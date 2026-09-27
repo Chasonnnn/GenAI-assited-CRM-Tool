@@ -307,6 +307,16 @@ PROTECTED_SYSTEM_STAGES_BY_ENTITY = {
         ),
     },
     EGG_DONOR_PIPELINE_ENTITY: {
+        "ready_to_match": ProtectedSystemStageDefinition(
+            system_role="handoff",
+            lock_reason="This is a protected system stage used by match workflows.",
+            locked_fields=DONOR_SYSTEM_STAGE_LOCKED_FIELDS,
+        ),
+        "matched": ProtectedSystemStageDefinition(
+            system_role="matched",
+            lock_reason="This is a protected system stage used by match workflows.",
+            locked_fields=DONOR_SYSTEM_STAGE_LOCKED_FIELDS,
+        ),
         "approved": ProtectedSystemStageDefinition(
             system_role="approval_gate",
             lock_reason="This is a protected system stage used by platform workflows.",
@@ -324,6 +334,16 @@ PROTECTED_SYSTEM_STAGES_BY_ENTITY = {
         ),
     },
     SPERM_DONOR_PIPELINE_ENTITY: {
+        "available": ProtectedSystemStageDefinition(
+            system_role="handoff",
+            lock_reason="This is a protected system stage used by match workflows.",
+            locked_fields=DONOR_SYSTEM_STAGE_LOCKED_FIELDS,
+        ),
+        "matched": ProtectedSystemStageDefinition(
+            system_role="matched",
+            lock_reason="This is a protected system stage used by match workflows.",
+            locked_fields=DONOR_SYSTEM_STAGE_LOCKED_FIELDS,
+        ),
         "approved": ProtectedSystemStageDefinition(
             system_role="approval_gate",
             lock_reason="This is a protected system stage used by platform workflows.",

@@ -100,7 +100,12 @@ async def _set_stage(
 
 
 async def _accept_match(authed_client, surrogate_id: str) -> dict:
+    from tests.test_match_cancel_request import _move_to_handoff
+
     intended_parent = await _create_intended_parent(authed_client)
+    await _move_to_handoff(
+        authed_client, "intended-parents", intended_parent["id"], "intended_parent"
+    )
     create_response = await authed_client.post(
         "/matches/",
         json={

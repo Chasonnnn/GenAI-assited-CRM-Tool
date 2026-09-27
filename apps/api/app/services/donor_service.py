@@ -977,6 +977,20 @@ def change_status(
         mutation=True,
     ):
         raise DonorValidationError("Role not permitted to change donor stage")
+    if target.stage_key == "matched":
+        # Serialize the manual guard with engine cancellation, which holds this
+        # party lock until the last active match and its stage change commit.
+        # V2 policy authorization above must acquire its configuration lock first.
+        donor = (
+            db.query(Donor)
+            .filter(Donor.id == donor.id, Donor.organization_id == donor.organization_id)
+            .populate_existing()
+            .with_for_update(key_share=True)
+            .one()
+        )
+    _require_match_for_matched(db, donor, target)
+    if target.id == donor.stage_id:
+        raise DonorValidationError("Target stage is the current donor stage")
     target_semantics = pipeline_semantics_service.get_stage_semantics(target)
     normalized_reason = reason.strip() if reason else None
     if target_semantics.requires_reason_on_enter and not normalized_reason:
@@ -1111,6 +1125,24 @@ def change_status(
     )
 
 
+def _require_match_for_matched(db: Session, donor: Donor, stage: PipelineStage) -> None:
+    if stage.stage_key != "matched":
+        return
+    from app.db.models import Match
+    from app.services.match_queries import COMMITTED_STATUSES
+
+    if (
+        not db.query(Match.id)
+        .filter(
+            Match.organization_id == donor.organization_id,
+            Match.donor_id == donor.id,
+            Match.status.in_(COMMITTED_STATUSES),
+        )
+        .first()
+    ):
+        raise DonorValidationError("Cannot set to Matched without an accepted Match.")
+
+
 def apply_status_change(
     db: Session,
     *,
@@ -1130,6 +1162,7 @@ def apply_status_change(
     emit_workflow_events: bool = True,
     commit: bool = True,
 ) -> DonorStatusChangeResult:
+    _require_match_for_matched(db, donor, new_stage)
     try:
         from app.services import approval_handoff_service
 

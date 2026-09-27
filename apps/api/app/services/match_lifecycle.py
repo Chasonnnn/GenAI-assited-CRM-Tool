@@ -11,7 +11,8 @@ surrogate's other open proposals in id order) FOR UPDATE, then the surrogate
 or donor row, then the intended parent row FOR NO KEY UPDATE. Each row is
 locked once. Party locks do not conflict with the FOR KEY SHARE locks that
 activity inserts take, so history written for another match's parties does not
-wait on them.
+wait on them. Permission v2 takes the existing organization configuration lock
+before these domain locks, matching the approval and stage services.
 """
 
 from collections.abc import Callable
@@ -348,8 +349,6 @@ def propose(
     )
     if existing:
         raise TransitionError(f"Match already exists with status: {existing.status}", 409)
-    if surrogate_id and match_queries.get_accepted_match_for_surrogate(db, org_id, surrogate_id):
-        raise TransitionError("Surrogate already has an accepted match")
 
     if (surrogate_id is None) == (donor_id is None):
         raise ValueError("Exactly one surrogate or donor is required")
@@ -401,7 +400,10 @@ def propose(
             "propose",
             match,
             proposed_by_user_id,
-            match_effects.workflow_trigger(db, "proposed", match),
+            [
+                *match_effects.workflow_trigger(db, "proposed", match),
+                *match_effects.surrogate_conflict_notifications(db, match),
+            ],
         ),
     )
     return match
@@ -424,7 +426,6 @@ class _Context:
     reason: str | None
     notes: str | None
     outcome: str | None
-    competitors: list[Match]
 
 
 def transition(
@@ -451,11 +452,16 @@ def transition(
     seeding a dev database does not run org workflows.
     """
     spec = TRANSITIONS[action]
+    if action == "accept":
+        from app.services import permission_policy_service
+
+        # V2 approvals and manual stage changes acquire this lock first. Taking
+        # it during a stage move instead can deadlock on a shared participant.
+        if permission_policy_service.is_enabled(db, match.organization_id):
+            permission_policy_service.lock_configuration(db, match.organization_id)
     if action == "complete":
         require_expansion()
-    locked, competitors = _lock(
-        db, match, with_competitors=action == "accept" and bool(match.surrogate_id)
-    )
+    locked, _ = _lock(db, match, with_competitors=action == "accept" and bool(match.surrogate_id))
     if action == "accept" and locked.donor_id:
         require_expansion()
 
@@ -470,7 +476,6 @@ def transition(
         reason=reason,
         notes=notes,
         outcome=outcome,
-        competitors=competitors,
     )
     if action == "request_cancel" and locked.status == CANCELLATION_PENDING:
         raise TransitionError("A pending cancellation request already exists for this match", 409)
@@ -484,24 +489,26 @@ def transition(
         raise TransitionError(spec.source_error.format(status=locked.status))
 
     try:
-        effects = _APPLY[action](ctx) if applies else []
-        if not applies:
-            write_case_change(
-                db,
-                locked,
-                actor_user_id,
-                spec.history,
-                {
-                    "status_request_id": str(request.id),
-                    "status": locked.status,
-                },
-            )
-        if action == "reject_cancel":
-            effects += match_effects.cancel_request_resolved_notification(
-                db, locked, request, actor_user_id, approved=False, reason=reason
-            )
-        if before_commit is not None:
-            before_commit()
+        # Keep refused stage moves atomic even when the caller retains its session.
+        with db.begin_nested():
+            effects = _APPLY[action](ctx) if applies else []
+            if not applies:
+                write_case_change(
+                    db,
+                    locked,
+                    actor_user_id,
+                    spec.history,
+                    {
+                        "status_request_id": str(request.id),
+                        "status": locked.status,
+                    },
+                )
+            if action == "reject_cancel":
+                effects += match_effects.cancel_request_resolved_notification(
+                    db, locked, request, actor_user_id, approved=False, reason=reason
+                )
+            if before_commit is not None:
+                before_commit()
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -510,6 +517,8 @@ def transition(
         raise
     db.refresh(locked)
     if dispatch_effects:
+        if action == "accept":
+            effects += match_effects.surrogate_conflict_notifications(db, locked)
         match_effects.dispatch(
             db, match_effects.TransitionEvent(action, locked, actor_user_id, effects)
         )
@@ -519,11 +528,18 @@ def transition(
 def _accept(ctx: _Context) -> list:
     db, match = ctx.db, ctx.match
     primary = match_participants.primary(match)
-    primary.check_accept(db, match)
+    if match_queries.has_surrogate_conflict(db, match):
+        raise TransitionError("Surrogate already has an accepted match")
+    warnings = match_participants.accept_eligibility_warnings(db, match)
+    if warnings:
+        raise TransitionError("; ".join(warnings))
+    match.status = ACCEPTED
+    # Sessions disable autoflush; the donor guard must see this acceptance
+    # inside the same savepoint before the participant stage is written.
+    db.flush()
     effects = primary.on_accept(
         db, match, actor_user_id=ctx.actor_user_id, actor_role=ctx.actor_role, now=ctx.now
     )
-    match.status = ACCEPTED
     match.reviewed_by_user_id = ctx.actor_user_id
     match.reviewed_at = ctx.now
     _append_notes(match, ctx.notes)
@@ -531,27 +547,14 @@ def _accept(ctx: _Context) -> list:
     match_participants.INTENDED_PARENT.on_accept(
         db, match, actor_user_id=ctx.actor_user_id, actor_role=ctx.actor_role, now=ctx.now
     )
-    for other in ctx.competitors:
-        other.status = DECLINED
-        other.closed_at = ctx.now
-        other.closed_by_user_id = ctx.actor_user_id
-        other.closure_reason = "Another match accepted"
-        other.decline_reason = other.closure_reason
-        other.reviewed_by_user_id = ctx.actor_user_id
-        other.reviewed_at = ctx.now
-        other.updated_at = ctx.now
-        write_case_change(db, other, ctx.actor_user_id, "match_declined")
-        # Step 6 replaces auto-closure with conflict flags; until then, only
-        # explicit declines fire workflows, not these automatic competitor closures.
     audit, party = _pair_details(match)
-    count = {"declined_matches": len(ctx.competitors)}
     write_history(
         db,
         match,
         ctx.actor_user_id,
         "match_accepted",
-        audit_details={**audit, **count},
-        party_details={**party, **count},
+        audit_details=audit,
+        party_details=party,
     )
     return [
         *effects,

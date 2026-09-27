@@ -143,6 +143,10 @@ async def test_v2_granted_approver_without_view_matches_gets_404(authed_client, 
 async def test_v2_granted_approver_outside_donor_scope_gets_404(authed_client, db, v2_org):
     # Case Manager donor scope is post-approval; a new donor is still pre-approval.
     match, request = await _pending_cancellation(authed_client, db, donor=True)
+    from app.db.models import Donor
+    from tests.test_match_participant_stages import _stage
+
+    _stage(db, db.get(Donor, uuid.UUID(match["donor_id"])), "new")
     _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "approve_status_change_requests", True)
 
     async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_user, client):
@@ -293,8 +297,16 @@ async def test_v2_request_list_shows_only_requests_in_the_callers_scope(
     foreign_admin = await _listed_requests(db, other_org.id, Role.ADMIN)
 
     assert manager.status_code == 200, manager.text
-    assert {item["request"]["id"] for item in manager.json()["items"]} == {str(visible.id)}
-    assert manager.json()["total"] == 1
+    expected = {str(visible.id), str(donor.id)}
+    listed = {item["request"]["id"] for item in manager.json()["items"]}
+    assert listed <= expected
+    assert len(listed) == min(per_page, 2)
+    assert manager.json()["total"] == 2
+    if per_page == 1:
+        second_page = await _listed_requests(db, v2_org.id, Role.CASE_MANAGER, per_page=1, page=2)
+        assert listed | {item["request"]["id"] for item in second_page.json()["items"]} == expected
+    else:
+        assert listed == expected
     assert admin.status_code == 200, admin.text
     assert {item["request"]["id"] for item in admin.json()["items"]} == {
         str(visible.id),
@@ -338,3 +350,63 @@ async def test_v2_cancel_request_notifies_members_with_effective_approval_permis
     assert {test_auth.user.id, admin.id, revoked_admin.id, granted.id, operations.id} <= recipients
     assert manager.id not in recipients
     assert intake.id not in recipients
+
+
+@pytest.mark.asyncio
+async def test_v2_donor_cancel_requires_stage_permission_only_when_last_match_closes(
+    authed_client, db, v2_org
+):
+    from app.db.models import Donor
+    from tests.test_match_cancel_request import _create_intended_parent
+    from tests.test_match_cases import _accept, _case, _donor
+
+    donor = await _donor(authed_client)
+    matches = [
+        await _accept(
+            authed_client,
+            await _case(authed_client, await _create_intended_parent(authed_client), donor=donor),
+        )
+        for _ in range(2)
+    ]
+    _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "approve_status_change_requests", True)
+    _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "change_donor_status", False)
+    for index, match in enumerate(matches):
+        response = await authed_client.post(
+            f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+        )
+        assert response.status_code == 200
+        from app.db.models import StatusChangeRequest
+
+        request = (
+            db.query(StatusChangeRequest)
+            .filter_by(entity_id=uuid.UUID(match["id"]), status="pending")
+            .one()
+        )
+        async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_, client):
+            approved = await client.post(f"/status-change-requests/{request.id}/approve")
+        assert approved.status_code == (200 if index == 0 else 400), approved.text
+        if index == 1:
+            assert approved.json()["detail"] == "Stage change permission required"
+            assert _request_row(db, request.id).status == "pending"
+        assert db.get(Donor, uuid.UUID(donor["id"])).stage.stage_key == "matched"
+
+
+@pytest.mark.asyncio
+async def test_v2_cancel_requires_no_stage_permission_when_parties_already_at_handoff(
+    authed_client, db, v2_org
+):
+    from app.db.models import IntendedParent
+    from tests.test_match_participant_stages import _stage
+
+    match, request = await _pending_cancellation(authed_client, db)
+    _stage(db, db.get(Surrogate, uuid.UUID(match["surrogate_id"])), "ready_to_match")
+    _stage(db, db.get(IntendedParent, uuid.UUID(match["intended_parent_id"])), "ready_to_match")
+    _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "approve_status_change_requests", True)
+    _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "change_surrogate_status", False)
+    _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "edit_intended_parents", False)
+    async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_, client):
+        response = await client.post(f"/status-change-requests/{request.id}/approve")
+    assert response.status_code == 200, response.text
+    assert _match_row(db, match["id"]).status == "cancelled"
+    assert db.query(SurrogateStatusHistory).filter_by(request_id=request.id).count() == 0
+    assert db.query(IntendedParentStatusHistory).filter_by(request_id=request.id).count() == 0

@@ -146,11 +146,8 @@ async def test_approve_cancellation_cancels_match_and_returns_parties_to_ready(
 
 
 @pytest.mark.asyncio
-async def test_approve_donor_cancellation_leaves_donor_stage_unchanged(
-    authed_client, db, test_auth
-):
+async def test_approve_donor_cancellation_returns_donor_to_handoff(authed_client, db, test_auth):
     match, request = await _pending_cancellation(authed_client, db, donor=True)
-    donor_stage = _stage_slug(db, Donor, match["donor_id"])
     before = _snapshot(db, test_auth.org.id)
 
     with _locked_tables(db) as locks:
@@ -158,17 +155,17 @@ async def test_approve_donor_cancellation_leaves_donor_stage_unchanged(
 
     assert response.status_code == 200, response.text
     assert _match_row(db, match["id"]).status == "cancelled"
-    assert _stage_slug(db, Donor, match["donor_id"]) == donor_stage
+    assert _stage_slug(db, Donor, match["donor_id"]) == "ready_to_match"
     assert _ip_stage_key(db, match["intended_parent_id"]) == "ready_to_match"
     assert locks == ["status_change_requests", "matches", "donors", "intended_parents"]
     assert _diff(before, _snapshot(db, test_auth.org.id)) == {
-        "audit": {("match_cancelled", "match"): 1},
+        "audit": {("match_cancelled", "match"): 1, ("donor_status_changed", "donor"): 1},
         "surrogate_activity": {},
         "entity_activity": {
             ("donor", "match_cancelled"): 1,
             ("intended_parent", "match_cancelled"): 1,
         },
-        "stage_history": {"intended_parent": 1},
+        "stage_history": {"donor": 1, "intended_parent": 1},
     }
 
 
@@ -379,7 +376,9 @@ async def test_approve_cancellation_preserves_ip_outside_matched(authed_client, 
     assert _match_row(db, match["id"]).status == "cancelled"
     assert _ip_stage_key(db, ip["id"]) == "delivered"
     assert _stage_slug(db, Surrogate, surrogate["id"]) == "ready_to_match"
-    assert _diff(before, _snapshot(db, test_auth.org.id))["stage_history"] == {"surrogate": 1}
+    assert _diff(before, _snapshot(db, test_auth.org.id))["stage_history"] == {
+        "surrogate": 1,
+    }
 
 
 @pytest.mark.asyncio
@@ -393,7 +392,10 @@ async def test_approve_without_handoff_stage_returns_400(
     original = pipeline_service.get_stage_by_system_role
 
     def without_handoff(db, pipeline_id, system_role, *args, **kwargs):
-        if system_role == "handoff":
+        entity_type = args[0] if args else kwargs.get("entity_type", "surrogate")
+        if system_role == "handoff" and entity_type == (
+            "intended_parent" if donor else "surrogate"
+        ):
             return None
         return original(db, pipeline_id, system_role, *args, **kwargs)
 

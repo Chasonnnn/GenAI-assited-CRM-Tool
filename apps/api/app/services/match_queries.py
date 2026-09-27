@@ -63,6 +63,27 @@ def get_donor(db: Session, donor_id: UUID | None, org_id: UUID) -> Donor | None:
     )
 
 
+def has_other_committed_match_for_donor(db: Session, match: Match) -> bool:
+    return (
+        db.query(Match.id)
+        .filter(
+            Match.organization_id == match.organization_id,
+            Match.donor_id == match.donor_id,
+            Match.id != match.id,
+            Match.status.in_(COMMITTED_STATUSES),
+        )
+        .first()
+        is not None
+    )
+
+
+def has_surrogate_conflict(db: Session, match: Match) -> bool:
+    if not match.surrogate_id or match.status not in PENDING_STATUSES:
+        return False
+    committed = get_accepted_match_for_surrogate(db, match.organization_id, match.surrogate_id)
+    return committed is not None and committed.id != match.id
+
+
 def get_existing_match(
     db: Session,
     org_id: UUID,
@@ -338,6 +359,9 @@ def get_match_stats(
 
 def to_read(db: Session, match: Match, org_id: UUID | None = None) -> MatchRead:
     """Convert a match to MatchRead with org-scoped party lookups."""
+    from app.services import match_participants
+
+    org_id = org_id or match.organization_id
     surrogate = get_surrogate_with_stage(db, match.surrogate_id, org_id)
     ip = get_intended_parent(db, match.intended_parent_id, org_id)
     donor = (
@@ -357,6 +381,12 @@ def to_read(db: Session, match: Match, org_id: UUID | None = None) -> MatchRead:
         outcome=match.outcome,
         intended_parent_id=str(match.intended_parent_id),
         status=match.status,
+        accept_eligibility_warnings=(
+            match_participants.accept_eligibility_warnings(db, match)
+            if match.status in PENDING_STATUSES
+            else []
+        ),
+        surrogate_has_accepted_match=has_surrogate_conflict(db, match),
         proposed_by_user_id=str(match.proposed_by_user_id) if match.proposed_by_user_id else None,
         proposed_at=match.proposed_at.isoformat() if match.proposed_at else None,
         reviewed_by_user_id=str(match.reviewed_by_user_id) if match.reviewed_by_user_id else None,

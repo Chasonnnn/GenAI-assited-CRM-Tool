@@ -229,11 +229,15 @@ def test_donor_defaults_keep_target_specific_labels_categories_and_system_anchor
     assert get_protected_system_stage_keys(EGG_DONOR_PIPELINE_ENTITY) == {
         "new",
         "approved",
+        "ready_to_match",
+        "matched",
         "closed",
     }
     assert get_protected_system_stage_keys(SPERM_DONOR_PIPELINE_ENTITY) == {
         "new",
         "approved",
+        "available",
+        "matched",
         "closed",
     }
 

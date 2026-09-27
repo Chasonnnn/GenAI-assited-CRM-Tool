@@ -424,7 +424,7 @@ async def test_repeat_proposal_after_closed_surrogate_pair_creates_new_match(aut
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("committed_status", ["accepted", "cancellation_pending"])
-async def test_propose_for_surrogate_with_committed_match_returns_400(
+async def test_propose_for_surrogate_with_committed_match_stays_open_and_flagged(
     authed_client, db, committed_status
 ):
     surrogate = await _create_surrogate(authed_client)
@@ -440,15 +440,16 @@ async def test_propose_for_surrogate_with_committed_match_returns_400(
         json={"surrogate_id": surrogate["id"], "intended_parent_id": second_ip["id"]},
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Surrogate already has an accepted match"
-    assert db.query(Match).count() == count
+    assert response.status_code == 201
+    assert response.json()["surrogate_has_accepted_match"] is True
+    assert response.json()["status"] == "under_review"
+    assert db.query(Match).count() == count + 1
 
 
 @pytest.mark.asyncio
 async def test_propose_accepts_parties_at_any_stage(authed_client, db):
-    surrogate = await _create_surrogate(authed_client)
-    ip = await _create_intended_parent(authed_client)
+    surrogate = await _create_surrogate(authed_client, ready=False)
+    ip = await _create_intended_parent(authed_client, ready=False)
     assert _stage_slug(db, Surrogate, surrogate["id"]) == "new_unread"
     assert _ip_stage_key(db, ip["id"]) == "new"
 
@@ -617,7 +618,7 @@ async def test_accept_surrogate_match_moves_surrogate_and_ip_to_matched(
 
 
 @pytest.mark.asyncio
-async def test_accept_declines_other_open_proposals_for_same_surrogate(
+async def test_accept_keeps_other_open_proposals_for_same_surrogate(
     authed_client, db, test_auth, monkeypatch
 ):
     surrogate = await _create_surrogate(authed_client)
@@ -636,16 +637,15 @@ async def test_accept_declines_other_open_proposals_for_same_surrogate(
 
     for other_id in (proposed["id"], reviewing["id"]):
         row = _match_row(db, other_id)
-        assert row.status == "declined"
-        assert row.closure_reason == "Another match accepted"
-        assert row.closed_by_user_id == test_auth.user.id
-        assert row.closed_at is not None
+        assert row.status == "under_review"
+        assert row.closure_reason is None
+        assert row.closed_by_user_id is None
+        assert row.closed_at is None
     assert _diff(before, _snapshot(db, test_auth.org.id)) == {
-        "audit": {("match_accepted", "match"): 1, ("match_declined", "match"): 2},
-        "surrogate_activity": {"match_accepted": 1, "match_declined": 2, "note_added": 1},
+        "audit": {("match_accepted", "match"): 1},
+        "surrogate_activity": {"match_accepted": 1, "note_added": 1},
         "entity_activity": {
             ("intended_parent", "match_accepted"): 1,
-            ("intended_parent", "match_declined"): 2,
         },
         "stage_history": {"surrogate": 1, "intended_parent": 1},
     }
@@ -656,12 +656,12 @@ async def test_accept_declines_other_open_proposals_for_same_surrogate(
         )
         .one()
     )
-    assert audit.details["declined_matches"] == 2
+    assert "declined_matches" not in audit.details
 
 
 @pytest.mark.asyncio
 async def test_accept_with_competing_proposals_locks_each_row_once_in_engine_order(
-    authed_client, db, test_auth
+    authed_client, db, test_auth, monkeypatch
 ):
     surrogate = await _create_surrogate(authed_client)
     accepted = await _case(
@@ -673,6 +673,10 @@ async def test_accept_with_competing_proposals_locks_each_row_once_in_engine_ord
         )
         for _ in range(2)
     ]
+    # Notification dedupe takes separate row locks after the engine commits.
+    monkeypatch.setattr(
+        "app.services.match_effects.surrogate_conflict_notifications", lambda *args: []
+    )
     statements: list[str] = []
     connection = db.connection()
 
@@ -695,7 +699,7 @@ async def test_accept_with_competing_proposals_locks_each_row_once_in_engine_ord
     assert statements[0].rstrip().endswith("FOR UPDATE")
     assert all(sql.rstrip().endswith("FOR NO KEY UPDATE") for sql in statements[1:])
     for other in competing:
-        assert _match_row(db, other["id"]).status == "declined"
+        assert _match_row(db, other["id"]).status == "under_review"
 
 
 @pytest.mark.asyncio
@@ -720,7 +724,7 @@ async def test_accept_when_surrogate_has_other_committed_match_returns_400(
     assert response.json()["detail"] == "Surrogate already has an accepted match"
     assert _match_row(db, competing.id).status == "under_review"
     assert _match_row(db, first["id"]).status == committed_status
-    assert _ip_stage_key(db, second_ip["id"]) == "new"
+    assert _ip_stage_key(db, second_ip["id"]) == "ready_to_match"
     assert _diff(before, _snapshot(db, test_auth.org.id)) == {
         "audit": {("api_mutation_fallback", "api_route"): 1},
         "surrogate_activity": {},
@@ -764,30 +768,31 @@ def _move_ip_to_stage(db, org_id, ip_id, stage_key):
 
 
 @pytest.mark.asyncio
-async def test_accept_when_ip_beyond_matched_preserves_ip_stage(authed_client, db, test_auth):
+async def test_accept_when_ip_beyond_matched_is_blocked(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     ip = await _create_intended_parent(authed_client)
     created = await _case(authed_client, ip, surrogate=surrogate)
     _move_ip_to_stage(db, test_auth.org.id, ip["id"], "delivered")
     before = _snapshot(db, test_auth.org.id)
 
-    accepted = await _accept(authed_client, created)
+    response = await authed_client.put(f"/matches/{created['id']}/accept", json={})
 
-    assert accepted["status"] == "accepted"
+    assert response.status_code == 400
+    assert "Intended parent at Delivered (delivered)" in response.json()["detail"]
+    assert _match_row(db, created["id"]).status == "under_review"
     assert _ip_stage_key(db, ip["id"]) == "delivered"
-    assert _stage_slug(db, Surrogate, surrogate["id"]) == "matched"
-    assert _diff(before, _snapshot(db, test_auth.org.id))["stage_history"] == {"surrogate": 1}
+    assert _stage_slug(db, Surrogate, surrogate["id"]) == "ready_to_match"
+    assert _diff(before, _snapshot(db, test_auth.org.id))["stage_history"] == {}
 
 
 @pytest.mark.asyncio
-async def test_accept_donor_match_moves_ip_but_not_donor_stage(
+async def test_accept_donor_match_moves_donor_and_ip_to_matched(
     authed_client, db, test_auth, monkeypatch
 ):
     spies = _spy_effects(monkeypatch)
     donor = await _donor(authed_client)
     ip = await _create_intended_parent(authed_client)
     created = await _case(authed_client, ip, donor=donor)
-    donor_stage = _stage_slug(db, Donor, donor["id"])
     _reset(spies)
     before = _snapshot(db, test_auth.org.id)
 
@@ -795,17 +800,17 @@ async def test_accept_donor_match_moves_ip_but_not_donor_stage(
         accepted = await _accept(authed_client, created)
 
     assert accepted["status"] == "accepted"
-    assert _stage_slug(db, Donor, donor["id"]) == donor_stage
+    assert _stage_slug(db, Donor, donor["id"]) == "matched"
     assert _ip_stage_key(db, ip["id"]) == "matched"
     assert locks == ["matches", "donors", "intended_parents"]
     assert _diff(before, _snapshot(db, test_auth.org.id)) == {
-        "audit": {("match_accepted", "match"): 1},
+        "audit": {("match_accepted", "match"): 1, ("donor_status_changed", "donor"): 1},
         "surrogate_activity": {},
         "entity_activity": {
             ("donor", "match_accepted"): 1,
             ("intended_parent", "match_accepted"): 1,
         },
-        "stage_history": {"intended_parent": 1},
+        "stage_history": {"donor": 1, "intended_parent": 1},
     }
     assert _call_counts(spies) == {"push_dashboard_stats": 1, "trigger_match_accepted": 1}
 
@@ -897,8 +902,8 @@ async def test_decline_surrogate_match_writes_declined_status_without_stage_chan
     assert "Discussed" in rejected["notes"]
     row = _match_row(db, created["id"])
     assert row.closed_by_user_id == test_auth.user.id
-    assert _stage_slug(db, Surrogate, surrogate["id"]) == "new_unread"
-    assert _ip_stage_key(db, ip["id"]) == "new"
+    assert _stage_slug(db, Surrogate, surrogate["id"]) == "ready_to_match"
+    assert _ip_stage_key(db, ip["id"]) == "ready_to_match"
     assert locks == ["matches", "surrogates", "intended_parents"]
     assert _diff(before, _snapshot(db, test_auth.org.id)) == {
         "audit": {("match_declined", "match"): 1},
@@ -1294,7 +1299,7 @@ async def test_disabled_expansion_blocks_donor_accept_with_503(authed_client, db
     assert response.status_code == 503
     assert response.json()["detail"] == "New match features are temporarily unavailable"
     assert _match_row(db, created["id"]).status == "under_review"
-    assert _ip_stage_key(db, ip["id"]) == "new"
+    assert _ip_stage_key(db, ip["id"]) == "ready_to_match"
 
 
 @pytest.mark.asyncio
@@ -1707,7 +1712,7 @@ async def test_accept_dispatches_surrogate_stage_callbacks_before_later_effects(
     stage = spies["handle_status_changed"].calls[0][1]
     assert stage["surrogate"].id == uuid.UUID(surrogate["id"])
     assert stage["new_stage"].slug == "matched"
-    assert stage["old_slug"] == "new_unread"
+    assert stage["old_slug"] == "ready_to_match"
     assert stage["user_id"] == test_auth.user.id
     assert stage["request_id"] is None
     assert stage["approved_by_user_id"] is None
@@ -1723,7 +1728,7 @@ async def test_accept_dispatches_surrogate_stage_callbacks_before_later_effects(
 
 
 @pytest.mark.asyncio
-async def test_accept_donor_match_dispatches_no_stage_callbacks(
+async def test_accept_donor_match_dispatches_donor_stage_callback_before_later_effects(
     authed_client, db, test_auth, monkeypatch
 ):
     created = await _case(
@@ -1733,10 +1738,18 @@ async def test_accept_donor_match_dispatches_no_stage_callbacks(
     )
     events: list[str] = []
     _spy_ordered_effects(monkeypatch, events)
+    stage_trigger = _Spy(events=events, name="trigger_donor_stage_changed")
+    monkeypatch.setattr(workflow_triggers, "trigger_donor_stage_changed", stage_trigger)
 
     await _accept(authed_client, created)
 
-    assert events == ["push_dashboard_stats", "trigger_match_accepted"]
+    assert events == [
+        "trigger_donor_stage_changed",
+        "push_dashboard_stats",
+        "trigger_match_accepted",
+    ]
+    assert stage_trigger.calls[0][1]["old_stage"].stage_key == "ready_to_match"
+    assert stage_trigger.calls[0][1]["new_stage"].stage_key == "matched"
 
 
 @asynccontextmanager

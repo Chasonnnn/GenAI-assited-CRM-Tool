@@ -37,8 +37,8 @@ class Party:
             model.id == self.party_id(match), model.organization_id == match.organization_id
         ).populate_existing().with_for_update(key_share=True).one()
 
-    def check_accept(self, db: Session, match: Match) -> None:
-        """Raise ValueError when this party blocks accepting the match."""
+    def accept_warning(self, db: Session, match: Match) -> str | None:
+        raise NotImplementedError
 
     def on_accept(
         self, db: Session, match: Match, *, actor_user_id: UUID, actor_role, now: datetime
@@ -67,12 +67,11 @@ class SurrogateParty(Party):
     def party_id(self, match: Match) -> UUID | None:
         return match.surrogate_id
 
-    def check_accept(self, db: Session, match: Match) -> None:
-        committed = match_queries.get_accepted_match_for_surrogate(
-            db, match.organization_id, match.surrogate_id
+    def accept_warning(self, db: Session, match: Match) -> str | None:
+        surrogate = match_queries.get_surrogate_with_stage(
+            db, match.surrogate_id, match.organization_id
         )
-        if committed and committed.id != match.id:
-            raise ValueError("Surrogate already has an accepted match")
+        return _stage_warning(surrogate, "Surrogate", {"ready_to_match"})
 
     def on_accept(
         self, db: Session, match: Match, *, actor_user_id: UUID, actor_role, now: datetime
@@ -92,8 +91,11 @@ class SurrogateParty(Party):
                 db, match.organization_id, actor_user_id
             ).id
         matched_stage = pipeline_service.get_stage_by_system_role(db, pipeline_id, "matched")
-        if not matched_stage or surrogate.stage_id == matched_stage.id:
+        if not matched_stage or not matched_stage.is_active or matched_stage.deleted_at:
+            raise ValueError("Surrogate Matched stage not found")
+        if surrogate.stage_id == matched_stage.id:
             return []
+        _authorize_stage_move(db, match, actor_user_id, "surrogate", surrogate, matched_stage)
         result = surrogate_status_service.change_status(
             db=db,
             surrogate=surrogate,
@@ -129,6 +131,9 @@ class SurrogateParty(Party):
         ready = pipeline_service.get_stage_by_system_role(db, old_stage.pipeline_id, "handoff")
         if not ready:
             raise ValueError("Ready to match stage not found")
+        if old_stage.id == ready.id:
+            return []
+        _authorize_stage_move(db, match, actor_user_id, "surrogate", surrogate, ready)
         result = surrogate_status_service.apply_status_change(
             db=db,
             surrogate=surrogate,
@@ -155,7 +160,7 @@ class SurrogateParty(Party):
 
 
 class DonorParty(Party):
-    """Donor stage does not move with the match."""
+    """Donors can retain multiple active matches at Matched."""
 
     kind = "donor"
     model = Donor
@@ -163,18 +168,67 @@ class DonorParty(Party):
     def party_id(self, match: Match) -> UUID | None:
         return match.donor_id
 
-    def on_cancel_approved(
-        self,
-        db: Session,
-        match: Match,
-        *,
-        request: StatusChangeRequest,
-        actor_user_id: UUID,
-        now: datetime,
-    ) -> list[Effect]:
-        if not match_queries.get_donor(db, match.donor_id, match.organization_id):
+    def accept_warning(self, db: Session, match: Match) -> str | None:
+        donor = match_queries.get_donor(db, match.donor_id, match.organization_id)
+        ready = "available" if donor and donor.donor_type == "sperm" else "ready_to_match"
+        eligible = {ready}
+        if match_queries.has_other_committed_match_for_donor(db, match):
+            eligible.add("matched")
+        return _stage_warning(donor, "Donor", eligible)
+
+    def _move(self, db, match, *, actor_user_id, now, role, request=None) -> list[Effect]:
+        from app.services import donor_service, pipeline_service, workflow_triggers
+
+        donor = match_queries.get_donor(db, match.donor_id, match.organization_id)
+        if not donor or not donor.stage:
             raise ValueError("Match participants not found")
-        return []
+        old_stage = donor.stage
+        if role == "handoff" and not pipeline_service.stage_matches_system_role(
+            old_stage, "matched", donor.pipeline_entity_type
+        ):
+            return []
+        target = pipeline_service.get_stage_by_system_role(
+            db, old_stage.pipeline_id, role, donor.pipeline_entity_type
+        )
+        if not target or not target.is_active or target.deleted_at:
+            raise ValueError(f"Donor {role} stage not found")
+        if old_stage.id == target.id:
+            return []
+        _authorize_stage_move(db, match, actor_user_id, "donor", donor, target)
+        donor_service.apply_status_change(
+            db,
+            donor=donor,
+            old_stage=old_stage,
+            new_stage=target,
+            user_id=actor_user_id,
+            reason=request.reason if request else "Match accepted",
+            effective_at=request.effective_at if request else now,
+            recorded_at=now,
+            request_id=request.id if request else None,
+            requested_at=request.requested_at if request else None,
+            approved_by_user_id=actor_user_id if request else None,
+            approved_at=now if request else None,
+            emit_workflow_events=False,
+            commit=False,
+        )
+        return [
+            (
+                "donor_stage_changed",
+                lambda: workflow_triggers.trigger_donor_stage_changed(
+                    db, donor, old_stage=old_stage, new_stage=target
+                ),
+            )
+        ]
+
+    def on_accept(self, db, match, *, actor_user_id, actor_role, now) -> list[Effect]:
+        return self._move(db, match, actor_user_id=actor_user_id, now=now, role="matched")
+
+    def on_cancel_approved(self, db, match, *, request, actor_user_id, now) -> list[Effect]:
+        if match_queries.has_other_committed_match_for_donor(db, match):
+            return []
+        return self._move(
+            db, match, actor_user_id=actor_user_id, now=now, role="handoff", request=request
+        )
 
     def check_attempt_type(self, attempt_type: str | None) -> None:
         if attempt_type == "embryo_transfer":
@@ -188,10 +242,14 @@ class IntendedParentParty(Party):
     def party_id(self, match: Match) -> UUID | None:
         return match.intended_parent_id
 
+    def accept_warning(self, db: Session, match: Match) -> str | None:
+        ip = match_queries.get_intended_parent(db, match.intended_parent_id, match.organization_id)
+        return _stage_warning(ip, "Intended parent", {"ready_to_match", "matched"})
+
     def on_accept(
         self, db: Session, match: Match, *, actor_user_id: UUID, actor_role, now: datetime
     ) -> list[Effect]:
-        """Move the intended parent to Matched unless already at or beyond it."""
+        """Move an eligible intended parent to Matched unless already there."""
         from app.services import intended_parent_status_service, pipeline_service
 
         ip = match_queries.get_intended_parent(db, match.intended_parent_id, match.organization_id)
@@ -205,18 +263,20 @@ class IntendedParentParty(Party):
         matched = pipeline_service.get_stage_by_system_role(
             db, current.pipeline_id, "matched", INTENDED_PARENT_PIPELINE_ENTITY
         )
-        if matched and current.order < matched.order:
-            intended_parent_status_service.apply_status_change(
-                db=db,
-                ip=ip,
-                old_stage=current,
-                new_stage=matched,
-                user_id=actor_user_id,
-                reason="Match accepted",
-                effective_at=now,
-                recorded_at=now,
-                commit=False,
-            )
+        if not matched or not matched.is_active or matched.deleted_at:
+            raise ValueError("Intended parent Matched stage not found")
+        _authorize_stage_move(db, match, actor_user_id, "intended_parent", ip, matched)
+        intended_parent_status_service.apply_status_change(
+            db=db,
+            ip=ip,
+            old_stage=current,
+            new_stage=matched,
+            user_id=actor_user_id,
+            reason="Match accepted",
+            effective_at=now,
+            recorded_at=now,
+            commit=False,
+        )
         return []
 
     def on_cancel_approved(
@@ -228,7 +288,7 @@ class IntendedParentParty(Party):
         actor_user_id: UUID,
         now: datetime,
     ) -> list[Effect]:
-        """Return the intended parent to Ready to Match when no other committed match remains."""
+        """Return a Matched intended parent to handoff after its last committed match ends."""
         from app.services import intended_parent_status_service, pipeline_service
 
         ip = match_queries.get_intended_parent(db, match.intended_parent_id, match.organization_id)
@@ -245,6 +305,9 @@ class IntendedParentParty(Party):
         )
         if not ready:
             raise ValueError("Ready to match stage not found")
+        if old_stage.id == ready.id:
+            return []
+        _authorize_stage_move(db, match, actor_user_id, "intended_parent", ip, ready)
         intended_parent_status_service.apply_status_change(
             db=db,
             ip=ip,
@@ -276,3 +339,41 @@ def primary(match: Match) -> Party:
 def parties(match: Match) -> list[Party]:
     """Parties in the engine's fixed lock order: surrogate or donor, then intended parent."""
     return [primary(match), INTENDED_PARENT]
+
+
+def _stage_warning(record, label: str, eligible: set[str]) -> str | None:
+    stage = record.stage if record else None
+    if stage and stage.stage_key in eligible and stage.is_active and not stage.deleted_at:
+        return None
+    current = f"{stage.label} ({stage.stage_key})" if stage else "Unknown"
+    return f"{label} at {current} is not eligible to accept"
+
+
+def accept_eligibility_warnings(db: Session, match: Match) -> list[str]:
+    return [warning for party in parties(match) if (warning := party.accept_warning(db, match))]
+
+
+def _authorize_stage_move(db, match, actor_user_id, kind, record, target) -> None:
+    from app.services import (
+        approval_handoff_service,
+        permission_service,
+        pipeline_semantics_service,
+    )
+
+    member = permission_service.get_membership_for_user(db, match.organization_id, actor_user_id)
+    permission = "edit_intended_parents" if kind == "intended_parent" else f"change_{kind}_status"
+    if not member or not permission_service.check_permission(
+        db, match.organization_id, actor_user_id, member.role, permission
+    ):
+        raise ValueError("Stage change permission required")
+    if kind != "intended_parent":
+        uses_record_policy = approval_handoff_service.authorize_stage_change(
+            db, record=record, kind=kind, target_stage=target, user_id=actor_user_id
+        )
+        if not uses_record_policy and not pipeline_semantics_service.can_role_access_stage(
+            member.role,
+            target,
+            feature_config=pipeline_semantics_service.get_pipeline_feature_config(target.pipeline),
+            mutation=True,
+        ):
+            raise ValueError(f"Role not permitted to change {kind} stage")
