@@ -89,8 +89,11 @@ describe('NotificationsPage', () => {
     })
 
     it('renders notifications page with header', () => {
-        render(<NotificationsPage />)
-        expect(screen.getByText('Notifications')).toBeInTheDocument()
+        const { container } = render(<NotificationsPage />)
+        const heading = screen.getByRole('heading', { level: 1, name: 'Notifications' })
+        expect(heading.closest('[data-slot="page-header"]')).not.toBeNull()
+        expect(heading.querySelector('svg')).toBeNull()
+        expect(container.querySelector('.text-teal-500.bg-teal-500\\/10')).toBeNull()
     })
 
     it('shows unread count badge', () => {
@@ -232,6 +235,26 @@ describe('NotificationsPage', () => {
         mockUseTasks.mockReturnValue({ data: { items: [] }, isLoading: false })
 
         render(<NotificationsPage />)
-        expect(screen.getByText("You're all caught up!")).toBeInTheDocument()
+        expect(screen.getByRole('heading', { level: 3, name: 'No notifications' })).toBeInTheDocument()
+        expect(screen.queryByText("You're all caught up!")).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+    })
+
+    it('offers Clear filters when a type filter has no notifications', async () => {
+        mockUseNotifications.mockReturnValue({
+            data: { unread_count: 0, items: [] },
+            isLoading: false,
+        })
+        mockUseTasks.mockReturnValue({ data: { items: [] }, isLoading: false })
+
+        render(<NotificationsPage />)
+        fireEvent.click(screen.getAllByRole('combobox')[0]!)
+        const option = await screen.findByRole('option', { name: 'Appointments' })
+        fireEvent.mouseMove(option)
+        fireEvent.click(option)
+
+        expect(await screen.findByRole('heading', { level: 3, name: 'No matching notifications' })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+        expect(screen.getByRole('heading', { level: 3, name: 'No notifications' })).toBeInTheDocument()
     })
 })
