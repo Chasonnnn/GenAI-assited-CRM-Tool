@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from "react"
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 const dynamicState = vi.hoisted(() => ({
@@ -44,13 +44,24 @@ function expectHeldCardEntrances(container: HTMLElement) {
     }
 }
 
+const accessState = vi.hoisted(() => ({
+    role: 'admin',
+    permissions: ['view_reports', 'view_donors'] as string[],
+    summaryCalls: 0,
+}))
+
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { ai_enabled: true, user_id: 'user-1', role: 'admin' } }),
+    useAuth: () => ({ user: { ai_enabled: true, user_id: 'user-1', role: accessState.role }, isLoading: false }),
+}))
+
+// The denied state's Dashboard link is an AppLink, which needs the app router.
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
 }))
 
 vi.mock('@/lib/hooks/use-permissions', () => ({
     useEffectivePermissions: () => ({
-        data: { permissions: ['view_reports', 'view_donors'] },
+        data: { permissions: accessState.permissions },
         isLoading: false,
     }),
 }))
@@ -117,16 +128,19 @@ vi.mock('@/components/ui/date-range-picker', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-analytics', () => ({
-    useAnalyticsSummary: () => ({
-        data: {
-            total_surrogates: 42,
-            new_this_period: 5,
-            qualification_rate: 10,
-            qualification_stage_key: 'pre_qualified',
-            avg_time_to_qualification_hours: 48,
-        },
-        isLoading: false,
-    }),
+    useAnalyticsSummary: () => {
+        accessState.summaryCalls += 1
+        return {
+            data: {
+                total_surrogates: 42,
+                new_this_period: 5,
+                qualification_rate: 10,
+                qualification_stage_key: 'pre_qualified',
+                avg_time_to_qualification_hours: 48,
+            },
+            isLoading: false,
+        }
+    },
     useSurrogatesByStatus: () => ({ data: [{ status: 'new_unread', count: 1 }], isLoading: false }),
     useSurrogatesByAssignee: () => ({ data: [{ user_email: 'alice@example.com', count: 2 }], isLoading: false }),
     useSurrogatesTrend: () => ({ data: [{ date: '2025-01-01', count: 1 }], isLoading: false }),
@@ -207,6 +221,12 @@ vi.mock('@/lib/hooks/use-analytics', () => ({
 }))
 
 describe('ReportsPage', () => {
+    beforeEach(() => {
+        accessState.role = 'admin'
+        accessState.permissions = ['view_reports', 'view_donors']
+        accessState.summaryCalls = 0
+    })
+
     it('lazy loads report visualizations', () => {
         expect(dynamicState.calls.length).toBeGreaterThan(0)
         expect(dynamicState.calls.some((call) => call.options?.ssr === false)).toBe(true)
@@ -214,7 +234,9 @@ describe('ReportsPage', () => {
 
     it('renders report summary cards', () => {
         render(<ReportsPage />)
-        expect(screen.getByText('Reports')).toBeInTheDocument()
+        expect(screen.getByRole('heading', { level: 1, name: 'Reports' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Export PDF' })).toBeInTheDocument()
+        expect(screen.getByRole('combobox', { name: 'Filter by campaign' })).toHaveTextContent('All campaigns')
         expect(screen.getByText('42')).toBeInTheDocument()
         expect(screen.getAllByText('$1,000').length).toBeGreaterThan(0)
         expect(screen.getByRole('heading', { name: 'Donors' })).toBeInTheDocument()
@@ -252,5 +274,27 @@ describe('ReportsPage', () => {
         )
         expect(container.querySelectorAll('[data-slot="card"].animate-in')).toHaveLength(4)
         expectHeldCardEntrances(container)
+    })
+
+    it('shows the denied state without report queries or Export PDF when view_reports is missing', () => {
+        accessState.role = 'case_manager'
+        accessState.permissions = ['view_dashboard']
+        render(<ReportsPage />)
+
+        expect(screen.getByRole('heading', { level: 1, name: 'Reports' })).toBeInTheDocument()
+        expect(screen.getByRole('heading', { level: 2, name: 'Permission required' })).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Export PDF' })).not.toBeInTheDocument()
+        expect(screen.queryByText('Unable to load')).not.toBeInTheDocument()
+        expect(accessState.summaryCalls).toBe(0)
+    })
+
+    it('shows the denied state to intake specialists, whom the reports API always rejects', () => {
+        accessState.role = 'intake_specialist'
+        accessState.permissions = ['view_dashboard', 'view_reports']
+        render(<ReportsPage />)
+
+        expect(screen.getByRole('heading', { level: 2, name: 'Permission required' })).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Export PDF' })).not.toBeInTheDocument()
+        expect(accessState.summaryCalls).toBe(0)
     })
 })
