@@ -6,7 +6,6 @@ import { AddSurrogateTaskDialog, type SurrogateTaskFormData } from "@/components
 import { SurrogateTasksTab } from "@/components/surrogates/tabs/SurrogateTasksTab"
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog"
 import { useTasks } from "@/lib/hooks/use-tasks"
-import { useSurrogate } from "@/lib/hooks/use-surrogates"
 import type { TaskListItem } from "@/lib/types/task"
 import type { TaskUpdatePayload } from "@/lib/api/tasks"
 import { useTaskActions } from "@/lib/hooks/use-task-actions"
@@ -14,7 +13,6 @@ import { useTaskActions } from "@/lib/hooks/use-task-actions"
 export default function SurrogateTasksPage() {
     const params = useParams<{ id: string }>()
     const id = params.id
-    const { data: surrogateData } = useSurrogate(id)
     const { data: tasksData, isLoading: tasksLoading } = useTasks({
         surrogate_id: id,
         exclude_approvals: true,
@@ -60,7 +58,6 @@ export default function SurrogateTasksPage() {
                 onOpenChange={setAddTaskDialogOpen}
                 onSubmit={handleAddTask}
                 isPending={taskActions.isCreating}
-                surrogateName={surrogateData?.full_name || "this surrogate"}
             />
             {editingTaskId ? <TaskDetailDialog
                 taskId={editingTaskId}

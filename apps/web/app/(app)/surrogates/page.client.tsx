@@ -4,7 +4,7 @@ import { useState, useTransition } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -16,9 +16,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ValidatedField } from "@/components/ui/field"
 import { PaginationJump } from "@/components/ui/pagination-jump"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { showUndoToast } from "@/components/ui/undo-toast"
 import { ListToolbar, ListToolbarSearch, MoreFiltersPopover } from "@/components/list-toolbar"
+import { PageHeader } from "@/components/page-header"
+import { StageSelect } from "@/components/stage-select"
 import { MoreVerticalIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UploadIcon, PlusIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
 import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useBulkChangeStage, useCreateSurrogate, useIntelligentSuggestionSummary, useSurrogateCreatedDates } from "@/lib/hooks/use-surrogates"
@@ -38,6 +43,11 @@ import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesF
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
 import { readableForeground } from "@/lib/stage-colors"
+import { getStageOptionLabel, pipelineStageOptions } from "@/lib/stage-options"
+import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
+import { SURROGATE_SOURCE_LABELS, isSurrogateSource } from "@/lib/surrogate-source-labels"
+import { useFormValidation } from "@/lib/forms/use-form-validation"
+import { EMAIL_INVALID_MESSAGE, validateEmail, validateRequired } from "@/lib/forms/validators"
 
 const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -70,6 +80,10 @@ function getInitials(name: string | null): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
+function formatSurrogateCount(count: number): string {
+    return `${count} surrogate${count === 1 ? "" : "s"}`
+}
+
 // Floating Action Bar for bulk operations
 function FloatingActionBar({
     selectedCount,
@@ -88,6 +102,7 @@ function FloatingActionBar({
     const { data: assignees } = useAssignees()
     const bulkAssignMutation = useBulkAssign()
     const bulkArchiveMutation = useBulkArchive()
+    const restoreMutation = useRestoreSurrogate()
     const bulkChangeStageMutation = useBulkChangeStage()
     const [isChangeStageOpen, setIsChangeStageOpen] = useState(false)
 
@@ -104,8 +119,23 @@ function FloatingActionBar({
     }
 
     const handleArchive = async () => {
-        await bulkArchiveMutation.mutateAsync(selectedSurrogateIds)
-        onClear()
+        const result = await bulkArchiveMutation.mutateAsync(selectedSurrogateIds)
+        if (result.archived === 0) {
+            throw new Error("Bulk archive failed")
+        }
+        const failedIds = new Set(result.failed)
+        const archivedIds = selectedSurrogateIds.filter((id) => !failedIds.has(id))
+        if (result.failed.length > 0) {
+            onSelectionChange(result.failed)
+        } else {
+            onClear()
+        }
+        showUndoToast(
+            result.failed.length > 0
+                ? `Archived ${result.archived} of ${selectedSurrogateIds.length} surrogates`
+                : `Archived ${formatSurrogateCount(result.archived)}`,
+            () => Promise.all(archivedIds.map((id) => restoreMutation.mutateAsync(id))),
+        )
     }
 
     const handleBulkStageChange = async (stageId: string) => {
@@ -185,10 +215,18 @@ function FloatingActionBar({
                         </Button>
                     )}
 
-                    <Button variant="secondary" size="sm" onClick={handleArchive} disabled={isLoading}>
-                        <ArchiveIcon className="size-4 mr-1" />
-                        Archive
-                    </Button>
+                    <ConfirmDialog
+                        trigger={
+                            <Button variant="secondary" size="sm" disabled={isLoading}>
+                                <ArchiveIcon className="size-4 mr-1" aria-hidden="true" />
+                                Archive
+                            </Button>
+                        }
+                        title={`Archive ${formatSurrogateCount(selectedCount)}?`}
+                        confirmLabel="Archive"
+                        errorFallback="Couldn't archive surrogates. Try again."
+                        onConfirm={handleArchive}
+                    />
 
                     <Button variant="ghost" size="sm" onClick={onClear} disabled={isLoading}>
                         <XIcon className="size-4 mr-1" />
@@ -209,29 +247,31 @@ function FloatingActionBar({
     )
 }
 
-const VALID_SOURCES = [
-    "all",
-    "manual",
-    "meta",
-    "tiktok",
-    "google",
-    "website",
-    "referral",
-    "other",
-] as const
-type SourceFilter = (typeof VALID_SOURCES)[number]
+const SOURCE_LABELS = SURROGATE_SOURCE_LABELS
+const SOURCE_OPTIONS = toSelectOptions(SOURCE_LABELS)
+type SourceFilter = "all" | SurrogateSource
 const isSourceFilter = (value: string | null): value is SourceFilter =>
-    value !== null && VALID_SOURCES.includes(value as SourceFilter)
+    value === "all" || isSurrogateSource(value)
 
-const CREATE_SOURCE_OPTIONS: { value: SurrogateSource; label: string }[] = [
-    { value: "manual", label: "Manual" },
-    { value: "website", label: "Website" },
-    { value: "referral", label: "Referral" },
-    { value: "meta", label: "Meta" },
-    { value: "tiktok", label: "TikTok" },
-    { value: "google", label: "Google" },
-    { value: "other", label: "Others" },
-]
+// The create dialog keeps its existing source list; Import and Agency are filter-only here.
+const CREATE_SOURCE_OPTIONS = (
+    ["manual", "website", "referral", "meta", "tiktok", "google", "other"] as const
+).map((value) => ({ value, label: SOURCE_LABELS[value] }))
+const getCreateSourceLabel = createSelectLabelGetter(SOURCE_LABELS, {
+    emptyLabel: "Select a source",
+    unknownLabel: "Unknown source",
+})
+
+type CreateSurrogateForm = {
+    full_name: string
+    email: string
+    source: SurrogateSource
+}
+
+const validateCreateSurrogateForm = (values: CreateSurrogateForm) => ({
+    full_name: validateRequired(values.full_name, "Enter a name."),
+    email: validateEmail(values.email, { requiredMessage: "Enter an email address." }),
+})
 
 const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
 const isDateRangePreset = (value: string | null): value is DateRangePreset =>
@@ -252,30 +292,11 @@ const DYNAMIC_FILTER_LABELS: Record<DynamicSurrogateFilter, string> = {
     attention_stuck: "Attention Needed: Stuck Surrogates",
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-    manual: "Manual",
-    meta: "Meta",
-    tiktok: "TikTok",
-    google: "Google",
-    website: "Website",
-    referral: "Referral",
-    other: "Others",
-    agency: "Agency",
-    import: "Import",
-}
-
-const getStageFilterLabel = (
-    value: string | null | undefined,
-    stages: Array<{ id: string; label: string }>
-) => {
-    if (!value || value === "all") return "All Stages"
-    return stages.find((stage) => stage.id === value)?.label ?? "Unknown stage"
-}
-
-const getSourceFilterLabel = (value: string | null | undefined) => {
-    if (!value || value === "all") return "All Sources"
-    return SOURCE_LABELS[value] ?? "Unknown source"
-}
+const getSourceFilterLabel = createSelectLabelGetter(SOURCE_LABELS, {
+    emptyLabel: "All Sources",
+    allValue: "all",
+    unknownLabel: "Unknown source",
+})
 
 const getQueueFilterLabel = (
     value: string | null | undefined,
@@ -581,10 +602,17 @@ export function SurrogatesPageClient() {
     const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false)
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [isMassEditOpen, setIsMassEditOpen] = useState(false)
-    const [createForm, setCreateForm] = useState({
+    // Row menu items unmount on click, so the confirm lives outside the menu.
+    const [archiveTarget, setArchiveTarget] = useState<{ id: string; number: string } | null>(null)
+    const [isArchiveConfirmOpen, setIsArchiveConfirmOpen] = useState(false)
+    const [createForm, setCreateForm] = useState<CreateSurrogateForm>({
         full_name: "",
         email: "",
-        source: "manual" as SurrogateSource,
+        source: "manual",
+    })
+    const createValidation = useFormValidation({
+        values: createForm,
+        validate: validateCreateSurrogateForm,
     })
     const perPage = 30
     const createMutation = useCreateSurrogate()
@@ -864,6 +892,7 @@ export function SurrogatesPageClient() {
     const { data: queues } = useQueues(false, { enabled: !!canSeeQueues })
     const { data: defaultPipeline } = useDefaultPipeline()
     const stageOptions = defaultPipeline?.stages || []
+    const stageSelectOptions = pipelineStageOptions(stageOptions)
     const stageById = new Map(stageOptions.map(stage => [stage.id, stage]))
 
     // Convert date range to ISO strings
@@ -917,9 +946,7 @@ export function SurrogatesPageClient() {
 
     const { data: availableCreatedDateKeys } = useSurrogateCreatedDates(createdDateFilters)
 
-    const { data, isLoading, isError, error, refetch } = useSurrogates({
-        page,
-        per_page: perPage,
+    const listFilters = {
         ...getDateRangeParams(),
         ...(stageFilter === "all" ? {} : { stage_id: stageFilter }),
         ...(sourceFilter === "all" ? {} : { source: sourceFilter }),
@@ -928,10 +955,25 @@ export function SurrogatesPageClient() {
         ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
         ...(ownerFilter === "all" ? {} : { owner_id: ownerFilter }),
         ...(dynamicFilter ? { dynamic_filter: dynamicFilter } : {}),
+    }
+    const isListFiltered = Object.keys(listFilters).length > 0
+
+    // Unfiltered first page, for the "8 of 151" header count. It shares the cache entry of the
+    // unfiltered list, so it usually costs no request.
+    const { data: unfilteredData } = useSurrogates(
+        { page: 1, per_page: perPage },
+        { enabled: isListFiltered },
+    )
+
+    const { data, isLoading, isError, error, refetch } = useSurrogates({
+        page,
+        per_page: perPage,
+        ...listFilters,
         ...(sortBy ? { sort_by: sortBy, sort_order: sortOrder } : {}),
     })
 
     const totalCount = data?.total ?? null
+    const unfilteredTotal = isListFiltered ? (unfilteredData?.total ?? null) : totalCount
     const totalPages = data?.pages ?? null
     const hasTotal = totalCount !== null
     const totalCountValue = totalCount ?? 0
@@ -1036,7 +1078,7 @@ export function SurrogatesPageClient() {
         ...(stageFilter !== "all"
             ? [{
                 key: "stage" as const,
-                label: `Stage: ${getStageFilterLabel(stageFilter, stageOptions)}`,
+                label: `Stage: ${getStageOptionLabel(stageFilter, stageSelectOptions)}`,
             }]
             : []),
         ...(dateRange !== "all"
@@ -1106,8 +1148,9 @@ export function SurrogatesPageClient() {
         setSelectedSurrogates(new Set())
     }
 
-    const handleArchive = async (surrogateId: string) => {
-        await archiveMutation.mutateAsync(surrogateId)
+    const handleArchive = async (target: { id: string; number: string }) => {
+        await archiveMutation.mutateAsync(target.id)
+        showUndoToast(`${target.number} archived`, () => restoreMutation.mutateAsync(target.id))
     }
 
     const handleRestore = async (surrogateId: string) => {
@@ -1124,44 +1167,40 @@ export function SurrogatesPageClient() {
             email: "",
             source: "manual",
         })
+        createValidation.reset()
     }
 
-    const handleCreate = async () => {
+    const handleCreate = createValidation.handleSubmit(async (values) => {
         try {
-            const fullName = createForm.full_name.trim()
-            const email = createForm.email.trim()
-            if (!fullName || !email) {
-                toast.error("Name and email are required")
-                return
-            }
             const created = await createMutation.mutateAsync({
-                full_name: fullName,
-                email,
-                source: createForm.source,
+                full_name: values.full_name.trim(),
+                email: values.email.trim(),
+                source: values.source,
                 assign_to_user: user?.role === "intake_specialist",
             })
             setIsCreateOpen(false)
             resetCreateForm()
-            toast.success("Surrogate created successfully")
+            toast.success("Surrogate created")
             push(buildSurrogateDetailHref(created.id, currentListHref) as Route)
         } catch (error) {
-            const message = error instanceof Error ? error.message : "Failed to create surrogate"
-            toast.error(message)
+            const formError = createValidation.applyApiError(error, {
+                fields: ["full_name", "email", "source"],
+                messages: { email: EMAIL_INVALID_MESSAGE },
+                fallback: "Couldn't create surrogate. Try again.",
+            })
+            if (formError) toast.error(formError)
         }
-    }
+    })
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            {/* Page Header - Fixed Height */}
-            <div className="flex-shrink-0 border-b border-border bg-background/95 backdrop-blur">
-                <div className="flex h-14 items-center justify-between px-6">
-                    <div>
-                        <h1 className="text-xl font-semibold">Surrogates</h1>
-                        <p className="text-sm text-muted-foreground">
-                            {hasTotal ? totalCount.toLocaleString() : "—"} total surrogates
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
+            <PageHeader
+                title="Surrogates"
+                count={totalCount}
+                countTotal={unfilteredTotal}
+                countLabel="surrogates"
+                actions={
+                    <>
                         {isDeveloper && (
                             <Button
                                 variant="outline"
@@ -1172,12 +1211,12 @@ export function SurrogatesPageClient() {
                             </Button>
                         )}
                         <Button onClick={() => setIsCreateOpen(true)}>
-                            <PlusIcon className="mr-2 size-4" />
-                            New Surrogates
+                            <PlusIcon className="mr-2 size-4" aria-hidden="true" />
+                            New surrogate
                         </Button>
-                    </div>
-                </div>
-            </div>
+                    </>
+                }
+            />
 
             {/* Dev-only Mass Edit Modal */}
             {isDeveloper && (
@@ -1209,24 +1248,14 @@ export function SurrogatesPageClient() {
                         )}
 
                         <div className="hidden md:block">
-                            <Select
+                            <StageSelect
                                 value={stageFilter}
                                 onValueChange={(value) => handleStageChange(value || "all")}
-                            >
-                                <SelectTrigger className="w-[180px]">
-                                    <SelectValue placeholder="All Stages">
-                                        {(value: string | null) => getStageFilterLabel(value, stageOptions)}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Stages</SelectItem>
-                                    {stageOptions.map((stage) => (
-                                        <SelectItem key={stage.id} value={stage.id}>
-                                            {stage.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                options={stageSelectOptions}
+                                allLabel="All Stages"
+                                className="w-[180px]"
+                                aria-label="Filter by stage"
+                            />
                         </div>
 
                         <div className="hidden md:block">
@@ -1259,13 +1288,11 @@ export function SurrogatesPageClient() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all">All Sources</SelectItem>
-                                        <SelectItem value="manual">Manual</SelectItem>
-                                        <SelectItem value="meta">Meta</SelectItem>
-                                        <SelectItem value="tiktok">TikTok</SelectItem>
-                                        <SelectItem value="google">Google</SelectItem>
-                                        <SelectItem value="website">Website</SelectItem>
-                                        <SelectItem value="referral">Referral</SelectItem>
-                                        <SelectItem value="other">Others</SelectItem>
+                                        {SOURCE_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -1356,22 +1383,15 @@ export function SurrogatesPageClient() {
                                 </Select>
                             </div>
 
-                            <div className="rounded-xl border border-border/70 bg-muted/30 p-3">
-                                <div className="flex items-start gap-3">
-                                    <Checkbox
-                                        id="surrogate-priority-only"
-                                        checked={priorityOnly}
-                                        onCheckedChange={(checked) =>
-                                            handlePriorityOnlyChange(Boolean(checked))
-                                        }
-                                    />
-                                    <div className="space-y-1">
-                                        <Label htmlFor="surrogate-priority-only">Priority only</Label>
-                                        <p className="text-sm text-muted-foreground">
-                                            Show only surrogates marked as priority.
-                                        </p>
-                                    </div>
-                                </div>
+                            <div className="flex items-center gap-3">
+                                <Checkbox
+                                    id="surrogate-priority-only"
+                                    checked={priorityOnly}
+                                    onCheckedChange={(checked) =>
+                                        handlePriorityOnlyChange(Boolean(checked))
+                                    }
+                                />
+                                <Label htmlFor="surrogate-priority-only">Priority only</Label>
                             </div>
                         </MoreFiltersPopover>
                     </>
@@ -1394,85 +1414,93 @@ export function SurrogatesPageClient() {
 
             {/* Create Modal */}
             <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetCreateForm() }}>
-                <DialogContent className="max-w-lg">
+                <DialogContent size="lg">
                     <DialogHeader>
-                        <DialogTitle>New Surrogates</DialogTitle>
-                        <DialogDescription>Add a new surrogate to the system</DialogDescription>
+                        <DialogTitle>New surrogate</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="surrogate-full-name">Full Name *</Label>
-                            <Input
-                                id="surrogate-full-name"
-                                value={createForm.full_name}
-                                onChange={(e) => setCreateForm((currentForm) => ({ ...currentForm, full_name: e.target.value }))}
-                                placeholder="Jane Smith"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="surrogate-email">Email *</Label>
-                            <Input
-                                id="surrogate-email"
-                                type="email"
-                                value={createForm.email}
-                                onChange={(e) => setCreateForm((currentForm) => ({ ...currentForm, email: e.target.value }))}
-                                placeholder="jane@example.com"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="surrogate-source">Source *</Label>
-                            <Select
-                                value={createForm.source}
-                                onValueChange={(value) =>
-                                    setCreateForm((currentForm) => ({ ...currentForm, source: value as SurrogateSource }))
-                                }
-                            >
-                                <SelectTrigger id="surrogate-source">
-                                    <SelectValue placeholder="Select a source" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {CREATE_SOURCE_OPTIONS.map((source) => (
-                                        <SelectItem key={source.value} value={source.value}>
-                                            {source.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <Card className="bg-muted/50">
-                            <CardContent className="py-4 flex items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-sm font-medium">Import CSV</p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Bulk upload surrogates from a CSV file.
-                                    </p>
-                                </div>
-                                <Button
-                                    render={<Link href="/surrogates/import" />}
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setIsCreateOpen(false)}
+                    <form id="create-surrogate-form" noValidate onSubmit={handleCreate} className="space-y-4">
+                        <ValidatedField label="Full name" error={createValidation.errorFor("full_name")}>
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    required
+                                    autoComplete="off"
+                                    value={createForm.full_name}
+                                    onChange={(e) => setCreateForm((currentForm) => ({ ...currentForm, full_name: e.target.value }))}
+                                    onBlur={() => createValidation.touch("full_name")}
+                                    placeholder="Jane Smith"
+                                />
+                            )}
+                        </ValidatedField>
+                        <ValidatedField label="Email" error={createValidation.errorFor("email")}>
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    type="email"
+                                    required
+                                    autoComplete="off"
+                                    value={createForm.email}
+                                    onChange={(e) => setCreateForm((currentForm) => ({ ...currentForm, email: e.target.value }))}
+                                    onBlur={() => createValidation.touch("email")}
+                                    placeholder="jane@example.com"
+                                />
+                            )}
+                        </ValidatedField>
+                        <ValidatedField label="Source" error={createValidation.errorFor("source")}>
+                            {(control) => (
+                                <Select
+                                    value={createForm.source}
+                                    onValueChange={(value) => {
+                                        if (isSurrogateSource(value)) {
+                                            setCreateForm((currentForm) => ({ ...currentForm, source: value }))
+                                        }
+                                    }}
                                 >
-                                    <UploadIcon className="mr-2 size-4" />
-                                    Import CSV
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </div>
-                    <DialogFooter>
+                                    <SelectTrigger {...control}>
+                                        <SelectValue placeholder="Select a source">{getCreateSourceLabel}</SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {CREATE_SOURCE_OPTIONS.map((source) => (
+                                            <SelectItem key={source.value} value={source.value}>
+                                                {source.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </ValidatedField>
+                    </form>
+                    <DialogFooter
+                        start={
+                            <Button
+                                render={<Link href="/surrogates/import" />}
+                                variant="outline"
+                                onClick={() => setIsCreateOpen(false)}
+                            >
+                                <UploadIcon className="mr-2 size-4" aria-hidden="true" />
+                                Import CSV
+                            </Button>
+                        }
+                    >
                         <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                             Cancel
                         </Button>
-                        <Button
-                            onClick={handleCreate}
-                            disabled={createMutation.isPending || !createForm.full_name.trim() || !createForm.email.trim()}
-                        >
-                            {createMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                        <Button type="submit" form="create-surrogate-form" disabled={createMutation.isPending}>
+                            {createMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" aria-hidden="true" />}
                             Create
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ConfirmDialog
+                open={isArchiveConfirmOpen}
+                onOpenChange={setIsArchiveConfirmOpen}
+                title={`Archive ${archiveTarget?.number ?? "surrogate"}?`}
+                confirmLabel="Archive"
+                errorFallback="Couldn't archive surrogate. Try again."
+                onConfirm={() => (archiveTarget ? handleArchive(archiveTarget) : undefined)}
+            />
 
             {/* Scrollable Content Area */}
             <div className="flex-1 overflow-auto p-6">
@@ -1658,7 +1686,13 @@ export function SurrogatesPageClient() {
                                                             )}
                                                             {!surrogateItem.is_archived ? (
                                                                 <DropdownMenuItem
-                                                                    onClick={() => handleArchive(surrogateItem.id)}
+                                                                    onClick={() => {
+                                                                        setArchiveTarget({
+                                                                            id: surrogateItem.id,
+                                                                            number: surrogateItem.surrogate_number,
+                                                                        })
+                                                                        setIsArchiveConfirmOpen(true)
+                                                                    }}
                                                                     disabled={archiveMutation.isPending}
                                                                     className="text-destructive"
                                                                 >

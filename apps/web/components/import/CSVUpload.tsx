@@ -57,7 +57,7 @@ import {
 } from "@/lib/import-utils"
 
 const TRANSFORM_OPTIONS = [
-    { value: "", label: "None" },
+    { value: "", label: "No transform" },
     { value: "date_flexible", label: "Date (flexible)" },
     { value: "datetime_flexible", label: "Date/Time (flexible)" },
     { value: "height_flexible", label: "Height (flexible)" },
@@ -82,7 +82,7 @@ const SOURCE_OPTIONS: Array<{ value: SurrogateSource; label: string }> = [
     { value: "meta", label: "Meta" },
     { value: "tiktok", label: "TikTok" },
     { value: "google", label: "Google" },
-    { value: "other", label: "Others" },
+    { value: "other", label: "Other" },
 ]
 
 interface CSVUploadProps {
@@ -1076,7 +1076,6 @@ function CSVColumnMappingHeading({
     return (
         <div>
             <CardTitle>Column Mapping</CardTitle>
-            <CardDescription>Review column mappings before submitting the import.</CardDescription>
             {hasCreatedAtMapping && (
                 <p className={cn("mt-2 text-xs", backdateCreatedAt ? "text-muted-foreground" : "text-amber-600")}>
                     {backdateCreatedAt
@@ -1328,8 +1327,8 @@ function CSVMappingTransformSelect({
             }
             disabled={mapping.action !== "map"}
         >
-            <SelectTrigger className="w-[170px]">
-                <SelectValue placeholder="None" />
+            <SelectTrigger className="w-[170px]" aria-label={`${mapping.csv_column} transform`}>
+                <SelectValue placeholder="No transform" />
             </SelectTrigger>
             <SelectContent>
                 {TRANSFORM_OPTIONS.map((option) => (
@@ -1509,7 +1508,7 @@ function CSVValidationDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent size="lg">
                 <DialogHeader>
                     <DialogTitle>Handle validation issues</DialogTitle>
                     <DialogDescription>
