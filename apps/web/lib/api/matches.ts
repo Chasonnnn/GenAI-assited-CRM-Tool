@@ -293,6 +293,7 @@ export interface MatchWorkTask {
     id: string
     title: string
     due_date: string | null
+    due_time?: string | null
     is_completed: boolean
     source: MatchWorkSource
     scope?: 'case' | 'record'

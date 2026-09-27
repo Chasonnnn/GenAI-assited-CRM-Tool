@@ -1,3 +1,5 @@
+import { format } from "date-fns"
+
 import { parseDateInput, startOfLocalDay } from "@/lib/utils/date"
 
 export type DueCategory = "overdue" | "today" | "tomorrow" | "this-week" | "later" | "no-date"
@@ -42,6 +44,12 @@ export function compareTasksByDueTime(
     const dateOrder = (a.due_date ?? "9999-99-99").localeCompare(b.due_date ?? "9999-99-99")
     if (dateOrder !== 0) return dateOrder
     return (a.due_time ?? "99:99:99").localeCompare(b.due_time ?? "99:99:99")
+}
+
+/** Formats an API due time ("HH:MM[:SS]") as "h:mm a". */
+export function formatDueTime(dueTime: string): string {
+    const [hours = 0, minutes = 0] = dueTime.split(":").map(Number)
+    return format(new Date(2000, 0, 1, hours, minutes), "h:mm a")
 }
 
 export function getDueCategory(task: { due_date: string | null }): DueCategory {

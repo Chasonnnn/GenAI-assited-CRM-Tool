@@ -7,6 +7,7 @@ from sqlalchemy import String, and_, cast, exists, func, literal, or_, select, u
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.permissions import PermissionKey as P
+from app.db.enums import AuditEventType
 from app.db.models import (
     Attachment,
     AuditLog,
@@ -165,6 +166,8 @@ def _list_activity(db, session, match, attempt_id, page):
         AuditLog.organization_id == session.org_id,
         AuditLog.target_type == "match",
         AuditLog.target_id == match.id,
+        # Page views write PHI access audits; they belong in the audit log, not the case activity.
+        AuditLog.event_type != AuditEventType.PHI_VIEWED.value,
     )
     if attempt_id:
         case_query = case_query.where(AuditLog.details["attempt_id"].astext == str(attempt_id))
@@ -379,6 +382,7 @@ def list_work(
                 "id": str(t.id),
                 "title": t.title,
                 "due_date": t.due_date,
+                "due_time": t.due_time,
                 "is_completed": t.is_completed,
                 "source": t.work_source or ("match" if t.match_id else work_source(t)),
                 "scope": "case" if t.match_id else "record",

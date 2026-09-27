@@ -139,4 +139,20 @@ describe("MatchDetailOverviewTabs", () => {
         expect(screen.getAllByText("All Sources")).toHaveLength(2)
         expect(screen.queryByText(/^All$/)).not.toBeInTheDocument()
     })
+
+    it("shows the due time next to the due date on case tasks", () => {
+        render(
+            <MatchDetailOverviewTabs
+                {...historyProps}
+                activeTab="tasks"
+                filteredNotes={[]}
+                filteredTasks={[
+                    { id: "timed", title: "Call clinic", due_date: "2026-01-01", due_time: "14:30:00", is_completed: false, source: "match" },
+                    { id: "untimed", title: "Send packet", due_date: "2026-01-01", due_time: null, is_completed: false, source: "match" },
+                ]}
+            />,
+        )
+        expect(screen.getByText("Due: Jan 1, 2026 · 2:30 PM")).toBeInTheDocument()
+        expect(screen.getByText("Due: Jan 1, 2026")).toBeInTheDocument()
+    })
 })

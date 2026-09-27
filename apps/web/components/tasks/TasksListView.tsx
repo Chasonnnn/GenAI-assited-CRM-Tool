@@ -20,6 +20,7 @@ import {
     categoryColors,
     categoryLabels,
     compareTasksByDueTime,
+    formatDueTime,
     getDueCategory,
     type DueCategory,
 } from "@/lib/utils/task-due"
@@ -54,11 +55,6 @@ const EMPTY_TITLES: Record<TaskStatusFilter, string> = {
     open: "No open tasks",
     completed: "No completed tasks",
     all: "No tasks",
-}
-
-function formatDueTime(dueTime: string): string {
-    const [hours = 0, minutes = 0] = dueTime.split(":").map(Number)
-    return format(new Date(2000, 0, 1, hours, minutes), "h:mm a")
 }
 
 /**

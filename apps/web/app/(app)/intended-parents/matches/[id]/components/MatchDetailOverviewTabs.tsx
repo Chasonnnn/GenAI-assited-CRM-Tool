@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { formatDueTime } from "@/lib/utils/task-due"
 import {
     CheckSquareIcon,
     DownloadIcon,
@@ -328,6 +329,7 @@ function TasksTab({
                             {task.due_date && (
                                 <p className="text-xs text-muted-foreground">
                                     Due: {formatDate(task.due_date)}
+                                    {task.due_time ? ` · ${formatDueTime(task.due_time)}` : ""}
                                 </p>
                             )}
                         </div>
