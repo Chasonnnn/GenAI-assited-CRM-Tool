@@ -76,6 +76,55 @@ async def test_org_signature_preview_does_not_include_unconfigured_linkedin(
 
 
 @pytest.mark.asyncio
+async def test_org_signature_preview_labels_legacy_platform_keys(
+    authed_client: AsyncClient, db, test_org
+):
+    """Stored lowercase platform keys render as display labels; custom text stays as stored."""
+    test_org.signature_template = "classic"
+    test_org.signature_social_links = [
+        {"platform": "linkedin", "url": "https://www.linkedin.com/company/example/"},
+        {"platform": "twitter", "url": "https://x.com/example"},
+        {"platform": "Newsletter", "url": "https://example.com/news"},
+    ]
+    db.commit()
+
+    response = await authed_client.get("/settings/organization/signature/preview")
+    assert response.status_code == 200
+    html = response.json()["html"]
+    assert ">LinkedIn</a>" in html
+    assert ">X</a>" in html
+    assert ">Newsletter</a>" in html
+    assert ">linkedin</a>" not in html
+    assert ">twitter</a>" not in html
+
+    # Org-scope sent emails use the org-only renderer, which reads the raw JSONB links.
+    response = await authed_client.get("/settings/organization/signature/preview?mode=org_only")
+    assert response.status_code == 200
+    html = response.json()["html"]
+    assert ">LinkedIn</a>" in html
+    assert ">X</a>" in html
+    assert ">linkedin</a>" not in html
+
+
+@pytest.mark.asyncio
+async def test_user_signature_labels_legacy_platform_keys(authed_client: AsyncClient, db, test_org):
+    """The per-user signature used in sent email labels legacy org platform keys."""
+    test_org.signature_template = "modern"
+    test_org.signature_social_links = [
+        {"platform": "instagram", "url": "https://www.instagram.com/example/"},
+        {"platform": " TIKTOK ", "url": "https://www.tiktok.com/@example"},
+    ]
+    db.commit()
+
+    response = await authed_client.get("/auth/me/signature/preview")
+    assert response.status_code == 200
+    html = response.json()["html"]
+    assert ">Instagram</a>" in html
+    assert ">TikTok</a>" in html
+    assert ">instagram</a>" not in html
+
+
+@pytest.mark.asyncio
 async def test_signature_update_rejects_invalid_url(authed_client: AsyncClient):
     """Invalid social URL is rejected."""
     response = await authed_client.patch(

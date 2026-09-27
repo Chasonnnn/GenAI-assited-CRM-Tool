@@ -911,7 +911,8 @@ function AppVersion() {
 // Social Links Section
 // =============================================================================
 
-// The API renders the stored platform text as the link label, so each value is its display text.
+// Each value is its display text. The API labels older lowercase keys at render time;
+// keep in sync with SOCIAL_PLATFORM_LABELS in apps/api/app/services/signature_template_service.py.
 const SOCIAL_PLATFORMS = ["LinkedIn", "Instagram", "Facebook", "X", "TikTok", "Website"] as const
 const SOCIAL_PLATFORM_ALIASES: Record<string, string> = { twitter: "X" }
 const MAX_SOCIAL_LINKS = 6

@@ -25,6 +25,19 @@ DEFAULT_TEMPLATE: TemplateType = "classic"
 HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
 HTTPS_URL_PATTERN = re.compile(r"^https://")
 
+# Display labels for org social link platforms, keyed by lowercase value. Older rows store
+# lowercase keys ("linkedin"); mapping at render time labels them without a data migration.
+# Keep in sync with SOCIAL_PLATFORMS in apps/web/app/(app)/settings/page.tsx.
+SOCIAL_PLATFORM_LABELS = {
+    "linkedin": "LinkedIn",
+    "instagram": "Instagram",
+    "facebook": "Facebook",
+    "x": "X",
+    "twitter": "X",
+    "tiktok": "TikTok",
+    "website": "Website",
+}
+
 
 def validate_hex_color(color: str | None) -> str | None:
     """Validate hex color format, return None if invalid."""
@@ -56,6 +69,23 @@ def escape_text(text: str | None) -> str:
     if not text:
         return ""
     return html.escape(text, quote=True)
+
+
+def social_platform_label(platform: str | None) -> str:
+    """Return the display label for a known platform key; other text is returned trimmed."""
+    trimmed = (platform or "").strip()
+    return SOCIAL_PLATFORM_LABELS.get(trimmed.lower(), trimmed)
+
+
+def _parse_org_social_links(links: list[dict] | None) -> list[dict]:
+    """Label, escape and validate org social links from JSONB."""
+    parsed = []
+    for link in links or []:
+        platform = escape_text(social_platform_label(link.get("platform")))
+        url = validate_url(link.get("url"))
+        if platform and url:
+            parsed.append({"platform": platform, "url": url})
+    return parsed
 
 
 def render_signature_html(
@@ -97,15 +127,7 @@ def _get_base_data(org: Organization, user: User) -> dict:
     otherwise falls back to profile values (display_name, etc.).
     """
     primary_color = validate_hex_color(org.signature_primary_color) or "#0066cc"
-
-    # Parse org social links from JSONB
-    org_social_links = []
-    if org.signature_social_links:
-        for link in org.signature_social_links:
-            platform = escape_text(link.get("platform", ""))
-            url = validate_url(link.get("url"))
-            if platform and url:
-                org_social_links.append({"platform": platform, "url": url})
+    org_social_links = _parse_org_social_links(org.signature_social_links)
 
     # Use signature overrides with fallback to profile values
     effective_name = getattr(user, "signature_name", None) or user.display_name
@@ -145,15 +167,7 @@ def _get_sample_data(org: Organization) -> dict:
     Keys match _get_base_data() to prevent preview drift.
     """
     primary_color = validate_hex_color(org.signature_primary_color) or "#0066cc"
-
-    # Parse org social links from JSONB
-    org_social_links = []
-    if org.signature_social_links:
-        for link in org.signature_social_links:
-            platform = escape_text(link.get("platform", ""))
-            url = validate_url(link.get("url"))
-            if platform and url:
-                org_social_links.append({"platform": platform, "url": url})
+    org_social_links = _parse_org_social_links(org.signature_social_links)
 
     return {
         # Org branding (all HTML-escaped)
