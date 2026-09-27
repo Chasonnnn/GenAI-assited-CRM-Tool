@@ -22,6 +22,53 @@ export type UseFormValidationOptions<TValues extends object> = {
     validate: (values: TValues) => FormFieldErrors<TValues>
 }
 
+type FieldTracking<Name extends string> = {
+    /** Values the form started from, or after reset(); null until the next render captures them. */
+    baseline: object | null
+    /** Fields whose value has differed from the baseline at some point. */
+    edited: ReadonlySet<Name>
+    /** Fields that lost focus after an edit; their client errors show. */
+    touched: ReadonlySet<Name>
+    /** touch() calls not yet settled against `edited`; the next render keeps or drops them. */
+    pendingTouches: ReadonlySet<Name>
+}
+
+const NO_FIELDS: ReadonlySet<never> = new Set()
+
+function freshTracking<Name extends string>(baseline: object | null): FieldTracking<Name> {
+    return { baseline, edited: NO_FIELDS, touched: NO_FIELDS, pendingTouches: NO_FIELDS }
+}
+
+/**
+ * Records newly edited fields and settles pending touches: a touch counts only for an edited field.
+ * Returns `tracking` itself when nothing changed, so the render-time update below converges.
+ */
+function settleTracking<TValues extends object, Name extends FieldName<TValues>>(
+    tracking: FieldTracking<Name>,
+    values: TValues,
+): FieldTracking<Name> {
+    const baseline = (tracking.baseline ?? values) as TValues
+    let edited = tracking.edited
+    for (const name of Object.keys(values) as Name[]) {
+        if (!edited.has(name) && !Object.is(values[name], baseline[name])) {
+            edited = new Set(edited).add(name)
+        }
+    }
+    let touched = tracking.touched
+    for (const name of tracking.pendingTouches) {
+        if (edited.has(name) && !touched.has(name)) touched = new Set(touched).add(name)
+    }
+    if (
+        tracking.baseline !== null &&
+        edited === tracking.edited &&
+        touched === tracking.touched &&
+        tracking.pendingTouches.size === 0
+    ) {
+        return tracking
+    }
+    return { baseline, edited, touched, pendingTouches: NO_FIELDS }
+}
+
 const INVALID_CONTROL_SELECTOR = '[aria-invalid="true"]:not([disabled])'
 const SUBMIT_ROOT_SELECTOR = 'form, [role="dialog"], [role="alertdialog"]'
 
@@ -45,7 +92,9 @@ function focusFirstInvalidAfterRender(getRoot: () => ParentNode | null) {
 /**
  * Field validation for forms that keep values in component state.
  *
- * - A field shows its error after it loses focus once, or after the first submit attempt.
+ * - A field shows its error after it loses focus following an edit, or after the first submit
+ *   attempt. Leaving an unedited field (for example an autofocused one) shows nothing, so the
+ *   error line cannot shift the layout under a click on another control.
  * - Errors are recomputed from `values`, so fixing a field clears its error on the next render.
  * - A failed submit focuses the first invalid control.
  * - API validation errors attach to fields and hide once the user edits that field.
@@ -56,7 +105,13 @@ export function useFormValidation<TValues extends object>({
 }: UseFormValidationOptions<TValues>) {
     type Name = FieldName<TValues>
 
-    const [touched, setTouched] = React.useState<ReadonlySet<Name>>(() => new Set())
+    const [trackingState, setTracking] = React.useState<FieldTracking<Name>>(() => freshTracking<Name>(values))
+    // Edits are detected by comparing values with the baseline during render, so they need no
+    // onChange wiring at the call sites. Updating state while rendering is React's pattern for
+    // state derived from previous renders; settleTracking returns the same object once settled.
+    const tracking = settleTracking(trackingState, values)
+    if (tracking !== trackingState) setTracking(tracking)
+    const { touched } = tracking
     const [submitAttempted, setSubmitAttempted] = React.useState(false)
     const [serverErrors, setServerErrorsState] = React.useState<Partial<Record<Name, ServerFieldError>>>({})
     // The form or dialog of the last submit, so later API errors focus inside it. It is read only in
@@ -82,8 +137,15 @@ export function useFormValidation<TValues extends object>({
     )
     const isValid = !hasClientErrors && !hasServerErrors
 
+    // A touch before the field's first edit is dropped on the next render. One made in the same
+    // handler as the edit (touch from onChange) is kept, because that render sees the new value.
     const touch = (name: Name) => {
-        setTouched((current) => (current.has(name) ? current : new Set(current).add(name)))
+        setTracking((current) => {
+            if (current.touched.has(name)) return current
+            if (current.edited.has(name)) return { ...current, touched: new Set(current.touched).add(name) }
+            if (current.pendingTouches.has(name)) return current
+            return { ...current, pendingTouches: new Set(current.pendingTouches).add(name) }
+        })
     }
 
     const setServerErrors = (errors: Partial<Record<Name, string>>) => {
@@ -125,7 +187,9 @@ export function useFormValidation<TValues extends object>({
         }
 
     const reset = () => {
-        setTouched(new Set())
+        // The next render's values become the baseline, so values set in the same handler count
+        // as the starting point rather than as edits.
+        setTracking(freshTracking<Name>(null))
         setSubmitAttempted(false)
         setServerErrorsState({})
     }
@@ -133,7 +197,7 @@ export function useFormValidation<TValues extends object>({
     return {
         /** The message to show under a field, or undefined. */
         errorFor,
-        /** Call from the control's onBlur. */
+        /** Call from the control's onBlur. It has no effect until the field has been edited. */
         touch,
         /** True when no field has a client or server error, whether or not it is shown yet. */
         isValid,

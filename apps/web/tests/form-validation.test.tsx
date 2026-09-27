@@ -163,6 +163,128 @@ describe("useFormValidation", () => {
         expect(screen.getByLabelText("Name")).not.toHaveAttribute("aria-invalid")
     })
 
+    it("keeps an unedited field quiet when it loses focus", () => {
+        render(<InviteForm onSubmit={vi.fn()} />)
+
+        const name = screen.getByLabelText("Name")
+        fireEvent.focus(name)
+        fireEvent.blur(name)
+
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+        expect(name).not.toHaveAttribute("aria-invalid")
+    })
+
+    it("does not show the error while retyping in a field that was left unedited earlier", () => {
+        render(<InviteForm onSubmit={vi.fn()} />)
+
+        const email = screen.getByLabelText("Email")
+        fireEvent.blur(email)
+        fireEvent.change(email, { target: { value: "j" } })
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+
+        fireEvent.blur(email)
+        expect(screen.getByRole("alert")).toHaveTextContent(EMAIL_INVALID_MESSAGE)
+    })
+
+    it("shows the required error after a field is edited back to empty and left", () => {
+        render(<InviteForm onSubmit={vi.fn()} />)
+
+        const name = screen.getByLabelText("Name")
+        fireEvent.change(name, { target: { value: "J" } })
+        fireEvent.change(name, { target: { value: "" } })
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+
+        fireEvent.blur(name)
+        expect(screen.getByRole("alert")).toHaveTextContent("Enter a name.")
+    })
+
+    it("keeps a touch made in the same handler as the edit", () => {
+        function LiveForm() {
+            const [values, setValues] = React.useState({ name: "Jordan" })
+            const form = useFormValidation({
+                values,
+                validate: (current) => ({ name: validateRequired(current.name, "Enter a name.") }),
+            })
+            return (
+                <ValidatedField label="Name" error={form.errorFor("name")}>
+                    {(control) => (
+                        <Input
+                            {...control}
+                            value={values.name}
+                            onChange={(event) => {
+                                setValues({ name: event.target.value })
+                                form.touch("name")
+                            }}
+                        />
+                    )}
+                </ValidatedField>
+            )
+        }
+        render(<LiveForm />)
+
+        fireEvent.change(screen.getByLabelText("Name"), { target: { value: "" } })
+
+        expect(screen.getByRole("alert")).toHaveTextContent("Enter a name.")
+    })
+
+    it("still shows every error on submit when no field was edited", async () => {
+        render(<InviteForm onSubmit={vi.fn()} />)
+
+        const name = screen.getByLabelText("Name")
+        fireEvent.blur(name)
+        fireEvent.click(screen.getByRole("button", { name: "Send invitation" }))
+
+        expect(screen.getAllByRole("alert")).toHaveLength(2)
+        await waitFor(() => {
+            expect(name).toHaveFocus()
+        })
+    })
+
+    it("treats values set together with reset() as the new starting point", () => {
+        function ReopenForm() {
+            const [values, setValues] = React.useState({ name: "" })
+            const form = useFormValidation({
+                values,
+                validate: (current) => ({ name: validateRequired(current.name, "Enter a name.") }),
+            })
+            return (
+                <>
+                    <ValidatedField label="Name" error={form.errorFor("name")}>
+                        {(control) => (
+                            <Input
+                                {...control}
+                                value={values.name}
+                                onChange={(event) => setValues({ name: event.target.value })}
+                                onBlur={() => form.touch("name")}
+                            />
+                        )}
+                    </ValidatedField>
+                    <Button
+                        onClick={() => {
+                            form.reset()
+                            setValues({ name: " " })
+                        }}
+                    >
+                        Reopen
+                    </Button>
+                </>
+            )
+        }
+        render(<ReopenForm />)
+
+        const name = screen.getByLabelText("Name")
+        fireEvent.change(name, { target: { value: "x" } })
+        fireEvent.change(name, { target: { value: "" } })
+        fireEvent.blur(name)
+        expect(screen.getByRole("alert")).toHaveTextContent("Enter a name.")
+
+        fireEvent.click(screen.getByRole("button", { name: "Reopen" }))
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+
+        fireEvent.blur(name)
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    })
+
     it("clears a shown error as soon as the value becomes valid", () => {
         render(<InviteForm onSubmit={vi.fn()} />)
 

@@ -202,7 +202,13 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
     it("shows a field error after blur and all errors after a blocked create", async () => {
         render(<PlatformSystemEmailTemplateNewPage />)
 
-        fireEvent.blur(screen.getByLabelText("Name"))
+        // Leaving an unedited field shows nothing; leaving it after an edit shows its error.
+        const name = screen.getByLabelText("Name")
+        fireEvent.blur(name)
+        expect(screen.queryByText("Name is required.")).not.toBeInTheDocument()
+        fireEvent.change(name, { target: { value: "W" } })
+        fireEvent.change(name, { target: { value: "" } })
+        fireEvent.blur(name)
         expect(screen.getByText("Name is required.")).toBeInTheDocument()
         expect(screen.queryByText("Subject is required.")).not.toBeInTheDocument()
 

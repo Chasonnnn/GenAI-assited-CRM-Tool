@@ -37,7 +37,13 @@ describe("NewAgencyPage validation", () => {
         expect(screen.queryByText("Enter an agency name.")).not.toBeInTheDocument()
         expect(screen.getByLabelText("Agency Name")).not.toHaveAttribute("aria-invalid")
 
-        fireEvent.blur(screen.getByLabelText("Agency Name"))
+        // Leaving an unedited field shows nothing; leaving it after an edit shows its error.
+        const name = screen.getByLabelText("Agency Name")
+        fireEvent.blur(name)
+        expect(screen.queryByText("Enter an agency name.")).not.toBeInTheDocument()
+        fireEvent.change(name, { target: { value: "Q" } })
+        fireEvent.change(name, { target: { value: "" } })
+        fireEvent.blur(name)
         expect(screen.getByText("Enter an agency name.")).toBeInTheDocument()
         expect(screen.queryByText("Enter the first admin email.")).not.toBeInTheDocument()
     })
