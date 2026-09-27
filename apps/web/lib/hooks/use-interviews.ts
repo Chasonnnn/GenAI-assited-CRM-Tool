@@ -224,6 +224,8 @@ export function useCreateInterviewNote() {
         onSuccess: (_, { interviewId }) => {
             void queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
             void queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
+            // List items carry notes_count.
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.lists() });
         },
     });
 }
@@ -258,6 +260,8 @@ export function useDeleteInterviewNote() {
         onSuccess: (_, { interviewId }) => {
             void queryClient.invalidateQueries({ queryKey: interviewKeys.notes(interviewId) });
             void queryClient.invalidateQueries({ queryKey: interviewKeys.detail(interviewId) });
+            // List items carry notes_count.
+            void queryClient.invalidateQueries({ queryKey: interviewKeys.lists() });
         },
     });
 }
