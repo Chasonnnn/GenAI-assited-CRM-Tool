@@ -67,7 +67,9 @@ const mockSetAIContext = vi.fn()
 const mockClearAIContext = vi.fn()
 const mockUseDonors = vi.fn()
 
-vi.mock("@/lib/hooks/use-permissions", () => ({ useEffectivePermissions: () => ({ data: { permissions: ["edit_tasks", "delete_tasks", "view_surrogates", "view_intended_parents", "view_donors"] } }) }))
+const ALL_TASK_PERMISSIONS = ["edit_tasks", "delete_tasks", "view_surrogates", "view_intended_parents", "view_donors"]
+const mockPermissions = vi.hoisted(() => ({ value: [] as string[] }))
+vi.mock("@/lib/hooks/use-permissions", () => ({ useEffectivePermissions: () => ({ data: { permissions: mockPermissions.value } }) }))
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
     useTask: (id: string) => mockUseTask(id),
@@ -143,6 +145,7 @@ describe('TasksPage', () => {
         mockNavigation.searchParams = new URLSearchParams()
         mockNavigation.push.mockReset()
         mockNavigation.replace.mockReset()
+        mockPermissions.value = [...ALL_TASK_PERMISSIONS]
         vi.mocked(window.localStorage.getItem).mockReturnValue('list')
         vi.mocked(window.localStorage.setItem).mockClear()
         Object.defineProperty(Element.prototype, 'scrollIntoView', {
@@ -291,6 +294,17 @@ describe('TasksPage', () => {
         expect(screen.getByRole('combobox', { name: 'Filter by linked record' })).toHaveTextContent('Donors')
         expect(screen.getByRole('button', { name: 'Remove filter: Linked: Donors' })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'Remove filter: Due: Due today' })).toBeInTheDocument()
+    })
+
+    it('offers only the linked record types the viewer can open', async () => {
+        mockPermissions.value = ["edit_tasks", "view_surrogates"]
+        render(<TasksPage />)
+
+        fireEvent.click(screen.getByRole('combobox', { name: 'Filter by linked record' }))
+        expect(await screen.findByRole('option', { name: 'Surrogates' })).toBeInTheDocument()
+        expect(screen.getByRole('option', { name: 'No linked record' })).toBeInTheDocument()
+        expect(screen.queryByRole('option', { name: 'Intended Parents' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('option', { name: 'Donors' })).not.toBeInTheDocument()
     })
 
     it('shows the assignee filter to admins and writes it to the URL', async () => {

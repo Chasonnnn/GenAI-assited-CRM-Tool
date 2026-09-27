@@ -30,6 +30,7 @@ import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { useTaskFocusNavigation } from "@/lib/hooks/use-task-focus-navigation"
 import type { UnifiedCalendarTaskFilter } from "@/lib/hooks/use-unified-calendar-data"
 import { useAuth } from "@/lib/auth-context"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { useAIContext } from "@/lib/context/ai-context"
 import type { TaskListItem } from "@/lib/types/task"
 import type { TaskLinkedType, TaskListParams, TaskUpdatePayload } from "@/lib/api/tasks"
@@ -124,6 +125,15 @@ function useTasksPageController() {
     const [status, setStatus] = useState<TaskStatusFilter>("open")
     const [due, setDue] = useState<TaskDueFilter>("all")
     const [linkedType, setLinkedType] = useState<TaskLinkedType | "all">("all")
+    // Same gates as the sidebar: a viewer only filters by record types they can open.
+    const { can } = usePermissionCheck()
+    const linkedTypeOptions = TASK_LINKED_TYPE_OPTIONS.filter((option) =>
+        option.value === "intended_parent"
+            ? can("view_intended_parents")
+            : option.value === "donor"
+              ? can("view_donors")
+              : true,
+    )
     const [search, setSearch] = useState("")
     const debouncedSearch = useDebouncedValue(search.trim(), 300)
     const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
@@ -455,6 +465,7 @@ function useTasksPageController() {
         isLoading,
         isRetryingList,
         linkedType,
+        linkedTypeOptions,
         listError,
         loadingApprovals,
         loadingCompleted,
@@ -559,7 +570,7 @@ function TasksPageToolbar({ controller }: { controller: TasksPageController }) {
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="all">All Records</SelectItem>
-                            {TASK_LINKED_TYPE_OPTIONS.map((option) => (
+                            {controller.linkedTypeOptions.map((option) => (
                                 <SelectItem key={option.value} value={option.value}>
                                     {option.label}
                                 </SelectItem>
