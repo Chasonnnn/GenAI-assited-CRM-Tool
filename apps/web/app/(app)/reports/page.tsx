@@ -20,6 +20,11 @@ import { toast } from "@/components/ui/toast"
 import { formatLocalDate } from "@/lib/utils/date"
 import { getCsrfHeaders } from "@/lib/csrf"
 import type { AnalyticsSummary, Campaign, MetaPerformance, PerformanceByUserResponse, SpendTotals } from "@/lib/api/analytics"
+import { PageHeader } from "@/components/page-header"
+import { ListToolbar } from "@/components/list-toolbar"
+import { LoadErrorState, PermissionDeniedState } from "@/components/error-state"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
+import ReportsLoading from "./loading"
 
 const ReportsChartsGrid = dynamic(
     () => import("./components/ReportsChartsGrid").then((mod) => mod.ReportsChartsGrid),
@@ -248,7 +253,14 @@ function AIUsageStats() {
     )
 }
 
-type ReportsPageHeaderProps = {
+const ALL_CAMPAIGNS_VALUE = "all"
+
+function getCampaignFilterLabel(value: string | null, campaignLabelById: Map<string, string>) {
+    if (!value || value === ALL_CAMPAIGNS_VALUE) return "All campaigns"
+    return campaignLabelById.get(value) ?? "Unknown campaign"
+}
+
+type ReportsFilterBarProps = {
     dateRange: DateRangePreset
     onDateRangeChange: (value: DateRangePreset) => void
     customRange: ReportCustomRange
@@ -259,11 +271,9 @@ type ReportsPageHeaderProps = {
     campaigns: Campaign[] | undefined
     campaignsLoading: boolean
     campaignsError: boolean
-    isExporting: boolean
-    onExportPDF: () => void
 }
 
-function ReportsPageHeader({
+function ReportsFilterBar({
     dateRange,
     onDateRangeChange,
     customRange,
@@ -274,31 +284,35 @@ function ReportsPageHeader({
     campaigns,
     campaignsLoading,
     campaignsError,
-    isExporting,
-    onExportPDF,
-}: ReportsPageHeaderProps) {
+}: ReportsFilterBarProps) {
     return (
-        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center justify-between px-6">
-                <h1 className="text-2xl font-semibold">Reports</h1>
-                <div className="flex items-center gap-3">
+        <ListToolbar
+            filters={
+                <>
                     <DateRangePicker
                         preset={dateRange}
                         onPresetChange={onDateRangeChange}
                         customRange={customRange}
                         onCustomRangeChange={onCustomRangeChange}
+                        ariaLabel="Filter by date range"
+                        className="h-9 flex-1 sm:flex-none"
                     />
-                    <Select value={selectedCampaign} onValueChange={(value) => onCampaignChange(value || '')}>
-                        <SelectTrigger className="w-48">
-                            <SelectValue placeholder="All">
-                                {(value: string | null) => {
-                                    if (!value) return "All"
-                                    return campaignLabelById.get(value) ?? "Unknown campaign"
-                                }}
+                    <Select
+                        value={selectedCampaign || ALL_CAMPAIGNS_VALUE}
+                        onValueChange={(value) =>
+                            onCampaignChange(value && value !== ALL_CAMPAIGNS_VALUE ? value : "")
+                        }
+                    >
+                        <SelectTrigger
+                            aria-label="Filter by campaign"
+                            className="min-w-36 flex-1 bg-background sm:w-56 sm:flex-none"
+                        >
+                            <SelectValue placeholder="All campaigns">
+                                {(value: string | null) => getCampaignFilterLabel(value, campaignLabelById)}
                             </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">All</SelectItem>
+                            <SelectItem value={ALL_CAMPAIGNS_VALUE}>All campaigns</SelectItem>
                             {campaignsLoading && (
                                 <SelectItem value="__loading__" disabled>
                                     Loading campaigns…
@@ -316,22 +330,24 @@ function ReportsPageHeader({
                             ))}
                         </SelectContent>
                     </Select>
-                    <Button
-                        onClick={onExportPDF}
-                        disabled={isExporting}
-                    >
-                        {isExporting ? (
-                            <>
-                                <Loader2Icon className="size-4 animate-spin" />
-                                Exporting…
-                            </>
-                        ) : (
-                            'Export PDF'
-                        )}
-                    </Button>
-                </div>
-            </div>
-        </div>
+                </>
+            }
+        />
+    )
+}
+
+function ExportPdfButton({ isExporting, onExportPDF }: { isExporting: boolean; onExportPDF: () => void }) {
+    return (
+        <Button onClick={onExportPDF} disabled={isExporting}>
+            {isExporting ? (
+                <>
+                    <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                    Exporting…
+                </>
+            ) : (
+                'Export PDF'
+            )}
+        </Button>
     )
 }
 
@@ -612,6 +628,50 @@ function ReportsPerformanceSection({
 
 export default function ReportsPage() {
     const { user } = useAuth()
+    const { isLoading, isError, retry, isRetrying, can } = usePermissionCheck()
+
+    // Clear AI context for reports pages (use global mode)
+    useSetAIContext(null)
+
+    if (isLoading) {
+        return <ReportsLoading />
+    }
+
+    if (isError) {
+        return (
+            <div className="flex min-h-screen flex-col">
+                <PageHeader title="Reports" />
+                <LoadErrorState
+                    title="Couldn't load permissions"
+                    onRetry={retry}
+                    isRetrying={isRetrying}
+                    headingLevel={2}
+                />
+            </div>
+        )
+    }
+
+    // The analytics API rejects intake specialists on report endpoints even with a role override,
+    // so they get the denied state rather than a page of failed requests.
+    const allowed = can("view_reports") && user?.role !== "intake_specialist"
+    if (!allowed) {
+        return (
+            <div className="flex min-h-screen flex-col">
+                <PageHeader title="Reports" />
+                <PermissionDeniedState
+                    description="Reports need the View reports permission. Ask an admin to update your role."
+                    secondaryHref="/dashboard"
+                    headingLevel={2}
+                />
+            </div>
+        )
+    }
+
+    return <ReportsContent />
+}
+
+function ReportsContent() {
+    const { user } = useAuth()
     const aiEnabled = user?.ai_enabled ?? false
 
     const [dateRange, setDateRange] = useState<DateRangePreset>('all')
@@ -622,9 +682,6 @@ export default function ReportsPage() {
     const [selectedCampaign, setSelectedCampaign] = useState<string>('')
     const [isExporting, setIsExporting] = useState(false)
     const [performanceMode, setPerformanceMode] = useState<PerformanceMode>("cohort")
-
-    // Clear AI context for reports pages (use global mode)
-    useSetAIContext(null)
 
     // Compute date range based on selected option
     const { fromDate, toDate } = getReportDateRange(dateRange, customRange)
@@ -752,7 +809,11 @@ export default function ReportsPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            <ReportsPageHeader
+            <PageHeader
+                title="Reports"
+                actions={<ExportPdfButton isExporting={isExporting} onExportPDF={handleExportPDF} />}
+            />
+            <ReportsFilterBar
                 dateRange={dateRange}
                 onDateRangeChange={setDateRange}
                 customRange={customRange}
@@ -763,8 +824,6 @@ export default function ReportsPage() {
                 campaigns={campaigns}
                 campaignsLoading={campaignsLoading}
                 campaignsError={campaignsError}
-                isExporting={isExporting}
-                onExportPDF={handleExportPDF}
             />
 
             {/* Main Content */}
