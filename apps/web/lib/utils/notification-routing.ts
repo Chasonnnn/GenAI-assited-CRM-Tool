@@ -42,6 +42,9 @@ export function getNotificationHref(notification: NotificationRouteInput): strin
     if (notification.entity_type === "intended_parent" && notification.entity_id) {
         return `/intended-parents/${notification.entity_id}`
     }
+    if (notification.entity_type === "match" && notification.entity_id) {
+        return `/intended-parents/matches/${notification.entity_id}`
+    }
     if (notification.entity_type === "donor" && notification.entity_id) {
         return `/donors/${notification.entity_id}`
     }

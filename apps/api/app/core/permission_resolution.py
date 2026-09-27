@@ -13,6 +13,8 @@ from app.core.permissions import (
     is_valid_permission,
 )
 
+MATCH_ACTION_PERMISSIONS = frozenset({"decide_matches", "close_matches"})
+
 
 def resolve_effective_permissions(
     role: str,
@@ -56,10 +58,17 @@ def resolve_effective_permissions(
         elif override_type == "revoke" and policy_version < 2:
             effective.discard(permission)
 
-    return {
+    effective = {
         permission
         for permission in effective
         if permission not in unavailable
         and not is_developer_only(permission, policy_version=policy_version)
         and (policy_version < 2 or permission not in ADMIN_ONLY_PERMISSIONS)
     }
+    if policy_version < 2:
+        # Production v1 authority comes only from the legacy permission, including
+        # its grants/revokes. Separate grants of the new action keys have no effect.
+        effective.difference_update(MATCH_ACTION_PERMISSIONS)
+        if "propose_matches" in effective:
+            effective.update(MATCH_ACTION_PERMISSIONS)
+    return effective

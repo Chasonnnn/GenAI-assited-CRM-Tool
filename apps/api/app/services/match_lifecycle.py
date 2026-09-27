@@ -37,9 +37,7 @@ DECLINED = MatchStatus.DECLINED.value
 CANCELLED = MatchStatus.CANCELLED.value
 COMPLETED = MatchStatus.COMPLETED.value
 
-CONCURRENT_ACCEPT_DETAIL = (
-    "This surrogate already has an accepted match (concurrent accept detected)"
-)
+CONCURRENT_ACCEPT_DETAIL = "Surrogate has an accepted match"
 
 
 class TransitionError(ValueError):
@@ -525,14 +523,49 @@ def transition(
     return locked
 
 
+def check_action(db: Session, match: Match, action: str, *, actor_user_id: UUID) -> None:
+    """State-based denials shared by action previews and transition execution."""
+    if action == "accept":
+        if match.donor_id:
+            require_expansion()
+        if match_queries.has_surrogate_conflict(db, match):
+            raise TransitionError("Surrogate has an accepted match")
+        warnings = match_participants.accept_eligibility_warnings(db, match)
+        if warnings:
+            raise TransitionError("; ".join(warnings))
+        match_participants.check_accept_stage_changes(db, match, actor_user_id)
+    elif action == "complete":
+        require_expansion()
+        if (
+            db.query(MatchAttempt.id)
+            .filter(
+                MatchAttempt.organization_id == match.organization_id,
+                MatchAttempt.match_id == match.id,
+                MatchAttempt.status.in_(("planned", "in_progress")),
+            )
+            .first()
+        ):
+            raise TransitionError("Finish or cancel open attempts before completing the match")
+    elif action == "request_cancel":
+        if (
+            db.query(StatusChangeRequest.id)
+            .filter(
+                StatusChangeRequest.organization_id == match.organization_id,
+                StatusChangeRequest.entity_type == "match",
+                StatusChangeRequest.entity_id == match.id,
+                StatusChangeRequest.status == "pending",
+            )
+            .first()
+        ):
+            raise TransitionError(
+                "A pending cancellation request already exists for this match", 409
+            )
+
+
 def _accept(ctx: _Context) -> list:
     db, match = ctx.db, ctx.match
     primary = match_participants.primary(match)
-    if match_queries.has_surrogate_conflict(db, match):
-        raise TransitionError("Surrogate already has an accepted match")
-    warnings = match_participants.accept_eligibility_warnings(db, match)
-    if warnings:
-        raise TransitionError("; ".join(warnings))
+    check_action(db, match, "accept", actor_user_id=ctx.actor_user_id)
     match.status = ACCEPTED
     # Sessions disable autoflush; the donor guard must see this acceptance
     # inside the same savepoint before the participant stage is written.
@@ -623,16 +656,7 @@ def _complete(ctx: _Context) -> list:
     outcome = ctx.outcome or ""
     if not outcome.strip():
         raise TransitionError("Completion outcome is required")
-    if (
-        db.query(MatchAttempt.id)
-        .filter(
-            MatchAttempt.organization_id == match.organization_id,
-            MatchAttempt.match_id == match.id,
-            MatchAttempt.status.in_(("planned", "in_progress")),
-        )
-        .first()
-    ):
-        raise TransitionError("Finish or cancel open attempts before completing the match")
+    check_action(db, match, "complete", actor_user_id=ctx.actor_user_id)
     match.status = COMPLETED
     match.closed_at = ctx.now
     match.closed_by_user_id = ctx.actor_user_id

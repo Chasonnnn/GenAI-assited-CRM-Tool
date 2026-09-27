@@ -81,11 +81,12 @@ def retain_at_approval(db, *, record, kind, target_stage, actor_user_id=None) ->
 
 
 def authorize_stage_change(
-    db, *, record, kind, target_stage, user_id, execution_permissions=None
+    db, *, record, kind, target_stage, user_id, execution_permissions=None, lock_configuration=True
 ) -> bool:
     if not permission_policy_service.is_enabled(db, record.organization_id):
         return False
-    permission_policy_service.lock_configuration(db, record.organization_id)
+    if lock_configuration:
+        permission_policy_service.lock_configuration(db, record.organization_id)
     if execution_permissions is None:
         member = (
             db.query(Membership)

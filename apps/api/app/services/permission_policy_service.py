@@ -12,7 +12,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.permission_resolution import resolve_effective_permissions
+from app.core.permission_resolution import MATCH_ACTION_PERMISSIONS, resolve_effective_permissions
 from app.core.permissions import (
     ADMIN_ONLY_PERMISSIONS,
     PERMISSION_REGISTRY,
@@ -162,6 +162,23 @@ def _validate_changes(changes: PermissionPolicyChanges) -> None:
         raise ValueError("Each legacy execution item must have exactly one resolution")
 
 
+def _match_actions(permissions: set[str], *, legacy: bool) -> set[str]:
+    if "view_matches" not in permissions:
+        return set()
+    actions = {"propose"} if not legacy or "propose_matches" in permissions else set()
+    if "decide_matches" in permissions:
+        actions.update({"accept", "decline"})
+    if "close_matches" in permissions:
+        actions.update({"request_cancel", "withdraw_cancel", "complete"})
+    return actions
+
+
+def _mapped_match_grants(user_overrides: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    if ("propose_matches", "grant") in user_overrides:
+        return [*user_overrides, *((key, "grant") for key in sorted(MATCH_ACTION_PERMISSIONS))]
+    return user_overrides
+
+
 def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> PermissionPolicyPreview:
     _validate_changes(changes)
     policy = db.get(OrganizationPermissionPolicy, org_id)
@@ -193,6 +210,16 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
         if row.permission in V2_DEFAULT_PERMISSIONS:
             continue
         proposed_roles.setdefault(row.role, {})[row.permission] = row.is_granted
+    if version < 2:
+        for role in V2_ROLE_DEFAULTS:
+            if role in PROTECTED_ROLES:
+                continue
+            legacy = resolve_effective_permissions(
+                role, role_overrides=proposed_roles.get(role, {}).items()
+            )
+            proposed_roles.setdefault(role, {}).update(
+                {key: "propose_matches" in legacy for key in MATCH_ACTION_PERMISSIONS}
+            )
     for role, permissions in changes.role_permissions.items():
         proposed_roles.setdefault(role, {}).update(permissions)
 
@@ -225,6 +252,8 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
                     "Role already denies this permission; explicitly remove the legacy revoke"
                 )
             proposed_roles.setdefault(role, {})[row.permission] = False
+            if version < 2 and row.permission == "propose_matches":
+                proposed_roles[role].update({key: False for key in MATCH_ACTION_PERMISSIONS})
         revoke_details.append(
             LegacyRevoke(
                 can_deny_for_role=(
@@ -263,10 +292,14 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
         proposed = resolve_effective_permissions(
             member.role,
             role_overrides=proposed_roles.get(member.role, {}).items(),
-            user_overrides=user_overrides,
+            user_overrides=_mapped_match_grants(user_overrides) if version < 2 else user_overrides,
             policy_version=2,
             ai_enabled=ai_enabled,
         )
+        # This explicitly labeled historical comparison shows the new proposing
+        # action without pretending its legacy permission (also used for editing) was granted.
+        previous_actions = _match_actions(current, legacy=version < 2)
+        proposed_actions = _match_actions(proposed, legacy=False)
         differences.append(
             PermissionMemberDifference(
                 membership_id=member.id,
@@ -276,6 +309,10 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
                 proposed=sorted(proposed),
                 gained=sorted(proposed - current),
                 lost=sorted(current - proposed),
+                previous_match_actions=sorted(previous_actions),
+                proposed_match_actions=sorted(proposed_actions),
+                gained_match_actions=sorted(proposed_actions - previous_actions),
+                lost_match_actions=sorted(previous_actions - proposed_actions),
             )
         )
 
@@ -315,6 +352,7 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
         ready=not unresolved
         and not unresolved_executions
         and bool(scope_review.get("ready", True)),
+        match_action_baseline="pre_step_7" if version < 2 else "current",
         members=differences,
         revokes=revoke_details,
         unresolved_revoke_ids=unresolved,
@@ -410,6 +448,32 @@ def activate(
             .one()
         )
         db.delete(row)
+    db.flush()
+    legacy_grants = (
+        db.query(UserPermissionOverride)
+        .filter(
+            UserPermissionOverride.organization_id == org_id,
+            UserPermissionOverride.permission == "propose_matches",
+            UserPermissionOverride.override_type == "grant",
+        )
+        .all()
+    )
+    for grant in legacy_grants:
+        for key in MATCH_ACTION_PERMISSIONS:
+            existing = (
+                db.query(UserPermissionOverride)
+                .filter_by(organization_id=org_id, user_id=grant.user_id, permission=key)
+                .first()
+            )
+            if existing is None:
+                db.add(
+                    UserPermissionOverride(
+                        organization_id=org_id,
+                        user_id=grant.user_id,
+                        permission=key,
+                        override_type="grant",
+                    )
+                )
     policy = db.get(OrganizationPermissionPolicy, org_id)
     if policy is None:
         policy = OrganizationPermissionPolicy(organization_id=org_id, configuration_revision=1)

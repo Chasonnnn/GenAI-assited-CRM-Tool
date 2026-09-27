@@ -22,9 +22,10 @@ import {
     UsersIcon,
     CalendarPlusIcon,
 } from "lucide-react"
-import { useMatch, matchKeys, useAcceptMatch, useDeclineMatch, useCancelMatch, useMatchWork, useCreateMatchNote, useUploadMatchFile, matchWorkKeys, useCompleteMatch } from "@/lib/hooks/use-matches"
+import { useMatch, matchKeys, useAcceptMatch, useDeclineMatch, useCancelMatch, useMatchWork, useCreateMatchNote, useUploadMatchFile, matchWorkKeys, useCompleteMatch, useWithdrawMatchCancellation } from "@/lib/hooks/use-matches"
 import type { MatchRead, MatchWorkSource } from "@/lib/api/matches"
 import { CompleteMatchDialog } from "@/components/matches/CompleteMatchDialog"
+import { MatchAcceptWarnings, MatchActionControls, MatchConflictBadge, type MatchAction } from "@/components/matches/MatchActionControls"
 import { MatchAttemptControl } from "@/components/matches/MatchAttemptControl"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
 import { DeclineMatchDialog } from "@/components/matches/DeclineMatchDialog"
@@ -90,24 +91,12 @@ type MatchDetailOverviewTabsProps = ComponentProps<typeof MatchDetailOverviewTab
 
 function MatchDetailHeader({
     match,
-    canChangeStatus,
-    acceptPending,
-    declinePending,
-    cancelPending,
-    onAcceptMatch,
-    onDeclineClick,
-    onCancelClick,
-    onCompleteClick,
+    pending,
+    onAction,
 }: {
     match: MatchRead
-    canChangeStatus: boolean
-    acceptPending: boolean
-    declinePending: boolean
-    cancelPending: boolean
-    onAcceptMatch: () => void
-    onDeclineClick: () => void
-    onCancelClick: () => void
-    onCompleteClick: () => void
+    pending: Partial<Record<MatchAction, boolean>>
+    onAction: (action: MatchAction) => void
 }) {
     return (
         <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -137,42 +126,8 @@ function MatchDetailHeader({
                 <Badge className={getMatchStatusBadgeClassName(match.status)}>
                     {getMatchStatusLabel(match.status)}
                 </Badge>
-                {canChangeStatus && (match.status === "under_review") && (
-                    <>
-                        <Button
-                            variant="default"
-                            size="sm"
-                            className="h-7 text-xs bg-green-600 hover:bg-green-700"
-                            onClick={onAcceptMatch}
-                            disabled={acceptPending}
-                        >
-                            {acceptPending ? "Accepting..." : "Accept Match"}
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={onDeclineClick}
-                            disabled={declinePending}
-                        >
-                            {declinePending ? "Declining..." : "Decline"}
-                        </Button>
-                    </>
-                )}
-                {canChangeStatus && match.status === "accepted" && (
-                    <>
-                    <Button size="sm" className="h-7 text-xs" onClick={onCompleteClick}>Complete Match</Button>
-                    <Button
-                        variant="destructive"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={onCancelClick}
-                        disabled={cancelPending}
-                    >
-                        {cancelPending ? "Requesting..." : "Cancel Match"}
-                    </Button>
-                    </>
-                )}
+                <MatchConflictBadge show={match.surrogate_has_accepted_match} />
+                <MatchActionControls match={match} pending={pending} onAction={onAction} />
             </div>
         </div>
     )
@@ -632,6 +587,7 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
     const acceptMatchMutation = useAcceptMatch()
     const declineMatchMutation = useDeclineMatch()
     const cancelMatchMutation = useCancelMatch()
+    const withdrawCancellationMutation = useWithdrawMatchCancellation()
     const createNoteMutation = useCreateMatchNote(matchId)
     const uploadAttachmentMutation = useUploadMatchFile(matchId)
     const deleteAttachmentMutation = useDeleteAttachment()
@@ -655,7 +611,7 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         filteredActivity,
     } = useMatchDetailRelatedData(match, sourceFilter, selectedAttemptId || undefined, workPage)
 
-    // Check if user can change surrogate status (case_manager+)
+    // Attempt editing still follows the legacy role gate; match actions come from allowed_actions.
     const canChangeStatus = !!user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
     const canCreateWork = match?.status === "under_review" || match?.status === "accepted"
 
@@ -720,6 +676,27 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
     }
 
+    const handleWithdrawCancellation = async () => {
+        setActionError(null)
+        const requestId = match?.pending_cancellation_request_id
+        if (!requestId) {
+            setActionError("No pending cancellation request exists for this match")
+            return
+        }
+        try {
+            await withdrawCancellationMutation.mutateAsync({ matchId, requestId })
+            invalidateMatchSourceQueries()
+        } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to withdraw cancellation") }
+    }
+
+    const handleMatchAction = (action: MatchAction) => {
+        if (action === "accept") void handleAcceptMatch()
+        else if (action === "decline") setDeclineDialogOpen(true)
+        else if (action === "request_cancel") setCancelDialogOpen(true)
+        else if (action === "complete") setCompleteDialogOpen(true)
+        else void handleWithdrawCancellation()
+    }
+
     const handleAddNote = async (source: MatchWorkSource, content: string) => {
         try {
             await createNoteMutation.mutateAsync({ source, content, ...(selectedAttemptId ? { attempt_id: selectedAttemptId } : {}) })
@@ -776,15 +753,16 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
             <div className="flex min-h-screen flex-col">
                 <MatchDetailHeader
                     match={match}
-                    canChangeStatus={canChangeStatus}
-                    acceptPending={acceptMatchMutation.isPending}
-                    declinePending={declineMatchMutation.isPending}
-                    cancelPending={cancelMatchMutation.isPending}
-                    onAcceptMatch={handleAcceptMatch}
-                    onDeclineClick={() => setDeclineDialogOpen(true)}
-                    onCancelClick={() => setCancelDialogOpen(true)}
-                    onCompleteClick={() => setCompleteDialogOpen(true)}
+                    pending={{
+                        accept: acceptMatchMutation.isPending,
+                        decline: declineMatchMutation.isPending,
+                        request_cancel: cancelMatchMutation.isPending,
+                        complete: completeMutation.isPending,
+                        withdraw_cancel: withdrawCancellationMutation.isPending,
+                    }}
+                    onAction={handleMatchAction}
                 />
+                <MatchAcceptWarnings warnings={match.accept_eligibility_warnings} />
 
                 {actionError && <p role="alert" className="px-6 py-2 text-sm text-destructive">{actionError}</p>}
                 {match.outcome && <div className="px-6 py-2 text-sm border-b"><span className="font-medium">Outcome: </span>{match.outcome}{match.closed_at && <span className="text-muted-foreground"> · {formatMatchDate(match.closed_at)}</span>}</div>}

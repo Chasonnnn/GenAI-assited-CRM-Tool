@@ -86,6 +86,8 @@ async def test_accept_eligibility_warning_names_ineligible_party_and_stage(
     expected = f"{label} at {target.label} ({stage}) is not eligible to accept"
     assert match["status"] == "under_review"
     assert match["accept_eligibility_warnings"] == [expected]
+    assert "accept" not in match["allowed_actions"]
+    assert match["blocked_reasons"]["accept"] == expected
     assert match["surrogate_has_accepted_match"] is False
     response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
     assert response.status_code == 400, response.text
@@ -124,9 +126,11 @@ async def test_surrogate_conflict_set_blocks_accept_allows_decline_and_clears(
         read = (await authed_client.get(f"/matches/{other['id']}")).json()
         assert read["status"] == "under_review"
         assert read["surrogate_has_accepted_match"] is True
+        assert "accept" not in read["allowed_actions"]
+        assert read["blocked_reasons"]["accept"] == "Surrogate has an accepted match"
         refused = await authed_client.put(f"/matches/{other['id']}/accept", json={})
         assert refused.status_code == 400
-        assert refused.json()["detail"] == "Surrogate already has an accepted match"
+        assert refused.json()["detail"] == "Surrogate has an accepted match"
     event = match_effects.TransitionEvent(
         "accept",
         _match_row(db, first["id"]),
@@ -382,7 +386,7 @@ async def test_accept_requires_ip_stage_permission_and_rolls_back_primary_move(
     ) as (_, client):
         response = await client.put(f"/matches/{match['id']}/accept", json={})
     assert response.status_code == 400
-    assert response.json()["detail"] == "Stage change permission required"
+    assert response.json()["detail"] == "Missing permission: edit_intended_parents"
     assert _match_row(db, match["id"]).status == "under_review"
     assert db.get(model, uuid.UUID(party["id"])).stage_id == before
     assert (
@@ -551,13 +555,19 @@ async def test_accept_denied_by_pipeline_role_rule_changes_nothing(
     db.commit()
     before_stage = row.stage_id
     before_ip_stage = db.get(IntendedParent, uuid.UUID(ip["id"])).stage_id
+    read = await authed_client.get(f"/matches/{match['id']}")
+    assert "accept" not in read.json()["allowed_actions"]
     before_history = _snapshot(db, test_auth.org.id)
 
     response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
 
     assert response.status_code == 400, response.text
     party_kind = "donor" if is_donor else "surrogate"
-    assert response.json()["detail"] == f"Role not permitted to change {party_kind} stage"
+    assert (
+        response.json()["detail"]
+        == read.json()["blocked_reasons"]["accept"]
+        == f"Role not permitted to change {party_kind} stage"
+    )
     assert _match_row(db, match["id"]).status == "under_review"
     assert db.get(model, row.id).stage_id == before_stage
     assert db.get(IntendedParent, uuid.UUID(ip["id"])).stage_id == before_ip_stage
@@ -568,3 +578,38 @@ async def test_accept_denied_by_pipeline_role_rule_changes_nothing(
         "entity_activity": {},
         "stage_history": {},
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("policy", [1, 2])
+@pytest.mark.parametrize("kind", ["surrogate", "egg", "sperm"])
+async def test_accept_reports_all_ineligible_parties_in_preview_and_http(
+    authed_client, db, test_auth, policy, kind
+):
+    if policy == 2:
+        _activate_v2(db, test_auth.org.id)
+    is_donor = kind != "surrogate"
+    party = (
+        await _donor(authed_client, donor_type=kind)
+        if is_donor
+        else await _create_surrogate(authed_client)
+    )
+    ip = await _create_intended_parent(authed_client)
+    primary = db.get(Donor if is_donor else Surrogate, uuid.UUID(party["id"]))
+    intended_parent = db.get(IntendedParent, uuid.UUID(ip["id"]))
+    primary_stage = _stage(db, primary, "new" if is_donor else "new_unread")
+    ip_stage = _stage(db, intended_parent, "new")
+    match = await _case(authed_client, ip, **{"donor" if is_donor else "surrogate": party})
+    warnings = match["accept_eligibility_warnings"]
+    assert len(warnings) == 2
+    assert warnings[0].startswith("Donor at" if is_donor else "Surrogate at")
+    assert warnings[1].startswith("Intended parent at")
+    expected = "; ".join(warnings)
+    assert match["blocked_reasons"]["accept"] == expected
+    assert "accept" not in match["allowed_actions"]
+    response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
+    assert response.status_code == 400
+    assert response.json()["detail"] == expected
+    assert _match_row(db, match["id"]).status == "under_review"
+    assert primary.stage_id == primary_stage.id
+    assert intended_parent.stage_id == ip_stage.id

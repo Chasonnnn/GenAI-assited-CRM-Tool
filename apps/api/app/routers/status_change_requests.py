@@ -64,7 +64,7 @@ _CANCEL_PERMISSIONS: dict[str, tuple[PermissionKey, ...]] = {
     ),
     "match": (
         PermissionKey.MATCHES_VIEW,
-        PermissionKey.MATCHES_PROPOSE,
+        PermissionKey.MATCHES_CLOSE,
     ),
 }
 
@@ -439,7 +439,12 @@ def cancel_request(
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
     status_change_request_service.require_request_access(db, session, req)
-    _require_cancel_access(db, session, req.entity_type)
+    if req.entity_type == "match":
+        from app.services import match_access
+
+        match_access.load(db, session, req.entity_id)
+    else:
+        _require_cancel_access(db, session, req.entity_type)
 
     try:
         result = status_change_request_service.cancel_request(

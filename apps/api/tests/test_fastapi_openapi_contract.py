@@ -28,3 +28,15 @@ def test_openapi_contract_snapshot_matches() -> None:
     expected = json.loads(fixture.read_text(encoding="utf-8"))
     actual = _build_contract()
     assert actual == expected
+
+
+def test_match_read_action_contract() -> None:
+    fields = app.openapi()["components"]["schemas"]["MatchRead"]["properties"]
+    assert fields["allowed_actions"]["type"] == "array"
+    assert fields["allowed_actions"]["items"] == {"type": "string"}
+    assert fields["blocked_reasons"]["type"] == "object"
+    assert fields["blocked_reasons"]["additionalProperties"] == {"type": "string"}
+    assert fields["pending_cancellation_request_id"]["anyOf"] == [
+        {"type": "string"},
+        {"type": "null"},
+    ]

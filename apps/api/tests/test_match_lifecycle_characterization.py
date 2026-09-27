@@ -721,7 +721,7 @@ async def test_accept_when_surrogate_has_other_committed_match_returns_400(
     response = await authed_client.put(f"/matches/{competing.id}/accept", json={})
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Surrogate already has an accepted match"
+    assert response.json()["detail"] == "Surrogate has an accepted match"
     assert _match_row(db, competing.id).status == "under_review"
     assert _match_row(db, first["id"]).status == committed_status
     assert _ip_stage_key(db, second_ip["id"]) == "ready_to_match"
@@ -1372,6 +1372,7 @@ async def test_user_without_propose_matches_cannot_propose(authed_client, db, te
         )
 
     assert response.status_code == 403
+    assert response.json()["detail"] == "Missing permission: propose_matches"
     assert db.query(Match).count() == count
 
 

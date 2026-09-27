@@ -231,4 +231,44 @@ describe('NotificationsPage', () => {
         fireEvent.click(button)
         expect(mockMarkAllRead).toHaveBeenCalledTimes(1)
     })
+
+    it('filters match updates to match conflict notifications', async () => {
+        render(<NotificationsPage />)
+        fireEvent.click(screen.getByRole('combobox'))
+        const option = await screen.findByRole('option', { name: 'Match Updates' })
+        fireEvent.mouseMove(option)
+        fireEvent.click(option)
+        expect(mockUseNotifications).toHaveBeenLastCalledWith(
+            expect.objectContaining({ notification_types: ['match_conflict'] })
+        )
+        expect(screen.getByRole('combobox')).toHaveTextContent('Match Updates')
+    })
+
+    it('routes match conflict notifications to the match detail with the match icon', () => {
+        mockUseNotifications.mockReturnValue({
+            data: {
+                unread_count: 1,
+                items: [
+                    {
+                        id: 'n4',
+                        type: 'match_conflict',
+                        title: 'Surrogate has an accepted match',
+                        body: 'M10001 remains under review.',
+                        entity_type: 'match',
+                        entity_id: 'match-1',
+                        read_at: null,
+                        created_at: new Date().toISOString(),
+                    },
+                ],
+            },
+            isLoading: false,
+        })
+        mockUseTasks.mockReturnValue({ data: { items: [] }, isLoading: false })
+        render(<NotificationsPage />)
+        const item = screen.getByText('Surrogate has an accepted match').closest('button')!
+        expect(item.querySelector('svg.lucide-heart-handshake')).not.toBeNull()
+        fireEvent.click(item)
+        expect(mockMarkRead).toHaveBeenCalledWith('n4')
+        expect(mockPush).toHaveBeenCalledWith('/intended-parents/matches/match-1')
+    })
 })

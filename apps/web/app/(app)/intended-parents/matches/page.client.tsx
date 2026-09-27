@@ -252,8 +252,7 @@ export default function MatchesPage() {
                             <SelectValue placeholder="All statuses">
                                 {(value: string | null) => {
                                     if (!value || value === "all") return "All statuses"
-                                    if (isMatchStatus(value)) return getMatchStatusLabel(value)
-                                    return value
+                                    return getMatchStatusLabel(value)
                                 }}
                             </SelectValue>
                         </SelectTrigger>

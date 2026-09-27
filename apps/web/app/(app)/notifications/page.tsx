@@ -19,6 +19,7 @@ import {
     AlertCircleIcon,
     FileTextIcon,
     CalendarIcon,
+    HeartHandshakeIcon,
     ChevronDownIcon,
     ChevronUpIcon,
 } from "lucide-react"
@@ -53,7 +54,17 @@ const TYPE_GROUPS: Record<string, string[]> = {
         "status_change_approved",
         "status_change_rejected",
     ],
+    match: ["match_conflict"],
     appointment: ["appointment_requested", "appointment_confirmed", "appointment_cancelled", "appointment_reminder"],
+}
+
+const TYPE_FILTER_LABELS: Record<string, string> = {
+    all: "All",
+    surrogate: "Surrogate Updates",
+    application: "Applications",
+    task: "Task Updates",
+    match: "Match Updates",
+    appointment: "Appointments",
 }
 
 function getNotificationIcon(type: string) {
@@ -68,6 +79,7 @@ function getNotificationIcon(type: string) {
     ) {
         return CheckSquareIcon
     }
+    if (type.startsWith("match_")) return HeartHandshakeIcon
     if (type.startsWith("appointment")) return CalendarIcon
     return BellIcon
 }
@@ -196,24 +208,13 @@ export default function NotificationsPage() {
                     <Select value={typeFilter} onValueChange={(v) => { if (v) setTypeFilter(v) }}>
                         <SelectTrigger className="w-[200px]">
                         <SelectValue placeholder="Filter by type">
-                            {(value: string | null) => {
-                                const labels: Record<string, string> = {
-                                    all: "All",
-                                    surrogate: "Surrogate Updates",
-                                    application: "Applications",
-                                    task: "Task Updates",
-                                    appointment: "Appointments",
-                                }
-                                return labels[value ?? "all"] ?? "All"
-                            }}
+                            {(value: string | null) => TYPE_FILTER_LABELS[value ?? "all"] ?? TYPE_FILTER_LABELS.all}
                         </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="all">All</SelectItem>
-                            <SelectItem value="surrogate">Surrogate Updates</SelectItem>
-                            <SelectItem value="application">Applications</SelectItem>
-                            <SelectItem value="task">Task Updates</SelectItem>
-                            <SelectItem value="appointment">Appointments</SelectItem>
+                            {Object.entries(TYPE_FILTER_LABELS).map(([value, label]) => (
+                                <SelectItem key={value} value={value}>{label}</SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>

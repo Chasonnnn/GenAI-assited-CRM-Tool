@@ -74,3 +74,16 @@ export function getMatchStatusBadgeClassName(value: string | null | undefined): 
 export function getMatchKindLabel(kind: string | null | undefined): string {
     return kind === "donor" ? "Donor" : "Surrogate"
 }
+
+const MATCH_ACTION_LABELS: Record<string, string> = {
+    propose: "Propose",
+    accept: "Accept",
+    decline: "Decline",
+    request_cancel: "Request cancellation",
+    withdraw_cancel: "Withdraw cancellation request",
+    complete: "Complete",
+}
+
+export function getMatchActionLabel(action: string): string {
+    return MATCH_ACTION_LABELS[action] ?? "Unknown match action"
+}

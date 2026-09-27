@@ -82,28 +82,43 @@ def require_request_access(db, session, request):
         raise HTTPException(status_code=404, detail="Request not found")
 
 
-def _reviewer_session(db, org_id, user_id):
-    from app.schemas.auth import UserSession
-    from app.services import permission_policy_service, permission_service
+def _actor_session(db, org_id, user_id):
+    from fastapi import HTTPException
 
-    if not permission_policy_service.is_enabled(db, org_id):
-        return None
-    permission_policy_service.lock_configuration(db, org_id)
+    from app.schemas.auth import UserSession
+    from app.services import permission_service
+
     member = permission_service.get_membership_for_user(db, org_id, user_id)
     if member is None:
-        raise ValueError("Active organization membership required")
-    actor = UserSession(org_id=org_id, user_id=user_id, role=member.role, email="", display_name="")
-    if "approve_status_change_requests" not in permission_service.get_effective_permissions(
-        db, org_id, user_id, member.role
+        raise HTTPException(status_code=403, detail="Active organization membership required")
+    return UserSession(org_id=org_id, user_id=user_id, role=member.role, email="", display_name="")
+
+
+def _reviewer_session(db, org_id, user_id, *, legacy_match=False):
+    from fastapi import HTTPException
+
+    from app.services import permission_policy_service, permission_service
+
+    uses_v2 = permission_policy_service.is_enabled(db, org_id)
+    if not uses_v2 and not legacy_match:
+        return None
+    if uses_v2:
+        permission_policy_service.lock_configuration(db, org_id)
+    actor = _actor_session(db, org_id, user_id)
+    if not permission_service.check_permission(
+        db, org_id, user_id, actor.role.value, "approve_status_change_requests"
     ):
-        raise ValueError("Status change review permission required")
+        raise HTTPException(
+            status_code=403, detail="Missing permission: approve_status_change_requests"
+        )
     return actor
 
 
 def _require_applicant_approval(db, actor, record, target_stage):
-    if actor is None:
+    from app.services import approval_handoff_service, permission_policy_service, permission_service
+
+    if actor is None or not permission_policy_service.is_enabled(db, actor.org_id):
         return
-    from app.services import approval_handoff_service, permission_service
 
     module = "donors" if isinstance(record, Donor) else "surrogates"
     if approval_handoff_service.crosses_approval(
@@ -156,13 +171,16 @@ def _resolve_match_request(
     restores an accepted status when the match is still pending cancellation,
     and commits the request resolution with it.
     """
-    from app.services import match_lifecycle, match_queries
+    from app.services import match_access, match_lifecycle, match_queries
 
     match = match_queries.get_match(db, request.entity_id, org_id)
     if match is None:
         resolve()
         db.commit()
         return request
+    match_access.authorize(
+        db, action, match, _actor_session(db, org_id, actor_user_id), request=request
+    )
     match_lifecycle.transition(
         db,
         match,
@@ -247,7 +265,7 @@ def approve_request(
         db: Database session
         request_id: Request ID to approve
         admin_user_id: User ID of the approving admin
-        admin_role: Role of the approving admin (must be admin or developer)
+        admin_role: Legacy v1 non-match role gate; match and v2 review use permissions
 
     Returns:
         Updated StatusChangeRequest
@@ -283,7 +301,9 @@ def approve_request(
     if request.status != "pending":
         raise ValueError(f"Request is not pending (status: {request.status})")
 
-    # Check admin permission
+    # Permission-only review is limited to match cancellations under v1.
+    if actor is None and request.entity_type == "match":
+        actor = _reviewer_session(db, org_id, admin_user_id, legacy_match=True)
     role_str = admin_role.value if hasattr(admin_role, "value") else admin_role
     if actor is None and role_str not in [Role.ADMIN.value, Role.DEVELOPER.value]:
         raise ValueError("Only admins can approve status change requests")
@@ -457,6 +477,9 @@ def approve_request(
             request.approved_by_user_id = admin_user_id
             request.approved_at = now
 
+        from app.services import match_access
+
+        match_access.authorize(db, "approve_cancel", match, actor, request=request)
         # The engine commits the cancellation with the request and runs its effects.
         match_lifecycle.transition(
             db,
@@ -548,7 +571,7 @@ def reject_request(
         db: Database session
         request_id: Request ID to reject
         admin_user_id: User ID of the rejecting admin
-        admin_role: Role of the rejecting admin (must be admin or developer)
+        admin_role: Legacy v1 non-match role gate; match and v2 review use permissions
         reason: Optional rejection reason
 
     Returns:
@@ -576,7 +599,9 @@ def reject_request(
     if request.status != "pending":
         raise ValueError(f"Request is not pending (status: {request.status})")
 
-    # Check admin permission
+    # Permission-only review is limited to match cancellations under v1.
+    if actor is None and request.entity_type == "match":
+        actor = _reviewer_session(db, org_id, admin_user_id, legacy_match=True)
     role_str = admin_role.value if hasattr(admin_role, "value") else admin_role
     if actor is None and role_str not in [Role.ADMIN.value, Role.DEVELOPER.value]:
         raise ValueError("Only admins can reject status change requests")
@@ -717,7 +742,7 @@ def cancel_request(
     if request.status != "pending":
         raise ValueError(f"Request is not pending (status: {request.status})")
 
-    if request.requested_by_user_id != user_id:
+    if request.entity_type != "match" and request.requested_by_user_id != user_id:
         raise ValueError("Only the requester can cancel their request")
 
     now = datetime.now(UTC)

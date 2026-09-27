@@ -49,6 +49,9 @@ class MatchRead(BaseModel):
     decline_reason: str | None
     created_at: str
     updated_at: str
+    allowed_actions: list[str] = Field(default_factory=list)
+    blocked_reasons: dict[str, str] = Field(default_factory=dict)
+    pending_cancellation_request_id: str | None = None
     accept_eligibility_warnings: list[str] = Field(default_factory=list)
     surrogate_has_accepted_match: bool = False
     # Denormalized for convenience

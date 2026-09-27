@@ -413,25 +413,20 @@ async def test_approve_without_handoff_stage_returns_400(
 
 
 @pytest.mark.asyncio
-async def test_approve_by_non_admin_role_with_approval_permission_returns_400(
-    authed_client, db, test_auth
+@pytest.mark.parametrize("action,status", [("approve", "cancelled"), ("reject", "accepted")])
+async def test_non_admin_with_approval_permission_can_resolve_cancellation(
+    authed_client, db, test_auth, action, status
 ):
     match, request = await _pending_cancellation(authed_client, db)
-
     async with _client_for(
         db,
         test_auth.org.id,
         role=Role.CASE_MANAGER,
         grant=("approve_status_change_requests",),
-    ) as (_user, client):
-        response = await client.post(f"/status-change-requests/{request.id}/approve")
-        rejected = await client.post(f"/status-change-requests/{request.id}/reject", json={})
-
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Only admins can approve status change requests"
-    assert rejected.status_code == 400
-    assert rejected.json()["detail"] == "Only admins can reject status change requests"
-    assert _match_row(db, match["id"]).status == "cancellation_pending"
+    ) as (_, client):
+        response = await client.post(f"/status-change-requests/{request.id}/{action}", json={})
+    assert response.status_code == 200, response.text
+    assert _match_row(db, match["id"]).status == status
 
 
 # =============================================================================
@@ -531,20 +526,20 @@ async def test_withdraw_cancellation_restores_accepted_with_match_history(
 
 
 @pytest.mark.asyncio
-async def test_withdraw_by_non_requester_returns_400(authed_client, db, test_auth):
+async def test_withdraw_by_non_requester_returns_403(authed_client, db, test_auth):
     match, request = await _pending_cancellation(authed_client, db)
 
     async with _client_for(db, test_auth.org.id) as (_user, client):
         response = await client.post(f"/status-change-requests/{request.id}/cancel")
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Only the requester can cancel their request"
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only the requester can withdraw the cancellation request"
     assert _request_row(db, request.id).status == "pending"
     assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 @pytest.mark.asyncio
-async def test_withdraw_requires_propose_matches(authed_client, db, test_auth):
+async def test_withdraw_requires_close_matches_via_v1_shim(authed_client, db, test_auth):
     async with _client_for(db, test_auth.org.id) as (requester, requester_client):
         match, request = await _pending_cancellation(authed_client, db, requester=requester_client)
         db.add(
@@ -561,7 +556,7 @@ async def test_withdraw_requires_propose_matches(authed_client, db, test_auth):
         response = await requester_client.post(f"/status-change-requests/{request.id}/cancel")
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Missing permission for request entity"
+    assert response.json()["detail"] == "Missing permission: close_matches"
     assert _request_row(db, request.id).status == "pending"
     assert _match_row(db, match["id"]).status == "cancellation_pending"
 
