@@ -453,6 +453,7 @@ function InsuranceSection({
                     <InlineEditField
                         value={surrogateData.insurance_company}
                         onSave={onUpdate("insurance_company")}
+                        label="Insurance company"
                         placeholder="Insurance company"
                     />
                 </div>
@@ -461,6 +462,7 @@ function InsuranceSection({
                     <InlineEditField
                         value={surrogateData.insurance_plan_name}
                         onSave={onUpdate("insurance_plan_name")}
+                        label="Insurance plan name"
                         placeholder="Plan name"
                     />
                 </div>
@@ -473,6 +475,7 @@ function InsuranceSection({
                     <InlineEditField
                         value={surrogateData.insurance_policy_number}
                         onSave={onUpdate("insurance_policy_number")}
+                        label="Policy number"
                         placeholder="Policy number"
                     />
                 </div>
@@ -481,6 +484,7 @@ function InsuranceSection({
                     <InlineEditField
                         value={surrogateData.insurance_member_id}
                         onSave={onUpdate("insurance_member_id")}
+                        label="Member ID"
                         placeholder="Member ID"
                     />
                 </div>
@@ -492,6 +496,7 @@ function InsuranceSection({
                     <InlineEditField
                         value={surrogateData.insurance_group_number}
                         onSave={onUpdate("insurance_group_number")}
+                        label="Group number"
                         placeholder="Group number"
                     />
                 </div>
@@ -501,6 +506,7 @@ function InsuranceSection({
                         value={surrogateData.insurance_phone}
                         onSave={onUpdate("insurance_phone")}
                         type="tel"
+                        label="Insurance phone"
                         placeholder="Insurance phone"
                     />
                 </div>
@@ -513,6 +519,7 @@ function InsuranceSection({
                     value={surrogateData.insurance_fax ?? null}
                     onSave={onUpdate("insurance_fax")}
                     type="tel"
+                    label="Insurance fax"
                     placeholder="Fax"
                 />
             </div>
@@ -526,6 +533,7 @@ function InsuranceSection({
                         <InlineEditField
                             value={surrogateData.insurance_subscriber_name}
                             onSave={onUpdate("insurance_subscriber_name")}
+                            label="Subscriber name"
                             placeholder="Subscriber name"
                         />
                     </div>
@@ -535,7 +543,6 @@ function InsuranceSection({
                             value={surrogateData.insurance_subscriber_dob}
                             onSave={onUpdate("insurance_subscriber_dob")}
                             label="Subscriber date of birth"
-                            placeholder="Set DOB"
                         />
                     </div>
                 </div>

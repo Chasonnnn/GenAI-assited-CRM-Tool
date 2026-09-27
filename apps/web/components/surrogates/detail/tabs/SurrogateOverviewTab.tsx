@@ -29,6 +29,7 @@ import { TabsContent } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
+import { EmptyValue } from "@/components/ui/empty-value"
 import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
 import { ActivityTimeline } from "@/components/surrogates/ActivityTimeline"
 import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
@@ -459,7 +460,6 @@ export function SurrogateOverviewTab() {
                                                 data: { date_of_birth: value },
                                             })
                                         }}
-                                        placeholder="-"
                                         label="Date of Birth"
                                     />
                                 }
@@ -529,7 +529,7 @@ export function SurrogateOverviewTab() {
                             <ProfileMetric
                                 icon={ScaleIcon}
                                 label="BMI"
-                                primary={bmiValue ?? "-"}
+                                primary={bmiValue ?? <EmptyValue />}
                             />
                         </div>
                     </SurrogateOverviewCard>
@@ -719,7 +719,6 @@ export function SurrogateOverviewTab() {
                                                 <InlineDateField
                                                     value={surrogateData.partner_date_of_birth}
                                                     onSave={async (value) => updateSurrogate({ partner_date_of_birth: value })}
-                                                    placeholder="-"
                                                     label="Partner date of birth"
                                                 />
                                             </PersonalInfoRow>
@@ -888,8 +887,8 @@ export function SurrogateOverviewTab() {
                                 if (!isChecklistBooleanFieldKey(item.key)) {
                                     return (
                                         <div key={item.key} className="flex items-center gap-2">
-                                            <span className="flex size-6 shrink-0 items-center justify-center text-sm text-muted-foreground">
-                                                -
+                                            <span className="flex size-6 shrink-0 items-center justify-center text-sm">
+                                                <EmptyValue />
                                             </span>
                                             <span className="text-sm">{item.label}</span>
                                         </div>
@@ -984,7 +983,7 @@ export function SurrogateOverviewTab() {
                                     <span className="text-sm text-muted-foreground">
                                         {item.label}:
                                     </span>
-                                    <span className="text-sm">{item.display_value}</span>
+                                    <span className="text-sm">{item.display_value || <EmptyValue />}</span>
                                 </div>
                             )
                         })}

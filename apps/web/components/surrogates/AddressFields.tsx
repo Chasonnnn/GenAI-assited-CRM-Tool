@@ -6,12 +6,15 @@ interface AddressFieldsProps<T extends object> {
     prefix: string  // e.g., 'clinic', 'monitoring_clinic', 'ob', 'delivery_hospital'
     data: T
     onUpdate: (field: string, value: string | null) => Promise<void>
+    /** Section name for the field labels, so repeated address blocks have distinct names. */
+    labelPrefix?: string
 }
 
-export function AddressFields<T extends object>({ prefix, data, onUpdate }: AddressFieldsProps<T>) {
+export function AddressFields<T extends object>({ prefix, data, onUpdate, labelPrefix }: AddressFieldsProps<T>) {
     const field = (name: string) => `${prefix}_${name}`
     const dataRecord = data as unknown as Record<string, string | null | undefined>
     const getValue = (name: string) => dataRecord[field(name)] ?? null
+    const label = (name: string) => (labelPrefix ? `${labelPrefix} ${name}` : name)
 
     return (
         <div className="space-y-2 text-sm">
@@ -20,6 +23,7 @@ export function AddressFields<T extends object>({ prefix, data, onUpdate }: Addr
                 <InlineEditField
                     value={getValue('address_line1')}
                     onSave={(v) => onUpdate(field('address_line1'), v || null)}
+                    label={label("Street address")}
                     placeholder="Street address"
                 />
             </div>
@@ -28,6 +32,7 @@ export function AddressFields<T extends object>({ prefix, data, onUpdate }: Addr
                 <InlineEditField
                     value={getValue('address_line2')}
                     onSave={(v) => onUpdate(field('address_line2'), v || null)}
+                    label={label("Address line 2")}
                     placeholder="Suite, unit, etc."
                 />
             </div>
@@ -36,6 +41,7 @@ export function AddressFields<T extends object>({ prefix, data, onUpdate }: Addr
                 <InlineEditField
                     value={getValue('city')}
                     onSave={(v) => onUpdate(field('city'), v || null)}
+                    label={label("City")}
                     placeholder="City"
                 />
             </div>
@@ -45,6 +51,7 @@ export function AddressFields<T extends object>({ prefix, data, onUpdate }: Addr
                     <InlineEditField
                         value={getValue('state')}
                         onSave={(v) => onUpdate(field('state'), v || null)}
+                        label={label("State")}
                         placeholder="XX"
                         validate={(v) => v && v.length !== 2 ? 'Use 2-letter code' : null}
                     />
@@ -54,6 +61,7 @@ export function AddressFields<T extends object>({ prefix, data, onUpdate }: Addr
                     <InlineEditField
                         value={getValue('postal')}
                         onSave={(v) => onUpdate(field('postal'), v || null)}
+                        label={label("ZIP")}
                         placeholder="00000"
                     />
                 </div>

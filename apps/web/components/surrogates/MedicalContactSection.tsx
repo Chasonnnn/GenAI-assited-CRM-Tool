@@ -52,6 +52,7 @@ export function MedicalContactSection<T extends object>({
                     <InlineEditField
                         value={dataRecord[resolvedProviderField] ?? null}
                         onSave={(v) => onUpdate(resolvedProviderField, v || null)}
+                        label={`${title} doctor name`}
                         placeholder="Doctor name"
                     />
                 </div>
@@ -63,12 +64,13 @@ export function MedicalContactSection<T extends object>({
                     <InlineEditField
                         value={getNameValue()}
                         onSave={(v) => onUpdate(resolvedNameField, v || null)}
+                        label={`${title} name`}
                         placeholder="Clinic/Hospital name"
                     />
                 </div>
             )}
 
-            <AddressFields prefix={prefix} data={data} onUpdate={onUpdate} />
+            <AddressFields prefix={prefix} data={data} onUpdate={onUpdate} labelPrefix={title} />
 
             <div className="flex items-center gap-2 pt-1 border-t">
                 <PhoneIcon className="size-3.5 text-muted-foreground shrink-0" />
@@ -76,6 +78,7 @@ export function MedicalContactSection<T extends object>({
                     value={getValue('phone')}
                     onSave={(v) => onUpdate(field('phone'), v || null)}
                     type="tel"
+                    label={`${title} phone`}
                     placeholder="Phone"
                 />
             </div>
@@ -86,6 +89,7 @@ export function MedicalContactSection<T extends object>({
                     value={getValue('fax')}
                     onSave={(v) => onUpdate(field('fax'), v || null)}
                     type="tel"
+                    label={`${title} fax`}
                     placeholder="Fax"
                 />
             </div>
@@ -97,6 +101,7 @@ export function MedicalContactSection<T extends object>({
                         value={getValue('email')}
                         onSave={(v) => onUpdate(field('email'), v || null)}
                         type="email"
+                        label={`${title} email`}
                         placeholder="Email"
                     />
                 </div>

@@ -6,7 +6,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CheckIcon, XIcon, PencilIcon, Loader2Icon, CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { EmptyValue } from "@/components/ui/empty-value"
+import { EMPTY_VALUE_LABEL, EmptyValue } from "@/components/ui/empty-value"
 import { format, parseISO, isValid } from "date-fns"
 
 import { useRecordEditing } from "@/components/records/RecordEditingContext"
@@ -180,7 +180,8 @@ export function InlineDateField({
                 onClick={handleStartEdit}
                 onKeyDown={handleDisplayKeyDown}
                 disabled={disabled}
-                aria-label={disabled ? label : `Edit ${label}`}
+                // Read-only: the aria-label replaces the content, so it must carry the value.
+                aria-label={disabled ? `${label}: ${displayValue || EMPTY_VALUE_LABEL}` : `Edit ${label}`}
             >
                 <span className={cn("text-sm", className)}>{displayValue || <EmptyValue />}</span>
                 {!disabled && (

@@ -258,21 +258,38 @@ describe('Inline Field Accessibility', () => {
         expect(screen.getByRole("button", { name: "Cancel Email" })).toBeInTheDocument()
     })
 
-    it('adds contextual labels to InlineEditField trigger/input with placeholder fallback', () => {
+    it('names InlineEditField controls from the required label, not the placeholder', () => {
         render(
             <InlineEditField
                 value="Acme Health"
-                placeholder="Insurance Company"
+                label="Insurance Company"
+                placeholder="Blue Shield"
                 onSave={vi.fn().mockResolvedValue(undefined)}
             />
         )
 
+        expect(screen.queryByRole("button", { name: "Edit Blue Shield" })).not.toBeInTheDocument()
         const trigger = screen.getByRole("button", { name: "Edit Insurance Company" })
         fireEvent.click(trigger)
 
         expect(screen.getByRole("textbox", { name: "Insurance Company" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Save Insurance Company" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Cancel Insurance Company" })).toBeInTheDocument()
+    })
+
+    it('shows the shared empty token, not the placeholder, for an empty InlineEditField', () => {
+        render(
+            <InlineEditField
+                value={null}
+                label="ZIP"
+                placeholder="00000"
+                onSave={vi.fn().mockResolvedValue(undefined)}
+            />
+        )
+
+        const trigger = screen.getByRole("button", { name: "Edit ZIP" })
+        expect(trigger).toHaveTextContent("—")
+        expect(trigger).not.toHaveTextContent("00000")
     })
 
     it('adds contextual labels to InlineDateField save/cancel icon buttons', () => {

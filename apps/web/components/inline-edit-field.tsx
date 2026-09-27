@@ -20,7 +20,7 @@ interface InlineEditFieldProps {
     displayClassName?: string
     validate?: (value: string) => string | null
     /** Names the field for the edit, save and cancel controls ("Edit Fax"). */
-    label?: string
+    label: string
 }
 
 type InlineEditFieldState = {
@@ -141,10 +141,9 @@ export function InlineEditField({
         }
     }
 
-    // "-" was the old display-only empty token, not an input hint. Remove it with the label fallback.
+    // "-" was the old display-only empty token, not an input hint.
     const inputPlaceholder = placeholder && placeholder !== "-" ? placeholder : undefined
-    // The placeholder fallback stays until every call site passes `label`; then make `label` required.
-    const fieldLabel = label?.trim() || inputPlaceholder || "field"
+    const fieldLabel = label.trim() || "field"
     const displayValue = value || <EmptyValue />
 
     if (!canEdit) return <span className={cn("text-sm", className)}>{displayValue}</span>
