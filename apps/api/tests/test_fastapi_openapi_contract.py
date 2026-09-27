@@ -36,3 +36,7 @@ def test_match_read_action_contract() -> None:
     assert fields["allowed_actions"]["items"] == {"type": "string"}
     assert fields["blocked_reasons"]["type"] == "object"
     assert fields["blocked_reasons"]["additionalProperties"] == {"type": "string"}
+    assert fields["pending_cancellation_request_id"]["anyOf"] == [
+        {"type": "string"},
+        {"type": "null"},
+    ]

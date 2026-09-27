@@ -364,6 +364,11 @@ def to_read(db: Session, match: Match, *, session: UserSession) -> MatchRead:
     org_id = session.org_id
     match_access.authorize(db, "view", match, session, allow_archived=True)
     allowed, blocked = match_access.action_availability(db, match, session)
+    pending_request = (
+        match_access.pending_cancellation(db, match)
+        if match.status == MatchStatus.CANCELLATION_PENDING.value
+        else None
+    )
     surrogate = get_surrogate_with_stage(db, match.surrogate_id, org_id)
     ip = get_intended_parent(db, match.intended_parent_id, org_id)
     donor = (
@@ -385,6 +390,7 @@ def to_read(db: Session, match: Match, *, session: UserSession) -> MatchRead:
         status=match.status,
         allowed_actions=allowed,
         blocked_reasons=blocked,
+        pending_cancellation_request_id=str(pending_request.id) if pending_request else None,
         accept_eligibility_warnings=(
             match_participants.accept_eligibility_warnings(db, match)
             if match.status in PENDING_STATUSES

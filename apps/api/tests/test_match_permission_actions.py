@@ -73,6 +73,7 @@ async def test_allowed_actions_by_role_status_and_version(
         for action in applicable - allowed:
             assert body["blocked_reasons"][action] == f"Missing permission: {ACTIONS[action][4]}"
         assert body["status"] == status
+        assert body["pending_cancellation_request_id"] == (str(request.id) if request else None)
 
 
 @pytest.mark.asyncio
@@ -311,3 +312,57 @@ async def test_only_requester_has_withdraw_capability(authed_client, db, test_au
             == read.json()["blocked_reasons"]["withdraw_cancel"]
             == "Only the requester can withdraw the cancellation request"
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", [1, 2])
+async def test_pending_cancellation_id_is_visible_to_view_only_readers(
+    authed_client, db, test_auth, version
+):
+    if version == 2:
+        _activate_v2(db, test_auth.org.id)
+        _set_role_permission(db, test_auth.org.id, Role.CASE_MANAGER, "close_matches", False)
+    match, request = await _fixture(authed_client, db, test_auth.user.id, "cancellation_pending")
+    async with _client_for(
+        db,
+        test_auth.org.id,
+        role=Role.CASE_MANAGER,
+        revoke=("propose_matches",) if version == 1 else (),
+    ) as (_, client):
+        response = await client.get(f"/matches/{match.id}")
+        assert response.status_code == 200, response.text
+        assert response.json()["pending_cancellation_request_id"] == str(request.id)
+        assert response.json()["allowed_actions"] == []
+        denied = await client.post(f"/status-change-requests/{request.id}/approve")
+        assert denied.status_code == 403
+        assert denied.json()["detail"] == "Missing permission: approve_status_change_requests"
+        for match_status, request_status in (
+            ("accepted", "pending"),
+            ("cancellation_pending", "rejected"),
+        ):
+            match.status, request.status = match_status, request_status
+            db.commit()
+            response = await client.get(f"/matches/{match.id}")
+            assert response.status_code == 200
+            assert response.json()["pending_cancellation_request_id"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", [1, 2])
+async def test_pending_cancellation_id_is_not_exposed_cross_org(
+    authed_client, db, test_auth, version
+):
+    if version == 2:
+        _activate_v2(db, test_auth.org.id)
+    match, request = await _fixture(authed_client, db, test_auth.user.id, "cancellation_pending")
+    other_org = _other_org(db)
+    if version == 2:
+        _activate_v2(db, other_org.id)
+    async with _client_for(db, other_org.id) as (_, client):
+        response = await client.get(f"/matches/{match.id}")
+        assert response.status_code == 404
+        assert "pending_cancellation_request_id" not in response.json()
+        assert str(request.id) not in response.text
+    assert _match_row(db, match.id).status == "cancellation_pending"
+    db.refresh(request)
+    assert request.status == "pending"
