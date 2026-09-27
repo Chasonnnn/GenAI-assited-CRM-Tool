@@ -234,7 +234,8 @@ function MatchDetailMainTabs({
                 </div>
 
                 <TabsContent value="overview" className="h-[calc(100vh-145px)]">
-                    <div className="grid h-full gap-4 grid-cols-1 lg:grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]">
+                    {/* Below xl the case work column is too narrow for its four tabs, so it spans both card columns. */}
+                    <div className="grid h-full gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]">
                         {participantKind === "donor" ? <DonorProfileColumn donor={donorData} isLoading={donorLoading} isError={donorError} /> : <SurrogateProfileColumn
                             surrogateData={surrogateData}
                             isLoading={surrogateLoading}
@@ -243,7 +244,7 @@ function MatchDetailMainTabs({
                             intendedParentData={intendedParentData}
                             isLoading={intendedParentLoading}
                         />
-                        <MatchDetailOverviewTabs {...overviewTabsProps} />
+                        <MatchDetailOverviewTabs {...overviewTabsProps} className="lg:col-span-2 xl:col-span-1" />
                     </div>
                 </TabsContent>
 

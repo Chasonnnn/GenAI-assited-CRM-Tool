@@ -559,6 +559,16 @@ describe('MatchDetailPage', () => {
         expect(screen.queryByRole('link', { name: 'Back to matches' })).not.toBeInTheDocument()
     })
 
+    it('spans case work below the participant cards until xl', () => {
+        render(<MatchDetailPage />)
+        const caseWork = screen.getByRole('tab', { name: /Activity/ }).closest('[data-slot="tabs"]') as HTMLElement
+        const grid = caseWork.parentElement as HTMLElement
+        expect(grid).toHaveClass('lg:grid-cols-2')
+        expect(grid.className).toContain('xl:grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]')
+        expect(grid.className).not.toMatch(/(^|\s)lg:grid-cols-\[/)
+        expect(caseWork).toHaveClass('lg:col-span-2', 'xl:col-span-1')
+    })
+
     it('displays surrogate name when loaded', () => {
         render(<MatchDetailPage />)
         // Should show surrogate name (full name from match data) - in the header which combines both names

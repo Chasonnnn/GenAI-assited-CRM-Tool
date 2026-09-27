@@ -12,6 +12,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
 import {
     CheckSquareIcon,
     DownloadIcon,
@@ -64,6 +65,8 @@ type MatchDetailOverviewTabsProps = {
     isDeletePending: boolean
     formatDate: (dateStr: string | null | undefined) => string
     formatDateTime: (dateStr: string | null | undefined) => string
+    /** Grid placement from the page layout. */
+    className?: string | undefined
 }
 
 type SourceKind = "surrogate" | "donor" | "ip" | "match"
@@ -415,7 +418,7 @@ export function MatchDetailOverviewTabs(props: MatchDetailOverviewTabsProps) {
             onValueChange={(value) => {
                 if (typeof value === "string" && isTabType(value)) props.onTabChange(value)
             }}
-            className="min-w-0 gap-0 overflow-hidden rounded-lg border"
+            className={cn("min-w-0 gap-0 overflow-hidden rounded-lg border", props.className)}
         >
             <SourceFilterBar
                 participantKind={props.participantKind ?? "surrogate"}
