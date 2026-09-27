@@ -643,6 +643,27 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
         .all()
     }
 
+    # Pre-fetch pipeline stages to avoid N+1 queries
+    slugs_to_resolve = []
+    for workflow_data in SYSTEM_WORKFLOWS:
+        if workflow_data["system_key"] in existing_workflow_keys:
+            continue
+        if workflow_data.get("trigger_type") == "status_changed":
+            trigger_config = workflow_data.get("trigger_config", {})
+            if "to_stage_slug" in trigger_config:
+                slugs_to_resolve.append(trigger_config["to_stage_slug"])
+            if "from_stage_slug" in trigger_config:
+                slugs_to_resolve.append(trigger_config["from_stage_slug"])
+
+    resolved_stages = pipeline_service.resolve_stages_bulk(db, org_id, pipeline.id, slugs_to_resolve)
+    # Create a mapping of original slug reference to the resolved stage
+    # Using the same list mapping since resolve_stages_bulk returns them in order
+    stage_map = {
+        slug: stage
+        for slug, stage in zip(slugs_to_resolve, resolved_stages)
+        if stage is not None
+    }
+
     for workflow_data in SYSTEM_WORKFLOWS:
         if workflow_data["system_key"] in existing_workflow_keys:
             continue
@@ -651,16 +672,14 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
         if workflow_data.get("trigger_type") == "status_changed":
             to_slug = trigger_config.pop("to_stage_slug", None)
             from_slug = trigger_config.pop("from_stage_slug", None)
-            if to_slug:
-                to_stage = pipeline_service.resolve_stage(db, pipeline.id, to_slug)
-                if to_stage:
-                    trigger_config["to_stage_id"] = str(to_stage.id)
-                    trigger_config["to_stage_key"] = to_stage.stage_key
-            if from_slug:
-                from_stage = pipeline_service.resolve_stage(db, pipeline.id, from_slug)
-                if from_stage:
-                    trigger_config["from_stage_id"] = str(from_stage.id)
-                    trigger_config["from_stage_key"] = from_stage.stage_key
+            if to_slug and to_slug in stage_map:
+                to_stage = stage_map[to_slug]
+                trigger_config["to_stage_id"] = str(to_stage.id)
+                trigger_config["to_stage_key"] = to_stage.stage_key
+            if from_slug and from_slug in stage_map:
+                from_stage = stage_map[from_slug]
+                trigger_config["from_stage_id"] = str(from_stage.id)
+                trigger_config["from_stage_key"] = from_stage.stage_key
 
         # Resolve template_key to template_id in actions
         actions = []
