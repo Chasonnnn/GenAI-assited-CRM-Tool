@@ -68,6 +68,16 @@ async def test_manual_donor_retry_applies_record_scope_before_matching(
             {"field_key": field, "surrogate_field": field}
             for field in ("full_name", "email", "phone", "date_of_birth")
         ],
+        schema_snapshot={
+            "pages": [
+                {
+                    "fields": [
+                        {"key": key, "label": key, "type": "text"}
+                        for key in ("full_name", "email", "phone", "date_of_birth")
+                    ]
+                }
+            ]
+        },
     )
     db.add(submission)
     db.commit()

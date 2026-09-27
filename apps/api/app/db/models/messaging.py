@@ -87,7 +87,7 @@ class TwilioSettings(Base):
 
     organization: Mapped[Organization] = relationship()
     routes: Mapped[list[TwilioRoute]] = relationship(
-        back_populates="settings", cascade="all, delete-orphan"
+        back_populates="settings", cascade="all, delete-orphan", order_by="TwilioRoute.purpose"
     )
 
     __table_args__ = (
@@ -96,7 +96,7 @@ class TwilioSettings(Base):
 
 
 class TwilioRoute(Base):
-    """Purpose-bound 10DLC sender. Operational and promotional routes never fall back."""
+    """Purpose-bound 10DLC or toll-free sender; purpose routes never fall back."""
 
     __tablename__ = "twilio_routes"
     __table_args__ = (

@@ -51,6 +51,17 @@ def retry_context(db, test_org, test_user, default_stage):
             "phone": "+14155550143",
             "email": f"new-{uuid4()}@example.com",
         },
+        schema_snapshot={
+            "pages": [
+                {
+                    "fields": [
+                        {"key": key, "label": key, "type": "text"}
+                        for key in ("full_name", "date_of_birth", "phone", "email")
+                    ]
+                }
+            ]
+        },
+        mapping_snapshot=[],
     )
     db.add(submission)
     db.flush()
@@ -211,6 +222,16 @@ async def test_donor_retry_preserves_subtype_published_mapping_and_existing_lead
         {"field_key": "published_dob", "surrogate_field": "date_of_birth"},
         {"field_key": "published_phone", "surrogate_field": "phone"},
     ]
+    ctx.submission.schema_snapshot = {
+        "pages": [
+            {
+                "fields": [
+                    {"key": key, "label": key, "type": "text"}
+                    for key in ctx.submission.answers_json
+                ]
+            }
+        ]
+    }
     db.commit()
     response = await authed_client.post(
         f"/forms/submissions/{ctx.submission.id}/match/retry",
@@ -223,6 +244,7 @@ async def test_donor_retry_preserves_subtype_published_mapping_and_existing_lead
     assert lead.lead_type == lead_kind
     assert lead.full_name == "Donor Applicant"
     assert lead.email == ctx.submission.answers_json["published_email"]
+    assert lead.phone == ctx.submission.answers_json["published_phone"]
     assert callbacks == ["tracking", "workflow"]
 
     response = await authed_client.post(

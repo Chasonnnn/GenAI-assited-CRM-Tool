@@ -7,6 +7,8 @@ from threading import Barrier, Lock, Thread
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
+import pytest
+
 ACCOUNT_SID = "AC" + ("1" * 32)
 API_KEY_SID = "SK" + ("2" * 32)
 API_SECRET = "restricted-secret"
@@ -24,6 +26,7 @@ def _ready_claim(
     media_asset_ids=None,
     phi_enabled=False,
     fully_ready=True,
+    toll_free=False,
 ):
     from app.core.encryption import hash_phone
     from app.services import (
@@ -75,6 +78,18 @@ def _ready_claim(
             "settings_version": settings.current_version,
         },
     }
+    if toll_free:
+        sender = "+18005550199"
+        route.sender_phone_encrypted = twilio_settings_service.encrypt_credential(sender)
+        route.sender_phone_hash = hash_phone(sender)
+        route.sender_phone_last4 = sender[-4:]
+        route.a2p_status = "unconfigured"
+        route.consent_management_status = "unavailable"
+        route.capability_evidence["provider"].update(
+            sender_type="toll_free",
+            a2p_status=None,
+            toll_free_verification_status="TWILIO_APPROVED",
+        )
     monkeypatch.setenv("MESSAGING_DELIVERY_DISPATCH_ENABLED", "true")
     if media_asset_ids:
         monkeypatch.setattr(
@@ -127,6 +142,7 @@ def _allow_sending_hours(monkeypatch):
         RecipientTimezone,
         SendingWindowDecision,
     )
+
     monkeypatch.setattr(
         messaging_dispatch_service.messaging_sending_hours,
         "resolve_recipient_timezone",
@@ -137,6 +153,48 @@ def _allow_sending_hours(monkeypatch):
         "evaluate_sending_window",
         lambda **_kwargs: SendingWindowDecision(True, None, None),
     )
+
+
+@pytest.mark.parametrize("revoked", [False, True])
+def test_toll_free_materializes_and_dispatch_rechecks_verification(
+    db, test_org, monkeypatch, revoked
+):
+    from app.services import messaging_dispatch_service, twilio_settings_service, twilio_transport
+
+    delivery = _ready_claim(db, test_org, monkeypatch, toll_free=True)
+    _allow_sending_hours(monkeypatch)
+    if revoked:
+        settings = twilio_settings_service.get_settings(db, test_org.id)
+        route = next(item for item in settings.routes if item.id == delivery.route_id)
+        route.capability_evidence = {
+            "provider": {
+                **route.capability_evidence["provider"],
+                "toll_free_verification_status": "TWILIO_REJECTED",
+            }
+        }
+        db.commit()
+    calls = []
+
+    def fake_send(**kwargs):
+        calls.append(kwargs)
+        return twilio_transport.TwilioSendResult(
+            success=True, message_sid=MESSAGE_SID, initial_status="accepted"
+        )
+
+    monkeypatch.setattr(twilio_transport, "send_message", fake_send)
+    result = messaging_dispatch_service.dispatch_claimed_delivery(
+        db,
+        organization_id=test_org.id,
+        delivery_id=delivery.id,
+        lease_token=delivery.lease_token,
+        lease_generation=delivery.lease_generation,
+        now=datetime(2026, 7, 31, 18, 0, tzinfo=UTC),
+    )
+    assert result == ("deferred_route_not_ready" if revoked else "submitted")
+    assert len(calls) == (0 if revoked else 1)
+    if calls:
+        assert calls[0]["from_"] == "+18005550199"
+        assert calls[0]["messaging_service_sid"] == SERVICE_SID
 
 
 def test_dispatch_refuses_route_that_readiness_reports_blocked(

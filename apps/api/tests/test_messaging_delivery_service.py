@@ -101,6 +101,52 @@ def test_materialize_refuses_to_queue_when_dispatch_readiness_is_blocked(
         )
 
 
+@pytest.mark.parametrize("status", ["PENDING_REVIEW", "IN_REVIEW", "TWILIO_REJECTED", None])
+def test_materialize_rejects_unapproved_toll_free_verification(db, test_org, status):
+    from app.core.encryption import hash_phone
+    from app.db.models import MessageDelivery
+    from app.services import messaging_delivery_service, twilio_settings_service
+
+    consent = _consented_contact(db, test_org)
+    settings = twilio_settings_service.get_settings(db, test_org.id)
+    route = next(item for item in settings.routes if item.purpose == "operational")
+    sender = "+18005550199"
+    route.sender_phone_encrypted = twilio_settings_service.encrypt_credential(sender)
+    route.sender_phone_hash = hash_phone(sender)
+    route.sender_phone_last4 = sender[-4:]
+    route.a2p_status = "unconfigured"
+    route.consent_management_status = "unavailable"
+    route.capability_evidence = {
+        "provider": {
+            **route.capability_evidence["provider"],
+            "sender_type": "toll_free",
+            "a2p_status": None,
+            "toll_free_verification_status": status,
+        },
+    }
+    db.commit()
+
+    with pytest.raises(
+        messaging_delivery_service.MessagingRouteNotReady,
+        match="^operational_toll_free_unverified$",
+    ):
+        messaging_delivery_service.materialize_delivery(
+            db,
+            organization_id=test_org.id,
+            contact_id=consent.contact_id,
+            purpose="operational",
+            body="EWI operational updates. Msg & data rates may apply. HELP. STOP.",
+            idempotency_key="workflow:unapproved-toll-free:occurrence-1",
+            source_type="workflow",
+            source_id=None,
+            template_version_id=None,
+            media_asset_ids=[],
+            is_enrollment_confirmation=True,
+        )
+
+    assert db.query(MessageDelivery).filter_by(organization_id=test_org.id).count() == 0
+
+
 def test_materialize_encrypts_message_and_coalesces_identical_idempotency_key(
     db,
     test_org,

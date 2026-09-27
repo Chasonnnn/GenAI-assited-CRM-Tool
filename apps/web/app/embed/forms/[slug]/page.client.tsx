@@ -5,12 +5,19 @@ import { useQuery } from "@tanstack/react-query"
 import { AlertTriangleIcon, CheckCircle2Icon, Loader2Icon, SendIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { PublicFormFieldRenderer, type PublicFormAnswerValue } from "@/components/forms/PublicFormFieldRenderer"
+import { PublicSmsConsent } from "@/components/forms/PublicSmsConsent"
 import {
     getPublicFieldValidationError,
     isEmptyPublicFieldValue,
 } from "@/lib/forms/public-field-validation"
+import {
+    getSmsConsentError,
+    getSubmittedSmsPhoneFieldKey,
+    resolveSmsConsentPhoneField,
+    type SmsConsentPurpose,
+} from "@/lib/forms/public-sms-consent"
+import { getPublicSubmitConflictMessage } from "@/lib/forms/public-submit-error"
 import { cn } from "@/lib/utils"
 import type { JsonObject } from "@/lib/types/json"
 import { useEmbedFormResizeReporting } from "@/lib/hooks/use-embed-form-resize-reporting"
@@ -35,16 +42,18 @@ type EmbedFormState = {
     isSubmitted: boolean
     smsOperational: boolean
     smsPromotional: boolean
+    smsConsentErrorVisible: boolean
     error: string | null
 }
 type EmbedFormAction =
     | { type: "answerChanged"; fieldKey: string; value: PublicFormAnswerValue }
     | { type: "datePickerOpenChanged"; update: React.SetStateAction<Record<string, boolean>> }
-    | { type: "smsConsentChanged"; purpose: "operational" | "promotional"; checked: boolean }
+    | { type: "smsConsentChanged"; purpose: SmsConsentPurpose; checked: boolean }
     | { type: "validationFailed"; error: string }
+    | { type: "smsConsentValidationFailed" }
     | { type: "submissionStarted" }
     | { type: "submissionSucceeded" }
-    | { type: "submissionFailed" }
+    | { type: "submissionFailed"; error: string }
 const pageClassName = "public-form-light min-h-screen bg-transparent text-stone-900"
 
 function getInitialParentOrigin(): string | null {
@@ -71,6 +80,7 @@ function createInitialEmbedFormState(initialParentOrigin: string | null | undefi
         isSubmitted: false,
         smsOperational: false,
         smsPromotional: false,
+        smsConsentErrorVisible: false,
         error: parentOrigin ? null : "This form is not available for this website.",
     }
 }
@@ -143,6 +153,12 @@ function embedFormReducer(state: EmbedFormState, action: EmbedFormAction): Embed
                 ...state,
                 error: action.error,
             }
+        case "smsConsentValidationFailed":
+            return {
+                ...state,
+                smsConsentErrorVisible: true,
+                error: null,
+            }
         case "submissionStarted":
             return {
                 ...state,
@@ -159,7 +175,7 @@ function embedFormReducer(state: EmbedFormState, action: EmbedFormAction): Embed
             return {
                 ...state,
                 isSubmitting: false,
-                error: "Unable to submit the form. Please try again.",
+                error: action.error,
             }
     }
 }
@@ -197,8 +213,10 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
         isSubmitted,
         smsOperational,
         smsPromotional,
+        smsConsentErrorVisible,
         error: localError,
     } = state
+    const smsConsentCheckboxRef = React.useRef<HTMLSpanElement | null>(null)
     const formQuery = useQuery({
         queryKey: ["public", "embed-form", slug, parentOrigin],
         queryFn: () => {
@@ -235,6 +253,15 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
     for (const field of visibleFields) {
         if (field.type !== "file") renderableFields.push(field)
     }
+    const messagingConsent = formConfig?.messaging_consent
+    const smsSelection = { operational: smsOperational, promotional: smsPromotional }
+    const smsPhoneField = resolveSmsConsentPhoneField(messagingConsent, renderableFields)
+    const smsConsentError = getSmsConsentError({
+        options: messagingConsent,
+        selection: smsSelection,
+        phoneField: smsPhoneField,
+        phoneValue: smsPhoneField ? answers[smsPhoneField.key] : undefined,
+    })
 
     const updateField = (fieldKey: string, value: PublicFormAnswerValue, isInitialization = false) => {
         dispatch({ type: "answerChanged", fieldKey, value })
@@ -258,6 +285,17 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
     }
 
     const handleSubmit = async () => {
+        // The SMS check runs first so a checked consent always reports its phone error inline.
+        if (smsConsentError) {
+            dispatch({ type: "smsConsentValidationFailed" })
+            postEmbedMessageToParent(parentOrigin, { type: "sf:form:error", reason: "validation" })
+            if (smsPhoneField) {
+                document.getElementById(smsPhoneField.key)?.focus()
+            } else {
+                smsConsentCheckboxRef.current?.focus()
+            }
+            return
+        }
         const validationError = validate()
         if (validationError) {
             dispatch({ type: "validationFailed", error: validationError })
@@ -275,6 +313,7 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
                 answers: asJsonObject(answers),
                 sms_operational: smsOperational,
                 sms_promotional: smsPromotional,
+                sms_phone_field_key: getSubmittedSmsPhoneFieldKey(messagingConsent, smsSelection),
                 attribution: {},
             })
             postEmbedMessageToParent(parentOrigin, {
@@ -282,11 +321,27 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
                 submissionRef: response.id,
             })
             dispatch({ type: "submissionSucceeded" })
-        } catch {
-            dispatch({ type: "submissionFailed" })
+        } catch (error) {
+            dispatch({
+                type: "submissionFailed",
+                error: getPublicSubmitConflictMessage(error) ?? "Unable to submit the form. Please try again.",
+            })
             postEmbedMessageToParent(parentOrigin, { type: "sf:form:error", reason: "submit" })
         }
     }
+
+    const smsConsent = (
+        <PublicSmsConsent
+            options={messagingConsent}
+            selection={smsSelection}
+            onCheckedChange={(purpose, checked) =>
+                dispatch({ type: "smsConsentChanged", purpose, checked })
+            }
+            error={smsConsentErrorVisible ? smsConsentError : null}
+            density="compact"
+            checkedCheckboxRef={smsConsentCheckboxRef}
+        />
+    )
 
     return (
         <div ref={containerRef} className={cn(pageClassName, "p-0")}>
@@ -340,93 +395,25 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
 
                     <div className="space-y-3.5">
                         {renderableFields.map((field) => (
-                            <PublicFormFieldRenderer
-                                key={field.key}
-                                field={field}
-                                value={answers[field.key]}
-                                updateField={updateField}
-                                datePickerOpen={datePickerOpen}
-                                setDatePickerOpen={setDatePickerOpen}
-                                density="compact"
-                            />
+                            <React.Fragment key={field.key}>
+                                <PublicFormFieldRenderer
+                                    field={field}
+                                    value={answers[field.key]}
+                                    updateField={updateField}
+                                    datePickerOpen={datePickerOpen}
+                                    setDatePickerOpen={setDatePickerOpen}
+                                    density="compact"
+                                />
+                                {field.key === smsPhoneField?.key ? smsConsent : null}
+                            </React.Fragment>
                         ))}
+
+                        {smsPhoneField ? null : smsConsent}
 
                         {formConfig.form_schema.privacy_notice?.trim() ? (
                             <p className="rounded-md bg-stone-50 px-3 py-2 text-[12px] leading-5 text-stone-500">
                                 {formConfig.form_schema.privacy_notice.trim()}
                             </p>
-                        ) : null}
-
-                        {formConfig.messaging_consent?.operational ? (
-                            <div className="flex items-start gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-3">
-                                <Checkbox
-                                    id="sms-operational"
-                                    checked={smsOperational}
-                                    onCheckedChange={(checked) =>
-                                        dispatch({
-                                            type: "smsConsentChanged",
-                                            purpose: "operational",
-                                            checked: checked === true,
-                                        })
-                                    }
-                                    className="mt-0.5"
-                                />
-                                <label htmlFor="sms-operational" className="text-[12px] leading-5 text-stone-600">
-                                    {formConfig.messaging_consent.operational.disclosure}{" "}
-                                    <a
-                                        href={formConfig.messaging_consent.operational.sms_terms_url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="underline underline-offset-2"
-                                    >
-                                        SMS Terms
-                                    </a>{" "}
-                                    <a
-                                        href={formConfig.messaging_consent.operational.privacy_policy_url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="underline underline-offset-2"
-                                    >
-                                        Privacy Policy
-                                    </a>
-                                </label>
-                            </div>
-                        ) : null}
-
-                        {formConfig.messaging_consent?.promotional ? (
-                            <div className="flex items-start gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-3">
-                                <Checkbox
-                                    id="sms-promotional"
-                                    checked={smsPromotional}
-                                    onCheckedChange={(checked) =>
-                                        dispatch({
-                                            type: "smsConsentChanged",
-                                            purpose: "promotional",
-                                            checked: checked === true,
-                                        })
-                                    }
-                                    className="mt-0.5"
-                                />
-                                <label htmlFor="sms-promotional" className="text-[12px] leading-5 text-stone-600">
-                                    {formConfig.messaging_consent.promotional.disclosure}{" "}
-                                    <a
-                                        href={formConfig.messaging_consent.promotional.sms_terms_url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="underline underline-offset-2"
-                                    >
-                                        SMS Terms
-                                    </a>{" "}
-                                    <a
-                                        href={formConfig.messaging_consent.promotional.privacy_policy_url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="underline underline-offset-2"
-                                    >
-                                        Privacy Policy
-                                    </a>
-                                </label>
-                            </div>
                         ) : null}
 
                         {error ? (

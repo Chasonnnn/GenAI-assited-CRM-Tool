@@ -21,12 +21,7 @@ def match_submission(db: Session, submission: FormSubmission, *, session=None) -
 
     if submission.donor_id:
         return "linked"
-    identity = form_intake_service._extract_donor_identity(
-        answers=submission.answers_json or {},
-        mapping_lookup=form_intake_service._mapping_lookup_from_snapshot(
-            submission.mapping_snapshot or []
-        ),
-    )
+    identity = form_intake_service.extract_submission_identity(submission)
     contacts = [Donor.email_hash == identity["email_hash"]]
     if identity.get("phone_hash"):
         contacts.append(Donor.phone_hash == identity["phone_hash"])

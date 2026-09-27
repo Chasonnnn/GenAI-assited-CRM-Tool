@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { flushSync } from "react-dom"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,7 +24,15 @@ import { ApiError } from "@/lib/api"
 import type { JsonObject } from "@/lib/types/json"
 import { PublicFormFieldRenderer } from "@/components/forms/PublicFormFieldRenderer"
 import { PublicFormHeader } from "@/components/forms/PublicFormHeader"
+import { PublicSmsConsent } from "@/components/forms/PublicSmsConsent"
 import { getPublicFieldValidationError } from "@/lib/forms/public-field-validation"
+import {
+    getSmsConsentError,
+    getSubmittedSmsPhoneFieldKey,
+    resolveSmsConsentPhoneField,
+    type SmsConsentPurpose,
+} from "@/lib/forms/public-sms-consent"
+import { getPublicSubmitConflictMessage } from "@/lib/forms/public-submit-error"
 import {
     getSharedPublicForm,
     getSharedPublicFormDraft,
@@ -907,6 +916,8 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const [agreed, setAgreed] = React.useState(false)
     const [smsOperational, setSmsOperational] = React.useState(false)
     const [smsPromotional, setSmsPromotional] = React.useState(false)
+    const [smsConsentErrorVisible, setSmsConsentErrorVisible] = React.useState(false)
+    const smsConsentCheckboxRef = React.useRef<HTMLSpanElement | null>(null)
     const [resumePrompt, setResumePrompt] = React.useState<SharedResumePrompt | null>(null)
     const [isRestoringResume, setIsRestoringResume] = React.useState(false)
     const suppressedIdentityFingerprintsRef = React.useRef<Set<string> | null>(null)
@@ -1110,6 +1121,30 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     for (const reviewPage of visibleReviewPages) {
         fileFields.push(...reviewPage.fieldGroups.fileFields)
     }
+    const messagingConsent = formConfig?.messaging_consent
+    const smsSelection = { operational: smsOperational, promotional: smsPromotional }
+    const smsPhoneField = resolveSmsConsentPhoneField(
+        messagingConsent,
+        visibleReviewPages.flatMap((reviewPage) => reviewPage.fieldGroups.standardFields),
+    )
+    const smsPhoneStep = smsPhoneField
+        ? visibleReviewPages.findIndex((reviewPage) =>
+            reviewPage.fieldGroups.standardFields.includes(smsPhoneField),
+        ) + 1
+        : null
+    const smsConsentError = getSmsConsentError({
+        options: messagingConsent,
+        selection: smsSelection,
+        phoneField: smsPhoneField,
+        phoneValue: smsPhoneField ? answers[smsPhoneField.key] : undefined,
+    })
+    const setSmsConsent = (purpose: SmsConsentPurpose, checked: boolean) => {
+        if (purpose === "operational") {
+            setSmsOperational(checked)
+        } else {
+            setSmsPromotional(checked)
+        }
+    }
 
     const validateStep = (step: number): boolean => {
         if (!formConfig) return false
@@ -1117,6 +1152,12 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
 
         const page = pages[step - 1]
         if (!page) return false
+        // The SMS check runs first so a checked consent always reports its phone error inline.
+        if (step === smsPhoneStep && smsConsentError && smsPhoneField) {
+            setSmsConsentErrorVisible(true)
+            document.getElementById(smsPhoneField.key)?.focus()
+            return false
+        }
         for (const field of page.fields) {
             if (!isPublicFieldVisible(field, answers)) continue
             const error = getFieldValidationError(field, answers[field.key] ?? null)
@@ -1160,6 +1201,20 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const handleSubmit = () => {
         if (!agreed) {
             toast.error("Please confirm the agreement before submitting.")
+            return
+        }
+
+        if (smsConsentError) {
+            setSmsConsentErrorVisible(true)
+            if (smsPhoneStep && smsPhoneField) {
+                toast.error(smsConsentError)
+                // Commit the phone step synchronously so its input exists to take focus; focus scrolls it into view.
+                flushSync(() => setCurrentStep(smsPhoneStep))
+                document.getElementById(smsPhoneField.key)?.focus()
+            } else {
+                // Without a visible phone field the consent block renders on this review step.
+                smsConsentCheckboxRef.current?.focus()
+            }
             return
         }
 
@@ -1209,7 +1264,11 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                 fileFieldKeys,
                 undefined,
                 hasMessagingConsent
-                    ? { operational: smsOperational, promotional: smsPromotional }
+                    ? {
+                        operational: smsOperational,
+                        promotional: smsPromotional,
+                        phoneFieldKey: getSubmittedSmsPhoneFieldKey(messagingConsent, smsSelection),
+                    }
                     : undefined,
                 formConfig?.published_version_id,
                 attempt.key,
@@ -1223,7 +1282,9 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             setIsSubmitted(true)
         }
         void submit()
-            .catch(() => toast.error("Failed to submit application. Please try again."))
+            .catch((error: unknown) =>
+                toast.error(getPublicSubmitConflictMessage(error) ?? "Failed to submit application. Please try again."),
+            )
             .finally(() => setIsSubmitting(false))
     }
 
@@ -1393,6 +1454,16 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             />
         )
     }
+
+    const smsConsent = (
+        <PublicSmsConsent
+            options={messagingConsent}
+            selection={smsSelection}
+            onCheckedChange={setSmsConsent}
+            error={smsConsentErrorVisible ? smsConsentError : null}
+            checkedCheckboxRef={smsConsentCheckboxRef}
+        />
+    )
 
     // Loading state
     if (isLoading) {
@@ -1573,65 +1644,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                 </label>
                             </div>
 
-                            {formConfig.messaging_consent?.operational ? (
-                                <div className="flex items-start gap-3 rounded-lg border border-stone-200 bg-white p-4">
-                                    <Checkbox
-                                        id="sms-operational"
-                                        checked={smsOperational}
-                                        onCheckedChange={(checked) => setSmsOperational(checked === true)}
-                                        className="mt-1"
-                                    />
-                                    <label htmlFor="sms-operational" className="text-sm leading-relaxed text-stone-600">
-                                        {formConfig.messaging_consent.operational.disclosure}{" "}
-                                        <a
-                                            href={formConfig.messaging_consent.operational.sms_terms_url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="underline underline-offset-2"
-                                        >
-                                            SMS Terms
-                                        </a>{" "}
-                                        <a
-                                            href={formConfig.messaging_consent.operational.privacy_policy_url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="underline underline-offset-2"
-                                        >
-                                            Privacy Policy
-                                        </a>
-                                    </label>
-                                </div>
-                            ) : null}
-
-                            {formConfig.messaging_consent?.promotional ? (
-                                <div className="flex items-start gap-3 rounded-lg border border-stone-200 bg-white p-4">
-                                    <Checkbox
-                                        id="sms-promotional"
-                                        checked={smsPromotional}
-                                        onCheckedChange={(checked) => setSmsPromotional(checked === true)}
-                                        className="mt-1"
-                                    />
-                                    <label htmlFor="sms-promotional" className="text-sm leading-relaxed text-stone-600">
-                                        {formConfig.messaging_consent.promotional.disclosure}{" "}
-                                        <a
-                                            href={formConfig.messaging_consent.promotional.sms_terms_url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="underline underline-offset-2"
-                                        >
-                                            SMS Terms
-                                        </a>{" "}
-                                        <a
-                                            href={formConfig.messaging_consent.promotional.privacy_policy_url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="underline underline-offset-2"
-                                        >
-                                            Privacy Policy
-                                        </a>
-                                    </label>
-                                </div>
-                            ) : null}
+                            {smsPhoneField ? null : smsConsent}
 
                             <PrivacyNotice text={privacyNotice ?? null} />
                         </CardContent>
@@ -1649,7 +1662,14 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                     No fields on this page.
                                 </div>
                             ) : (
-                                currentVisibleFields.standardFields.map((field) => renderFieldInput(field))
+                                currentVisibleFields.standardFields.map((field) => (
+                                    <React.Fragment key={field.key}>
+                                        {renderFieldInput(field)}
+                                        {boundedCurrentStep === smsPhoneStep && field.key === smsPhoneField?.key
+                                            ? smsConsent
+                                            : null}
+                                    </React.Fragment>
+                                ))
                             )}
 
                             {currentVisibleFields.fileFields.map((field) => (

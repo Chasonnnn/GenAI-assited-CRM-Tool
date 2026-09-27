@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
 import EmbedFormPageClient from "../app/embed/forms/[slug]/page.client"
 import { getPublicFieldValidationError, type PublicFieldValue } from "@/lib/forms/public-field-validation"
+import { ApiError } from "@/lib/api"
 
 vi.unmock("@tanstack/react-query")
 
@@ -27,6 +28,19 @@ vi.mock("@/lib/api/forms", async () => {
         submitEmbedPublicForm,
     }
 })
+
+const smsConsentOptions = {
+    operational: {
+        disclosure: "I agree to receive application and appointment texts. Reply STOP to opt out.",
+        sms_terms_url: "https://www.ewisurrogacy.com/sms-terms",
+        privacy_policy_url: "https://www.ewisurrogacy.com/privacy",
+    },
+    promotional: {
+        disclosure: "I agree to receive promotional texts about surrogacy opportunities. Reply STOP to opt out.",
+        sms_terms_url: "https://www.ewisurrogacy.com/sms-terms",
+        privacy_policy_url: "https://www.ewisurrogacy.com/privacy",
+    },
+}
 
 const embedForm = {
     form_id: "form-1",
@@ -70,16 +84,9 @@ const embedForm = {
         privacy_policy_url: "https://www.ewisurrogacy.com/privacy",
     },
     messaging_consent: {
-        operational: {
-            disclosure: "I agree to receive application and appointment texts. Reply STOP to opt out.",
-            sms_terms_url: "https://www.ewisurrogacy.com/sms-terms",
-            privacy_policy_url: "https://www.ewisurrogacy.com/privacy",
-        },
-        promotional: {
-            disclosure: "I agree to receive promotional texts about surrogacy opportunities. Reply STOP to opt out.",
-            sms_terms_url: "https://www.ewisurrogacy.com/sms-terms",
-            privacy_policy_url: "https://www.ewisurrogacy.com/privacy",
-        },
+        phone_field_key: null,
+        operational: null,
+        promotional: null,
     },
     thank_you_config: {},
     embed_theme_json: {},
@@ -175,10 +182,7 @@ describe("EmbedFormPageClient", () => {
         fireEvent.change(screen.getByLabelText(/email/i), {
             target: { value: "embed@example.com" },
         })
-        const smsCheckboxes = screen.getAllByRole("checkbox")
-        expect(smsCheckboxes).toHaveLength(2)
-        expect(smsCheckboxes[0]).not.toBeChecked()
-        expect(smsCheckboxes[1]).not.toBeChecked()
+        expect(screen.queryAllByRole("checkbox")).toHaveLength(0)
         expect(screen.queryByText("I agree to be contacted.")).not.toBeInTheDocument()
         expect(screen.getByText(/By submitting, you agree/i)).toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: /submit/i }))
@@ -195,6 +199,7 @@ describe("EmbedFormPageClient", () => {
                     },
                     sms_operational: false,
                     sms_promotional: false,
+                    sms_phone_field_key: null,
                 }),
             )
         })
@@ -576,5 +581,410 @@ describe("EmbedFormPageClient", () => {
         await new Promise((resolve) => window.setTimeout(resolve, 0))
 
         expect(createEmbedFormSession).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+        {
+            name: "a stale form version",
+            error: new ApiError(409, "Conflict", "Published version is no longer current"),
+            message: "This form changed. Reload the page and try again.",
+        },
+        {
+            name: "a pending duplicate applicant",
+            error: new ApiError(409, "Conflict", "An intake submission is already pending review."),
+            message: "Unable to submit the form. Please try again.",
+        },
+        {
+            name: "a conflict without a detail",
+            error: new ApiError(409, "Conflict"),
+            message: "Unable to submit the form. Please try again.",
+        },
+        {
+            name: "a network failure",
+            error: new Error("Network down"),
+            message: "Unable to submit the form. Please try again.",
+        },
+    ])("shows the submit failure message for $name", async ({ error, message }) => {
+        submitEmbedPublicForm.mockRejectedValueOnce(error)
+        renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
+
+        expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
+        await waitForEmbedMessageListener()
+        window.dispatchEvent(
+            new MessageEvent("message", {
+                origin: "https://www.ewisurrogacy.com",
+                data: { type: "sf:form:init", attribution: {} },
+            }),
+        )
+        await waitFor(() => expect(createEmbedFormSession).toHaveBeenCalled())
+        fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: "Embed Lead" } })
+        fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "embed@example.com" } })
+        fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+        expect(await screen.findByText(message)).toBeInTheDocument()
+        expect(screen.getByLabelText(/full name/i)).toHaveValue("Embed Lead")
+        expect(screen.queryByRole("heading", { name: "Request received" })).not.toBeInTheDocument()
+        expect(document.body).not.toHaveTextContent(error.message)
+    })
+
+    describe("SMS consent", () => {
+        const [fullNameField, emailField] = embedForm.form_schema.pages[0].fields
+        const homePhoneField = {
+            key: "phone",
+            label: "Home Phone",
+            type: "phone",
+            required: false,
+            sensitivity: "contact",
+        }
+        const mobilePhoneField = {
+            key: "mobile_number",
+            label: "Mobile Phone",
+            type: "phone",
+            required: false,
+            sensitivity: "contact",
+        }
+        const contactPreferenceField = {
+            key: "contact_preference",
+            label: "Contact Preference",
+            type: "text",
+            required: false,
+            sensitivity: "campaign_safe",
+        }
+        const operationalConsent = {
+            phone_field_key: "mobile_number",
+            operational: smsConsentOptions.operational,
+            promotional: null,
+        }
+        const smsForm = {
+            ...embedForm,
+            form_schema: {
+                ...embedForm.form_schema,
+                pages: [
+                    {
+                        title: "Contact",
+                        fields: [fullNameField, homePhoneField, mobilePhoneField, emailField],
+                    },
+                ],
+            },
+            messaging_consent: operationalConsent,
+        }
+        const conditionalPhoneForm = {
+            ...smsForm,
+            form_schema: {
+                ...smsForm.form_schema,
+                pages: [
+                    {
+                        title: "Contact",
+                        fields: [
+                            fullNameField,
+                            contactPreferenceField,
+                            {
+                                ...mobilePhoneField,
+                                show_if: {
+                                    field_key: "contact_preference",
+                                    operator: "not_equals",
+                                    value: "Email only",
+                                },
+                            },
+                            emailField,
+                        ],
+                    },
+                ],
+            },
+        }
+        const missingPhoneMessage = "Add a phone number to receive text messages, or uncheck to continue."
+
+        async function startEmbedSession() {
+            await waitForEmbedMessageListener()
+            window.dispatchEvent(
+                new MessageEvent("message", {
+                    origin: "https://www.ewisurrogacy.com",
+                    data: { type: "sf:form:init", attribution: {} },
+                }),
+            )
+            await waitFor(() => expect(createEmbedFormSession).toHaveBeenCalled())
+        }
+
+        async function renderStartedSmsForm(form: unknown) {
+            getEmbedPublicForm.mockResolvedValue(form)
+            renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
+            await screen.findByLabelText(/full name/i)
+            await startEmbedSession()
+            fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: "Embed Lead" } })
+            fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "embed@example.com" } })
+        }
+
+        function getOperationalCheckbox() {
+            return screen.getByRole("checkbox", { name: /application and appointment texts/i })
+        }
+
+        function isBefore(first: HTMLElement, second: HTMLElement): boolean {
+            return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)
+        }
+
+        it("renders the SMS consent directly after the mapped phone field with readable disclosure and links", async () => {
+            getEmbedPublicForm.mockResolvedValue(smsForm)
+            renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
+
+            const phoneInput = await screen.findByLabelText("Mobile Phone")
+            const smsCheckbox = getOperationalCheckbox()
+            const emailInput = screen.getByLabelText(/email/i)
+            expect(isBefore(screen.getByLabelText("Home Phone"), phoneInput)).toBe(true)
+            expect(isBefore(phoneInput, smsCheckbox)).toBe(true)
+            expect(isBefore(smsCheckbox, emailInput)).toBe(true)
+            expect(isBefore(smsCheckbox, screen.getByText(/By submitting, you agree/i))).toBe(true)
+            expect(smsCheckbox).not.toBeChecked()
+
+            expect(screen.getByText(/application and appointment texts/i)).toHaveClass("text-sm", "text-stone-700")
+            const termsLink = screen.getByRole("link", { name: "Terms of Service" })
+            expect(termsLink).toHaveAttribute("href", "https://www.ewisurrogacy.com/sms-terms")
+            expect(termsLink).toHaveAttribute("target", "_blank")
+            const privacyLink = screen.getByRole("link", { name: "Privacy Policy" })
+            expect(privacyLink).toHaveAttribute("href", "https://www.ewisurrogacy.com/privacy")
+            expect(privacyLink).toHaveAttribute("target", "_blank")
+            expect(screen.queryByRole("link", { name: "SMS Terms" })).not.toBeInTheDocument()
+        })
+
+        it("submits with both SMS choices unchecked and no phone number", async () => {
+            await renderStartedSmsForm({
+                ...smsForm,
+                messaging_consent: { phone_field_key: "mobile_number", ...smsConsentOptions },
+            })
+
+            const smsCheckboxes = screen.getAllByRole("checkbox")
+            expect(smsCheckboxes).toHaveLength(2)
+            expect(smsCheckboxes[0]).not.toBeChecked()
+            expect(smsCheckboxes[1]).not.toBeChecked()
+            fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+            await waitFor(() => expect(submitEmbedPublicForm).toHaveBeenCalledWith(
+                "lead-form",
+                expect.objectContaining({
+                    answers: { full_name: "Embed Lead", email: "embed@example.com" },
+                    sms_operational: false,
+                    sms_promotional: false,
+                    sms_phone_field_key: null,
+                }),
+            ))
+        })
+
+        it("shows an inline message instead of submitting when SMS is checked without a phone number", async () => {
+            await renderStartedSmsForm(smsForm)
+
+            const smsCheckbox = getOperationalCheckbox()
+            fireEvent.click(smsCheckbox)
+            fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+            const message = await screen.findByText("Enter your phone number to receive text messages.")
+            expect(message).toHaveAttribute("role", "alert")
+            expect(submitEmbedPublicForm).not.toHaveBeenCalled()
+            expect(smsCheckbox).toHaveAttribute("aria-invalid", "true")
+            expect(smsCheckbox).toHaveAccessibleDescription(message.textContent ?? "")
+            expect(screen.getByLabelText("Mobile Phone")).toHaveFocus()
+
+            fireEvent.change(screen.getByLabelText("Mobile Phone"), { target: { value: "(555) 123-4567" } })
+            expect(screen.queryByText("Enter your phone number to receive text messages.")).not.toBeInTheDocument()
+            fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+            await waitFor(() => expect(submitEmbedPublicForm).toHaveBeenCalledWith(
+                "lead-form",
+                expect.objectContaining({
+                    answers: {
+                        full_name: "Embed Lead",
+                        mobile_number: "(555) 123-4567",
+                        email: "embed@example.com",
+                    },
+                    sms_operational: true,
+                    sms_promotional: false,
+                    sms_phone_field_key: "mobile_number",
+                }),
+            ))
+        })
+
+        it("reports a malformed phone inline on the first attempt when SMS is checked", async () => {
+            await renderStartedSmsForm(smsForm)
+
+            fireEvent.change(screen.getByLabelText("Mobile Phone"), { target: { value: "123" } })
+            const smsCheckbox = getOperationalCheckbox()
+            fireEvent.click(smsCheckbox)
+            fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+            const message = await screen.findByText("Enter a valid phone number to receive text messages.")
+            expect(message).toHaveAttribute("role", "alert")
+            expect(smsCheckbox).toHaveAttribute("aria-invalid", "true")
+            expect(smsCheckbox).toHaveAccessibleDescription(message.textContent ?? "")
+            expect(screen.getByLabelText("Mobile Phone")).toHaveFocus()
+            expect(screen.queryByText(/must be a valid phone number/i)).not.toBeInTheDocument()
+            expect(submitEmbedPublicForm).not.toHaveBeenCalled()
+        })
+
+        it("submits after unchecking SMS that blocked an empty phone", async () => {
+            await renderStartedSmsForm(smsForm)
+
+            fireEvent.click(getOperationalCheckbox())
+            fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+            await screen.findByText("Enter your phone number to receive text messages.")
+
+            fireEvent.click(getOperationalCheckbox())
+            expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+            expect(getOperationalCheckbox()).not.toHaveAttribute("aria-invalid")
+            fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+            await waitFor(() => expect(submitEmbedPublicForm).toHaveBeenCalledWith(
+                "lead-form",
+                expect.objectContaining({
+                    answers: { full_name: "Embed Lead", email: "embed@example.com" },
+                    sms_operational: false,
+                    sms_promotional: false,
+                    sms_phone_field_key: null,
+                }),
+            ))
+        })
+
+        it("blocks checked SMS after conditional logic hides the phone field until SMS is unchecked", async () => {
+            await renderStartedSmsForm(conditionalPhoneForm)
+
+            expect(isBefore(screen.getByLabelText("Mobile Phone"), getOperationalCheckbox())).toBe(true)
+            fireEvent.click(getOperationalCheckbox())
+            fireEvent.change(screen.getByLabelText("Contact Preference"), { target: { value: "Email only" } })
+
+            expect(screen.queryByLabelText("Mobile Phone")).not.toBeInTheDocument()
+            const smsCheckbox = getOperationalCheckbox()
+            expect(smsCheckbox).toBeChecked()
+            expect(isBefore(screen.getByLabelText(/email/i), smsCheckbox)).toBe(true)
+            expect(isBefore(smsCheckbox, screen.getByText(/By submitting, you agree/i))).toBe(true)
+            fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+            const message = await screen.findByText(missingPhoneMessage)
+            expect(message).toHaveAttribute("role", "alert")
+            expect(smsCheckbox).toHaveAttribute("aria-invalid", "true")
+            expect(smsCheckbox).toHaveAccessibleDescription(missingPhoneMessage)
+            expect(smsCheckbox).toHaveFocus()
+            expect(submitEmbedPublicForm).not.toHaveBeenCalled()
+
+            fireEvent.click(smsCheckbox)
+            expect(screen.queryByText(missingPhoneMessage)).not.toBeInTheDocument()
+            fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+            await waitFor(() => expect(submitEmbedPublicForm).toHaveBeenCalledWith(
+                "lead-form",
+                expect.objectContaining({
+                    answers: {
+                        full_name: "Embed Lead",
+                        contact_preference: "Email only",
+                        email: "embed@example.com",
+                    },
+                    sms_operational: false,
+                    sms_promotional: false,
+                    sms_phone_field_key: null,
+                }),
+            ))
+        })
+
+        it("blocks checked SMS when the mapped phone field is not on the form", async () => {
+            await renderStartedSmsForm({ ...embedForm, messaging_consent: operationalConsent })
+
+            const smsCheckbox = getOperationalCheckbox()
+            expect(isBefore(screen.getByLabelText(/email/i), smsCheckbox)).toBe(true)
+            fireEvent.click(smsCheckbox)
+            fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+            expect(await screen.findByText(missingPhoneMessage)).toBeInTheDocument()
+            expect(smsCheckbox).toHaveAttribute("aria-invalid", "true")
+            expect(submitEmbedPublicForm).not.toHaveBeenCalled()
+        })
+
+        it("posts only the validation reason to the parent frame for SMS consent errors", async () => {
+            const originalParent = Object.getOwnPropertyDescriptor(window, "parent")
+            const postMessage = vi.fn()
+            Object.defineProperty(window, "parent", {
+                configurable: true,
+                value: { postMessage },
+            })
+
+            try {
+                await renderStartedSmsForm(conditionalPhoneForm)
+
+                fireEvent.change(screen.getByLabelText("Mobile Phone"), { target: { value: "555-01" } })
+                fireEvent.click(getOperationalCheckbox())
+                fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+                await screen.findByText("Enter a valid phone number to receive text messages.")
+
+                fireEvent.change(screen.getByLabelText("Contact Preference"), { target: { value: "Email only" } })
+                fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+                await screen.findByText(missingPhoneMessage)
+
+                const errorMessages = postMessage.mock.calls.filter(
+                    ([message]) => (message as { type?: string }).type === "sf:form:error",
+                )
+                expect(errorMessages).toEqual([
+                    [{ type: "sf:form:error", reason: "validation" }, "https://www.ewisurrogacy.com"],
+                    [{ type: "sf:form:error", reason: "validation" }, "https://www.ewisurrogacy.com"],
+                ])
+                const serializedMessages = JSON.stringify(postMessage.mock.calls)
+                expect(serializedMessages).not.toContain("555-01")
+                expect(serializedMessages).not.toContain("55501")
+                expect(serializedMessages).not.toContain("Embed Lead")
+                expect(submitEmbedPublicForm).not.toHaveBeenCalled()
+            } finally {
+                if (originalParent) {
+                    Object.defineProperty(window, "parent", originalParent)
+                }
+            }
+        })
+
+        it("sends the mapped phone field key with checked SMS and shows the server message when the form changed", async () => {
+            const originalParent = Object.getOwnPropertyDescriptor(window, "parent")
+            const postMessage = vi.fn()
+            Object.defineProperty(window, "parent", {
+                configurable: true,
+                value: { postMessage },
+            })
+            submitEmbedPublicForm.mockRejectedValueOnce(
+                new ApiError(409, "Conflict", "This form changed. Reload the page and try again."),
+            )
+
+            try {
+                await renderStartedSmsForm(smsForm)
+                fireEvent.change(screen.getByLabelText("Mobile Phone"), { target: { value: "(555) 123-4567" } })
+                fireEvent.click(getOperationalCheckbox())
+                fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+                expect(await screen.findByText("This form changed. Reload the page and try again.")).toBeInTheDocument()
+                expect(submitEmbedPublicForm).toHaveBeenCalledWith(
+                    "lead-form",
+                    expect.objectContaining({
+                        sms_operational: true,
+                        sms_promotional: false,
+                        sms_phone_field_key: "mobile_number",
+                    }),
+                )
+                const errorMessages = postMessage.mock.calls.filter(
+                    ([message]) => (message as { type?: string }).type === "sf:form:error",
+                )
+                expect(errorMessages).toEqual([
+                    [{ type: "sf:form:error", reason: "submit" }, "https://www.ewisurrogacy.com"],
+                ])
+            } finally {
+                if (originalParent) {
+                    Object.defineProperty(window, "parent", originalParent)
+                }
+            }
+        })
+
+        it.each([
+            {
+                name: "a null phone field key",
+                messagingConsent: { phone_field_key: null, operational: null, promotional: null },
+            },
+            { name: "missing options", messagingConsent: undefined },
+        ])("does not render SMS consent with $name", async ({ messagingConsent }) => {
+            getEmbedPublicForm.mockResolvedValue({ ...smsForm, messaging_consent: messagingConsent })
+            renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
+
+            await screen.findByLabelText("Mobile Phone")
+            expect(screen.queryAllByRole("checkbox")).toHaveLength(0)
+            expect(screen.queryByRole("link", { name: "Terms of Service" })).not.toBeInTheDocument()
+        })
     })
 })

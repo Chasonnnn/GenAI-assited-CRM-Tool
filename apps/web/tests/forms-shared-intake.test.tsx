@@ -4,6 +4,7 @@ import { act, fireEvent, render as renderWithTestingLibrary, screen, waitFor } f
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import PublicIntakeFormClient from '../app/intake/[slug]/page.client'
+import { toast } from '@/components/ui/toast'
 import { ApiError } from '../lib/api'
 
 vi.unmock('@tanstack/react-query')
@@ -438,10 +439,55 @@ describe('Shared Intake Public Page', () => {
         expect(window.sessionStorage.getItem('intake-submit:other-form:version-1')).toBe('other-attempt')
     })
 
+    it.each([
+        {
+            name: 'a stale form version',
+            error: new ApiError(409, 'Conflict', 'Published version is no longer current'),
+            message: 'This form changed. Reload the page and try again.',
+        },
+        {
+            name: 'a pending duplicate applicant',
+            error: new ApiError(409, 'Conflict', 'An intake submission is already pending review.'),
+            message: 'Failed to submit application. Please try again.',
+        },
+        {
+            name: 'a conflict without a detail',
+            error: new ApiError(409, 'Conflict'),
+            message: 'Failed to submit application. Please try again.',
+        },
+        {
+            name: 'a network failure',
+            error: new Error('Network down'),
+            message: 'Failed to submit application. Please try again.',
+        },
+    ])('shows the submit failure message for $name', async ({ error, message }) => {
+        submitSharedPublicForm.mockRejectedValueOnce(error)
+        render(<PublicIntakeFormClient slug="event-abc" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        fireEvent.click(screen.getByRole('checkbox'))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message))
+        expect(toast.error).toHaveBeenCalledTimes(1)
+        expect(screen.getByText('Review Your Application')).toBeInTheDocument()
+        expect(JSON.stringify(vi.mocked(toast.error).mock.calls)).not.toContain(error.message)
+        expect(document.body).not.toHaveTextContent(error.message)
+    })
+
     it('keeps both SMS choices unchecked and optional on hosted intake', async () => {
         getSharedPublicForm.mockResolvedValue({
             ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Contact',
+                        fields: [{ key: 'mobile_number', label: 'Mobile Phone', type: 'phone', required: false }],
+                    },
+                ],
+            },
             messaging_consent: {
+                phone_field_key: 'mobile_number',
                 operational: {
                     disclosure: 'I agree to receive application and appointment texts.',
                     sms_terms_url: 'https://example.com/sms-terms',
@@ -456,7 +502,7 @@ describe('Shared Intake Public Page', () => {
         })
         render(<PublicIntakeFormClient slug="event-abc" />)
 
-        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        await screen.findByLabelText('Mobile Phone')
         const operational = screen.getByRole('checkbox', {
             name: /application and appointment texts/i,
         })
@@ -465,7 +511,10 @@ describe('Shared Intake Public Page', () => {
         })
         expect(operational).not.toBeChecked()
         expect(promotional).not.toBeChecked()
+        expect(screen.getAllByRole('link', { name: 'Terms of Service' })).toHaveLength(2)
 
+        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+        await screen.findByText('Review Your Application')
         fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
         fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
 
@@ -476,10 +525,398 @@ describe('Shared Intake Public Page', () => {
                 [],
                 undefined,
                 undefined,
-                { operational: false, promotional: false },
+                { operational: false, promotional: false, phoneFieldKey: null },
                 'version-1',
                 expect.any(String),
             )
+        })
+    })
+
+    describe('SMS consent next to the phone field', () => {
+        const fullNameField = { key: 'full_name', label: 'Full Name', type: 'text', required: true }
+        const homePhoneField = { key: 'phone', label: 'Home Phone', type: 'phone', required: false }
+        const mobilePhoneField = { key: 'mobile_number', label: 'Mobile Phone', type: 'phone', required: false }
+        const emailField = { key: 'email', label: 'Email', type: 'email', required: true }
+        const smsIntakeForm = {
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                privacy_notice: 'By submitting this form, you consent to intake screening.',
+                pages: [
+                    {
+                        title: 'Contact',
+                        fields: [fullNameField, homePhoneField, mobilePhoneField, emailField],
+                    },
+                ],
+            },
+            messaging_consent: {
+                phone_field_key: 'mobile_number',
+                operational: {
+                    disclosure: 'I agree to receive application and appointment texts.',
+                    sms_terms_url: 'https://example.com/sms-terms',
+                    privacy_policy_url: 'https://example.com/privacy',
+                },
+                promotional: null,
+            },
+        }
+        const missingPhoneMessage = 'Add a phone number to receive text messages, or uncheck to continue.'
+
+        function isBefore(first: HTMLElement, second: HTMLElement): boolean {
+            return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)
+        }
+
+        function fillRequiredContactFields() {
+            fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Jane Applicant' } })
+            fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'jane@example.com' } })
+        }
+
+        function getSmsCheckbox() {
+            return screen.getByRole('checkbox', { name: /application and appointment texts/i })
+        }
+
+        function querySmsCheckbox() {
+            return screen.queryByRole('checkbox', { name: /application and appointment texts/i })
+        }
+
+        function submitReviewStep() {
+            fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
+            fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+        }
+
+        it('renders the SMS consent on the phone step directly after the mapped phone field', async () => {
+            getSharedPublicForm.mockResolvedValue(smsIntakeForm)
+            render(<PublicIntakeFormClient slug="event-abc" />)
+
+            const phoneInput = await screen.findByLabelText('Mobile Phone')
+            const smsCheckbox = getSmsCheckbox()
+            expect(isBefore(screen.getByLabelText('Home Phone'), phoneInput)).toBe(true)
+            expect(isBefore(phoneInput, smsCheckbox)).toBe(true)
+            expect(isBefore(smsCheckbox, screen.getByLabelText(/email/i))).toBe(true)
+            expect(isBefore(smsCheckbox, screen.getByText(/you consent to intake screening/i))).toBe(true)
+            expect(smsCheckbox).not.toBeChecked()
+
+            expect(screen.getByText(/application and appointment texts/i)).toHaveClass('text-sm', 'text-stone-700')
+            const termsLink = screen.getByRole('link', { name: 'Terms of Service' })
+            expect(termsLink).toHaveAttribute('href', 'https://example.com/sms-terms')
+            expect(termsLink).toHaveAttribute('target', '_blank')
+            const privacyLinks = screen.getAllByRole('link', { name: 'Privacy Policy' })
+            expect(privacyLinks[0]).toHaveAttribute('href', 'https://example.com/privacy')
+            expect(privacyLinks[0]).toHaveAttribute('target', '_blank')
+            expect(screen.queryByRole('link', { name: 'SMS Terms' })).not.toBeInTheDocument()
+        })
+
+        it('renders the SMS consent only on the later step that holds the phone field', async () => {
+            getSharedPublicForm.mockResolvedValue({
+                ...smsIntakeForm,
+                form_schema: {
+                    ...smsIntakeForm.form_schema,
+                    pages: [
+                        { title: 'About You', fields: [fullNameField] },
+                        { title: 'Contact', fields: [mobilePhoneField, emailField] },
+                    ],
+                },
+            })
+            render(<PublicIntakeFormClient slug="event-abc" />)
+
+            await screen.findByLabelText(/full name/i)
+            expect(querySmsCheckbox()).not.toBeInTheDocument()
+            fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Jane Applicant' } })
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+            const phoneInput = await screen.findByLabelText('Mobile Phone')
+            const smsCheckbox = getSmsCheckbox()
+            expect(isBefore(phoneInput, smsCheckbox)).toBe(true)
+            expect(isBefore(smsCheckbox, screen.getByLabelText(/email/i))).toBe(true)
+
+            fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'jane@example.com' } })
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            await screen.findByText('Review Your Application')
+            expect(querySmsCheckbox()).not.toBeInTheDocument()
+        })
+
+        it('continues and submits with SMS unchecked and no phone number', async () => {
+            getSharedPublicForm.mockResolvedValue(smsIntakeForm)
+            render(<PublicIntakeFormClient slug="event-abc" />)
+            await screen.findByLabelText('Mobile Phone')
+
+            fillRequiredContactFields()
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            await screen.findByText('Review Your Application')
+            expect(querySmsCheckbox()).not.toBeInTheDocument()
+            submitReviewStep()
+
+            await waitFor(() => {
+                expect(submitSharedPublicForm).toHaveBeenCalledWith(
+                    'event-abc',
+                    { full_name: 'Jane Applicant', email: 'jane@example.com' },
+                    [],
+                    undefined,
+                    undefined,
+                    { operational: false, promotional: false, phoneFieldKey: null },
+                    'version-1',
+                    expect.any(String),
+                )
+            })
+        })
+
+        it('shows an inline message and stays on the step when SMS is checked without a phone number', async () => {
+            getSharedPublicForm.mockResolvedValue(smsIntakeForm)
+            render(<PublicIntakeFormClient slug="event-abc" />)
+            await screen.findByLabelText('Mobile Phone')
+
+            fillRequiredContactFields()
+            const smsCheckbox = getSmsCheckbox()
+            fireEvent.click(smsCheckbox)
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+            const message = await screen.findByText('Enter your phone number to receive text messages.')
+            expect(message).toHaveAttribute('role', 'alert')
+            expect(screen.queryByText('Review Your Application')).not.toBeInTheDocument()
+            expect(smsCheckbox).toHaveAttribute('aria-invalid', 'true')
+            expect(smsCheckbox).toHaveAccessibleDescription(message.textContent ?? '')
+            expect(screen.getByLabelText('Mobile Phone')).toHaveFocus()
+
+            fireEvent.change(screen.getByLabelText('Mobile Phone'), { target: { value: '(555) 123-4567' } })
+            expect(screen.queryByText('Enter your phone number to receive text messages.')).not.toBeInTheDocument()
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            await screen.findByText('Review Your Application')
+            submitReviewStep()
+
+            await waitFor(() => {
+                expect(submitSharedPublicForm).toHaveBeenCalledWith(
+                    'event-abc',
+                    { full_name: 'Jane Applicant', mobile_number: '(555) 123-4567', email: 'jane@example.com' },
+                    [],
+                    undefined,
+                    undefined,
+                    { operational: true, promotional: false, phoneFieldKey: 'mobile_number' },
+                    'version-1',
+                    expect.any(String),
+                )
+            })
+        })
+
+        it('reports a malformed phone inline on the first Continue when SMS is checked', async () => {
+            getSharedPublicForm.mockResolvedValue(smsIntakeForm)
+            render(<PublicIntakeFormClient slug="event-abc" />)
+            await screen.findByLabelText('Mobile Phone')
+
+            fillRequiredContactFields()
+            fireEvent.change(screen.getByLabelText('Mobile Phone'), { target: { value: '123' } })
+            const smsCheckbox = getSmsCheckbox()
+            fireEvent.click(smsCheckbox)
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+            const message = await screen.findByText('Enter a valid phone number to receive text messages.')
+            expect(message).toHaveAttribute('role', 'alert')
+            expect(smsCheckbox).toHaveAttribute('aria-invalid', 'true')
+            expect(smsCheckbox).toHaveAccessibleDescription(message.textContent ?? '')
+            expect(screen.getByLabelText('Mobile Phone')).toHaveFocus()
+            expect(toast.error).not.toHaveBeenCalled()
+            expect(screen.queryByText('Review Your Application')).not.toBeInTheDocument()
+        })
+
+        it('continues after unchecking SMS that blocked an empty phone', async () => {
+            getSharedPublicForm.mockResolvedValue(smsIntakeForm)
+            render(<PublicIntakeFormClient slug="event-abc" />)
+            await screen.findByLabelText('Mobile Phone')
+
+            fillRequiredContactFields()
+            fireEvent.click(getSmsCheckbox())
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            await screen.findByText('Enter your phone number to receive text messages.')
+
+            fireEvent.click(getSmsCheckbox())
+            expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+            expect(getSmsCheckbox()).not.toHaveAttribute('aria-invalid')
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            await screen.findByText('Review Your Application')
+            submitReviewStep()
+
+            await waitFor(() => {
+                expect(submitSharedPublicForm).toHaveBeenCalledWith(
+                    'event-abc',
+                    { full_name: 'Jane Applicant', email: 'jane@example.com' },
+                    [],
+                    undefined,
+                    undefined,
+                    { operational: false, promotional: false, phoneFieldKey: null },
+                    'version-1',
+                    expect.any(String),
+                )
+            })
+        })
+
+        it('blocks checked SMS on review after conditional logic hides the phone field until SMS is unchecked', async () => {
+            getSharedPublicForm.mockResolvedValue({
+                ...smsIntakeForm,
+                form_schema: {
+                    ...smsIntakeForm.form_schema,
+                    pages: [
+                        {
+                            title: 'Contact',
+                            fields: [
+                                fullNameField,
+                                { key: 'contact_preference', label: 'Contact Preference', type: 'text', required: false },
+                                {
+                                    ...mobilePhoneField,
+                                    show_if: {
+                                        field_key: 'contact_preference',
+                                        operator: 'not_equals',
+                                        value: 'Email only',
+                                    },
+                                },
+                                emailField,
+                            ],
+                        },
+                    ],
+                },
+            })
+            render(<PublicIntakeFormClient slug="event-abc" />)
+            await screen.findByLabelText('Mobile Phone')
+
+            fillRequiredContactFields()
+            fireEvent.click(getSmsCheckbox())
+            fireEvent.change(screen.getByLabelText('Contact Preference'), { target: { value: 'Email only' } })
+            expect(screen.queryByLabelText('Mobile Phone')).not.toBeInTheDocument()
+            expect(querySmsCheckbox()).not.toBeInTheDocument()
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+            await screen.findByText('Review Your Application')
+            const smsCheckbox = getSmsCheckbox()
+            expect(smsCheckbox).toBeChecked()
+            submitReviewStep()
+
+            const message = await screen.findByText(missingPhoneMessage)
+            expect(message).toHaveAttribute('role', 'alert')
+            expect(smsCheckbox).toHaveAttribute('aria-invalid', 'true')
+            expect(smsCheckbox).toHaveAccessibleDescription(missingPhoneMessage)
+            expect(smsCheckbox).toHaveFocus()
+            expect(submitSharedPublicForm).not.toHaveBeenCalled()
+
+            fireEvent.click(smsCheckbox)
+            expect(screen.queryByText(missingPhoneMessage)).not.toBeInTheDocument()
+            fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+
+            await waitFor(() => {
+                expect(submitSharedPublicForm).toHaveBeenCalledWith(
+                    'event-abc',
+                    { full_name: 'Jane Applicant', contact_preference: 'Email only', email: 'jane@example.com' },
+                    [],
+                    undefined,
+                    undefined,
+                    { operational: false, promotional: false, phoneFieldKey: null },
+                    'version-1',
+                    expect.any(String),
+                )
+            })
+        })
+
+        it('returns to the phone step and focuses the phone when a later answer reveals it after SMS was checked on review', async () => {
+            getSharedPublicForm.mockResolvedValue({
+                ...smsIntakeForm,
+                form_schema: {
+                    ...smsIntakeForm.form_schema,
+                    pages: [
+                        {
+                            title: 'Contact',
+                            fields: [
+                                fullNameField,
+                                {
+                                    ...mobilePhoneField,
+                                    show_if: { field_key: 'contact_preference', operator: 'equals', value: 'Text' },
+                                },
+                            ],
+                        },
+                        {
+                            title: 'Preferences',
+                            fields: [
+                                emailField,
+                                { key: 'contact_preference', label: 'Contact Preference', type: 'text', required: false },
+                            ],
+                        },
+                    ],
+                },
+            })
+            render(<PublicIntakeFormClient slug="event-abc" />)
+
+            await screen.findByLabelText(/full name/i)
+            expect(screen.queryByLabelText('Mobile Phone')).not.toBeInTheDocument()
+            fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Jane Applicant' } })
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            fireEvent.change(await screen.findByLabelText(/email/i), { target: { value: 'jane@example.com' } })
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+            await screen.findByText('Review Your Application')
+            fireEvent.click(getSmsCheckbox())
+            fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
+            fireEvent.click(screen.getAllByRole('button', { name: /edit/i })[1])
+
+            fireEvent.change(await screen.findByLabelText('Contact Preference'), { target: { value: 'Text' } })
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            await screen.findByText('Review Your Application')
+            expect(querySmsCheckbox()).not.toBeInTheDocument()
+            const submitButton = screen.getByRole('button', { name: 'Submit Application' })
+            submitButton.focus()
+            fireEvent.click(submitButton)
+
+            const message = await screen.findByText('Enter your phone number to receive text messages.')
+            expect(message).toHaveAttribute('role', 'alert')
+            expect(screen.queryByText('Review Your Application')).not.toBeInTheDocument()
+            expect(getSmsCheckbox()).toHaveAttribute('aria-invalid', 'true')
+            expect(screen.getByLabelText('Mobile Phone')).toHaveFocus()
+            expect(submitSharedPublicForm).not.toHaveBeenCalled()
+        })
+
+        it('sends the mapped phone field key with checked SMS and shows the server message when the form changed', async () => {
+            submitSharedPublicForm.mockRejectedValueOnce(
+                new ApiError(409, 'Conflict', 'This form changed. Reload the page and try again.'),
+            )
+            getSharedPublicForm.mockResolvedValue(smsIntakeForm)
+            render(<PublicIntakeFormClient slug="event-abc" />)
+            await screen.findByLabelText('Mobile Phone')
+
+            fillRequiredContactFields()
+            fireEvent.change(screen.getByLabelText('Mobile Phone'), { target: { value: '(555) 123-4567' } })
+            fireEvent.click(getSmsCheckbox())
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            await screen.findByText('Review Your Application')
+            submitReviewStep()
+
+            await waitFor(() => {
+                expect(toast.error).toHaveBeenCalledWith('This form changed. Reload the page and try again.')
+            })
+            expect(submitSharedPublicForm).toHaveBeenCalledWith(
+                'event-abc',
+                { full_name: 'Jane Applicant', mobile_number: '(555) 123-4567', email: 'jane@example.com' },
+                [],
+                undefined,
+                undefined,
+                { operational: true, promotional: false, phoneFieldKey: 'mobile_number' },
+                'version-1',
+                expect.any(String),
+            )
+            expect(screen.getByText('Review Your Application')).toBeInTheDocument()
+        })
+
+        it.each([
+            {
+                name: 'a null phone field key',
+                messagingConsent: { phone_field_key: null, operational: null, promotional: null },
+            },
+            { name: 'missing options', messagingConsent: undefined },
+        ])('does not render SMS consent with $name', async ({ messagingConsent }) => {
+            getSharedPublicForm.mockResolvedValue({ ...smsIntakeForm, messaging_consent: messagingConsent })
+            render(<PublicIntakeFormClient slug="event-abc" />)
+
+            await screen.findByLabelText('Mobile Phone')
+            expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+            expect(screen.queryByRole('link', { name: 'Terms of Service' })).not.toBeInTheDocument()
+
+            fillRequiredContactFields()
+            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            await screen.findByText('Review Your Application')
+            expect(screen.getAllByRole('checkbox')).toHaveLength(1)
         })
     })
 
