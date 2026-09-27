@@ -25,8 +25,10 @@ const mocks = vi.hoisted(() => ({
         publishedTemplate: null as Record<string, unknown> | null,
         draft: null as Record<string, unknown> | null,
         publishedLookupErrorId: null as string | null,
+        publishedLookupError: null as Error | null,
         draftsLoading: false,
         draftsError: false,
+        draftsErrorValue: null as Error | null,
         versions: [
             {
                 id: "version-7",
@@ -125,6 +127,11 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         isLoading: false,
         isError:
             Boolean(id) && id === mocks.state.publishedLookupErrorId,
+        error:
+            Boolean(id) && id === mocks.state.publishedLookupErrorId
+                ? mocks.state.publishedLookupError
+                : null,
+        isFetching: false,
         refetch: mocks.refetchPublished,
     }),
     useEmailTemplateVariables: () => ({ data: [], isLoading: false }),
@@ -154,6 +161,8 @@ vi.mock("@/lib/hooks/use-email-template-drafts", () => ({
             data: mocks.state.draft ? [mocks.state.draft] : [],
             isLoading: mocks.state.draftsLoading,
             isError: mocks.state.draftsError,
+            error: mocks.state.draftsErrorValue,
+            isFetching: false,
             refetch: mocks.refetchDrafts,
         }
     },
@@ -259,6 +268,8 @@ describe("OrganizationEmailTemplateStudio", () => {
         mocks.state.publishedLookupErrorId = null
         mocks.state.draftsLoading = false
         mocks.state.draftsError = false
+        mocks.state.draftsErrorValue = null
+        mocks.state.publishedLookupError = null
 
         mocks.createDraftFromTemplate.mockResolvedValue(draftFromPublished)
         mocks.updateDraft.mockResolvedValue({
@@ -536,6 +547,9 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(
             screen.getByRole("heading", { name: "Leave without saving?" }),
         ).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Discard changes" })).toHaveClass(
+            "bg-destructive",
+        )
 
         fireEvent.click(screen.getByRole("button", { name: "Keep editing" }))
         expect(mocks.push).not.toHaveBeenCalled()
@@ -543,7 +557,7 @@ describe("OrganizationEmailTemplateStudio", () => {
         fireEvent.click(
             screen.getByRole("button", { name: "Back to email templates" }),
         )
-        fireEvent.click(screen.getByRole("button", { name: "Leave without saving" }))
+        fireEvent.click(screen.getByRole("button", { name: "Discard changes" }))
 
         expect(mocks.push).toHaveBeenCalledWith("/automation/email-templates")
     })
@@ -567,7 +581,7 @@ describe("OrganizationEmailTemplateStudio", () => {
             screen.getByRole("heading", { name: "Leave without saving?" }),
         ).toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole("button", { name: "Leave without saving" }))
+        fireEvent.click(screen.getByRole("button", { name: "Discard changes" }))
 
         expect(mocks.push).toHaveBeenCalledWith("/settings/integrations/email")
         destination.remove()
@@ -654,7 +668,7 @@ describe("OrganizationEmailTemplateStudio", () => {
 
         expect(screen.queryByLabelText("From email")).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Send test" }))
-        expect(screen.getByLabelText("Test recipient")).toHaveValue(
+        expect(screen.getByLabelText("To email")).toHaveValue(
             "owner@example.com",
         )
     })
@@ -994,10 +1008,11 @@ describe("OrganizationEmailTemplateStudio", () => {
 
         expect(screen.getByText("Not tested")).toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Send test" }))
-        fireEvent.change(screen.getByLabelText("Test recipient"), {
+        fireEvent.change(screen.getByLabelText("To email"), {
             target: { value: "qa@example.com" },
         })
-        fireEvent.change(screen.getByLabelText("Test value for first_name"), {
+        fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
+        fireEvent.change(await screen.findByLabelText("First name"), {
             target: { value: "Taylor" },
         })
         fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
@@ -1042,7 +1057,7 @@ describe("OrganizationEmailTemplateStudio", () => {
 
         render(<OrganizationEmailTemplateStudio templateId="template-1" />)
         fireEvent.click(screen.getByRole("button", { name: "Send test" }))
-        fireEvent.change(screen.getByLabelText("Test recipient"), {
+        fireEvent.change(screen.getByLabelText("To email"), {
             target: { value: "qa@example.com" },
         })
         fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
@@ -1053,7 +1068,7 @@ describe("OrganizationEmailTemplateStudio", () => {
             ),
         ).toBeInTheDocument()
         expect(screen.queryByText("Recipient is suppressed")).not.toBeInTheDocument()
-        expect(screen.getByLabelText("Test recipient")).toHaveValue(
+        expect(screen.getByLabelText("To email")).toHaveValue(
             "qa@example.com",
         )
         expect(screen.getByRole("button", { name: "Send test email" })).toBeEnabled()
@@ -1072,7 +1087,7 @@ describe("OrganizationEmailTemplateStudio", () => {
 
         render(<OrganizationEmailTemplateStudio templateId="template-1" />)
         fireEvent.click(screen.getByRole("button", { name: "Send test" }))
-        fireEvent.change(screen.getByLabelText("Test recipient"), {
+        fireEvent.change(screen.getByLabelText("To email"), {
             target: { value: "qa@example.com" },
         })
         fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
@@ -1094,13 +1109,77 @@ describe("OrganizationEmailTemplateStudio", () => {
         render(<OrganizationEmailTemplateStudio templateId="draft-new" />)
 
         expect(
-            screen.getByRole("heading", { name: "New email template" }),
+            screen.getByRole("heading", { level: 1, name: "Legacy welcome" }),
         ).toBeInTheDocument()
         expect(
+            screen.queryByRole("heading", { name: "New email template" }),
+        ).not.toBeInTheDocument()
+        expect(
             screen.queryByRole("heading", {
-                name: "Unable to load template studio",
+                name: "Couldn't load template studio",
             }),
         ).not.toBeInTheDocument()
+    })
+
+    it("titles a published template with its saved name, not the name being typed", () => {
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+
+        expect(
+            screen.getByRole("heading", { level: 1, name: "Legacy welcome" }),
+        ).toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText("Template name"), {
+            target: { value: "Renamed" },
+        })
+        expect(
+            screen.getByRole("heading", { level: 1, name: "Legacy welcome" }),
+        ).toBeInTheDocument()
+    })
+
+    it("shows a denied state with a way back when organization drafts return 403", () => {
+        mocks.state.publishedTemplate = null
+        mocks.state.draftsError = true
+        mocks.state.draftsErrorValue = new ApiError(403, "Forbidden", "Missing permission")
+
+        render(<OrganizationEmailTemplateStudio />)
+
+        expect(
+            screen.getByRole("heading", {
+                level: 1,
+                name: "Organization templates require template management access",
+            }),
+        ).toBeInTheDocument()
+        expect(screen.queryByText("Missing permission")).not.toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to Email Templates" })).toHaveAttribute(
+            "href",
+            "/automation/email-templates",
+        )
+    })
+
+    it("shows a not-found state for a missing template id instead of loading", () => {
+        mocks.state.publishedTemplate = null
+        mocks.state.publishedLookupErrorId = "missing-template"
+        mocks.state.publishedLookupError = new ApiError(404, "Not Found", "Template not found")
+
+        render(<OrganizationEmailTemplateStudio templateId="missing-template" />)
+
+        expect(
+            screen.getByRole("heading", { level: 1, name: "Template not found" }),
+        ).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: /Back to Email Templates/ })).toHaveAttribute(
+            "href",
+            "/automation/email-templates",
+        )
+        expect(screen.queryByText("Loading template studio…")).not.toBeInTheDocument()
+    })
+
+    it("shows a not-found state when an id resolves to no draft or template", () => {
+        mocks.state.publishedTemplate = null
+
+        render(<OrganizationEmailTemplateStudio templateId="missing-template" />)
+
+        expect(
+            screen.getByRole("heading", { level: 1, name: "Template not found" }),
+        ).toBeInTheDocument()
     })
 
     it("applies only explicit local edits when the created draft baseline has diverged", async () => {
@@ -1196,10 +1275,27 @@ describe("OrganizationEmailTemplateStudio", () => {
         render(<OrganizationEmailTemplateStudio />)
         fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
 
-        expect(
-            await screen.findByText("Name, subject, and email body are required."),
-        ).toBeInTheDocument()
+        expect(await screen.findByText("Enter a template name.")).toBeInTheDocument()
+        expect(screen.getByText("Enter a subject.")).toBeInTheDocument()
+        expect(screen.getByText("Enter the email body.")).toBeInTheDocument()
+        expect(screen.getByLabelText("Template name")).toHaveAttribute("aria-invalid", "true")
+        expect(screen.getByLabelText("Subject")).toHaveAttribute("aria-invalid", "true")
         expect(mocks.createDraft).not.toHaveBeenCalled()
+
+        fireEvent.change(screen.getByLabelText("Template name"), {
+            target: { value: "New outreach" },
+        })
+        fireEvent.change(screen.getByLabelText("Subject"), {
+            target: { value: "Hello there" },
+        })
+        fireEvent.change(screen.getByLabelText("Email body"), {
+            target: { value: "<p>Welcome</p>" },
+        })
+
+        expect(screen.queryByText("Enter a template name.")).not.toBeInTheDocument()
+        expect(screen.queryByText("Enter a subject.")).not.toBeInTheDocument()
+        expect(screen.queryByText("Enter the email body.")).not.toBeInTheDocument()
+        expect(screen.getByLabelText("Template name")).not.toHaveAttribute("aria-invalid")
     })
 
     it("offers a retryable terminal state when draft loading fails", async () => {
@@ -1211,10 +1307,10 @@ describe("OrganizationEmailTemplateStudio", () => {
 
         expect(
             screen.getByRole("heading", {
-                name: "Unable to load template studio",
+                name: "Couldn't load template studio",
             }),
         ).toBeInTheDocument()
-        fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
         await waitFor(() => expect(mocks.refetchDrafts).toHaveBeenCalledOnce())
     })
 })

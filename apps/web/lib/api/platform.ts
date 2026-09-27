@@ -162,6 +162,8 @@ export interface SystemEmailTemplate {
     is_active: boolean;
     current_version: number;
     updated_at: string | null;
+    /** Built-in keys are recreated from defaults after delete, so delete acts as a reset. */
+    is_builtin?: boolean;
 }
 
 export interface PlatformSystemEmailTemplateCreate {

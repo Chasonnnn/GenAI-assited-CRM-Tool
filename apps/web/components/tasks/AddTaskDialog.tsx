@@ -5,10 +5,10 @@
  */
 
 import { useReducer } from "react"
+import { parseISO } from "date-fns"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -24,8 +24,15 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import type { TaskRecurrence } from "@/lib/utils/task-recurrence"
+import { toast } from "@/components/ui/toast"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import {
+    buildRecurringDates,
+    MAX_TASK_OCCURRENCES,
+    type TaskRecurrence,
+} from "@/lib/utils/task-recurrence"
 import { TaskRelatedRecordPicker } from "@/components/tasks/TaskRelatedRecordPicker"
+import { getTaskTypeLabel, isEditableTaskType, TASK_TYPE_OPTIONS } from "@/lib/task-labels"
 import {
     getTaskRelatedRecordSelection,
     toTaskRelatedRecordPayload,
@@ -43,17 +50,6 @@ interface AddTaskDialogProps {
     isPending: boolean
     initialRelatedRecord?: TaskRelatedRecordFields
 }
-
-const TASK_TYPES = [
-    { value: "meeting", label: "Meeting" },
-    { value: "follow_up", label: "Follow Up" },
-    { value: "contact", label: "Contact" },
-    { value: "review", label: "Review" },
-    { value: "medication", label: "Medication" },
-    { value: "exam", label: "Exam" },
-    { value: "appointment", label: "Appointment" },
-    { value: "other", label: "Other" },
-]
 
 type TaskDialogFormState = {
     title: string
@@ -164,20 +160,39 @@ export function AddTaskDialog({
                 })
                 return
             }
+            // The page refuses to create a series longer than the limit, so stop here instead of
+            // closing the dialog with nothing created.
+            const end = parseISO(repeatUntil)
+            const dates = buildRecurringDates(parseISO(dueDate), end, recurrence)
+            const lastDate = dates[dates.length - 1]
+            if (dates.length >= MAX_TASK_OCCURRENCES && lastDate && end > lastDate) {
+                dispatchForm({
+                    type: "validationError",
+                    value: `A repeating task can have at most ${MAX_TASK_OCCURRENCES} occurrences. Choose an earlier repeat until date.`,
+                })
+                return
+            }
         }
 
         const trimmedDescription = description.trim()
-        await onSubmit({
-            title: title.trim(),
-            task_type: taskType,
-            recurrence,
-            ...(trimmedDescription ? { description: trimmedDescription } : {}),
-            ...(dueDate ? { due_date: dueDate } : {}),
-            ...(dueTime ? { due_time: dueTime } : {}),
-            ...(repeatUntil ? { repeat_until: repeatUntil } : {}),
-            ...toTaskRelatedRecordPayload(relatedRecord),
-        })
+        try {
+            await onSubmit({
+                title: title.trim(),
+                task_type: taskType,
+                recurrence,
+                ...(trimmedDescription ? { description: trimmedDescription } : {}),
+                ...(dueDate ? { due_date: dueDate } : {}),
+                ...(dueTime ? { due_time: dueTime } : {}),
+                ...(repeatUntil ? { repeat_until: repeatUntil } : {}),
+                ...toTaskRelatedRecordPayload(relatedRecord),
+            })
+        } catch (submitError) {
+            const message = getActionErrorMessage(submitError, "Couldn't create task. Try again.")
+            if (message) dispatchForm({ type: "validationError", value: message })
+            return
+        }
 
+        toast.success(recurrence === "none" ? "Task created" : "Tasks created")
         dispatchForm({ type: "reset", relatedRecord: initialRelatedRecordSelection })
         onOpenChange(false)
     }
@@ -191,12 +206,9 @@ export function AddTaskDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle>Add Task</DialogTitle>
-                    <DialogDescription>
-                        Create a new task for your list.
-                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
@@ -221,23 +233,15 @@ export function AddTaskDialog({
                         <Label htmlFor="task-type">Type</Label>
                         <Select
                             value={taskType}
-                            onValueChange={(v) =>
-                                dispatchForm({
-                                    type: "taskType",
-                                    value: v as TaskFormData["task_type"],
-                                })
-                            }
+                            onValueChange={(v) => {
+                                if (isEditableTaskType(v)) dispatchForm({ type: "taskType", value: v })
+                            }}
                         >
                             <SelectTrigger id="task-type">
-                                <SelectValue>
-                                    {(value: string | null) => {
-                                        const type = TASK_TYPES.find(t => t.value === value)
-                                        return type?.label ?? "Select type"
-                                    }}
-                                </SelectValue>
+                                <SelectValue>{getTaskTypeLabel}</SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                                {TASK_TYPES.map((type) => (
+                                {TASK_TYPE_OPTIONS.map((type) => (
                                     <SelectItem key={type.value} value={type.value}>
                                         {type.label}
                                     </SelectItem>
@@ -355,7 +359,7 @@ export function AddTaskDialog({
                     </div>
 
                     {error && (
-                        <p className="text-xs text-destructive">{error}</p>
+                        <p role="alert" className="text-sm text-destructive">{error}</p>
                     )}
                 </div>
 
@@ -371,7 +375,7 @@ export function AddTaskDialog({
                         onClick={handleSubmit}
                         disabled={isPending || !title.trim()}
                     >
-                        {isPending ? "Creating..." : "Create Task"}
+                        {isPending ? "Creating…" : "Create task"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

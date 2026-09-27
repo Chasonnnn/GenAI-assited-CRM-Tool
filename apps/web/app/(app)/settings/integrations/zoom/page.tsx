@@ -3,10 +3,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { toast } from "@/components/ui/toast"
 import { Table, TableHead, TableHeader, TableBody, TableRow, TableCell } from "@/components/ui/table"
-import { ArrowLeftIcon, VideoIcon, CheckCircleIcon, UnlinkIcon, Loader2Icon, ExternalLinkIcon, CalendarIcon } from "lucide-react"
+import { VideoIcon, CheckCircleIcon, UnlinkIcon, Loader2Icon, ExternalLinkIcon, CalendarIcon } from "lucide-react"
 import { useZoomStatus, useZoomMeetings, useConnectZoom, useDisconnectIntegration, type ZoomMeetingRead } from "@/lib/hooks/use-user-integrations"
 import Link from "@/components/app-link"
+import { PageHeader } from "@/components/page-header"
 import { formatDate, formatRelativeTime } from "@/lib/formatters"
 
 export default function ZoomSettingsPage() {
@@ -27,27 +30,19 @@ export default function ZoomSettingsPage() {
         connectZoom.mutate()
     }
 
-    const handleDisconnect = () => {
-        disconnectZoom.mutate('zoom')
+    // Errors propagate so the confirm dialog stays open and shows them inline.
+    const handleDisconnect = async () => {
+        await disconnectZoom.mutateAsync('zoom')
+        toast.success("Zoom disconnected")
     }
 
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6">
-            {/* Header */}
-            <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" render={<Link href="/settings/integrations" />} aria-label="Back to integrations">
-                    <ArrowLeftIcon className="size-5" aria-hidden="true" />
-                </Button>
-                <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900">
-                        <VideoIcon className="size-5 text-blue-600 dark:text-blue-400" aria-hidden="true" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-semibold">Zoom Integration</h1>
-                    </div>
-                </div>
-            </div>
-
+        <div className="flex flex-1 flex-col">
+            <PageHeader
+                title="Zoom Integration"
+                back={{ href: "/settings/integrations", label: "Back to integrations" }}
+            />
+            <div className="flex flex-1 flex-col gap-6 p-6">
             {/* Connection Status Card */}
             <Card>
                 <CardHeader>
@@ -57,8 +52,8 @@ export default function ZoomSettingsPage() {
                     {status?.connected ? (
                         <div className="space-y-4">
                             <div className="flex items-center gap-3">
-                                <Badge variant="default" className="bg-green-600">
-                                    <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
+                                <Badge variant="outline" className="border-success/30 bg-success/10 text-success">
+                                    <CheckCircleIcon aria-hidden="true" />
                                     Connected
                                 </Badge>
                             </div>
@@ -95,18 +90,19 @@ export default function ZoomSettingsPage() {
                                     )}
                                     Reconnect
                                 </Button>
-                                <Button
-                                    variant="destructive"
-                                    onClick={handleDisconnect}
-                                    disabled={disconnectZoom.isPending}
-                                >
-                                    {disconnectZoom.isPending ? (
-                                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                    ) : (
-                                        <UnlinkIcon className="mr-2 size-4" aria-hidden="true" />
+                                <ConfirmDialog
+                                    trigger={(
+                                        <Button variant="destructive-ghost" disabled={disconnectZoom.isPending}>
+                                            <UnlinkIcon aria-hidden="true" />
+                                            Disconnect…
+                                        </Button>
                                     )}
-                                    Disconnect
-                                </Button>
+                                    title="Disconnect Zoom?"
+                                    description="New appointments can no longer create Zoom meetings."
+                                    confirmLabel="Disconnect"
+                                    errorFallback="Couldn't disconnect Zoom. Try again."
+                                    onConfirm={handleDisconnect}
+                                />
                             </div>
                         </div>
                     ) : (
@@ -205,6 +201,7 @@ export default function ZoomSettingsPage() {
                     </CardContent>
                 </Card>
             )}
+            </div>
         </div>
     )
 }

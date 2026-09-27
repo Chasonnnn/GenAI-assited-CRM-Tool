@@ -10,7 +10,9 @@ import {
     EmailTemplateVisualEditor,
     type EmailTemplateVisualEditorHandle,
 } from "@/components/email/email-template-visual-editor"
+import { SendTestEmailDialog } from "@/components/email/SendTestEmailDialog"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
+import { NotFoundState, QueryErrorState } from "@/components/error-state"
 import {
     RichTextEditor,
     type RichTextEditorHandle,
@@ -29,7 +31,6 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
     Card,
     CardContent,
@@ -37,14 +38,8 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { FieldError, ValidatedField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -67,6 +62,7 @@ import {
     type EmailTemplateBodyMode,
 } from "@/lib/email-template-preview"
 import { prepareTemplateHtmlForVisualEditor } from "@/lib/email-template-html"
+import { useFormValidation } from "@/lib/forms/use-form-validation"
 import {
     useCreateEmailTemplateDraft,
     useCreateEmailTemplateDraftFromTemplate,
@@ -103,6 +99,12 @@ type EditorFields = {
 }
 
 type ActiveEditorField = "subject" | "body"
+
+const TEMPLATE_NOT_FOUND = {
+    title: "Template not found",
+    backHref: "/automation/email-templates",
+    backLabel: "Back to Email Templates",
+}
 
 function fieldsFromTemplate(
     value: EmailTemplateDraft | EmailTemplate | null | undefined,
@@ -141,6 +143,14 @@ function hasOverlappingServerChanges(
     return (Object.keys(localChanges) as Array<keyof EditorFields>).some(
         (field) => localBaseline[field] !== serverBaseline[field],
     )
+}
+
+function validateContentFields(values: Pick<EditorFields, "name" | "subject" | "body">) {
+    return {
+        name: values.name.trim() ? undefined : "Enter a template name.",
+        subject: values.subject.trim() ? undefined : "Enter a subject.",
+        body: values.body.trim() ? undefined : "Enter the email body.",
+    }
 }
 
 const SUBJECT_PREVIEW_VALUES: Record<string, string> = {
@@ -258,37 +268,36 @@ export default function OrganizationEmailTemplateStudio({
         }
 
         return (
-            <div className="p-6">
-                <h1 className="text-xl font-semibold">Unable to load template studio</h1>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    Refresh the page and try again.
-                </p>
-                <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-4"
-                    onClick={retryFailedQueries}
-                >
-                    Retry
-                </Button>
-            </div>
+            <QueryErrorState
+                error={draftList.error ?? publishedTemplate.error ?? draftDetail.error}
+                onRetry={retryFailedQueries}
+                isRetrying={
+                    draftList.isFetching || publishedTemplate.isFetching || draftDetail.isFetching
+                }
+                title="Couldn't load template studio"
+                forbidden={{
+                    ...(scope === "org"
+                        ? { title: "Organization templates require template management access" }
+                        : {}),
+                    description: "Ask an admin to update your role.",
+                    secondaryHref: "/automation/email-templates",
+                    secondaryLabel: "Back to Email Templates",
+                }}
+                notFound={TEMPLATE_NOT_FOUND}
+                headingLevel={1}
+            />
         )
     }
 
     const draft = draftDetail.data ?? matchingDraft ?? null
     const published = publishedTemplate.data ?? null
+    const isMissingTemplate = Boolean(templateId) && !draft && !published
     if (
+        isMissingTemplate ||
         (draft && draft.scope !== scope) ||
         (published && published.scope !== scope)
     ) {
-        return (
-            <div className="p-6">
-                <h1 className="text-xl font-semibold">Template not found</h1>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    This template is not available in the selected Studio.
-                </p>
-            </div>
-        )
+        return <NotFoundState {...TEMPLATE_NOT_FOUND} headingLevel={1} />
     }
 
     return (
@@ -383,6 +392,11 @@ function OrganizationEmailTemplateEditor({
 
     const isDirty = Object.keys(buildChangedFields(fields, savedFields)).length > 0
     useUnsavedChangesWarning(isDirty, setPendingNavigation)
+    const contentForm = useFormValidation({
+        values: { name: fields.name, subject: fields.subject, body: fields.body },
+        validate: validateContentFields,
+    })
+    const bodyError = contentForm.errorFor("body")
     const orgCompanyName =
         user?.org_display_name || user?.org_name || "Your organization"
     const previewHtml = buildEmailTemplatePreviewHtml(fields.body, {
@@ -392,9 +406,12 @@ function OrganizationEmailTemplateEditor({
         orgSignatureHtml: orgSignaturePreview.data?.html,
     })
     const previewSubject = buildPreviewSubject(fields.subject, orgCompanyName)
-    const testVariableNames = extractEmailTemplateVariables(
+    const templateVariableNames = extractEmailTemplateVariables(
         `${fields.subject}\n${fields.body}`,
-    ).filter((name) => name !== "unsubscribe_url")
+    )
+    const testVariableNames = templateVariableNames.filter(
+        (name) => name !== "unsubscribe_url",
+    )
     const isTestCurrent =
         !isDirty && Boolean(draft) && draft?.last_tested_revision === draft?.revision
     const isTestQueued =
@@ -468,14 +485,9 @@ function OrganizationEmailTemplateEditor({
                 ? fields
                 : { ...fields, body: visualBody }
         if (currentFields !== fields) setFields(currentFields)
-        if (
-            !currentFields.name.trim() ||
-            !currentFields.subject.trim() ||
-            !currentFields.body.trim()
-        ) {
-            setSaveError("Name, subject, and email body are required.")
-            return
-        }
+        // contentForm has already validated the rendered fields and marked any empty one; this
+        // guards the structure editor's final HTML, which is read only at save time.
+        if (Object.values(validateContentFields(currentFields)).some(Boolean)) return
 
         setIsSaving(true)
         setCopyStatus(null)
@@ -668,11 +680,8 @@ function OrganizationEmailTemplateEditor({
     }
 
     const handleSendTest = async () => {
+        // SendTestEmailDialog validates the recipient before calling this handler.
         if (!draft) return
-        if (!testRecipient.trim()) {
-            setTestError("Enter a recipient email address.")
-            return
-        }
 
         const idempotencyKey =
             testOccurrenceIdRef.current ?? createTestOccurrenceId()
@@ -746,7 +755,9 @@ function OrganizationEmailTemplateEditor({
                             : "Organization template"}
                     </p>
                     <h1 className="text-2xl font-semibold tracking-tight">
-                        {publishedTemplate ? "Edit email template" : "New email template"}
+                        {draft || publishedTemplate
+                            ? savedFields.name.trim() || "Edit email template"
+                            : "New email template"}
                     </h1>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -772,7 +783,9 @@ function OrganizationEmailTemplateEditor({
                     <Button
                         type="button"
                         variant="outline"
-                        onClick={handleSaveDraft}
+                        onClick={(event) =>
+                            contentForm.handleSubmit(() => handleSaveDraft())(event)
+                        }
                         disabled={
                             isSaving ||
                             requiresRefresh ||
@@ -916,36 +929,48 @@ function OrganizationEmailTemplateEditor({
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-5">
-                        <div className="grid gap-2">
-                            <Label htmlFor="template-name">Template name</Label>
-                            <Input
-                                id="template-name"
-                                value={fields.name}
-                                onChange={(event) =>
-                                    setFields((current) => ({
-                                        ...current,
-                                        name: event.target.value,
-                                    }))
-                                }
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="template-subject">Subject</Label>
-                            <Input
-                                ref={subjectRef}
-                                id="template-subject"
-                                value={fields.subject}
-                                onFocus={() => {
-                                    activeEditorFieldRef.current = "subject"
-                                }}
-                                onChange={(event) =>
-                                    setFields((current) => ({
-                                        ...current,
-                                        subject: event.target.value,
-                                    }))
-                                }
-                            />
-                        </div>
+                        <ValidatedField
+                            id="template-name"
+                            label="Template name"
+                            error={contentForm.errorFor("name")}
+                        >
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    value={fields.name}
+                                    onBlur={() => contentForm.touch("name")}
+                                    onChange={(event) =>
+                                        setFields((current) => ({
+                                            ...current,
+                                            name: event.target.value,
+                                        }))
+                                    }
+                                />
+                            )}
+                        </ValidatedField>
+                        <ValidatedField
+                            id="template-subject"
+                            label="Subject"
+                            error={contentForm.errorFor("subject")}
+                        >
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    ref={subjectRef}
+                                    value={fields.subject}
+                                    onFocus={() => {
+                                        activeEditorFieldRef.current = "subject"
+                                    }}
+                                    onBlur={() => contentForm.touch("subject")}
+                                    onChange={(event) =>
+                                        setFields((current) => ({
+                                            ...current,
+                                            subject: event.target.value,
+                                        }))
+                                    }
+                                />
+                            )}
+                        </ValidatedField>
                         {scope === "org" ? (
                             <div className="grid gap-2">
                                 <Label htmlFor="template-from-email">
@@ -986,7 +1011,12 @@ function OrganizationEmailTemplateEditor({
                         </div>
                         <div className="flex items-center justify-between gap-3">
                             <div className="space-y-1">
-                                <Label id="template-body-label">Email body</Label>
+                                <Label
+                                    id="template-body-label"
+                                    className={bodyError ? "text-destructive" : undefined}
+                                >
+                                    Email body
+                                </Label>
                                 {!visualEditorSupport.supported ? (
                                     <p className="text-xs text-muted-foreground">
                                         {visualEditorSupport.reason}
@@ -1040,7 +1070,10 @@ function OrganizationEmailTemplateEditor({
                             <Textarea
                                 ref={htmlBodyRef}
                                 aria-label="Email HTML"
+                                aria-invalid={bodyError ? true : undefined}
+                                aria-describedby={bodyError ? "template-body-error" : undefined}
                                 value={fields.body}
+                                onBlur={() => contentForm.touch("body")}
                                 className="min-h-80 resize-y font-mono text-xs leading-relaxed"
                                 onFocus={() => {
                                     activeEditorFieldRef.current = "body"
@@ -1090,8 +1123,12 @@ function OrganizationEmailTemplateEditor({
                                 maxHeight="560px"
                                 enableImages
                                 enableEmojiPicker
+                                {...(bodyError ? { className: "border-destructive" } : {})}
                             />
                         )}
+                        {bodyError ? (
+                            <FieldError id="template-body-error">{bodyError}</FieldError>
+                        ) : null}
                     </CardContent>
                 </Card>
 
@@ -1189,35 +1226,19 @@ function OrganizationEmailTemplateEditor({
                 </AlertDialogContent>
             </AlertDialog>
 
-            <AlertDialog
+            <ConfirmDialog
                 open={pendingNavigation !== null}
                 onOpenChange={(open) => {
                     if (!open) setPendingNavigation(null)
                 }}
-            >
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Your local edits have not been saved to this draft.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Keep editing</AlertDialogCancel>
-                        <AlertDialogAction
-                            type="button"
-                            onClick={() =>
-                                leaveStudio(
-                                    pendingNavigation ??
-                                        "/automation/email-templates",
-                                )
-                            }
-                        >
-                            Leave without saving
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                title="Leave without saving?"
+                description="Your local edits have not been saved to this draft."
+                cancelLabel="Keep editing"
+                confirmLabel="Discard changes"
+                onConfirm={() =>
+                    leaveStudio(pendingNavigation ?? "/automation/email-templates")
+                }
+            />
 
             <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
                 <AlertDialogContent>
@@ -1250,90 +1271,26 @@ function OrganizationEmailTemplateEditor({
                 </AlertDialogContent>
             </AlertDialog>
 
-            <Dialog open={testOpen} onOpenChange={handleTestOpenChange}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Send a draft test</DialogTitle>
-                        <DialogDescription>
-                            This sends the saved draft only. It does not publish the
-                            template.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="test-recipient">Test recipient</Label>
-                            <Input
-                                id="test-recipient"
-                                type="email"
-                                placeholder="qa@example.com"
-                                value={testRecipient}
-                                onChange={(event) =>
-                                    setTestRecipient(event.target.value)
-                                }
-                            />
-                        </div>
-                        {testVariableNames.map((name) => (
-                            <div key={name} className="grid gap-2">
-                                <Label htmlFor={`test-variable-${name}`}>
-                                    Test value for {name}
-                                </Label>
-                                <Input
-                                    id={`test-variable-${name}`}
-                                    value={testVariables[name] ?? ""}
-                                    onChange={(event) =>
-                                        setTestVariables((current) => ({
-                                            ...current,
-                                            [name]: event.target.value,
-                                        }))
-                                    }
-                                />
-                            </div>
-                        ))}
-                        <div className="flex items-start gap-3 rounded-lg border p-3 text-sm">
-                            <Checkbox
-                                id="test-ignore-opt-out"
-                                checked={ignoreOptOut}
-                                onCheckedChange={(checked) =>
-                                    setIgnoreOptOut(checked === true)
-                                }
-                            />
-                            <Label
-                                htmlFor="test-ignore-opt-out"
-                                className="cursor-pointer font-normal"
-                            >
-                                <span className="block font-medium">
-                                    Send even if unsubscribed
-                                </span>
-                                <span className="text-muted-foreground">
-                                    Test-only override for an authorized recipient.
-                                </span>
-                            </Label>
-                        </div>
-                        {testError ? (
-                            <p role="alert" className="text-sm text-destructive">
-                                {testError}
-                            </p>
-                        ) : null}
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => handleTestOpenChange(false)}
-                            disabled={isSendingTest}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="button"
-                            onClick={handleSendTest}
-                            disabled={isSendingTest}
-                        >
-                            {isSendingTest ? "Sending…" : "Send test email"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <SendTestEmailDialog
+                open={testOpen}
+                onOpenChange={handleTestOpenChange}
+                description="This sends the saved draft only. It does not publish the template."
+                toEmail={testRecipient}
+                onToEmailChange={setTestRecipient}
+                ignoreOptOut={ignoreOptOut}
+                onIgnoreOptOutChange={setIgnoreOptOut}
+                variableNames={testVariableNames}
+                variables={testVariables}
+                onVariableChange={(name, value) =>
+                    setTestVariables((current) => ({ ...current, [name]: value }))
+                }
+                hasUnsubscribeUrl={templateVariableNames.includes("unsubscribe_url")}
+                error={testError}
+                isSending={isSendingTest}
+                onSend={() => {
+                    void handleSendTest()
+                }}
+            />
         </main>
     )
 }
