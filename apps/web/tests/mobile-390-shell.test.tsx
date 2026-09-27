@@ -124,6 +124,25 @@ describe("App shell at 390px", () => {
         expect(screen.queryByRole("button", { name: "Close sidebar overlay" })).not.toBeInTheDocument()
     })
 
+    it("keeps the closed off-canvas sidebar out of the tab order", () => {
+        mockNavigationState.pathname = "/dashboard"
+        const view = renderShell()
+        const sidebar = view.container.querySelector("aside")
+
+        expect(sidebar).toHaveAttribute("inert")
+
+        fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }))
+        expect(sidebar).not.toHaveAttribute("inert")
+
+        mockNavigationState.pathname = "/surrogates"
+        view.rerender(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+        expect(sidebar).toHaveAttribute("inert")
+    })
+
     it("keeps the section for the new route expanded after closing", () => {
         mockNavigationState.pathname = "/dashboard"
         const view = renderShell()

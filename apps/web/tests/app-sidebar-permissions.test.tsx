@@ -542,6 +542,7 @@ describe("AppSidebar permission visibility", () => {
             )
             const sidebar = view.container.querySelector("aside")
             expect(sidebar).toHaveClass("w-12")
+            expect(sidebar).not.toHaveAttribute("inert")
 
             fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }))
             expect(sidebar).toHaveClass("w-64")
@@ -552,6 +553,7 @@ describe("AppSidebar permission visibility", () => {
                     <div>content</div>
                 </AppSidebar>
             )
+            expect(sidebar).toHaveAttribute("inert")
             mockMobileState.isMobile = false
             view.rerender(
                 <AppSidebar>
@@ -560,6 +562,7 @@ describe("AppSidebar permission visibility", () => {
             )
 
             expect(sidebar).toHaveClass("w-64")
+            expect(sidebar).not.toHaveAttribute("inert")
         } finally {
             if (cookieDescriptor) {
                 Object.defineProperty(document, "cookie", cookieDescriptor)

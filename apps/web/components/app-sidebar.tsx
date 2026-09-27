@@ -806,6 +806,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
                     isMobile && "fixed inset-y-0 left-0",
                     isMobile && (mobileOpen ? "translate-x-0" : "-translate-x-full")
                 )}
+                // The closed off-canvas sidebar stays mounted off-screen; inert keeps its
+                // links out of the tab order and the accessibility tree.
+                inert={isMobile && !mobileOpen}
                 onClick={closeMobileOnLinkClick}
             >
                 {sidebarContent}
