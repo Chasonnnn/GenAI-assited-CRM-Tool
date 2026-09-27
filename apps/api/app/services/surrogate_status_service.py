@@ -306,6 +306,22 @@ def _schedule_interview_appointment(
     return appointment
 
 
+def _apply_delivery_details(
+    surrogate: Surrogate,
+    *,
+    effective_at: datetime,
+    org_timezone_str: str,
+    delivery_baby_gender: str | None,
+    delivery_baby_weight: str | None,
+) -> None:
+    if surrogate.actual_delivery_date is None:
+        surrogate.actual_delivery_date = effective_at.astimezone(ZoneInfo(org_timezone_str)).date()
+    if delivery_baby_gender is not None:
+        surrogate.delivery_baby_gender = delivery_baby_gender.strip() or None
+    if delivery_baby_weight is not None:
+        surrogate.delivery_baby_weight = delivery_baby_weight.strip() or None
+
+
 def _cleanup_on_hold_follow_up_task(
     db: Session,
     *,
@@ -349,6 +365,8 @@ def change_status(
     schedule_interview_appointment: bool = True,
     override_availability: bool = False,
     override_reason: str | None = None,
+    delivery_baby_gender: str | None = None,
+    delivery_baby_weight: str | None = None,
 ) -> StatusChangeResult:
     """
     Change surrogate stage and record history with backdating support.
@@ -399,6 +417,19 @@ def change_status(
 
     if old_stage_id == new_stage.id:
         raise ValueError("Target stage is same as current stage")
+
+    # Match acceptance flushes the accepted Match before it moves the surrogate, so every
+    # stage-change path can require an accepted Match here.
+    if pipeline_service.stage_matches_key(new_stage, "matched"):
+        from app.services import match_queries
+
+        accepted_match = match_queries.get_accepted_match_for_surrogate(
+            db=db,
+            org_id=surrogate.organization_id,
+            surrogate_id=surrogate.id,
+        )
+        if accepted_match is None:
+            raise ValueError("Cannot set to Matched without an accepted Match.")
 
     if (
         not pipeline_service.stage_matches_key(new_stage, "on_hold")
@@ -556,6 +587,8 @@ def change_status(
                 else None,
                 override_availability=override_availability,
                 override_reason=override_reason,
+                delivery_baby_gender=delivery_baby_gender,
+                delivery_baby_weight=delivery_baby_weight,
                 trigger_workflows=trigger_workflows,
                 commit=commit,
             )
@@ -597,6 +630,8 @@ def change_status(
                 else None,
                 override_availability=override_availability,
                 override_reason=override_reason,
+                delivery_baby_gender=delivery_baby_gender,
+                delivery_baby_weight=delivery_baby_weight,
                 trigger_workflows=trigger_workflows,
                 commit=commit,
             )
@@ -699,6 +734,8 @@ def change_status(
         else None,
         override_availability=override_availability,
         override_reason=override_reason,
+        delivery_baby_gender=delivery_baby_gender,
+        delivery_baby_weight=delivery_baby_weight,
         trigger_workflows=trigger_workflows,
         commit=commit,
     )
@@ -732,6 +769,8 @@ def apply_status_change(
     interview_scheduled_at: datetime | None = None,
     override_availability: bool = False,
     override_reason: str | None = None,
+    delivery_baby_gender: str | None = None,
+    delivery_baby_weight: str | None = None,
     trigger_workflows: bool = True,
     commit: bool = True,
 ) -> StatusChangeResult:
@@ -786,6 +825,15 @@ def apply_status_change(
             org_timezone_str=resolved_org_timezone,
             override_availability=override_availability,
             override_reason=override_reason,
+        )
+
+    if pipeline_service.stage_matches_key(new_stage, "delivered"):
+        _apply_delivery_details(
+            surrogate,
+            effective_at=effective_at,
+            org_timezone_str=resolved_org_timezone,
+            delivery_baby_gender=delivery_baby_gender,
+            delivery_baby_weight=delivery_baby_weight,
         )
 
     # Update contact status if reached or leaving intake stage
