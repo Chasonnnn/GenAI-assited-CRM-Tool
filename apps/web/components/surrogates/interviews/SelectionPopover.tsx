@@ -234,8 +234,6 @@ export function SelectionPopover({
                 onClick={handleAddComment}
                 className={cn(
                     "shadow-lg gap-1.5 rounded-full px-3.5 h-8",
-                    "bg-teal-600 hover:bg-teal-700 text-white",
-                    "dark:bg-teal-600 dark:hover:bg-teal-500",
                     "transition-all duration-150",
                     "hover:scale-105 hover:shadow-xl"
                 )}
@@ -248,7 +246,8 @@ export function SelectionPopover({
                 className={cn(
                     "absolute left-1/2 -translate-x-1/2 -bottom-1.5",
                     "w-3 h-3 rotate-45",
-                    "bg-teal-600 dark:bg-teal-600"
+                    // Midpoint of the default button gradient, where the arrow meets the pill.
+                    "bg-[color-mix(in_oklch,var(--primary-gradient-from),var(--primary-gradient-to))]"
                 )}
             />
         </div>,

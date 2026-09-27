@@ -34,8 +34,8 @@ export function DeletePageDialog({
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction
+                        variant="destructive"
                         onClick={onConfirm}
-                        className="bg-red-600 hover:bg-red-700"
                     >
                         Delete Page
                     </AlertDialogAction>
