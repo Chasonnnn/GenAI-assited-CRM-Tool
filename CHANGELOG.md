@@ -2,6 +2,54 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.72](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.71...surrogacy-crm-platform-v0.91.72) (2026-09-27)
+
+
+### Features
+
+* add match decision and closure permissions with v1 shim ([3d8791d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3d8791de027b75650c94b0d70d20b14584c569c2))
+* complete permission v2 and modularize execution services ([f226c11](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f226c11ce763e9537ad3c503550515384cb75486))
+* drive match detail controls from server allowed actions ([9dffda4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9dffda484e65bc0b313aad2700b97778459d4a51))
+* enforce match action permissions and expose session capabilities ([7320715](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/73207150b3d80833172c2efb7afb0c04ab8c3f42))
+* enforce match participant eligibility and stage transitions ([d76049a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d76049a40e24b132dfc34be15d7c631bfa783d81))
+* expose pending cancellation request id on match reads ([6ed70f3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6ed70f3bcfd933750bd04fc6d29424ab7208ac32))
+* implement the match status model ([5e7a8ed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5e7a8ede9b6d625cf6f688fe3d1ad2e9f8ffd8e6))
+* match participant stages and eligibility (step 6) ([e13f95b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e13f95bfa128b5cd08803d0cd2073cae5e2ba298))
+* match permission actions and controls (step 7) ([91c2fc7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/91c2fc7aff4c8b7ddcd2c481d82eb947491c28d3))
+* match status model (step 5) ([024af2e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/024af2efdf2f42ae2add2ae130356e6150e46714))
+* protect donor match handoff stages ([b328e16](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b328e16dc38864773813e07c2e4ebcc9ea9b08f3))
+* route and filter match conflict notifications ([e48f1bd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e48f1bd760c820a5027d2415e0a972960afde90e))
+* show match permission topic and match action review changes ([5325a73](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5325a736527f42122d8c3de64f73f6fd0e484095))
+* unify scheduling architecture and calendar UX ([aa08147](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/aa081479f72d354cc4e0654863fc35d9b2ecb154))
+
+
+### Bug Fixes
+
+* address match step 4 review follow-ups ([f092d35](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f092d3569fa34827b0dca0845886f9f996b6589b))
+* address match step 4 review follow-ups ([35bb85e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/35bb85efdf2d3ebabb6ddf231064740cfdd7cc2f))
+* batch stage resolution for intelligent rules ([2e9553a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2e9553a558b02704ea2f3c02d1c42478fc7a7b26))
+* consolidate validated search, query, and notification fixes ([d50e2f8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d50e2f85b8a2698850f536cc85f7aab18ca387f9))
+* count non-terminal matches in operations overview ([3838fa4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3838fa4e689fc04ab149c1c4b849a188592cf9c8))
+* count non-terminal matches in operations overview ([8365897](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/83658974d09f26a8d71da4b8561705436085e905))
+* label match triggers in templates and separate status from stage labels ([dccb183](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dccb183cfec5c90952844f5a8621288051cf73e5))
+* preserve match migration history and close review gaps ([d282ba3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d282ba328368f3b66c7322d33dd79716549a5cb9))
+* preserve progressed parties when cancelling matches ([04007d4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/04007d41a7922f16784394ea3e7ab0244ee25baf))
+* preserve v1 match proposal and non-match review rules ([ea1153d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ea1153d61065febe141e5f98f3616297fa2c8257))
+* refresh match capabilities after attempt and approval changes ([a15c184](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a15c184e923adda4e9bc073fd7f7f30ccd62dde0))
+* refresh match capabilities after party stage changes ([002f41a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/002f41a9d0f08b5d93c483537fdeb0cf06d75638))
+* seed every match status deterministically without expansion ([376b457](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/376b45733d7fa8b0db40e50bc916a0c23d72dfe2))
+* show progress while marking notifications read ([c60c4b0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c60c4b0e684fbcac03d5a4753423b6cfe0cb6717))
+* treat organization search wildcards literally ([e9f01e3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e9f01e3ac8c960a7c34a27ba32f108bd3c743076))
+
+
+### Maintenance
+
+* drop robots disallow for the removed /matches route ([d6224cf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d6224cf41cf5553ff84c6dc27ac753c141ce1662))
+* merge main into permission v2 ([a94e980](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a94e980ee8fd774b3962cb87c5c53d405b2e2f9d))
+* merge main into scheduling v2 ([0d8cc1b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0d8cc1bee0c02a85a32866af79852777721352ff))
+* sync match permission characterization tests ([2fc6af8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2fc6af8771d9b9d1392f8eb6f2a3014264529fb1))
+* sync validated fixes with current main ([25d6af2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/25d6af2c7ae70a84258a545f72241d8e5e70bea0))
+
 ## [0.91.71](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.70...surrogacy-crm-platform-v0.91.71) (2026-09-24)
 
 
