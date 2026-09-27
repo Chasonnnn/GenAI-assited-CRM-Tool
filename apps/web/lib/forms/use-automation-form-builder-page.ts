@@ -292,8 +292,16 @@ export function useAutomationFormBuilderPage() {
     const { state, patchState, resetForForm, hydrateFromForm } =
         useAutomationFormBuilderState(formKey, isNewForm)
 
-    const { data: formData, isLoading: isFormLoading } = useForm(formId)
-    const { data: mappingData, isLoading: isMappingsLoading } = useFormMappings(formId)
+    const formQuery = useForm(formId)
+    const mappingsQuery = useFormMappings(formId)
+    const { data: formData, isLoading: isFormLoading } = formQuery
+    const { data: mappingData, isLoading: isMappingsLoading } = mappingsQuery
+    // Only a failure with no loaded data blocks the builder. A failed background refetch keeps
+    // the last data, so unsaved edits stay on screen. A missing mapping list would hydrate the
+    // builder without mappings and the next save would clear them, so it blocks too.
+    const loadErrorQuery = [formQuery, mappingsQuery].find(
+        (query) => query.isError && query.data === undefined,
+    )
     const { data: mappingOptionsData } = useFormMappingOptions(state.formLeadKind)
     const {
         data: intakeLinks = [],
@@ -998,6 +1006,18 @@ export function useAutomationFormBuilderPage() {
     return {
         formId,
         isNewForm,
+        loadError:
+            !isNewForm && loadErrorQuery
+                ? {
+                      error: loadErrorQuery.error,
+                      retry: () => {
+                          for (const query of [formQuery, mappingsQuery]) {
+                              if (query.isError) void query.refetch()
+                          }
+                      },
+                      isRetrying: formQuery.isFetching || mappingsQuery.isFetching,
+                  }
+                : null,
         showLoading: !isNewForm && (isFormLoading || isMappingsLoading),
         shouldRenderNull: !isNewForm && !formData,
         state,

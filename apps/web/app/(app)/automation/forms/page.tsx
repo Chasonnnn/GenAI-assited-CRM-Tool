@@ -25,7 +25,9 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { EmptyState } from "@/components/empty-state"
 import { LoadErrorState, PermissionDeniedState, QueryErrorState } from "@/components/error-state"
+import { FORM_BUILDER_DENIED } from "@/components/forms/builder/FormBuilderAccessStates"
 import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1009,10 +1011,6 @@ export default function FormsListPage() {
         })
     }
 
-    const formBuilderDenied = {
-        title: "No access to Form Builder",
-        description: "Ask an admin to update your role.",
-    }
     let blockedState: ReactNode = null
     if (permissionCheck.isLoading) {
         blockedState = (
@@ -1029,7 +1027,7 @@ export default function FormsListPage() {
             />
         )
     } else if (!canManageForms) {
-        blockedState = <PermissionDeniedState {...formBuilderDenied} />
+        blockedState = <PermissionDeniedState {...FORM_BUILDER_DENIED} />
     } else if (formsQuery.isError) {
         blockedState = (
             <QueryErrorState
@@ -1039,7 +1037,7 @@ export default function FormsListPage() {
                 }}
                 isRetrying={formsQuery.isFetching}
                 title="Couldn't load forms"
-                forbidden={formBuilderDenied}
+                forbidden={FORM_BUILDER_DENIED}
             />
         )
     }

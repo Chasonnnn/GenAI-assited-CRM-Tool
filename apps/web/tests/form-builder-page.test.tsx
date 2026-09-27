@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import type { ImgHTMLAttributes } from "react"
 
 import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
+import { ApiError } from "@/lib/api"
 import type {
     FormRead,
     FormSubmissionRead,
@@ -27,6 +28,11 @@ const { toastError, toastSuccess, useFormMappingOptionsMock } = vi.hoisted(() =>
 }))
 const navigationState = vi.hoisted(() => ({
     formId: "new",
+}))
+const permissionState = vi.hoisted(() => ({
+    isLoading: false,
+    isError: false,
+    permissions: ["manage_forms"] as string[],
 }))
 
 vi.mock("next/navigation", () => ({
@@ -60,6 +66,16 @@ vi.mock("@/lib/auth-context", () => ({
         user: {
             org_id: "org-1",
         },
+    }),
+}))
+
+vi.mock("@/lib/hooks/use-permission-check", () => ({
+    usePermissionCheck: () => ({
+        isLoading: permissionState.isLoading,
+        isError: permissionState.isError,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => permissionState.permissions.includes(permission),
     }),
 }))
 
@@ -99,6 +115,9 @@ vi.mock("@/lib/hooks/use-forms", () => ({
 describe("FormBuilderPage", () => {
     beforeEach(() => {
         navigationState.formId = "new"
+        permissionState.isLoading = false
+        permissionState.isError = false
+        permissionState.permissions = ["manage_forms"]
         mockPush.mockReset()
         mockReplace.mockReset()
         mockUseForm.mockReset()
@@ -174,6 +193,131 @@ describe("FormBuilderPage", () => {
                 },
             ],
         })
+    })
+
+    it.each(["new", "form-1"])(
+        "shows the Form Builder denied state and sends no form requests without manage_forms (%s)",
+        (formId) => {
+            navigationState.formId = formId
+            permissionState.permissions = ["view_surrogates"]
+
+            render(<FormBuilderPage />)
+
+            expect(screen.getByRole("heading", { level: 1, name: "Form Builder" })).toBeInTheDocument()
+            expect(
+                screen.getByRole("heading", { level: 2, name: "No access to Form Builder" }),
+            ).toBeInTheDocument()
+            expect(screen.getByRole("link", { name: "Back to forms" })).toHaveAttribute(
+                "href",
+                "/automation/forms",
+            )
+            expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument()
+            expect(mockUseForm).not.toHaveBeenCalled()
+            expect(mockFormMappings).not.toHaveBeenCalled()
+            expect(mockFormSubmissions).not.toHaveBeenCalled()
+            expect(useFormMappingOptionsMock).not.toHaveBeenCalled()
+        },
+    )
+
+    it("shows a load error with retry, not a blank page, when the form request fails", () => {
+        navigationState.formId = "form-1"
+        const refetch = vi.fn()
+        mockUseForm.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, "Internal Server Error", "database exploded"),
+            refetch,
+        })
+
+        render(<FormBuilderPage />)
+
+        expect(screen.getByRole("heading", { level: 2, name: "Couldn't load form" })).toBeInTheDocument()
+        expect(screen.queryByText(/database exploded/)).not.toBeInTheDocument()
+        expect(screen.queryByText("Loading form…")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
+    it("shows the not-found state when the form does not exist", () => {
+        navigationState.formId = "form-1"
+        mockUseForm.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(404, "Not Found", "Form not found"),
+            refetch: vi.fn(),
+        })
+
+        render(<FormBuilderPage />)
+
+        expect(screen.getByRole("heading", { level: 2, name: "Form not found" })).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to forms" })).toHaveAttribute(
+            "href",
+            "/automation/forms",
+        )
+    })
+
+    it("shows the denied state with a way back when the form request is forbidden", () => {
+        navigationState.formId = "form-1"
+        mockUseForm.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(403, "Forbidden", "Missing permission: manage_forms"),
+            refetch: vi.fn(),
+        })
+
+        render(<FormBuilderPage />)
+
+        expect(
+            screen.getByRole("heading", { level: 2, name: "No access to Form Builder" }),
+        ).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to forms" })).toHaveAttribute(
+            "href",
+            "/automation/forms",
+        )
+        expect(screen.queryByText(/Missing permission/)).not.toBeInTheDocument()
+    })
+
+    it("blocks the builder when the field mappings fail to load", () => {
+        navigationState.formId = "form-1"
+        mockUseForm.mockReturnValue({
+            data: {
+                id: "form-1",
+                name: "Mapped Form",
+                status: "draft",
+                purpose: "surrogate_application",
+                lead_kind: "surrogate",
+                created_at: "2026-07-16T00:00:00Z",
+                updated_at: "2026-07-16T00:00:00Z",
+                description: null,
+                form_schema: { pages: [{ title: "Page 1", fields: [] }] },
+                published_schema: null,
+                max_file_size_bytes: 10 * 1024 * 1024,
+                max_file_count: 10,
+                allowed_mime_types: null,
+                default_application_email_template_id: null,
+            } satisfies FormRead,
+            isLoading: false,
+        })
+        mockFormMappings.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, "Internal Server Error"),
+            refetch: vi.fn(),
+        })
+
+        render(<FormBuilderPage />)
+
+        expect(screen.getByRole("heading", { level: 2, name: "Couldn't load form" })).toBeInTheDocument()
+        expect(screen.queryByLabelText("Form name")).not.toBeInTheDocument()
     })
 
     it("uses design-system tab controls for workspace sections and a dedicated settings tab", () => {
