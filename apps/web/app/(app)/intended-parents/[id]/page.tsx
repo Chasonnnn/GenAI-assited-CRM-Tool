@@ -5,7 +5,7 @@ import { RecordAppointmentsCard } from "@/components/records/RecordAppointmentsC
 import { RecordCorrespondenceCard } from "@/components/records/RecordCorrespondenceCard"
 
 
-import { useReducer } from "react"
+import { useReducer, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
     EMPTY_INTENDED_PARENT_FORM_VALUES,
@@ -21,7 +21,6 @@ import {
     EditIntendedParentDialog,
     IntendedParentHeader,
     IntendedParentLoadingState,
-    IntendedParentNotFoundState,
     MaritalStatusCard,
     PartnerCard,
 } from "./components/IntendedParentDetailSections"
@@ -54,6 +53,14 @@ import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { IntendedParentDocumentsSection } from "@/components/intended-parents/IntendedParentDocumentsSection"
 import { IntendedParentNotesSection } from "@/components/intended-parents/IntendedParentNotesSection"
+import { QueryErrorState } from "@/components/error-state"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+
+const INTENDED_PARENT_NOT_FOUND = {
+    title: "Intended parent not found",
+    backHref: "/intended-parents",
+    backLabel: "Back to Intended Parents",
+}
 
 type IntendedParentDetailState = {
     isEditOpen: boolean
@@ -133,6 +140,7 @@ export default function IntendedParentDetailPage() {
     const id = params.id
 
     const [detailState, dispatch] = useReducer(intendedParentDetailReducer, initialDetailState)
+    const [pendingConfirm, setPendingConfirm] = useState<"archive" | "delete" | null>(null)
     const { user } = useAuth()
     const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
     const canEdit = user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("edit_intended_parents")
@@ -141,7 +149,14 @@ export default function IntendedParentDetailPage() {
     const canCreateTasks = user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("create_tasks")
 
     // Queries
-    const { data: ip, isLoading } = useIntendedParent(id)
+    const {
+        data: ip,
+        isLoading,
+        isError,
+        error,
+        refetch,
+        isFetching,
+    } = useIntendedParent(id)
     const historyQuery = useIntendedParentHistory(id)
     const activityQuery = useEntityActivity("intended_parent", id)
     const stageOptionsQuery = useIntendedParentStatuses()
@@ -258,10 +273,9 @@ export default function IntendedParentDetailPage() {
         return response
     }
 
+    // ConfirmDialog keeps the dialog open while these run and shows a failure inline.
     const handleArchive = async () => {
-        if (confirm("Are you sure you want to archive this intended parent?")) {
-            await archiveMutation.mutateAsync(id)
-        }
+        await archiveMutation.mutateAsync(id)
     }
 
     const handleRestore = async () => {
@@ -269,10 +283,8 @@ export default function IntendedParentDetailPage() {
     }
 
     const handleDelete = async () => {
-        if (confirm("This will permanently delete this intended parent. Are you sure?")) {
-            await deleteMutation.mutateAsync(id)
-            push("/intended-parents")
-        }
+        await deleteMutation.mutateAsync(id)
+        push("/intended-parents")
     }
 
 
@@ -280,8 +292,22 @@ export default function IntendedParentDetailPage() {
         return <IntendedParentLoadingState />
     }
 
-    if (!ip) {
-        return <IntendedParentNotFoundState />
+    if (isError || !ip) {
+        return (
+            <QueryErrorState
+                error={error}
+                onRetry={() => { void refetch() }}
+                isRetrying={isFetching}
+                title="Couldn't load intended parent"
+                forbidden={{
+                    description: "Your account does not have permission to view this intended parent. Ask an admin to update your role.",
+                    secondaryHref: "/dashboard",
+                }}
+                notFound={INTENDED_PARENT_NOT_FOUND}
+                headingLevel={1}
+                className="min-h-screen"
+            />
+        )
     }
 
     const maritalStatusOptions = getMaritalStatusOptions(ip.marital_status)
@@ -304,9 +330,28 @@ export default function IntendedParentDetailPage() {
                 onProposeMatch={() => dispatch({ type: "proposeMatch.set", open: true })}
                 onChangeStage={() => dispatch({ type: "changeStatus.set", open: true })}
                 onEdit={handleEdit}
-                onArchive={handleArchive}
+                onArchive={() => setPendingConfirm("archive")}
                 onRestore={handleRestore}
-                onDelete={handleDelete}
+                onDelete={() => setPendingConfirm("delete")}
+            />
+
+            <ConfirmDialog
+                open={pendingConfirm === "archive"}
+                onOpenChange={(open) => { if (!open) setPendingConfirm(null) }}
+                title={`Archive intended parent ${ip.intended_parent_number}?`}
+                confirmLabel="Archive intended parent"
+                errorFallback="Couldn't archive this intended parent. Try again."
+                onConfirm={handleArchive}
+            />
+
+            <ConfirmDialog
+                open={pendingConfirm === "delete"}
+                onOpenChange={(open) => { if (!open) setPendingConfirm(null) }}
+                title={`Delete intended parent ${ip.intended_parent_number}?`}
+                description="This permanently deletes the record and cannot be undone."
+                confirmLabel={`Delete ${ip.intended_parent_number}`}
+                errorFallback="Couldn't delete this intended parent. Try again."
+                onConfirm={handleDelete}
             />
 
             <div className="min-w-0 flex-1 p-6">

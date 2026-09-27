@@ -210,8 +210,8 @@ describe("EntityActivityHistory", () => {
             />,
         )
 
-        expect(screen.getByText("Failed to load activity.")).toBeInTheDocument()
-        fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+        expect(screen.getByRole("heading", { name: "Couldn't load activity" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
         expect(refetch).toHaveBeenCalledOnce()
     })
 
