@@ -60,16 +60,15 @@ export function pipelineStageOptions(
 }
 
 const MATCH_STATUS_DOT_CLASS: Record<MatchStatus, string> = {
-    proposed: "bg-blue-500",
-    reviewing: "bg-amber-500",
+    under_review: "bg-amber-500",
     accepted: "bg-green-500",
-    cancel_pending: "bg-amber-400",
-    rejected: "bg-red-500",
+    cancellation_pending: "bg-amber-400",
+    declined: "bg-red-500",
     cancelled: "bg-gray-400",
     completed: "bg-emerald-600",
 }
 
-const OPEN_MATCH_STATUSES = new Set<MatchStatus>(["proposed", "reviewing", "accepted", "cancel_pending"])
+const OPEN_MATCH_STATUSES = new Set<MatchStatus>(["under_review", "accepted", "cancellation_pending"])
 
 /** Match statuses as stage options: open statuses first, then closed ones. */
 export function matchStatusStageOptions(counts?: Partial<Record<MatchStatus, number>>): StageOption[] {

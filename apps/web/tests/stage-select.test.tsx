@@ -80,25 +80,25 @@ describe("stage option labels", () => {
     })
 
     it("covers every match status, including the closed ones", () => {
-        const matchOptions = matchStatusStageOptions({ proposed: 8, cancelled: 3 })
+        const matchOptions = matchStatusStageOptions({ under_review: 8, cancelled: 3 })
 
         expect(matchOptions.map((option) => option.label)).toEqual([
-            "Proposed",
-            "Reviewing",
+            "Under Review",
             "Accepted",
-            "Cancel Pending",
-            "Rejected",
+            "Cancellation Pending",
+            "Declined",
             "Cancelled",
             "Completed",
         ])
         expect(matchOptions.filter((option) => option.group === "Closed").map((option) => option.value)).toEqual([
-            "rejected",
+            "declined",
             "cancelled",
             "completed",
         ])
-        expect(matchOptions[0]).toMatchObject({ count: 8, dotClassName: "bg-blue-500" })
+        expect(matchOptions[0]).toMatchObject({ count: 8, dotClassName: "bg-amber-500" })
         expect(matchOptions[1]).not.toHaveProperty("count")
-        expect(getMatchStatusFilterLabel("cancel_pending")).toBe("Cancel Pending")
+        expect(getMatchStatusFilterLabel("cancellation_pending")).toBe("Cancellation Pending")
+        expect(getMatchStatusFilterLabel("proposed")).toBe("Unknown stage")
         expect(getMatchStatusFilterLabel("all")).toBe("All Stages")
         expect(getMatchStatusFilterLabel("bogus")).toBe("Unknown stage")
     })
@@ -229,17 +229,17 @@ describe("StageSelect", () => {
         render(
             <ControlledStageSelect
                 initialValue="all"
-                options={matchStatusStageOptions({ proposed: 8 })}
+                options={matchStatusStageOptions({ under_review: 8 })}
                 allLabel="All Stages"
                 aria-label="Filter by stage"
             />
         )
 
         fireEvent.click(screen.getByRole("combobox", { name: "Filter by stage" }))
-        const proposed = await screen.findByRole("option", { name: /Proposed/ })
-        expect(proposed).toHaveTextContent("8")
-        const dot = proposed.querySelector('[data-slot="stage-dot"]')
-        expect(dot).toHaveClass("bg-blue-500")
+        const underReview = await screen.findByRole("option", { name: /Under Review/ })
+        expect(underReview).toHaveTextContent("8")
+        const dot = underReview.querySelector('[data-slot="stage-dot"]')
+        expect(dot).toHaveClass("bg-amber-500")
         // SelectItem's ItemText is a flex row without cross-axis centering; the dot, label and
         // count need their own centered row or the 8px dot sits at the top of the 20px line.
         const row = dot?.parentElement

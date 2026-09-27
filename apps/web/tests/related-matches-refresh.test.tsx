@@ -25,7 +25,7 @@ const proposedMatch = {
     id: "match1",
     match_number: "M10042",
     match_kind: "surrogate",
-    status: "proposed",
+    status: "under_review",
     surrogate_name: "Jane Doe",
     ip_name: "John Smith",
     proposed_at: "2026-09-26T12:00:00Z",
