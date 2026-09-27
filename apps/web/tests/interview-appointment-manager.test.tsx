@@ -11,10 +11,15 @@ const useInterviewAppointment = vi.fn()
 const slotStart = "2026-09-21T14:30:00.000Z"
 const slotEnd = "2026-09-21T15:00:00.000Z"
 const refetchSlots = vi.fn()
+const refetchOpenDays = vi.fn()
+const useInterviewOpenDays = vi.fn()
+const useInterviewSlots = vi.fn()
+const slotsLoaded = () => ({ data: { slots: [{ start: slotStart, end: slotEnd }] }, isLoading: false, isFetching: false, isError: false, refetch: refetchSlots })
 
 vi.mock("@/lib/hooks/use-interview-appointment", () => ({
     useInterviewAppointment: (...args: unknown[]) => useInterviewAppointment(...args),
-    useInterviewSlots: () => ({ data: { slots: [{ start: slotStart, end: slotEnd }] }, isLoading: false, isFetching: false, isError: false, refetch: refetchSlots }),
+    useInterviewSlots: (...args: unknown[]) => useInterviewSlots(...args),
+    useInterviewOpenDays: (...args: unknown[]) => useInterviewOpenDays(...args),
     useManageInterviewAppointment: () => ({ mutateAsync, isPending: false }),
     useRetryInterviewAppointmentGoogleSync: () => ({ mutateAsync: retryGoogleSync, isPending: false }),
 }))
@@ -52,6 +57,29 @@ function activeState(overrides: Partial<InterviewAppointmentState> = {}): Interv
     }
 }
 
+function openDays(dates: string[]) {
+    return { data: { timezone: "UTC", dates }, isSuccess: true, isError: false, isLoading: false, refetch: refetchOpenDays }
+}
+
+const openDaysFailed = () => ({ data: undefined, isSuccess: false, isError: true, isLoading: false, refetch: refetchOpenDays })
+
+/** Open days per calendar grid, keyed by the grid's first date. */
+function openDaysByGrid(grids: Record<string, string[]>) {
+    return (_surrogateId: string, dateStart: string) => openDays(grids[dateStart] ?? [])
+}
+
+function dayButton(dialog: HTMLElement, date: string) {
+    const button = dialog.querySelector<HTMLButtonElement>(`[data-day="${date}"] button`)
+    expect(button).not.toBeNull()
+    return button as HTMLButtonElement
+}
+
+async function openSchedule() {
+    renderManager(activeState({ appointment: null }))
+    fireEvent.click(screen.getByRole("button", { name: "Schedule" }))
+    return screen.findByRole("dialog", { name: "Schedule interview" })
+}
+
 async function openCancel() {
     fireEvent.click(screen.getByRole("button", { name: "Manage" }))
     fireEvent.click(await screen.findByRole("button", { name: "Cancel appointment" }))
@@ -66,6 +94,119 @@ describe("InterviewAppointmentManager", () => {
         refetch.mockReset()
         useInterviewAppointment.mockReset()
         refetchSlots.mockReset()
+        refetchOpenDays.mockReset()
+        useInterviewOpenDays.mockReset().mockReturnValue(openDays(["2026-09-21", "2026-09-23"]))
+        useInterviewSlots.mockReset().mockImplementation(slotsLoaded)
+    })
+
+    it("opens booking on the first open day with its times and focus, and disables closed days", async () => {
+        const dialog = await openSchedule()
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+        expect(useInterviewOpenDays).toHaveBeenCalledWith("surrogate-1", "2026-08-30", "2026-10-03", timezone, true)
+        expect(useInterviewOpenDays).not.toHaveBeenCalledWith("surrogate-1", "2026-09-27", "2026-10-31", timezone, true)
+        expect(within(dialog).getByText("Mon, Sep 21")).toBeInTheDocument()
+        expect(within(dialog).getByRole("group", { name: "Available times" })).toBeInTheDocument()
+        expect(dayButton(dialog, "2026-09-19")).toBeDisabled()
+        expect(dayButton(dialog, "2026-09-22")).toBeDisabled()
+        expect(dayButton(dialog, "2026-09-23")).toBeEnabled()
+        await waitFor(() => expect(dayButton(dialog, "2026-09-21")).toHaveFocus())
+
+        fireEvent.click(dayButton(dialog, "2026-09-23"))
+        expect(within(dialog).getByText("Wed, Sep 23")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Choose a time outside availability" })).toBeEnabled()
+    })
+
+    it("opens on today with every day disabled and focus on the next-month arrow when this and next month have no open days", async () => {
+        useInterviewOpenDays.mockReturnValue(openDays([]))
+        const dialog = await openSchedule()
+
+        expect(useInterviewOpenDays).toHaveBeenCalledWith("surrogate-1", "2026-09-27", "2026-10-31", expect.any(String), true)
+        expect(within(dialog).getByText("September 2026")).toBeInTheDocument()
+        expect(within(dialog).getByText("Sat, Sep 19")).toBeInTheDocument()
+        const days = Array.from(dialog.querySelectorAll<HTMLButtonElement>("[data-day] button"))
+        expect(days.length).toBeGreaterThan(28)
+        expect(days.every((day) => day.disabled)).toBe(true)
+        const next = within(dialog).getByRole("button", { name: /next month/i })
+        await waitFor(() => expect(next).toHaveFocus())
+
+        fireEvent.click(next)
+        expect(within(dialog).getByText("October 2026")).toBeInTheDocument()
+        expect(within(dialog).getByText("Sat, Sep 19")).toBeInTheDocument()
+    })
+
+    it("opens on the next month's first open day when no day from today is open this month", async () => {
+        useInterviewOpenDays.mockImplementation(openDaysByGrid({ "2026-08-30": [], "2026-09-27": ["2026-10-05", "2026-10-06"] }))
+        const dialog = await openSchedule()
+
+        expect(within(dialog).getByText("October 2026")).toBeInTheDocument()
+        expect(within(dialog).getByText("Mon, Oct 5")).toBeInTheDocument()
+        expect(within(dialog).getByRole("group", { name: "Available times" })).toBeInTheDocument()
+        expect(dayButton(dialog, "2026-10-02")).toBeDisabled()
+        await waitFor(() => expect(dayButton(dialog, "2026-10-05")).toHaveFocus())
+    })
+
+    it("falls back to today with selectable days and no open-day error when open days fail", async () => {
+        useInterviewOpenDays.mockReturnValue(openDaysFailed())
+        const dialog = await openSchedule()
+
+        expect(within(dialog).getByText("Sat, Sep 19")).toBeInTheDocument()
+        expect(dayButton(dialog, "2026-09-20")).toBeEnabled()
+        expect(dayButton(dialog, "2026-09-18")).toBeDisabled()
+        expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument()
+    })
+
+    it("moves to the first open day with focus when Retry loads open days after a failure", async () => {
+        useInterviewOpenDays.mockReturnValue(openDaysFailed())
+        useInterviewSlots.mockReturnValue({ data: undefined, isLoading: false, isFetching: false, isError: true, refetch: refetchSlots })
+        const view = renderManager(activeState({ appointment: null }))
+        fireEvent.click(screen.getByRole("button", { name: "Schedule" }))
+        const dialog = await screen.findByRole("dialog", { name: "Schedule interview" })
+        expect(within(dialog).getByText("Sat, Sep 19")).toBeInTheDocument()
+
+        fireEvent.click(within(dialog).getByRole("button", { name: "Retry availability" }))
+        expect(refetchSlots).toHaveBeenCalledOnce()
+        expect(refetchOpenDays).toHaveBeenCalledOnce()
+        useInterviewOpenDays.mockReturnValue(openDays(["2026-09-21", "2026-09-23"]))
+        useInterviewSlots.mockImplementation(slotsLoaded)
+        view.rerender(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} />)
+
+        expect(within(dialog).getByText("Mon, Sep 21")).toBeInTheDocument()
+        expect(dayButton(dialog, "2026-09-19")).toBeDisabled()
+        await waitFor(() => expect(dayButton(dialog, "2026-09-21")).toHaveFocus())
+    })
+
+    it("keeps a day picked during an open-day failure when open days load later", async () => {
+        useInterviewOpenDays.mockReturnValue(openDaysFailed())
+        const view = renderManager(activeState({ appointment: null }))
+        fireEvent.click(screen.getByRole("button", { name: "Schedule" }))
+        const dialog = await screen.findByRole("dialog", { name: "Schedule interview" })
+        fireEvent.click(dayButton(dialog, "2026-09-22"))
+
+        useInterviewOpenDays.mockReturnValue(openDays(["2026-09-21", "2026-09-23"]))
+        view.rerender(<InterviewAppointmentManager surrogateId="surrogate-1" stageId={scheduledStage.id} />)
+        expect(within(dialog).getByText("Tue, Sep 22")).toBeInTheDocument()
+    })
+
+    it("keeps days disabled and shows loading until open days arrive", async () => {
+        useInterviewOpenDays.mockReturnValue({ data: undefined, isSuccess: false, isError: false, isLoading: true, refetch: refetchOpenDays })
+        const dialog = await openSchedule()
+
+        expect(within(dialog).getByText("Loading available times…")).toHaveAttribute("role", "status")
+        expect(dayButton(dialog, "2026-09-21")).toBeDisabled()
+        expect(dialog.querySelector('[data-slot="calendar"]')?.parentElement).toHaveAttribute("aria-busy", "true")
+        expect(within(dialog).queryByRole("group", { name: "Available times" })).not.toBeInTheDocument()
+    })
+
+    it("opens a reschedule on the first open day from the current appointment date", async () => {
+        useInterviewOpenDays.mockReturnValue(openDays(["2026-09-19", "2026-09-22"]))
+        renderManager(activeState())
+        fireEvent.click(screen.getByRole("button", { name: "Manage" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Reschedule" }))
+        const dialog = await screen.findByRole("dialog", { name: "Reschedule interview" })
+
+        expect(within(dialog).getByText("Tue, Sep 22")).toBeInTheDocument()
+        expect(dayButton(dialog, "2026-09-19")).toBeEnabled()
     })
 
     it("groups Reschedule, Cancel appointment, and Done in the same action row", async () => {

@@ -1,6 +1,7 @@
 "use client"
 
-import { useId } from "react"
+import { useEffect, useId, useRef } from "react"
+import { startOfMonth } from "date-fns"
 import { Loader2Icon } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
@@ -12,6 +13,7 @@ import {
     schedulingDateKey,
     schedulingTimezoneLabel,
 } from "@/lib/scheduling-time"
+import { cn } from "@/lib/utils"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 
 type Slot = { start: string; end: string }
@@ -70,22 +72,42 @@ export interface SchedulingTimePickerProps extends SchedulingSlotListProps {
     date: string
     onDateChange: (date: string) => void
     minDate?: string | undefined
-    availableDates?: ReadonlySet<string>
-    month?: Date
+    availableDates?: ReadonlySet<string> | undefined
+    datesLoading?: boolean | undefined
+    month?: Date | undefined
     onMonthChange?: (month: Date) => void
+    /** Each new value moves focus to the selected day, or to the next-month arrow when that day is closed. */
+    dateFocusRequest?: number | undefined
     override?: AvailabilityOverride
 }
 
+function LoadingCaptionLabel({ className, children, ...props }: React.ComponentProps<"span">) {
+    return <span className={cn(className, "inline-flex items-center gap-1.5")} {...props}>
+        {children}<Loader2Icon className="size-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
+    </span>
+}
+
 export function SchedulingTimePicker({
-    idPrefix, date, onDateChange, minDate, availableDates, month, onMonthChange, override,
+    idPrefix, date, onDateChange, minDate, availableDates, datesLoading, month, onMonthChange, dateFocusRequest, override,
     slots, timezone, selectedStart, onSelectStart, loading, error, onRetry, disabled,
 }: SchedulingTimePickerProps) {
     const uniqueId = useId()
     const dateId = `${idPrefix}-${uniqueId}-date-time`
     const reasonId = `${idPrefix}-${uniqueId}-reason`
+    const calendarRef = useRef<HTMLDivElement>(null)
+    const handledFocusRequest = useRef<number | undefined>(undefined)
     const firstDate = minDate ?? schedulingDateKey(new Date(), timezone)
     const selectedDate = date ? parseDateInput(date) : undefined
     const selectedSlot = slots?.find(slot => slot.start === selectedStart)
+
+    // The caller picks the date after mount (from a request), so focus follows each request once.
+    useEffect(() => {
+        if (!dateFocusRequest || !date || handledFocusRequest.current === dateFocusRequest) return
+        handledFocusRequest.current = dateFocusRequest
+        const calendar = calendarRef.current
+        const day = calendar?.querySelector<HTMLButtonElement>(`[data-day="${date}"] button:not(:disabled)`)
+        ;(day ?? calendar?.querySelector<HTMLButtonElement>(".rdp-button_next:not([aria-disabled=true])"))?.focus()
+    }, [dateFocusRequest, date])
 
     if (override?.enabled) return <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -105,18 +127,24 @@ export function SchedulingTimePicker({
     return <div className="@container space-y-4">
         <div className="text-sm text-muted-foreground">{schedulingTimezoneLabel(timezone)}</div>
         <div className="grid items-start gap-4 @min-[32rem]:grid-cols-[minmax(16rem,1fr)_minmax(0,1fr)]">
-            <Calendar
-                mode="single"
-                selected={selectedDate}
-                {...(month ? { month } : { defaultMonth: selectedDate ?? parseDateInput(firstDate) })}
-                {...(onMonthChange ? { onMonthChange } : {})}
-                onSelect={next => { if (next) onDateChange(formatLocalDate(next)) }}
-                disabled={day => disabled === true || formatLocalDate(day) < firstDate || Boolean(!error && !loading && availableDates && !availableDates.has(formatLocalDate(day)))}
-                className="w-full p-0 [--cell-size:--spacing(8)]"
-                classNames={{ month_grid: "w-full" }}
-            />
+            <div ref={calendarRef} aria-busy={datesLoading || undefined}>
+                <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    {...(month ? { month } : { defaultMonth: selectedDate ?? parseDateInput(firstDate) })}
+                    // Months before the first selectable day have nothing to pick.
+                    startMonth={startOfMonth(parseDateInput(firstDate))}
+                    {...(onMonthChange ? { onMonthChange } : {})}
+                    {...(datesLoading ? { components: { CaptionLabel: LoadingCaptionLabel } } : {})}
+                    onSelect={next => { if (next) onDateChange(formatLocalDate(next)) }}
+                    disabled={day => disabled === true || formatLocalDate(day) < firstDate || Boolean(availableDates && !availableDates.has(formatLocalDate(day)))}
+                    className="w-full p-0 [--cell-size:--spacing(8)]"
+                    // With known open days, an open day of the next or previous month reads as pickable.
+                    classNames={{ month_grid: "w-full", ...(availableDates ? { outside: "" } : {}) }}
+                />
+            </div>
             <div className="min-w-0 space-y-3">
-                {date ? <p className="text-sm font-medium">{parseDateInput(date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p> : null}
+                {date ? <p className="text-sm font-medium">{parseDateInput(date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</p> : null}
                 {date || loading || error ? <SchedulingSlotList
                     {...(slots ? { slots } : {})}
                     timezone={timezone}

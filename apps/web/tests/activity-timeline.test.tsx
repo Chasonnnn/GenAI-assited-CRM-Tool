@@ -12,6 +12,7 @@ const mockUseInterviewAppointment = vi.fn()
 vi.mock('@/lib/hooks/use-interview-appointment', () => ({
     useInterviewAppointment: () => mockUseInterviewAppointment(),
     useInterviewSlots: () => ({ data: { slots: [] }, isLoading: false, isFetching: false, isError: false, refetch: vi.fn() }),
+    useInterviewOpenDays: () => ({ data: { timezone: 'UTC', dates: [] }, isSuccess: true, isError: false, isLoading: false, refetch: vi.fn() }),
     useManageInterviewAppointment: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useRetryInterviewAppointmentGoogleSync: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
