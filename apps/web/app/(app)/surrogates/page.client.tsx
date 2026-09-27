@@ -23,6 +23,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { showUndoToast } from "@/components/ui/undo-toast"
 import { ListToolbar, ListToolbarSearch, MoreFiltersPopover } from "@/components/list-toolbar"
 import { PageHeader } from "@/components/page-header"
+import { QueryErrorState } from "@/components/error-state"
 import { StageSelect } from "@/components/stage-select"
 import { MoreVerticalIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UploadIcon, PlusIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
@@ -971,7 +972,7 @@ export function SurrogatesPageClient() {
         { enabled: isListFiltered },
     )
 
-    const { data, isLoading, isError, error, refetch } = useSurrogates({
+    const { data, isLoading, isError, error, refetch, isFetching } = useSurrogates({
         page,
         per_page: perPage,
         ...listFilters,
@@ -1513,14 +1514,14 @@ export function SurrogatesPageClient() {
 
                 {/* Error State */}
                 {isError && (
-                    <Card className="p-6 text-center border-destructive/40 bg-destructive/5">
-                        <p className="text-destructive">Unable to load surrogates.</p>
-                        {error instanceof Error && (
-                            <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
-                        )}
-                        <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
-                            Retry
-                        </Button>
+                    <Card>
+                        <QueryErrorState
+                            error={error}
+                            onRetry={() => void refetch()}
+                            isRetrying={isFetching}
+                            title="Couldn't load surrogates"
+                            headingLevel={2}
+                        />
                     </Card>
                 )}
 

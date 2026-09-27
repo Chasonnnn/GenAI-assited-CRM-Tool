@@ -276,6 +276,27 @@ describe('SurrogatesPage', () => {
         expect(container.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('0 surrogates')
     })
 
+    it('shows a load error with retry and never the server detail', async () => {
+        const { ApiError } = await import('@/lib/api')
+        const refetch = vi.fn()
+        mockUseSurrogates.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, 'Internal Server Error', 'boom'),
+            refetch,
+        })
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByRole('heading', { level: 2, name: "Couldn't load surrogates" })).toBeInTheDocument()
+        expect(screen.queryByText('boom')).not.toBeInTheDocument()
+        expect(screen.queryByText('No surrogates yet')).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
     it('shows the filtered count against the unfiltered total', () => {
         mockSearchParams.set('stage', 's2')
         mockUseSurrogates.mockImplementation((filters: { stage_id?: string }) => ({
