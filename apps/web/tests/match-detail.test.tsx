@@ -485,13 +485,13 @@ describe('MatchDetailPage', () => {
         await waitFor(() => expect(mockCreateTaskMutateAsync).toHaveBeenCalledWith({ title: 'Attempt follow-up', task_type: 'other', match_id: 'match1', work_source: 'match', attempt_id: 'attempt2' }))
     })
 
-    it('keeps a rejected concurrent acceptance visible in the confirm dialog', async () => {
-        mockAcceptMatchMutateAsync.mockRejectedValue(new ApiError(409, 'Conflict', 'Surrogate already has an active match'))
+    it('keeps a refused concurrent acceptance visible in the confirm dialog', async () => {
+        mockAcceptMatchMutateAsync.mockRejectedValue(new ApiError(409, 'Conflict', 'Surrogate has an accepted match'))
         render(<MatchDetailPage />)
         fireEvent.click(screen.getByRole('button', { name: 'Accept Match' }))
         const dialog = await screen.findByRole('alertdialog')
         fireEvent.click(within(dialog).getByRole('button', { name: 'Accept Match' }))
-        await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent('Surrogate already has an active match'))
+        await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent('Surrogate has an accepted match'))
         expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     })
 
@@ -510,7 +510,7 @@ describe('MatchDetailPage', () => {
         expect(changes).toEqual([
             'Surrogate stage: Ready to Match → Matched',
             'Intended parent stage: New → Matched',
-            'Other proposed matches for this surrogate are cancelled.',
+            "Other matches under review for this surrogate stay open but can't be accepted.",
         ])
         expect(mockAcceptMatchMutateAsync).not.toHaveBeenCalled()
 
@@ -519,41 +519,41 @@ describe('MatchDetailPage', () => {
         expect(mockAcceptMatchMutateAsync).not.toHaveBeenCalled()
     })
 
-    it('uses the default variant for Accept and destructive-outline for Reject', () => {
+    it('uses the default variant for Accept and destructive-outline for Decline', () => {
         render(<MatchDetailPage />)
         const accept = screen.getByRole('button', { name: 'Accept Match' })
-        const reject = screen.getByRole('button', { name: 'Reject' })
+        const decline = screen.getByRole('button', { name: 'Decline' })
         expect(accept.className).toMatch(/bg-\[linear-gradient/)
         expect(accept).toHaveClass('h-8')
         expect(accept.className).not.toMatch(/bg-green|h-7|text-xs/)
-        expect(reject).toHaveClass('border-destructive/40', 'text-destructive', 'h-8')
+        expect(decline).toHaveClass('border-destructive/40', 'text-destructive', 'h-8')
     })
 
-    it('shows the rejection reason on a rejected match', () => {
+    it('shows the decline reason on a declined match', () => {
         mockUseMatch.mockReturnValue({
-            data: { ...mockMatch, status: 'rejected', rejection_reason: 'Budget does not align', reviewed_at: '2026-09-05T12:00:00Z' },
+            data: { ...mockMatch, status: 'declined', allowed_actions: [], decline_reason: 'Budget does not align', reviewed_at: '2026-09-05T12:00:00Z' },
             isLoading: false,
         })
         const { container } = render(<MatchDetailPage />)
-        const row = container.querySelector('[data-slot="match-rejection-reason"]')
+        const row = container.querySelector('[data-slot="match-decline-reason"]')
         expect(row).not.toBeNull()
-        expect(row).toHaveTextContent('Rejection reason: Budget does not align')
+        expect(row).toHaveTextContent('Decline reason: Budget does not align')
     })
 
-    it('shows status actions to a custom role that holds propose_matches', () => {
+    it('shows attempt editing to a custom role that holds propose_matches', () => {
         mockUserRole = 'match_coordinator'
         mockPermissions = ['view_matches', 'propose_matches']
+        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted', allowed_actions: [] }, isLoading: false })
         render(<MatchDetailPage />)
-        expect(screen.getByRole('button', { name: 'Accept Match' })).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Add Attempt' })).toBeInTheDocument()
     })
 
-    it('hides status actions from a listed role without propose_matches', () => {
+    it('hides attempt editing from a listed role without propose_matches', () => {
         mockUserRole = 'admin'
         mockPermissions = ['view_matches']
+        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted', allowed_actions: [] }, isLoading: false })
         render(<MatchDetailPage />)
-        expect(screen.queryByRole('button', { name: 'Accept Match' })).not.toBeInTheDocument()
-        expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Add Attempt' })).not.toBeInTheDocument()
     })
 
     it('links a denied viewer without view_matches to the dashboard', () => {

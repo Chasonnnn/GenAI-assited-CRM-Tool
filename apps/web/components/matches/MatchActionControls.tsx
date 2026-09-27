@@ -11,11 +11,11 @@ export type MatchAction = MatchRead["allowed_actions"][number]
 
 const ACTION_ORDER: MatchAction[] = ["accept", "decline", "complete", "request_cancel", "withdraw_cancel"]
 
-const ACTION_PRESENTATION: Record<MatchAction, { label: string; pendingLabel: string; variant: "default" | "destructive" | "outline"; className?: string }> = {
-    accept: { label: "Accept Match", pendingLabel: "Accepting...", variant: "default", className: "bg-green-600 hover:bg-green-700" },
-    decline: { label: "Decline", pendingLabel: "Declining...", variant: "destructive" },
+const ACTION_PRESENTATION: Record<MatchAction, { label: string; pendingLabel: string; variant: "default" | "destructive-outline" | "outline" }> = {
+    accept: { label: "Accept Match", pendingLabel: "Accepting...", variant: "default" },
+    decline: { label: "Decline", pendingLabel: "Declining...", variant: "destructive-outline" },
     complete: { label: "Complete Match", pendingLabel: "Completing...", variant: "default" },
-    request_cancel: { label: "Cancel Match", pendingLabel: "Requesting...", variant: "destructive" },
+    request_cancel: { label: "Cancel Match", pendingLabel: "Requesting...", variant: "destructive-outline" },
     withdraw_cancel: { label: "Withdraw Cancellation", pendingLabel: "Withdrawing...", variant: "outline" },
 }
 
@@ -30,7 +30,6 @@ function BlockedActionButton({ action, reason }: { action: MatchAction; reason: 
                         <Button
                             variant={presentation.variant}
                             size="sm"
-                            className={`h-7 text-xs ${presentation.className ?? ""}`}
                             disabled
                             focusableWhenDisabled
                             aria-describedby={reasonId}
@@ -69,7 +68,6 @@ export function MatchActionControls({
                         key={action}
                         variant={presentation.variant}
                         size="sm"
-                        className={`h-7 text-xs ${presentation.className ?? ""}`}
                         onClick={() => onAction(action)}
                         disabled={anyPending}
                     >
