@@ -231,7 +231,8 @@ describe("Messaging integration settings page", () => {
 
         render(<MessagingIntegrationPageClient />)
 
-        expect(screen.getByText("Messaging settings are restricted")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 1, name: "Messaging delivery" })).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 2, name: "Messaging settings are restricted" })).toBeInTheDocument()
         expect(mockUseTwilioSettings).toHaveBeenCalledWith(false)
         expect(mockUseTwilioReadiness).toHaveBeenCalledWith(false)
     })

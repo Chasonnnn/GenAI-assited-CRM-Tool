@@ -941,16 +941,26 @@ export default function MessagingIntegrationPageClient() {
         void Promise.all([settingsQuery.refetch(), readinessQuery.refetch()])
     }
 
-    if (authLoading || permissionsLoading) return <LoadingState />
-
-    if (!user || !canManageIntegrations) {
+    if (authLoading || permissionsLoading || !user || !canManageIntegrations) {
+        // Same shell as SettingsPageGate: the header stays while access is checked or denied.
         return (
-            <PermissionDeniedState
-                title="Messaging settings are restricted"
-                description="Only organization administrators and developers can manage Twilio credentials, routes, and compliance settings."
-                secondaryHref="/settings/integrations"
-                secondaryLabel="Back to integrations"
-            />
+            <div className="flex min-h-dvh flex-col bg-muted/10">
+                <PageHeader
+                    title="Messaging delivery"
+                    back={{ href: "/settings/integrations", label: "Back to integrations" }}
+                />
+                {authLoading || permissionsLoading ? (
+                    <LoadingState />
+                ) : (
+                    <PermissionDeniedState
+                        title="Messaging settings are restricted"
+                        description="Only organization administrators and developers can manage Twilio credentials, routes, and compliance settings."
+                        secondaryHref="/settings/integrations"
+                        secondaryLabel="Back to integrations"
+                        headingLevel={2}
+                    />
+                )}
+            </div>
         )
     }
 
