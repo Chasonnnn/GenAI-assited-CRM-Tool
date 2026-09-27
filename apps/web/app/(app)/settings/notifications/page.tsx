@@ -1,5 +1,6 @@
 "use client"
 
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
@@ -255,13 +256,12 @@ function NotificationsSettingsCard() {
 
 export default function NotificationSettingsPage() {
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6 max-w-3xl mx-auto">
-            <div>
-                <h1 className="text-2xl font-semibold">Notifications</h1>
+        <div className="flex flex-1 flex-col">
+            <PageHeader title="Notifications" />
+            <div className="flex max-w-3xl flex-col gap-6 p-6">
+                <BrowserNotificationsCard />
+                <NotificationsSettingsCard />
             </div>
-
-            <BrowserNotificationsCard />
-            <NotificationsSettingsCard />
         </div>
     )
 }

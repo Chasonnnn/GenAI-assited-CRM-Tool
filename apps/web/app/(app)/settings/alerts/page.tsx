@@ -18,6 +18,9 @@ import {
 } from "lucide-react"
 import { useAlerts, useAlertsSummary, useResolveAlert, useAcknowledgeAlert, useSnoozeAlert } from "@/lib/hooks/use-ops"
 import { formatRelativeTime } from "@/lib/formatters"
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
+import { SettingsPageGate } from "../settings-page-gate"
 
 const severityConfig = {
     critical: { icon: XCircleIcon, color: "text-red-600 bg-red-100 dark:bg-red-900/30", badge: "destructive" },
@@ -39,12 +42,33 @@ const alertTypeLabels: Record<string, string> = {
 }
 
 export default function AlertsPage() {
+    return (
+        <SettingsPageGate
+            title="System Alerts"
+            permission="manage_ops"
+            deniedDescription="System Alerts need the Manage ops permission. Ask an admin to update your role."
+        >
+            <AlertsContent />
+        </SettingsPageGate>
+    )
+}
+
+function AlertsContent() {
     const [statusFilter, setStatusFilter] = useState<string>("open")
 
-    const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useAlertsSummary()
-    const { data: alertsData, isLoading: alertsLoading, refetch: refetchAlerts } = useAlerts(
-        statusFilter !== "all" ? { status: statusFilter } : {}
-    )
+    const {
+        data: summary,
+        isLoading: summaryLoading,
+        refetch: refetchSummary,
+    } = useAlertsSummary()
+    const {
+        data: alertsData,
+        isLoading: alertsLoading,
+        isError: alertsError,
+        error: alertsQueryError,
+        isFetching: alertsFetching,
+        refetch: refetchAlerts,
+    } = useAlerts(statusFilter !== "all" ? { status: statusFilter } : {})
 
     const resolveAlert = useResolveAlert()
     const acknowledgeAlert = useAcknowledgeAlert()
@@ -59,21 +83,16 @@ export default function AlertsPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <div className="flex items-center gap-3">
-                        <h1 className="text-2xl font-semibold">System Alerts</h1>
-                        {totalOpen > 0 && (
-                            <Badge variant="destructive">{totalOpen} open</Badge>
-                        )}
-                    </div>
+            <PageHeader
+                title="System Alerts"
+                meta={totalOpen > 0 ? <Badge variant="destructive">{totalOpen} open</Badge> : null}
+                actions={
                     <Button variant="outline" size="sm" onClick={handleRefresh}>
                         <RefreshCwIcon className="mr-2 size-4" aria-hidden="true" />
                         Refresh
                     </Button>
-                </div>
-            </div>
+                }
+            />
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
@@ -160,6 +179,14 @@ export default function AlertsPage() {
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
+                        ) : alertsError ? (
+                            <QueryErrorState
+                                error={alertsQueryError}
+                                onRetry={() => void refetchAlerts()}
+                                isRetrying={alertsFetching}
+                                title="Couldn't load alerts"
+                                className="min-h-0 py-10"
+                            />
                         ) : (alertsData?.items?.length ?? 0) === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                                 <CheckCircleIcon className="mb-2 size-12 text-green-500" aria-hidden="true" />

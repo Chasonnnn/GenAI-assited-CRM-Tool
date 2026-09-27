@@ -4,9 +4,13 @@ import Link from "@/components/app-link"
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, ChevronRight, Shield, Lock, Loader2 } from "lucide-react"
+import { ChevronRight, Lock, Loader2 } from "lucide-react"
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { useRoles } from "@/lib/hooks/use-permissions"
+import type { RoleSummary } from "@/lib/api/permissions"
 import { useAuth } from "@/lib/auth-context"
+import { SettingsPageGate } from "../../settings-page-gate"
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
     intake_specialist: "Entry-level role for processing new leads and initial case intake",
@@ -22,42 +26,54 @@ const ROLE_ICONS: Record<string, string> = {
     developer: "🔧",
 }
 
+const TEAM_BACK_LINK = { href: "/settings/team", label: "Back to Team" }
+
 export default function RolePermissionsPage() {
-    const { data: roles, isLoading } = useRoles()
+    return (
+        <SettingsPageGate
+            title="Role Permissions"
+            permission="view_roles"
+            deniedDescription="Role permissions need the View roles permission. Ask an admin to update your role."
+            back={TEAM_BACK_LINK}
+        >
+            <RolePermissionsContent />
+        </SettingsPageGate>
+    )
+}
+
+function RolePermissionsContent() {
+    const { data: roles, isLoading, isError, error, refetch, isFetching } = useRoles()
     const { user } = useAuth()
     const isDeveloper = user?.role === "developer"
 
-    if (isLoading) {
-        return (
-            <div className="flex flex-1 items-center justify-center p-6">
-                <Loader2 className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-            </div>
-        )
-    }
-
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6 max-w-4xl mx-auto">
-            <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" render={<Link href="/settings/team" />}>
-                <ChevronLeft className="size-4 mr-1" aria-hidden="true" />
-                Back to Team
-            </Button>
-            </div>
-
-            <div>
-                <h1 className="text-2xl font-semibold flex items-center gap-2">
-                <Shield className="size-6" aria-hidden="true" />
-                    Role Permissions
-                </h1>
-                {!isDeveloper && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                        Only Developers can modify role defaults.
-                    </p>
+        <div className="flex min-h-screen flex-col">
+            <PageHeader title="Role Permissions" back={TEAM_BACK_LINK} />
+            <div className="p-6">
+                {isLoading ? (
+                    <div className="flex items-center justify-center p-12" role="status" aria-label="Loading">
+                        <Loader2 className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                    </div>
+                ) : isError ? (
+                    <QueryErrorState
+                        error={error}
+                        onRetry={() => void refetch()}
+                        isRetrying={isFetching}
+                        title="Couldn't load roles"
+                        headingLevel={2}
+                    />
+                ) : (
+                    <RoleCards roles={roles ?? []} isDeveloper={isDeveloper} />
                 )}
             </div>
+        </div>
+    )
+}
 
+function RoleCards({ roles, isDeveloper }: { roles: RoleSummary[]; isDeveloper: boolean }) {
+    return (
             <div className="grid gap-4">
-                {roles?.map((role) => (
+                {roles.map((role) => (
                     <Card key={role.role} className={role.is_developer ? "border-orange-200 bg-orange-50/30" : ""}>
                         <CardHeader className="pb-2">
                             <div className="flex items-center justify-between">
@@ -103,15 +119,5 @@ export default function RolePermissionsPage() {
                     </Card>
                 ))}
             </div>
-
-            {!isDeveloper && (
-                <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
-                    <p>
-                        <strong>Note:</strong> Role permission defaults can only be modified by Developers.
-                        Contact your administrator to request changes.
-                    </p>
-                </div>
-            )}
-        </div>
     )
 }

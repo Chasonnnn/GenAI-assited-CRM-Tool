@@ -2,16 +2,19 @@
 
 import { useState } from "react"
 import { useParams } from "next/navigation"
-import Link from "@/components/app-link"
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { SaveBar } from "@/components/ui/save-bar"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { ChevronLeft, Shield, Lock, Loader2, Save, AlertTriangle } from "lucide-react"
+import { Lock, Loader2 } from "lucide-react"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import { useRoleDetail, useUpdateRolePermissions } from "@/lib/hooks/use-permissions"
 import { useAuth } from "@/lib/auth-context"
 import { toast } from "@/components/ui/toast"
+import { SettingsPageGate } from "../../../settings-page-gate"
 
 const CATEGORY_ORDER = [
     "Navigation",
@@ -23,7 +26,23 @@ const CATEGORY_ORDER = [
     "Compliance",
 ]
 
+// Keeps the existing destination (the roles list is this page's parent); only the label changed.
+const ROLES_BACK_LINK = { href: "/settings/team/roles", label: "Back to Role Permissions" }
+
 export default function RoleDetailPage() {
+    return (
+        <SettingsPageGate
+            title="Role Permissions"
+            permission="view_roles"
+            deniedDescription="Role permissions need the View roles permission. Ask an admin to update your role."
+            back={ROLES_BACK_LINK}
+        >
+            <RoleDetailContent />
+        </SettingsPageGate>
+    )
+}
+
+function RoleDetailContent() {
     const params = useParams()
     const rawRole = params.role
     const role = typeof rawRole === "string"
@@ -31,7 +50,7 @@ export default function RoleDetailPage() {
         : Array.isArray(rawRole)
             ? rawRole[0] ?? ""
             : ""
-    const { data: roleDetail, isLoading } = useRoleDetail(role)
+    const { data: roleDetail, isLoading, isError, error, refetch, isFetching } = useRoleDetail(role)
     const updatePermissions = useUpdateRolePermissions()
     const { user } = useAuth()
 
@@ -65,23 +84,37 @@ export default function RoleDetailPage() {
             await updatePermissions.mutateAsync({ role, permissions: changes })
             setChanges({})
             toast.success("Permissions updated")
-        } catch (error) {
-            toast.error(
-                "Failed to update permissions",
-                { description: error instanceof Error ? error.message : "Unknown error" }
-            )
+        } catch (saveError) {
+            const message = getActionErrorMessage(saveError, "Couldn't update permissions. Try again.")
+            if (message) toast.error(message)
         }
     }
 
-    if (isLoading) {
+    if (isLoading || isError || !roleDetail) {
         return (
-            <div className="flex flex-1 items-center justify-center p-6">
-                <Loader2 className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+            <div className="flex min-h-screen flex-col">
+                <PageHeader title="Role Permissions" back={ROLES_BACK_LINK} />
+                {isLoading ? (
+                    <div className="flex items-center justify-center p-12" role="status" aria-label="Loading">
+                        <Loader2 className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                    </div>
+                ) : (
+                    <QueryErrorState
+                        error={error}
+                        onRetry={() => void refetch()}
+                        isRetrying={isFetching}
+                        title="Couldn't load this role"
+                        notFound={{
+                            title: "Role not found",
+                            backHref: ROLES_BACK_LINK.href,
+                            backLabel: ROLES_BACK_LINK.label,
+                        }}
+                        headingLevel={2}
+                    />
+                )}
             </div>
         )
     }
-
-    if (!roleDetail) return null
 
     // Sort categories
     const sortedCategories = Object.keys(roleDetail.permissions_by_category).sort((a, b) => {
@@ -94,48 +127,21 @@ export default function RoleDetailPage() {
     })
 
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6 max-w-4xl mx-auto">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                <Button variant="ghost" size="sm" render={<Link href="/settings/team/roles" />}>
-                    <ChevronLeft className="size-4 mr-1" aria-hidden="true" />
-                    Back
-                </Button>
-                </div>
-                {isDeveloper && hasChanges && (
-                    <Button onClick={handleSave} disabled={updatePermissions.isPending}>
-                        {updatePermissions.isPending ? (
-                            <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                        ) : (
-                            <Save className="size-4 mr-2" aria-hidden="true" />
-                        )}
-                        Save Changes
-                    </Button>
-                )}
-            </div>
+        <div className="flex min-h-screen flex-col">
+            <PageHeader
+                title={`${roleDetail.label} Permissions`}
+                back={ROLES_BACK_LINK}
+                meta={
+                    isDeveloper ? null : (
+                        <Badge variant="outline">
+                            <Lock className="size-3 mr-1" aria-hidden="true" />
+                            Read only
+                        </Badge>
+                    )
+                }
+            />
 
-            <div>
-                <h1 className="text-2xl font-semibold flex items-center gap-2">
-                    <Shield className="size-6" aria-hidden="true" />
-                    {roleDetail.label} Permissions
-                </h1>
-                {!isDeveloper && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                        Only Developers can modify role defaults.
-                    </p>
-                )}
-            </div>
-
-            {hasChanges && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center gap-3">
-                    <AlertTriangle className="size-5 text-yellow-600" aria-hidden="true" />
-                    <p className="text-sm text-yellow-800">
-                        You have unsaved changes. Click Save Changes to apply.
-                    </p>
-                </div>
-            )}
-
-            <div className="space-y-6">
+            <div className="flex-1 space-y-6 p-6">
                 {sortedCategories.map((category) => {
                     const permissions = roleDetail.permissions_by_category[category] ?? []
 
@@ -153,7 +159,7 @@ export default function RoleDetailPage() {
                                         return (
                                             <div
                                                 key={perm.key}
-                                                className={`flex items-center justify-between py-2 ${isChanged ? "bg-yellow-50 -mx-2 px-2 rounded" : ""}`}
+                                                className={`flex items-center justify-between py-2 ${isChanged ? "bg-warning/10 -mx-2 px-2 rounded" : ""}`}
                                             >
                                                 <div className="flex-1">
                                                     <Label className="font-medium flex items-center gap-2">
@@ -184,6 +190,16 @@ export default function RoleDetailPage() {
                     )
                 })}
             </div>
+
+            {isDeveloper ? (
+                <SaveBar
+                    dirty={hasChanges}
+                    changeCount={Object.keys(changes).length}
+                    saving={updatePermissions.isPending}
+                    onSave={() => void handleSave()}
+                    onDiscard={() => setChanges({})}
+                />
+            ) : null}
         </div>
     )
 }

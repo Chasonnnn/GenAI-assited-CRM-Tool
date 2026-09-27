@@ -12,6 +12,14 @@ vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mocks.useAuth(),
 }))
 
+vi.mock("@/components/app-link", () => ({
+    default: ({ children, href, ...props }: React.ComponentProps<"a">) => (
+        <a href={href} {...props}>
+            {children}
+        </a>
+    ),
+}))
+
 vi.mock("@/lib/csrf", () => ({
     getCsrfHeaders: () => ({ "X-CSRF-Token": "test-token" }),
 }))
@@ -47,7 +55,10 @@ describe("AdminDataPage", () => {
 
         render(<AdminDataPage />)
 
+        expect(screen.getByRole("heading", { level: 1, name: "Data Management" })).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 2, name: "Permission required" })).toBeInTheDocument()
         expect(screen.getByText(/only accessible to developers/i)).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to Settings" })).toHaveAttribute("href", "/settings")
         expect(screen.queryByRole("button", { name: /export surrogates csv/i })).not.toBeInTheDocument()
     })
 

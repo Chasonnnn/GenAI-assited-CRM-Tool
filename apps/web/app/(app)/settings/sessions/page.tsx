@@ -12,6 +12,8 @@
  */
 
 import { useState } from "react"
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { toast } from "@/components/ui/toast"
 import {
     Card,
@@ -158,7 +160,7 @@ function SessionCard({
 // =============================================================================
 
 export default function SessionsPage() {
-    const { data: sessions, isLoading, error } = useSessions()
+    const { data: sessions, isLoading, error, refetch, isFetching } = useSessions()
     const revokeSession = useRevokeSession()
     const revokeAllSessions = useRevokeAllSessions()
 
@@ -191,20 +193,26 @@ export default function SessionsPage() {
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+            <div className="flex flex-col">
+                <PageHeader title="Active Sessions" />
+                <div className="flex h-64 items-center justify-center">
+                    <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                </div>
             </div>
         )
     }
 
     if (error) {
         return (
-            <div className="container max-w-2xl py-8">
-                <Card>
-                    <CardContent className="py-8 text-center">
-                        <p className="text-destructive">Failed to load sessions</p>
-                    </CardContent>
-                </Card>
+            <div className="flex flex-col">
+                <PageHeader title="Active Sessions" />
+                <QueryErrorState
+                    error={error}
+                    onRetry={() => void refetch()}
+                    isRetrying={isFetching}
+                    title="Couldn't load sessions"
+                    headingLevel={2}
+                />
             </div>
         )
     }
@@ -213,10 +221,9 @@ export default function SessionsPage() {
     const currentSession = sessions?.find(s => s.is_current)
 
     return (
-        <div className="container max-w-2xl py-8 space-y-6">
-            <div>
-                <h1 className="text-2xl font-semibold">Active Sessions</h1>
-            </div>
+        <div className="flex flex-col">
+            <PageHeader title="Active Sessions" />
+            <div className="max-w-2xl space-y-6 p-6">
 
             {/* Current Session */}
             <Card>
@@ -318,6 +325,7 @@ export default function SessionsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            </div>
         </div>
     )
 }
