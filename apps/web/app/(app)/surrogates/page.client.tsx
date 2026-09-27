@@ -190,10 +190,11 @@ function FloatingActionBar({
 
     return (
         <>
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-                <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
+            {/* The full-width wrapper keeps a 16px gutter; only the bar itself takes clicks. */}
+            <div className="pointer-events-none fixed inset-x-4 bottom-6 z-50 flex justify-center">
+                <div className="pointer-events-auto bg-primary text-primary-foreground shadow-lg rounded-lg px-4 py-3 sm:px-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                     <span className="font-medium">{selectedCount} surrogate{selectedCount > 1 ? 's' : ''} selected</span>
-                    <div className="h-4 w-px bg-primary-foreground/30" />
+                    <div className="hidden h-4 w-px bg-primary-foreground/30 sm:block" />
 
                     {canAssign && (
                         <DropdownMenu>

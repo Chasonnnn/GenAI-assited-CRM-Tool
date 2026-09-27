@@ -517,6 +517,24 @@ describe('SurrogatesPage', () => {
         expect(screen.queryByRole('button', { name: 'Change stage' })).not.toBeInTheDocument()
     })
 
+    it('keeps the floating selection bar inside a 16px side gutter on narrow screens', () => {
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [buildSurrogateListItem()], total: 1, pages: 1 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+        fireEvent.click(screen.getByLabelText('Select John Doe'))
+
+        const bar = screen.getByText('1 surrogate selected').parentElement as HTMLElement
+        const container = bar.parentElement as HTMLElement
+        // A left-1/2 anchor limits the bar to half the viewport, so it overflowed at 390px.
+        expect(container).toHaveClass('fixed', 'inset-x-4', 'flex', 'justify-center', 'pointer-events-none')
+        expect(container).not.toHaveClass('left-1/2')
+        expect(bar).toHaveClass('flex-wrap', 'pointer-events-auto')
+    })
+
     it('submits selected surrogate ids through the bulk change stage flow', async () => {
         const mutateAsync = vi.fn().mockResolvedValue({
             requested: 2,
