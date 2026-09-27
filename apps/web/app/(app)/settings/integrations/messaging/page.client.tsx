@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { useAuth } from "@/lib/auth-context"
 import { getErrorMessage } from "@/lib/error-utils"
 import type {
@@ -734,7 +735,7 @@ function ComplianceControlsCard({
 
 function SettingsSaveBar({ version, isPending }: { version: number; isPending: boolean }) {
     return (
-        <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/85">
+        <div ref={toastClearanceRef} className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/85">
             <p className="text-xs text-muted-foreground">Configuration version {version}</p>
             <Button type="submit" disabled={isPending}>
                 {isPending ? <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <ShieldCheckIcon aria-hidden="true" />}

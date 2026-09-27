@@ -38,6 +38,7 @@ import {
     UploadIcon,
 } from "lucide-react"
 import { toast } from "@/components/ui/toast"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { useAuth } from "@/lib/auth-context"
 import {
     useApproveFormSubmission,
@@ -1460,7 +1461,7 @@ function SurrogateApplicationReviewFooter({
     if (!state.isPending) return null
 
     return (
-        <div className="sticky bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 -mx-4 md:-mx-6">
+        <div ref={toastClearanceRef} className="sticky bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 -mx-4 md:-mx-6">
             <div className="flex items-center justify-end gap-3">
                 <Button
                     variant="outline"

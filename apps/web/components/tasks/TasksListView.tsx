@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { EmptyValue } from "@/components/ui/empty-value"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { getTaskTypeLabel, type TaskStatusFilter } from "@/lib/task-labels"
 import type { TaskListItem } from "@/lib/types/task"
@@ -381,6 +382,7 @@ export function TasksListView({
 
             {selectedCount > 0 ? (
                 <div
+                    ref={toastClearanceRef}
                     role="toolbar"
                     aria-label="Selected tasks"
                     className="sticky bottom-4 z-20 mx-auto mt-4 flex w-fit max-w-full flex-wrap items-center justify-center gap-x-4 gap-y-2 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground shadow-lg"

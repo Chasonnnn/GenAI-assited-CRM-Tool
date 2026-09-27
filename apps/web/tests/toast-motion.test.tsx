@@ -39,7 +39,10 @@ describe("Toast motion", () => {
         const root = renderToast()
 
         expect((root as HTMLElement).style.getPropertyValue("--toast-swipe-movement-x")).toBe("0px")
-        expect(root).toHaveClass("transform-[translateX(var(--toast-swipe-movement-x))]")
+        expect((root as HTMLElement).style.getPropertyValue("--toast-swipe-movement-y")).toBe("0px")
+        expect(root).toHaveClass(
+            "transform-[translate(var(--toast-swipe-movement-x),var(--toast-swipe-movement-y))]",
+        )
         expect(transitionProperties(root)).toContain("transform")
     })
 })

@@ -4,6 +4,7 @@ import * as React from "react"
 import { CheckIcon, CircleAlertIcon, Loader2Icon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { cn } from "@/lib/utils"
 
 type SaveBarProps = {
@@ -62,6 +63,7 @@ function SaveBar({
       </span>
       {visible ? (
         <div
+          ref={toastClearanceRef}
           role="region"
           aria-label="Unsaved changes"
           data-slot="save-bar"

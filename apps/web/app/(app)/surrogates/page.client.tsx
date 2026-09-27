@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils"
 import { formatRace } from "@/lib/formatters"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { toast } from "@/components/ui/toast"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { MassEditStageModal } from "@/components/surrogates/MassEditStageModal"
 import { BulkChangeStageModal } from "@/components/surrogates/BulkChangeStageModal"
 import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"
@@ -183,7 +184,7 @@ function FloatingActionBar({
 
     return (
         <>
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+            <div ref={toastClearanceRef} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
                 <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
                     <span className="font-medium">{selectedCount} surrogate{selectedCount > 1 ? 's' : ''} selected</span>
                     <div className="h-4 w-px bg-primary-foreground/30" />
