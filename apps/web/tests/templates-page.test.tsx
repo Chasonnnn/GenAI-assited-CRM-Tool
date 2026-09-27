@@ -197,6 +197,19 @@ describe('WorkflowTemplatesPanel', () => {
         expect(screen.getByText('Workflow Templates')).toBeInTheDocument()
     })
 
+    it.each([
+        ['match_declined', 'Match Declined'],
+        ['match_cancelled', 'Match Cancelled'],
+    ])('labels the %s trigger', (triggerType, label) => {
+        const baseQuery = (useQuery as ReturnType<typeof vi.fn>).getMockImplementation()!
+        ; (useQuery as ReturnType<typeof vi.fn>).mockImplementation((options) => options.queryKey[0] === 'templates'
+            ? { data: [{ ...mockTemplates[0], id: `tmpl-${triggerType}`, name: `Template ${triggerType}`, trigger_type: triggerType }], isLoading: false, isError: false, error: null }
+            : baseQuery(options))
+        render(<WorkflowTemplatesPanel />)
+        expect(screen.getByText(`Trigger: ${label}`)).toBeInTheDocument()
+        expect(screen.queryByText(`Trigger: ${triggerType}`)).not.toBeInTheDocument()
+    })
+
     it('renders template list from mocked data', () => {
         render(<WorkflowTemplatesPanel />)
         expect(screen.getByText('Welcome New Lead')).toBeInTheDocument()
