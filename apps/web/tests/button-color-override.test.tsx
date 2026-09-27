@@ -139,34 +139,9 @@ function isDefaultVariant(variant: string | true | undefined): boolean {
 // Existing call sites, per file. Remove a file's entry when its buttons use a variant; the count
 // may only go down.
 const DEFAULT_VARIANT_BG_ALLOWLIST: Readonly<Record<string, number>> = {
-    "app/(app)/automation/campaigns/[id]/page.client.tsx": 2,
-    "app/(app)/automation/campaigns/page.tsx": 2,
     "app/(app)/automation/forms/page.tsx": 1,
-    "app/(app)/intended-parents/matches/[id]/page.client.tsx": 1, // ips-matches-donors-9
-    "app/intake/[slug]/page.client.tsx": 2,
     "app/invite/[id]/page.client.tsx": 1,
     "app/login/LoginPageClient.tsx": 1,
-    "app/ops/login/page.client.tsx": 1, // ops-4
-    "app/ops/page.client.tsx": 1, // ops-3
-    "app/ops/templates/email/[id]/page.client.tsx": 1,
-    "app/ops/templates/system/[systemKey]/page.client.tsx": 1, // ops-1
-    "app/ops/templates/workflows/[id]/page.client.tsx": 1,
-    "components/ai/AIFloatingButton.tsx": 1,
-    "components/appointments/AppointmentsList.tsx": 2,
-    "components/documents/EntityDocuments.tsx": 1,
-    "components/forms/builder/AutomationFormBuilderScreen.tsx": 1,
-    "components/forms/builder/DeletePageDialog.tsx": 1,
-    "components/forms/builder/TemplateFormBuilderScreen.tsx": 1,
-    "components/import/ImportApprovalActions.tsx": 1,
-    "components/ops/agencies/AgencyInvitesTab.tsx": 1, // ops-1
-    "components/ops/agencies/AgencyOverviewTab.tsx": 2, // ops-1
-    "components/ops/agencies/AgencyUsersTab.tsx": 1, // ops-1
-    "components/status-change-requests/StatusChangeRequestActions.tsx": 1,
-    "components/surrogates/SurrogateApplicationTab.tsx": 4,
-    "components/surrogates/interviews/SelectionPopover.tsx": 1,
-    "components/surrogates/profile/ProfileCard/SaveBar.tsx": 1,
-    "components/tasks/ApprovalTaskActions.tsx": 1,
-    "components/tasks/TaskEditModal.tsx": 1, // scheduling-8
 }
 
 describe("default-variant background policy", () => {

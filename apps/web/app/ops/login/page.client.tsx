@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { buttonVariants } from '@/components/ui/button-variants';
+import Link from '@/components/app-link';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 import { getAuthApiBase } from '@/lib/auth-utils';
 
@@ -11,17 +13,15 @@ const ERROR_MESSAGES: Record<string, string> = {
     auth_failed: 'Authentication failed. Please try again.',
     domain_not_allowed: 'Your email domain is not authorized.',
     no_invite: 'No active invitation found for your email.',
+    not_platform_admin: 'This account does not have platform access.',
     state_expired: 'Session expired. Please try again.',
     state_mismatch: 'Security verification failed. Please try again.',
 };
 
-export default function OpsLoginPageClient() {
+export default function OpsLoginPageClient({ errorCode = null }: { errorCode?: string | null }) {
     const [redirectStatus, setRedirectStatus] = useState<"idle" | "redirecting">("idle");
-    const [errorMessage] = useState<string | null>(() => {
-        if (typeof window === 'undefined') return null;
-        const errorCode = new URLSearchParams(window.location.search).get('error');
-        return errorCode ? ERROR_MESSAGES[errorCode] || 'An error occurred.' : null;
-    });
+    const errorMessage = errorCode ? ERROR_MESSAGES[errorCode] || 'An error occurred.' : null;
+    const isSignedInWithoutAccess = errorCode === 'not_platform_admin';
 
     const apiBase = getAuthApiBase();
     const isRedirecting = redirectStatus === "redirecting";
@@ -38,30 +38,43 @@ export default function OpsLoginPageClient() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-stone-100 dark:bg-stone-950 p-4">
-            <Card className="w-full max-w-md border-stone-200 dark:border-stone-800 shadow-lg">
+        <div data-ops-console="" className="min-h-screen flex items-center justify-center bg-muted p-4">
+            <Card className="w-full max-w-md shadow-lg">
                 <CardHeader className="text-center space-y-4 pb-4">
-                    <Badge className="mx-auto bg-teal-600 text-white px-3 py-1 text-xs tracking-widest font-semibold">
+                    <Badge className="mx-auto px-3 py-1 text-xs tracking-widest font-semibold">
                         OPS CONSOLE
                     </Badge>
-                    <div className="size-14 mx-auto rounded-xl bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center">
-                        <ShieldCheck className="size-8 text-teal-600" strokeWidth={1.5} />
+                    <div className="size-14 mx-auto rounded-xl bg-muted border border-border flex items-center justify-center">
+                        <ShieldCheck className="size-8 text-primary" strokeWidth={1.5} aria-hidden="true" />
                     </div>
-                    <CardTitle className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
+                    <CardTitle className="text-2xl font-semibold text-foreground">
                         Platform Administration
                     </CardTitle>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
                     {errorMessage && (
-                        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-lg text-red-700 dark:text-red-300 text-sm">
-                            <AlertCircle className="size-4 flex-shrink-0" />
+                        <div
+                            role="alert"
+                            className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-lg text-red-700 dark:text-red-300 text-sm"
+                        >
+                            <AlertCircle className="size-4 flex-shrink-0" aria-hidden="true" />
                             <span>{errorMessage}</span>
                         </div>
                     )}
 
+                    {isSignedInWithoutAccess && (
+                        <Link
+                            href="/dashboard"
+                            className={buttonVariants({ className: 'w-full py-6 text-base font-semibold' })}
+                        >
+                            Back to app
+                        </Link>
+                    )}
+
                     <Button
-                        className="w-full py-6 bg-stone-900 hover:bg-stone-800 dark:bg-stone-100 dark:hover:bg-stone-200 dark:text-stone-900"
+                        className="w-full py-6 text-base font-semibold"
+                        variant={isSignedInWithoutAccess ? 'outline' : 'default'}
                         onClick={handleGoogleLogin}
                         disabled={isRedirecting}
                     >
@@ -86,7 +99,7 @@ export default function OpsLoginPageClient() {
                         {isRedirecting ? 'Signing In...' : 'Sign in with Google'}
                     </Button>
 
-                    <p className="text-xs text-center text-stone-400 dark:text-stone-500">
+                    <p className="text-xs text-center text-muted-foreground">
                         Requires platform administrator access
                     </p>
                 </CardContent>

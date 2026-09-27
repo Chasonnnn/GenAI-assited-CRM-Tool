@@ -1,0 +1,12 @@
+/*
+ * Ops console accent. Scoped on the document root while an ops page is mounted, so dialogs,
+ * menus and popovers rendered in portals use the same teal primary as the page.
+ * Specificity (0,2,0) beats both `:root` and `.dark` in globals.css, so one rule covers both themes.
+ */
+:root:has([data-ops-console]) {
+  --primary: oklch(0.6 0.118 184.704);
+  --primary-foreground: oklch(0.985 0 89.876);
+  --primary-gradient-from: oklch(0.6 0.118 184.704);
+  --primary-gradient-to: oklch(0.511 0.096 186.391);
+  --ring: oklch(0.6 0.118 184.704);
+}

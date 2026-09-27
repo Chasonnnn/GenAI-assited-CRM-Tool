@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { renderToString } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
@@ -110,6 +110,8 @@ describe("agency time rendering", () => {
                     created_at: "2026-05-01T00:00:00.000Z",
                     updated_at: "2026-05-01T00:00:00.000Z",
                 }}
+                subscriptionStatus="found"
+                onRetry={vi.fn()}
                 notesDraft=""
                 notesDirty={false}
                 notesSaving={false}
@@ -122,5 +124,48 @@ describe("agency time rendering", () => {
 
         expect(screen.getByText("June 3, 2026")).toBeInTheDocument()
         expect(screen.getByText("June 4, 2026")).toBeInTheDocument()
+        expect(screen.getByText("Professional")).toBeInTheDocument()
+        expect(screen.getByText("Active")).toBeInTheDocument()
+    })
+
+    const subscriptionHandlers = {
+        notesDraft: "",
+        notesDirty: false,
+        notesSaving: false,
+        onNotesChange: vi.fn(),
+        onSaveNotes: vi.fn(),
+        onExtendSubscription: vi.fn(),
+        onToggleAutoRenew: vi.fn(),
+    }
+
+    it("shows an empty state when the agency has no subscription record", () => {
+        render(
+            <AgencySubscriptionTab
+                subscription={null}
+                subscriptionStatus="missing"
+                onRetry={vi.fn()}
+                {...subscriptionHandlers}
+            />,
+        )
+
+        expect(screen.getByRole("heading", { name: "No subscription record" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument()
+    })
+
+    it("shows a retryable error when the subscription fails to load", () => {
+        const onRetry = vi.fn()
+        render(
+            <AgencySubscriptionTab
+                subscription={null}
+                subscriptionStatus="error"
+                onRetry={onRetry}
+                {...subscriptionHandlers}
+            />,
+        )
+
+        expect(screen.getByRole("heading", { name: "Couldn't load subscription" })).toBeInTheDocument()
+        expect(screen.queryByText("No subscription record")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(onRetry).toHaveBeenCalledOnce()
     })
 })

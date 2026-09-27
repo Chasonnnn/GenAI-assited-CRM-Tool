@@ -310,12 +310,13 @@ export function AgencyInvitesTab({
                                                 <AlertDialog>
                                                     <AlertDialogTrigger
                                                         className={buttonVariants({
-                                                            variant: "ghost",
+                                                            variant: "destructive-ghost",
                                                             size: "sm",
-                                                            className: "text-destructive",
+                                                            className: "text-muted-foreground",
                                                         })}
+                                                        aria-label={`Revoke invite for ${invite.email}`}
                                                     >
-                                                        <Ban className="size-4" />
+                                                        <Ban className="size-4" aria-hidden="true" />
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
@@ -328,8 +329,8 @@ export function AgencyInvitesTab({
                                                         <AlertDialogFooter>
                                                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                                                             <AlertDialogAction
+                                                                variant="destructive"
                                                                 onClick={() => onRevokeInvite(invite.id)}
-                                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                                             >
                                                                 Revoke
                                                             </AlertDialogAction>

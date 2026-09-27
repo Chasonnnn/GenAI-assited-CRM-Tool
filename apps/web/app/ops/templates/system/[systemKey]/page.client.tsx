@@ -6,19 +6,9 @@ import { useParams, useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
 import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
 import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
     Dialog,
     DialogContent,
@@ -26,8 +16,23 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { EmptyState } from "@/components/empty-state"
+import { ValidatedField } from "@/components/ui/field"
+import { PageHeader } from "@/components/page-header"
+import { SaveStatus, type SaveStatusState } from "@/components/ui/save-bar"
+import { TestSendAgencySelect, useTestSendAgencies } from "@/components/ops/templates/TestSendAgencySelect"
+import { getSubscriptionPlanLabel } from "@/components/ops/agencies/agency-constants"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import { useFormValidation } from "@/lib/forms/use-form-validation"
+import { validateEmail, validateRequired } from "@/lib/forms/validators"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -40,6 +45,8 @@ import {
     ArrowLeftIcon,
     EyeIcon,
     Loader2Icon,
+    MoreHorizontalIcon,
+    RotateCcwIcon,
     SaveIcon,
     SearchIcon,
     SendIcon,
@@ -65,7 +72,6 @@ import {
     useUpdatePlatformSystemEmailTemplate,
 } from "@/lib/hooks/use-platform-templates"
 import {
-    listOrganizations,
     listMembers,
     type OrganizationSummary,
     type OrgMember,
@@ -416,7 +422,7 @@ function SystemTemplateCampaignRecipientCard({
                                             }
                                         />
                                         <div>
-                                            <div className="font-medium text-stone-900 dark:text-stone-100">
+                                            <div className="font-medium text-foreground">
                                                 {member.display_name || member.email}
                                             </div>
                                             <div className="text-xs text-muted-foreground">
@@ -564,12 +570,18 @@ export default function PlatformSystemEmailTemplatePage() {
     const [testEmail, setTestEmail] = useState("")
     const [testOrgId, setTestOrgId] = useState("")
     const [saving, setSaving] = useState(false)
+    const [saveResult, setSaveResult] = useState<"idle" | "saved" | "error">("idle")
     const [sending, setSending] = useState(false)
     const [brandingSaving, setBrandingSaving] = useState(false)
     const [campaignOpen, setCampaignOpen] = useState(false)
+    const [campaignConfirmOpen, setCampaignConfirmOpen] = useState(false)
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-    const [orgs, setOrgs] = useState<OrganizationSummary[]>([])
-    const [orgsLoading, setOrgsLoading] = useState(false)
+    const {
+        agencies: orgs,
+        isLoading: orgsLoading,
+        isError: orgsError,
+        defaultAgencyId,
+    } = useTestSendAgencies()
     const [orgSearch, setOrgSearch] = useState("")
     const [selectedOrgIds, setSelectedOrgIds] = useState<string[]>([])
     const [orgMembers, setOrgMembers] = useState<Record<string, OrgMember[]>>({})
@@ -578,6 +590,7 @@ export default function PlatformSystemEmailTemplatePage() {
     const [campaignSending, setCampaignSending] = useState(false)
     const [campaignFailureSummary, setCampaignFailureSummary] = useState<string | null>(null)
     const logoFileInputRef = useRef<HTMLInputElement | null>(null)
+    const testSendCardRef = useRef<HTMLFormElement | null>(null)
     const testSendOccurrenceIdRef = useRef<string | null>(null)
     const campaignOccurrenceIdRef = useRef<string | null>(null)
 
@@ -651,18 +664,34 @@ export default function PlatformSystemEmailTemplatePage() {
         : []
     const fromEmailError = getFromEmailError(fromEmail)
     const logoPreviewUrl = getLogoPreviewUrl(logoUrl)
+    const isDirty =
+        subject !== sourceDraft.subject ||
+        fromEmail !== sourceDraft.fromEmail ||
+        body !== sourceDraft.body ||
+        isActive !== sourceDraft.isActive
+    const saveStatus: SaveStatusState = saving
+        ? "saving"
+        : saveResult === "error"
+          ? "error"
+          : saveResult === "saved" && !isDirty
+            ? "saved"
+            : "idle"
 
-    const loadOrganizations = async () => {
-        setOrgsLoading(true)
-        const finishLoading = () => setOrgsLoading(false)
-        try {
-            const data = await listOrganizations({ limit: 200 })
-            setOrgs(data.items)
-            finishLoading()
-        } catch {
-            toast.error("Failed to load organizations")
-            finishLoading()
-        }
+    // With exactly one agency, test sends default to it.
+    const effectiveTestOrgId = testOrgId || defaultAgencyId
+    const testSendValidation = useFormValidation({
+        values: { agency: effectiveTestOrgId, email: testEmail },
+        validate: (values) => ({
+            agency: validateRequired(values.agency, "Select an agency."),
+            email: validateEmail(values.email, { requiredMessage: "Enter a test email." }),
+        }),
+    })
+
+    const focusTestSend = () => {
+        const form = testSendCardRef.current
+        if (!form) return
+        form.scrollIntoView({ behavior: "smooth", block: "nearest" })
+        form.querySelector<HTMLElement>("button, input")?.focus({ preventScroll: true })
     }
 
     const handleCampaignOpenChange = (open: boolean) => {
@@ -670,7 +699,6 @@ export default function PlatformSystemEmailTemplatePage() {
         if (open) {
             campaignOccurrenceIdRef.current = createCampaignOccurrenceId()
             setCampaignFailureSummary(null)
-            void loadOrganizations()
         }
     }
 
@@ -767,7 +795,15 @@ export default function PlatformSystemEmailTemplatePage() {
         })
     }
 
-    const totalSelectedUsers = Object.values(selectedUsersByOrg).reduce((acc, ids) => acc + ids.length, 0)
+    const campaignTargets: Array<{ org_id: string; user_ids: string[] }> = []
+    for (const orgId of selectedOrgIds) {
+        const userIds = selectedUsersByOrg[orgId] ?? []
+        if (userIds.length > 0) {
+            campaignTargets.push({ org_id: orgId, user_ids: userIds })
+        }
+    }
+    const totalSelectedUsers = campaignTargets.reduce((acc, target) => acc + target.user_ids.length, 0)
+    const campaignOrgCount = campaignTargets.length
 
     const hasComplexHtml = hasComplexEmailHtml(body)
 
@@ -860,24 +896,34 @@ export default function PlatformSystemEmailTemplatePage() {
             })
             currentVersionRef.current = { systemKey, version: updated.current_version }
             testSendOccurrenceIdRef.current = null
+            // Show the saved (server-sanitized) content; the refetched template then matches it.
+            setTemplateDraftOverride({ systemKey, draft: buildTemplateDraft(updated) })
+            setSaveResult("saved")
             toast.success("System template updated")
             finishSaving()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to update template")
+            setSaveResult("error")
+            const message = getActionErrorMessage(error, "Couldn't save template.")
+            if (message) toast.error(message)
             finishSaving()
         }
     }
 
+    const isBuiltinTemplate = template?.is_builtin ?? false
+
+    // Built-in keys are recreated from defaults on the next read, so deleting one resets it.
     const handleDeleteTemplate = async () => {
-        if (deleteTemplate.isPending) return
-        try {
-            await deleteTemplate.mutateAsync({ systemKey })
-            toast.success("System template deleted")
-            setShowDeleteDialog(false)
-            push("/ops/templates?tab=system")
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to delete system template")
+        await deleteTemplate.mutateAsync({ systemKey })
+        if (isBuiltinTemplate) {
+            setTemplateDraftOverride(null)
+            setSaveResult("idle")
+            currentVersionRef.current = null
+            toast.success("System template reset to default")
+            void refetchTemplate()
+            return
         }
+        toast.success("System template deleted")
+        push("/ops/templates?tab=system")
     }
 
     const handleSaveBranding = async () => {
@@ -890,7 +936,8 @@ export default function PlatformSystemEmailTemplatePage() {
             toast.success("Platform branding updated")
             finishSaving()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to update branding")
+            const message = getActionErrorMessage(error, "Couldn't update branding.")
+            if (message) toast.error(message)
             finishSaving()
         }
     }
@@ -921,20 +968,13 @@ export default function PlatformSystemEmailTemplatePage() {
             toast.success("Logo uploaded")
             clearInput()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to upload logo")
+            const message = getActionErrorMessage(error, "Couldn't upload logo.")
+            if (message) toast.error(message)
             clearInput()
         }
     }
 
-    const handleSendTest = async () => {
-        if (!testEmail.trim()) {
-            toast.error("Test email is required")
-            return
-        }
-        if (!testOrgId.trim()) {
-            toast.error("Organization ID is required for test sends")
-            return
-        }
+    const handleSendTest = async (values: { agency: string; email: string }) => {
         setSending(true)
         const finishSending = () => setSending(false)
         try {
@@ -944,8 +984,8 @@ export default function PlatformSystemEmailTemplatePage() {
             const result = await sendTest.mutateAsync({
                 systemKey,
                 payload: {
-                    to_email: testEmail.trim(),
-                    org_id: testOrgId.trim(),
+                    to_email: values.email.trim(),
+                    org_id: values.agency,
                     idempotency_key: testSendOccurrenceId,
                 },
             })
@@ -958,24 +998,15 @@ export default function PlatformSystemEmailTemplatePage() {
             toast.success("Test email queued")
             finishSending()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to send test email")
+            const message = getActionErrorMessage(error, "Couldn't send test email.")
+            if (message) toast.error(message)
             finishSending()
         }
     }
 
     const handleSendCampaign = async () => {
-        const targets: Array<{ org_id: string; user_ids: string[] }> = []
-        for (const orgId of selectedOrgIds) {
-            const userIds = selectedUsersByOrg[orgId] ?? []
-            if (userIds.length > 0) {
-                targets.push({ org_id: orgId, user_ids: userIds })
-            }
-        }
-
-        if (targets.length === 0) {
-            toast.error("Select at least one recipient to send the campaign")
-            return
-        }
+        const targets = campaignTargets
+        if (targets.length === 0) return
 
         setCampaignSending(true)
         const finishSending = () => setCampaignSending(false)
@@ -1008,7 +1039,8 @@ export default function PlatformSystemEmailTemplatePage() {
             setCampaignOpen(false)
             finishSending()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to send campaign")
+            const message = getActionErrorMessage(error, "Couldn't send campaign.")
+            if (message) toast.error(message)
             finishSending()
         }
     }
@@ -1033,68 +1065,95 @@ export default function PlatformSystemEmailTemplatePage() {
         )
     }
 
-    return (
-        <div className="p-6 space-y-6">
-            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete system template?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This deletes{" "}
-                            <span className="font-medium text-foreground">{template.name}</span>. Built-in system templates will be restored to their default content automatically.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={deleteTemplate.isPending}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleDeleteTemplate}
-                            disabled={deleteTemplate.isPending}
-                            className="bg-destructive text-white hover:bg-destructive/90"
-                        >
-                            Delete
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+    const headerBusy = deleteTemplate.isPending || saving || sending || brandingSaving || campaignSending
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <Button variant="ghost" onClick={() => push("/ops/templates?tab=system")}>
-                        <ArrowLeftIcon className="mr-2 size-4" />
-                        Back to templates
-                    </Button>
-                    <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
-                        {template.name}
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                        System key: <span className="font-mono">{template.system_key}</span>
-                    </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        variant="destructive"
-                        onClick={() => setShowDeleteDialog(true)}
-                        disabled={
-                            deleteTemplate.isPending ||
-                            saving ||
-                            sending ||
-                            brandingSaving ||
-                            campaignSending
-                        }
-                    >
-                        {deleteTemplate.isPending ? (
-                            <Loader2Icon className="mr-2 size-4 animate-spin" />
-                        ) : (
-                            <Trash2Icon className="mr-2 size-4" />
-                        )}
-                        Delete
-                    </Button>
+    return (
+        <div>
+            {isBuiltinTemplate ? (
+                <ConfirmDialog
+                    open={showDeleteDialog}
+                    onOpenChange={setShowDeleteDialog}
+                    title={`Reset ${template.name} to default?`}
+                    description="Your changes to the subject, sender and body are replaced with the built-in content."
+                    confirmLabel="Reset to default"
+                    confirmVariant="default"
+                    errorFallback="Couldn't reset template."
+                    onConfirm={handleDeleteTemplate}
+                />
+            ) : (
+                <ConfirmDialog
+                    open={showDeleteDialog}
+                    onOpenChange={setShowDeleteDialog}
+                    title={`Delete ${template.name}?`}
+                    description="This system email is removed for every organization."
+                    confirmLabel="Delete"
+                    errorFallback="Couldn't delete template."
+                    onConfirm={handleDeleteTemplate}
+                />
+            )}
+
+            <PageHeader
+                title={template.name}
+                back={{ href: "/ops/templates?tab=system", label: "Back to templates" }}
+                sticky
+                className="top-14"
+                meta={
+                    <>
+                        <Badge variant="outline" className="font-mono text-xs font-normal">
+                            {template.system_key}
+                        </Badge>
+                        <SaveStatus state={saveStatus} />
+                    </>
+                }
+                actions={
+                    <>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                render={<Button variant="outline" size="icon" aria-label="More actions" />}
+                                disabled={headerBusy}
+                            >
+                                <MoreHorizontalIcon aria-hidden="true" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={focusTestSend}>
+                                    <SendIcon aria-hidden="true" />
+                                    Send test
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleCampaignOpenChange(true)}>
+                                    <UsersIcon aria-hidden="true" />
+                                    Send campaign
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                {isBuiltinTemplate ? (
+                                    <DropdownMenuItem onClick={() => setShowDeleteDialog(true)}>
+                                        <RotateCcwIcon aria-hidden="true" />
+                                        Reset to default
+                                    </DropdownMenuItem>
+                                ) : (
+                                    <DropdownMenuItem
+                                        variant="destructive"
+                                        onClick={() => setShowDeleteDialog(true)}
+                                    >
+                                        <Trash2Icon aria-hidden="true" />
+                                        Delete
+                                    </DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button onClick={handleSave} disabled={saving}>
+                            {saving ? (
+                                <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                            ) : (
+                                <SaveIcon className="size-4" aria-hidden="true" />
+                            )}
+                            Save
+                        </Button>
+                    </>
+                }
+            />
+
                     <Dialog open={campaignOpen} onOpenChange={handleCampaignOpenChange}>
-                        <DialogTrigger className={buttonVariants({ variant: "outline" })}>
-                            <UsersIcon className="mr-2 size-4" />
-                            Send campaign
-                        </DialogTrigger>
-                        <DialogContent className="max-w-3xl">
+                        <DialogContent size="3xl">
                             <DialogHeader>
                                 <DialogTitle>Send campaign</DialogTitle>
                                 <DialogDescription>
@@ -1142,6 +1201,10 @@ export default function PlatformSystemEmailTemplatePage() {
                                                     <Loader2Icon className="size-4 animate-spin" />
                                                     Loading organizations&hellip;
                                                 </div>
+                                            ) : orgsError ? (
+                                                <div className="p-4 text-sm text-destructive">
+                                                    Couldn&apos;t load organizations.
+                                                </div>
                                             ) : filteredOrgs.length === 0 ? (
                                                 <div className="p-4 text-sm text-muted-foreground">
                                                     No organizations match your search.
@@ -1153,7 +1216,7 @@ export default function PlatformSystemEmailTemplatePage() {
                                                         return (
                                                             <label
                                                                 key={org.id}
-                                                                className="flex items-center justify-between gap-3 p-3 text-sm hover:bg-stone-50 dark:hover:bg-stone-800/40"
+                                                                className="flex items-center justify-between gap-3 p-3 text-sm hover:bg-muted/50"
                                                             >
                                                                 <div className="flex items-center gap-3">
                                                                     <Checkbox
@@ -1163,7 +1226,7 @@ export default function PlatformSystemEmailTemplatePage() {
                                                                         }
                                                                     />
                                                                     <div>
-                                                                        <div className="font-medium text-stone-900 dark:text-stone-100">
+                                                                        <div className="font-medium text-foreground">
                                                                             {org.name}
                                                                         </div>
                                                                         <div className="text-xs text-muted-foreground">
@@ -1172,7 +1235,7 @@ export default function PlatformSystemEmailTemplatePage() {
                                                                     </div>
                                                                 </div>
                                                                 <Badge variant="outline" className="text-xs">
-                                                                    {org.subscription_plan}
+                                                                    {getSubscriptionPlanLabel(org.subscription_plan)}
                                                                 </Badge>
                                                             </label>
                                                         )
@@ -1195,33 +1258,37 @@ export default function PlatformSystemEmailTemplatePage() {
                             </div>
                             <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
                                 <span className="text-xs text-muted-foreground">
-                                    {totalSelectedUsers} recipients selected
+                                    {totalSelectedUsers} {totalSelectedUsers === 1 ? "recipient" : "recipients"} selected
                                 </span>
                                 <div className="flex gap-2">
                                     <Button variant="outline" onClick={() => setCampaignOpen(false)}>
                                         Cancel
                                     </Button>
-                                    <Button onClick={handleSendCampaign} disabled={campaignSending}>
-                                        {campaignSending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                                    <Button
+                                        onClick={() => setCampaignConfirmOpen(true)}
+                                        disabled={campaignSending || totalSelectedUsers === 0}
+                                    >
+                                        {campaignSending && <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />}
                                         Send campaign
                                     </Button>
                                 </div>
                             </DialogFooter>
+                            <ConfirmDialog
+                                open={campaignConfirmOpen}
+                                onOpenChange={setCampaignConfirmOpen}
+                                title={`Send to ${campaignOrgCount} ${campaignOrgCount === 1 ? "organization" : "organizations"}?`}
+                                description={`${template.name} is sent to ${totalSelectedUsers} ${totalSelectedUsers === 1 ? "recipient" : "recipients"}.`}
+                                confirmLabel="Send campaign"
+                                confirmVariant="default"
+                                confirmIcon={<SendIcon aria-hidden="true" />}
+                                errorFallback="Couldn't send campaign."
+                                onConfirm={handleSendCampaign}
+                            />
                         </DialogContent>
                     </Dialog>
-                    <Button onClick={handleSave} disabled={saving}>
-                        {saving ? (
-                            <Loader2Icon className="mr-2 size-4 animate-spin" />
-                        ) : (
-                            <SaveIcon className="mr-2 size-4" />
-                        )}
-                        Save changes
-                    </Button>
-                </div>
-            </div>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-                <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-6 p-6 xl:grid-cols-[1.1fr_0.9fr]">
+                <div className="min-w-0 space-y-6">
                     <Card>
                         <CardHeader>
                             <CardTitle>Platform Branding</CardTitle>
@@ -1434,8 +1501,9 @@ export default function PlatformSystemEmailTemplatePage() {
                                     onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
                                     onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
                                     onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
+                                    aria-label="HTML body"
                                     placeholder="Paste or edit the HTML for this template..."
-                                    className="min-h-[280px] font-mono text-xs leading-relaxed"
+                                    className="min-h-[280px] max-h-[60vh] overflow-y-auto font-mono text-xs leading-relaxed"
                                 />
                             )}
                             {effectiveEditorMode === "visual" && hasComplexHtml && (
@@ -1471,68 +1539,104 @@ export default function PlatformSystemEmailTemplatePage() {
                         </CardContent>
                     </Card>
 
+                </div>
+
+                <div className="min-w-0 space-y-6 xl:sticky xl:top-36 xl:max-h-[calc(100dvh-10rem)] xl:self-start xl:overflow-y-auto">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <EyeIcon className="size-4" aria-hidden="true" />
+                                Preview
+                            </CardTitle>
+                            <CardDescription>Rendered using sample values.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {body.trim() ? (
+                                // The preview mirrors an email client, so it stays on a white surface in dark mode.
+                                // Fixed-width email tables scroll inside it instead of widening the page.
+                                <div className="overflow-x-auto rounded-md border border-stone-200 bg-white shadow-sm">
+                                    <TrustedSanitizedHtmlContent
+                                        html={previewHtml}
+                                        className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
+                                    />
+                                </div>
+                            ) : (
+                                <EmptyState
+                                    icon={EyeIcon}
+                                    title="No content yet"
+                                    headingLevel={3}
+                                    className="rounded-md border border-dashed"
+                                />
+                            )}
+                        </CardContent>
+                    </Card>
+
                     <Card>
                         <CardHeader>
                             <CardTitle>Send test email</CardTitle>
-                            <CardDescription>
-                                Render this template for a specific organization and send to a test inbox.
-                            </CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="space-y-2">
-                                <Label htmlFor="test-org-id">Organization ID</Label>
-                                <Input
-                                    id="test-org-id"
-                                    value={testOrgId}
-                                    onChange={(event) => {
-                                        testSendOccurrenceIdRef.current = null
-                                        setTestOrgId(event.target.value)
-                                    }}
-                                    placeholder="UUID of an organization"
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="test-email">Test email</Label>
-                                <Input
-                                    id="test-email"
-                                    type="email"
-                                    value={testEmail}
-                                    onChange={(event) => {
-                                        testSendOccurrenceIdRef.current = null
-                                        setTestEmail(event.target.value)
-                                    }}
-                                    placeholder="test@example.com"
-                                />
-                            </div>
-                            <Button onClick={handleSendTest} disabled={sending}>
-                                {sending ? (
-                                    <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                ) : (
-                                    <SendIcon className="mr-2 size-4" />
-                                )}
-                                Send test
-                            </Button>
+                        <CardContent>
+                            <form
+                                ref={testSendCardRef}
+                                noValidate
+                                onSubmit={testSendValidation.handleSubmit(handleSendTest)}
+                                className="space-y-3"
+                            >
+                                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                                    <ValidatedField
+                                        id="test-agency"
+                                        label="Agency"
+                                        error={testSendValidation.errorFor("agency")}
+                                    >
+                                        {(control) => (
+                                            <TestSendAgencySelect
+                                                id={control.id}
+                                                agencies={orgs}
+                                                isLoading={orgsLoading}
+                                                isError={orgsError}
+                                                value={effectiveTestOrgId}
+                                                onValueChange={(value) => {
+                                                    testSendOccurrenceIdRef.current = null
+                                                    setTestOrgId(value)
+                                                    testSendValidation.touch("agency")
+                                                }}
+                                                invalid={control["aria-invalid"] === true}
+                                                describedBy={control["aria-describedby"]}
+                                            />
+                                        )}
+                                    </ValidatedField>
+                                    <ValidatedField
+                                        id="test-email"
+                                        label="Test email"
+                                        error={testSendValidation.errorFor("email")}
+                                    >
+                                        {(control) => (
+                                            <Input
+                                                {...control}
+                                                type="email"
+                                                value={testEmail}
+                                                onChange={(event) => {
+                                                    testSendOccurrenceIdRef.current = null
+                                                    setTestEmail(event.target.value)
+                                                }}
+                                                onBlur={() => testSendValidation.touch("email")}
+                                                placeholder="test@example.com"
+                                            />
+                                        )}
+                                    </ValidatedField>
+                                </div>
+                                <Button type="submit" disabled={sending}>
+                                    {sending ? (
+                                        <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                                    ) : (
+                                        <SendIcon className="size-4" aria-hidden="true" />
+                                    )}
+                                    Send test
+                                </Button>
+                            </form>
                         </CardContent>
                     </Card>
                 </div>
-
-                <Card className="h-fit">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <EyeIcon className="size-4" />
-                            Preview
-                        </CardTitle>
-                        <CardDescription>Rendered using sample values.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="rounded-md border border-stone-200 bg-white shadow-sm">
-                            <TrustedSanitizedHtmlContent
-                                html={previewHtml}
-                                className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
-                            />
-                        </div>
-                    </CardContent>
-                </Card>
             </div>
         </div>
     )
