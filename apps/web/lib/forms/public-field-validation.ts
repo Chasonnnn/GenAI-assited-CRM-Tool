@@ -14,7 +14,7 @@ function getAnchoredPattern(pattern: string): string {
     return pattern.startsWith("^") && pattern.endsWith("$") ? pattern : `^(?:${pattern})$`
 }
 
-function isValidPublicPhone(value: string): boolean {
+export function isValidPublicPhone(value: string): boolean {
     const digits = value.replace(/\D/g, "")
     return digits.length === 10 || (digits.length === 11 && digits.startsWith("1"))
 }
