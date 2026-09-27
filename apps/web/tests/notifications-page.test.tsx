@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import NotificationsPage from '../app/(app)/notifications/page'
 
 const mockPush = vi.fn()
@@ -144,6 +144,8 @@ describe('NotificationsPage', () => {
                 ],
             })
         )
+        // Reopening before the first popup unmounts lets the click hit a stale option under load.
+        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
 
         fireEvent.mouseDown(screen.getByRole('combobox'))
         const allOption = await screen.findByRole('option', { name: 'All' })
