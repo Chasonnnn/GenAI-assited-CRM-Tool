@@ -1,7 +1,6 @@
-"use client"
+import { redirect } from "next/navigation"
 
-import WorkflowTemplatesPanel from "@/components/automation/workflow-templates-panel"
-
+// Workflow templates live in the /automation Workflow Templates tab; this route keeps old links working.
 export default function TemplatesPage() {
-    return <WorkflowTemplatesPanel />
+    redirect("/automation?scope=templates")
 }
