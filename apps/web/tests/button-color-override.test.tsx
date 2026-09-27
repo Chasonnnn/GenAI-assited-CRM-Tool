@@ -139,7 +139,6 @@ function isDefaultVariant(variant: string | true | undefined): boolean {
 // Existing call sites, per file. Remove a file's entry when its buttons use a variant; the count
 // may only go down.
 const DEFAULT_VARIANT_BG_ALLOWLIST: Readonly<Record<string, number>> = {
-    "app/(app)/automation/forms/page.tsx": 1,
     "app/invite/[id]/page.client.tsx": 1,
     "app/login/LoginPageClient.tsx": 1,
 }

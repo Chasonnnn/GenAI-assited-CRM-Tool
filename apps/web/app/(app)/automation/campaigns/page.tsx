@@ -831,7 +831,7 @@ function CampaignsTableRow({
                         <CheckCircle2Icon className="size-4" />
                         {campaign.sent_count}
                     </span>
-                    <span className="flex items-center gap-1 text-red-600">
+                    <span className="flex items-center gap-1 text-destructive">
                         <XCircleIcon className="size-4" />
                         {campaign.failed_count}
                     </span>

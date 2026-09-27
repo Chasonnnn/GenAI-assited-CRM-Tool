@@ -743,7 +743,7 @@ function TaskRow({ task, isOverdue = false }: { task: TaskListItem; isOverdue?: 
             <span
                 className={cn(
                     "text-xs",
-                    isOverdue ? "text-red-600/80" : "text-muted-foreground"
+                    isOverdue ? "text-destructive" : "text-muted-foreground"
                 )}
             >
                 {dueLabel}
@@ -936,7 +936,7 @@ function ActivityTimelineNextSteps({
             <div className="space-y-3">
                 {overdueTasks.length > 0 ? (
                     <div className="space-y-1">
-                        <span className="text-xs font-medium text-red-600">Overdue</span>
+                        <span className="text-xs font-medium text-destructive">Overdue</span>
                         {overdueTasks.map((task) => (
                             <TaskRow key={task.id} task={task} isOverdue />
                         ))}

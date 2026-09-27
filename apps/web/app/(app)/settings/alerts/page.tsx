@@ -24,9 +24,10 @@ import { PageHeader } from "@/components/page-header"
 import { SettingsPageGate } from "../settings-page-gate"
 
 const severityConfig = {
-    critical: { icon: XCircleIcon, color: "text-red-600 bg-red-100 dark:bg-red-900/30", badge: "destructive" },
-    error: { icon: AlertCircleIcon, color: "text-orange-600 bg-orange-100 dark:bg-orange-900/30", badge: "destructive" },
-    warn: { icon: AlertTriangleIcon, color: "text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30", badge: "warning" },
+    // Dark tints stay at 950/30 so the destructive "open" badge on top keeps 4.5:1.
+    critical: { icon: XCircleIcon, color: "text-red-600 bg-red-100 dark:bg-red-950/30 dark:text-red-400", badge: "destructive" },
+    error: { icon: AlertCircleIcon, color: "text-orange-600 bg-orange-100 dark:bg-orange-950/30 dark:text-orange-400", badge: "destructive" },
+    warn: { icon: AlertTriangleIcon, color: "text-yellow-600 bg-yellow-100 dark:bg-yellow-950/30", badge: "warning" },
 } as const
 
 const isSeverityKey = (value: string): value is keyof typeof severityConfig =>

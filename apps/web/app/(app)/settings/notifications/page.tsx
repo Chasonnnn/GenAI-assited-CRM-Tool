@@ -66,7 +66,7 @@ function BrowserNotificationsCard() {
                 )
             case "denied":
                 return (
-                    <div className="flex items-center gap-2 text-red-600">
+                    <div className="flex items-center gap-2 text-destructive">
                         <BellOff className="size-4" aria-hidden="true" />
                         <span className="text-sm font-medium">Blocked</span>
                     </div>

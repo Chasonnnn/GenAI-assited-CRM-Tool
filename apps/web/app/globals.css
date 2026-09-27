@@ -162,7 +162,10 @@
   --accent: oklch(0.218 0 89.876);
   /* #1A1A1A */
   --accent-foreground: oklch(0.97 0 89.876);
-  --destructive: oklch(0.60 0.22 25);
+  /* Light enough for text on dark cards (6.7:1) and on the /20 badge and hover tints (4.5:1 or
+     more). Solid fills must use it at 60% (the destructive button's dark:bg-destructive/60) to keep
+     white text at 5.4:1; a full fill gives 2.6:1. */
+  --destructive: oklch(0.73 0.17 22);
   --destructive-foreground: oklch(0.985 0 89.876);
   /* Lighter success reads as text on dark surfaces; filled buttons use it at 60%. */
   --success: oklch(0.72 0.17 150);

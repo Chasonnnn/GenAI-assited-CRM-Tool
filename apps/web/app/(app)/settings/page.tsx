@@ -286,7 +286,7 @@ function OrganizationLogoField({
                 <Button unstyled
                   type="button"
                   disabled={deletePending}
-                  className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 dark:bg-destructive/60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                   aria-label="Remove organization logo"
                 >
                   <TrashIcon className="size-3" aria-hidden="true" />
@@ -673,7 +673,7 @@ function ProfileSection() {
                 <Button unstyled
                   type="button"
                   disabled={deleteAvatarMutation.isPending}
-                  className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 dark:bg-destructive/60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                   aria-label="Remove profile photo"
                 >
                   <TrashIcon className="size-3" aria-hidden="true" />
