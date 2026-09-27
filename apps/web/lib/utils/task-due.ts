@@ -31,6 +31,19 @@ function isDueThisWeek(dueDate: string | null): boolean {
     return due > today && due <= endOfWeek && !isDueToday(dueDate) && !isDueTomorrow(dueDate)
 }
 
+/**
+ * Orders tasks by due date, then due time, with untimed tasks after timed ones on the same day
+ * and undated tasks last. Matches the API's list order.
+ */
+export function compareTasksByDueTime(
+    a: { due_date: string | null; due_time: string | null },
+    b: { due_date: string | null; due_time: string | null },
+): number {
+    const dateOrder = (a.due_date ?? "9999-99-99").localeCompare(b.due_date ?? "9999-99-99")
+    if (dateOrder !== 0) return dateOrder
+    return (a.due_time ?? "99:99:99").localeCompare(b.due_time ?? "99:99:99")
+}
+
 export function getDueCategory(task: { due_date: string | null }): DueCategory {
     if (!task.due_date) return "no-date"
     if (isOverdue(task.due_date)) return "overdue"
