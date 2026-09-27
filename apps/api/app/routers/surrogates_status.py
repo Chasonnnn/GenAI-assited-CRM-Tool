@@ -33,9 +33,7 @@ def change_status(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Change surrogate stage (records history, respects access control)."""
-    from datetime import date
-
-    from app.services import pipeline_service, surrogate_status_service
+    from app.services import surrogate_status_service
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
@@ -45,24 +43,6 @@ def change_status(
 
     if surrogate.is_archived:
         raise HTTPException(status_code=400, detail="Cannot change status of archived surrogate")
-
-    target_stage = pipeline_service.get_stage_by_id(db, data.stage_id)
-    is_changing_to_delivered = pipeline_service.stage_matches_key(target_stage, "delivered")
-
-    # Disallow setting Matched directly unless there is an accepted Match row
-    if pipeline_service.stage_matches_key(target_stage, "matched"):
-        from app.services import match_queries
-
-        accepted = match_queries.get_accepted_match_for_surrogate(
-            db=db,
-            org_id=session.org_id,
-            surrogate_id=surrogate.id,
-        )
-        if accepted is None:
-            raise HTTPException(
-                status_code=403,
-                detail="Cannot set to Matched without an accepted Match.",
-            )
 
     try:
         result = surrogate_status_service.change_status(
@@ -77,6 +57,8 @@ def change_status(
             override_availability=data.override_availability,
             override_reason=data.override_reason,
             on_hold_follow_up_months=data.on_hold_follow_up_months,
+            delivery_baby_gender=data.delivery_baby_gender,
+            delivery_baby_weight=data.delivery_baby_weight,
             emit_events=True,
         )
     except ValueError as e:
@@ -84,33 +66,6 @@ def change_status(
             status_code=503 if isinstance(e, CalendarAvailabilityUnavailable) else 403,
             detail=str(e),
         ) from e
-
-    if result["status"] == "applied" and is_changing_to_delivered and result["surrogate"]:
-        updated_fields = False
-
-        if result["surrogate"].actual_delivery_date is None:
-            if data.effective_at:
-                delivery_date = (
-                    data.effective_at.date() if hasattr(data.effective_at, "date") else date.today()
-                )
-            else:
-                delivery_date = date.today()
-            result["surrogate"].actual_delivery_date = delivery_date
-            updated_fields = True
-
-        if data.delivery_baby_gender is not None:
-            gender = data.delivery_baby_gender.strip()
-            result["surrogate"].delivery_baby_gender = gender or None
-            updated_fields = True
-
-        if data.delivery_baby_weight is not None:
-            weight = data.delivery_baby_weight.strip()
-            result["surrogate"].delivery_baby_weight = weight or None
-            updated_fields = True
-
-        if updated_fields:
-            db.commit()
-            db.refresh(result["surrogate"])
 
     surrogate_read = _surrogate_to_read(result["surrogate"], db) if result["surrogate"] else None
     return SurrogateStatusChangeResponse(
