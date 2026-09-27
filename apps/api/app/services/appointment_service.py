@@ -2113,6 +2113,7 @@ def _validate_self_service_appointment_state(
 
 
 def _filter_user_appointments(
+    db: Session,
     query,
     *,
     user_id: UUID,
@@ -2122,12 +2123,22 @@ def _filter_user_appointments(
     q: str | None = None,
     appointment_type_id: UUID | None = None,
     meeting_mode: str | None = None,
+    session=None,
 ):
-    """Scope a query to one user's appointments in one org and apply the list filters."""
+    """Scope a query to one user's appointments in one org and apply the list filters.
+
+    With a session, linked records must also fall inside the member's record scope.
+    """
     query = query.filter(
         Appointment.user_id == user_id,
         Appointment.organization_id == org_id,
     )
+    if session is not None:
+        from app.services import record_scope_service
+
+        query = query.filter(
+            record_scope_service.build_linked_visibility_filter(db, session, Appointment)
+        )
     if date_start:
         start_dt = datetime.combine(date_start, time.min, tzinfo=UTC)
         query = query.filter(Appointment.scheduled_start >= start_dt)
@@ -2160,9 +2171,11 @@ def count_appointments_by_status(
     q: str | None = None,
     appointment_type_id: UUID | None = None,
     meeting_mode: str | None = None,
+    session=None,
 ) -> dict[str, int]:
     """Count one user's appointments per status with the same filters as the list."""
     query = _filter_user_appointments(
+        db,
         db.query(Appointment.status, func.count(Appointment.id)),
         user_id=user_id,
         org_id=org_id,
@@ -2171,6 +2184,7 @@ def count_appointments_by_status(
         q=q,
         appointment_type_id=appointment_type_id,
         meeting_mode=meeting_mode,
+        session=session,
     )
     counts = {status.value: 0 for status in AppointmentStatus}
     for status, count in query.group_by(Appointment.status).all():
@@ -2230,6 +2244,7 @@ def list_appointments(
     if not settings.SCHEDULING_V2_ENABLED:
         expire_pending_appointments(db, org_id=org_id, user_id=user_id)
     query = _filter_user_appointments(
+        db,
         db.query(Appointment),
         user_id=user_id,
         org_id=org_id,
@@ -2238,14 +2253,8 @@ def list_appointments(
         q=q,
         appointment_type_id=appointment_type_id,
         meeting_mode=meeting_mode,
+        session=session,
     )
-
-    if session is not None:
-        from app.services import record_scope_service
-
-        query = query.filter(
-            record_scope_service.build_linked_visibility_filter(db, session, Appointment)
-        )
 
     if status:
         query = query.filter(Appointment.status == status)

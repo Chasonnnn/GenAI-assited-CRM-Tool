@@ -696,6 +696,7 @@ def get_appointment_status_counts(
         q=q,
         appointment_type_id=appointment_type_id,
         meeting_mode=meeting_mode.value if meeting_mode else None,
+        session=session,
     )
     return AppointmentStatusCounts(**counts)
 
