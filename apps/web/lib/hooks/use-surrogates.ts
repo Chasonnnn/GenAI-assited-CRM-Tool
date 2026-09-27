@@ -5,6 +5,7 @@
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as surrogatesApi from '../api/surrogates';
 import type { SurrogateCreatedDatesParams, SurrogateListParams } from '../api/surrogates';
+import { matchKeys } from '../queries/matches';
 
 // Query keys
 export const surrogateKeys = {
@@ -231,6 +232,8 @@ export function useChangeSurrogateStatus() {
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
             void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+            // Stage moves change match accept eligibility and allowed actions.
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all });
         },
     });
 }
@@ -363,6 +366,7 @@ export function useBulkChangeStage() {
         onSuccess: (_result, variables) => {
             invalidateSurrogateScopeCaches(queryClient, variables.surrogate_ids);
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all });
             void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
 
@@ -439,6 +443,7 @@ export function useApplySurrogateMassEditStage() {
             invalidateSurrogateScopeCaches(queryClient);
             void queryClient.invalidateQueries({ queryKey: ['notes', 'list'] });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
             void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
         },
