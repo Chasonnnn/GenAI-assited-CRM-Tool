@@ -17,7 +17,7 @@ import { Loader2Icon } from "lucide-react"
 interface CancelMatchDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
-    onConfirm: (reason?: string) => Promise<void>
+    onConfirm: (reason: string) => Promise<void>
     isPending?: boolean
 }
 
@@ -32,8 +32,9 @@ export function CancelMatchDialog({
 
     const handleConfirm = async () => {
         const trimmed = reason.trim()
+        if (!trimmed) return
         setError(null)
-        try { await onConfirm(trimmed ? trimmed : undefined) } catch (error) { setError(error instanceof Error ? error.message : "Unable to update match"); return }
+        try { await onConfirm(trimmed) } catch (error) { setError(error instanceof Error ? error.message : "Unable to update match"); return }
         setReason("")
         onOpenChange(false)
     }
@@ -63,7 +64,7 @@ export function CancelMatchDialog({
                 <div className="grid gap-4 py-4">
                     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
                     <div className="grid gap-2">
-                        <Label htmlFor="reason">Reason (optional)</Label>
+                        <Label htmlFor="reason">Reason</Label>
                         <Textarea
                             id="reason"
                             placeholder="Why are you cancelling this match?"
@@ -81,7 +82,7 @@ export function CancelMatchDialog({
                     <Button
                         variant="destructive"
                         onClick={handleConfirm}
-                        disabled={isPending}
+                        disabled={isPending || !reason.trim()}
                     >
                         {isPending ? (
                             <>

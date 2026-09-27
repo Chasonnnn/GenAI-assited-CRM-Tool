@@ -2,10 +2,10 @@
 
 import * as React from "react"
 import { useParams } from "next/navigation"
+import { Button } from "@/components/ui/button"
 import { TabsContent } from "@/components/ui/tabs"
 import { SurrogateAiTab } from "@/components/surrogates/detail/SurrogateAiTab"
-import { useSummarizeSurrogate, useDraftEmail } from "@/lib/hooks/use-ai"
-import { useAuth } from "@/lib/auth-context"
+import { useSummarizeSurrogate, useDraftEmail, useAIAvailability } from "@/lib/hooks/use-ai"
 import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import type { DraftEmailResponse, EmailType, SummarizeSurrogateResponse } from "@/lib/api/ai"
 
@@ -14,7 +14,8 @@ export default function SurrogateAiPage() {
     const id = params.id
     const summarizeSurrogateMutation = useSummarizeSurrogate()
     const draftEmailMutation = useDraftEmail()
-    const { user } = useAuth()
+    const availability = useAIAvailability()
+    const aiSettings = availability.data
     const { can } = usePermissionCheck()
 
     const [aiSummary, setAiSummary] = React.useState<SummarizeSurrogateResponse | null>(null)
@@ -22,12 +23,13 @@ export default function SurrogateAiPage() {
     const [selectedEmailType, setSelectedEmailType] = React.useState<EmailType | null>(null)
 
     const handleGenerateSummary = async () => {
+        if (!aiSettings?.is_enabled) return
         const result = await summarizeSurrogateMutation.mutateAsync(id)
         setAiSummary(result)
     }
 
     const handleDraftEmail = async () => {
-        if (!selectedEmailType) return
+        if (!selectedEmailType || !aiSettings?.is_enabled) return
         const result = await draftEmailMutation.mutateAsync({
             surrogate_id: id,
             email_type: selectedEmailType,
@@ -35,11 +37,18 @@ export default function SurrogateAiPage() {
         setAiDraftEmail(result)
     }
 
+    if (availability.isPending) {
+        return <TabsContent value="ai"><p role="status">Loading AI Assistant…</p></TabsContent>
+    }
+    if (availability.isError) {
+        return <TabsContent value="ai"><p role="alert">AI Assistant unavailable</p><Button variant="outline" onClick={() => void availability.refetch()}>Retry</Button></TabsContent>
+    }
+
     return (
         <TabsContent value="ai" className="space-y-4">
             <SurrogateAiTab
-                aiEnabled={Boolean(user?.ai_enabled)}
-                canManageAI={can("manage_ai_settings")}
+                aiEnabled={Boolean(aiSettings?.is_enabled)}
+                canManageAI={can("manage_integrations") && can("manage_ai_settings")}
                 aiSummary={aiSummary}
                 aiDraftEmail={aiDraftEmail}
                 selectedEmailType={selectedEmailType}

@@ -77,6 +77,8 @@ export function DetailView() {
         canEdit,
         canDelete,
         canEditNotes,
+        canTranscribe,
+        canSummarize,
         dialog,
         closeDialog,
         upload,
@@ -161,7 +163,7 @@ export function DetailView() {
                                 Version History
                             </DropdownMenuItem>
                             {aiEnabled && (
-                                <DropdownMenuItem onClick={generateAISummary} disabled={isAISummaryPending}>
+                                <DropdownMenuItem onClick={generateAISummary} disabled={!canSummarize || isAISummaryPending}>
                                     <SparklesIcon className="size-4 mr-2" />
                                     {isAISummaryPending ? "Generating..." : "AI Summary"}
                                 </DropdownMenuItem>
@@ -196,6 +198,7 @@ export function DetailView() {
                 onOpenChange={(open) => !open && closeDialog()}
                 attachments={attachments}
                 canUpload={canEdit}
+                canTranscribe={canTranscribe}
                 onUploadFiles={uploadFiles}
                 uploadError={upload.type === "error" ? upload.message : null}
                 uploadInputRef={uploadInputRef}

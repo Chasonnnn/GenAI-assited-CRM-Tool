@@ -20,7 +20,8 @@ interface InlineEditFieldProps {
     displayClassName?: string
     validate?: (value: string) => string | null
     /** Names the field for the edit, save and cancel controls ("Edit Fax"). */
-    label: string
+    label?: string
+    readOnly?: boolean
 }
 
 type InlineEditFieldState = {
@@ -80,8 +81,10 @@ export function InlineEditField({
     displayClassName,
     validate,
     label,
+    readOnly = false,
 }: InlineEditFieldProps) {
-    const canEdit = useRecordEditing()
+    const editingEnabled = useRecordEditing()
+    const canEdit = editingEnabled && !readOnly
     const [state, dispatch] = React.useReducer(
         inlineEditFieldReducer,
         INITIAL_INLINE_EDIT_FIELD_STATE,
@@ -93,7 +96,7 @@ export function InlineEditField({
     useFocusWhen(inputRef, isEditing, { select: true })
 
     const handleStartEdit = () => {
-        dispatch({ type: "startEdit", value: value || "" })
+        if (canEdit) dispatch({ type: "startEdit", value: value || "" })
     }
 
     const handleCancel = () => {
@@ -143,10 +146,10 @@ export function InlineEditField({
 
     // "-" was the old display-only empty token, not an input hint.
     const inputPlaceholder = placeholder && placeholder !== "-" ? placeholder : undefined
-    const fieldLabel = label.trim() || "field"
+    const fieldLabel = label?.trim() || inputPlaceholder || "field"
     const displayValue = value || <EmptyValue />
 
-    if (!canEdit) return <span className={cn("text-sm", className)}>{displayValue}</span>
+    if (!canEdit) return <span className={cn("text-sm", className, displayClassName)}>{displayValue}</span>
 
     if (!isEditing) {
         return (

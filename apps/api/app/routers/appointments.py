@@ -627,6 +627,7 @@ def list_appointments(
         meeting_mode=meeting_mode.value if meeting_mode else None,
         limit=per_page,
         offset=offset,
+        session=session,
     )
 
     pages = (total + per_page - 1) // per_page if per_page > 0 else 0

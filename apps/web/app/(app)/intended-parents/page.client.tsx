@@ -428,9 +428,9 @@ export default function IntendedParentsPage() {
 function IntendedParentsList() {
     const searchParams = useSearchParams()
     const { replace } = useRouter()
-    const { can } = usePermissionCheck()
-    // Creating an intended parent requires the edit permission (POST /intended-parents).
-    const canCreate = can("edit_intended_parents")
+    const { can, policyVersion } = usePermissionCheck()
+    // POST /intended-parents checks edit_intended_parents under policy v1 and create_intended_parents under v2.
+    const canCreate = can(policyVersion === 2 ? "create_intended_parents" : "edit_intended_parents")
     const currentQuery = searchParams.toString()
     const urlState = readIntendedParentListUrlState(searchParams)
     const [stateDraft, setStateDraft] = useState<QueryDraft<IntendedParentListUrlState> | null>(null)
@@ -530,6 +530,7 @@ function IntendedParentsList() {
     }
 
     const handleCreate = createValidation.handleSubmit(async (values) => {
+        if (!canCreate) return
         try {
             await createMutation.mutateAsync(buildIntendedParentCreatePayload(values))
             setIsCreateOpen(false)
@@ -648,7 +649,7 @@ function IntendedParentsList() {
             </div>
 
             <CreateIntendedParentDialog
-                open={isCreateOpen}
+                open={isCreateOpen && canCreate}
                 formData={formData}
                 isPending={createMutation.isPending}
                 onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetForm() }}

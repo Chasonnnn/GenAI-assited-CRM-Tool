@@ -103,4 +103,26 @@ describe('multipart requests', () => {
         )
         expect(formData.get('published_version_id')).toBe('version-1')
     })
+
+    it.each([
+        { name: 'checked SMS', consent: { operational: true, promotional: false, phoneFieldKey: 'mobile_number' }, expected: 'mobile_number' },
+        { name: 'unchecked SMS', consent: { operational: false, promotional: false, phoneFieldKey: null }, expected: null },
+    ])('submitSharedPublicForm sends the SMS phone field key only for $name', async ({ consent, expected }) => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            makeResponse({
+                id: 'submission-1',
+                status: 'pending_review',
+                outcome: 'lead_created',
+                surrogate_id: null,
+                intake_lead_id: 'lead-1',
+            })
+        )
+        global.fetch = fetchMock as unknown as typeof fetch
+
+        await submitSharedPublicForm('shared-slug', {}, [], undefined, undefined, consent, 'version-1')
+
+        const formData = (fetchMock.mock.calls[0]?.[1] as RequestInit).body as FormData
+        expect(formData.get('sms_operational')).toBe(String(consent.operational))
+        expect(formData.get('sms_phone_field_key')).toBe(expected)
+    })
 })

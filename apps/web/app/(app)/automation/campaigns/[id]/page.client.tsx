@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     Table,
     TableBody,
@@ -71,6 +71,7 @@ import {
     useRunRecipients,
     useDeleteCampaign,
     useDuplicateCampaign,
+    usePublishCampaign,
     useCancelCampaign,
     useSendCampaign,
     useUpdateCampaign,
@@ -87,7 +88,6 @@ import type {
 import type { EmailTemplate, EmailTemplateListItem } from "@/lib/api/email-templates"
 import { listMessagingTemplates, type MessagingTemplateVersion } from "@/lib/api/twilio"
 import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
-import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import type { StageOption } from "@/lib/stage-options"
 import { useQuery } from "@tanstack/react-query"
 import { getDefaultPipeline } from "@/lib/api/pipelines"
@@ -376,7 +376,6 @@ function createCampaignDetailHandlers({
 
 function CampaignDetailHeader({
     campaign,
-    canManage,
     canEdit,
     cancelPending,
     onEdit,
@@ -384,10 +383,11 @@ function CampaignDetailHeader({
     onCancel,
     onDuplicate,
     onDelete,
+    onPublish,
+    publishPending,
 }: {
     campaign: Campaign
-    /** Viewer holds manage_email_templates, which every campaign action requires. */
-    canManage: boolean
+    /** The API's can_edit for this campaign, limited to draft and scheduled campaigns. */
     canEdit: boolean
     cancelPending: boolean
     onEdit: () => void
@@ -395,7 +395,15 @@ function CampaignDetailHeader({
     onCancel: () => void
     onDuplicate: () => void
     onDelete: () => void
+    onPublish: () => void
+    publishPending: boolean
 }) {
+    // Per-campaign flags from the API decide every action (policy v1 derives them from
+    // manage_email_templates; v2 from the campaign permissions and scope).
+    const canEditCampaign = campaign.can_edit === true
+    const canSendCampaign = campaign.can_send === true
+    const canPublishCampaign = campaign.can_publish === true
+    const hasActions = canEditCampaign || canSendCampaign || canPublishCampaign
     return (
         <div className="border-b bg-card">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 p-6">
@@ -411,6 +419,7 @@ function CampaignDetailHeader({
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             <h1 className="min-w-0 break-words text-2xl font-semibold">{campaign.name}</h1>
+                            <Badge variant="outline">{campaign.scope === "personal" ? "Personal" : "Organization"}</Badge>
                             <Badge
                                 variant={statusStyles[campaign.status]?.variant || "secondary"}
                                 className={statusStyles[campaign.status]?.className}
@@ -425,23 +434,25 @@ function CampaignDetailHeader({
                         )}
                     </div>
                 </div>
-                {canManage ? (
+                {hasActions ? (
                     <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={onEdit}
-                            disabled={!canEdit}
-                        >
-                            <PencilIcon className="size-4" />
-                            Edit
-                        </Button>
-                        {campaign.status === "draft" && (
+                        {canEditCampaign ? (
+                            <Button
+                                variant="outline"
+                                onClick={onEdit}
+                                disabled={!canEdit}
+                            >
+                                <PencilIcon className="size-4" />
+                                Edit
+                            </Button>
+                        ) : null}
+                        {canSendCampaign && campaign.status === "draft" && (
                             <Button onClick={onSendNow}>
                                 <SendIcon className="size-4" />
                                 Send Now
                             </Button>
                         )}
-                        {(campaign.status === "scheduled" || campaign.status === "sending") && (
+                        {canSendCampaign && (campaign.status === "scheduled" || campaign.status === "sending") && (
                             <Button
                                 variant="destructive"
                                 onClick={onCancel}
@@ -450,34 +461,41 @@ function CampaignDetailHeader({
                                 Stop
                             </Button>
                         )}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger
-                                render={
-                                    <Button
-                                        variant="outline"
-                                        size="icon"
-                                        aria-label="More campaign actions"
-                                    >
-                                        <MoreHorizontalIcon className="size-4" aria-hidden="true" />
-                                    </Button>
-                                }
-                            />
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={onDuplicate}>
-                                    <CopyIcon className="size-4" aria-hidden="true" />
-                                    Duplicate
-                                </DropdownMenuItem>
-                                {campaign.status === "draft" ? (
-                                    <>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                                            <TrashIcon className="size-4" aria-hidden="true" />
-                                            Delete
-                                        </DropdownMenuItem>
-                                    </>
-                                ) : null}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        {canPublishCampaign ? (
+                            <Button variant="outline" disabled={publishPending} onClick={onPublish}>
+                                Publish to organization
+                            </Button>
+                        ) : null}
+                        {canEditCampaign ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger
+                                    render={
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            aria-label="More campaign actions"
+                                        >
+                                            <MoreHorizontalIcon className="size-4" aria-hidden="true" />
+                                        </Button>
+                                    }
+                                />
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={onDuplicate}>
+                                        <CopyIcon className="size-4" aria-hidden="true" />
+                                        Duplicate
+                                    </DropdownMenuItem>
+                                    {campaign.status === "draft" ? (
+                                        <>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                                                <TrashIcon className="size-4" aria-hidden="true" />
+                                                Delete
+                                            </DropdownMenuItem>
+                                        </>
+                                    ) : null}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ) : null}
                     </div>
                 ) : null}
             </div>
@@ -771,6 +789,7 @@ function CampaignRecipientsCard({
     recipients,
     recipientFilter,
     retryPending,
+    canSend,
     onRecipientFilterChange,
     onRetryFailed,
 }: {
@@ -779,6 +798,7 @@ function CampaignRecipientsCard({
     recipients: CampaignRecipient[] | undefined
     recipientFilter: string
     retryPending: boolean
+    canSend: boolean
     onRecipientFilterChange: (value: string) => void
     onRetryFailed: () => void
 }) {
@@ -799,7 +819,7 @@ function CampaignRecipientsCard({
                             variant="outline"
                             size="sm"
                             onClick={onRetryFailed}
-                            disabled={retryPending}
+                            disabled={retryPending || !canSend}
                         >
                             {retryPending ? (
                                 <Loader2Icon className="size-4 animate-spin" />
@@ -1171,18 +1191,16 @@ export default function CampaignDetailPage() {
         campaignEditDraftReducer,
         initialCampaignEditDraft,
     )
-    const { can } = usePermissionCheck()
-    // Every campaign write and the recipient preview require the email template manage permission.
-    const canManage = can("manage_email_templates")
-
     // API hooks
     const campaignQuery = useCampaign(campaignId)
     const { data: campaign, isLoading } = campaignQuery
+    // The recipient preview route requires edit access to this campaign.
+    const canPreviewRecipients = campaign?.can_edit === true
     const { data: runs } = useCampaignRuns(campaignId)
     const latestRun = runs?.[0]
     const { data: preview, isLoading: previewLoading, refetch: refetchPreview } = useCampaignPreview(
         campaignId,
-        { enabled: canManage },
+        { enabled: canPreviewRecipients },
     )
     const recipientQuery = {
         limit: 50,
@@ -1205,6 +1223,7 @@ export default function CampaignDetailPage() {
 
     const deleteCampaign = useDeleteCampaign()
     const duplicateCampaign = useDuplicateCampaign()
+    const publishCampaign = usePublishCampaign()
     const cancelCampaign = useCancelCampaign()
     const sendCampaign = useSendCampaign()
     const updateCampaign = useUpdateCampaign()
@@ -1241,7 +1260,7 @@ export default function CampaignDetailPage() {
         intendedParentStatuses?.statuses,
     )
     const canEdit =
-        canManage && (campaign?.status === "draft" || campaign?.status === "scheduled")
+        campaign?.can_edit === true && (campaign.status === "draft" || campaign.status === "scheduled")
     const shouldAutoOpenEdit = searchParams.get("edit") === "1"
     const autoEditRequestKey =
         shouldAutoOpenEdit && canEdit && campaign
@@ -1297,7 +1316,7 @@ export default function CampaignDetailPage() {
         (candidate) => candidate.id === campaign.message_template_version_id,
     )
     const template = campaign.channel === "messaging" ? messageTemplate : emailTemplate
-    const templates = campaign.channel === "messaging" ? messagingTemplates : emailTemplates
+    const templates = campaign.channel === "messaging" ? messagingTemplates : emailTemplates?.filter((template) => template.scope !== "personal" || (campaign.scope === "personal" && template.owner_user_id === campaign.owner_user_id))
 
     // Calculate percentages
     const totalRecipients = campaign.total_recipients || 0
@@ -1345,7 +1364,6 @@ export default function CampaignDetailPage() {
         <div className="flex min-h-screen flex-col bg-background">
             <CampaignDetailHeader
                 campaign={campaign}
-                canManage={canManage}
                 canEdit={canEdit}
                 cancelPending={cancelCampaign.isPending}
                 onEdit={openEditDialog}
@@ -1353,9 +1371,25 @@ export default function CampaignDetailPage() {
                 onCancel={() => setShowCancelDialog(true)}
                 onDuplicate={handleDuplicate}
                 onDelete={() => setShowDeleteDialog(true)}
+                publishPending={publishCampaign.isPending}
+                onPublish={() => publishCampaign.mutate(campaign.id, {
+                    onSuccess: (published) => { toast.success("Organization campaign created"); push(`/automation/campaigns/${published.id}`) },
+                    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not publish campaign"),
+                })}
             />
 
-            <div className="flex-1 p-6 space-y-6">
+            <Tabs defaultValue="overview" className="flex-1 p-6">
+                <TabsList><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="details">Details</TabsTrigger></TabsList>
+                <TabsContent value="details">
+                    <Card><CardHeader><CardTitle>Details</CardTitle></CardHeader><CardContent>
+                        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm max-w-xl">
+                            <dt className="text-muted-foreground">Scope</dt><dd>{campaign.scope === "personal" ? "Personal" : "Organization"}</dd>
+                            <dt className="text-muted-foreground">Proposed by</dt><dd>{campaign.proposed_by_name ?? campaign.created_by_name ?? "—"}</dd>
+                            <dt className="text-muted-foreground">Created</dt><dd>{format(parseDateInput(campaign.created_at), "MMM d, yyyy")}</dd>
+                        </dl>
+                    </CardContent></Card>
+                </TabsContent>
+                <TabsContent value="overview" className="space-y-6">
                 <CampaignStatsGrid
                     campaign={campaign}
                     totalRecipients={totalRecipients}
@@ -1375,7 +1409,7 @@ export default function CampaignDetailPage() {
                     createdBefore={createdBefore}
                 />
 
-                {canManage ? (
+                {canPreviewRecipients ? (
                     <RecipientPreviewCard
                         totalCount={preview?.total_count || 0}
                         sampleRecipients={
@@ -1425,10 +1459,12 @@ export default function CampaignDetailPage() {
                     recipients={recipients}
                     recipientFilter={recipientFilter}
                     retryPending={retryFailed.isPending}
+                    canSend={campaign.can_send === true}
                     onRecipientFilterChange={setRecipientFilter}
                     onRetryFailed={() => setShowRetryDialog(true)}
                 />
-            </div>
+                </TabsContent>
+            </Tabs>
 
             <CampaignEditDialog
                 open={showEditDialog}
@@ -1451,7 +1487,7 @@ export default function CampaignDetailPage() {
             <CampaignConfirmationDialogs
                 campaignName={campaign.name}
                 channel={campaign.channel}
-                recipientCount={canManage && preview ? preview.total_count : null}
+                recipientCount={canPreviewRecipients && preview ? preview.total_count : null}
                 dialogs={{
                     deleteOpen: showDeleteDialog,
                     cancelOpen: showCancelDialog,

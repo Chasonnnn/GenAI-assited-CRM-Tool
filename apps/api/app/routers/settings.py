@@ -287,8 +287,8 @@ def list_intelligent_suggestion_rules(
 ):
     rules = intelligent_suggestions_service.list_rules(db, session.org_id)
     return [
-        IntelligentSuggestionRuleRead(**intelligent_suggestions_service.serialize_rule(db, rule))
-        for rule in rules
+        IntelligentSuggestionRuleRead(**rule)
+        for rule in intelligent_suggestions_service.serialize_rules(db, session.org_id, rules)
     ]
 
 

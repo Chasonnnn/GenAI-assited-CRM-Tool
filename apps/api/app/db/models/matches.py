@@ -31,7 +31,7 @@ class Match(Base):
     """
     Proposed match between a surrogate and intended parent.
 
-    Tracks the matching workflow from proposal through acceptance/rejection.
+    Tracks the matching workflow from proposal through acceptance/decline.
     Only one accepted match is allowed per surrogate.
     """
 
@@ -52,7 +52,7 @@ class Match(Base):
             "surrogate_id",
             "intended_parent_id",
             unique=True,
-            postgresql_where=text("status IN ('proposed','reviewing','accepted','cancel_pending')"),
+            postgresql_where=text("status IN ('under_review','accepted','cancellation_pending')"),
         ),
         Index(
             "uq_match_open_donor_ip",
@@ -60,7 +60,7 @@ class Match(Base):
             "donor_id",
             "intended_parent_id",
             unique=True,
-            postgresql_where=text("status IN ('proposed','reviewing','accepted','cancel_pending')"),
+            postgresql_where=text("status IN ('under_review','accepted','cancellation_pending')"),
         ),
         UniqueConstraint(
             "organization_id",
@@ -73,7 +73,7 @@ class Match(Base):
             "organization_id",
             "surrogate_id",
             unique=True,
-            postgresql_where=text("status IN ('accepted', 'cancel_pending')"),
+            postgresql_where=text("status IN ('accepted', 'cancellation_pending')"),
         ),
         Index("ix_matches_match_number", "match_number"),
         Index("ix_matches_surrogate_id", "surrogate_id"),
@@ -112,8 +112,8 @@ class Match(Base):
     outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
     match_number: Mapped[str] = mapped_column(String(10), nullable=False)
 
-    # Status workflow: proposed → reviewing → accepted/rejected/cancelled
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="proposed")
+    # Status workflow: under_review → accepted/declined → cancellation_pending/cancelled/completed
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="under_review")
 
     # Who proposed and when
     proposed_by_user_id: Mapped[uuid.UUID] = mapped_column(
@@ -127,9 +127,9 @@ class Match(Base):
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
-    # Notes and rejection reason
+    # Notes and decline reason
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decline_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)

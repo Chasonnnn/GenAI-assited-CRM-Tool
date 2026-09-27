@@ -215,7 +215,7 @@ let metaCrmDatasetEventsData = {
 const aiSettingsData = {
     is_enabled: true,
     provider: 'gemini',
-    model: 'gemini-3.7-flash',
+    model: 'gemini-3.8-flash',
     api_key_masked: 'sk-****',
     vertex_wif: null,
     vertex_api_key: null,
@@ -824,7 +824,7 @@ describe('IntegrationsPage', () => {
         const footer = dialog.querySelector('[data-slot="dialog-footer"]') as HTMLElement
         expect(within(footer).getByRole('button', { name: 'Save AI Configuration' })).toBeInTheDocument()
         expect(within(footer).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
-        expect(within(dialog).getByText('gemini-3.7-flash')).toBeInTheDocument()
+        expect(within(dialog).getByText('gemini-3.8-flash')).toBeInTheDocument()
         expect(within(dialog).queryByText('gemini-3-flash-preview')).not.toBeInTheDocument()
     })
 

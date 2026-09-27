@@ -5,6 +5,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     listForms,
+    listSurrogateApplicationForms,
+    listSurrogateApplicationIntakeLinks,
     getForm,
     createForm,
     updateForm,
@@ -86,6 +88,22 @@ export function useForms(options: { enabled?: boolean } = {}) {
         queryKey: formKeys.list(),
         queryFn: () => listForms(),
         enabled: options.enabled ?? true,
+    })
+}
+
+export function useSurrogateApplicationForms(surrogateId: string | null) {
+    return useQuery({
+        queryKey: ['forms', 'surrogate-application', surrogateId],
+        queryFn: () => listSurrogateApplicationForms(surrogateId!),
+        enabled: !!surrogateId,
+    })
+}
+
+export function useSurrogateApplicationIntakeLinks(surrogateId: string | null, formId: string | null) {
+    return useQuery({
+        queryKey: ['forms', 'surrogate-application', surrogateId, 'intake-links', formId],
+        queryFn: () => listSurrogateApplicationIntakeLinks(surrogateId!, formId!),
+        enabled: !!surrogateId && !!formId,
     })
 }
 

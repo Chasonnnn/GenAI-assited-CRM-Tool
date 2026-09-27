@@ -143,7 +143,10 @@ export function NotificationBell() {
                             size="sm"
                             className="h-auto p-0 text-xs text-muted-foreground hover:text-foreground"
                             onClick={handleMarkAllRead}
+                            disabled={markAllRead.isPending}
+                            aria-busy={markAllRead.isPending}
                         >
+                            {markAllRead.isPending && <Spinner className="size-3" aria-hidden="true" />}
                             Mark all read
                         </Button>
                     )}

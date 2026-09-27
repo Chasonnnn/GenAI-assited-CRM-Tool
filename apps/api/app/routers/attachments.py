@@ -22,7 +22,7 @@ from app.services import (
     activity_service,
     attachment_service,
     form_submission_service,
-    match_service,
+    match_access,
     match_work_service,
     record_access_service,
 )
@@ -187,6 +187,7 @@ def list_attachments(
 
     attachments = attachment_service.list_attachments(
         db=db,
+        session=session,
         org_id=surrogate.organization_id,
         surrogate_id=surrogate.id,
         include_quarantined=False,
@@ -350,6 +351,7 @@ def list_donor_attachments(
     donor = _get_donor_with_access(db, donor_id, session)
     attachments = attachment_service.list_attachments(
         db=db,
+        session=session,
         org_id=donor.organization_id,
         donor_id=donor.id,
         include_quarantined=False,
@@ -430,6 +432,7 @@ def list_ip_attachments(
 
     attachments = attachment_service.list_attachments(
         db=db,
+        session=session,
         org_id=ip.organization_id,
         intended_parent_id=ip.id,
         include_quarantined=False,
@@ -558,7 +561,7 @@ def download_attachment(
 
     # Authorize the actual attachment subject, in addition to the route permission.
     if attachment.match_id:
-        match_service.get_match_with_access(db, session, attachment.match_id)
+        match_access.load(db, session, attachment.match_id)
     if attachment.surrogate_id:
         _get_surrogate_with_access(db, attachment.surrogate_id, session)
     elif attachment.intended_parent_id:
@@ -653,7 +656,7 @@ def delete_attachment(
 
     surrogate = None
     if attachment.match_id:
-        match_service.get_match_with_access(db, session, attachment.match_id)
+        match_access.load(db, session, attachment.match_id)
     if attachment.surrogate_id:
         surrogate = _get_surrogate_with_access(
             db, attachment.surrogate_id, session, require_write=True
@@ -768,7 +771,7 @@ def download_local_attachment(
     # Authorize the actual attachment subject, in addition to the route permission.
     if attachment is not None:
         if attachment.match_id:
-            match_service.get_match_with_access(db, session, attachment.match_id)
+            match_access.load(db, session, attachment.match_id)
         if attachment.surrogate_id:
             _get_surrogate_with_access(db, attachment.surrogate_id, session)
         elif attachment.intended_parent_id:

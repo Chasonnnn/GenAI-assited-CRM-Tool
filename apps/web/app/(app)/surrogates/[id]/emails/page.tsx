@@ -46,6 +46,8 @@ export default function SurrogateEmailsPage() {
     const permissionCheck = usePermissionCheck()
     const permissionsLoading = permissionCheck.isLoading
     const canViewEmails = permissionCheck.can('view_tickets')
+    // Adding and deactivating contacts need link_ticket_surrogates (developer-only, like view_tickets).
+    const canManageContacts = permissionCheck.can('link_ticket_surrogates')
 
     const emailsQuery = useSurrogateEmails(surrogateId, { enabled: canViewEmails })
     const contactsQuery = useSurrogateEmailContacts(surrogateId, { enabled: canViewEmails })
@@ -60,6 +62,7 @@ export default function SurrogateEmailsPage() {
     const [contactType, setContactType] = useState('')
 
     const handleAddContact = async () => {
+        if (!canManageContacts) return
         const email = contactEmail.trim()
         if (!email) {
             toast.error('Email is required')
@@ -89,6 +92,7 @@ export default function SurrogateEmailsPage() {
     }
 
     const handleDeactivate = async (contactId: string) => {
+        if (!canManageContacts) return
         try {
             await deactivateContact.mutateAsync(contactId)
             toast.success('Contact deactivated')
@@ -178,6 +182,7 @@ export default function SurrogateEmailsPage() {
                             <Label htmlFor="surrogate-email-contact-email">Email</Label>
                             <Input
                                 id="surrogate-email-contact-email"
+                                disabled={!canManageContacts}
                                 type="email"
                                 value={contactEmail}
                                 onChange={(event) => setContactEmail(event.target.value)}
@@ -187,6 +192,7 @@ export default function SurrogateEmailsPage() {
                             <Label htmlFor="surrogate-email-contact-label">Label</Label>
                             <Input
                                 id="surrogate-email-contact-label"
+                                disabled={!canManageContacts}
                                 value={contactLabel}
                                 onChange={(event) => setContactLabel(event.target.value)}
                             />
@@ -195,12 +201,13 @@ export default function SurrogateEmailsPage() {
                             <Label htmlFor="surrogate-email-contact-type">Type</Label>
                             <Input
                                 id="surrogate-email-contact-type"
+                                disabled={!canManageContacts}
                                 value={contactType}
                                 onChange={(event) => setContactType(event.target.value)}
                             />
                         </div>
                     </div>
-                    <Button onClick={handleAddContact} disabled={createContact.isPending}>
+                    <Button onClick={handleAddContact} disabled={!canManageContacts || createContact.isPending}>
                         {createContact.isPending ? 'Adding…' : 'Add Contact'}
                     </Button>
 
@@ -231,7 +238,7 @@ export default function SurrogateEmailsPage() {
                                             variant="outline"
                                             size="sm"
                                             onClick={() => handleDeactivate(contact.id)}
-                                            disabled={!contact.is_active || deactivateContact.isPending}
+                                            disabled={!canManageContacts || !contact.is_active || deactivateContact.isPending}
                                         >
                                             {contact.is_active ? 'Deactivate' : 'Inactive'}
                                         </Button>

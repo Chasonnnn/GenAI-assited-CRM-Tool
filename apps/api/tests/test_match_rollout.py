@@ -40,12 +40,12 @@ async def test_disabled_expansion_preserves_legacy_match_operations(authed_clien
 
 
 @pytest.mark.asyncio
-async def test_disabled_expansion_rejects_repeat_pairs(authed_client, db, monkeypatch):
+async def test_disabled_expansion_rejects_repeat_pairs(authed_client, db, test_auth, monkeypatch):
     ip = await _create_intended_parent(authed_client)
     surrogate = await _create_surrogate(authed_client)
     case = await _case(authed_client, ip, surrogate=surrogate)
     response = await authed_client.put(
-        f"/matches/{case['id']}/reject", json={"rejection_reason": "Not proceeding"}
+        f"/matches/{case['id']}/decline", json={"reason": "Not proceeding"}
     )
     assert response.status_code == 200
     monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", False)
@@ -53,19 +53,23 @@ async def test_disabled_expansion_rejects_repeat_pairs(authed_client, db, monkey
         "/matches/", json={"surrogate_id": surrogate["id"], "intended_parent_id": ip["id"]}
     )
     assert response.status_code == 503
-    assert db.query(Match).count() == 1
+    assert db.query(Match).filter(Match.organization_id == test_auth.org.id).count() == 1
 
 
 @pytest.mark.asyncio
-async def test_disabled_expansion_rejects_parallel_ip_commitment(authed_client, monkeypatch):
+async def test_disabled_expansion_allows_parallel_ip_surrogate_commitment(
+    authed_client, monkeypatch
+):
     ip = await _create_intended_parent(authed_client)
     first = await _create_surrogate(authed_client)
     second = await _create_surrogate(authed_client)
     await _accept(authed_client, await _case(authed_client, ip, surrogate=first))
     second_case = await _case(authed_client, ip, surrogate=second)
+    assert second_case["status"] == "under_review"
     monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", False)
     response = await authed_client.put(f"/matches/{second_case['id']}/accept", json={})
-    assert response.status_code == 503
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
 
 
 def test_expansion_requires_explicit_activation(monkeypatch):

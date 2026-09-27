@@ -7,6 +7,7 @@ import pytest
 from app.db.enums import IntendedParentStatus, Role
 from app.db.models import IntendedParentStatusHistory, StatusChangeRequest
 from app.services import intended_parent_status_service, ip_service, pipeline_service
+from app.utils import datetime_parsing
 
 
 def _create_ip(db, org_id, user_id):
@@ -28,6 +29,36 @@ def _get_ip_stage(db, org_id, stage_key: str):
     stage = pipeline_service.get_stage_by_key(db, pipeline.id, stage_key)
     assert stage is not None
     return stage
+
+
+def test_implicit_effective_time_uses_status_change_clock(db, test_org, test_user, monkeypatch):
+    ip = _create_ip(db, test_org.id, test_user.id)
+    ready_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.READY_TO_MATCH.value)
+
+    class DelayedClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(tz) + timedelta(seconds=5)
+
+    # Simulate time passing during the timezone lookup, without a slow/flaky sleep.
+    monkeypatch.setattr(datetime_parsing, "datetime", DelayedClock)
+    started_at = datetime.now(UTC)
+    result = intended_parent_status_service.change_status(
+        db=db,
+        ip=ip,
+        new_stage=ready_stage,
+        user_id=test_user.id,
+        user_role=Role.DEVELOPER,
+    )
+    assert result["status"] == "applied"
+    history = (
+        db.query(IntendedParentStatusHistory)
+        .filter(IntendedParentStatusHistory.intended_parent_id == ip.id)
+        .order_by(IntendedParentStatusHistory.recorded_at.desc())
+        .first()
+    )
+    assert history is not None
+    assert started_at <= history.effective_at <= datetime.now(UTC)
 
 
 def test_ip_status_backdate_requires_reason(db, test_org, test_user):

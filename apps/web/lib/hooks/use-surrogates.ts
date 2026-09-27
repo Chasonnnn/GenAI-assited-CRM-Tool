@@ -5,6 +5,7 @@
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as surrogatesApi from '../api/surrogates';
 import type { SurrogateCreatedDatesParams, SurrogateListParams } from '../api/surrogates';
+import { matchKeys } from '../queries/matches';
 
 // Query keys
 export const surrogateKeys = {
@@ -36,6 +37,27 @@ export function invalidateSurrogateCrmCaches(queryClient: QueryClient, surrogate
         queryKey: ['analytics', 'activity-feed'],
         exact: false,
     });
+}
+
+function invalidateSurrogateScopeCaches(queryClient: QueryClient, surrogateIds?: string[]) {
+    for (const surrogateId of surrogateIds ?? [undefined]) {
+        void queryClient.invalidateQueries({
+            queryKey: surrogateId
+                ? ['record-collaborators', 'surrogate', surrogateId]
+                : ['record-collaborators', 'surrogate'],
+        });
+    }
+    for (const queryKey of [
+        ['record-scopes', 'migration-review'],
+        ['analytics'],
+        ['dashboard'],
+        ['appointments', 'list'],
+        surrogateKeys.intelligentSummary(),
+        surrogateKeys.unassignedQueue(),
+        [...surrogateKeys.all, 'created-dates'],
+    ]) {
+        void queryClient.invalidateQueries({ queryKey });
+    }
 }
 
 function invalidateSurrogateMutationCaches(queryClient: QueryClient, surrogateId: string, options: { history?: boolean } = {}) {
@@ -201,7 +223,9 @@ export function useChangeSurrogateStatus() {
                     queryClient.setQueryData(surrogateKeys.detail(response.surrogate.id), response.surrogate);
                 }
                 void queryClient.invalidateQueries({ queryKey: surrogateKeys.interviewAppointment(surrogateId) });
+                void queryClient.invalidateQueries({ queryKey: ['notes', 'list', surrogateId] });
             }
+            invalidateSurrogateScopeCaches(queryClient, [surrogateId]);
             // Invalidate related queries
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(surrogateId) });
@@ -209,6 +233,8 @@ export function useChangeSurrogateStatus() {
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.stats() });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(surrogateId) });
             void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
+            // Stage moves change match accept eligibility and allowed actions.
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all });
         },
     });
 }
@@ -340,7 +366,9 @@ export function useBulkChangeStage() {
     return useMutation({
         mutationFn: surrogatesApi.bulkChangeStage,
         onSuccess: (_result, variables) => {
+            invalidateSurrogateScopeCaches(queryClient, variables.surrogate_ids);
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all });
             void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
 
@@ -414,7 +442,10 @@ export function useApplySurrogateMassEditStage() {
     return useMutation({
         mutationFn: surrogatesApi.applySurrogateMassEditStage,
         onSuccess: () => {
+            invalidateSurrogateScopeCaches(queryClient);
+            void queryClient.invalidateQueries({ queryKey: ['notes', 'list'] });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.all });
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all });
             void queryClient.invalidateQueries({ queryKey: surrogateKeys.unassignedQueue() });
             void queryClient.invalidateQueries({ queryKey: ['tasks', 'list'] });
         },

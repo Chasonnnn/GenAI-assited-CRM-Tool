@@ -80,6 +80,7 @@ def test_seed_donor_pipelines_is_idempotent_and_subtype_specific(db, test_org):
                 stage["stage_type"],
             )
             for stage in get_default_stage_defs(entity_type)
+            if stage["stage_key"] != "approved"
         ]
         assert migration_stages == runtime_stages
 

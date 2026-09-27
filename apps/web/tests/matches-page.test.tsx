@@ -33,7 +33,7 @@ vi.mock('@/lib/hooks/use-matches', () => ({
     useMatchStats: () => ({
         data: {
             total: 42,
-            by_status: { proposed: 8, reviewing: 9, accepted: 8, cancel_pending: 1, rejected: 9, cancelled: 4, completed: 3 },
+            by_status: { under_review: 17, accepted: 8, cancellation_pending: 1, declined: 9, cancelled: 4, completed: 3 },
         },
         isLoading: false,
     }),
@@ -48,8 +48,12 @@ vi.mock('@/lib/hooks/use-permissions', () => ({
     useEffectivePermissions: (userId: string | null) => mockUseEffectivePermissions(userId),
 }))
 
-function setPermissions(permissions: string[]) {
-    mockUseEffectivePermissions.mockReturnValue({ data: { permissions }, isLoading: false, isError: false })
+function setPermissions(permissions: string[], policyVersion?: number) {
+    mockUseEffectivePermissions.mockReturnValue({
+        data: { permissions, ...(policyVersion ? { policy_version: policyVersion } : {}) },
+        isLoading: false,
+        isError: false,
+    })
 }
 
 const emptyMatches = { data: { items: [], total: 0, per_page: 20, page: 1 }, isLoading: false }
@@ -65,7 +69,7 @@ describe('MatchesPage', () => {
                 surrogate_number: 'S10001',
                 ip_id: 'ip1',
                 ip_name: 'John Smith',
-                status: 'proposed' as const,
+                status: 'under_review' as const,
                 proposed_at: '2024-01-15T10:00:00Z',
                 proposed_by_user_id: 'user1',
                 proposed_by_name: 'Admin User',
@@ -108,6 +112,14 @@ describe('MatchesPage', () => {
         })
     })
 
+    it.each(['pending_legacy', 'constructor'])('labels the filter and preserves unknown status %s', (unknownStatus) => {
+        mockUseMatches.mockReturnValue({data: {...mockMatchData, items: [{...mockMatchData.items[0], status: unknownStatus}]}, isLoading: false})
+        render(<MatchesPage />)
+        expect(screen.getByRole('combobox', { name: 'Filter by stage' })).toHaveTextContent('All Stages')
+        expect(screen.getByText(unknownStatus)).toBeInTheDocument()
+        expect(screen.queryByText('Under Review')).not.toBeInTheDocument()
+    })
+
     it('renders page header and title', () => {
         render(<MatchesPage />)
         expect(screen.getByRole('heading', { level: 1, name: 'Matches' })).toBeInTheDocument()
@@ -146,6 +158,17 @@ describe('MatchesPage', () => {
         setPermissions(['view_matches'])
         render(<MatchesPage />)
         expect(screen.queryByRole('button', { name: 'New Match' })).not.toBeInTheDocument()
+    })
+
+    it('also requires view_intended_parents for New Match under policy v2', () => {
+        setPermissions(['view_matches', 'propose_matches'], 2)
+        const { unmount } = render(<MatchesPage />)
+        expect(screen.queryByRole('button', { name: 'New Match' })).not.toBeInTheDocument()
+        unmount()
+
+        setPermissions(['view_matches', 'propose_matches', 'view_intended_parents'], 2)
+        render(<MatchesPage />)
+        expect(screen.getByRole('button', { name: 'New Match' })).toBeInTheDocument()
     })
 
     it('gates the page on view_matches before loading matches', () => {
@@ -346,7 +369,7 @@ describe('MatchesPage', () => {
     it('debounces search URL updates while preserving sibling filters and resetting page', () => {
         vi.useFakeTimers()
         mockSearchParams.set('page', '4')
-        mockSearchParams.set('status', 'proposed')
+        mockSearchParams.set('status', 'under_review')
         mockSearchParams.set('q', 'old')
 
         render(<MatchesPage />)
@@ -361,7 +384,7 @@ describe('MatchesPage', () => {
         })
 
         expect(mockRouterReplace).toHaveBeenCalledWith(
-            '/intended-parents/matches?status=proposed&q=alice',
+            '/intended-parents/matches?status=under_review&q=alice',
             { scroll: false },
         )
         vi.useRealTimers()

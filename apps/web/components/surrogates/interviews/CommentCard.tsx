@@ -79,7 +79,7 @@ function ReplyItem({
     useFocusWhen(editInputRef, isEditing)
 
     const handleEditSubmit = () => {
-        if (!editContent.trim() || !onEdit) return
+        if (!canEdit || !editContent.trim() || !onEdit) return
         onEdit(reply.id, editContent.trim())
         setIsEditing(false)
     }
@@ -97,7 +97,7 @@ function ReplyItem({
                             {formatRelativeTime(reply.created_at)}
                         </span>
                     </div>
-                    {isEditing ? (
+                    {isEditing && canEdit ? (
                         <div className="mt-2 space-y-2">
                             <Textarea
                                 ref={editInputRef}
@@ -205,14 +205,14 @@ export function CommentCard({
     useFocusWhen(editInputRef, isEditing)
 
     const handleReplySubmit = () => {
-        if (!replyContent.trim()) return
+        if (!canEdit || !replyContent.trim()) return
         onReply(replyContent.trim())
         setReplyContent("")
         setIsReplying(false)
     }
 
     const handleEditSubmit = () => {
-        if (!editContent.trim() || !onEdit) return
+        if (!canEdit || !editContent.trim() || !onEdit) return
         onEdit(editContent.trim())
         setIsEditing(false)
     }
@@ -265,7 +265,7 @@ export function CommentCard({
                 )}
 
                 {/* Comment content or edit mode */}
-                {isEditing ? (
+                {isEditing && canEdit ? (
                     <div className="space-y-2" data-comment-card-interaction="true">
                         <Textarea
                             ref={editInputRef}
@@ -335,7 +335,7 @@ export function CommentCard({
                 )}
 
                 {/* Reply input */}
-                {isReplying && (
+                {isReplying && canEdit && (
                     <div className="pt-2 space-y-2" data-comment-card-interaction="true">
                         <div className="flex items-start gap-2">
                             <CornerDownRightIcon className="size-3.5 text-muted-foreground shrink-0 mt-2" />

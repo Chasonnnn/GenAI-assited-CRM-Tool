@@ -42,7 +42,14 @@ POLICIES: dict[str, ResourcePolicy] = {
     ),
     "matches": ResourcePolicy(
         default=P.MATCHES_VIEW,
-        actions={"propose": P.MATCHES_PROPOSE},
+        actions={
+            "propose": P.MATCHES_VIEW,
+            "accept": P.MATCHES_DECIDE,
+            "decline": P.MATCHES_DECIDE,
+            "request_cancel": P.MATCHES_CLOSE,
+            "complete": P.MATCHES_CLOSE,
+            "withdraw_cancel": P.MATCHES_CLOSE,
+        },
     ),
     "tasks": ResourcePolicy(
         default=P.TASKS_VIEW,

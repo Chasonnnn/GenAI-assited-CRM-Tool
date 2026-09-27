@@ -5,6 +5,7 @@ import logging
 import secrets
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
+from html import escape
 from typing import NotRequired, TypedDict
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.db.enums import (
     AppointmentStatus,
     ContactStatus,
+    EntityType,
     MeetingMode,
     OwnerType,
     Role,
@@ -47,6 +49,8 @@ class StatusChangeResult(TypedDict):
     request_id: UUID | None
     message: str | None
     after_commit: NotRequired[Callable[[], None]]
+    # The same after-commit work as named steps, for callers that isolate each one.
+    after_commit_effects: NotRequired[list[tuple[str, Callable[[], None]]]]
 
 
 UNDO_GRACE_PERIOD = timedelta(minutes=5)
@@ -341,6 +345,7 @@ def change_status(
     *,
     emit_events: bool = False,
     commit: bool = True,
+    execution_permissions: frozenset[str] | None = None,
     schedule_interview_appointment: bool = True,
     override_availability: bool = False,
     override_reason: str | None = None,
@@ -365,7 +370,7 @@ def change_status(
 
     now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, surrogate.organization_id)
-    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str)
+    normalized_effective_at = normalize_effective_at(effective_at, org_tz_str, now=now)
 
     old_stage_id = surrogate.stage_id
     old_label = surrogate.status_label
@@ -401,8 +406,12 @@ def change_status(
     ):
         raise ValueError("Follow-up timing is only allowed when moving to On-Hold")
 
-    if pipeline_service.stage_matches_key(new_stage, "on_hold") and not reason:
-        raise ValueError("Reason required when moving to On-Hold")
+    reason = reason.strip() if reason else None
+    if (
+        pipeline_semantics_service.get_stage_semantics(new_stage).requires_reason_on_enter
+        and not reason
+    ):
+        raise ValueError(f"Reason required when moving to {new_stage.label}")
 
     normalized_interview_scheduled_at = _normalize_interview_scheduled_at(
         interview_scheduled_at,
@@ -446,7 +455,17 @@ def change_status(
     if not role_str:
         raise ValueError("User role is required to change stage")
 
-    if role_str == Role.CASE_MANAGER.value:
+    from app.services import approval_handoff_service
+
+    uses_record_policy = approval_handoff_service.authorize_stage_change(
+        db,
+        record=surrogate,
+        kind="surrogate",
+        target_stage=new_stage,
+        user_id=user_id,
+        execution_permissions=execution_permissions,
+    )
+    if not uses_record_policy and role_str == Role.CASE_MANAGER.value:
         if surrogate.owner_type != OwnerType.USER.value or surrogate.owner_id != user_id:
             raise ValueError("Surrogate must be claimed before changing stage")
 
@@ -467,7 +486,12 @@ def change_status(
         and pipeline_service.stage_matches_key(current_stage, "interview_scheduled")
         and pipeline_service.stage_matches_key(new_stage, "reschedule_needed")
     )
-    if is_resume_from_on_hold or is_interview_rebooking or is_interview_cancellation:
+    if (
+        uses_record_policy
+        or is_resume_from_on_hold
+        or is_interview_rebooking
+        or is_interview_cancellation
+    ):
         pass
     elif not is_regression:
         if not pipeline_semantics_service.can_role_access_stage(
@@ -716,8 +740,11 @@ def apply_status_change(
 
     Called for non-regressions, undo within grace period, and approved regressions.
     """
-    from app.services import pipeline_service
+    from app.services import approval_handoff_service, pipeline_service
 
+    approval_handoff_service.retain_at_approval(
+        db, record=surrogate, kind="surrogate", target_stage=new_stage, actor_user_id=user_id
+    )
     resolved_org_timezone = org_timezone_str or _get_org_timezone(db, surrogate.organization_id)
     deleted_follow_up_task = None
     created_follow_up_task = None
@@ -791,6 +818,26 @@ def apply_status_change(
         approved_at=approved_at,
     )
     db.add(history)
+    reason_note = None
+    if reason and user_id:
+        from app.services import note_service
+
+        reason_html = escape(reason).replace("\n", "<br>")
+        try:
+            reason_note = note_service.create_note(
+                db=db,
+                org_id=surrogate.organization_id,
+                entity_type=EntityType.SURROGATE,
+                entity_id=surrogate.id,
+                author_id=user_id,
+                content=f"<p><strong>Stage changed to {escape(new_stage.label)}</strong></p><p>{reason_html}</p>",
+                commit=False,
+                emit_events=False,
+            )
+        except Exception:
+            if commit:
+                db.rollback()
+            raise
     if scheduled_interview:
         from app.services import activity_service
 
@@ -811,7 +858,15 @@ def apply_status_change(
         )
         scheduled_activity.created_at = max(datetime.now(UTC), effective_at)
 
-    def after_commit() -> None:
+    def dispatch_reason_note() -> None:
+        if reason_note is not None and trigger_workflows:
+            from app.services import note_service
+
+            note_service.dispatch_note_added(
+                db, note_id=reason_note.id, org_id=surrogate.organization_id
+            )
+
+    def sync_follow_up_tasks() -> None:
         if deleted_follow_up_task is not None:
             from app.services import task_service
 
@@ -821,6 +876,7 @@ def apply_status_change(
 
             task_service._sync_task_to_google_best_effort(db, created_follow_up_task)
 
+    def dispatch_status_changed() -> None:
         from app.services import surrogate_events
 
         surrogate_events.handle_status_changed(
@@ -841,6 +897,16 @@ def apply_status_change(
             trigger_workflows=trigger_workflows,
         )
 
+    after_commit_effects = [
+        ("surrogate_note_added", dispatch_reason_note),
+        ("surrogate_follow_up_task_sync", sync_follow_up_tasks),
+        ("surrogate_stage_changed", dispatch_status_changed),
+    ]
+
+    def after_commit() -> None:
+        for _name, run in after_commit_effects:
+            run()
+
     if not commit:
         db.flush()
         return StatusChangeResult(
@@ -849,6 +915,7 @@ def apply_status_change(
             request_id=None,
             message=None,
             after_commit=after_commit,
+            after_commit_effects=after_commit_effects,
         )
     db.commit()
     db.refresh(surrogate)

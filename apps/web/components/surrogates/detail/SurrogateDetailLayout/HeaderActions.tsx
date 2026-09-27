@@ -29,6 +29,7 @@ import { useAuth } from "@/lib/auth-context"
 import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { stageHasCapability, stageUsesPauseBehavior } from "@/lib/surrogate-stage-context"
 import { toast } from "@/components/ui/toast"
+import { RecordCollaboratorsDialog } from "@/components/permissions/record-collaborators-dialog"
 import { exportSurrogatePacketPdf } from "@/lib/api/surrogates"
 import {
     useSurrogateDetailActions,
@@ -42,6 +43,7 @@ export function HeaderActions() {
         surrogate,
         stageById,
         effectiveStage,
+        effectivePermissions,
         queues,
         assignees,
         canManageQueue,
@@ -67,7 +69,8 @@ export function HeaderActions() {
     const [isExporting, setIsExporting] = React.useState(false)
     // Menu items unmount on click, so the archive confirm is rendered outside the menu.
     const [isArchiveConfirmOpen, setIsArchiveConfirmOpen] = React.useState(false)
-    // Archive and restore require the same permission the API enforces.
+    const [collaboratorsOpen, setCollaboratorsOpen] = React.useState(false)
+    // Archive and restore require the same permission the API enforces, under policy v1 and v2.
     const canArchive = usePermissionCheck().can("archive_surrogates")
 
     if (!surrogate) return null
@@ -87,10 +90,15 @@ export function HeaderActions() {
         workflowStageOrder !== null && contactedStage
             ? workflowStageOrder <= contactedStage.order
             : isIntakeStage
+    const isV2 = effectivePermissions?.policy_version === 2
+    const canManageCollaborators = isV2 && !!effectivePermissions.capabilities?.can_manage_roles
+    const canEdit = !isV2 || (effectivePermissions.permissions.includes("edit_surrogates") && !surrogate.is_archived)
+    const canSendEmail = !isV2 || effectivePermissions.permissions.includes("send_email")
+    const canScheduleZoom = !isV2 || effectivePermissions.permissions.includes("manage_appointments")
     const isAssignee = !!(user?.user_id && surrogate.owner_id === user.user_id)
     const canLogInteraction =
         surrogate.owner_type === "user" &&
-        (isAssignee || canManageQueue) &&
+        (isV2 ? canEdit : isAssignee || canManageQueue) &&
         !surrogate.is_archived
     const canLogContact = canLogInteraction && !isOnHold && isAtOrBeforeContacted
 
@@ -100,7 +108,11 @@ export function HeaderActions() {
         "eligible_for_matching"
     )
     const isManagerRole = user?.role && ["case_manager", "admin", "developer"].includes(user.role)
-    const canProposeMatch = isManagerRole && !isOnHold && isReadyToMatchStage && !surrogate.is_archived
+    const hasMatchAuthority = isV2
+        ? ["view_matches", "propose_matches", "view_intended_parents"].every((permission) =>
+            effectivePermissions.permissions.includes(permission))
+        : isManagerRole
+    const canProposeMatch = hasMatchAuthority && !isOnHold && isReadyToMatchStage && !surrogate.is_archived
 
     const handleExport = async () => {
         setIsExporting(true)
@@ -156,7 +168,7 @@ export function HeaderActions() {
                 variant="outline"
                 size="sm"
                 onClick={() => openDialog({ type: "email" })}
-                disabled={surrogate.is_archived || !surrogate.email}
+                disabled={!canSendEmail || surrogate.is_archived || !surrogate.email}
                 className="gap-2"
             >
                 <MailIcon className="size-4" />
@@ -193,7 +205,7 @@ export function HeaderActions() {
                     onClick={() => {
                         openDialog({ type: "zoom_meeting" })
                     }}
-                    disabled={surrogate.is_archived}
+                    disabled={surrogate.is_archived || !canScheduleZoom}
                 >
                     <VideoIcon className="mr-2 size-4" />
                     Schedule Zoom
@@ -219,9 +231,12 @@ export function HeaderActions() {
                     <MoreVerticalIcon className="size-4" aria-hidden="true" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => openDialog({ type: "edit_surrogate" })}>
-                        Edit
-                    </DropdownMenuItem>
+                    {canEdit && (
+                        <DropdownMenuItem onClick={() => openDialog({ type: "edit_surrogate" })}>
+                            Edit
+                        </DropdownMenuItem>
+                    )}
+                    {canManageCollaborators && <DropdownMenuItem onClick={() => setCollaboratorsOpen(true)}>Collaborators</DropdownMenuItem>}
                     <DropdownMenuItem onClick={handleExport} disabled={isExporting}>
                         {isExporting ? "Exporting" : "Export"}
                     </DropdownMenuItem>
@@ -233,8 +248,7 @@ export function HeaderActions() {
                             Release to Queue
                         </DropdownMenuItem>
                     )}
-                    {user?.role &&
-                        ["case_manager", "admin", "developer"].includes(user.role) &&
+                    {canManageQueue &&
                         !surrogate.is_archived && (
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger disabled={isAssignPending}>
@@ -301,6 +315,15 @@ export function HeaderActions() {
                 errorFallback="Couldn't archive surrogate. Try again."
                 onConfirm={archiveSurrogate}
             />
+            {collaboratorsOpen && (
+                <RecordCollaboratorsDialog
+                    kind="surrogate"
+                    recordId={surrogate.id}
+                    open={collaboratorsOpen}
+                    onOpenChange={setCollaboratorsOpen}
+                    canManage={canManageCollaborators}
+                />
+            )}
         </>
     )
 }

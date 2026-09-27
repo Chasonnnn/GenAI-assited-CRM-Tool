@@ -114,6 +114,7 @@ export function InlineSelectField({
     }
 
     const handleSave = async (nextValue = editValue) => {
+        if (!canEdit || isSaving) return
         const normalizedValue = nextValue || null
         if ((value ?? "") === (nextValue ?? "")) {
             setIsEditing(false)
@@ -133,7 +134,7 @@ export function InlineSelectField({
         }
     }
 
-    if (!isEditing) {
+    if (!canEdit || !isEditing) {
         return (
             <Button unstyled
                 type="button"
@@ -286,6 +287,7 @@ export function InlineHeightField({
     }
 
     const handleSave = async () => {
+        if (!canEdit || isSaving) return
         const nextValue = serializeHeightSelection(feet, inches)
         if ((feet !== "" || inches !== "") && nextValue === null) {
             setError("Invalid height")
@@ -305,7 +307,7 @@ export function InlineHeightField({
         }
     }
 
-    if (!isEditing) {
+    if (!canEdit || !isEditing) {
         return (
             <Button unstyled
                 type="button"
@@ -430,6 +432,7 @@ export function InlineRaceField({
     }
 
     const handleSave = async () => {
+        if (!canEdit || isSaving) return
         const currentValue = normalizeRaceOptionKey(value)
         if (editValue === currentValue) {
             setIsEditing(false)
@@ -449,7 +452,7 @@ export function InlineRaceField({
         }
     }
 
-    if (!isEditing) {
+    if (!canEdit || !isEditing) {
         return (
             <Button unstyled
                 type="button"
@@ -549,6 +552,7 @@ export function InlineWeightField({
     }
 
     const handleSave = async () => {
+        if (!canEdit || isSaving) return
         const trimmed = editValue.trim()
         if (!trimmed) {
             setIsEditing(false)
@@ -579,7 +583,7 @@ export function InlineWeightField({
         }
     }
 
-    if (!isEditing) {
+    if (!canEdit || !isEditing) {
         return (
             <Button unstyled
                 type="button"
@@ -722,9 +726,10 @@ export function SsnField({
     const [editValue, setEditValue] = React.useState("")
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
-    const displayValue = revealedValue || maskedValue || <EmptyValue />
+    const displayValue = (canEdit && revealedValue) || maskedValue || <EmptyValue />
 
     const save = async () => {
+        if (!canEdit || isSaving) return
         setIsSaving(true)
         const finishSaving = () => setIsSaving(false)
         try {
@@ -739,7 +744,7 @@ export function SsnField({
         }
     }
 
-    if (isEditing) {
+    if (canEdit && isEditing) {
         return (
             <div className="space-y-1">
                 <div className="flex min-w-0 items-center gap-2">
@@ -805,7 +810,7 @@ export function SsnField({
                     size="icon"
                     className="size-7"
                     onClick={() => void onReveal()}
-                    disabled={isRevealPending}
+                    disabled={!canEdit || isRevealPending}
                     aria-label={`Reveal ${label}`}
                 >
                     <EyeIcon className="size-3.5" aria-hidden="true" />

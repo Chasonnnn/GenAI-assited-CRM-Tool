@@ -31,6 +31,7 @@ from app.db.models import (
     Membership,
     Organization,
     PipelineStage,
+    StatusChangeRequest,
     Surrogate,
     SurrogateActivityLog,
     SurrogateContactAttempt,
@@ -38,7 +39,15 @@ from app.db.models import (
     User,
 )
 from app.db.session import SessionLocal
-from app.services import dev_service, match_service, pipeline_service, template_seeder
+from app.services import (
+    dev_service,
+    intended_parent_status_service,
+    match_lifecycle,
+    match_queries,
+    permission_policy_service,
+    pipeline_service,
+    template_seeder,
+)
 from app.utils.height import total_inches_to_height_ft
 
 # Sample data pools
@@ -312,13 +321,14 @@ IP_STATUS_FLOW = [
     IntendedParentStatus.DELIVERED.value,
 ]
 MATCH_STATUS_FLOW = [
-    MatchStatus.PROPOSED.value,
-    MatchStatus.REVIEWING.value,
+    MatchStatus.UNDER_REVIEW.value,
     MatchStatus.ACCEPTED.value,
-    MatchStatus.REJECTED.value,
+    MatchStatus.DECLINED.value,
+    MatchStatus.CANCELLATION_PENDING.value,
     MatchStatus.CANCELLED.value,
+    MatchStatus.COMPLETED.value,
 ]
-MATCH_ACCEPTABLE_SURROGATE_STAGES = {"approved", "ready_to_match"}
+MATCH_ACCEPTABLE_SURROGATE_STAGES = {"ready_to_match"}
 
 
 def mask_email(email: str) -> str:
@@ -1048,6 +1058,26 @@ def _build_match_targets(count: int, mode: str) -> list[str]:
     return _repeat_balanced(MATCH_STATUS_FLOW, count)
 
 
+def _promote_surrogate_to_ready(
+    db, org_id: UUID, candidates: list, accepted: list, used: set[UUID]
+) -> Surrogate | None:
+    """Move one unused seeded surrogate to ready_to_match so it can accept a match."""
+    taken = {s.id for s in accepted} | used
+    pool = [s for s in candidates if s.id not in taken]
+    if not pool:
+        return None
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    stage = pipeline_service.get_stage_by_slug(db, pipeline.id, "ready_to_match")
+    if stage is None:
+        return None
+    surrogate = random.choice(pool)
+    surrogate.stage_id = stage.id
+    surrogate.stage = stage
+    surrogate.status_label = stage.label
+    db.flush()
+    return surrogate
+
+
 def create_matches(
     db,
     *,
@@ -1087,44 +1117,58 @@ def create_matches(
     accepted_surrogates = [
         s for s, slug in surrogate_rows if slug in MATCH_ACCEPTABLE_SURROGATE_STAGES
     ]
-    if not accepted_surrogates:
-        accepted_surrogates = general_surrogates
 
     proposer = _pick_actor(
         users_by_role,
         [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value],
-    )
-    reviewer = _pick_actor(
-        users_by_role,
-        [Role.ADMIN.value, Role.DEVELOPER.value, Role.CASE_MANAGER.value],
-        fallback=proposer,
     )
     decider = _pick_actor(
         users_by_role,
         [Role.DEVELOPER.value, Role.ADMIN.value, Role.CASE_MANAGER.value],
         fallback=proposer,
     )
-    if reviewer.id == proposer.id:
-        for user in users_by_role.values():
-            if user.id != proposer.id:
-                reviewer = user
-                break
-
     targets = _build_match_targets(count, mode=mode)
+    if not match_lifecycle.expansion_enabled():
+        # complete() is fenced behind MATCH_CASE_EXPANSION_ENABLED; seed accepted instead.
+        skipped = targets.count(MatchStatus.COMPLETED.value)
+        targets = [
+            MatchStatus.ACCEPTED.value if t == MatchStatus.COMPLETED.value else t for t in targets
+        ]
+        if skipped:
+            print(f"  - match expansion disabled: seeding {skipped} completed matches as accepted")
     used_pairs: set[tuple[UUID, UUID]] = set()
     used_accepted_surrogates: set[UUID] = set()
     created_matches: list[Match] = []
 
     for target_status in targets:
+        needs_acceptance = target_status not in {
+            MatchStatus.UNDER_REVIEW.value,
+            MatchStatus.DECLINED.value,
+        }
         created = False
         for _ in range(120):
-            pool = (
-                accepted_surrogates
-                if target_status == MatchStatus.ACCEPTED.value
-                else general_surrogates
-            )
-            if target_status == MatchStatus.ACCEPTED.value:
-                pool = [s for s in pool if s.id not in used_accepted_surrogates]
+            pool = accepted_surrogates if needs_acceptance else general_surrogates
+            if needs_acceptance:
+                pool = [
+                    s
+                    for s in pool
+                    if s.id not in used_accepted_surrogates
+                    and s.stage.stage_key == "ready_to_match"
+                ]
+                if not pool:
+                    # Random stage seeding rarely leaves enough acceptable surrogates;
+                    # promote one so every status in the flow is seeded deterministically.
+                    promoted = _promote_surrogate_to_ready(
+                        db,
+                        org_id,
+                        general_surrogates,
+                        accepted_surrogates,
+                        used_accepted_surrogates,
+                    )
+                    if promoted is None:
+                        break
+                    accepted_surrogates.append(promoted)
+                    pool = [promoted]
             if not pool:
                 break
 
@@ -1135,7 +1179,7 @@ def create_matches(
                 continue
             used_pairs.add(pair)
 
-            existing = match_service.get_existing_match(
+            existing = match_queries.get_existing_match(
                 db,
                 org_id=org_id,
                 surrogate_id=surrogate.id,
@@ -1144,93 +1188,136 @@ def create_matches(
             if existing:
                 continue
 
-            match = match_service.create_match(
-                db=db,
-                org_id=org_id,
-                surrogate_id=surrogate.id,
-                intended_parent_id=intended_parent.id,
-                proposed_by_user_id=proposer.id,
-                compatibility_score=round(random.uniform(60, 99), 2),
-                notes=f"Seed {target_status} scenario",
-            )
-
-            if target_status == MatchStatus.PROPOSED.value:
-                created_matches.append(match)
-                created = True
-                break
-
-            if target_status == MatchStatus.REVIEWING.value:
-                match = match_service.mark_match_reviewing_if_needed(
+            try:
+                match = match_lifecycle.propose(
                     db=db,
-                    match=match,
-                    actor_user_id=reviewer.id,
                     org_id=org_id,
+                    surrogate_id=surrogate.id,
+                    intended_parent_id=intended_parent.id,
+                    proposed_by_user_id=proposer.id,
+                    notes=f"Seed {target_status} scenario",
+                    dispatch_effects=False,
                 )
+            except match_lifecycle.TransitionError:
+                # The pair is already open or a participant is missing; pick another.
+                continue
+
+            if target_status == MatchStatus.UNDER_REVIEW.value:
                 created_matches.append(match)
                 created = True
                 break
 
-            if target_status == MatchStatus.ACCEPTED.value:
+            if needs_acceptance:
+                if intended_parent.status not in {"ready_to_match", "matched"}:
+                    pipeline = pipeline_service.get_or_create_default_pipeline(
+                        db, org_id, entity_type="intended_parent"
+                    )
+                    stage = pipeline_service.get_stage_by_system_role(
+                        db, pipeline.id, "handoff", "intended_parent"
+                    )
+                    now = datetime.now(UTC)
+                    intended_parent_status_service.apply_status_change(
+                        db,
+                        ip=intended_parent,
+                        old_stage=intended_parent.stage,
+                        new_stage=stage,
+                        user_id=decider.id,
+                        reason="Seed match eligibility",
+                        effective_at=now,
+                        recorded_at=now,
+                    )
                 try:
-                    match = match_service.accept_match(
-                        db=db,
-                        match=match,
+                    match = match_lifecycle.transition(
+                        db,
+                        match,
+                        "accept",
                         actor_user_id=decider.id,
                         actor_role=Role.DEVELOPER.value,
-                        org_id=org_id,
                         notes="Seed accepted match",
+                        dispatch_effects=False,
                     )
                 except ValueError:
                     try:
-                        match_service.cancel_match(
-                            db=db,
-                            match=match,
+                        match_lifecycle.transition(
+                            db,
+                            match,
+                            "decline",
                             actor_user_id=decider.id,
-                            org_id=org_id,
+                            reason="Seed proposal withdrawn",
+                            dispatch_effects=False,
                         )
                     except Exception:
                         pass
                     continue
-                used_accepted_surrogates.add(surrogate.id)
+                if target_status in {
+                    MatchStatus.CANCELLATION_PENDING.value,
+                    MatchStatus.CANCELLED.value,
+                }:
+                    match = match_lifecycle.transition(
+                        db,
+                        match,
+                        "request_cancel",
+                        actor_user_id=proposer.id,
+                        reason="Seed cancellation for test coverage",
+                        dispatch_effects=False,
+                    )
+                if target_status == MatchStatus.CANCELLED.value:
+                    if permission_policy_service.is_enabled(db, org_id):
+                        permission_policy_service.lock_configuration(db, org_id)
+                    request = (
+                        db.query(StatusChangeRequest)
+                        .filter(
+                            StatusChangeRequest.organization_id == org_id,
+                            StatusChangeRequest.entity_type == "match",
+                            StatusChangeRequest.entity_id == match.id,
+                            StatusChangeRequest.status == "pending",
+                        )
+                        .with_for_update()
+                        .one()
+                    )
+
+                    def resolve():
+                        request.status = "approved"
+                        request.approved_by_user_id = decider.id
+                        request.approved_at = datetime.now(UTC)
+
+                    match = match_lifecycle.transition(
+                        db,
+                        match,
+                        "approve_cancel",
+                        actor_user_id=decider.id,
+                        request=request,
+                        before_commit=resolve,
+                        dispatch_effects=False,
+                    )
+                if target_status == MatchStatus.COMPLETED.value:
+                    match = match_lifecycle.transition(
+                        db,
+                        match,
+                        "complete",
+                        actor_user_id=decider.id,
+                        outcome="Seed completed match",
+                        dispatch_effects=False,
+                    )
+                if target_status in {
+                    MatchStatus.ACCEPTED.value,
+                    MatchStatus.CANCELLATION_PENDING.value,
+                }:
+                    used_accepted_surrogates.add(surrogate.id)
                 created_matches.append(match)
                 created = True
                 break
 
-            if target_status == MatchStatus.REJECTED.value:
-                if reviewer.id != proposer.id and random.random() < 0.6:
-                    match = match_service.mark_match_reviewing_if_needed(
-                        db=db,
-                        match=match,
-                        actor_user_id=reviewer.id,
-                        org_id=org_id,
-                    )
-                match = match_service.reject_match(
-                    db=db,
-                    match=match,
+            if target_status == MatchStatus.DECLINED.value:
+                match = match_lifecycle.transition(
+                    db,
+                    match,
+                    "decline",
                     actor_user_id=decider.id,
-                    org_id=org_id,
-                    rejection_reason="Seed rejection for test coverage",
-                    notes="Seed rejected scenario",
+                    reason="Seed decline for test coverage",
+                    notes="Seed declined scenario",
+                    dispatch_effects=False,
                 )
-                created_matches.append(match)
-                created = True
-                break
-
-            if target_status == MatchStatus.CANCELLED.value:
-                if reviewer.id != proposer.id and random.random() < 0.6:
-                    match = match_service.mark_match_reviewing_if_needed(
-                        db=db,
-                        match=match,
-                        actor_user_id=reviewer.id,
-                        org_id=org_id,
-                    )
-                match_service.cancel_match(
-                    db=db,
-                    match=match,
-                    actor_user_id=decider.id,
-                    org_id=org_id,
-                )
-                db.refresh(match)
                 created_matches.append(match)
                 created = True
                 break

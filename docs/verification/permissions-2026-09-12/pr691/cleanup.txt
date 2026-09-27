@@ -1,0 +1,2 @@
+Disposable container crm-permission-pr691-verify and its anonymous volume removed after verification.
+No API, web server, workers, or external providers were started during PR integration.

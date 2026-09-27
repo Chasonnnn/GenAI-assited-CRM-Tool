@@ -44,7 +44,7 @@ class ChatResponse:
         """Estimate cost based on model pricing (approximate)."""
         # Introductory pricing per 1M tokens through December 31, 2026.
         pricing = {
-            "gemini-3.7-flash": {"input": Decimal("0.75"), "output": Decimal("3.75")},
+            "gemini-3.8-flash": {"input": Decimal("0.75"), "output": Decimal("3.75")},
         }
 
         model_pricing = pricing.get(self.model, {"input": Decimal("0"), "output": Decimal("0")})
@@ -291,7 +291,7 @@ class GoogleGenAIProvider(AIProvider):
 class GeminiProvider(GoogleGenAIProvider):
     """Google Gemini API provider."""
 
-    def __init__(self, api_key: str, default_model: str = "gemini-3.7-flash") -> None:
+    def __init__(self, api_key: str, default_model: str = "gemini-3.8-flash") -> None:
         self.api_key = api_key
         client = genai.Client(api_key=api_key)
         super().__init__(client, default_model)
@@ -343,7 +343,11 @@ class VertexWIFCredentials(Credentials):
 
     def refresh(self, request: Request) -> None:  # noqa: ARG002
         now = datetime.now(UTC)
-        if self.token and self.expiry and self.expiry > now + timedelta(minutes=2):
+        if (
+            self.token
+            and self.expiry
+            and self.expiry.replace(tzinfo=UTC) > now + timedelta(minutes=2)
+        ):
             return
 
         from app.services import wif_oidc_service
@@ -392,22 +396,22 @@ class VertexWIFCredentials(Credentials):
         access_token = iam_payload["accessToken"]
         expires_at = iam_payload.get("expireTime")
         if expires_at:
-            self.expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
         else:
-            self.expiry = now + timedelta(hours=1)
+            expiry = now + timedelta(hours=1)
+        # google-auth Credentials requires naive UTC at its expiry boundary.
+        self.expiry = expiry.astimezone(UTC).replace(tzinfo=None)
         self.token = access_token
 
 
 class VertexWIFProvider(GoogleGenAIProvider):
     """Vertex AI provider using Workload Identity Federation (OIDC)."""
 
-    def __init__(
-        self, config: VertexWIFConfig, default_model: str = "gemini-3.7-flash"
-    ) -> None:
+    def __init__(self, config: VertexWIFConfig, default_model: str = "gemini-3.8-flash") -> None:
         self.config = config
         self._credentials = VertexWIFCredentials(config)
         client = genai.Client(
-            vertexai=True,
+            enterprise=True,
             project=config.project_id,
             location=config.location,
             credentials=self._credentials,
@@ -474,12 +478,12 @@ class VertexAPIKeyProvider(GoogleGenAIProvider):
     def __init__(
         self,
         config: VertexAPIKeyConfig,
-        default_model: str = "gemini-3.7-flash",
+        default_model: str = "gemini-3.8-flash",
     ) -> None:
         self.config = config
         self._is_express = not (config.project_id and config.location)
         client_kwargs: dict[str, object] = {
-            "vertexai": True,
+            "enterprise": True,
             "api_key": config.api_key,
             "http_options": types.HttpOptions(api_version="v1"),
         }
@@ -509,13 +513,13 @@ def get_provider(
 ) -> AIProvider:
     """Factory function to get the appropriate AI provider."""
     if provider_name == "gemini":
-        return GeminiProvider(api_key, default_model=model or "gemini-3.7-flash")
+        return GeminiProvider(api_key, default_model=model or "gemini-3.8-flash")
     elif provider_name == "vertex_api_key":
         config = VertexAPIKeyConfig(
             api_key=api_key,
             project_id=kwargs.get("project_id"),
             location=kwargs.get("location"),
         )
-        return VertexAPIKeyProvider(config, default_model=model or "gemini-3.7-flash")
+        return VertexAPIKeyProvider(config, default_model=model or "gemini-3.8-flash")
     else:
         raise ValueError(f"Unknown provider: {provider_name}")

@@ -1,0 +1,68 @@
+{
+  "runs": [
+    {
+      "arm": "vitest4",
+      "summary": [
+        "Test Files  266 passed (266)",
+        "Tests  1507 passed (1507)",
+        "Duration  22.63s (transform 16.26s, setup 40.59s, import 106.16s, tests 92.93s, environment 112.48s)"
+      ],
+      "error": null
+    },
+    {
+      "arm": "vitest5_default",
+      "summary": [
+        "Test Files  266 passed (266)",
+        "Tests  1507 passed (1507)",
+        "Duration  20.61s (environment 31%, tests 27%, import 25%, setup 10%, transform 7%)"
+      ],
+      "error": null
+    },
+    {
+      "arm": "vitest5_vm_failed",
+      "summary": [
+        "Test Files  266 failed (266)",
+        "Tests  no tests",
+        "Duration  2.88s (environment 58%, worker 42%)"
+      ],
+      "error": "Cannot redefine property: location"
+    },
+    {
+      "arm": "vitest5_cache",
+      "summary": [
+        "Test Files  266 passed (266)",
+        "Tests  1507 passed (1507)",
+        "Duration  22.26s (environment 30%, tests 28%, import 26%, setup 10%, transform 5%)"
+      ],
+      "error": null
+    },
+    {
+      "arm": "vitest5_cache_warm",
+      "summary": [
+        "Test Files  266 passed (266)",
+        "Tests  1507 passed (1507)",
+        "Duration  21.86s (environment 31%, tests 29%, import 26%, setup 10%, transform 3%)"
+      ],
+      "error": null
+    },
+    {
+      "arm": "final_check",
+      "summary": [
+        "Test Files  266 passed (266)",
+        "Tests  1507 passed (1507)",
+        "Duration  22.10s (environment 31%, tests 27%, import 25%, setup 10%, transform 6%)"
+      ],
+      "error": null
+    }
+  ],
+  "benchmark_limitations": "Single non-randomized samples; warm-cache validation overlapped ESLint. No statistically supported speedup claim. Durations are Vitest reported, not external process wall time.",
+  "checks": {
+    "typescript7": "passed",
+    "typescript6": "passed",
+    "eslint": "passed",
+    "sanitizer_focused": "56 passed",
+    "production_build": "passed with network for Google Fonts",
+    "live_browser": "not run",
+    "backend": "unchanged; not run"
+  }
+}

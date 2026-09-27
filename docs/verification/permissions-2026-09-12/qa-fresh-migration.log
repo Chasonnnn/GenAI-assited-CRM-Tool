@@ -1,0 +1,163 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 20260111_2137, Baseline consolidated migration.
+INFO  [alembic.runtime.migration] Running upgrade 20260111_2137 -> 20260112_1631, Add is_active to memberships.
+INFO  [alembic.runtime.migration] Running upgrade 20260112_1631 -> 20260113_1000, Meta analytics enhancement: ad accounts, hierarchy, spend, forms.
+INFO  [alembic.runtime.migration] Running upgrade 20260113_1000 -> 20260113_1100, Rename cases to surrogates throughout the database.
+INFO  [alembic.runtime.migration] Running upgrade 20260113_1100 -> 20260113_1130, Update pipeline stages for Surrogacy Force.
+INFO  [alembic.runtime.migration] Running upgrade 20260113_1130 -> 20260113_1205, Rename form_field_mappings case_field to surrogate_field.
+INFO  [alembic.runtime.migration] Running upgrade 20260113_1205 -> 20260115_0900, Fix surrogate index and constraint names for renamed tables.
+INFO  [alembic.runtime.migration] Running upgrade 20260115_0900 -> 20260115_1400, Add intended parent numbers and S/I numbering format.
+INFO  [alembic.runtime.migration] Running upgrade 20260115_1400 -> 20260115_1500, Add match numbers.
+INFO  [alembic.runtime.migration] Running upgrade 20260115_1500 -> 20260115_1700, Add medical, insurance, and pregnancy fields to surrogates.
+INFO  [alembic.runtime.migration] Running upgrade 20260115_1500 -> 20260115_1600, Add backdated stage change support with dual timestamps and approval workflow.
+INFO  [alembic.runtime.migration] Running upgrade 20260115_1600, 20260115_1700 -> 20260115_1710, Merge backdated stage support and medical fields heads.
+INFO  [alembic.runtime.migration] Running upgrade 20260115_1710 -> 20260115_1715, Add backdated status change support for intended parents.
+INFO  [alembic.runtime.migration] Running upgrade 20260115_1715 -> 20260115_1720, Update intended parent statuses to new workflow.
+INFO  [alembic.runtime.migration] Running upgrade 20260115_1720 -> 20260115_1800, Add idempotency keys to email logs and zoom meetings.
+INFO  [alembic.runtime.migration] Running upgrade 20260115_1800 -> 20260116_0900, Add portal domain to organizations.
+INFO  [alembic.runtime.migration] Running upgrade 20260116_0900 -> 20260116_1400, Add AI bulk task idempotency table.
+INFO  [alembic.runtime.migration] Running upgrade 20260116_1400 -> 20260116_1500, Add Zoom and Google Meet integration fields.
+INFO  [alembic.runtime.migration] Running upgrade 20260116_1500 -> 20260117_0900, Add actual_delivery_date to surrogates for Journey tracking.
+INFO  [alembic.runtime.migration] Running upgrade 20260117_0900 -> 20260117_0935, Reorder default pipeline stages so interview follows application submission.
+INFO  [alembic.runtime.migration] Running upgrade 20260117_0935 -> 20260117_1000, Add journey_featured_images table for milestone image selection.
+INFO  [alembic.runtime.migration] Running upgrade 20260117_1000 -> 20260117_1015, Update second_hcg_confirmed label casing.
+INFO  [alembic.runtime.migration] Running upgrade 20260117_1015 -> 20260117_1030, Update terminal stage order and pipeline labels.
+INFO  [alembic.runtime.migration] Running upgrade 20260117_1030 -> 20260117_1045, Update stage label casing for transfer cycle and OB care.
+INFO  [alembic.runtime.migration] Running upgrade 20260117_1045 -> 20260117_1200, Add import file content and org-scoped indexes.
+INFO  [alembic.runtime.migration] Running upgrade 20260117_1200 -> 20260122_0900, Add platform admin support: is_platform_admin flag, organization subscriptions, admin action logs.
+INFO  [alembic.runtime.migration] Running upgrade 20260122_0900 -> 20260123_0900, Add support sessions for platform admin role override.
+INFO  [alembic.runtime.migration] Running upgrade 20260123_0900 -> 20260123_2355, Add support session constraints and operational indexes.
+INFO  [alembic.runtime.migration] Running upgrade 20260123_2355 -> 20260125_1915, add_email_template_from_email
+INFO  [alembic.runtime.migration] Running upgrade 20260125_1915 -> 20260125_2000, add_resend_settings
+INFO  [alembic.runtime.migration] Running upgrade 20260125_2000 -> 20260125_2100, add_org_soft_delete
+INFO  [alembic.runtime.migration] Running upgrade 20260125_2100 -> 20260125_2330, add_email_log_engagement
+INFO  [alembic.runtime.migration] Running upgrade 20260125_2330 -> 20260125_2400, Remove portal_domain from organizations.
+INFO  [alembic.runtime.migration] Running upgrade 20260125_2400 -> 20260126_1000, Add import templates and custom fields.
+INFO  [alembic.runtime.migration] Running upgrade 20260126_1000 -> 20260126_1030, Ensure surrogate_imports.unknown_column_behavior exists.
+INFO  [alembic.runtime.migration] Running upgrade 20260126_1030 -> 20260126_1100, Add workflow scope and owner_user_id fields.
+INFO  [alembic.runtime.migration] Running upgrade 20260126_1100 -> 20260128_1030, Add Vertex WIF fields to ai_settings.
+INFO  [alembic.runtime.migration] Running upgrade 20260128_1030 -> 20260128_1400, Add Meta OAuth connection table and FK columns.
+INFO  [alembic.runtime.migration] Running upgrade 20260128_1400 -> 20260129_1200, Add normalized identity fields and trigram indexes for search.
+INFO  [alembic.runtime.migration] Running upgrade 20260129_1200 -> 20260129_1300, Add email domain and phone last4 helpers for ops filtering.
+INFO  [alembic.runtime.migration] Running upgrade 20260129_1300 -> 20260129_1900, Add Meta lead mapping fields and remove legacy token columns.
+INFO  [alembic.runtime.migration] Running upgrade 20260129_1900 -> 20260129_2100, Add backdate flag to surrogate imports.
+INFO  [alembic.runtime.migration] Running upgrade 20260129_2100 -> faed99d040d9, add_import_mapping_corrections
+INFO  [alembic.runtime.migration] Running upgrade faed99d040d9 -> 20260129_2300, add_meta_ad_platform_daily
+INFO  [alembic.runtime.migration] Running upgrade 20260129_2300 -> 20260129_2355, Add zapier_webhook_settings table.
+INFO  [alembic.runtime.migration] Running upgrade 20260129_2355 -> 20260130_0010, Add outbound Zapier webhook settings fields.
+INFO  [alembic.runtime.migration] Running upgrade faed99d040d9 -> 20260129_0051, fix_workflow_pause_fk
+INFO  [alembic.runtime.migration] Running upgrade 20260129_0051, 20260130_0010 -> 20260130_0105, Merge multiple heads.
+INFO  [alembic.runtime.migration] Running upgrade 20260130_0105 -> 20260130_0230, Add file hash to surrogate imports.
+INFO  [alembic.runtime.migration] Running upgrade 20260130_0230 -> 20260130_0300, Add default source to surrogate imports.
+INFO  [alembic.runtime.migration] Running upgrade 20260130_0300 -> 20260130_1900, Add delivery outcome fields to surrogates.
+INFO  [alembic.runtime.migration] Running upgrade 20260130_1900 -> 20260130_2130, Add delivered_count to campaign_runs.
+INFO  [alembic.runtime.migration] Running upgrade 20260130_2130 -> 20260130_2310, Update AI settings defaults to Gemini.
+INFO  [alembic.runtime.migration] Running upgrade 20260130_2310 -> 20260131_0100, Add personal scope support to email templates.
+INFO  [alembic.runtime.migration] Running upgrade 20260131_0100 -> 20260131_1200, Add form submission mapping snapshots and file field keys.
+INFO  [alembic.runtime.migration] Running upgrade 20260131_1200 -> 20260131_1500, Add appointment type location, dial-in, and auto-approve fields.
+INFO  [alembic.runtime.migration] Running upgrade 20260131_1500 -> 20260131_1600, Add validation_mode to surrogate imports.
+INFO  [alembic.runtime.migration] Running upgrade 20260131_1600 -> 20260131_1800, Update attachment quarantine semantics for pending scans.
+INFO  [alembic.runtime.migration] Running upgrade 20260131_1800 -> 20260131_2345, Normalize AI model defaults for Gemini providers.
+INFO  [alembic.runtime.migration] Running upgrade 20260131_2345 -> 20260131_2355, Add zapier_inbound_webhooks table.
+INFO  [alembic.runtime.migration] Running upgrade 20260131_2355 -> 20260201_1200, Add platform template studio tables and workflow template publish controls.
+INFO  [alembic.runtime.migration] Running upgrade 20260201_1200 -> 20260201_1300, Seed platform email + workflow templates for ops console.
+INFO  [alembic.runtime.migration] Running upgrade 20260201_1300 -> 20260202_1415, Add platform system email templates and branding.
+INFO  [alembic.runtime.migration] Running upgrade 20260202_1415 -> 20260202_1600, Add meeting_modes to appointment types.
+INFO  [alembic.runtime.migration] Running upgrade 20260202_1600 -> 20260202_2315, Extend appointment idempotency_key length.
+INFO  [alembic.runtime.migration] Running upgrade 20260202_2315 -> 20260202_2350, Seed Jotform surrogate intake platform form template.
+INFO  [alembic.runtime.migration] Running upgrade 20260202_2350 -> 20260202_2355, Reassign org surrogates to Unassigned queue.
+INFO  [alembic.runtime.migration] Running upgrade 20260202_2355 -> 20260202_2359, Seed Jotform surrogate application platform form template.
+INFO  [alembic.runtime.migration] Running upgrade 20260202_2359 -> 20260202_1148, Fix long label in surrogate application form template.
+INFO  [alembic.runtime.migration] Running upgrade 20260202_1148 -> 20260206_1031, add_campaign_include_unsubscribed
+INFO  [alembic.runtime.migration] Running upgrade 20260206_1031 -> 20260206_1300, Fix Ready to Match label casing.
+INFO  [alembic.runtime.migration] Running upgrade 20260206_1300 -> 20260207_1200, Add form submission drafts for server-side autosave.
+INFO  [alembic.runtime.migration] Running upgrade 20260207_1200 -> 20260209_1200, Seed Surrogate Full Application Form platform form template (2-page version).
+INFO  [alembic.runtime.migration] Running upgrade 20260209_1200 -> 20260213_0900, Add org-level hidden list for platform form templates.
+INFO  [alembic.runtime.migration] Running upgrade 20260213_0900 -> 20260219_1400, Normalize stored surrogate heights from feet.inches shorthand.
+INFO  [alembic.runtime.migration] Running upgrade 20260219_1400 -> 20260219_1730, Add Google Calendar push-channel metadata to user integrations.
+INFO  [alembic.runtime.migration] Running upgrade 20260219_1730 -> 20260219_1900, Add email_log_attachments join table.
+INFO  [alembic.runtime.migration] Running upgrade 20260219_1900 -> 20260220_0930, Add Google Tasks sync linkage fields to tasks.
+INFO  [alembic.runtime.migration] Running upgrade 20260220_0930 -> 20260222_1200, Add mailbox ingestion and ticketing schema.
+INFO  [alembic.runtime.migration] Running upgrade 20260222_1200 -> 20260222_1700, bridge missing local revision stamp
+INFO  [alembic.runtime.migration] Running upgrade 20260222_1700 -> 20260222_1705, Add Gmail watch metadata fields to mailboxes.
+INFO  [alembic.runtime.migration] Running upgrade 20260222_1705 -> 20260222_1800, add dual-mode intake links, leads, and submission matching
+INFO  [alembic.runtime.migration] Running upgrade 20260222_1800 -> 20260223_1300, add form purpose and org-level default surrogate application form
+INFO  [alembic.runtime.migration] Running upgrade 20260223_1300 -> 20260223_2358, seed surrogate pre-screening questionnaire platform form template
+INFO  [alembic.runtime.migration] Running upgrade 20260223_2358 -> 20260224_0015, seed form intake auto-routing workflow platform template
+INFO  [alembic.runtime.migration] Running upgrade 20260224_0015 -> 20260224_0105, seed dual intake workflow templates for full app and pre-screening
+INFO  [alembic.runtime.migration] Running upgrade 20260224_0105 -> 20260224_1710, drop match compatibility score
+INFO  [alembic.runtime.migration] Running upgrade 20260224_1710 -> 20260224_1835, add important notification settings
+INFO  [alembic.runtime.migration] Running upgrade 20260224_1835 -> 20260225_1100, allow multiple ai conversations per entity
+INFO  [alembic.runtime.migration] Running upgrade faed99d040d9 -> 20260315_1200, add fax, pcp provider, and lab clinic fields to surrogates
+INFO  [alembic.runtime.migration] Running upgrade 20260315_1200 -> 20260315_1300, expand intended parent fields – partner, pronouns, address, IVF clinic
+INFO  [alembic.runtime.migration] Running upgrade 20260225_1100 -> 20260302_0900, add intelligent suggestion settings
+INFO  [alembic.runtime.migration] Running upgrade 20260225_1100 -> 20260227_1200, introduce stage_key and cut over qualified to pre_qualified
+INFO  [alembic.runtime.migration] Running upgrade 20260227_1200 -> 20260301_1200, add shared intake draft identity lookup columns
+INFO  [alembic.runtime.migration] Running upgrade 20260301_1200, 20260302_0900 -> 20260303_1000, merge intelligent suggestion heads
+INFO  [alembic.runtime.migration] Running upgrade 20260303_1000 -> 20260306_1400, add surrogate on-hold support
+INFO  [alembic.runtime.migration] Running upgrade 20260306_1400 -> 20260307_2000, add zapier outbound event monitoring
+INFO  [alembic.runtime.migration] Running upgrade 20260307_2000 -> 20260308_0400, add meta crm dataset outbound
+INFO  [alembic.runtime.migration] Running upgrade 20260308_0400, 20260315_1300 -> 20260315_1800, convert booking links to readable user slugs and merge heads
+INFO  [alembic.runtime.migration] Running upgrade 20260315_1800 -> 20260315_1815, repair booking link slugs backfilled with escaped regex bug
+INFO  [alembic.runtime.migration] Running upgrade 20260315_1815 -> 20260315_1900, convert intake links to readable org-scoped slugs
+INFO  [alembic.runtime.migration] Running upgrade 20260315_1900 -> 20260320_1100, add pipeline semantics platform fields
+INFO  [alembic.runtime.migration] Running upgrade 20260320_1100 -> 20260321_1200, platformize intended parent pipelines
+INFO  [alembic.runtime.migration] Running upgrade 20260321_1200 -> 20260321_1700, add intended parent detail fields
+INFO  [alembic.runtime.migration] Running upgrade 20260321_1700 -> 20260321_1800, rename trust holder fields to trust info
+INFO  [alembic.runtime.migration] Running upgrade 20260321_1800 -> 20260329_2230, add surrogate journey timing field and template mapping
+INFO  [alembic.runtime.migration] Running upgrade 20260329_2230 -> 20260406_1700, canonicalize surrogate height precision
+INFO  [alembic.runtime.migration] Running upgrade 20260406_1700 -> 20260502_1200, add surrogate sensitive personal info
+INFO  [alembic.runtime.migration] Running upgrade 20260502_1200 -> 20260503_0900, add surrogate personal address fields
+INFO  [alembic.runtime.migration] Running upgrade 20260503_0900 -> 20260506_2035, add surrogate embryo stage
+INFO  [alembic.runtime.migration] Running upgrade 20260506_2035 -> 20260508_1200, remove dedicated form submission tokens
+INFO  [alembic.runtime.migration] Running upgrade 20260508_1200 -> 20260508_1330, add public intake embed contracts
+INFO  [alembic.runtime.migration] Running upgrade 20260508_1330 -> 20260509_0915, default public intake embeds to enhanced match lead tracking
+INFO  [alembic.runtime.migration] Running upgrade 20260509_0915 -> 20260509_1500, add ai studio settings and drafts
+INFO  [alembic.runtime.migration] Running upgrade 20260509_1500 -> 20260509_1515, add ai studio image output settings
+INFO  [alembic.runtime.migration] Running upgrade 20260509_1515 -> 20260510_1553, align ai studio timestamp timezones
+INFO  [alembic.runtime.migration] Running upgrade 20260510_1553 -> 20260529_2355, seed pre-questionaire platform form template
+INFO  [alembic.runtime.migration] Running upgrade 20260529_2355 -> 20260615_0900, add intake pool access grants
+INFO  [alembic.runtime.migration] Running upgrade 20260615_0900 -> 20260615_0945, align intake pool grant timestamp timezones
+INFO  [alembic.runtime.migration] Running upgrade 20260615_0945 -> 20260624_1130, public intake hardening
+INFO  [alembic.runtime.migration] Running upgrade 20260624_1130 -> 20260624_1730, harden pre-questionaire public fields
+INFO  [alembic.runtime.migration] Running upgrade 20260624_1730 -> 20260701_1025, Add indexes for intelligent suggestion summary queries.
+INFO  [alembic.runtime.migration] Running upgrade 20260701_1025 -> 20260725_1800, Expand jobs with rolling-compatible claim metadata.
+INFO  [alembic.runtime.migration] Running upgrade 20260725_1800 -> 20260723_0048, Add durable Resend webhook events.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0048 -> 20260723_0115, Index tenant-scoped provider message lookups.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0115 -> 20260723_0130, Add the leased transactional email delivery outbox.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0130 -> 20260723_0140, Add monotonic invite send revision.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0140 -> 20260723_0150, Link campaign recipients to immutable email messages.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0150 -> 20260723_0160, Add durable provider-account email admission.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0160 -> 20260723_0170, Track Resend's provider idempotency window.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0170 -> 20260723_0180, Preserve the user who initiated a durable email.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0180 -> 20260723_0190, Snapshot immutable attachment metadata on outbound email logs.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0190 -> 20260723_0200, Bind provider retries to the credential used for the first attempt.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0200 -> 20260723_0210, Link appointment notifications to durable email occurrences.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0210 -> 20260723_0220, Add source-linked email reconciliation cases.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0220 -> 20260723_0230, Index stale Resend reconciliation claims.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0230 -> 20260723_0240, Scope Resend webhook events to their trusted delivery route.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0240 -> 20260723_0250, Support organization- and platform-scoped background jobs.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0250 -> 20260723_0260, Persist sanitized, fenced Resend readiness snapshots.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0260 -> 20260723_0270, Add optional shared Resend admission-group identity.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0270 -> 20260723_0280, Add isolated email template drafts.
+INFO  [alembic.runtime.migration] Running upgrade 20260723_0280 -> 20260725_0290, Pin published email content for queued campaign runs and workflow jobs.
+INFO  [alembic.runtime.migration] Running upgrade 20260725_0290 -> 20260803_0100, Add hashed opaque unsubscribe tokens.
+INFO  [alembic.runtime.migration] Running upgrade 20260725_0290 -> 20260731_2200, Add organization Twilio settings and purpose-bound routes.
+INFO  [alembic.runtime.migration] Running upgrade 20260731_2200 -> 20260731_2210, Add organization-scoped messaging consent ledger.
+INFO  [alembic.runtime.migration] Running upgrade 20260731_2210 -> 20260731_2220, Add immutable Meta legal snapshots and lead disclaimer responses.
+INFO  [alembic.runtime.migration] Running upgrade 20260731_2220 -> 20260731_2230, add messaging delivery core
+INFO  [alembic.runtime.migration] Running upgrade 20260731_2230 -> 20260731_2235, Add provider synchronization state for messaging consent.
+INFO  [alembic.runtime.migration] Running upgrade 20260731_2235 -> 20260731_2240, channelize campaigns for messaging
+INFO  [alembic.runtime.migration] Running upgrade 20260731_2240 -> 20260731_2250, Add durable inbound MMS processing state.
+INFO  [alembic.runtime.migration] Running upgrade 20260731_2250, 20260803_0100 -> 20260804_0040, Merge Twilio messaging and opaque unsubscribe migration heads.
+INFO  [alembic.runtime.migration] Running upgrade 20260804_0040 -> 20260824_1150, Rebuild the enrollment-confirmation uniqueness predicate.
+INFO  [alembic.runtime.migration] Running upgrade 20260824_1150 -> 20260824_1200, Upgrade Google AI settings to Gemini 3.7 Flash.
+INFO  [alembic.runtime.migration] Running upgrade 20260824_1200 -> 20260829_0100, Add the complete donor module.
+INFO  [alembic.runtime.migration] Running upgrade 20260829_0100 -> 20260830_0100, Add shared Intended Parent and Donor activity logs.
+INFO  [alembic.runtime.migration] Running upgrade 20260830_0100 -> 20260905_1400_match_cases, Add independent donor cases, explicit closure, and treatment attempts.
+INFO  [alembic.runtime.migration] Running upgrade 20260905_1400_match_cases -> 20260905_1500_match_work, Attach work to exact cases and attempts without guessing historical ownership.
+INFO  [alembic.runtime.migration] Running upgrade 20260905_1500_match_work -> 20260905_1600_record_integrations, Add explicit appointment case context and record correspondence links.
+INFO  [alembic.runtime.migration] Running upgrade 20260905_1600_record_integrations -> 20260907_2200_perm_policy, Add explicit organization permission-policy activation state.
+INFO  [alembic.runtime.migration] Running upgrade 20260907_2200_perm_policy -> 20260907_2210_record_scope, Add record scope rules and retained Intake collaborators.
+INFO  [alembic.runtime.migration] Running upgrade 20260907_2210_record_scope -> 20260907_2220_work_authority, Separate organization execution authority, publication credit and donor phases.

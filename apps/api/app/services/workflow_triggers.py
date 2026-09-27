@@ -1,5 +1,6 @@
 """Workflow triggers - hooks into core services to trigger workflows."""
 
+import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -20,7 +21,10 @@ from app.db.models import (
     WorkflowExecution,
 )
 from app.schemas.workflow import is_supported_simple_cron
+from app.services import workflow_execution_authority
 from app.services.workflow_engine import engine
+
+logger = logging.getLogger(__name__)
 
 
 def _get_entity_owner_id(surrogate: Surrogate) -> UUID | None:
@@ -36,16 +40,24 @@ def _get_donor_owner_id(donor: Donor) -> UUID | None:
     return None
 
 
-def _workflow_applies_to_owner(workflow, entity_owner_id: UUID | None) -> bool:
+def _workflow_applies_to_owner(
+    workflow, entity_owner_id: UUID | None, db=None, subject_type=None, subject_id=None
+) -> bool:
     """Return whether one org or personal workflow applies to an entity owner."""
     if workflow.scope == "org":
         return True
+    if db is not None and workflow_execution_authority.enabled(db, workflow.organization_id):
+        return workflow_execution_authority.personal_subject_allowed(
+            db, workflow, subject_type, subject_id
+        )
     return workflow.scope == "personal" and workflow.owner_user_id == entity_owner_id
 
 
-def _workflow_applies_to_surrogate(workflow, surrogate: Surrogate) -> bool:
+def _workflow_applies_to_surrogate(workflow, surrogate: Surrogate, db=None) -> bool:
     """Return whether one org or personal workflow applies to this surrogate."""
-    return _workflow_applies_to_owner(workflow, _get_entity_owner_id(surrogate))
+    return _workflow_applies_to_owner(
+        workflow, _get_entity_owner_id(surrogate), db, "surrogate", surrogate.id
+    )
 
 
 def _get_owner_id_for_surrogate_id(
@@ -535,7 +547,9 @@ def trigger_scheduled_workflows(
         if _should_run_cron(cron, now, tz):
             if workflow.subject_type in {"egg_donor", "sperm_donor"}:
                 for donor in _iter_donors(db, org_id, workflow.subject_type):
-                    if not _workflow_applies_to_owner(workflow, _get_donor_owner_id(donor)):
+                    if not _workflow_applies_to_owner(
+                        workflow, _get_donor_owner_id(donor), db, workflow.subject_type, donor.id
+                    ):
                         continue
                     engine.execute_workflow(
                         db=db,
@@ -549,7 +563,7 @@ def trigger_scheduled_workflows(
                     )
             elif workflow.subject_type == "surrogate":
                 for surrogate in _iter_surrogates(db, org_id):
-                    if not _workflow_applies_to_surrogate(workflow, surrogate):
+                    if not _workflow_applies_to_surrogate(workflow, surrogate, db):
                         continue
                     engine.execute_workflow(
                         db=db,
@@ -588,7 +602,9 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
 
         if workflow.subject_type in {"egg_donor", "sperm_donor"}:
             for donor in _iter_donors(db, org_id, workflow.subject_type, updated_before=threshold):
-                if not _workflow_applies_to_owner(workflow, _get_donor_owner_id(donor)):
+                if not _workflow_applies_to_owner(
+                    workflow, _get_donor_owner_id(donor), db, workflow.subject_type, donor.id
+                ):
                     continue
                 engine.execute_workflow(
                     db=db,
@@ -605,7 +621,7 @@ def trigger_inactivity_workflows(db: Session, org_id: UUID) -> None:
                 )
         elif workflow.subject_type == "surrogate":
             for surrogate in _iter_surrogates(db, org_id, updated_before=threshold):
-                if not _workflow_applies_to_surrogate(workflow, surrogate):
+                if not _workflow_applies_to_surrogate(workflow, surrogate, db):
                     continue
                 engine.execute_workflow(
                     db=db,
@@ -719,7 +735,9 @@ def trigger_task_due_sweep(db: Session, org_id: UUID) -> None:
                 subject_type, subject_id = "surrogate", task.id
             if subject_type != workflow.subject_type or subject_id is None:
                 continue
-            if not _workflow_applies_to_owner(workflow, entity_owner_id):
+            if not _workflow_applies_to_owner(
+                workflow, entity_owner_id, db, subject_type, subject_id
+            ):
                 continue
             donor_subject = subject_type in {"egg_donor", "sperm_donor"}
             engine.execute_workflow(
@@ -762,76 +780,62 @@ def trigger_task_overdue_sweep(db: Session, org_id: UUID) -> None:
 
 
 # =============================================================================
-# Match Triggers (called from match_service.py)
+# Match Triggers (dispatched by match_effects after a committed transition)
 # =============================================================================
 
 
-def trigger_match_proposed(db: Session, match: Match) -> None:
-    """Trigger workflows when a match is proposed."""
-    entity_owner_id = _get_owner_id_for_surrogate_id(db, match.organization_id, match.surrogate_id)
+def _trigger_match(db: Session, match: Match, trigger_type: WorkflowTriggerType) -> None:
+    from app.services import match_queries
+
+    party = (
+        match_queries.get_donor(db, match.donor_id, match.organization_id)
+        if match.donor_id
+        else match_queries.get_surrogate_with_stage(db, match.surrogate_id, match.organization_id)
+    )
+    if party is None:
+        logger.warning(
+            "match_workflow_party_missing",
+            extra={"match_id": str(match.id), "trigger_type": trigger_type.value},
+        )
+        raise ValueError("Match workflow participant not found")
+    event_data = {
+        "match_id": str(match.id),
+        "surrogate_id": str(match.surrogate_id) if match.surrogate_id else None,
+        "donor_id": str(match.donor_id) if match.donor_id else None,
+        "intended_parent_id": str(match.intended_parent_id),
+        "status": match.status,
+    }
+    if trigger_type == WorkflowTriggerType.MATCH_ACCEPTED:
+        accepted_at = match.reviewed_at or match.updated_at
+        event_data["accepted_at"] = accepted_at.isoformat() if accepted_at else None
     engine.trigger(
         db=db,
-        trigger_type=WorkflowTriggerType.MATCH_PROPOSED,
+        trigger_type=trigger_type,
         entity_type="match",
         entity_id=match.id,
-        event_data={
-            "match_id": str(match.id),
-            "surrogate_id": str(match.surrogate_id),
-            "intended_parent_id": str(match.intended_parent_id)
-            if match.intended_parent_id
-            else None,
-            "status": match.status,
-        },
+        event_data=event_data,
         org_id=match.organization_id,
         source=WorkflowEventSource.USER,
-        entity_owner_id=entity_owner_id,
+        entity_owner_id=_get_entity_owner_id(party),
+        subject_type="match",
+        subject_id=match.id,
     )
+
+
+def trigger_match_proposed(db: Session, match: Match) -> None:
+    _trigger_match(db, match, WorkflowTriggerType.MATCH_PROPOSED)
 
 
 def trigger_match_accepted(db: Session, match: Match) -> None:
-    """Trigger workflows when a match is accepted."""
-    accepted_at = match.reviewed_at or match.updated_at
-    entity_owner_id = _get_owner_id_for_surrogate_id(db, match.organization_id, match.surrogate_id)
-    engine.trigger(
-        db=db,
-        trigger_type=WorkflowTriggerType.MATCH_ACCEPTED,
-        entity_type="match",
-        entity_id=match.id,
-        event_data={
-            "match_id": str(match.id),
-            "surrogate_id": str(match.surrogate_id),
-            "intended_parent_id": str(match.intended_parent_id)
-            if match.intended_parent_id
-            else None,
-            "status": match.status,
-            "accepted_at": accepted_at.isoformat() if accepted_at else None,
-        },
-        org_id=match.organization_id,
-        source=WorkflowEventSource.USER,
-        entity_owner_id=entity_owner_id,
-    )
+    _trigger_match(db, match, WorkflowTriggerType.MATCH_ACCEPTED)
 
 
-def trigger_match_rejected(db: Session, match: Match) -> None:
-    """Trigger workflows when a match is rejected."""
-    entity_owner_id = _get_owner_id_for_surrogate_id(db, match.organization_id, match.surrogate_id)
-    engine.trigger(
-        db=db,
-        trigger_type=WorkflowTriggerType.MATCH_REJECTED,
-        entity_type="match",
-        entity_id=match.id,
-        event_data={
-            "match_id": str(match.id),
-            "surrogate_id": str(match.surrogate_id),
-            "intended_parent_id": str(match.intended_parent_id)
-            if match.intended_parent_id
-            else None,
-            "status": match.status,
-        },
-        org_id=match.organization_id,
-        source=WorkflowEventSource.USER,
-        entity_owner_id=entity_owner_id,
-    )
+def trigger_match_declined(db: Session, match: Match) -> None:
+    _trigger_match(db, match, WorkflowTriggerType.MATCH_DECLINED)
+
+
+def trigger_match_cancelled(db: Session, match: Match) -> None:
+    _trigger_match(db, match, WorkflowTriggerType.MATCH_CANCELLED)
 
 
 # =============================================================================

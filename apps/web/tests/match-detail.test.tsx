@@ -73,9 +73,10 @@ const mockCreateMatchNote = vi.fn()
 const mockUploadMatchFile = vi.fn()
 const mockUseMatch = vi.fn()
 const mockUseAcceptMatch = vi.fn()
-const mockUseRejectMatch = vi.fn()
+const mockUseDeclineMatch = vi.fn()
 const mockUseCancelMatch = vi.fn()
 const mockUseUpdateMatchNotes = vi.fn()
+const mockUseWithdrawMatchCancellation = vi.fn()
 
 vi.mock('@/lib/hooks/use-matches', () => ({
     useMatch: (id: string) => mockUseMatch(id),
@@ -87,8 +88,9 @@ vi.mock('@/lib/hooks/use-matches', () => ({
     useUploadMatchFile: () => ({ mutateAsync: mockUploadMatchFile, isPending: false }),
     matchWorkKeys: { all: (id: string) => ['matches', 'detail', id, 'work'] },
     useAcceptMatch: () => mockUseAcceptMatch(),
-    useRejectMatch: () => mockUseRejectMatch(),
+    useDeclineMatch: () => mockUseDeclineMatch(),
     useCancelMatch: () => mockUseCancelMatch(),
+    useWithdrawMatchCancellation: () => mockUseWithdrawMatchCancellation(),
     useUpdateMatchNotes: () => mockUseUpdateMatchNotes(),
     matchKeys: { detail: (id: string) => ['matches', 'detail', id], lists: () => ['matches', 'list'] },
 }))
@@ -194,14 +196,19 @@ describe('MatchDetailPage', () => {
         ip_id: 'ip1',
         intended_parent_id: 'ip1',
         ip_name: 'John Smith',
-        status: 'proposed' as const,
+        status: 'under_review' as const,
         proposed_at: '2024-01-15T10:00:00Z',
         proposed_by_user_id: 'user1',
         proposed_by_name: 'Admin User',
         notes_internal: 'Internal notes about the match',
+        allowed_actions: ['accept', 'decline'],
+        blocked_reasons: {},
+        accept_eligibility_warnings: [],
+        surrogate_has_accepted_match: false,
+        pending_cancellation_request_id: null,
     }
 
-    it.each(['completed', 'cancelled', 'cancel_pending', 'rejected'])('keeps %s case work readable without creation actions', async (status) => {
+    it.each(['completed', 'cancelled', 'cancellation_pending', 'declined'])('keeps %s case work readable without creation actions', async (status) => {
         mockUseMatch.mockReturnValue({ data: { ...mockMatch, status, outcome: 'Finished.', closed_at: '2026-09-05T12:00:00Z' }, isLoading: false })
         mockUseMatchWork.mockReturnValue({ data: { notes: [{ id: 'note1', content: 'Existing case note', source: 'match', created_at: '2026-09-05T12:00:00Z', author_name: 'Admin' }], files: [], tasks: [], activity: [] }, isLoading: false })
         render(<MatchDetailPage />)
@@ -270,6 +277,7 @@ describe('MatchDetailPage', () => {
             error: null,
         })
         mockUseCancelMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseWithdrawMatchCancellation.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
 
         mockUseSurrogate.mockReturnValue({
             data: mockSurrogate,
@@ -286,8 +294,9 @@ describe('MatchDetailPage', () => {
 
         mockAcceptMatchMutateAsync.mockResolvedValue(mockMatch)
         mockUseAcceptMatch.mockReturnValue({ mutateAsync: mockAcceptMatchMutateAsync, isPending: false })
-        mockUseRejectMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseDeclineMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseCancelMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseWithdrawMatchCancellation.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateMatchNotes.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseTasks.mockReturnValue({ data: { items: [], total: 0 }, isLoading: false })
         mockCreateTaskMutateAsync.mockResolvedValue({})
@@ -439,7 +448,7 @@ describe('MatchDetailPage', () => {
     })
 
     it('records completion outcome through the existing match action area', async () => {
-        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted' }, isLoading: false })
+        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted', allowed_actions: ['complete', 'request_cancel'] }, isLoading: false })
         mockCompleteMatchMutateAsync.mockResolvedValue({ ...mockMatch, status: 'completed' })
         render(<MatchDetailPage />)
         fireEvent.click(screen.getByRole('button', { name: 'Complete Match' }))
@@ -571,6 +580,94 @@ describe('MatchDetailPage', () => {
         expect(caseWork).toHaveClass('lg:col-span-2', 'xl:col-span-1')
     })
 
+    describe('match action controls', () => {
+        it('renders only the controls the server allows', () => {
+            mockUseMatch.mockReturnValue({ data: { ...mockMatch, allowed_actions: ['decline'] }, isLoading: false })
+            render(<MatchDetailPage />)
+            expect(screen.getByRole('button', { name: 'Decline' })).toBeEnabled()
+            for (const name of ['Accept Match', 'Complete Match', 'Cancel Match', 'Withdraw Cancellation']) {
+                expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
+            }
+        })
+
+        it('renders no status controls when the server allows none, regardless of role', () => {
+            mockUseMatch.mockReturnValue({ data: { ...mockMatch, allowed_actions: [], blocked_reasons: {} }, isLoading: false })
+            render(<MatchDetailPage />)
+            expect(screen.queryByRole('button', { name: 'Accept Match' })).not.toBeInTheDocument()
+            expect(screen.queryByRole('button', { name: 'Decline' })).not.toBeInTheDocument()
+        })
+
+        it('renders a blocked control disabled with the server reason as its description', async () => {
+            const reason = 'Surrogate has an accepted match'
+            mockUseMatch.mockReturnValue({ data: { ...mockMatch, allowed_actions: ['decline'], blocked_reasons: { accept: reason } }, isLoading: false })
+            render(<MatchDetailPage />)
+            const accept = screen.getByRole('button', { name: 'Accept Match' })
+            expect(accept).toHaveAttribute('aria-disabled', 'true')
+            expect(accept).toHaveAccessibleDescription(reason)
+            fireEvent.click(accept)
+            expect(mockAcceptMatchMutateAsync).not.toHaveBeenCalled()
+            fireEvent.focus(accept)
+            await waitFor(() => expect(screen.getAllByText(reason)).toHaveLength(2))
+        })
+
+        it('renders accept eligibility warnings as a list', () => {
+            mockUseMatch.mockReturnValue({ data: { ...mockMatch, accept_eligibility_warnings: ['Surrogate is at Screening, not Ready to Match', 'Intended parent is at New'] }, isLoading: false })
+            render(<MatchDetailPage />)
+            const list = screen.getByRole('list', { name: 'Accept warnings' })
+            expect(list.querySelectorAll('li')).toHaveLength(2)
+            expect(list).toHaveTextContent('Surrogate is at Screening, not Ready to Match')
+            expect(list).toHaveTextContent('Intended parent is at New')
+        })
+
+        it('omits the warning list and conflict badge when absent', () => {
+            render(<MatchDetailPage />)
+            expect(screen.queryByRole('list', { name: 'Accept warnings' })).not.toBeInTheDocument()
+            expect(screen.queryByText('Surrogate has an accepted match')).not.toBeInTheDocument()
+        })
+
+        it('flags a surrogate that already has an accepted match', () => {
+            mockUseMatch.mockReturnValue({ data: { ...mockMatch, surrogate_has_accepted_match: true }, isLoading: false })
+            render(<MatchDetailPage />)
+            expect(screen.getByText('Surrogate has an accepted match')).toBeInTheDocument()
+        })
+
+        it('shows the pending label and disables sibling controls while an action runs', () => {
+            mockUseAcceptMatch.mockReturnValue({ mutateAsync: mockAcceptMatchMutateAsync, isPending: true })
+            render(<MatchDetailPage />)
+            expect(screen.getByRole('button', { name: 'Accepting...' })).toBeDisabled()
+            expect(screen.getByRole('button', { name: 'Decline' })).toBeDisabled()
+        })
+
+        it('withdraws the pending cancellation request by its id', async () => {
+            const mutateAsync = vi.fn().mockResolvedValue({})
+            mockUseWithdrawMatchCancellation.mockReturnValue({ mutateAsync, isPending: false })
+            mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'cancellation_pending', allowed_actions: ['withdraw_cancel'], pending_cancellation_request_id: 'request1' }, isLoading: false })
+            render(<MatchDetailPage />)
+            fireEvent.click(screen.getByRole('button', { name: 'Withdraw Cancellation' }))
+            await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ matchId: 'match1', requestId: 'request1' }))
+        })
+
+        it('shows the server detail when withdrawal fails', async () => {
+            mockUseWithdrawMatchCancellation.mockReturnValue({ mutateAsync: vi.fn().mockRejectedValue(new ApiError(403, 'Forbidden', 'Only the requester can withdraw the cancellation request')), isPending: false })
+            mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'cancellation_pending', allowed_actions: ['withdraw_cancel'], pending_cancellation_request_id: 'request1' }, isLoading: false })
+            render(<MatchDetailPage />)
+            fireEvent.click(screen.getByRole('button', { name: 'Withdraw Cancellation' }))
+            await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Only the requester can withdraw the cancellation request'))
+        })
+
+        it('opens the decline and cancellation reason dialogs from allowed controls', () => {
+            mockUseMatch.mockReturnValue({ data: { ...mockMatch, allowed_actions: ['decline'] }, isLoading: false })
+            const { unmount } = render(<MatchDetailPage />)
+            fireEvent.click(screen.getByRole('button', { name: 'Decline' }))
+            expect(screen.getByRole('dialog', { name: 'Decline Match' })).toBeInTheDocument()
+            unmount()
+            mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted', allowed_actions: ['request_cancel'] }, isLoading: false })
+            render(<MatchDetailPage />)
+            fireEvent.click(screen.getByRole('button', { name: 'Cancel Match' }))
+            expect(screen.getByRole('dialog', { name: 'Cancel Match' })).toBeInTheDocument()
+        })
+    })
+
     it('displays surrogate name when loaded', () => {
         render(<MatchDetailPage />)
         // Should show surrogate name (full name from match data) - in the header which combines both names
@@ -585,7 +682,7 @@ describe('MatchDetailPage', () => {
 
     it('displays match status badge', () => {
         render(<MatchDetailPage />)
-        expect(screen.getByText('Proposed')).toBeInTheDocument()
+        expect(screen.getByText('Under Review')).toBeInTheDocument()
     })
 
     it('renders tabs for Overview and Calendar', () => {
@@ -684,8 +781,9 @@ describe('MatchDetailPage with different statuses', () => {
             status: 'accepted',
         })
         mockUseAcceptMatch.mockReturnValue({ mutateAsync: mockAcceptMatchMutateAsync, isPending: false })
-        mockUseRejectMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseDeclineMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseCancelMatch.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseWithdrawMatchCancellation.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
         mockUseUpdateMatchNotes.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     })
 
@@ -699,6 +797,8 @@ describe('MatchDetailPage with different statuses', () => {
                 surrogate_name: 'Jane Doe',
                 ip_name: 'John Smith',
                 status: 'accepted',
+                allowed_actions: [],
+                blocked_reasons: {},
                 proposed_at: '2024-01-15T10:00:00Z',
                 accepted_at: '2024-01-16T10:00:00Z',
             },
@@ -709,7 +809,7 @@ describe('MatchDetailPage with different statuses', () => {
         expect(screen.getByText('Accepted')).toBeInTheDocument()
     })
 
-    it('shows rejected status badge for rejected matches', () => {
+    it('shows declined status badge for declined matches', () => {
         mockUseMatch.mockReturnValue({
             data: {
                 id: 'match1',
@@ -718,15 +818,17 @@ describe('MatchDetailPage with different statuses', () => {
                 intended_parent_id: 'ip1',
                 surrogate_name: 'Jane Doe',
                 ip_name: 'John Smith',
-                status: 'rejected',
+                status: 'declined',
+                allowed_actions: [],
+                blocked_reasons: {},
                 proposed_at: '2024-01-15T10:00:00Z',
                 rejected_at: '2024-01-16T10:00:00Z',
-                rejection_reason: 'Not compatible',
+                decline_reason: 'Not compatible',
             },
             isLoading: false,
             error: null,
         })
         render(<MatchDetailPage />)
-        expect(screen.getByText('Rejected')).toBeInTheDocument()
+        expect(screen.getByText('Declined')).toBeInTheDocument()
     })
 })

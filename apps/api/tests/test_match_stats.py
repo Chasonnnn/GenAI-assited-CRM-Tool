@@ -56,6 +56,12 @@ async def test_match_stats_returns_zero_filled_statuses_and_grouped_total(
     )
     assert accepted_response.status_code == 201, accepted_response.text
 
+    from tests.test_match_cancel_request import _move_to_handoff
+
+    await _move_to_handoff(authed_client, "surrogates", surrogate_two["id"], "surrogate")
+    await _move_to_handoff(
+        authed_client, "intended-parents", intended_parent_two["id"], "intended_parent"
+    )
     accept = await authed_client.put(
         f"/matches/{accepted_response.json()['id']}/accept",
         json={},
@@ -67,10 +73,17 @@ async def test_match_stats_returns_zero_filled_statuses_and_grouped_total(
 
     payload = stats_response.json()
     assert payload["total"] == 2
-    assert payload["by_status"]["proposed"] == 1
+    assert payload["by_status"]["under_review"] == 1
     assert payload["by_status"]["accepted"] == 1
-    assert payload["by_status"]["reviewing"] == 0
-    assert payload["by_status"]["cancel_pending"] == 0
-    assert payload["by_status"]["rejected"] == 0
+    assert payload["by_status"]["cancellation_pending"] == 0
+    assert payload["by_status"]["declined"] == 0
     assert payload["by_status"]["cancelled"] == 0
+    assert set(payload["by_status"]) == {
+        "under_review",
+        "accepted",
+        "cancellation_pending",
+        "declined",
+        "cancelled",
+        "completed",
+    }
     assert sum(payload["by_status"].values()) == payload["total"]

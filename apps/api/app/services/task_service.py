@@ -641,7 +641,7 @@ def check_task_subject_access(db: Session, task: Task, session: UserSession) -> 
     if task.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Task not found")
     if task.match_id:
-        from app.services.match_service import get_match_with_access
+        from app.services.match_access import load as get_match_with_access
 
         get_match_with_access(db, session, task.match_id)
 
@@ -958,13 +958,24 @@ def list_tasks(
         Task.organization_id == org_id,
         task_subjects_belong_to_org(org_id),
     )
+    from types import SimpleNamespace
+
+    from app.services import permission_policy_service, record_scope_service
+
+    scoped_v2 = user_id is not None and permission_policy_service.is_enabled(db, org_id)
+    if scoped_v2:
+        query = query.filter(
+            record_scope_service.build_linked_visibility_filter(
+                db, SimpleNamespace(org_id=org_id, user_id=user_id, role=user_role), Task
+            )
+        )
 
     if match_id:
         context_filter = Task.match_id == match_id
         if include_record_history and not attempt_id:
-            from app.services import match_service, match_work_service
+            from app.services import match_queries, match_work_service
 
-            match = match_service.get_match(db, match_id, org_id)
+            match = match_queries.get_match(db, match_id, org_id)
             if match is None:
                 raise HTTPException(status_code=404, detail="Match not found")
             context_filter = or_(
@@ -993,7 +1004,9 @@ def list_tasks(
 
     # Role-based surrogate access filtering for intake specialists:
     # filter out tasks linked to surrogates they can't access.
-    if user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST:
+    if not scoped_v2 and (
+        user_role == Role.INTAKE_SPECIALIST.value or user_role == Role.INTAKE_SPECIALIST
+    ):
         if user_id:
             accessible_surrogate_ids = select(Surrogate.id).where(
                 Surrogate.organization_id == org_id,
@@ -1198,9 +1211,9 @@ def list_tasks_for_session(
             record_access_service.get_record_with_access(db, session, kind, record_id)
 
     if match_id:
-        from app.services import match_service, match_work_service
+        from app.services import match_access, match_work_service
 
-        match_service.get_match_with_access(db, session, match_id, allow_archived=True)
+        match_access.load(db, session, match_id, allow_archived=True)
         match_work_service.validate_context(db, session.org_id, match_id, attempt_id)
     elif attempt_id or include_record_history:
         raise HTTPException(status_code=400, detail="Attempt or record history requires match_id")
@@ -1281,6 +1294,7 @@ def count_overdue_tasks(
     today,
     *,
     can_view_donors: bool = True,
+    session: UserSession | None = None,
 ) -> int:
     """Count overdue tasks for dashboard metrics."""
     filters = [
@@ -1290,6 +1304,10 @@ def count_overdue_tasks(
         Task.task_type != TaskType.WORKFLOW_APPROVAL.value,
         Task.due_date < today,
     ]
+    if session is not None:
+        from app.services import record_scope_service
+
+        filters.append(record_scope_service.build_linked_visibility_filter(db, session, Task))
     if not can_view_donors:
         filters.append(Task.donor_id.is_(None))
     return db.scalar(select(func.count(Task.id)).where(*filters)) or 0

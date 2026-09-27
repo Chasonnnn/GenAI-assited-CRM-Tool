@@ -11,13 +11,14 @@ vi.mock('next/navigation', () => ({
 const mockUseNotifications = vi.fn()
 const mockMarkRead = vi.fn()
 const mockMarkAllRead = vi.fn()
+const mockUseMarkAllRead = vi.fn()
 const mockUseTasks = vi.fn()
 const mockUseNotificationSocket = vi.fn()
 
 vi.mock('@/lib/hooks/use-notifications', () => ({
     useNotifications: (params: unknown) => mockUseNotifications(params),
     useMarkRead: () => ({ mutate: mockMarkRead, isPending: false }),
-    useMarkAllRead: () => ({ mutate: mockMarkAllRead, isPending: false }),
+    useMarkAllRead: () => mockUseMarkAllRead(),
 }))
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
@@ -86,6 +87,7 @@ describe('NotificationsPage', () => {
         mockPush.mockReset()
         mockMarkRead.mockReset()
         mockMarkAllRead.mockReset()
+        mockUseMarkAllRead.mockReturnValue({ mutate: mockMarkAllRead, isPending: false })
     })
 
     it('renders notifications page with header', () => {
@@ -309,5 +311,66 @@ describe('NotificationsPage', () => {
         expect(screen.getByText('Surrogate assigned')).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
         expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
+    it("shows progress and prevents duplicate mark-all requests until the mutation settles", () => {
+        mockUseMarkAllRead.mockReturnValue({ mutate: mockMarkAllRead, isPending: true })
+        const { rerender } = render(<NotificationsPage />)
+        const button = screen.getByRole("button", { name: "Mark all read" })
+
+        expect(button).toBeDisabled()
+        expect(button).toHaveAttribute("aria-busy", "true")
+        expect(button.querySelector("svg")).toHaveClass("animate-spin")
+        fireEvent.click(button)
+        expect(mockMarkAllRead).not.toHaveBeenCalled()
+
+        // A rejected request leaves unread items available for retry.
+        mockUseMarkAllRead.mockReturnValue({ mutate: mockMarkAllRead, isPending: false, isError: true })
+        rerender(<NotificationsPage />)
+        expect(button).toBeEnabled()
+        expect(button).toHaveAttribute("aria-busy", "false")
+        expect(button.querySelector("svg")).toBeNull()
+        fireEvent.click(button)
+        expect(mockMarkAllRead).toHaveBeenCalledTimes(1)
+    })
+
+    it('filters match updates to match conflict notifications', async () => {
+        render(<NotificationsPage />)
+        fireEvent.click(screen.getByRole('combobox'))
+        const option = await screen.findByRole('option', { name: 'Match Updates' })
+        fireEvent.mouseMove(option)
+        fireEvent.click(option)
+        expect(mockUseNotifications).toHaveBeenLastCalledWith(
+            expect.objectContaining({ notification_types: ['match_conflict'] })
+        )
+        expect(screen.getByRole('combobox')).toHaveTextContent('Match Updates')
+    })
+
+    it('routes match conflict notifications to the match detail with the match icon', () => {
+        mockUseNotifications.mockReturnValue({
+            data: {
+                unread_count: 1,
+                items: [
+                    {
+                        id: 'n4',
+                        type: 'match_conflict',
+                        title: 'Surrogate has an accepted match',
+                        body: 'M10001 remains under review.',
+                        entity_type: 'match',
+                        entity_id: 'match-1',
+                        read_at: null,
+                        created_at: new Date().toISOString(),
+                    },
+                ],
+            },
+            isLoading: false,
+        })
+        mockUseTasks.mockReturnValue({ data: { items: [] }, isLoading: false })
+        render(<NotificationsPage />)
+        const item = screen.getByText('Surrogate has an accepted match').closest('button')!
+        expect(item.querySelector('svg.lucide-heart-handshake')).not.toBeNull()
+        fireEvent.click(item)
+        expect(mockMarkRead).toHaveBeenCalledWith('n4')
+        expect(mockPush).toHaveBeenCalledWith('/intended-parents/matches/match-1')
     })
 })

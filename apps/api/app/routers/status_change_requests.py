@@ -64,7 +64,7 @@ _CANCEL_PERMISSIONS: dict[str, tuple[PermissionKey, ...]] = {
     ),
     "match": (
         PermissionKey.MATCHES_VIEW,
-        PermissionKey.MATCHES_PROPOSE,
+        PermissionKey.MATCHES_CLOSE,
     ),
 }
 
@@ -166,6 +166,7 @@ def list_pending_requests(
         entity_type=entity_type,
         page=page,
         per_page=per_page,
+        session=session,
         include_donor_requests=_has_permission(
             db,
             session,
@@ -241,11 +242,12 @@ def get_request(
     )
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
+    status_change_request_service.require_request_access(db, session, req)
     _require_donor_request_access(db, session, req.entity_type)
     if req.entity_type == "match":
-        from app.services import match_service
+        from app.services import match_access
 
-        match_service.get_match_with_access(db, session, req.entity_id)
+        match_access.load(db, session, req.entity_id)
 
     details = status_change_request_service.get_request_with_details(
         db=db,
@@ -308,11 +310,12 @@ def approve_request(
     )
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
+    status_change_request_service.require_request_access(db, session, req)
     _require_donor_request_access(db, session, req.entity_type)
     if req.entity_type == "match":
-        from app.services import match_service
+        from app.services import match_access
 
-        match_service.get_match_with_access(db, session, req.entity_id)
+        match_access.load(db, session, req.entity_id)
 
     try:
         result = status_change_request_service.approve_request(
@@ -372,11 +375,12 @@ def reject_request(
     )
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
+    status_change_request_service.require_request_access(db, session, req)
     _require_donor_request_access(db, session, req.entity_type)
     if req.entity_type == "match":
-        from app.services import match_service
+        from app.services import match_access
 
-        match_service.get_match_with_access(db, session, req.entity_id)
+        match_access.load(db, session, req.entity_id)
 
     try:
         result = status_change_request_service.reject_request(
@@ -434,7 +438,13 @@ def cancel_request(
     )
     if not req or req.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Request not found")
-    _require_cancel_access(db, session, req.entity_type)
+    status_change_request_service.require_request_access(db, session, req)
+    if req.entity_type == "match":
+        from app.services import match_access
+
+        match_access.load(db, session, req.entity_id)
+    else:
+        _require_cancel_access(db, session, req.entity_type)
 
     try:
         result = status_change_request_service.cancel_request(

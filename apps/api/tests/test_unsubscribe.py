@@ -8,6 +8,8 @@ import time
 
 import pytest
 
+from app.services import campaign_suppression_service
+
 
 def test_generated_unsubscribe_token_is_opaque_and_database_resolved(db, test_org):
     from app.db.models import UnsubscribeToken
@@ -43,7 +45,7 @@ def test_generated_unsubscribe_token_is_opaque_and_database_resolved(db, test_or
 async def test_unsubscribe_endpoint_adds_suppression(client, db, test_org):
     from app.db.enums import SuppressionReason
     from app.db.models import EmailSuppression
-    from app.services import campaign_service, unsubscribe_service
+    from app.services import unsubscribe_service
 
     token = unsubscribe_service.generate_unsubscribe_token(
         db,
@@ -54,7 +56,7 @@ async def test_unsubscribe_endpoint_adds_suppression(client, db, test_org):
     resp = await client.get(f"/email/unsubscribe/{token}")
     assert resp.status_code == 200
 
-    assert campaign_service.is_email_suppressed(
+    assert campaign_suppression_service.is_email_suppressed(
         db,
         test_org.id,
         "user@example.com",
@@ -73,7 +75,7 @@ async def test_unsubscribe_endpoint_adds_suppression(client, db, test_org):
 
 @pytest.mark.asyncio
 async def test_one_click_unsubscribe_post_adds_suppression(client, db, test_org):
-    from app.services import campaign_service, unsubscribe_service
+    from app.services import unsubscribe_service
 
     token = unsubscribe_service.generate_unsubscribe_token(
         db,
@@ -88,7 +90,7 @@ async def test_one_click_unsubscribe_post_adds_suppression(client, db, test_org)
     )
 
     assert response.status_code == 200
-    assert campaign_service.is_email_suppressed(
+    assert campaign_suppression_service.is_email_suppressed(
         db,
         test_org.id,
         "one-click@example.com",
@@ -97,13 +99,12 @@ async def test_one_click_unsubscribe_post_adds_suppression(client, db, test_org)
 
 @pytest.mark.asyncio
 async def test_unsubscribe_endpoint_handles_invalid_token(client, db, test_org):
-    from app.services import campaign_service
 
     resp = await client.get("/email/unsubscribe/invalid-token")
     assert resp.status_code == 200
 
     assert (
-        campaign_service.is_email_suppressed(
+        campaign_suppression_service.is_email_suppressed(
             db,
             test_org.id,
             "user@example.com",
@@ -166,7 +167,6 @@ async def test_consumed_unsubscribe_token_remains_idempotent(client, db, test_or
 @pytest.mark.asyncio
 async def test_legacy_unsubscribe_token_remains_compatible(client, db, test_org):
     from app.core.config import settings
-    from app.services import campaign_service
 
     payload = {
         "v": 1,
@@ -195,7 +195,7 @@ async def test_legacy_unsubscribe_token_remains_compatible(client, db, test_org)
     response = await client.get(f"/email/unsubscribe/{payload_b64}.{signature}")
 
     assert response.status_code == 200
-    assert campaign_service.is_email_suppressed(
+    assert campaign_suppression_service.is_email_suppressed(
         db,
         test_org.id,
         "legacy@example.com",

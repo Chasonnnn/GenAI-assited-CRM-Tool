@@ -17,6 +17,10 @@ import {
     getIntakePoolGrants,
     createIntakePoolGrant,
     revokeIntakePoolGrant,
+    getPolicyConfiguration,
+    previewPolicy,
+    activatePolicy,
+    type PolicyChanges,
     type MemberUpdate,
     type IntakePoolGrantCreate,
 } from "@/lib/api/permissions"
@@ -26,6 +30,7 @@ const KEYS = {
     permissions: ["permissions"] as const,
     members: ["permissions", "members"] as const,
     member: (id: string) => ["permissions", "members", id] as const,
+    effectivePermissions: ["permissions", "effective"] as const,
     effective: (userId: string) => ["permissions", "effective", userId] as const,
     roles: ["permissions", "roles"] as const,
     role: (role: string) => ["permissions", "roles", role] as const,
@@ -43,10 +48,10 @@ export function useAvailablePermissions() {
     })
 }
 
-export function useMembers() {
+export function useMembers(includeInactive = false) {
     return useQuery({
-        queryKey: KEYS.members,
-        queryFn: getMembers,
+        queryKey: [...KEYS.members, { includeInactive }],
+        queryFn: () => getMembers(includeInactive),
     })
 }
 
@@ -64,10 +69,7 @@ export function useUpdateMember() {
     return useMutation({
         mutationFn: ({ memberId, data }: { memberId: string; data: MemberUpdate }) =>
             updateMember(memberId, data),
-        onSuccess: (_, { memberId }) => {
-            void queryClient.invalidateQueries({ queryKey: KEYS.member(memberId) })
-            void queryClient.invalidateQueries({ queryKey: KEYS.members })
-        },
+        onSuccess: () => queryClient.invalidateQueries(),
     })
 }
 
@@ -76,15 +78,13 @@ export function useRemoveMember() {
 
     return useMutation({
         mutationFn: (memberId: string) => removeMember(memberId),
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: KEYS.members })
-        },
+        onSuccess: () => queryClient.invalidateQueries(),
     })
 }
 
 export function useEffectivePermissions(userId: string | null) {
     return useQuery({
-        queryKey: KEYS.effective("me"),
+        queryKey: KEYS.effective(userId || ""),
         queryFn: getMyEffectivePermissions,
         enabled: !!userId,
     })
@@ -106,11 +106,7 @@ export function useCreateIntakePoolGrant() {
 
     return useMutation({
         mutationFn: (data: IntakePoolGrantCreate) => createIntakePoolGrant(data),
-        onSuccess: (grant) => {
-            void queryClient.invalidateQueries({ queryKey: KEYS.intakePoolGrants() })
-            void queryClient.invalidateQueries({ queryKey: KEYS.intakePoolGrants(grant.grantee_user_id) })
-            void queryClient.invalidateQueries({ queryKey: ["surrogates", "accessible-owners"] })
-        },
+        onSuccess: () => queryClient.invalidateQueries(),
     })
 }
 
@@ -119,17 +115,15 @@ export function useRevokeIntakePoolGrant() {
 
     return useMutation({
         mutationFn: revokeIntakePoolGrant,
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ["permissions", "intake-pool-grants"] })
-            void queryClient.invalidateQueries({ queryKey: ["surrogates", "accessible-owners"] })
-        },
+        onSuccess: () => queryClient.invalidateQueries(),
     })
 }
 
-export function useRoles() {
+export function useRoles(enabled = true) {
     return useQuery({
         queryKey: KEYS.roles,
         queryFn: getRoles,
+        enabled,
     })
 }
 
@@ -145,12 +139,9 @@ export function useUpdateRolePermissions() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ role, permissions }: { role: string; permissions: Record<string, boolean> }) =>
-            updateRolePermissions(role, permissions),
-        onSuccess: (_, { role }) => {
-            void queryClient.invalidateQueries({ queryKey: KEYS.role(role) })
-            void queryClient.invalidateQueries({ queryKey: KEYS.roles })
-        },
+        mutationFn: ({ role, permissions, scopeRules }: { role: string; permissions: Record<string, boolean>; scopeRules?: Partial<Record<import("@/lib/api/record-scopes").RecordModule, import("@/lib/api/record-scopes").RecordScopeRule>> }) =>
+            updateRolePermissions(role, permissions, scopeRules),
+        onSuccess: () => queryClient.invalidateQueries(),
     })
 }
 
@@ -158,10 +149,19 @@ export function useBulkUpdateRoles() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ memberIds, role }: { memberIds: string[]; role: string }) =>
-            bulkUpdateRoles(memberIds, role),
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: KEYS.members })
-        },
+        mutationFn: ({ memberIds, role, review }: { memberIds: string[]; role: string; review?: Pick<MemberUpdate, "access_reviewed" | "retain_additions" | "retain_collaborators"> }) =>
+            bulkUpdateRoles(memberIds, role, review),
+        onSuccess: () => queryClient.invalidateQueries(),
     })
+}
+
+export function usePolicyConfiguration(enabled = true) {
+    return useQuery({ queryKey: ["permissions", "policy"], queryFn: getPolicyConfiguration, enabled })
+}
+export function usePreviewPolicy() {
+    return useMutation({ mutationFn: (changes: PolicyChanges) => previewPolicy(changes) })
+}
+export function useActivatePolicy() {
+    const client = useQueryClient()
+    return useMutation({ mutationFn: activatePolicy, onSuccess: () => client.invalidateQueries() })
 }

@@ -28,6 +28,7 @@ import type {
     EntityNoteCreate,
 } from '@/lib/types/intended-parent'
 import { entityActivityKeys } from './use-entity-activity'
+import { matchKeys } from '../queries/matches'
 
 // Query keys
 export const intendedParentKeys = {
@@ -151,6 +152,8 @@ export function useUpdateIntendedParentStatus() {
             void queryClient.invalidateQueries({
                 queryKey: entityActivityKeys.entity('intended_parent', id),
             })
+            // Stage moves change match accept eligibility and allowed actions.
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all })
         },
     })
 }

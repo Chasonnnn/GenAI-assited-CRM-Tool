@@ -32,7 +32,7 @@ from app.schemas.platform_templates import (
     EmailTemplateLibraryDetail,
     EmailTemplateLibraryItem,
 )
-from app.services import email_delivery_service, email_service, user_service
+from app.services import email_delivery_service, email_service, email_template_access, user_service
 
 router = APIRouter(
     tags=["Email Templates"],
@@ -60,9 +60,31 @@ def list_template_variables():
 
 
 def _build_template_response(
-    db: Session, template, include_body: bool = True
+    db: Session,
+    template,
+    include_body: bool = True,
+    *,
+    session=None,
+    access_permissions=None,
+    policy_version=None,
 ) -> EmailTemplateRead | EmailTemplateListItem:
     """Build template response with owner name populated."""
+    from app.services import permission_policy_service
+
+    capabilities = None
+    version = (
+        policy_version
+        if policy_version is not None
+        else (2 if permission_policy_service.is_enabled(db, template.organization_id) else 1)
+    )
+    if session is not None and version >= 2:
+        from app.services import permission_service
+
+        if access_permissions is None:
+            access_permissions = permission_service.get_effective_permissions(
+                db, session.org_id, session.user_id, session.role.value
+            )
+        capabilities = email_template_access.capabilities(template, session, access_permissions)
     owner_name = None
     if template.owner_user_id:
         owner = user_service.get_user_by_id(db, template.owner_user_id)
@@ -81,7 +103,12 @@ def _build_template_response(
             scope=template.scope,
             owner_user_id=template.owner_user_id,
             owner_name=owner_name,
-            source_template_id=template.source_template_id,
+            capabilities=capabilities,
+            source_template_id=template.source_template_id
+            if template.scope == "personal" or version < 2
+            else None,
+            proposed_by_user_id=template.proposed_by_user_id,
+            proposed_by_name=template.proposed_by_name,
             is_system_template=template.is_system_template,
             current_version=template.current_version,
             created_at=template.created_at,
@@ -97,6 +124,8 @@ def _build_template_response(
             scope=template.scope,
             owner_user_id=template.owner_user_id,
             owner_name=owner_name,
+            capabilities=capabilities,
+            proposed_by_name=template.proposed_by_name,
             is_system_template=template.is_system_template,
             created_at=template.created_at,
             updated_at=template.updated_at,
@@ -140,7 +169,26 @@ def list_templates(
         usage_context=usage_context,
     )
 
-    return [_build_template_response(db, t, include_body=False) for t in templates]
+    from app.services import permission_policy_service, permission_service
+
+    audited = [email_template_access.audit_private_read(db, session, item) for item in templates]
+    if any(audited):
+        db.commit()
+    version = permission_policy_service.get_version(db, session.org_id)
+    access_permissions = permission_service.get_effective_permissions(
+        db, session.org_id, session.user_id, session.role.value
+    )
+    return [
+        _build_template_response(
+            db,
+            t,
+            include_body=False,
+            session=session,
+            access_permissions=access_permissions,
+            policy_version=version,
+        )
+        for t in templates
+    ]
 
 
 @router.post(
@@ -160,8 +208,14 @@ def create_template(
     - scope=org: requires manage permission
     - scope=personal: any user can create their own personal templates
     """
-    from app.services import permission_service
+    from app.services import permission_policy_service, permission_service
 
+    if permission_policy_service.is_enabled(
+        db, session.org_id
+    ) and not email_template_access.can_edit_template(
+        db, session, scope=data.scope, owner_user_id=session.user_id
+    ):
+        raise HTTPException(status_code=403, detail="Template editing permission required")
     # Check permissions based on scope
     if data.scope == "org":
         # Org templates require manage permission
@@ -212,7 +266,7 @@ def create_template(
     except ValueError as exc:
         # Most commonly this is `from_email` validation.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return _build_template_response(db, template)
+    return _build_template_response(db, template, session=session)
 
 
 # =============================================================================
@@ -285,7 +339,9 @@ def get_template(
         if not is_admin:
             raise HTTPException(status_code=404, detail="Template not found")
 
-    return _build_template_response(db, template)
+    if email_template_access.audit_private_read(db, session, template):
+        db.commit()
+    return _build_template_response(db, template, session=session)
 
 
 @router.patch(
@@ -305,31 +361,23 @@ def update_template(
     - Org templates: requires manage permission
     - Personal templates: owner, admin, or developer can edit
     """
-    from app.services import permission_service, version_service
+    from app.services import version_service
 
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    # Check permissions based on scope
-    if template.scope == "org":
-        manage_perm = POLICIES["email_templates"].actions["manage"]
-        perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
-        if not permission_service.check_permission(
-            db, session.org_id, session.user_id, session.role.value, perm_key
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to edit organization templates",
-            )
-    else:
-        # Personal templates: owner or admin/developer can edit
-        is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
-        if template.owner_user_id != session.user_id and not is_admin:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only edit your own personal templates",
-            )
+    if not email_template_access.can_edit_template(
+        db, session, scope=template.scope, owner_user_id=template.owner_user_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You don't have permission to edit organization templates"
+                if template.scope == "org"
+                else "You can only edit your own personal templates"
+            ),
+        )
 
     # Check for duplicate name if changing
     if data.name and data.name != template.name:
@@ -371,7 +419,7 @@ def update_template(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    return _build_template_response(db, updated)
+    return _build_template_response(db, updated, session=session)
 
 
 @router.delete(
@@ -390,31 +438,21 @@ def delete_template(
     - Org templates: requires manage permission
     - Personal templates: owner, admin, or developer can delete
     """
-    from app.services import permission_service
-
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    # Check permissions based on scope
-    if template.scope == "org":
-        manage_perm = POLICIES["email_templates"].actions["manage"]
-        perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
-        if not permission_service.check_permission(
-            db, session.org_id, session.user_id, session.role.value, perm_key
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to delete organization templates",
-            )
-    else:
-        # Personal templates: owner or admin/developer can delete
-        is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
-        if template.owner_user_id != session.user_id and not is_admin:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only delete your own personal templates",
-            )
+    if not email_template_access.can_edit_template(
+        db, session, scope=template.scope, owner_user_id=template.owner_user_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You don't have permission to delete organization templates"
+                if template.scope == "org"
+                else "You can only delete your own personal templates"
+            ),
+        )
 
     email_service.delete_template(db, template, user_id=session.user_id)
 
@@ -450,7 +488,7 @@ def copy_template(
             template_id=template_id,
             new_name=data.name,
         )
-        return _build_template_response(db, template)
+        return _build_template_response(db, template, session=session)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except LookupError as e:
@@ -487,7 +525,7 @@ def share_template(
             template_id=template_id,
             new_name=data.name,
         )
-        return _build_template_response(db, template)
+        return _build_template_response(db, template, session=session)
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except LookupError as e:
@@ -509,7 +547,16 @@ def send_email(
         require_permission(POLICIES["email_templates"].actions["manage"])
     ),
 ):
-    """Send an email using a template (queues for async sending). Manager only."""
+    """Queue a template email within the sender's action and record access."""
+    email_template_access.require_send_permission(db, session, surrogate_id=data.surrogate_id)
+    template = email_service.get_template(db, data.template_id, session.org_id)
+    if template is None or (
+        template.scope == "personal"
+        and not email_template_access.can_edit_personal_template(
+            owner_user_id=template.owner_user_id, user_id=session.user_id, role=session.role
+        )
+    ):
+        raise HTTPException(status_code=404, detail="Template not found")
     try:
         result = email_service.send_from_template(
             db,
@@ -521,6 +568,7 @@ def send_email(
             schedule_at=data.schedule_at,
             sender_user_id=session.user_id,
             idempotency_key=data.idempotency_key,
+            source_type="manual_template_email",
         )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
@@ -555,9 +603,19 @@ async def send_test_email(
     """
     from app.services import email_test_send_service, permission_service
 
+    email_template_access.require_send_permission(db, session)
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
+
+    from app.services import permission_policy_service
+
+    if permission_policy_service.is_enabled(
+        db, session.org_id
+    ) and not email_template_access.can_edit_template(
+        db, session, scope=template.scope, owner_user_id=template.owner_user_id
+    ):
+        raise HTTPException(status_code=403, detail="Template editing permission required")
 
     # Platform/system templates are not allowed via org endpoints (e.g. org_invite).
     from app.services import system_email_template_service
@@ -638,26 +696,28 @@ def get_template_versions(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Get version history for a template the current user can edit."""
-    from app.services import permission_service
-
     template = email_service.get_template(db, template_id, session.org_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
+    from app.services import permission_policy_service
+
+    if permission_policy_service.is_enabled(
+        db, session.org_id
+    ) and not email_template_access.can_edit_template(
+        db, session, scope=template.scope, owner_user_id=template.owner_user_id
+    ):
+        raise HTTPException(status_code=403, detail="Template editing permission required")
+
     if template.scope == "personal":
-        is_admin = session.role in (Role.ADMIN, Role.DEVELOPER)
-        if template.owner_user_id != session.user_id and not is_admin:
+        if not email_template_access.can_edit_personal_template(
+            owner_user_id=template.owner_user_id, user_id=session.user_id, role=session.role
+        ):
             raise HTTPException(status_code=404, detail="Template not found")
     else:
         manage_perm = POLICIES["email_templates"].actions["manage"]
         perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
-        if not permission_service.check_permission(
-            db,
-            session.org_id,
-            session.user_id,
-            session.role.value,
-            perm_key,
-        ):
+        if not email_template_access.has_manage_permission(db, session):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Missing permission: {perm_key}",
@@ -694,10 +754,16 @@ def rollback_template(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
 
-    if (
-        template.scope == "personal"
-        and template.owner_user_id != session.user_id
-        and session.role not in (Role.ADMIN, Role.DEVELOPER)
+    from app.services import permission_policy_service
+
+    if permission_policy_service.is_enabled(
+        db, session.org_id
+    ) and not email_template_access.can_edit_template(
+        db, session, scope=template.scope, owner_user_id=template.owner_user_id
+    ):
+        raise HTTPException(status_code=403, detail="Template editing permission required")
+    if template.scope == "personal" and not email_template_access.can_edit_personal_template(
+        owner_user_id=template.owner_user_id, user_id=session.user_id, role=session.role
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -714,7 +780,7 @@ def rollback_template(
     if error:
         raise HTTPException(status_code=400, detail=error)
 
-    return _build_template_response(db, updated)
+    return _build_template_response(db, updated, session=session)
 
 
 @router.post(
@@ -729,14 +795,8 @@ def copy_platform_email_template(
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
     """Copy a platform template into org templates."""
-    from app.services import permission_service
-
-    manage_perm = POLICIES["email_templates"].actions["manage"]
-    perm_key = manage_perm.value if hasattr(manage_perm, "value") else str(manage_perm)
-    if not permission_service.check_permission(
-        db, session.org_id, session.user_id, session.role.value, perm_key
-    ):
-        raise HTTPException(status_code=403, detail="Missing permission: manage_email_templates")
+    if not email_template_access.has_manage_permission(db, session):
+        raise HTTPException(status_code=403, detail="Organization template management required")
 
     from app.services import platform_template_service
 
@@ -760,4 +820,4 @@ def copy_platform_email_template(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    return _build_template_response(db, created)
+    return _build_template_response(db, created, session=session)

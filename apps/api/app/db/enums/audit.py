@@ -46,6 +46,9 @@ class AuditEventType(str, Enum):
     # Versioned config changes (with before/after version links)
     CONFIG_PIPELINE_UPDATED = "config_pipeline_updated"
     CONFIG_TEMPLATE_UPDATED = "config_template_updated"
+    WORKFLOW_CONFIG_CHANGED = "workflow_config_changed"
+    WORKFLOW_PRIVATE_ACCESSED = "workflow_private_accessed"
+    WORKFLOW_PUBLISHED = "workflow_published"
     CONFIG_ROLLED_BACK = "config_rolled_back"
 
     # Data operations
@@ -132,8 +135,12 @@ class AuditEventType(str, Enum):
     MATCH_ATTEMPT_UPDATED = "match_attempt_updated"
     MATCH_CANCEL_REQUESTED = "match_cancel_requested"
     MATCH_ACCEPTED = "match_accepted"
-    MATCH_REJECTED = "match_rejected"
+    MATCH_DECLINED = "match_declined"
+    MATCH_STATUS_MIGRATED = "match_status_migrated"
     MATCH_CANCELLED = "match_cancelled"
+    MATCH_CANCEL_REQUEST_REJECTED = "match_cancel_request_rejected"
+    MATCH_CANCEL_REQUEST_WITHDRAWN = "match_cancel_request_withdrawn"
+    MATCH_EFFECT_FAILED = "match_effect_failed"
 
     # Attachments
     ATTACHMENT_UPLOADED = "attachment_uploaded"

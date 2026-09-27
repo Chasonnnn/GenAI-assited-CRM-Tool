@@ -32,6 +32,7 @@ import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
 import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import type { SurrogateSource } from "@/lib/types/surrogate"
 import { isDynamicSurrogateFilter, type DynamicSurrogateFilter, type SurrogateMassEditStageFilters } from "@/lib/api/surrogates"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
@@ -87,6 +88,24 @@ function formatSurrogateCount(count: number): string {
     return `${count} surrogate${count === 1 ? "" : "s"}`
 }
 
+/** Bulk actions the viewer can run. Rows are selectable only when at least one exists. */
+function useSurrogateBulkActions() {
+    const { user } = useAuth()
+    const { data: permissions } = useEffectivePermissions(user?.user_id ?? null)
+    const canAssign = permissions?.policy_version === 2
+        ? permissions.permissions.includes('assign_surrogates')
+        : Boolean(user?.role && ['case_manager', 'admin', 'developer'].includes(user.role))
+    const canBulkChangeStage = Boolean(user?.role && ['admin', 'developer'].includes(user.role))
+    // Archive requires the same permission the API enforces.
+    const canArchive = usePermissionCheck().can("archive_surrogates")
+    return {
+        canAssign,
+        canBulkChangeStage,
+        canArchive,
+        canSelect: canAssign || canBulkChangeStage || canArchive,
+    }
+}
+
 // Floating Action Bar for bulk operations
 function FloatingActionBar({
     selectedCount,
@@ -101,18 +120,13 @@ function FloatingActionBar({
     onClear: () => void
     onSelectionChange: (surrogateIds: string[]) => void
 }) {
-    const { user } = useAuth()
     const { data: assignees } = useAssignees()
     const bulkAssignMutation = useBulkAssign()
     const bulkArchiveMutation = useBulkArchive()
     const restoreMutation = useRestoreSurrogate()
     const bulkChangeStageMutation = useBulkChangeStage()
     const [isChangeStageOpen, setIsChangeStageOpen] = useState(false)
-
-    const canAssign = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
-    const canBulkChangeStage = user?.role && ['admin', 'developer'].includes(user.role)
-    // Archive requires the same permission the API enforces.
-    const canArchive = usePermissionCheck().can("archive_surrogates")
+    const { canAssign, canBulkChangeStage, canArchive } = useSurrogateBulkActions()
 
     const handleAssign = async (userId: string) => {
         await bulkAssignMutation.mutateAsync({
@@ -184,10 +198,11 @@ function FloatingActionBar({
 
     return (
         <>
-            <div ref={toastClearanceRef} className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-                <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
+            {/* The full-width wrapper keeps a 16px gutter; only the bar itself takes clicks. */}
+            <div ref={toastClearanceRef} className="pointer-events-none fixed inset-x-4 bottom-6 z-50 flex justify-center">
+                <div className="pointer-events-auto bg-primary text-primary-foreground shadow-lg rounded-lg px-4 py-3 sm:px-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                     <span className="font-medium">{selectedCount} surrogate{selectedCount > 1 ? 's' : ''} selected</span>
-                    <div className="h-4 w-px bg-primary-foreground/30" />
+                    <div className="hidden h-4 w-px bg-primary-foreground/30 sm:block" />
 
                     {canAssign && (
                         <DropdownMenu>
@@ -581,14 +596,25 @@ export function SurrogatesPageClient() {
 
     const { user } = useAuth()
     const { data: assignees } = useAssignees()
-    const canUseOrgAssigneeFilter = user?.role === "admin" || user?.role === "developer" || user?.role === "case_manager"
+    const { data: permissions } = useEffectivePermissions(user?.user_id ?? null)
+    const canCreateSurrogates = permissions?.permissions.includes(
+        permissions.policy_version === 2 ? "create_surrogates" : "edit_surrogates",
+    ) === true
+    const canUseOrgAssigneeFilter = permissions?.policy_version === 2
+        ? permissions.permissions.includes("view_surrogates")
+        : user?.role === "admin" || user?.role === "developer" || user?.role === "case_manager"
     const canFilterByAssignee = canUseOrgAssigneeFilter
     const assigneeFilterOptions = assignees ?? []
     const canManagePriority = user?.role === "admin" || user?.role === "developer"
     const canArchive = usePermissionCheck().can("archive_surrogates")
+    const { canSelect: canSelectRows } = useSurrogateBulkActions()
     const listUrlState = readSurrogateListUrlState(normalizedSearchParams, canFilterByAssignee)
+    const { data: defaultPipeline, isLoading: isPipelineLoading } = useDefaultPipeline()
+    const stageOptions = defaultPipeline?.stages || []
+    const stageSelectOptions = pipelineStageOptions(stageOptions)
+    const stageById = new Map(stageOptions.map(stage => [stage.id, stage]))
     const {
-        stageFilter,
+        stageFilter: urlStageFilter,
         sourceFilter,
         queueFilter,
         ownerFilter,
@@ -601,6 +627,12 @@ export function SurrogatesPageClient() {
         sortBy,
         sortOrder,
     } = listUrlState
+    // The list API answers 422 for a stage id outside the pipeline, so an unknown URL stage reads
+    // as All Stages. The stage-filtered queries wait while the pipeline loads.
+    const stageFilter = urlStageFilter !== "all" && defaultPipeline && !stageById.has(urlStageFilter)
+        ? "all"
+        : urlStageFilter
+    const isCheckingStageFilter = urlStageFilter !== "all" && !defaultPipeline && isPipelineLoading
     const [searchDraft, setSearchDraft] = useState(() => ({
         query: currentQuery,
         value: debouncedSearch,
@@ -898,10 +930,6 @@ export function SurrogatesPageClient() {
     const canSeeQueues = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
     const isDeveloper = user?.role === "developer"
     const { data: queues } = useQueues(false, { enabled: !!canSeeQueues })
-    const { data: defaultPipeline } = useDefaultPipeline()
-    const stageOptions = defaultPipeline?.stages || []
-    const stageSelectOptions = pipelineStageOptions(stageOptions)
-    const stageById = new Map(stageOptions.map(stage => [stage.id, stage]))
 
     // Convert date range to ISO strings
     const getDateRangeParams = () => {
@@ -952,7 +980,9 @@ export function SurrogatesPageClient() {
         ...(ownerFilter === "all" ? {} : { owner_id: ownerFilter }),
     } as const
 
-    const { data: availableCreatedDateKeys } = useSurrogateCreatedDates(createdDateFilters)
+    const { data: availableCreatedDateKeys } = useSurrogateCreatedDates(createdDateFilters, {
+        enabled: !isCheckingStageFilter,
+    })
 
     const listFilters = {
         ...getDateRangeParams(),
@@ -973,12 +1003,14 @@ export function SurrogatesPageClient() {
         { enabled: isListFiltered },
     )
 
-    const { data, isLoading, isError, error, refetch, isFetching } = useSurrogates({
+    const listQuery = useSurrogates({
         page,
         per_page: perPage,
         ...listFilters,
         ...(sortBy ? { sort_by: sortBy, sort_order: sortOrder } : {}),
-    })
+    }, { enabled: !isCheckingStageFilter })
+    const { data, isError, error, refetch, isFetching } = listQuery
+    const isLoading = listQuery.isLoading || isCheckingStageFilter
 
     const totalCount = data?.total ?? null
     const unfilteredTotal = isListFiltered ? (unfilteredData?.total ?? null) : totalCount
@@ -1179,6 +1211,7 @@ export function SurrogatesPageClient() {
     }
 
     const handleCreate = createValidation.handleSubmit(async (values) => {
+        if (!canCreateSurrogates) return
         try {
             const created = await createMutation.mutateAsync({
                 full_name: values.full_name.trim(),
@@ -1218,10 +1251,12 @@ export function SurrogatesPageClient() {
                                 Mass Edit
                             </Button>
                         )}
-                        <Button onClick={() => setIsCreateOpen(true)}>
-                            <PlusIcon className="mr-2 size-4" aria-hidden="true" />
-                            New surrogate
-                        </Button>
+                        {canCreateSurrogates && (
+                            <Button onClick={() => setIsCreateOpen(true)}>
+                                <PlusIcon className="mr-2 size-4" aria-hidden="true" />
+                                New surrogate
+                            </Button>
+                        )}
                     </>
                 }
             />
@@ -1255,26 +1290,22 @@ export function SurrogatesPageClient() {
                             </Button>
                         )}
 
-                        <div className="hidden md:block">
-                            <StageSelect
-                                value={stageFilter}
-                                onValueChange={(value) => handleStageChange(value || "all")}
-                                options={stageSelectOptions}
-                                allLabel="All Stages"
-                                className="w-[180px]"
-                                aria-label="Filter by stage"
-                            />
-                        </div>
+                        <StageSelect
+                            value={stageFilter}
+                            onValueChange={(value) => handleStageChange(value || "all")}
+                            options={stageSelectOptions}
+                            allLabel="All Stages"
+                            className="w-[180px]"
+                            aria-label="Filter by stage"
+                        />
 
-                        <div className="hidden md:block">
-                            <DateRangePicker
-                                preset={dateRange}
-                                onPresetChange={handlePresetChange}
-                                customRange={customRange}
-                                onCustomRangeChange={handleCustomRangeChange}
-                                availableDateKeys={availableCreatedDateKeys ?? []}
-                            />
-                        </div>
+                        <DateRangePicker
+                            preset={dateRange}
+                            onPresetChange={handlePresetChange}
+                            customRange={customRange}
+                            onCustomRangeChange={handleCustomRangeChange}
+                            availableDateKeys={availableCreatedDateKeys ?? []}
+                        />
 
                         <MoreFiltersPopover
                             open={isMoreFiltersOpen}
@@ -1421,7 +1452,7 @@ export function SurrogatesPageClient() {
             />
 
             {/* Create Modal */}
-            <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetCreateForm() }}>
+            <Dialog open={isCreateOpen && canCreateSurrogates} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetCreateForm() }}>
                 <DialogContent size="lg">
                     <DialogHeader>
                         <DialogTitle>New surrogate</DialogTitle>
@@ -1566,13 +1597,15 @@ export function SurrogatesPageClient() {
                             <Table className={cn("min-w-max [&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center transition-opacity", isFilterPending && "opacity-60")}>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className="w-[40px]">
-                                            <Checkbox
-                                                checked={data?.items && data.items.length > 0 && selectedSurrogates.size === data.items.length}
-                                                onCheckedChange={(checked) => handleSelectAll(!!checked)}
-                                                aria-label="Select all surrogates"
-                                            />
-                                        </TableHead>
+                                        {canSelectRows && (
+                                            <TableHead className="w-[40px]">
+                                                <Checkbox
+                                                    checked={data?.items && data.items.length > 0 && selectedSurrogates.size === data.items.length}
+                                                    onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                                                    aria-label="Select all surrogates"
+                                                />
+                                            </TableHead>
+                                        )}
                                         <SortableTableHead column="surrogate_number" label="Surrogate #" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} className="w-[100px]" />
                                         <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>Age</TableHead>
@@ -1603,13 +1636,15 @@ export function SurrogatesPageClient() {
                                                 key={surrogateItem.id}
                                                 className={cn(rowClass, "[content-visibility:auto] [contain-intrinsic-size:auto_53px]")}
                                             >
-                                                <TableCell>
-                                                    <Checkbox
-                                                        checked={selectedSurrogates.has(surrogateItem.id)}
-                                                        onCheckedChange={(checked) => handleSelectSurrogate(surrogateItem.id, !!checked)}
-                                                        aria-label={`Select ${surrogateItem.full_name}`}
-                                                    />
-                                                </TableCell>
+                                                {canSelectRows && (
+                                                    <TableCell>
+                                                        <Checkbox
+                                                            checked={selectedSurrogates.has(surrogateItem.id)}
+                                                            onCheckedChange={(checked) => handleSelectSurrogate(surrogateItem.id, !!checked)}
+                                                            aria-label={`Select ${surrogateItem.full_name}`}
+                                                        />
+                                                    </TableCell>
+                                                )}
                                                 <TableCell>
                                                     <Link href={detailHref} className={`font-medium hover:underline ${surrogateItem.is_priority ? "text-amber-600" : "text-primary"}`}>
                                                         #{surrogateItem.surrogate_number}
@@ -1777,7 +1812,7 @@ export function SurrogatesPageClient() {
                 )}
 
                 {/* Floating Action Bar for Multi-Select */}
-                {selectedSurrogates.size > 0 && (
+                {canSelectRows && selectedSurrogates.size > 0 && (
                     <FloatingActionBar
                         selectedCount={selectedSurrogates.size}
                         selectedSurrogateIds={Array.from(selectedSurrogates)}

@@ -14,19 +14,19 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Loader2Icon } from "lucide-react"
 
-interface RejectMatchDialogProps {
+interface DeclineMatchDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     onConfirm: (reason: string) => Promise<void>
     isPending?: boolean
 }
 
-export function RejectMatchDialog({
+export function DeclineMatchDialog({
     open,
     onOpenChange,
     onConfirm,
     isPending = false,
-}: RejectMatchDialogProps) {
+}: DeclineMatchDialogProps) {
     const [error, setError] = useState<string | null>(null)
     const [reason, setReason] = useState("")
 
@@ -55,18 +55,18 @@ export function RejectMatchDialog({
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>Reject Match</DialogTitle>
+                    <DialogTitle>Decline Match</DialogTitle>
                     <DialogDescription>
-                        Please provide a reason for rejecting this match. This will be recorded for future reference.
+                        Please provide a reason for declining this match. This will be recorded for future reference.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
                     <div className="grid gap-2">
-                        <Label htmlFor="reason">Rejection Reason</Label>
+                        <Label htmlFor="reason">Decline Reason</Label>
                         <Textarea
                             id="reason"
-                            placeholder="Enter the reason for rejecting this match"
+                            placeholder="Enter the reason for declining this match"
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
                             rows={4}
@@ -86,10 +86,10 @@ export function RejectMatchDialog({
                         {isPending ? (
                             <>
                                 <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                Rejecting
+                                Declining
                             </>
                         ) : (
-                            "Reject Match"
+                            "Decline Match"
                         )}
                     </Button>
                 </DialogFooter>

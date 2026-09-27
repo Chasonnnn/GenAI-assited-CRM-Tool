@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from app.services import campaign_execution_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,7 +19,6 @@ async def process_campaign_send(db, job) -> None:
         - run_id: UUID of the campaign run
         - user_id: UUID of user who triggered the send
     """
-    from app.services import campaign_service
 
     payload = job.payload or {}
     campaign_id = payload.get("campaign_id")
@@ -41,7 +42,13 @@ async def process_campaign_send(db, job) -> None:
         from app.db.enums import CampaignStatus
         from app.db.models import Campaign
 
-        campaign = db.query(Campaign).filter(Campaign.id == UUID(campaign_id)).first()
+        campaign = (
+            db.query(Campaign)
+            .filter(
+                Campaign.id == UUID(campaign_id), Campaign.organization_id == job.organization_id
+            )
+            .first()
+        )
         if not campaign:
             raise Exception(f"Campaign {campaign_id} not found")
 
@@ -51,7 +58,7 @@ async def process_campaign_send(db, job) -> None:
 
         # Execute the campaign send (full run or retry failed only)
         if retry_failed_only:
-            result = campaign_service.retry_failed_campaign_run(
+            result = campaign_execution_service.retry_failed_campaign_run(
                 db=db,
                 org_id=job.organization_id,
                 campaign_id=UUID(campaign_id),
@@ -59,7 +66,7 @@ async def process_campaign_send(db, job) -> None:
                 actor_user_id=actor_user_id,
             )
         else:
-            result = campaign_service.execute_campaign_run(
+            result = campaign_execution_service.execute_campaign_run(
                 db=db,
                 org_id=job.organization_id,
                 campaign_id=UUID(campaign_id),

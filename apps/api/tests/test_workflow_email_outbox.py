@@ -18,8 +18,7 @@ async def test_queued_workflow_email_uses_the_template_selected_when_queued(
     from app.core.encryption import hash_email
     from app.db.enums import JobType
     from app.db.models import EmailLog, EmailTemplate, Job, Surrogate
-    from app.services import workflow_email_provider
-    from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
+    from app.services import workflow_communication_actions, workflow_email_provider
     from app.utils.normalization import normalize_email
     from app.worker import process_workflow_email
 
@@ -66,13 +65,12 @@ async def test_queued_workflow_email_uses_the_template_selected_when_queued(
             },
         ),
     )
-    adapter = DefaultWorkflowDomainAdapter()
     monkeypatch.setattr(
-        adapter,
-        "_resolve_email_variables",
+        workflow_communication_actions,
+        "resolve_email_variables",
         lambda _db, _entity: {"full_name": "Queued Recipient"},
     )
-    queued = adapter._action_send_email(
+    queued = workflow_communication_actions.send_email(
         db=db,
         action={
             "action_type": "send_email",

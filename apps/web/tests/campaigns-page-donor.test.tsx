@@ -10,11 +10,17 @@ const mockCreateCampaign = vi.fn()
 const mockPreviewFilters = vi.fn()
 const mockSendCampaign = vi.fn()
 const mockPreviewFiltersReset = vi.fn()
-let mockPermissions = new Set(["manage_email_templates"])
+let mockPermissions: { policy_version: number; permissions: string[] } = {
+    policy_version: 1,
+    permissions: ["manage_email_templates"],
+}
+// Per-campaign flags the API computes for the viewer.
+let mockCampaignFlags = { can_edit: true, can_send: true }
 let mockEmptyCampaigns = false
 let mockCampaignsError = false
 const mockRefetchCampaigns = vi.fn()
 let mockMessagingTemplates: Array<{ id: string; name: string; body: string }> = []
+vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ user: { user_id: "user-1" } }) }))
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: vi.fn() }),
@@ -74,7 +80,8 @@ vi.mock("@/lib/hooks/use-permission-check", () => ({
         isError: false,
         isRetrying: false,
         retry: vi.fn(),
-        can: (permission: string) => mockPermissions.has(permission),
+        can: (permission: string) => mockPermissions.permissions.includes(permission),
+        policyVersion: mockPermissions.policy_version,
     }),
 }))
 
@@ -104,6 +111,8 @@ vi.mock("@/lib/hooks/use-campaigns", () => ({
             opened_count: 0,
             clicked_count: 0,
             created_at: "2026-08-29T12:00:00Z",
+            scope: "org",
+            ...mockCampaignFlags,
         }],
         isLoading: false,
     }),
@@ -150,6 +159,7 @@ vi.mock("@/lib/api/twilio", () => ({
 
 describe("donor campaign creation", () => {
     beforeEach(() => {
+        mockPermissions = { policy_version: 1, permissions: ["manage_email_templates"] }
         mockCreateCampaign.mockReset().mockResolvedValue({ id: "campaign-new" })
         mockPreviewFilters.mockReset()
         mockSendCampaign.mockReset().mockResolvedValue({})
@@ -186,7 +196,7 @@ describe("donor campaign creation", () => {
             }
             return { data: [], isLoading: false } as never
         })
-        mockPermissions = new Set(["manage_email_templates"])
+        mockCampaignFlags = { can_edit: true, can_send: true }
         mockEmptyCampaigns = false
         mockCampaignsError = false
         mockRefetchCampaigns.mockReset()
@@ -243,6 +253,7 @@ describe("donor campaign creation", () => {
             options.queryKey[0] === "defaultPipeline" && options.queryKey[1] === "egg_donor"
         )).toBe(true)
         expect(mockPreviewFilters).toHaveBeenCalledWith({
+            scope: "org",
             channel: "email",
             recipientType: "egg_donor",
             filterCriteria: { stage_ids: ["egg-stage-1"] },
@@ -346,7 +357,8 @@ describe("donor campaign creation", () => {
     })
 
     it("hides create and manage actions without the campaign permission", async () => {
-        mockPermissions = new Set()
+        mockPermissions = { policy_version: 1, permissions: [] }
+        mockCampaignFlags = { can_edit: false, can_send: false }
         render(<CampaignsPage />)
 
         expect(screen.queryByRole("button", { name: "Create Campaign" })).not.toBeInTheDocument()
@@ -360,7 +372,7 @@ describe("donor campaign creation", () => {
 
     it("shows an empty state without create copy for roles that cannot create", () => {
         mockEmptyCampaigns = true
-        mockPermissions = new Set()
+        mockPermissions = { policy_version: 1, permissions: [] }
         const view = render(<CampaignsPage />)
 
         expect(screen.getByRole("heading", { name: "No campaigns yet", level: 3 })).toBeInTheDocument()
@@ -368,7 +380,7 @@ describe("donor campaign creation", () => {
         expect(screen.queryByRole("button", { name: "Create Campaign" })).not.toBeInTheDocument()
 
         view.unmount()
-        mockPermissions = new Set(["manage_email_templates"])
+        mockPermissions = { policy_version: 1, permissions: ["manage_email_templates"] }
         render(<CampaignsPage />)
         expect(screen.getAllByRole("button", { name: "Create Campaign" })).toHaveLength(2)
     })
@@ -393,4 +405,44 @@ describe("donor campaign creation", () => {
         const confirm = await screen.findByRole("alertdialog")
         expect(within(confirm).getByText("Send to 4 recipients now?")).toBeInTheDocument()
     })
+    it("creates a private draft without offering a send when only editing is granted", async () => {
+        mockPermissions = { policy_version: 2, permissions: ["view_campaigns", "edit_campaigns", "send_email"] }
+        render(<CampaignsPage />)
+        fireEvent.click(screen.getAllByRole("button", { name: "Create Campaign" })[0]!)
+        expect(screen.getByRole("combobox", { name: "Campaign scope" })).toHaveValue("personal")
+        fireEvent.change(screen.getByLabelText("Campaign name"), { target: { value: "Private draft" } })
+        fireEvent.click(screen.getByRole("button", { name: "Next" }))
+        fireEvent.click(screen.getByRole("button", { name: "Next" }))
+        fireEvent.change(screen.getByRole("combobox", { name: "Email template" }), { target: { value: "template-1" } })
+        fireEvent.click(screen.getByRole("button", { name: "Next" }))
+
+        expect(screen.queryByRole("radio", { name: "Send now" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("radio", { name: "Schedule for later" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        await waitFor(() => expect(mockCreateCampaign).toHaveBeenCalledWith(expect.objectContaining({ name: "Private draft", scope: "personal" })))
+        expect(mockPreviewFilters).toHaveBeenCalledWith(expect.objectContaining({ scope: "personal" }))
+        expect(mockSendCampaign).not.toHaveBeenCalled()
+    })
+
+    it("offers no scope choice under policy v1, where every campaign is organization-wide", () => {
+        render(<CampaignsPage />)
+        fireEvent.click(screen.getAllByRole("button", { name: "Create Campaign" })[0]!)
+        expect(screen.queryByRole("combobox", { name: "Campaign scope" })).not.toBeInTheDocument()
+    })
+
+    it("filters the list by campaign scope", () => {
+        render(<CampaignsPage />)
+        expect(screen.getByRole("link", { name: "Egg donor screening" })).toBeInTheDocument()
+
+        fireEvent.change(screen.getByRole("combobox", { name: "Campaign scope filter" }), { target: { value: "personal" } })
+        expect(screen.queryByRole("link", { name: "Egg donor screening" })).not.toBeInTheDocument()
+        expect(screen.getByRole("heading", { name: "No campaigns in this scope", level: 3 })).toBeInTheDocument()
+    })
+
+    it("hides creation when only viewing is granted", () => {
+        mockPermissions = { policy_version: 2, permissions: ["view_campaigns"] }
+        render(<CampaignsPage />)
+        expect(screen.queryByRole("button", { name: "Create Campaign" })).not.toBeInTheDocument()
+    })
+
 })

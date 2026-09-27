@@ -141,7 +141,7 @@ async def test_request_transcription_enqueues_job(
         organization_id=test_org.id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3.7-flash",
+        model="gemini-3.8-flash",
         current_version=1,
         consent_accepted_at=datetime.now(UTC),
         consent_accepted_by=test_user.id,
@@ -234,7 +234,7 @@ async def test_interview_summary_anonymizes_transcript(
         organization_id=test_org.id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3.7-flash",
+        model="gemini-3.8-flash",
         current_version=1,
         anonymize_pii=True,
         consent_accepted_at=datetime.now(UTC),
@@ -256,7 +256,7 @@ async def test_interview_summary_anonymizes_transcript(
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gemini-3.7-flash",
+                model="gemini-3.8-flash",
             )
 
     monkeypatch.setattr(
@@ -318,7 +318,7 @@ async def test_summarize_all_interviews_loads_tenant_notes_in_one_query(
         organization_id=test_org.id,
         is_enabled=True,
         provider="gemini",
-        model="gemini-3.7-flash",
+        model="gemini-3.8-flash",
         current_version=1,
         anonymize_pii=False,
         consent_accepted_at=datetime.now(UTC),
@@ -342,7 +342,7 @@ async def test_summarize_all_interviews_loads_tenant_notes_in_one_query(
                 prompt_tokens=10,
                 completion_tokens=5,
                 total_tokens=15,
-                model="gemini-3.7-flash",
+                model="gemini-3.8-flash",
             )
 
     monkeypatch.setattr(

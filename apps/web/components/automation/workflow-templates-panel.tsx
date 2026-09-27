@@ -158,6 +158,10 @@ const TRIGGER_LABELS: Record<string, string> = {
     task_overdue: "Task Overdue",
     scheduled: "Scheduled",
     inactivity: "Inactivity",
+    match_proposed: "Match Proposed",
+    match_accepted: "Match Accepted",
+    match_declined: "Match Declined",
+    match_cancelled: "Match Cancelled",
 }
 
 const WORKFLOW_SCOPE_LABELS: Record<WorkflowScope, string> = {

@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, fireEvent } from "@testing-library/react"
 
 import { NotificationBell } from "@/components/notification-bell"
 
@@ -10,6 +10,7 @@ const mockUseUnreadCount = vi.fn()
 const mockUseNotificationSocket = vi.fn()
 const mockMarkReadMutate = vi.fn()
 const mockMarkAllReadMutate = vi.fn()
+const mockUseMarkAllRead = vi.fn()
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: mockPush }),
@@ -49,7 +50,7 @@ vi.mock("@/lib/hooks/use-notifications", () => ({
     useNotifications: (params: unknown) => mockUseNotifications(params),
     useUnreadCount: () => mockUseUnreadCount(),
     useMarkRead: () => ({ mutate: mockMarkReadMutate }),
-    useMarkAllRead: () => ({ mutate: mockMarkAllReadMutate }),
+    useMarkAllRead: () => mockUseMarkAllRead(),
 }))
 
 vi.mock("@/lib/hooks/use-notification-socket", () => ({
@@ -69,6 +70,7 @@ describe("NotificationBell", () => {
         mockPush.mockReset()
         mockMarkReadMutate.mockReset()
         mockMarkAllReadMutate.mockReset()
+        mockUseMarkAllRead.mockReturnValue({ mutate: mockMarkAllReadMutate, isPending: false })
         mockUseNotificationSocket.mockReturnValue({
             isConnected: false,
             lastNotification: null,
@@ -178,5 +180,27 @@ describe("NotificationBell", () => {
         render(<NotificationBell />)
 
         expect(screen.getByTestId("notification-menu")).toHaveAttribute("data-open", "false")
+    })
+
+    it("shows progress and prevents duplicate mark-all requests until the mutation settles", () => {
+        mockUseUnreadCount.mockReturnValue({ data: { count: 2 }, isLoading: false })
+        mockUseMarkAllRead.mockReturnValue({ mutate: mockMarkAllReadMutate, isPending: true })
+        const { rerender } = render(<NotificationBell />)
+        const button = screen.getByRole("button", { name: "Mark all read" })
+
+        expect(button).toBeDisabled()
+        expect(button).toHaveAttribute("aria-busy", "true")
+        expect(button.querySelector("svg")).toHaveClass("animate-spin")
+        fireEvent.click(button)
+        expect(mockMarkAllReadMutate).not.toHaveBeenCalled()
+
+        // A rejected request leaves unread items available for retry.
+        mockUseMarkAllRead.mockReturnValue({ mutate: mockMarkAllReadMutate, isPending: false, isError: true })
+        rerender(<NotificationBell />)
+        expect(button).toBeEnabled()
+        expect(button).toHaveAttribute("aria-busy", "false")
+        expect(button.querySelector("svg")).toBeNull()
+        fireEvent.click(button)
+        expect(mockMarkAllReadMutate).toHaveBeenCalledTimes(1)
     })
 })

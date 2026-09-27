@@ -51,6 +51,30 @@ def cli_api(db, test_user, monkeypatch, tmp_path):
         app.dependency_overrides[get_db] = previous
 
 
+@pytest.mark.parametrize("literal", ["%", "_", "\\"])
+@pytest.mark.parametrize("field", ["name", "slug"])
+def test_cli_organization_search_treats_wildcards_as_literals(cli_api, db, literal, field):
+    _, _, api, headers = cli_api
+    matching = Organization(name="Literal target", slug="literal-target")
+    setattr(matching, field, f"literal{literal}target")
+    unrelated = Organization(name="LiteralXtarget", slug="literalxtarget")
+    deleted = Organization(
+        name=f"deleted{literal}target",
+        slug=f"deleted{literal}target",
+        deleted_at=datetime.now(UTC),
+    )
+    db.add_all([matching, unrelated, deleted])
+    db.commit()
+
+    response = api.get("/platform/cli/orgs", headers=headers, params={"search": literal})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [{"id": str(matching.id), "name": matching.name, "slug": matching.slug}],
+        "total": 1,
+    }
+
+
 def test_cli_organization_discovery_preserves_search_and_pagination(cli_api, db):
     _, _, api, headers = cli_api
     first = Organization(name="CLI Search Zulu", slug="cli-search-a")

@@ -2,13 +2,8 @@
 
 import { useState } from "react"
 import Link from "@/components/app-link"
-import { EmptyState } from "@/components/empty-state"
-import { QueryErrorState } from "@/components/error-state"
-import { PageHeader } from "@/components/page-header"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ConfirmDialog } from "@/components/ui/confirm-dialog"
-import { ValidatedField } from "@/components/ui/field"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -30,10 +25,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createSelectLabelGetter } from "@/lib/select-labels"
-import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
-import { useFormValidation } from "@/lib/forms/use-form-validation"
-import { EMAIL_INVALID_MESSAGE, validateEmail } from "@/lib/forms/validators"
 import {
     Select,
     SelectContent,
@@ -43,129 +34,105 @@ import {
 } from "@/components/ui/select"
 import {
     Loader2, UserPlus, Mail, RotateCcw, X,
-    Users, Shield, Settings2, UserCog
+    Users, Settings2, UserCog
 } from "lucide-react"
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
-import { useMembers, useRemoveMember, useBulkUpdateRoles } from "@/lib/hooks/use-permissions"
+import { useEffectivePermissions, useMembers, useRemoveMember } from "@/lib/hooks/use-permissions"
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatRelativeTime } from "@/lib/formatters"
-import { SettingsPageGate } from "../settings-page-gate"
 
-const ROLE_LABELS: Record<string, string> = {
-    intake_specialist: "Intake Specialist",
-    case_manager: "Case Manager",
-    admin: "Admin",
-    developer: "Developer",
-}
+import { PermissionBulkRoleReview } from "@/components/permissions/permission-bulk-role-review"
+import { ChoiceField, PermissionError, ROLE_LABELS } from "@/components/permissions/permission-controls"
+import { PermissionNavigation } from "@/components/permissions/permission-navigation"
 
 const ROLE_COLORS: Record<string, string> = {
     intake_specialist: "bg-blue-100 text-blue-800",
     case_manager: "bg-green-100 text-green-800",
+    operations: "bg-rose-100 text-rose-800",
     admin: "bg-purple-100 text-purple-800",
     developer: "bg-orange-100 text-orange-800",
 }
 
-const INVITE_ROLE_OPTIONS = ["intake_specialist", "case_manager", "admin"] as const
+const INVITE_ROLE_OPTIONS = ["intake_specialist", "case_manager", "operations", "admin"] as const
 type InviteRole = (typeof INVITE_ROLE_OPTIONS)[number]
 const ACTIONABLE_INVITE_STATUSES = new Set(["pending", "expired"])
 
-const getInviteRoleLabel = createSelectLabelGetter(ROLE_LABELS, {
-    emptyLabel: "Select role",
-    unknownLabel: "Unknown role",
-})
-
-type PendingRemoval = { id: string; email: string }
-
-type InviteFormValues = {
-    email: string
-    role: InviteRole | ""
-}
-
-function validateInviteForm(values: InviteFormValues) {
-    return {
-        email: validateEmail(values.email, { requiredMessage: "Enter an email address." }),
-        role: values.role ? undefined : "Select a role.",
-    }
-}
-
-function InviteTeamModal({ onClose }: { onClose: () => void }) {
-    const [values, setValues] = useState<InviteFormValues>({ email: "", role: INVITE_ROLE_OPTIONS[0] })
+function InviteTeamModal({ onClose, v2 }: { onClose: () => void; v2: boolean }) {
+    const [email, setEmail] = useState("")
+    const [role, setRole] = useState<InviteRole>(INVITE_ROLE_OPTIONS[0])
     const createInvite = useCreateInvite()
-    const form = useFormValidation({ values, validate: validateInviteForm })
 
-    const handleSubmit = form.handleSubmit(async ({ email, role }) => {
-        if (!role) return
-        const trimmedEmail = email.trim()
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+
         try {
-            await createInvite.mutateAsync({ email: trimmedEmail, role })
-            toast.success(`Invited ${trimmedEmail} as ${ROLE_LABELS[role] || role}`)
-            setValues({ email: "", role: INVITE_ROLE_OPTIONS[0] })
-            form.reset()
+            await createInvite.mutateAsync({ email, role })
+            toast.success(`Invited ${email} as ${ROLE_LABELS[role] || role}`)
             onClose()
         } catch (error) {
-            const formError = form.applyApiError(error, {
-                fields: ["email", "role"],
-                messages: { email: EMAIL_INVALID_MESSAGE },
-                fallback: "Couldn't send the invitation. Try again.",
+            toast.error("Failed to send invitation", {
+                description: error instanceof Error ? error.message : "Unknown error",
             })
-            if (formError) toast.error(formError)
         }
-    })
+    }
 
     return (
         <DialogContent>
-            <form onSubmit={handleSubmit} noValidate>
+            <form onSubmit={handleSubmit}>
                 <DialogHeader>
                     <DialogTitle>Invite Team Member</DialogTitle>
+                    <DialogDescription>
+                        Send an invitation email to add someone to your organization.
+                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
-                    <ValidatedField label="Email address" id="email" error={form.errorFor("email")}>
-                        {(control) => (
-                            <Input
-                                {...control}
-                                name="inviteEmail"
-                                type="email"
-                                placeholder="colleague@example.com"
-                                value={values.email}
-                                onChange={(e) => setValues((current) => ({ ...current, email: e.target.value }))}
-                                onBlur={() => form.touch("email")}
-                                autoComplete="email"
-                                spellCheck={false}
-                            />
-                        )}
-                    </ValidatedField>
+                    <div className="space-y-2">
+                        <Label htmlFor="email">Email address</Label>
+                        <Input
+                            id="email"
+                            name="inviteEmail"
+                            type="email"
+                            placeholder="colleague@example.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            autoComplete="email"
+                            spellCheck={false}
+                        />
+                    </div>
 
-                    <ValidatedField label="Role" id="role" error={form.errorFor("role")}>
-                        {(control) => (
-                            <Select
-                                value={values.role}
-                                onValueChange={(v) =>
-                                    v && setValues((current) => ({ ...current, role: v as InviteRole }))
-                                }
-                            >
-                                <SelectTrigger {...control} className="w-full">
-                                    <SelectValue placeholder="Select role">{getInviteRoleLabel}</SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {INVITE_ROLE_OPTIONS.map((roleOption) => (
-                                        <SelectItem key={roleOption} value={roleOption}>
-                                            {ROLE_LABELS[roleOption]}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    </ValidatedField>
+                    <div className="space-y-2">
+                        <Label htmlFor="role">Role</Label>
+                        <Select value={role} onValueChange={(v) => v && setRole(v as InviteRole)}>
+                            <SelectTrigger id="role">
+                                <SelectValue placeholder="Select role">
+                                    {(value: string | null) => {
+                                        return value ? ROLE_LABELS[value] ?? "Unknown role" : "Select role"
+                                    }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {INVITE_ROLE_OPTIONS.filter((option) => v2 || option !== "operations").map((roleOption) => (
+                                    <SelectItem key={roleOption} value={roleOption}>
+                                        {ROLE_LABELS[roleOption]}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                            Role permissions can be customized after invitation is accepted.
+                        </p>
+                    </div>
                 </div>
 
                 <DialogFooter>
                     <Button type="button" variant="outline" onClick={onClose}>
                         Cancel
                     </Button>
-                    <Button type="submit" disabled={createInvite.isPending || !form.isValid}>
+                    <Button type="submit" disabled={createInvite.isPending}>
                         {createInvite.isPending && (
                             <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                         )}
@@ -177,29 +144,32 @@ function InviteTeamModal({ onClose }: { onClose: () => void }) {
     )
 }
 
-function MembersTab() {
-    const { data: members, isLoading, isError, error, refetch, isFetching } = useMembers()
+function MembersTab({ includeInactive, v2, canManage, canAssignDeveloper }: { includeInactive: boolean; v2: boolean; canManage: boolean; canAssignDeveloper: boolean }) {
+    const { data: members, isLoading, error, refetch } = useMembers(includeInactive)
     const removeMember = useRemoveMember()
-    const bulkUpdate = useBulkUpdateRoles()
     const { user } = useAuth()
 
     // Selection state for bulk operations
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
     const [showBulkDialog, setShowBulkDialog] = useState(false)
-    const [bulkRole, setBulkRole] = useState("case_manager")
-    const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(null)
-    const [removalOpen, setRemovalOpen] = useState(false)
+    const [search, setSearch] = useState("")
+    const [roleFilter, setRoleFilter] = useState("all")
+    const visibleMembers = (members ?? []).filter((member) =>
+        (roleFilter === "all" || member.role === roleFilter) &&
+        `${member.display_name ?? ""} ${member.email}`.toLowerCase().includes(search.trim().toLowerCase())
+    )
 
-    const handleConfirmRemove = async () => {
-        if (!pendingRemoval) return
-        await removeMember.mutateAsync(pendingRemoval.id)
-        setSelectedIds((current) => {
-            if (!current.has(pendingRemoval.id)) return current
-            const next = new Set(current)
-            next.delete(pendingRemoval.id)
-            return next
-        })
-        toast.success("Member removed")
+    const handleRemove = async (memberId: string, email: string) => {
+        if (!confirm(`Remove ${email} from the organization? This cannot be undone.`)) return
+
+        try {
+            await removeMember.mutateAsync(memberId)
+            toast.success("Member removed")
+        } catch (error) {
+            toast.error("Failed to remove member", {
+                description: error instanceof Error ? error.message : "Unknown error",
+            })
+        }
     }
 
     const toggleSelect = (id: string) => {
@@ -218,8 +188,8 @@ function MembersTab() {
         if (!members) return
         const selectableIds: string[] = []
 
-        for (const member of members) {
-            if (member.user_id === user?.user_id || member.role === "developer") continue
+        for (const member of visibleMembers) {
+            if (member.user_id === user?.user_id || (member.role === "developer" && !canAssignDeveloper) || !canManage) continue
             selectableIds.push(member.id)
         }
 
@@ -230,22 +200,7 @@ function MembersTab() {
         }
     }
 
-    const handleBulkAssign = async () => {
-        if (selectedIds.size === 0) return
-
-        try {
-            const result = await bulkUpdate.mutateAsync({
-                memberIds: Array.from(selectedIds),
-                role: bulkRole,
-            })
-            toast.success(`${result.success} member(s) updated${result.failed > 0 ? `, ${result.failed} failed` : ""}`)
-            setSelectedIds(new Set())
-            setShowBulkDialog(false)
-        } catch (error) {
-            const message = getActionErrorMessage(error, "Couldn't update roles. Try again.")
-            if (message) toast.error(message)
-        }
-    }
+    if (error) return <PermissionError error={error} retry={() => void refetch()} />
 
     if (isLoading) {
         return (
@@ -255,27 +210,23 @@ function MembersTab() {
         )
     }
 
-    if (isError) {
+    if (!members?.length) {
         return (
-            <QueryErrorState
-                error={error}
-                onRetry={() => void refetch()}
-                isRetrying={isFetching}
-                title="Couldn't load team members"
-                className="min-h-0 py-10"
-            />
+            <div className="text-center py-8 text-muted-foreground">
+                No team members yet
+            </div>
         )
     }
 
-    if (!members?.length) {
-        return <EmptyState icon={Users} title="No team members" />
-    }
-
-    const selectableMembers = members.filter(m => m.user_id !== user?.user_id && m.role !== "developer")
-    const allSelected = selectableMembers.length > 0 && selectedIds.size === selectableMembers.length
+    const selectableMembers = visibleMembers.filter(m => canManage && m.user_id !== user?.user_id && (m.role !== "developer" || canAssignDeveloper))
+    const allSelected = selectableMembers.length > 0 && selectableMembers.every((member) => selectedIds.has(member.id))
 
     return (
         <div>
+            <div className="mb-5 grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_200px]">
+                <div className="space-y-2"><Label htmlFor="people-search">Search people</Label><Input id="people-search" value={search} onChange={(event) => { setSearch(event.target.value); setSelectedIds(new Set()) }} /></div>
+                <ChoiceField label="Filter by role" value={roleFilter} options={{ all: "All roles", ...ROLE_LABELS }} onChange={(value) => { setRoleFilter(value); setSelectedIds(new Set()) }} />
+            </div>
             {/* Bulk Actions Bar */}
             {selectedIds.size > 0 && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
@@ -297,42 +248,8 @@ function MembersTab() {
                                     Assign Role
                                 </Button>
                             } />
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Bulk Assign Role</DialogTitle>
-                                    <DialogDescription>
-                                        Assign the same role to {selectedIds.size} selected member{selectedIds.size !== 1 ? "s" : ""}.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <div className="py-4 space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="bulk-role">New Role</Label>
-                                        <Select value={bulkRole} onValueChange={(v) => v && setBulkRole(v)}>
-                                            <SelectTrigger id="bulk-role">
-                                                <SelectValue placeholder="Select role">{getInviteRoleLabel}</SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {INVITE_ROLE_OPTIONS.map((roleOption) => (
-                                                    <SelectItem key={roleOption} value={roleOption}>
-                                                        {ROLE_LABELS[roleOption]}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => setShowBulkDialog(false)}>
-                                        Cancel
-                                    </Button>
-                                    <Button onClick={handleBulkAssign} disabled={bulkUpdate.isPending}>
-                                        {bulkUpdate.isPending && (
-                                            <Loader2 className="size-4 mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                        )}
-                                        Apply to {selectedIds.size} Member{selectedIds.size !== 1 ? "s" : ""}
-                                    </Button>
-                                </DialogFooter>
-                            </DialogContent>
+                            {showBulkDialog && <PermissionBulkRoleReview memberIds={Array.from(selectedIds)} v2={v2} canAssignDeveloper={canAssignDeveloper} onClose={() => setShowBulkDialog(false)} onSaved={() => { setSelectedIds(new Set()); setShowBulkDialog(false); toast.success("Roles updated") }} />}
+
                         </Dialog>
                     </div>
                 </div>
@@ -346,6 +263,7 @@ function MembersTab() {
                                 checked={allSelected}
                                 onCheckedChange={toggleSelectAll}
                                 aria-label="Select all"
+                                disabled={!canManage}
                             />
                         </TableHead>
                         <TableHead className="text-center">Name</TableHead>
@@ -356,8 +274,8 @@ function MembersTab() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {members.map((member) => {
-                        const isSelectable = member.user_id !== user?.user_id && member.role !== "developer"
+                    {visibleMembers.map((member) => {
+                        const isSelectable = canManage && member.user_id !== user?.user_id && (member.role !== "developer" || canAssignDeveloper)
                         const isSelected = selectedIds.has(member.id)
 
                         return (
@@ -371,7 +289,7 @@ function MembersTab() {
                                     />
                                 </TableCell>
                                 <TableCell className="font-medium text-center">
-                                    {member.display_name || "—"}
+                                    {member.display_name || "—"}{member.is_active === false && <Badge variant="secondary" className="ml-2">Inactive</Badge>}
                                 </TableCell>
                                 <TableCell className="text-center">{member.email}</TableCell>
                                 <TableCell className="text-center">
@@ -395,21 +313,19 @@ function MembersTab() {
                                             Manage
                                         </Button>
                                         <div className="flex w-14 justify-center">
-                                            {member.user_id !== user?.user_id ? (
+                                            {isSelectable && member.is_active !== false ? (
                                                 <Button
-                                                    variant="destructive-ghost"
+                                                    variant="ghost"
                                                     size="sm"
-                                                    onClick={() => {
-                                                        setPendingRemoval({ id: member.id, email: member.email })
-                                                        setRemovalOpen(true)
-                                                    }}
-                                                    className="text-muted-foreground"
+                                                    onClick={() => handleRemove(member.id, member.email)}
+                                                    disabled={removeMember.isPending}
+                                                    className="text-destructive hover:text-destructive"
                                                     aria-label={`Remove ${member.email}`}
                                                 >
                                                     <X className="size-4" aria-hidden="true" />
                                                 </Button>
                                             ) : (
-                                                <Badge variant="outline" className="text-xs">You</Badge>
+                                                member.user_id === user?.user_id ? <Badge variant="outline" className="text-xs">You</Badge> : null
                                             )}
                                         </div>
                                     </div>
@@ -417,43 +333,40 @@ function MembersTab() {
                             </TableRow>
                         )
                     })}
+                {visibleMembers.length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No matching people.</TableCell></TableRow>}
                 </TableBody>
             </Table>
-
-            <ConfirmDialog
-                open={removalOpen}
-                onOpenChange={setRemovalOpen}
-                title={`Remove ${pendingRemoval?.email ?? "member"}?`}
-                description="They lose access to the organization. This cannot be undone."
-                confirmLabel="Remove member"
-                errorFallback="Couldn't remove this member. Try again."
-                onConfirm={handleConfirmRemove}
-            />
         </div>
     )
 }
 
 function InvitationsTab() {
-    const { data, isLoading, isError, error, refetch, isFetching } = useInvites()
+    const { data, isLoading } = useInvites()
     const resendInvite = useResendInvite()
     const revokeInvite = useRevokeInvite()
-    const [pendingRevoke, setPendingRevoke] = useState<PendingRemoval | null>(null)
-    const [revokeOpen, setRevokeOpen] = useState(false)
 
     const handleResend = async (inviteId: string) => {
         try {
             await resendInvite.mutateAsync(inviteId)
             toast.success("Invitation resent")
-        } catch (resendError) {
-            const message = getActionErrorMessage(resendError, "Couldn't resend the invitation. Try again.")
-            if (message) toast.error(message)
+        } catch (error) {
+            toast.error("Failed to resend", {
+                description: error instanceof Error ? error.message : "Unknown error",
+            })
         }
     }
 
-    const handleConfirmRevoke = async () => {
-        if (!pendingRevoke) return
-        await revokeInvite.mutateAsync(pendingRevoke.id)
-        toast.success("Invitation revoked")
+    const handleRevoke = async (inviteId: string) => {
+        if (!confirm("Revoke this invitation?")) return
+
+        try {
+            await revokeInvite.mutateAsync(inviteId)
+            toast.success("Invitation revoked")
+        } catch (error) {
+            toast.error("Failed to revoke", {
+                description: error instanceof Error ? error.message : "Unknown error",
+            })
+        }
     }
 
     const actionableInvites = data?.invites.filter((inv) => ACTIONABLE_INVITE_STATUSES.has(inv.status)) || []
@@ -466,24 +379,15 @@ function InvitationsTab() {
         )
     }
 
-    if (isError) {
+    if (actionableInvites.length === 0) {
         return (
-            <QueryErrorState
-                error={error}
-                onRetry={() => void refetch()}
-                isRetrying={isFetching}
-                title="Couldn't load invitations"
-                className="min-h-0 py-10"
-            />
+            <div className="text-center py-8 text-muted-foreground">
+                No actionable invitations
+            </div>
         )
     }
 
-    if (actionableInvites.length === 0) {
-        return <EmptyState icon={Mail} title="No pending invitations" />
-    }
-
     return (
-        <>
         <Table>
             <TableHeader>
                 <TableRow>
@@ -521,13 +425,11 @@ function InvitationsTab() {
                                     <RotateCcw className="size-4" aria-hidden="true" />
                                 </Button>
                                 <Button
-                                    variant="destructive-ghost"
+                                    variant="ghost"
                                     size="sm"
-                                    onClick={() => {
-                                        setPendingRevoke({ id: invite.id, email: invite.email })
-                                        setRevokeOpen(true)
-                                    }}
-                                    className="text-muted-foreground"
+                                    onClick={() => handleRevoke(invite.id)}
+                                    disabled={revokeInvite.isPending}
+                                    className="text-destructive hover:text-destructive"
                                     aria-label={`Revoke invitation for ${invite.email}`}
                                 >
                                     <X className="size-4" aria-hidden="true" />
@@ -538,34 +440,17 @@ function InvitationsTab() {
                 ))}
             </TableBody>
         </Table>
-
-        <ConfirmDialog
-            open={revokeOpen}
-            onOpenChange={setRevokeOpen}
-            title={`Revoke the invitation for ${pendingRevoke?.email ?? "this person"}?`}
-            description="The invitation link stops working."
-            confirmLabel="Revoke invitation"
-            errorFallback="Couldn't revoke the invitation. Try again."
-            onConfirm={handleConfirmRevoke}
-        />
-        </>
     )
 }
 
 export default function TeamSettingsPage() {
-    return (
-        <SettingsPageGate
-            title="Team"
-            permission="manage_team"
-            deniedDescription="Team settings need the Manage team permission. Ask an admin to update your role."
-        >
-            <TeamSettingsContent />
-        </SettingsPageGate>
-    )
-}
-
-function TeamSettingsContent() {
     const [showInviteModal, setShowInviteModal] = useState(false)
+    const [includeInactive, setIncludeInactive] = useState(false)
+    const { user } = useAuth()
+    const effective = useEffectivePermissions(user?.user_id ?? null)
+    const v2 = effective.data?.policy_version === 2
+    const canManage = !!effective.data?.capabilities?.can_manage_members
+    const canAssignDeveloper = !!effective.data?.capabilities?.can_assign_developer
     const { data: inviteData } = useInvites()
     const { data: members } = useMembers()
 
@@ -573,52 +458,50 @@ function TeamSettingsContent() {
     const memberCount = members?.length || 0
 
     return (
-        <div className="flex min-h-screen flex-col">
-            <PageHeader
-                title="Team"
-                count={members ? memberCount : null}
-                countLabel="members"
-                actions={
-                    <>
-                        <Button
-                            render={<Link href="/settings/team/roles" />}
-                            variant="outline"
-                            className="flex-1 sm:flex-none"
-                        >
-                            <Shield className="size-4 mr-2" aria-hidden="true" />
-                            Role Permissions
-                        </Button>
-                        <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
-                            <DialogTrigger render={
-                                <Button className="flex-1 sm:flex-none">
-                                    <UserPlus className="size-4 mr-2" aria-hidden="true" />
-                                    Invite Member
-                                </Button>
-                            } />
-                            <InviteTeamModal onClose={() => setShowInviteModal(false)} />
-                        </Dialog>
-                    </>
-                }
-            />
+        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6 sm:p-8">
+            <header className="flex flex-wrap items-center justify-between gap-5"><h1 className="text-3xl font-semibold tracking-tight">Permissions</h1><PermissionNavigation current="people" capabilities={effective.data?.capabilities} /></header>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-2xl font-semibold">People</h2>
+                </div>
 
-            <div className="p-6">
+                <div className="flex gap-2">
+
+                    {canManage && <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
+                        <DialogTrigger render={
+                            <Button>
+                                <UserPlus className="size-4 mr-2" aria-hidden="true" />
+                                Invite Member
+                            </Button>
+                        } />
+                        <InviteTeamModal v2={v2} onClose={() => setShowInviteModal(false)} />
+                    </Dialog>}
+                </div>
+            </div>
+
             <Card>
+                <CardHeader>
+                    <CardTitle>Team</CardTitle>
+                    <CardDescription>
+                        {memberCount} member{memberCount !== 1 ? "s" : ""} • {actionableInviteCount} actionable invitation{actionableInviteCount !== 1 ? "s" : ""}
+                    </CardDescription>
+                </CardHeader>
                 <CardContent>
                     <Tabs defaultValue="members">
                         <TabsList className="mb-4">
                             <TabsTrigger value="members">
                                 <Users className="size-4 mr-1" aria-hidden="true" />
-                                {/* No count until the list loads, so a failed load never reads as 0. */}
-                                {members ? `Members (${memberCount})` : "Members"}
+                                Members ({memberCount})
                             </TabsTrigger>
                             <TabsTrigger value="invitations">
                                 <Mail className="size-4 mr-1" aria-hidden="true" />
-                                {inviteData ? `Invitations (${actionableInviteCount})` : "Invitations"}
+                                Invitations ({actionableInviteCount})
                             </TabsTrigger>
                         </TabsList>
 
                         <TabsContent value="members">
-                            <MembersTab />
+                            {canManage && <label className="mb-5 flex items-center gap-2 text-sm"><Checkbox checked={includeInactive} onCheckedChange={(value) => setIncludeInactive(value === true)} />Include inactive members</label>}
+                            <MembersTab key={String(includeInactive)} includeInactive={includeInactive} v2={v2} canManage={canManage} canAssignDeveloper={canAssignDeveloper} />
                         </TabsContent>
 
                         <TabsContent value="invitations">
@@ -627,7 +510,6 @@ function TeamSettingsContent() {
                     </Tabs>
                 </CardContent>
             </Card>
-            </div>
         </div>
     )
 }

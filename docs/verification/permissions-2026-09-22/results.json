@@ -1,0 +1,67 @@
+{
+  "date": "2026-09-22",
+  "data": "Synthetic local organizations only",
+  "api_tests": 3999,
+  "frontend_test_files": 286,
+  "activation": {
+    "organizations": 2,
+    "legacy_applicants_preserved": 3,
+    "new_applicants": 3,
+    "unresolved_handoffs_blocked": 3,
+    "unresolved_revokes_blocked": 1,
+    "unresolved_execution_items_blocked": 2,
+    "stale_review_rejected": true,
+    "alpha_version": 2,
+    "beta_version": 1,
+    "retained_collaborators": 3,
+    "workflow_disabled": true,
+    "campaign_status": "cancelled"
+  },
+  "handoffs": [
+    {
+      "kind": "surrogate",
+      "approved_in_ui": true,
+      "claimed_in_ui": true,
+      "owner_verified": true,
+      "intake_retained": true,
+      "foreign_status": 404
+    },
+    {
+      "kind": "egg",
+      "approved_in_ui": true,
+      "claimed_in_ui": true,
+      "owner_verified": true,
+      "intake_retained": true,
+      "foreign_status": 404
+    },
+    {
+      "kind": "sperm",
+      "approved_in_ui": true,
+      "claimed_in_ui": true,
+      "owner_verified": true,
+      "intake_retained": true,
+      "foreign_status": 404
+    }
+  ],
+  "access_ui": {
+    "people_search_empty": true,
+    "surrogate_revoked_next_request": true,
+    "egg_revoked_next_request": true,
+    "same_grant_across_record_and_member": true,
+    "sperm_revoked_next_request": true,
+    "protected_admin_readonly": true,
+    "mobile_no_horizontal_overflow": true
+  },
+  "role_ui": {
+    "role_review_save_reload": true,
+    "baseline_restored": true,
+    "access_checker_revoked_scope": true,
+    "error_retry": true,
+    "mobile_dark": true
+  },
+  "provider_sends": 0,
+  "production_activations": 0,
+  "application_commit": "93131b867fb8ff48ad8108a77fda0720e89cc91c",
+  "frontend_tests": 1758,
+  "final_navigation_error_retry": true
+}

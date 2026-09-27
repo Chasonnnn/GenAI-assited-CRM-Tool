@@ -64,6 +64,14 @@ def get_record_with_access(
     )
     if record is None:
         raise HTTPException(status_code=404, detail=f"{label} not found")
+    from app.services import permission_policy_service, record_scope_service
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        if not record_scope_service.can_access_record(
+            db, session, kind, record, allow_archived=allow_archived and action == "view"
+        ):
+            raise HTTPException(status_code=403, detail=f"You don't have access to this {kind}")
+        return record
     if isinstance(record, Surrogate):
         check_surrogate_access(
             record,

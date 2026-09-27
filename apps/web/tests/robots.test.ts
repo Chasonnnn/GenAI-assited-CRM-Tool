@@ -14,7 +14,6 @@ describe("robots metadata route", () => {
                     "/appointments",
                     "/surrogates",
                     "/intended-parents",
-                    "/matches",
                     "/tasks",
                     "/reports",
                     "/automation",

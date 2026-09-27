@@ -45,7 +45,23 @@ class Campaign(Base):
 
     __tablename__ = "campaigns"
     __table_args__ = (
-        UniqueConstraint("organization_id", "name", name="uq_campaign_name"),
+        Index(
+            "uq_campaign_org_name",
+            "organization_id",
+            "name",
+            unique=True,
+            postgresql_where=text("scope = 'org'"),
+        ),
+        Index(
+            "uq_campaign_personal_name",
+            "organization_id",
+            "owner_user_id",
+            "name",
+            unique=True,
+            postgresql_where=text("scope = 'personal'"),
+        ),
+        CheckConstraint("scope IN ('personal', 'org')", name="ck_campaigns_scope"),
+        CheckConstraint("scope != 'org' OR owner_user_id IS NULL", name="ck_campaigns_org_owner"),
         CheckConstraint("channel IN ('email', 'messaging')", name="ck_campaigns_channel"),
         CheckConstraint(
             "(channel = 'email' AND email_template_id IS NOT NULL "
@@ -72,6 +88,15 @@ class Campaign(Base):
     )
 
     # Campaign details
+    scope: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'org'"))
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    proposed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    proposed_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    execution_authority: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -129,7 +154,7 @@ class Campaign(Base):
     organization: Mapped[Organization] = relationship()
     email_template: Mapped[EmailTemplate | None] = relationship()
     message_template: Mapped[MessageTemplate | None] = relationship()
-    created_by: Mapped[User | None] = relationship()
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
     runs: Mapped[list[CampaignRun]] = relationship(
         back_populates="campaign",
         cascade="all, delete-orphan",
@@ -182,6 +207,7 @@ class CampaignRun(Base):
     # Immutable published template selected when this run was queued. Nullable
     # only for runs created before the snapshot migration.
     email_template_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    authority_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     message_template_version_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("message_templates.id", ondelete="RESTRICT"),

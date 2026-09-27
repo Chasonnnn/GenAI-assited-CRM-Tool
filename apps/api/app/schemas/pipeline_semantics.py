@@ -11,6 +11,8 @@ from app.core.stage_definitions import (
     EGG_DONOR_PIPELINE_ENTITY,
     INTENDED_PARENT_PIPELINE_ENTITY,
     SPERM_DONOR_PIPELINE_ENTITY,
+    SURROGATE_PIPELINE_ENTITY,
+    SURROGATE_REASON_REQUIRED_STAGE_KEYS,
     canonicalize_stage_key,
     normalize_pipeline_entity_type,
 )
@@ -415,7 +417,7 @@ def default_stage_semantics(
         integration_bucket=integration_bucket,
         analytics_bucket=normalized_key if stage_type != "paused" else "on_hold",
         suggestion_profile_key=_SUGGESTION_PROFILE_BY_STAGE_KEY.get(normalized_key),
-        requires_reason_on_enter=normalized_key == "on_hold",
+        requires_reason_on_enter=normalized_key in SURROGATE_REASON_REQUIRED_STAGE_KEYS,
     ).model_dump(mode="json")
 
 
@@ -526,6 +528,11 @@ def normalize_stage_semantics(
 ) -> StageSemantics:
     default_payload = default_stage_semantics(stage_key, stage_type, entity_type)
     payload = deep_merge_dicts(default_payload, semantics or {})
+    if (
+        normalize_pipeline_entity_type(entity_type) == SURROGATE_PIPELINE_ENTITY
+        and canonicalize_stage_key(stage_key) in SURROGATE_REASON_REQUIRED_STAGE_KEYS
+    ):
+        payload["requires_reason_on_enter"] = True
     return StageSemantics.model_validate(payload)
 
 

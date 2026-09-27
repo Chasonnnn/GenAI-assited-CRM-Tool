@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ def test_setup_upgrades_only_missing_or_outdated_mise(tmp_path, version):
     for directory in (repo / ".agents", home / ".local/bin", binaries):
         directory.mkdir(parents=True)
     # Never fall through to a real mise, curl, or sudo on the test host.
-    for tool in ("bash", "dirname", "grep", "sed", "awk", "dpkg", "mktemp", "rm", "cat", "mkdir", "cp"):
+    for tool in ("bash", "dirname", "grep", "sed", "awk", "mktemp", "rm", "cat", "mkdir", "cp"):
         (binaries / tool).symlink_to(shutil.which(tool))
     shutil.copy(ROOT / ".agents/setup", repo / ".agents/setup")
     (repo / "mise.toml").write_text('min_version = "2026.7.16"\n')
@@ -31,23 +32,35 @@ def test_setup_upgrades_only_missing_or_outdated_mise(tmp_path, version):
         path.chmod(0o755)
 
     def mise_body(release):
-        return f'''
+        return f"""
 if [[ "$1" == --version ]]; then
     echo '{release} linux-x64'
     exit 0
 fi
 echo '{release}' "$@" >> "$HOME/calls"
 [[ '{release}' != 2026.4.28 ]] || exit 1
-'''
+"""
 
     if version:
         executable(binaries / "mise", mise_body(version))
     executable(home / "replacement", mise_body("2026.7.16"))
     executable(binaries / "dpkg-query", "echo 'install ok installed'\n")
+    # The setup targets Debian; its isolated test must also run on macOS.
+    comparator = binaries / "dpkg"
+    comparator.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "assert len(sys.argv) == 5 and sys.argv[1] == '--compare-versions'\n"
+        "assert sys.argv[3] == 'ge'\n"
+        "installed = tuple(map(int, sys.argv[2].split('.')))\n"
+        "required = tuple(map(int, sys.argv[4].split('.')))\n"
+        "sys.exit(0 if installed >= required else 1)\n"
+    )
+    comparator.chmod(0o755)
     executable(api / ".venv/bin/python", "exit 0\n")
     executable(
         binaries / "curl",
-        '''
+        """
 echo download >> "$HOME/downloads"
 while [[ "$1" != -o ]]; do shift; done
 cat > "$2" <<'INSTALLER'
@@ -56,7 +69,7 @@ cat > "$2" <<'INSTALLER'
 mkdir -p "$HOME/.local/bin"
 cp "$HOME/replacement" "$HOME/.local/bin/mise"
 INSTALLER
-''',
+""",
     )
     env = {**os.environ, "HOME": str(home), "PATH": str(binaries)}
     result = subprocess.run(

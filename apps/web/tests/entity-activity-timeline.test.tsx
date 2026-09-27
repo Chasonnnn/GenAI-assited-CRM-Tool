@@ -168,6 +168,7 @@ describe("EntityActivityTimeline", () => {
 describe("ActivityEventRow", () => {
     it.each([
         ["record_created", null, "Record created", null],
+        ["match_rejected", null, "Match declined", null],
         ["note_added", { preview: "Screening call completed" }, "Note", "Screening call completed"],
         ["attachment_added", { filename: "screening.pdf" }, "File uploaded", "screening.pdf"],
         ["task_completed", { title: "Review records" }, "Task completed", "Review records"],

@@ -11,7 +11,6 @@ export default function robots(): MetadataRoute.Robots {
                 "/appointments",
                 "/surrogates",
                 "/intended-parents",
-                "/matches",
                 "/tasks",
                 "/reports",
                 "/automation",

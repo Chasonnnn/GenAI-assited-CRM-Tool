@@ -3,6 +3,8 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 const dynamicState = vi.hoisted(() => ({
+    policyVersion: 1,
+    canViewOrgReports: true,
     calls: [] as Array<{ options?: { ssr?: boolean } }>,
 }))
 
@@ -61,7 +63,11 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/lib/hooks/use-permissions', () => ({
     useEffectivePermissions: () => ({
-        data: { permissions: accessState.permissions },
+        data: {
+            permissions: accessState.permissions,
+            policy_version: dynamicState.policyVersion,
+            capabilities: { can_view_org_reports: dynamicState.canViewOrgReports },
+        },
         isLoading: false,
     }),
 }))
@@ -225,6 +231,8 @@ describe('ReportsPage', () => {
         accessState.role = 'admin'
         accessState.permissions = ['view_reports', 'view_donors']
         accessState.summaryCalls = 0
+        dynamicState.policyVersion = 1
+        dynamicState.canViewOrgReports = true
     })
 
     it('lazy loads report visualizations', () => {
@@ -321,7 +329,7 @@ describe('ReportsPage', () => {
         expect(accessState.summaryCalls).toBe(0)
     })
 
-    it('shows the denied state to intake specialists, whom the reports API always rejects', () => {
+    it('shows the denied state to intake specialists under policy v1, whose reports API rejects them', () => {
         accessState.role = 'intake_specialist'
         accessState.permissions = ['view_dashboard', 'view_reports']
         render(<ReportsPage />)
@@ -329,5 +337,26 @@ describe('ReportsPage', () => {
         expect(screen.getByRole('heading', { level: 2, name: 'Permission required' })).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Export PDF' })).not.toBeInTheDocument()
         expect(accessState.summaryCalls).toBe(0)
+    })
+
+    it('shows reports to intake specialists with view_reports under policy v2', () => {
+        dynamicState.policyVersion = 2
+        accessState.role = 'intake_specialist'
+        accessState.permissions = ['view_dashboard', 'view_reports']
+        render(<ReportsPage />)
+
+        expect(screen.queryByRole('heading', { level: 2, name: 'Permission required' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Export PDF' })).toBeInTheDocument()
+    })
+
+    it('hides organization ad spend for a scoped report viewer', () => {
+        dynamicState.policyVersion = 2
+        dynamicState.canViewOrgReports = false
+        const view = render(<ReportsPage />)
+        expect(screen.queryByText('Ad Spend')).not.toBeInTheDocument()
+        view.unmount()
+        dynamicState.canViewOrgReports = true
+        render(<ReportsPage />)
+        expect(screen.getByText('Ad Spend')).toBeInTheDocument()
     })
 })

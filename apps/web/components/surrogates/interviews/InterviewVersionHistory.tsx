@@ -92,7 +92,7 @@ export function InterviewVersionHistory({
     }
 
     const handleRestore = async () => {
-        if (!versionToRestore) return
+        if (!canRestore || !versionToRestore) return
         try {
             await restoreMutation.mutateAsync({
                 interviewId,
@@ -176,7 +176,7 @@ export function InterviewVersionHistory({
             )}
 
             {/* Restore Confirmation Dialog */}
-            <Dialog open={restoreConfirmOpen} onOpenChange={setRestoreConfirmOpen}>
+            <Dialog open={restoreConfirmOpen && canRestore} onOpenChange={setRestoreConfirmOpen}>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Restore Version {versionToRestore}?</DialogTitle>

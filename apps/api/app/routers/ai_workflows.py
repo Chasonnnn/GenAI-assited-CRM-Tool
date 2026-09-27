@@ -89,17 +89,11 @@ def generate_workflow(
     Generate a workflow configuration from natural language description.
 
     The generated workflow is returned for user review before saving.
-    Restricted to Manager/Developer roles for safety.
     """
-    from app.services import ai_workflow_service
+    from app.services import ai_workflow_service, workflow_access
 
-    if body.scope == "org":
-        from app.services import permission_service
-
-        if not permission_service.check_permission(
-            db, session.org_id, session.user_id, session.role.value, P.AUTOMATION_MANAGE.value
-        ):
-            raise HTTPException(status_code=403, detail="Missing permission: manage_automation")
+    if not workflow_access.can_create(db, session, body.scope):
+        raise HTTPException(status_code=403, detail="Cannot manage organization workflows")
 
     result = ai_workflow_service.generate_workflow(
         db=db,
@@ -130,16 +124,11 @@ async def generate_workflow_stream(
     session: Annotated[UserSession, "fastapi_param"] = Depends(require_permission(P.AI_USE)),
 ) -> StreamingResponse:
     """Stream workflow generation via SSE."""
-    from app.services import ai_settings_service, ai_workflow_service
+    from app.services import ai_settings_service, ai_workflow_service, workflow_access
     from app.services.ai_workflow_service import GeneratedWorkflow
 
-    if body.scope == "org":
-        from app.services import permission_service
-
-        if not permission_service.check_permission(
-            db, session.org_id, session.user_id, session.role.value, P.AUTOMATION_MANAGE.value
-        ):
-            raise HTTPException(status_code=403, detail="Missing permission: manage_automation")
+    if not workflow_access.can_create(db, session, body.scope):
+        raise HTTPException(status_code=403, detail="Cannot manage organization workflows")
 
     settings = ai_settings_service.get_ai_settings(db, session.org_id)
     if not settings or not settings.is_enabled:
@@ -330,13 +319,10 @@ def validate_workflow(
             errors=[f"Invalid workflow format: {str(e)}"],
         )
 
-    if body.scope == "org":
-        from app.services import permission_service
+    from app.services import workflow_access
 
-        if not permission_service.check_permission(
-            db, session.org_id, session.user_id, session.role.value, P.AUTOMATION_MANAGE.value
-        ):
-            raise HTTPException(status_code=403, detail="Missing permission: manage_automation")
+    if not workflow_access.can_create(db, session, body.scope):
+        raise HTTPException(status_code=403, detail="Cannot manage organization workflows")
 
     result = ai_workflow_service.validate_workflow(
         db,
@@ -380,13 +366,10 @@ def save_ai_workflow(
             error=f"Invalid workflow format: {str(e)}",
         )
 
-    if body.scope == "org":
-        from app.services import permission_service
+    from app.services import workflow_access
 
-        if not permission_service.check_permission(
-            db, session.org_id, session.user_id, session.role.value, P.AUTOMATION_MANAGE.value
-        ):
-            raise HTTPException(status_code=403, detail="Missing permission: manage_automation")
+    if not workflow_access.can_create(db, session, body.scope):
+        raise HTTPException(status_code=403, detail="Cannot manage organization workflows")
 
     try:
         saved = ai_workflow_service.save_workflow(

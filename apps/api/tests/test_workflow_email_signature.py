@@ -265,8 +265,7 @@ async def test_workflow_email_rejects_platform_system_template(
 ):
     from app.db.enums import JobType
     from app.db.models import EmailTemplate, Job
-    from app.services import workflow_email_provider
-    from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
+    from app.services import workflow_communication_actions, workflow_email_provider
     from app.worker import process_workflow_email
 
     template = EmailTemplate(
@@ -290,9 +289,8 @@ async def test_workflow_email_rejects_platform_system_template(
 
     monkeypatch.setattr(workflow_email_provider, "resolve_workflow_email_provider", fail_resolve)
 
-    adapter = DefaultWorkflowDomainAdapter()
     with pytest.raises(ValueError, match="Platform system template"):
-        adapter._action_send_email(
+        workflow_communication_actions.send_email(
             db=db,
             action={
                 "action_type": "send_email",

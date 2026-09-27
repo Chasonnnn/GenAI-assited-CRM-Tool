@@ -93,7 +93,16 @@ async def send_surrogate_email(
         gmail_service,
         oauth_service,
         org_service,
+        permission_policy_service,
+        permission_service,
     )
+
+    if permission_policy_service.is_enabled(
+        db, session.org_id
+    ) and not permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, "send_email"
+    ):
+        raise HTTPException(status_code=403, detail="Missing permission: send_email")
 
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:

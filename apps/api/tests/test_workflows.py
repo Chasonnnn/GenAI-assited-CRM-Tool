@@ -336,7 +336,7 @@ def test_ai_workflow_service_triggers():
         "scheduled",
         "match_proposed",
         "match_accepted",
-        "match_rejected",
+        "match_declined",
         "document_uploaded",
         "note_added",
         "appointment_scheduled",

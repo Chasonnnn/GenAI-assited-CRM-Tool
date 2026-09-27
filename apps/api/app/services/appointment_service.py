@@ -2196,6 +2196,8 @@ def list_appointments(
     meeting_mode: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    *,
+    session=None,
 ) -> tuple[list[Appointment], int]:
     """List appointments for a user with pagination.
 
@@ -2238,15 +2240,22 @@ def list_appointments(
         meeting_mode=meeting_mode,
     )
 
+    if session is not None:
+        from app.services import record_scope_service
+
+        query = query.filter(
+            record_scope_service.build_linked_visibility_filter(db, session, Appointment)
+        )
+
     if status:
         query = query.filter(Appointment.status == status)
 
     if match_id:
         context_filter = Appointment.match_id == match_id
         if include_record_history and not attempt_id:
-            from app.services import match_service, match_work_service
+            from app.services import match_queries, match_work_service
 
-            match = match_service.get_match(db, match_id, org_id)
+            match = match_queries.get_match(db, match_id, org_id)
             if match is None:
                 raise ValueError("Match not found")
             context_filter = or_(
@@ -2434,9 +2443,9 @@ def update_record_links(
 
 def _validate_new_record_context(db, org_id, links):
     if links.get("donor_id") or links.get("match_id") or links.get("attempt_id"):
-        from app.core.match_rollout import require_match_expansion
+        from app.services import match_lifecycle
 
-        require_match_expansion()
+        match_lifecycle.require_expansion()
     if links.get("match_id"):
         from app.services.match_work_service import validate_context
 
@@ -2478,6 +2487,11 @@ def validate_existing_appointment_access(db, session, appointment, *, action="vi
         field: getattr(appointment, field)
         for field in ("surrogate_id", "intended_parent_id", "donor_id", "match_id", "attempt_id")
     }
+    from app.services import permission_policy_service
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        validate_record_links(db, session, links, action=action)
+        return
     if appointment.donor_id or appointment.match_id or appointment.attempt_id:
         validate_record_links(db, session, links, action=action)
         return

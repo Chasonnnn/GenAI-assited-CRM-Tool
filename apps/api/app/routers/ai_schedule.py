@@ -84,7 +84,7 @@ async def parse_schedule(
     At least one of surrogate_id, intended_parent_id, or match_id must be provided.
     User reviews and approves before tasks are created.
     """
-    from app.services import ai_settings_service, ip_service, match_service, surrogate_service
+    from app.services import ai_settings_service, ip_service, match_access, surrogate_service
     from app.services.schedule_parser import parse_schedule_text
 
     # Enforce AI consent (consistent with /chat)
@@ -131,9 +131,7 @@ async def parse_schedule(
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
     elif body.match_id:
-        match = match_service.get_match(db, body.match_id, session.org_id)
-        if not match:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+        match = match_access.load(db, session, body.match_id, "view", allow_archived=True)
         # Enforce access to the associated surrogate
         if match.surrogate_id:
             surrogate = surrogate_service.get_surrogate(db, session.org_id, match.surrogate_id)
@@ -187,7 +185,7 @@ async def parse_schedule_stream(
 ) -> StreamingResponse:
     """Stream schedule parsing via SSE."""
     from app.db.enums import TaskType
-    from app.services import ai_settings_service, ip_service, match_service, surrogate_service
+    from app.services import ai_settings_service, ip_service, match_access, surrogate_service
     from app.services.pii_anonymizer import PIIMapping, anonymize_text, rehydrate_text
     from app.services.schedule_parser import ProposedTask
 
@@ -232,9 +230,7 @@ async def parse_schedule_stream(
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
     elif body.match_id:
-        match = match_service.get_match(db, body.match_id, session.org_id)
-        if not match:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+        match = match_access.load(db, session, body.match_id, "view", allow_archived=True)
         if match.surrogate_id:
             surrogate = surrogate_service.get_surrogate(db, session.org_id, match.surrogate_id)
             if surrogate:

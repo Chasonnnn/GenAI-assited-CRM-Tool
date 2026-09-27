@@ -124,7 +124,7 @@ const settingsNavigation = {
 }
 
 const automationNavigation = {
-    title: "Automation",
+    title: "Operations",
     url: "/automation",
     icon: Zap,
 }
@@ -363,7 +363,7 @@ function AppSidebarContent({
                 </Button>
             </div>
 
-            <nav className="flex-1 px-2 pt-3" aria-label="Navigation">
+            <nav className="min-h-0 flex-1 overflow-y-auto px-2 pt-3" aria-label="Navigation">
                 {!collapsed && (
                     <div className="mb-2 text-xs font-medium text-muted-foreground">Navigation</div>
                 )}
@@ -597,6 +597,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const { user } = useAuth()
     const isDeveloper = user?.role === "developer"
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
+    const isNewPolicy = (effectivePermissions?.policy_version ?? 1) >= 2
     const permissionSet = new Set(effectivePermissions?.permissions ?? [])
     const canViewTeam = isDeveloper || permissionSet.has("manage_team")
     const canViewPipelines = isDeveloper || permissionSet.has("manage_pipelines")
@@ -698,10 +699,12 @@ export function AppSidebar({ children }: AppSidebarProps) {
     ]
 
     const automationItems: Array<{ title: string; url: string; tab?: string | null }> = [
-        { title: "Workflows", url: "/automation", tab: null },
-        { title: "Campaigns", url: "/automation/campaigns" },
-        { title: "Email Templates", url: "/automation/email-templates" },
+        ...(!isNewPolicy || permissionSet.has("view_automation") ? [{ title: "Workflows", url: "/automation", tab: null }] : []),
+        ...(!isNewPolicy || permissionSet.has("view_campaigns") ? [{ title: "Campaigns", url: "/automation/campaigns" }] : []),
+        ...(!isNewPolicy || permissionSet.has("view_email_templates") ? [{ title: "Email Templates", url: "/automation/email-templates" }] : []),
+        // The forms API requires manage_forms under both policy versions.
         ...(canViewFormBuilder ? [{ title: "Form Builder", url: "/automation/forms" }] : []),
+        ...(isNewPolicy && permissionSet.has("view_form_submissions") ? [{ title: "Form Submissions", url: "/automation/form-submissions" }] : []),
         { title: "AI Builder", url: "/automation/ai-builder" },
         ...(canViewAutomationExecutions ? [{ title: "Executions", url: "/automation/executions" }] : []),
     ]

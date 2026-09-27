@@ -290,17 +290,21 @@ def update_milestone_featured_image(
     """
     Update the featured image for a journey milestone.
 
-    Requires case_manager or higher role.
+    Requires record edit authority, or case_manager+ under the legacy policy.
     Set attachment_id to None to clear the featured image.
     """
-    # Check role - require case_manager+
-    if session.role not in (Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER):
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    from app.services import permission_policy_service, record_access_service
 
-    # Verify surrogate exists and belongs to org
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
+    if permission_policy_service.is_enabled(db, session.org_id):
+        surrogate = record_access_service.get_record_with_access(
+            db, session, "surrogate", surrogate_id, action="edit"
+        )
+    else:
+        if session.role not in (Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER):
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+        if not surrogate:
+            raise HTTPException(status_code=404, detail="Surrogate not found")
 
     stage = pipeline_service.get_stage_by_id(db, surrogate.stage_id) if surrogate.stage_id else None
     pipeline_id = stage.pipeline_id if stage is not None else None

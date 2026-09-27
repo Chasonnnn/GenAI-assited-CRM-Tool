@@ -16,6 +16,7 @@ import {
     useAssignSurrogate,
     useBulkArchive,
     useBulkAssign,
+    useBulkChangeStage,
     useChangeSurrogateStatus,
     useCreateContactAttempt,
     useRevealSurrogateSensitiveInfo,
@@ -65,6 +66,9 @@ describe("surrogate mutation hooks", () => {
             }
         )
 
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['record-collaborators', 'surrogate', 'surrogate-1'] })
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['analytics'] })
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['record-scopes', 'migration-review'] })
         expect(setQueryData).toHaveBeenCalledWith(
             surrogateKeys.detail("surrogate-1"),
             { id: "surrogate-1" }
@@ -78,6 +82,21 @@ describe("surrogate mutation hooks", () => {
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: ["tasks", "list"],
         })
+    })
+
+    it("refreshes each collaborator panel after bulk stage changes", () => {
+        useBulkChangeStage()
+        capturedOptions?.onSuccess?.({}, { surrogate_ids: ['surrogate-1', 'surrogate-2'] })
+        for (const id of ['surrogate-1', 'surrogate-2']) {
+            expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['record-collaborators', 'surrogate', id] })
+        }
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['dashboard'] })
+    })
+
+    it("refreshes collaborator panels after a stage change across a filtered dataset", () => {
+        useApplySurrogateMassEditStage()
+        capturedOptions?.onSuccess?.({}, {})
+        expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['record-collaborators', 'surrogate'] })
     })
 
     it("keeps appointment state unchanged for a pending stage approval", () => {

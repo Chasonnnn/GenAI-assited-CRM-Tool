@@ -167,7 +167,7 @@ export function InlineDateField({
         }
     }
 
-    if (!isEditing) {
+    if (!isEditing || disabled) {
         return (
             <Button unstyled
                 type="button"

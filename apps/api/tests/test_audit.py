@@ -12,7 +12,7 @@ from sqlalchemy import text
 from app.db.enums import AuditEventType
 from app.db.models import AuditLog, Organization
 from app.db.session import SessionLocal
-from app.services import audit_service, version_service
+from app.services import audit_service, permission_policy_service, version_service
 
 # =============================================================================
 # Unit Tests (no DB required)
@@ -100,6 +100,50 @@ def test_audit_event_type_references_are_defined():
                 missing.setdefault(match, []).append(str(file_path))
 
     assert not missing, f"Undefined AuditEventType references found: {missing}"
+
+
+def test_permission_configuration_lock_allows_audit_foreign_keys(db_engine):
+    """Configuration serialization must not block the audit writer's organization FK."""
+    from sqlalchemy.exc import OperationalError
+
+    org_id = uuid.uuid4()
+    with SessionLocal(bind=db_engine) as configuration, SessionLocal(bind=db_engine) as writer:
+        configuration.add(
+            Organization(id=org_id, name="Audit lock test", slug=f"audit-lock-{org_id}")
+        )
+        configuration.commit()
+        try:
+            permission_policy_service.lock_configuration(configuration, org_id)
+            writer.execute(text("SET LOCAL lock_timeout = '500ms'"))
+            first = audit_service.log_event(
+                writer, org_id, AuditEventType.AUTH_LOGIN_FAILED, details={"attempt": "first"}
+            )
+            writer.flush()
+            first_hash = first.entry_hash
+            writer.commit()
+
+            # A weaker lock must still serialize competing configuration changes.
+            writer.execute(text("SET LOCAL lock_timeout = '500ms'"))
+            with pytest.raises(OperationalError, match="lock timeout"):
+                permission_policy_service.lock_configuration(writer, org_id)
+            writer.rollback()
+
+            second = audit_service.log_event(
+                configuration,
+                org_id,
+                AuditEventType.AUTH_LOGIN_FAILED,
+                details={"attempt": "second"},
+            )
+            assert second.prev_hash == first_hash
+            configuration.commit()
+            assert configuration.query(AuditLog).filter_by(organization_id=org_id).count() == 2
+        finally:
+            writer.rollback()
+            configuration.rollback()
+            configuration.execute(text("SET LOCAL session_replication_role = replica"))
+            configuration.query(AuditLog).filter_by(organization_id=org_id).delete()
+            configuration.query(Organization).filter_by(id=org_id).delete()
+            configuration.commit()
 
 
 def test_concurrent_audit_appends_form_one_linear_org_chain(db_engine):

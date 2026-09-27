@@ -148,9 +148,10 @@ async def test_same_form_repeat_is_held_for_review_without_linking_or_promoting(
     assert repeat.matched_at is None
     assert repeat.answers_json == answers
     assert db.query(Donor).filter_by(organization_id=test_org.id).count() == 1
-    assert db.query(FormSubmission).filter_by(
-        form_id=uuid.UUID(form_id), donor_id=donor.id
-    ).count() == 1
+    assert (
+        db.query(FormSubmission).filter_by(form_id=uuid.UUID(form_id), donor_id=donor.id).count()
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -285,18 +286,25 @@ async def test_late_donor_match_reuses_record_instead_of_failing_job(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["egg_donor", "sperm_donor"])
+@pytest.mark.parametrize(
+    "policy_state", ["legacy", "active", "paused", "creator_left", "unbound", "foreign_execution"]
+)
 async def test_published_form_workflow_routes_both_donor_types(
-    authed_client, db, test_org, test_user, donor_storage, kind
+    authed_client, db, test_org, test_user, donor_storage, kind, policy_state
 ):
     import copy
     import json
 
-    from app.db.models import Form, FormFieldMapping
+    from app.db.models import Form, FormFieldMapping, Membership, WorkflowExecution
+    from app.db.models.permission_policy import OrganizationPermissionPolicy
     from app.jobs.handlers.form_submissions import process_donor_intake_promote
     from app.schemas.workflow import WorkflowCreate
     from app.services import workflow_service
     from tests.test_hosted_donor_forms import _png_bytes
 
+    if policy_state != "legacy":
+        db.add(OrganizationPermissionPolicy(organization_id=test_org.id, version=2))
+        db.flush()
     form_id, slug = await _create_donor_form(authed_client, lead_kind="egg_donor")
     schema = copy.deepcopy(db.get(Form, uuid.UUID(form_id)).schema_json)
     schema["pages"][0]["fields"].insert(
@@ -319,7 +327,7 @@ async def test_published_form_workflow_routes_both_donor_types(
     update = await authed_client.put(f"/forms/{form_id}/mappings", json={"mappings": mappings})
     assert update.status_code == 200, update.text
     assert (await authed_client.post(f"/forms/{form_id}/publish")).status_code == 200
-    workflow_service.create_workflow(
+    workflow = workflow_service.create_workflow(
         db,
         test_org.id,
         test_user.id,
@@ -358,10 +366,36 @@ async def test_published_form_workflow_routes_both_donor_types(
     assert submission.intake_lead_id is not None
     jobs = _jobs(db, test_org.id)
     assert len(jobs) == 1
+    if policy_state == "paused":
+        workflow.is_enabled = False
+    elif policy_state == "creator_left":
+        db.query(Membership).filter_by(
+            organization_id=test_org.id, user_id=test_user.id
+        ).one().is_active = False
+    elif policy_state == "unbound":
+        lead = db.get(IntakeLead, submission.intake_lead_id)
+        lead.source_metadata = {"auto_create_donor": True}
+    elif policy_state == "foreign_execution":
+        from app.db.models import Organization
+
+        other_org = Organization(name="Other agency", slug=f"foreign-execution-{uuid.uuid4().hex}")
+        db.add(other_org)
+        db.flush()
+        db.query(WorkflowExecution).filter_by(
+            workflow_id=workflow.id
+        ).one().organization_id = other_org.id
+    db.flush()
+    if policy_state in {"paused", "unbound", "foreign_execution"}:
+        with pytest.raises(RuntimeError, match="Donor intake promotion failed"):
+            await process_donor_intake_promote(db, jobs[0])
+        assert db.query(Donor).filter_by(organization_id=test_org.id).count() == 0
+        return
+    await process_donor_intake_promote(db, jobs[0])
     await process_donor_intake_promote(db, jobs[0])
     db.refresh(submission)
     assert submission.donor_id is not None
     assert db.get(Donor, submission.donor_id).donor_type == kind.removesuffix("_donor")
+    assert db.query(Donor).filter_by(organization_id=test_org.id).count() == 1
 
 
 @pytest.mark.asyncio

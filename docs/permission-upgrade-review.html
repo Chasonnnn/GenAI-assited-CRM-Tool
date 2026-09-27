@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Permission upgrade review: unfinished frontend, backend refactors, and final verification gates.">
+  <title>Permission upgrade — what's left</title>
+  <!-- Serve alongside the synthetic screenshots in .amp/in/artifacts/permission-review/. -->
+  <style>
+    :root { color-scheme: light; font: 16px/1.55 system-ui, sans-serif; color: #19202d; background: #f5f6f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1160px; margin: auto; padding: 44px 28px 80px; }
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { font-size: clamp(30px, 4vw, 46px); letter-spacing: -.035em; margin: 12px 0 20px; }
+    h2 { font-size: 26px; letter-spacing: -.02em; margin: 0; }
+    h3 { font-size: 18px; margin: 12px 0; }
+    p { margin: 10px 0; }
+    a { color: #2449a2; text-underline-offset: 4px; }
+    a:hover { color: #123173; }
+    a:focus-visible, summary:focus-visible { outline: 3px solid #466bde; outline-offset: 4px; }
+    .skip { position: absolute; top: -100px; left: 16px; padding: 10px; background: white; }
+    .skip:focus { top: 8px; }
+    .eyebrow, .number { color: #596477; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .meta, .links, nav { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+    .meta { align-items: center; color: #596477; font-size: 13px; }
+    .status { display: inline-block; padding: 4px 9px; border-radius: 4px; font-size: 12px; font-weight: 650; letter-spacing: 0; white-space: nowrap; }
+    .review { background: #fff0d7; color: #775000; }
+    .open { background: #edf1f9; color: #334b75; }
+    .passed { background: #e6f2e9; color: #255c38; }
+    .blocked { background: #fce8e8; color: #963637; }
+    .muted { color: #596477; }
+    .notice { border: 1px solid #ebc2c2; border-left: 4px solid #b44848; padding: 16px 20px; background: #fff7f7; margin: 24px 0; }
+    .notice strong { display: block; margin-bottom: 5px; }
+    .notice p { font-size: 14px; margin: 0; }
+    nav { padding: 17px 0; border-top: 1px solid #d8dde5; border-bottom: 1px solid #d8dde5; font-size: 14px; font-weight: 600; }
+    nav a { text-decoration: none; }
+    section { margin-top: 38px; scroll-margin-top: 20px; }
+    .section-title { display: flex; align-items: baseline; gap: 14px; margin-bottom: 18px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    article, .panel { background: white; border: 1px solid #d8dde5; border-radius: 8px; padding: 22px; min-width: 0; }
+    article p, li, dd { font-size: 14px; }
+    ul { padding-left: 19px; margin: 12px 0 0; }
+    li + li { margin-top: 8px; }
+    .criteria { border-top: 1px solid #e6e9ef; margin-top: 18px; padding-top: 14px; }
+    .criteria strong { display: block; color: #596477; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 5px; }
+    code { font-size: .88em; overflow-wrap: anywhere; }
+    details { border-top: 1px solid #e6e9ef; padding-top: 14px; margin-top: 16px; font-size: 14px; }
+    summary { cursor: pointer; font-weight: 600; color: #2449a2; }
+    figure { margin: 14px 0 0; }
+    figure img { display: block; width: 100%; height: auto; border: 1px solid #d8dde5; }
+    figcaption { color: #596477; font-size: 12px; margin-top: 8px; }
+    .rows { margin: 0; }
+    .row { display: grid; grid-template-columns: minmax(180px, .9fr) 150px minmax(0, 1.7fr); gap: 18px; align-items: baseline; padding: 17px 0; }
+    .row + .row { border-top: 1px solid #e6e9ef; }
+    dt { font-size: 14px; font-weight: 650; }
+    dd { margin: 0; }
+    .boundary { border-left: 4px solid #a66505; }
+    footer { margin-top: 34px; border-top: 1px solid #d8dde5; padding-top: 20px; color: #596477; font-size: 12px; }
+    footer .links { margin-top: 12px; }
+    @media (max-width: 700px) {
+      main { padding: 28px 16px 56px; }
+      .grid { grid-template-columns: 1fr; }
+      article, .panel { padding: 18px; }
+      .row { grid-template-columns: 1fr auto; gap: 8px 12px; }
+      .row dd:last-child { grid-column: 1 / -1; }
+      .section-title { align-items: flex-start; }
+      .number { padding-top: 5px; }
+      nav { gap: 12px 18px; }
+    }
+    @media print {
+      :root { background: white; }
+      main { padding: 0; }
+      article, .row { break-inside: avoid; }
+      .skip, nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+<a class="skip" href="#frontend">Skip to remaining work</a>
+<main>
+  <header>
+    <div class="eyebrow">Surrogacy Force · Permission upgrade</div>
+    <h1>What's left before this is finished</h1>
+    <div class="meta">
+      <span class="status review">Not ready for acceptance</span>
+      <span>Static review, not the live product</span>
+      <span>September 20, 2026 · 03:43 UTC snapshot</span>
+    </div>
+    <div class="notice">
+      <strong>New blocker: permission PR #691 has a backend CI failure.</strong>
+      <p>The hourly workflow-maintenance sweep test failed with <code>ObjectDeletedError</code>; 3,552 tests passed in that run. The cause is not yet established. Frontend checks and all three Docker image builds passed in CI. <a href="https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/35486892164/job/106014805948">Inspect the failed job ↗</a></p>
+    </div>
+    <nav aria-label="Remaining work">
+      <a href="#frontend">01 Frontend review</a>
+      <a href="#backend">02 Backend refactors</a>
+      <a href="#verification">03 Final checks</a>
+      <a href="#boundaries">04 What stays out</a>
+    </nav>
+  </header>
+
+  <section id="frontend" aria-labelledby="frontend-title">
+    <div class="section-title"><span class="number">01</span><h2 id="frontend-title">Frontend still needs your review</h2></div>
+    <div class="grid">
+      <article>
+        <span class="status review">Implemented · acceptance pending</span>
+        <h3>Roles and change review</h3>
+        <p>The module-first Roles editor exists. Selecting a mockup did not approve every implemented control.</p>
+        <ul><li>Review action permissions separately from record scope.</li><li>Exercise additions, removals, role changes, and loss of access while editing.</li><li>Check loading, error, narrow-layout, and keyboard states.</li></ul>
+        <div class="criteria"><strong>Finished when</strong><p>The actual editor and its review/apply flow are accepted and verified.</p></div>
+        <details><summary>See the implemented Roles screen</summary><figure><a href="01-roles.png" target="_blank" rel="noopener"><img loading="lazy" src="01-roles.png" alt="Implemented Case Manager Roles editor with donor scope and separate actions"></a><figcaption>Earlier September 20 application capture with synthetic data. Screenshot, not an interactive editor.</figcaption></figure></details>
+      </article>
+      <article>
+        <span class="status review">Mockup not fully implemented</span>
+        <h3>People and member access</h3>
+        <p>People currently leads to the existing Team page. Roles, Team, and member details remain separate screens.</p>
+        <ul><li>Agree the navigation/layout before changing it.</li><li>Review individual and bulk role-change carryover.</li><li>Verify inactive-member inspection and revoked access.</li></ul>
+        <div class="criteria"><strong>Finished when</strong><p>The chosen People experience is implemented—not merely linked to the old Team layout.</p></div>
+        <details><summary>See the existing Team screen</summary><figure><a href="13-team.png" target="_blank" rel="noopener"><img loading="lazy" src="13-team.png" alt="Existing Team page with Members and Invitations tabs and an inactive-member filter"></a><figcaption>Existing implementation; not the unified People mockup.</figcaption></figure></details>
+      </article>
+      <article>
+        <span class="status review">Explicit decision still needed</span>
+        <h3>Remaining ownership and collaboration controls</h3>
+        <p>The donor Owner card and eligible assignment/claim controls remain. Member settings still has collaboration Add/Remove controls.</p>
+        <ul><li>Review whether and where these controls belong.</li><li>Backend retained collaboration still exists; removing a card did not remove that access policy.</li></ul>
+        <div class="criteria"><strong>Finished when</strong><p>The remaining controls and policy are explicitly reviewed. Presence in the draft is not approval.</p></div>
+        <details><summary>See donor and member settings</summary><p><a href="10-donor.png" target="_blank" rel="noopener">Donor Owner card ↗</a> · <a href="03-member-access.png" target="_blank" rel="noopener">Member collaboration controls ↗</a></p></details>
+      </article>
+      <article>
+        <span class="status review">Review within the current scope</span>
+        <h3>Check access and shared controls</h3>
+        <p>Check access explains record visibility only. It does not answer whether someone may Edit, Send, approve, or assign.</p>
+        <ul><li>Keep that boundary unless a broader checker is agreed.</li><li>Verify publication, read-only controls, and immediate revocation across related pages.</li></ul>
+        <div class="criteria"><strong>Finished when</strong><p>Labels and controls match server authority without implying that visibility grants every action.</p></div>
+        <details><summary>See the visibility-only checker</summary><figure><a href="05-check-access.png" target="_blank" rel="noopener"><img loading="lazy" src="05-check-access.png" alt="Check access showing record visibility through collaboration, separate from action permissions"></a><figcaption>Existing positive visibility result using a synthetic Intake member.</figcaption></figure></details>
+      </article>
+    </div>
+  </section>
+
+  <section id="backend" aria-labelledby="backend-title">
+    <div class="section-title"><span class="number">02</span><h2 id="backend-title">Backend refactors are only partly done</h2></div>
+    <div class="grid">
+      <article>
+        <span class="status open">In progress</span><h3>Workflow action execution</h3>
+        <p><strong>Done:</strong> three intake actions moved into <code>workflow_intake_actions</code>. Authority, definition validation, and scheduling already have separate boundaries.</p>
+        <p><strong>Remaining:</strong> record changes, task creation, and communication actions still live in the large adapter.</p>
+        <div class="criteria"><strong>Must preserve</strong><p>Execution snapshots, creator attribution, approval, idempotency, retries, and delivery-time authorization.</p></div>
+      </article>
+      <article>
+        <span class="status open">Remaining</span><h3>Campaign lifecycle</h3>
+        <p>Separate definition/publication, audience selection, run lifecycle, and retry dispatch where these responsibilities are still combined.</p>
+        <p>Existing <code>campaign_access</code> remains the authority boundary.</p>
+        <div class="criteria"><strong>Must preserve</strong><p>Consent, suppression, immutable launch content, recipient counts, delivery locks, and permission rechecks.</p></div>
+      </article>
+      <article>
+        <span class="status open">Transaction change required</span><h3>Intake matching and retries</h3>
+        <p><code>retry_submission_match</code> commits its reset before rematching. Nested matching helpers can commit again.</p>
+        <p>Ordinary approval/rejection already has service-owned transactions. Moving workflow actions did not fix the retry transaction.</p>
+        <div class="criteria"><strong>Finished when</strong><p>Matching and audit finish atomically, with regressions proving rollback on failure and safe repeated execution.</p></div>
+      </article>
+      <article>
+        <span class="status open">Remaining</span><h3>Reporting datasets</h3>
+        <p>Use the same authorized dataset for counts, charts, drill-downs, and exports. Consolidate duplicated query composition where it exists.</p>
+        <p>Request-only v2 caching is deliberate. Restoring cross-request caching is a separate optimization, not a missing permission feature.</p>
+        <div class="criteria"><strong>Must preserve</strong><p>Tenant isolation and access revocation on the next request, including after ownership or stage changes.</p></div>
+      </article>
+    </div>
+  </section>
+
+  <section id="verification" aria-labelledby="verification-title">
+    <div class="section-title"><span class="number">03</span><h2 id="verification-title">Final checks must cover the accepted version</h2></div>
+    <div class="panel">
+      <dl class="rows">
+        <div class="row"><dt>Current local checks</dt><dd><span class="status passed">Passed locally</span></dd><dd>3,651 API tests; 1,703 frontend tests, TypeScript, ESLint; production web build; fresh and existing-database migrations. These do not make failed CI green.</dd></div>
+        <div class="row"><dt>Draft PR CI</dt><dd><span class="status blocked">Backend blocked</span></dd><dd>#690 checks passed. #691 has one backend test failure; the serial migration/outbox step did not run after that failure. Investigate and get the combined PR green.</dd></div>
+        <div class="row"><dt>Docker images</dt><dd><span class="status passed">Passed in CI</span></dd><dd>API, worker, and web image builds passed on the published snapshot. Repeat after the remaining implementation changes; no images were deployed.</dd></div>
+        <div class="row"><dt>Three-record handoffs</dt><dd><span class="status review">Rerun required</span></dd><dd>Surrogate, egg donor, and sperm donor: Intake approval → pool → Case Manager claim. Check denied, cross-org, and revoked-access cases. Earlier full journeys predate the latest integration.</dd></div>
+        <div class="row"><dt>Activation rehearsal</dt><dd><span class="status review">Rerun required</span></dd><dd>Use isolated production-shaped data. Review stale previews, unresolved history/grants, and existing workflow/campaign authority. Activate only the reviewed synthetic organization; leave the other on v1.</dd></div>
+        <div class="row"><dt>Release and real activation</dt><dd><span class="status review">Not authorized</span></dd><dd>Separate approval is required for release, production migrations, and each real-organization activation. Passing tests is not that approval.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section id="boundaries" aria-labelledby="boundaries-title">
+    <div class="section-title"><span class="number">04</span><h2 id="boundaries-title">What stays out of this work</h2></div>
+    <div class="panel boundary">
+      <ul>
+        <li><strong>Do not restore</strong> the rejected record-page Intake collaborators cards or donor header photo/upload control.</li>
+        <li><strong>No new product UI is proposed by this page.</strong> It presents the remaining work and existing screenshots; it does not implement or approve the missing screens.</li>
+        <li><strong>No silent expansion:</strong> permission defaults, broader Check access behavior, cross-request caching, Meta/Twilio configuration, and onboarding are not being added here.</li>
+        <li><strong>No production actions:</strong> no merge, deployment, provider send, migration, or real activation is authorized by this review.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <p>Snapshot of draft #691 after the September 20 intake-action extraction and workplan update. Status is not live. Screenshots are earlier synthetic application captures, not proof that every frontend state is complete.</p>
+    <p>Source: <code>permission-upgrade-execution-plan.md</code>, <code>permission-module-refactor-plan.md</code>, <code>permission-upgrade-verification.md</code>, and the linked CI run.</p>
+    <div class="links"><a href="https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/pull/690">Draft #690 ↗</a><a href="https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/pull/691">Draft #691 ↗</a><a href="#frontend">Back to frontend review ↑</a></div>
+  </footer>
+</main>
+</body>
+</html>

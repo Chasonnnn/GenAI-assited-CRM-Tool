@@ -6,9 +6,9 @@ const mockStreamMessage = vi.fn()
 const mockApproveAction = vi.fn()
 const mockRejectAction = vi.fn()
 const mockUseAuth = vi.fn()
+const mockAvailability = vi.fn()
 
 let mockUser: { user_id: string } | null = { user_id: 'u1' }
-let mockAISettings = { is_enabled: true }
 let mockPermissions = new Set<string>()
 
 vi.mock('next/navigation', () => ({
@@ -26,7 +26,7 @@ vi.mock('@/lib/hooks/use-permission-check', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-ai', () => ({
-    useAISettings: () => ({ data: mockAISettings }),
+    useAIAvailability: () => mockAvailability(),
     useStreamChatMessage: () => mockStreamMessage,
     useApproveAction: () => ({ mutateAsync: mockApproveAction, isPending: false }),
     useRejectAction: () => ({ mutateAsync: mockRejectAction, isPending: false }),
@@ -38,8 +38,8 @@ vi.mock('@/lib/auth-context', () => ({
 
 describe('AIAssistantPage', () => {
     beforeEach(() => {
+        mockAvailability.mockReturnValue({ data: { is_enabled: true }, refetch: vi.fn() })
         mockUser = { user_id: 'u1' }
-        mockAISettings = { is_enabled: true }
         mockPermissions = new Set()
         mockUseAuth.mockReturnValue({ user: mockUser, isLoading: false, error: null, refetch: vi.fn() })
 
@@ -72,14 +72,24 @@ describe('AIAssistantPage', () => {
     })
 
     it('shows the shared AI-unavailable notice and disables the input when AI is off', () => {
-        mockAISettings = { is_enabled: false }
-        mockPermissions = new Set(['manage_integrations'])
+        mockAvailability.mockReturnValue({ data: { is_enabled: false }, refetch: vi.fn() })
+        mockPermissions = new Set(['manage_integrations', 'manage_ai_settings'])
 
         render(<AIAssistantPage />)
 
         expect(screen.getByRole('status')).toHaveTextContent('AI is turned off for this organization.')
         expect(screen.getByRole('link', { name: 'AI settings' })).toHaveAttribute('href', '/settings/integrations')
         expect(screen.getByRole('textbox')).toBeDisabled()
+    })
+
+    it('omits the AI settings link without manage_ai_settings, which the AI settings API requires', () => {
+        mockAvailability.mockReturnValue({ data: { is_enabled: false }, refetch: vi.fn() })
+        mockPermissions = new Set(['manage_integrations'])
+
+        render(<AIAssistantPage />)
+
+        expect(screen.getByRole('status')).toHaveTextContent('AI is turned off for this organization.')
+        expect(screen.queryByRole('link', { name: 'AI settings' })).not.toBeInTheDocument()
     })
 
     it('sends a message and can approve a proposed action in global mode', async () => {
@@ -103,6 +113,32 @@ describe('AIAssistantPage', () => {
         expect(mockApproveAction).toHaveBeenCalledWith('a1')
 
         expect(await screen.findByText('Done')).toBeInTheDocument()
+    })
+
+    it('blocks sending and approval when organization AI is disabled after a proposal', async () => {
+        const view = render(<AIAssistantPage />)
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Prepare a note' } })
+        fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter', shiftKey: false })
+        expect(await screen.findByRole('button', { name: /approve/i })).toBeEnabled()
+
+        mockAvailability.mockReturnValue({ data: { is_enabled: false }, refetch: vi.fn() })
+        view.rerender(<AIAssistantPage />)
+        expect(screen.getByRole('textbox')).toBeDisabled()
+        expect(screen.getByRole('button', { name: /approve/i })).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: /approve/i }))
+        expect(mockApproveAction).not.toHaveBeenCalled()
+    })
+
+    it('keeps actions unavailable while availability is loading or failed', () => {
+        mockAvailability.mockReturnValue({ data: undefined, isLoading: true })
+        const view = render(<AIAssistantPage />)
+        expect(screen.getByRole('textbox')).toBeDisabled()
+        const refetch = vi.fn()
+        mockAvailability.mockReturnValue({ data: undefined, isError: true, error: new Error('Unavailable'), refetch })
+        view.rerender(<AIAssistantPage />)
+        expect(screen.getByRole('textbox')).toBeDisabled()
+        fireEvent.click(screen.getByRole('button', { name: /retry/i }))
+        expect(refetch).toHaveBeenCalled()
     })
 
     it("renders streamed assistant Markdown as rich text", async () => {

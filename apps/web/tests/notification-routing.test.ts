@@ -53,3 +53,17 @@ describe("getNotificationHref", () => {
         expect(href).toBe("/surrogates?dynamic_filter=intelligent_any")
     })
 })
+
+describe("match notifications", () => {
+    it("routes match conflict notifications to the match detail", () => {
+        expect(getNotificationHref({ type: "match_conflict", entity_type: "match", entity_id: "match-1" })).toBe("/intended-parents/matches/match-1")
+    })
+
+    it("routes match cancellation decisions to the match detail", () => {
+        expect(getNotificationHref({ type: "status_change_approved", entity_type: "match", entity_id: "match-2" })).toBe("/intended-parents/matches/match-2")
+    })
+
+    it("keeps pending match cancellation approvals in the approvals queue", () => {
+        expect(getNotificationHref({ type: "status_change_requested", entity_type: "match", entity_id: "match-3" })).toBe("/tasks?filter=my_tasks&focus=approvals")
+    })
+})

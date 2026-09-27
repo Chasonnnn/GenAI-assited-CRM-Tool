@@ -484,8 +484,9 @@ function DonorsToolbar({
 export default function DonorsPageClient() {
     const { user } = useAuth()
     const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
-    const canEditDonors = user?.role === "developer" ||
-        permissionsQuery.data?.permissions.includes("edit_donors") === true
+    const canCreateDonors = permissionsQuery.data?.permissions.includes(
+        permissionsQuery.data.policy_version === 2 ? "create_donors" : "edit_donors",
+    ) === true
     const searchParams = useSearchParams()
     const { replace } = useRouter()
     const query = searchParams.toString()
@@ -597,6 +598,7 @@ export default function DonorsPageClient() {
     }
 
     const handleCreate = createValidation.handleSubmit(async (values) => {
+        if (!canCreateDonors) return
         try {
             await createDonor.mutateAsync({
                 donor_type: donorType,
@@ -663,7 +665,7 @@ export default function DonorsPageClient() {
                 countTotal={isFiltered ? unfilteredQuery.data?.total : undefined}
                 countLabel={getDonorTypePluralLabel(donorType).toLowerCase()}
                 actions={
-                    canEditDonors ? (
+                    canCreateDonors ? (
                         <Button
                             onClick={() => {
                                 resetCreateForm()
@@ -754,7 +756,7 @@ export default function DonorsPageClient() {
             <CreateDonorDialog
                 donorType={donorType}
                 formValues={formValues}
-                open={isCreateOpen}
+                open={isCreateOpen && canCreateDonors}
                 pending={createDonor.isPending}
                 onOpenChange={(open) => {
                     if (open) setIsCreateOpen(true)

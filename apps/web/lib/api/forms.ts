@@ -364,6 +364,7 @@ export interface MessagingConsentOptionRead {
 }
 
 export interface MessagingConsentOptionsRead {
+    phone_field_key: string | null
     operational?: MessagingConsentOptionRead | null
     promotional?: MessagingConsentOptionRead | null
 }
@@ -395,6 +396,7 @@ export interface FormEmbedSubmitPayload {
     consent?: { accepted: boolean }
     sms_operational?: boolean
     sms_promotional?: boolean
+    sms_phone_field_key: string | null
     attribution?: Record<string, unknown>
 }
 
@@ -798,7 +800,7 @@ export function submitSharedPublicForm(
     files: File[] = [],
     fileFieldKeys?: string[],
     challengeToken?: string | null,
-    messagingConsent?: { operational?: boolean; promotional?: boolean },
+    messagingConsent?: { operational?: boolean; promotional?: boolean; phoneFieldKey?: string | null },
     publishedVersionId?: string | null,
     idempotencyKey?: string,
 ): Promise<FormSubmissionSharedResponse> {
@@ -816,6 +818,10 @@ export function submitSharedPublicForm(
     }
     formData.append('sms_operational', String(messagingConsent?.operational === true))
     formData.append('sms_promotional', String(messagingConsent?.promotional === true))
+    // Multipart has no null; omitting the part sends sms_phone_field_key as null.
+    if (messagingConsent?.phoneFieldKey) {
+        formData.append('sms_phone_field_key', messagingConsent.phoneFieldKey)
+    }
     const options = challengeToken ? { headers: { "X-Intake-Challenge": challengeToken } } : undefined
     return api.upload<FormSubmissionSharedResponse>(`/forms/public/intake/${slug}/submit`, formData, options)
 }
@@ -947,4 +953,16 @@ export async function exportSubmissionPdf(submissionId: string): Promise<void> {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(objectUrl)
+}
+
+export function listSubmissionReviewForms(): Promise<FormSummary[]> {
+    return api.get<FormSummary[]>("/forms/submission-review/forms")
+}
+
+export function listSurrogateApplicationForms(surrogateId: string): Promise<FormSummary[]> {
+    return api.get<FormSummary[]>(`/forms/surrogates/${surrogateId}/application-forms`)
+}
+
+export function listSurrogateApplicationIntakeLinks(surrogateId: string, formId: string): Promise<FormIntakeLinkRead[]> {
+    return api.get<FormIntakeLinkRead[]>(`/forms/surrogates/${surrogateId}/application-forms/${formId}/intake-links`)
 }

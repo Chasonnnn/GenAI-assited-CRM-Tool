@@ -232,7 +232,12 @@ def get_shared_public_form(
         campaign_name=intake_link.campaign_name,
         event_name=intake_link.event_name,
         messaging_consent=form_intake_service.get_messaging_consent_options(
-            db, intake_link.organization_id
+            db,
+            intake_link.organization_id,
+            schema=schema,
+            mapping_snapshot=form_intake_service.get_intake_mapping_snapshot(
+                db, form=form, published_version=version
+            ),
         ),
         agency_name=agency_name,
         agency_logo_url=agency_logo_url,
@@ -284,7 +289,12 @@ def get_embed_public_form(
         event_name=intake_link.event_name,
         tracking_mode=intake_link.tracking_mode,
         messaging_consent=form_intake_service.get_messaging_consent_options(
-            db, intake_link.organization_id
+            db,
+            intake_link.organization_id,
+            schema=schema,
+            mapping_snapshot=form_intake_service.get_intake_mapping_snapshot(
+                db, form=form, published_version=version
+            ),
         ),
         consent=FormEmbedConsentRead(
             text=intake_link.consent_text,
@@ -364,6 +374,7 @@ def submit_embed_public_form(
             consent_accepted=bool(body.consent and body.consent.accepted),
             sms_operational=body.sms_operational,
             sms_promotional=body.sms_promotional,
+            sms_phone_field_key=body.sms_phone_field_key,
             attribution=body.attribution,
         )
     except PermissionError as exc:
@@ -569,6 +580,7 @@ def submit_shared_public_form(
     idempotency_key: Annotated[str | None, "fastapi_param"] = Form(default=None),
     sms_operational: Annotated[bool, "fastapi_param"] = Form(default=False),
     sms_promotional: Annotated[bool, "fastapi_param"] = Form(default=False),
+    sms_phone_field_key: Annotated[str | None, "fastapi_param"] = Form(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
@@ -633,6 +645,7 @@ def submit_shared_public_form(
             idempotency_key=resolved_idempotency_key,
             sms_operational=sms_operational,
             sms_promotional=sms_promotional,
+            sms_phone_field_key=sms_phone_field_key,
         )
     except form_intake_service.DuplicateApplicantSubmissionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

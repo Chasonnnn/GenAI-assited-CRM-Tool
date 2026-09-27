@@ -1,4 +1,4 @@
-"""Profile card API endpoints for case manager+ users."""
+"""Profile cards under the active surrogate access policy."""
 
 from typing import Annotated, Any
 from uuid import UUID
@@ -28,6 +28,21 @@ def _require_case_manager(session: UserSession) -> None:
     """Check if user has case_manager+ role."""
     if session.role not in CASE_MANAGER_ROLES:
         raise HTTPException(status_code=403, detail="Profile card requires case_manager+ role")
+
+
+def _get_profile_record(db: Session, session: UserSession, surrogate_id: UUID, *, edit=False):
+    from app.services import permission_policy_service, record_access_service
+
+    if permission_policy_service.is_enabled(db, session.org_id):
+        return record_access_service.get_record_with_access(
+            db, session, "surrogate", surrogate_id, action="edit" if edit else "view"
+        )
+    _require_case_manager(session)
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
+    if surrogate is None:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    return surrogate
 
 
 # =============================================================================
@@ -92,13 +107,8 @@ def get_profile(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
-    """Get profile data for a surrogate (case_manager+ only)."""
-    _require_case_manager(session)
-
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
-    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    """Get profile data for an accessible surrogate."""
+    _get_profile_record(db, session, surrogate_id, edit=False)
 
     data = profile_service.get_profile_data(db, session.org_id, surrogate_id)
     return ProfileDataResponse(**data)
@@ -115,12 +125,7 @@ def sync_profile(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     """Get staged diff from latest submission (requires Save to persist)."""
-    _require_case_manager(session)
-
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
-    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    _get_profile_record(db, session, surrogate_id, edit=False)
 
     staged_changes = profile_service.get_sync_diff(db, session.org_id, surrogate_id)
 
@@ -147,12 +152,7 @@ def save_profile_overrides(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
     """Save profile overrides (and optionally update base submission ID after sync)."""
-    _require_case_manager(session)
-
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
-    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    _get_profile_record(db, session, surrogate_id, edit=True)
 
     try:
         profile_service.save_profile_overrides(
@@ -179,12 +179,7 @@ def toggle_hidden_field(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
     """Toggle hidden state for a profile field."""
-    _require_case_manager(session)
-
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
-    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    _get_profile_record(db, session, surrogate_id, edit=True)
 
     profile_service.set_field_hidden(
         db=db,
@@ -210,12 +205,7 @@ def export_profile_pdf(
 
     from app.services import pdf_export_service
 
-    _require_case_manager(session)
-
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
-    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    surrogate = _get_profile_record(db, session, surrogate_id, edit=False)
 
     # Get org name for header
     org = org_service.get_org_by_id(db, session.org_id)

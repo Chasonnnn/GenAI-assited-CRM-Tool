@@ -8,14 +8,14 @@ import {
     getMatch,
     createMatch,
     acceptMatch,
-    rejectMatch,
+    declineMatch,
     cancelMatch,
     updateMatchNotes,
     getMatchStats,
     type ListMatchesParams,
     type MatchCreate,
     type MatchAcceptRequest,
-    type MatchRejectRequest,
+    type MatchDeclineRequest,
     type MatchCancelRequest,
     type MatchUpdateNotesRequest,
     type MatchListItem,
@@ -88,19 +88,24 @@ export function useAcceptMatch() {
             void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: matchKeys.stats() })
             queryClient.setQueryData(matchKeys.detail(result.id), result)
+            // Other proposals for the same surrogate gain the conflict flag and lose Accept.
+            void queryClient.invalidateQueries({
+                queryKey: matchKeys.details(),
+                predicate: (query) => query.queryKey[2] !== result.id,
+            })
         },
     })
 }
 
 /**
- * Reject a match.
+ * Decline a match.
  */
-export function useRejectMatch() {
+export function useDeclineMatch() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ matchId, data }: { matchId: string; data: MatchRejectRequest }) =>
-            rejectMatch(matchId, data),
+        mutationFn: ({ matchId, data }: { matchId: string; data: MatchDeclineRequest }) =>
+            declineMatch(matchId, data),
         onSuccess: (result) => {
             void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: matchKeys.stats() })
@@ -110,13 +115,13 @@ export function useRejectMatch() {
 }
 
 /**
- * Cancel a proposed match.
+ * Request cancellation of an accepted match.
  */
 export function useCancelMatch() {
     const queryClient = useQueryClient()
 
     return useMutation({
-        mutationFn: ({ matchId, data }: { matchId: string; data?: MatchCancelRequest }) =>
+        mutationFn: ({ matchId, data }: { matchId: string; data: MatchCancelRequest }) =>
             cancelMatch(matchId, data),
         onSuccess: (result) => {
             void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
@@ -268,8 +273,22 @@ export function useSaveMatchAttempt(matchId: string) {
     return useMutation({
         mutationFn: ({ attemptId, data }: { attemptId?: string; data: MatchAttemptInput }) => attemptId ? updateMatchAttempt(matchId, attemptId, data) : createMatchAttempt(matchId, data),
         onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: matchAttemptKeys.list(matchId) })
-            void queryClient.invalidateQueries({ queryKey: matchWorkKeys.all(matchId) })
+            // Open attempts block completion; the detail prefix also covers attempts and case work.
+            void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
+        },
+    })
+}
+
+import { cancelRequest as cancelStatusChangeRequest } from '@/lib/api/status-change-requests'
+export function useWithdrawMatchCancellation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ requestId }: { matchId: string; requestId: string }) => cancelStatusChangeRequest(requestId),
+        onSuccess: (_result, { matchId }) => {
+            void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: ['status-change-requests'] })
         },
     })
 }

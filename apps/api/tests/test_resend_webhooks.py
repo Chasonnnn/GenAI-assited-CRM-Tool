@@ -10,6 +10,8 @@ from datetime import UTC
 import pytest
 from sqlalchemy import event
 
+from app.services import campaign_run_service
+
 
 async def _post_signed_resend_event(
     client,
@@ -2542,7 +2544,7 @@ class TestCampaignRunProviderLock:
         """Test that enqueue_campaign_send locks the email provider on the run."""
         from app.db.enums import CampaignStatus
         from app.db.models import Campaign, CampaignRun, EmailTemplate
-        from app.services import campaign_service, resend_settings_service
+        from app.services import resend_settings_service
 
         # Setup: Create Resend settings
         resend_settings_service.update_resend_settings(
@@ -2581,7 +2583,7 @@ class TestCampaignRunProviderLock:
         db.refresh(campaign)
 
         # Enqueue the campaign
-        message, run_id, _ = campaign_service.enqueue_campaign_send(
+        message, run_id, _ = campaign_run_service.enqueue_campaign_send(
             db, test_org.id, campaign.id, test_user.id, send_now=True
         )
 
@@ -2594,7 +2596,7 @@ class TestCampaignRunProviderLock:
         """Test that enqueue fails if email provider not configured."""
         from app.db.enums import CampaignStatus
         from app.db.models import Campaign, EmailTemplate
-        from app.services import campaign_service, resend_settings_service
+        from app.services import resend_settings_service
 
         # Create settings without provider
         resend_settings_service.get_or_create_resend_settings(db, test_org.id, test_user.id)
@@ -2625,7 +2627,7 @@ class TestCampaignRunProviderLock:
 
         # Should fail because no provider configured
         with pytest.raises(ValueError) as exc:
-            campaign_service.enqueue_campaign_send(
+            campaign_run_service.enqueue_campaign_send(
                 db, test_org.id, campaign.id, test_user.id, send_now=True
             )
 

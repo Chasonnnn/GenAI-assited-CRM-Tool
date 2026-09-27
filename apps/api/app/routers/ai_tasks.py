@@ -13,7 +13,7 @@ from app.core.permissions import PermissionKey as P
 from app.core.surrogate_access import check_surrogate_access
 from app.schemas.ai_tasks import BulkTaskCreateRequest, BulkTaskCreateResponse
 from app.schemas.auth import UserSession
-from app.services import ai_task_service, ip_service, match_service, surrogate_service
+from app.services import ai_task_service, ip_service, match_access, surrogate_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -35,16 +35,6 @@ def create_bulk_tasks(
     Uses request_id for idempotency - same request_id returns cached result.
     Tasks can be linked to case, surrogate, intended parent, or match.
     """
-    cached_response = ai_task_service.get_cached_bulk_response(
-        db,
-        session.org_id,
-        session.user_id,
-        body.request_id,
-    )
-    if cached_response:
-        logger.info("Returning cached result for request_id=%s", body.request_id)
-        return cached_response
-
     # Verify entity exists and belongs to org
     entity_type = None
     entity_id = None
@@ -69,9 +59,7 @@ def create_bulk_tasks(
         entity_type = "intended_parent"
         entity_id = body.intended_parent_id
     elif body.match_id:
-        match = match_service.get_match(db, body.match_id, session.org_id)
-        if not match:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Match not found")
+        match = match_access.load(db, session, body.match_id, "view")
         entity_type = "match"
         entity_id = body.match_id
 
@@ -90,6 +78,17 @@ def create_bulk_tasks(
             db=db,
             org_id=session.org_id,
         )
+
+    # Replays require the same current entity access as new requests.
+    cached_response = ai_task_service.get_cached_bulk_response(
+        db,
+        session.org_id,
+        session.user_id,
+        body.request_id,
+    )
+    if cached_response:
+        logger.info("Returning cached result for request_id=%s", body.request_id)
+        return cached_response
 
     task_surrogate_id = surrogate_id
     task_ip_id = body.intended_parent_id

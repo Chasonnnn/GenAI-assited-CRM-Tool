@@ -29,6 +29,7 @@ function formatDurationLabel(value: string | null) {
 export function ZoomMeetingDialog() {
     const {
         surrogate,
+        effectivePermissions,
         timezoneName,
     } = useSurrogateDetailData()
     const { activeDialog, closeDialog } = useSurrogateDetailDialogs()
@@ -44,6 +45,7 @@ export function ZoomMeetingDialog() {
     } = useSurrogateDetailZoom()
 
     const isOpen = activeDialog.type === "zoom_meeting"
+    const canSendEmail = effectivePermissions?.policy_version !== 2 || effectivePermissions.permissions.includes("send_email")
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && closeDialog()}>
@@ -124,7 +126,7 @@ export function ZoomMeetingDialog() {
                             </Button>
                             <Button
                                 onClick={sendZoomInvite}
-                                disabled={isSendZoomInvitePending || !surrogate?.email}
+                                disabled={!canSendEmail || isSendZoomInvitePending || !surrogate?.email}
                             >
                                 {isSendZoomInvitePending ? "Sending..." : "Send Invite"}
                             </Button>

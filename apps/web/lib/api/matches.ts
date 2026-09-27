@@ -31,13 +31,18 @@ export interface MatchRead {
     closure_reason?: string | null
     outcome?: string | null
     intended_parent_id: string
+    allowed_actions: Array<'accept' | 'decline' | 'request_cancel' | 'withdraw_cancel' | 'complete'>
+    blocked_reasons: Record<string, string>
+    pending_cancellation_request_id: string | null
+    accept_eligibility_warnings: string[]
+    surrogate_has_accepted_match: boolean
     status: string
     proposed_by_user_id: string | null
     proposed_at: string
     reviewed_by_user_id: string | null
     reviewed_at: string | null
     notes: string | null
-    rejection_reason: string | null
+    decline_reason: string | null
     created_at: string
     updated_at: string
     surrogate_number: string | null
@@ -91,20 +96,20 @@ export interface MatchAcceptRequest {
     notes?: string
 }
 
-export interface MatchRejectRequest {
+export interface MatchDeclineRequest {
     notes?: string
-    rejection_reason: string
+    reason: string
 }
 
 export interface MatchCancelRequest {
-    reason?: string
+    reason: string
 }
 
 export interface MatchUpdateNotesRequest {
     notes: string
 }
 
-export type MatchStatus = 'proposed' | 'reviewing' | 'accepted' | 'cancel_pending' | 'rejected' | 'cancelled' | 'completed'
+export type MatchStatus = 'under_review' | 'accepted' | 'cancellation_pending' | 'declined' | 'cancelled' | 'completed'
 
 // =============================================================================
 // API Functions
@@ -175,16 +180,16 @@ export async function acceptMatch(matchId: string, data: MatchAcceptRequest = {}
 }
 
 /**
- * Reject a match with reason.
+ * Decline a match with reason.
  */
-export async function rejectMatch(matchId: string, data: MatchRejectRequest): Promise<MatchRead> {
-    return api.put<MatchRead>(`/matches/${matchId}/reject`, data)
+export async function declineMatch(matchId: string, data: MatchDeclineRequest): Promise<MatchRead> {
+    return api.put<MatchRead>(`/matches/${matchId}/decline`, data)
 }
 
 /**
  * Request cancellation of an accepted match (admin approval required).
  */
-export async function cancelMatch(matchId: string, data: MatchCancelRequest = {}): Promise<MatchRead> {
+export async function cancelMatch(matchId: string, data: MatchCancelRequest): Promise<MatchRead> {
     return api.post<MatchRead>(`/matches/${matchId}/cancel-request`, data)
 }
 

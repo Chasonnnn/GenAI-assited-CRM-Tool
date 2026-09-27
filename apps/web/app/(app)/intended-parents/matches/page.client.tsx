@@ -182,8 +182,9 @@ export default function MatchesPage() {
 function MatchesList() {
     const searchParams = useSearchParams()
     const { replace } = useRouter()
-    const { can } = usePermissionCheck()
-    const canProposeMatches = can("propose_matches")
+    const { can, policyVersion } = usePermissionCheck()
+    // Same gate as the surrogate header's Propose Match under v2 (it also needs view_intended_parents).
+    const canProposeMatches = can("propose_matches") && (policyVersion !== 2 || can("view_intended_parents"))
     const [isNewMatchOpen, setIsNewMatchOpen] = useState(false)
     const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false)
     const currentQuery = searchParams.toString()
@@ -439,16 +440,9 @@ function MatchesList() {
                                                 </Link>
                                             </TableCell>
                                             <TableCell>
-                                                {(() => {
-                                                    const status = isMatchStatus(match.status)
-                                                        ? match.status
-                                                        : "proposed"
-                                                    return (
-                                                        <Badge className={getMatchStatusBadgeClassName(status)}>
-                                                            {getMatchStatusLabel(status)}
-                                                        </Badge>
-                                                    )
-                                                })()}
+                                                <Badge className={getMatchStatusBadgeClassName(match.status)}>
+                                                    {getMatchStatusLabel(match.status)}
+                                                </Badge>
                                             </TableCell>
                                             <TableCell>
                                                 {(match.match_kind === "donor" ? match.donor_stage_label : match.surrogate_stage_label) ? (

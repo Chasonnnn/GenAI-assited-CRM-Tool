@@ -53,6 +53,7 @@ function AttachmentsUploadButton({ onUploadFiles, uploadInputRef, isUploading }:
 
 interface AttachmentsSectionProps {
     attachments: InterviewAttachmentRead[]
+    canTranscribe?: boolean
     uploadError: string | null
     isUploading: boolean
     onRequestTranscription: (attachmentId: string) => void
@@ -61,6 +62,7 @@ interface AttachmentsSectionProps {
 
 function AttachmentsSection({
     attachments,
+    canTranscribe: hasTranscriptionPermission = true,
     uploadError,
     isUploading,
     onRequestTranscription,
@@ -82,7 +84,7 @@ function AttachmentsSection({
                     {attachments.map((att) => {
                         const status = att.transcription_status || "not_started"
                         const isProcessing = status === "pending" || status === "processing"
-                        const canTranscribe = att.is_audio_video && !isProcessing && status !== "completed"
+                        const canTranscribe = hasTranscriptionPermission && att.is_audio_video && !isProcessing && status !== "completed"
 
                         return (
                             <div
@@ -145,6 +147,7 @@ interface AttachmentsDialogProps {
     onOpenChange: (open: boolean) => void
     attachments: InterviewAttachmentRead[]
     canUpload: boolean
+    canTranscribe?: boolean
     onUploadFiles: (files: FileList | null) => void
     uploadError: string | null
     uploadInputRef: React.RefObject<HTMLInputElement | null>
@@ -158,6 +161,7 @@ export function AttachmentsDialog({
     onOpenChange,
     attachments,
     canUpload,
+    canTranscribe = true,
     onUploadFiles,
     uploadError,
     uploadInputRef,
@@ -190,6 +194,7 @@ export function AttachmentsDialog({
                 <div className="max-h-[60vh] overflow-auto py-2">
                     <AttachmentsSection
                         attachments={attachments}
+                        canTranscribe={canTranscribe}
                         uploadError={uploadError}
                         isUploading={isUploading}
                         onRequestTranscription={onRequestTranscription}

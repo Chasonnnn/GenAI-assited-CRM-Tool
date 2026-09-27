@@ -7,7 +7,16 @@ from app.db.models import EntityActivityLog, IntendedParent, Match, StatusChange
 from app.services import pipeline_service
 
 
-async def _create_surrogate(authed_client) -> dict:
+async def _move_to_handoff(client, route, record_id, entity_type):
+    pipeline = await client.get("/settings/pipelines/default", params={"entity_type": entity_type})
+    assert pipeline.status_code == 200, pipeline.text
+    key = "available" if entity_type == "sperm_donor" else "ready_to_match"
+    stage = next(s for s in pipeline.json()["stages"] if s["stage_key"] == key)
+    response = await client.patch(f"/{route}/{record_id}/status", json={"stage_id": stage["id"]})
+    assert response.status_code == 200, response.text
+
+
+async def _create_surrogate(authed_client, *, ready=True) -> dict:
     response = await authed_client.post(
         "/surrogates",
         json={
@@ -16,10 +25,13 @@ async def _create_surrogate(authed_client) -> dict:
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    record = response.json()
+    if ready:
+        await _move_to_handoff(authed_client, "surrogates", record["id"], "surrogate")
+    return record
 
 
-async def _create_intended_parent(authed_client) -> dict:
+async def _create_intended_parent(authed_client, *, ready=True) -> dict:
     response = await authed_client.post(
         "/intended-parents",
         json={
@@ -28,7 +40,10 @@ async def _create_intended_parent(authed_client) -> dict:
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    record = response.json()
+    if ready:
+        await _move_to_handoff(authed_client, "intended-parents", record["id"], "intended_parent")
+    return record
 
 
 async def _create_accepted_match(authed_client) -> dict:
@@ -92,10 +107,12 @@ async def test_create_match_response_excludes_compatibility_score(authed_client,
 async def test_match_cancel_request_creates_pending_request(authed_client, db, test_auth):
     match = await _create_accepted_match(authed_client)
 
-    response = await authed_client.post(f"/matches/{match['id']}/cancel-request", json={})
+    response = await authed_client.post(
+        f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+    )
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["status"] == MatchStatus.CANCEL_PENDING.value
+    assert payload["status"] == MatchStatus.CANCELLATION_PENDING.value
 
     request = (
         db.query(StatusChangeRequest)
@@ -111,7 +128,7 @@ async def test_match_cancel_request_creates_pending_request(authed_client, db, t
 
     match_row = db.query(Match).filter(Match.id == uuid.UUID(match["id"])).first()
     assert match_row is not None
-    assert match_row.status == MatchStatus.CANCEL_PENDING.value
+    assert match_row.status == MatchStatus.CANCELLATION_PENDING.value
     assert _ip_activity_types(db, match_row)[-1] == "match_cancel_requested"
 
 
@@ -119,7 +136,9 @@ async def test_match_cancel_request_creates_pending_request(authed_client, db, t
 async def test_match_cancel_request_approval_updates_statuses(authed_client, db, test_auth):
     match = await _create_accepted_match(authed_client)
 
-    response = await authed_client.post(f"/matches/{match['id']}/cancel-request", json={})
+    response = await authed_client.post(
+        f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+    )
     assert response.status_code == 200, response.text
 
     request = (
@@ -162,7 +181,9 @@ async def test_match_cancel_request_approval_updates_statuses(authed_client, db,
 async def test_match_cancel_request_reject_restores_status(authed_client, db, test_auth):
     match = await _create_accepted_match(authed_client)
 
-    response = await authed_client.post(f"/matches/{match['id']}/cancel-request", json={})
+    response = await authed_client.post(
+        f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+    )
     assert response.status_code == 200, response.text
 
     request = (
@@ -184,7 +205,7 @@ async def test_match_cancel_request_reject_restores_status(authed_client, db, te
     match_row = db.query(Match).filter(Match.id == uuid.UUID(match["id"])).first()
     assert match_row is not None
     assert match_row.status == MatchStatus.ACCEPTED.value
-    assert _ip_activity_types(db, match_row)[-1] == "match_cancel_requested"
+    assert _ip_activity_types(db, match_row)[-1] == "match_cancel_request_rejected"
 
 
 @pytest.mark.asyncio
@@ -197,13 +218,13 @@ async def test_reject_and_cancel_match_are_mirrored_to_intended_parent_activity(
     )
     assert rejected.status_code == 201, rejected.text
     reject_response = await authed_client.put(
-        f"/matches/{rejected.json()['id']}/reject",
-        json={"rejection_reason": "Not compatible"},
+        f"/matches/{rejected.json()['id']}/decline",
+        json={"reason": "Not compatible"},
     )
     assert reject_response.status_code == 200, reject_response.text
     rejected_match = db.get(Match, uuid.UUID(rejected.json()["id"]))
     assert rejected_match is not None
-    assert _ip_activity_types(db, rejected_match)[-1] == "match_rejected"
+    assert _ip_activity_types(db, rejected_match)[-1] == "match_declined"
 
     cancelled_ip = await _create_intended_parent(authed_client)
     cancelled = await authed_client.post(
@@ -211,11 +232,13 @@ async def test_reject_and_cancel_match_are_mirrored_to_intended_parent_activity(
         json={"surrogate_id": surrogate["id"], "intended_parent_id": cancelled_ip["id"]},
     )
     assert cancelled.status_code == 201, cancelled.text
-    cancel_response = await authed_client.delete(f"/matches/{cancelled.json()['id']}")
-    assert cancel_response.status_code == 204, cancel_response.text
+    cancel_response = await authed_client.put(
+        f"/matches/{cancelled.json()['id']}/decline", json={"reason": "Withdrawn"}
+    )
+    assert cancel_response.status_code == 200, cancel_response.text
     cancelled_match = db.get(Match, uuid.UUID(cancelled.json()["id"]))
     assert cancelled_match is not None
-    assert _ip_activity_types(db, cancelled_match)[-1] == "match_cancelled"
+    assert _ip_activity_types(db, cancelled_match)[-1] == "match_declined"
 
 
 @pytest.mark.asyncio
@@ -233,7 +256,9 @@ async def test_match_cancel_request_requires_accepted_match(authed_client, db):
     assert response.status_code == 201, response.text
     match = response.json()
 
-    cancel = await authed_client.post(f"/matches/{match['id']}/cancel-request", json={})
+    cancel = await authed_client.post(
+        f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+    )
     assert cancel.status_code == 400
 
 

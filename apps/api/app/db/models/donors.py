@@ -376,6 +376,9 @@ class Donor(Base):
         ForeignKey("pipeline_stages.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    paused_from_stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("pipeline_stages.id", ondelete="SET NULL"), nullable=True
+    )
     profile_photo_attachment_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("attachments.id", ondelete="SET NULL", use_alter=True),

@@ -65,6 +65,7 @@ import {
 import { format } from "date-fns"
 import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
 import { parseDateInput } from "@/lib/utils/date"
 import {
     useCampaigns,
@@ -117,6 +118,22 @@ const statusLabels: Record<string, string> = {
     cancelled: "Cancelled",
 }
 
+type CampaignScope = "personal" | "org"
+type CampaignScopeFilter = CampaignScope | "all"
+
+const CAMPAIGN_SCOPE_LABELS: Record<CampaignScope, string> = {
+    personal: "Personal",
+    org: "Organization",
+}
+
+function getCampaignScopeFilterLabel(value: string | null): string {
+    return value === "personal" || value === "org" ? CAMPAIGN_SCOPE_LABELS[value] : "All campaigns"
+}
+
+function getCampaignScopeLabel(value: string | null): string {
+    return value === "personal" ? CAMPAIGN_SCOPE_LABELS.personal : CAMPAIGN_SCOPE_LABELS.org
+}
+
 const CAMPAIGN_WIZARD_STEPS = ["Setup", "Audience", "Content", "Review & send"] as const
 const SETUP_STEP = 1
 const AUDIENCE_STEP = 2
@@ -129,6 +146,10 @@ type SendMode = "draft" | "now" | "later"
 type StateSetter<T> = Dispatch<SetStateAction<T>>
 
 type CampaignWizardState = {
+    scope: CampaignScope
+    policyV2: boolean
+    canManageOrg: boolean
+    canSend: boolean
     wizardStep: number
     campaignName: string
     campaignDescription: string
@@ -160,6 +181,7 @@ type CampaignWizardData = {
 }
 
 type CampaignWizardActions = {
+    setScope: (scope: CampaignScope) => void
     resetWizard: () => void
     setWizardStep: StateSetter<number>
     setCampaignName: StateSetter<string>
@@ -252,9 +274,16 @@ const isSendMode = (value: unknown): value is SendMode =>
 
 function useCampaignsPageController() {
     const { push } = useRouter()
-    const { can } = usePermissionCheck()
-    // Every campaign write and preview endpoint requires the email template manage permission.
-    const canManageCampaigns = can("manage_email_templates")
+    const { user } = useAuth()
+    const { can, policyVersion } = usePermissionCheck()
+    const policyV2 = (policyVersion ?? 1) >= 2
+    // Campaign creation checks manage_email_templates under policy v1 and edit_campaigns under v2.
+    // Per-campaign actions use the can_edit / can_send flags from the API instead.
+    const canCreate = can(policyV2 ? "edit_campaigns" : "manage_email_templates")
+    const canManageOrg = canCreate && (!policyV2 || can("manage_org_campaigns"))
+    const [scopeSelection, setScopeSelection] = useState<CampaignScope | null>(null)
+    const campaignScope: CampaignScope = scopeSelection ?? (policyV2 ? "personal" : "org")
+    const [scopeFilter, setScopeFilter] = useState<CampaignScopeFilter>("all")
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
     const [showCreateWizard, setShowCreateWizard] = useState(false)
     const [wizardStep, setWizardStep] = useState(SETUP_STEP)
@@ -263,6 +292,7 @@ function useCampaignsPageController() {
     const [campaignName, setCampaignName] = useState("")
     const [campaignDescription, setCampaignDescription] = useState("")
     const [channel, setChannel] = useState<CampaignChannel>("email")
+    const canSend = canCreate && (!policyV2 || (can("send_campaigns") && can(channel === "email" ? "send_email" : "send_sms")))
     const [selectedTemplateId, setSelectedTemplateId] = useState("")
     const [recipientType, setRecipientType] = useState<RecipientType>("case")
     const [selectedStages, setSelectedStages] = useState<string[]>([])
@@ -276,7 +306,9 @@ function useCampaignsPageController() {
 
     const campaignsQuery = useCampaigns(statusFilter)
     const { data: campaigns, isLoading } = campaignsQuery
-    const { data: emailTemplates, isLoading: emailTemplatesLoading } = useEmailTemplates()
+    const { data: emailTemplates, isLoading: emailTemplatesLoading } = useEmailTemplates({
+        scope: campaignScope === "org" ? "org" : null,
+    })
     const { data: messageTemplates, isLoading: messageTemplatesLoading } = useQuery({
         queryKey: ["messaging-templates", "promotional", "published"],
         queryFn: () => listMessagingTemplates({ purpose: "promotional", status: "published" }),
@@ -284,7 +316,7 @@ function useCampaignsPageController() {
         enabled: showCreateWizard && channel === "messaging",
     })
     const templates: CampaignTemplateOption[] | undefined = channel === "email"
-        ? emailTemplates
+        ? emailTemplates?.filter((template) => template.scope !== "personal" || (campaignScope === "personal" && template.owner_user_id === user?.user_id))
         : messageTemplates?.map((template) => ({
             id: template.id,
             name: template.name,
@@ -296,8 +328,12 @@ function useCampaignsPageController() {
     const cancelCampaign = useCancelCampaign()
     const sendCampaign = useSendCampaign()
     const previewFilters = usePreviewFilters()
+    const sendNowCampaign = sendNowDialogId
+        ? campaigns?.find((campaign) => campaign.id === sendNowDialogId)
+        : undefined
     const sendNowPreview = useCampaignPreview(sendNowDialogId ?? undefined, {
-        enabled: Boolean(sendNowDialogId) && canManageCampaigns,
+        // The preview route requires edit access to the campaign.
+        enabled: sendNowCampaign?.can_edit === true,
     })
     const { data: intendedParentStatuses } = useIntendedParentStatuses()
 
@@ -315,13 +351,18 @@ function useCampaignsPageController() {
         pipeline?.stages,
         intendedParentStatuses?.statuses,
     )
-    const filteredCampaigns = campaigns || []
+    const filteredCampaigns = (campaigns || []).filter(
+        (campaign) => scopeFilter === "all" || (campaign.scope ?? "org") === scopeFilter,
+    )
     const currentMinute = useCurrentMinuteTimestamp()
+    // Without send permission the wizard only saves drafts.
+    const effectiveSendMode: SendMode = canSend ? sendMode : "draft"
     const scheduleError =
-        currentMinute === null ? undefined : getScheduleError(sendMode, scheduledAt, currentMinute)
+        currentMinute === null ? undefined : getScheduleError(effectiveSendMode, scheduledAt, currentMinute)
 
     const resetWizard = () => {
         setWizardStep(SETUP_STEP)
+        setScopeSelection(null)
         setCampaignName("")
         setCampaignDescription("")
         setChannel("email")
@@ -338,6 +379,7 @@ function useCampaignsPageController() {
 
     const previewRecipientSelection = () => {
         previewFilters.mutate({
+            scope: campaignScope,
             channel,
             recipientType,
             filterCriteria: buildFilterCriteria(),
@@ -350,7 +392,8 @@ function useCampaignsPageController() {
             toast.error("Add a campaign name and a template first.")
             return
         }
-        if (sendMode === "later" && (!scheduledAt || scheduledAt.getTime() <= Date.now())) {
+        const mode = effectiveSendMode
+        if (mode === "later" && (!scheduledAt || scheduledAt.getTime() <= Date.now())) {
             toast.error("Choose a send time in the future.")
             return
         }
@@ -359,6 +402,7 @@ function useCampaignsPageController() {
         try {
             const campaign = await createCampaign.mutateAsync({
                 name: campaignName,
+                scope: campaignScope,
                 channel,
                 ...(channel === "email"
                     ? { email_template_id: selectedTemplateId }
@@ -367,7 +411,7 @@ function useCampaignsPageController() {
                 filter_criteria: buildFilterCriteria(),
                 include_unsubscribed: channel === "email" && includeUnsubscribed,
                 ...(campaignDescription ? { description: campaignDescription } : {}),
-                ...(sendMode === "later" && scheduledAt
+                ...(mode === "later" && scheduledAt
                     ? { scheduled_at: scheduledAt.toISOString() }
                     : {}),
             })
@@ -377,18 +421,18 @@ function useCampaignsPageController() {
             return
         }
 
-        if (sendMode === "draft") {
+        if (mode === "draft") {
             toast.success("Campaign saved as draft")
             resetWizard()
             return
         }
 
         try {
-            await sendCampaign.mutateAsync({ id: campaignId, sendNow: sendMode === "now" })
-            toast.success(sendMode === "now" ? "Campaign queued for sending" : "Campaign scheduled")
+            await sendCampaign.mutateAsync({ id: campaignId, sendNow: mode === "now" })
+            toast.success(mode === "now" ? "Campaign queued for sending" : "Campaign scheduled")
         } catch {
             toast.error(
-                sendMode === "now"
+                mode === "now"
                     ? "Saved as draft, but sending didn't start."
                     : "Saved as draft, but scheduling failed.",
             )
@@ -425,6 +469,7 @@ function useCampaignsPageController() {
     }
 
     const wizardState: CampaignWizardState = {
+        scope: campaignScope, policyV2, canManageOrg, canSend,
         wizardStep,
         campaignName,
         campaignDescription,
@@ -434,7 +479,7 @@ function useCampaignsPageController() {
         selectedStages,
         selectedStates,
         includeUnsubscribed,
-        sendMode,
+        sendMode: effectiveSendMode,
         scheduledAt,
         scheduleError,
     }
@@ -448,6 +493,7 @@ function useCampaignsPageController() {
         isPreviewLoading: previewFilters.isPending,
     }
     const wizardActions: CampaignWizardActions = {
+        setScope: (scope) => { setScopeSelection(scope); setSelectedTemplateId(""); previewFilters.reset() },
         resetWizard,
         setWizardStep,
         setCampaignName,
@@ -495,14 +541,17 @@ function useCampaignsPageController() {
         handleCancelCampaign,
         handleSendNowCampaign,
     }
-    const openCreateWizard = canManageCampaigns ? () => setShowCreateWizard(true) : undefined
+    const openCreateWizard = canCreate ? () => setShowCreateWizard(true) : undefined
 
     return {
         headerProps: {
+            scopeFilter,
+            onScopeFilterChange: setScopeFilter,
             onCreateCampaign: openCreateWizard,
         },
         listProps: {
             statusFilter,
+            scopeFilter,
             onStatusFilterChange: setStatusFilter,
             campaigns: filteredCampaigns,
             isLoading,
@@ -517,7 +566,6 @@ function useCampaignsPageController() {
             page,
             perPage,
             onPageChange: setPage,
-            canManageCampaigns,
             onCreateCampaign: openCreateWizard,
             onViewCampaign: (campaignId: string) => push(`/automation/campaigns/${campaignId}`),
             onEditCampaign: (campaignId: string) =>
@@ -555,17 +603,43 @@ export default function CampaignsPage() {
     )
 }
 
-function CampaignsPageHeader({ onCreateCampaign }: { onCreateCampaign: (() => void) | undefined }) {
+function CampaignsPageHeader({
+    onCreateCampaign,
+    scopeFilter,
+    onScopeFilterChange,
+}: {
+    onCreateCampaign: (() => void) | undefined
+    scopeFilter: CampaignScopeFilter
+    onScopeFilterChange: (value: CampaignScopeFilter) => void
+}) {
     return (
         <PageHeader
             title="Campaigns"
             actions={
-                onCreateCampaign ? (
-                    <Button onClick={onCreateCampaign}>
-                        <PlusIcon className="size-4" />
-                        Create Campaign
-                    </Button>
-                ) : null
+                <>
+                    <Select
+                        value={scopeFilter}
+                        onValueChange={(value) => {
+                            if (value === "all" || value === "personal" || value === "org") onScopeFilterChange(value)
+                        }}
+                        aria-label="Campaign scope filter"
+                    >
+                        <SelectTrigger aria-label="Campaign scope filter" className="w-40">
+                            <SelectValue>{getCampaignScopeFilterLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All campaigns</SelectItem>
+                            <SelectItem value="personal">{CAMPAIGN_SCOPE_LABELS.personal}</SelectItem>
+                            <SelectItem value="org">{CAMPAIGN_SCOPE_LABELS.org}</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    {onCreateCampaign ? (
+                        <Button onClick={onCreateCampaign}>
+                            <PlusIcon className="size-4" />
+                            Create Campaign
+                        </Button>
+                    ) : null}
+                </>
             }
         />
     )
@@ -573,6 +647,7 @@ function CampaignsPageHeader({ onCreateCampaign }: { onCreateCampaign: (() => vo
 
 function CampaignsListSection({
     statusFilter,
+    scopeFilter,
     onStatusFilterChange,
     campaigns,
     isLoading,
@@ -580,7 +655,6 @@ function CampaignsListSection({
     page,
     perPage,
     onPageChange,
-    canManageCampaigns,
     onCreateCampaign,
     onViewCampaign,
     onEditCampaign,
@@ -590,6 +664,7 @@ function CampaignsListSection({
     onDeleteCampaign,
 }: {
     statusFilter: string | undefined
+    scopeFilter: CampaignScopeFilter
     onStatusFilterChange: StateSetter<string | undefined>
     campaigns: CampaignListItem[]
     isLoading: boolean
@@ -597,7 +672,6 @@ function CampaignsListSection({
     page: number
     perPage: number
     onPageChange: StateSetter<number>
-    canManageCampaigns: boolean
     onCreateCampaign: (() => void) | undefined
     onViewCampaign: (campaignId: string) => void
     onEditCampaign: (campaignId: string) => void
@@ -638,13 +712,15 @@ function CampaignsListSection({
                             />
                         </Card>
                     ) : campaigns.length === 0 ? (
-                        <CampaignsEmptyState onCreateCampaign={onCreateCampaign} isFiltered={Boolean(statusFilter)} />
+                        <CampaignsEmptyState
+                            onCreateCampaign={onCreateCampaign}
+                            filter={statusFilter ? "status" : scopeFilter !== "all" ? "scope" : null}
+                        />
                     ) : (
                         <CampaignsTable
                             campaigns={campaigns}
                             page={page}
                             perPage={perPage}
-                            canManageCampaigns={canManageCampaigns}
                             onViewCampaign={onViewCampaign}
                             onEditCampaign={onEditCampaign}
                             onSendNowCampaign={onSendNowCampaign}
@@ -675,16 +751,22 @@ function CampaignsLoadingState() {
 
 function CampaignsEmptyState({
     onCreateCampaign,
-    isFiltered,
+    filter,
 }: {
     onCreateCampaign: (() => void) | undefined
-    isFiltered: boolean
+    filter: "status" | "scope" | null
 }) {
+    const title =
+        filter === "status"
+            ? "No campaigns with this status"
+            : filter === "scope"
+              ? "No campaigns in this scope"
+              : "No campaigns yet"
     return (
         <Card className="py-0">
             <EmptyState
                 icon={MailIcon}
-                title={isFiltered ? "No campaigns with this status" : "No campaigns yet"}
+                title={title}
                 headingLevel={3}
                 action={
                     onCreateCampaign ? (
@@ -703,7 +785,6 @@ function CampaignsTable({
     campaigns,
     page,
     perPage,
-    canManageCampaigns,
     onViewCampaign,
     onEditCampaign,
     onSendNowCampaign,
@@ -714,7 +795,6 @@ function CampaignsTable({
     campaigns: CampaignListItem[]
     page: number
     perPage: number
-    canManageCampaigns: boolean
     onViewCampaign: (campaignId: string) => void
     onEditCampaign: (campaignId: string) => void
     onSendNowCampaign: (campaignId: string) => void
@@ -745,7 +825,6 @@ function CampaignsTable({
                             <CampaignsTableRow
                                 key={campaign.id}
                                 campaign={campaign}
-                                canManageCampaigns={canManageCampaigns}
                                 onViewCampaign={onViewCampaign}
                                 onEditCampaign={onEditCampaign}
                                 onSendNowCampaign={onSendNowCampaign}
@@ -762,7 +841,6 @@ function CampaignsTable({
 
 function CampaignsTableRow({
     campaign,
-    canManageCampaigns,
     onViewCampaign,
     onEditCampaign,
     onSendNowCampaign,
@@ -771,7 +849,6 @@ function CampaignsTableRow({
     onDeleteCampaign,
 }: {
     campaign: CampaignListItem
-    canManageCampaigns: boolean
     onViewCampaign: (campaignId: string) => void
     onEditCampaign: (campaignId: string) => void
     onSendNowCampaign: (campaignId: string) => void
@@ -796,6 +873,7 @@ function CampaignsTableRow({
                 >
                     {campaign.name}
                 </Link>
+                <Badge variant="outline" className="ml-2">{getCampaignScopeLabel(campaign.scope ?? "org")}</Badge>
             </TableCell>
             <TableCell className="text-muted-foreground">
                 <div className="space-y-1">
@@ -855,7 +933,6 @@ function CampaignsTableRow({
             <TableCell>
                 <CampaignActionsMenu
                     campaign={campaign}
-                    canManageCampaigns={canManageCampaigns}
                     onViewCampaign={onViewCampaign}
                     onEditCampaign={onEditCampaign}
                     onSendNowCampaign={onSendNowCampaign}
@@ -870,7 +947,6 @@ function CampaignsTableRow({
 
 function CampaignActionsMenu({
     campaign,
-    canManageCampaigns,
     onViewCampaign,
     onEditCampaign,
     onSendNowCampaign,
@@ -879,7 +955,6 @@ function CampaignActionsMenu({
     onDeleteCampaign,
 }: {
     campaign: CampaignListItem
-    canManageCampaigns: boolean
     onViewCampaign: (campaignId: string) => void
     onEditCampaign: (campaignId: string) => void
     onSendNowCampaign: (campaignId: string) => void
@@ -900,25 +975,25 @@ function CampaignActionsMenu({
                     <EyeIcon className="mr-2 size-4" />
                     View Details
                 </DropdownMenuItem>
-                {canManageCampaigns && campaign.status === "draft" && (
+                {campaign.can_send === true && campaign.status === "draft" && (
                     <DropdownMenuItem onClick={() => onSendNowCampaign(campaign.id)}>
                         <SendIcon className="mr-2 size-4" />
                         Send Now
                     </DropdownMenuItem>
                 )}
-                {canManageCampaigns && (campaign.status === "draft" || campaign.status === "scheduled") && (
+                {campaign.can_edit === true && (campaign.status === "draft" || campaign.status === "scheduled") && (
                     <DropdownMenuItem onClick={() => onEditCampaign(campaign.id)}>
                         <PencilIcon className="mr-2 size-4" />
                         Edit
                     </DropdownMenuItem>
                 )}
-                {canManageCampaigns ? (
+                {campaign.can_edit === true ? (
                     <DropdownMenuItem onClick={() => { void onDuplicateCampaign(campaign.id) }}>
                         <CopyIcon className="mr-2 size-4" />
                         Duplicate
                     </DropdownMenuItem>
                 ) : null}
-                {canManageCampaigns && (campaign.status === "scheduled" || campaign.status === "sending") && (
+                {campaign.can_send === true && (campaign.status === "scheduled" || campaign.status === "sending") && (
                     <DropdownMenuItem
                         onClick={() => onCancelCampaign(campaign.id)}
                         className="text-destructive"
@@ -927,7 +1002,7 @@ function CampaignActionsMenu({
                         Stop
                     </DropdownMenuItem>
                 )}
-                {canManageCampaigns && campaign.status === "draft" && (
+                {campaign.can_edit === true && campaign.status === "draft" && (
                     <DropdownMenuItem
                         onClick={() => onDeleteCampaign(campaign.id)}
                         className="text-destructive"
@@ -1063,6 +1138,28 @@ function CampaignSetupStep({
 }) {
     return (
         <div className="flex flex-col gap-4">
+            {state.policyV2 ? (
+                <div className="flex flex-col gap-2">
+                    <Label htmlFor="campaign-scope">Scope</Label>
+                    <Select
+                        aria-label="Campaign scope"
+                        value={state.scope}
+                        onValueChange={(value) => {
+                            if (value === "personal" || value === "org") actions.setScope(value)
+                        }}
+                    >
+                        <SelectTrigger id="campaign-scope" className="w-full">
+                            <SelectValue>{getCampaignScopeLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="personal">{CAMPAIGN_SCOPE_LABELS.personal}</SelectItem>
+                            <SelectItem value="org" disabled={!state.canManageOrg}>
+                                {CAMPAIGN_SCOPE_LABELS.org}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            ) : null}
             <div className="flex flex-col gap-2">
                 <Label htmlFor="campaign-channel">Channel</Label>
                 <Select
@@ -1253,47 +1350,49 @@ function CampaignReviewStep({
 
             <CampaignRecipientSummary data={data} />
 
-            <div className="flex flex-col gap-3">
-                <span id="campaign-send-mode-label" className="text-sm font-medium">
-                    When to send
-                </span>
-                <RadioGroup
-                    aria-labelledby="campaign-send-mode-label"
-                    value={state.sendMode}
-                    onValueChange={(value) => {
-                        if (isSendMode(value)) actions.setSendMode(value)
-                    }}
-                    className="flex flex-wrap gap-x-5 gap-y-2"
-                >
-                    {SEND_MODE_OPTIONS.map((option) => (
-                        <div key={option.value} className="flex items-center gap-2">
-                            <RadioGroupItem id={`campaign-send-${option.value}`} value={option.value} />
-                            <Label htmlFor={`campaign-send-${option.value}`} className="cursor-pointer font-normal">
-                                {option.label}
-                            </Label>
-                        </div>
-                    ))}
-                </RadioGroup>
-                {state.sendMode === "later" ? (
-                    <ValidatedField label="Send time" error={state.scheduleError}>
-                        {(control) => (
-                            <div className="flex flex-wrap items-center gap-2">
-                                <DateTimePicker
-                                    triggerId={control.id}
-                                    aria-invalid={control["aria-invalid"]}
-                                    aria-describedby={control["aria-describedby"]}
-                                    value={state.scheduledAt}
-                                    onChange={actions.setScheduledAt}
-                                    className="w-full sm:w-72"
-                                />
-                                {timeZone ? (
-                                    <span className="text-sm text-muted-foreground">{timeZone}</span>
-                                ) : null}
+            {state.canSend ? (
+                <div className="flex flex-col gap-3">
+                    <span id="campaign-send-mode-label" className="text-sm font-medium">
+                        When to send
+                    </span>
+                    <RadioGroup
+                        aria-labelledby="campaign-send-mode-label"
+                        value={state.sendMode}
+                        onValueChange={(value) => {
+                            if (isSendMode(value)) actions.setSendMode(value)
+                        }}
+                        className="flex flex-wrap gap-x-5 gap-y-2"
+                    >
+                        {SEND_MODE_OPTIONS.map((option) => (
+                            <div key={option.value} className="flex items-center gap-2">
+                                <RadioGroupItem id={`campaign-send-${option.value}`} value={option.value} />
+                                <Label htmlFor={`campaign-send-${option.value}`} className="cursor-pointer font-normal">
+                                    {option.label}
+                                </Label>
                             </div>
-                        )}
-                    </ValidatedField>
-                ) : null}
-            </div>
+                        ))}
+                    </RadioGroup>
+                    {state.sendMode === "later" ? (
+                        <ValidatedField label="Send time" error={state.scheduleError}>
+                            {(control) => (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <DateTimePicker
+                                        triggerId={control.id}
+                                        aria-invalid={control["aria-invalid"]}
+                                        aria-describedby={control["aria-describedby"]}
+                                        value={state.scheduledAt}
+                                        onChange={actions.setScheduledAt}
+                                        className="w-full sm:w-72"
+                                    />
+                                    {timeZone ? (
+                                        <span className="text-sm text-muted-foreground">{timeZone}</span>
+                                    ) : null}
+                                </div>
+                            )}
+                        </ValidatedField>
+                    ) : null}
+                </div>
+            ) : null}
         </div>
     )
 }

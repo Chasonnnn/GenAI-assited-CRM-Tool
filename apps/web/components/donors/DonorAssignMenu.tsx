@@ -3,9 +3,17 @@
 import { useState } from "react"
 import { CheckIcon, Loader2Icon, UserIcon } from "lucide-react"
 import { DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu"
-import { useDonorOwnerOptions, useUpdateDonor } from "@/lib/hooks/use-donors"
+import { useClaimDonor, useDonorOwnerOptions, useUpdateDonor } from "@/lib/hooks/use-donors"
 import { toast } from "@/components/ui/toast"
 import type { Donor, DonorOwnerType } from "@/lib/types/donor"
+
+export function DonorClaimMenuItem({ donorId }: { donorId: string }) {
+    const claim = useClaimDonor()
+    return <DropdownMenuItem disabled={claim.isPending} onClick={async () => {
+        try { await claim.mutateAsync(donorId); toast.success("Donor claimed") }
+        catch (error) { toast.error(error instanceof Error ? error.message : "Unable to claim donor") }
+    }}>{claim.isPending ? "Claiming…" : "Claim donor"}</DropdownMenuItem>
+}
 
 export function DonorAssignMenu({ donor }: { donor: Donor }) {
     const [open, setOpen] = useState(false)

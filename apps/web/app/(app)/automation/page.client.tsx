@@ -54,6 +54,7 @@ import {
     useDeleteWorkflow,
     useToggleWorkflow,
     useDuplicateWorkflow,
+    usePublishWorkflow,
     useTestWorkflow,
 } from "@/lib/hooks/use-workflows"
 import type {
@@ -73,6 +74,7 @@ import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { EmptyState } from "@/components/empty-state"
 import { QueryErrorState } from "@/components/error-state"
 import { WizardStepper } from "@/components/automation/wizard-stepper"
+import { toast } from "@/components/ui/toast"
 import { useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { ApiError } from "@/lib/api"
@@ -131,7 +133,8 @@ const triggerIcons: Record<string, React.ElementType> = {
     inactivity: ClockIcon,
     match_proposed: ActivityIcon,
     match_accepted: CheckCircle2Icon,
-    match_rejected: XIcon,
+    match_declined: XIcon,
+    match_cancelled: XIcon,
     appointment_scheduled: CalendarIcon,
     appointment_completed: CheckCircle2Icon,
     note_added: FileTextIcon,
@@ -156,7 +159,8 @@ const triggerLabels: Record<string, string> = {
     inactivity: "Inactivity",
     match_proposed: "Match Proposed",
     match_accepted: "Match Accepted",
-    match_rejected: "Match Rejected",
+    match_declined: "Match Declined",
+    match_cancelled: "Match Cancelled",
     appointment_scheduled: "Appointment Scheduled",
     appointment_completed: "Appointment Completed",
     note_added: "Note Added",
@@ -886,9 +890,12 @@ function useAutomationPageView({
 }: AutomationPageClientProps) {
     const { push } = useRouter()
     const { user } = useAuth()
-    const { can } = usePermissionCheck()
+    const { can, policyVersion } = usePermissionCheck()
     const canUseAI = Boolean(user?.ai_enabled) && can("use_ai_assistant")
     const canManageAutomation = can("manage_automation")
+    const policyV2 = (policyVersion ?? 1) >= 2
+    const canManageOrgWorkflows = canManageAutomation && (!policyV2 || can("manage_org_workflows"))
+    const [detailsWorkflow, setDetailsWorkflow] = useState<WorkflowListItem | null>(null)
     const [activeTab] = useState(initialTab)
 
     const [workflowScopeSelection, setWorkflowScopeSelection] = useState<{
@@ -900,7 +907,7 @@ function useAutomationPageView({
     })
     const workflowScopeTab =
         !hasInitialScopeParam &&
-        canManageAutomation &&
+        canManageOrgWorkflows &&
         !workflowScopeSelection.touched &&
         workflowScopeSelection.tab === "personal"
             ? "org"
@@ -991,8 +998,11 @@ function useAutomationPageView({
 
     const isTemplatesTab = workflowScopeTab === "templates"
     const activeWorkflowScope: WorkflowScope = workflowScopeTab === "templates" ? "personal" : workflowScopeTab
-    // POST /workflows with scope "org" requires manage_automation; personal workflows do not.
-    const canCreateInActiveScope = activeWorkflowScope !== "org" || canManageAutomation
+    // Mirrors workflow_access.can_create: org workflows need manage_automation (plus
+    // manage_org_workflows under policy v2); personal workflows are open under v1 and need
+    // manage_automation under v2.
+    const canCreatePersonal = !policyV2 || canManageAutomation
+    const canCreateInActiveScope = activeWorkflowScope === "org" ? canManageOrgWorkflows : canCreatePersonal
 
     const workflowSetupSessionIdRef = useRef<string | null>(null)
 
@@ -1080,6 +1090,7 @@ function useAutomationPageView({
     const updateWorkflow = useUpdateWorkflow()
     const toggleWorkflow = useToggleWorkflow()
     const duplicateWorkflow = useDuplicateWorkflow()
+    const publishWorkflow = usePublishWorkflow()
     const deleteWorkflow = useDeleteWorkflow()
     const testWorkflowMutation = useTestWorkflow()
 
@@ -1459,10 +1470,21 @@ function useAutomationPageView({
                 activeTab={activeTab}
                 onOpenExecutions={() => push("/automation/executions")}
                 onCreateTemplate={() => handleOpenTemplateModal()}
-                canViewExecutions={canManageAutomation}
-                onCreateWorkflow={isTemplatesTab ? () => handleCreate("personal") : undefined}
+                canViewExecutions={canManageOrgWorkflows}
+                onCreateWorkflow={isTemplatesTab && canCreatePersonal ? () => handleCreate("personal") : undefined}
             />
 
+            <Dialog open={detailsWorkflow !== null} onOpenChange={(open) => !open && setDetailsWorkflow(null)}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>{detailsWorkflow?.name}</DialogTitle></DialogHeader>
+                    <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                        <dt className="text-muted-foreground">Scope</dt><dd>{detailsWorkflow?.scope === "personal" ? "Personal" : "Organization"}</dd>
+                        {detailsWorkflow?.owner_name && <><dt className="text-muted-foreground">Owner</dt><dd>{detailsWorkflow.owner_name}</dd></>}
+                        <dt className="text-muted-foreground">Proposed by</dt><dd>{detailsWorkflow?.proposed_by_name ?? "—"}</dd>
+                        <dt className="text-muted-foreground">Created</dt><dd>{detailsWorkflow ? new Date(detailsWorkflow.created_at).toLocaleDateString() : "—"}</dd>
+                    </dl>
+                </DialogContent>
+            </Dialog>
             {/* Main Content */}
             <div className="flex-1 p-6">
                 <div className="space-y-6">
@@ -1642,9 +1664,14 @@ function useAutomationPageView({
                                                         <DropdownMenuItem onClick={() => handleEdit(workflow.id)} disabled={!canEdit}>
                                                             Edit
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => handleDuplicate(workflow.id)}>
+                                                        <DropdownMenuItem disabled={!canEdit} onClick={() => handleDuplicate(workflow.id)}>
                                                             Duplicate
                                                         </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => setDetailsWorkflow(workflow)}>Details</DropdownMenuItem>
+                                                        {workflow.can_publish && <DropdownMenuItem disabled={publishWorkflow.isPending} onClick={() => publishWorkflow.mutate(workflow.id, {
+                                                            onSuccess: () => { toast.success("Organization workflow created"); setWorkflowScopeSelection({ tab: "org", touched: true }) },
+                                                            onError: (error) => toast.error(error instanceof Error ? error.message : "Could not publish workflow"),
+                                                        })}>Publish to organization</DropdownMenuItem>}
                                                         <DropdownMenuItem onClick={() => handleViewHistory(workflow.id)}>
                                                             View History
                                                         </DropdownMenuItem>

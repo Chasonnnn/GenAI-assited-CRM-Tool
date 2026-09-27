@@ -279,6 +279,9 @@ async def test_bulk_change_stage_rejects_regressions_per_row_without_aborting_ba
     ("target_slug", "expected_detail"),
     [
         ("on_hold", "Bulk stage changes only support immediate stages"),
+        ("cold_leads", "Bulk stage changes only support immediate stages"),
+        ("lost", "Bulk stage changes only support immediate stages"),
+        ("disqualified", "Bulk stage changes only support immediate stages"),
         ("delivered", "Bulk stage changes only support immediate stages"),
     ],
 )

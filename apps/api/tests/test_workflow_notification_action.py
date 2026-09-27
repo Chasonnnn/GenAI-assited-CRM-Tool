@@ -7,10 +7,8 @@ from app.db.enums import NotificationType, OwnerType
 
 
 def test_workflow_send_notification_uses_workflow_notification_type(monkeypatch):
-    from app.services import notification_service
-    from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
+    from app.services import notification_service, workflow_communication_actions
 
-    adapter = DefaultWorkflowDomainAdapter()
     captured: dict = {}
 
     def fake_create_notification(**kwargs):
@@ -28,7 +26,7 @@ def test_workflow_send_notification_uses_workflow_notification_type(monkeypatch)
         created_by_user_id=None,
     )
 
-    result = adapter._action_send_notification(
+    result = workflow_communication_actions.send_notification(
         db=SimpleNamespace(),
         action={
             "title": "Workflow sent",

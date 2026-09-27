@@ -431,10 +431,20 @@ def list_donors(
     archived_only: bool = False,
     page: int = 1,
     per_page: int = 20,
+    session=None,
 ) -> tuple[list[Donor], int]:
     query = (
         db.query(Donor).options(selectinload(Donor.stage)).filter(Donor.organization_id == org_id)
     )
+    if session is not None:
+        from app.services import permission_policy_service, record_scope_service
+
+        if permission_policy_service.is_enabled(db, session.org_id):
+            query = query.filter(
+                record_scope_service.build_visibility_filter(
+                    db, session, "donor", allow_archived=include_archived or archived_only
+                )
+            )
     if archived_only:
         query = query.filter(Donor.is_archived.is_(True))
     elif not include_archived:
@@ -471,7 +481,10 @@ def list_donors(
                 DonorStatusHistory.donor_id.label("donor_id"),
                 func.max(DonorStatusHistory.effective_at).label("last_change_at"),
             )
-            .filter(DonorStatusHistory.organization_id == org_id)
+            .filter(
+                DonorStatusHistory.organization_id == org_id,
+                DonorStatusHistory.new_stage_id.is_not(None),
+            )
             .group_by(DonorStatusHistory.donor_id)
             .subquery()
         )
@@ -920,6 +933,7 @@ def change_status(
     *,
     user_role: Role | str | None = None,
     emit_workflow_events: bool = True,
+    execution_permissions: frozenset[str] | None = None,
 ) -> DonorStatusChangeResult:
     if donor.is_archived:
         raise DonorValidationError("Cannot change status of an archived donor")
@@ -946,13 +960,37 @@ def change_status(
     if not role_value:
         raise DonorValidationError("User role is required to change donor stage")
     feature_config = pipeline_semantics_service.get_pipeline_feature_config(target.pipeline)
-    if not pipeline_semantics_service.can_role_access_stage(
+    from app.services import approval_handoff_service
+
+    uses_record_policy = approval_handoff_service.authorize_stage_change(
+        db,
+        record=donor,
+        kind="donor",
+        target_stage=target,
+        user_id=user_id,
+        execution_permissions=execution_permissions,
+    )
+    if not uses_record_policy and not pipeline_semantics_service.can_role_access_stage(
         role_value,
         target,
         feature_config=feature_config,
         mutation=True,
     ):
         raise DonorValidationError("Role not permitted to change donor stage")
+    if target.stage_key == "matched":
+        # Serialize the manual guard with engine cancellation, which holds this
+        # party lock until the last active match and its stage change commit.
+        # V2 policy authorization above must acquire its configuration lock first.
+        donor = (
+            db.query(Donor)
+            .filter(Donor.id == donor.id, Donor.organization_id == donor.organization_id)
+            .populate_existing()
+            .with_for_update(key_share=True)
+            .one()
+        )
+    _require_match_for_matched(db, donor, target)
+    if target.id == donor.stage_id:
+        raise DonorValidationError("Target stage is the current donor stage")
     target_semantics = pipeline_semantics_service.get_stage_semantics(target)
     normalized_reason = reason.strip() if reason else None
     if target_semantics.requires_reason_on_enter and not normalized_reason:
@@ -963,6 +1001,7 @@ def change_status(
     normalized_effective_at = normalize_effective_at(
         effective_at,
         _get_org_timezone(db, donor.organization_id),
+        now=now,
     )
     is_backdated = (now - normalized_effective_at).total_seconds() > 1
     is_regression = target.order < old_stage.order
@@ -1086,6 +1125,24 @@ def change_status(
     )
 
 
+def _require_match_for_matched(db: Session, donor: Donor, stage: PipelineStage) -> None:
+    if stage.stage_key != "matched":
+        return
+    from app.db.models import Match
+    from app.services.match_queries import COMMITTED_STATUSES
+
+    if (
+        not db.query(Match.id)
+        .filter(
+            Match.organization_id == donor.organization_id,
+            Match.donor_id == donor.id,
+            Match.status.in_(COMMITTED_STATUSES),
+        )
+        .first()
+    ):
+        raise DonorValidationError("Cannot set to Matched without an accepted Match.")
+
+
 def apply_status_change(
     db: Session,
     *,
@@ -1105,7 +1162,18 @@ def apply_status_change(
     emit_workflow_events: bool = True,
     commit: bool = True,
 ) -> DonorStatusChangeResult:
+    _require_match_for_matched(db, donor, new_stage)
     try:
+        from app.services import approval_handoff_service
+
+        approval_handoff_service.retain_at_approval(
+            db, record=donor, kind="donor", target_stage=new_stage, actor_user_id=user_id
+        )
+        if new_stage.stage_type == "paused":
+            if old_stage.stage_type != "paused":
+                donor.paused_from_stage_id = old_stage.id
+        else:
+            donor.paused_from_stage_id = None
         history = DonorStatusHistory(
             donor_id=donor.id,
             organization_id=donor.organization_id,

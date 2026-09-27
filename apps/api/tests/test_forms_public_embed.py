@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import uuid
+from copy import deepcopy
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -13,19 +15,25 @@ from app.db.models import (
     AutomationWorkflow,
     ConsentRecord,
     EmbedSession,
+    Form,
+    FormIntakeDraft,
     FormIntakeLink,
     FormSubmission,
     IntakeLead,
     Job,
     LeadAttribution,
+    MessagingConsentEvidence,
     MessagingConsentState,
     MessagingContact,
     MetaCrmDatasetEvent,
+    Organization,
+    PublishedIntakeVersion,
     Surrogate,
     TrackingEventLog,
     WorkflowExecution,
 )
 from app.db.models.messaging import TwilioSettings
+from app.services import form_intake_service
 
 
 @pytest.fixture(autouse=True)
@@ -90,6 +98,7 @@ async def _create_published_lead_capture_form_with_schema(
     authed_client,
     *,
     form_schema: dict[str, object],
+    mappings: list[dict[str, str]] | None = None,
 ) -> tuple[str, str, str]:
     create_res = await authed_client.post(
         "/forms",
@@ -102,6 +111,12 @@ async def _create_published_lead_capture_form_with_schema(
     )
     assert create_res.status_code == 200
     form_id = create_res.json()["id"]
+
+    if mappings is not None:
+        mapping_res = await authed_client.put(
+            f"/forms/{form_id}/mappings", json={"mappings": mappings}
+        )
+        assert mapping_res.status_code == 200
 
     publish_res = await authed_client.post(f"/forms/{form_id}/publish")
     assert publish_res.status_code == 200
@@ -157,8 +172,8 @@ async def test_embed_public_form_uses_latest_logo_branding_without_republish(
     assert "agency_logo_url" not in public_res.json()
 
 
-@pytest.mark.asyncio
-async def test_embed_sms_choices_are_optional_separate_and_snapshotted(authed_client, db, test_org):
+@pytest.fixture
+def messaging_consent_settings(db, test_org):
     settings = TwilioSettings(
         organization_id=test_org.id,
         enabled=False,
@@ -181,7 +196,13 @@ async def test_embed_sms_choices_are_optional_separate_and_snapshotted(authed_cl
     )
     db.add(settings)
     db.commit()
+    return settings
 
+
+@pytest.mark.asyncio
+async def test_embed_sms_choices_are_optional_separate_and_snapshotted(
+    authed_client, db, test_org, messaging_consent_settings
+):
     _form_id, link_id, slug = await _create_published_lead_capture_form(authed_client)
     allowed_origin = "https://www.ewisurrogacy.com"
     link_res = await authed_client.patch(
@@ -200,6 +221,7 @@ async def test_embed_sms_choices_are_optional_separate_and_snapshotted(authed_cl
     )
     assert public_res.status_code == 200
     public_payload = public_res.json()
+    assert public_payload["messaging_consent"]["phone_field_key"] == "phone"
     assert public_payload["messaging_consent"]["operational"]["disclosure"].startswith(
         "I agree to receive application"
     )
@@ -225,6 +247,7 @@ async def test_embed_sms_choices_are_optional_separate_and_snapshotted(authed_cl
             },
             "sms_operational": True,
             "sms_promotional": False,
+            "sms_phone_field_key": public_payload["messaging_consent"]["phone_field_key"],
         },
     )
     assert submit_res.status_code == 200
@@ -255,6 +278,625 @@ async def test_embed_sms_choices_are_optional_separate_and_snapshotted(authed_cl
     assert state_by_purpose == {
         "operational": "opted_in",
         "promotional": "unknown",
+    }
+
+
+async def _create_sms_phone_form(authed_client, variant):
+    schema = _lead_capture_schema(
+        extra_fields=[
+            {
+                "key": "date_of_birth",
+                "label": "DOB",
+                "type": "date",
+                "required": False,
+                "sensitivity": "identity",
+            }
+        ]
+    )
+    fields = schema["pages"][0]["fields"]
+    phone_field = next(field for field in fields if field["key"] == "phone")
+    mappings = None
+    if variant == "mapped":
+        phone_field["key"] = "mobile"
+        fields.insert(0, {**phone_field, "key": "phone", "label": "Other Phone"})
+        mappings = [{"field_key": "mobile", "surrogate_field": "phone"}]
+    elif variant == "none":
+        fields.remove(phone_field)
+    elif variant == "unmapped":
+        phone_field["key"] = "backup_phone"
+    elif variant == "hidden":
+        phone_field["show_if"] = {"field_key": "state", "operator": "equals", "value": "CA"}
+    form_id, link_id, slug = await _create_published_lead_capture_form_with_schema(
+        authed_client, form_schema=schema, mappings=mappings
+    )
+    origin = "https://agency.example"
+    enabled = await authed_client.patch(
+        f"/forms/intake-links/{link_id}",
+        json={
+            "embed_enabled": True,
+            "allowed_embed_origins": [origin],
+            "tracking_mode": "internal_only",
+        },
+    )
+    assert enabled.status_code == 200
+    if variant == "draft_mapped":
+        fields.append({**phone_field, "key": "mobile", "label": "Draft Mobile"})
+        updated = await authed_client.patch(f"/forms/{form_id}", json={"form_schema": schema})
+        assert updated.status_code == 200
+        mapped = await authed_client.put(
+            f"/forms/{form_id}/mappings",
+            json={"mappings": [{"field_key": "mobile", "surrogate_field": "phone"}]},
+        )
+        assert mapped.status_code == 200
+    return slug, origin
+
+
+async def _submit_sms_phone_form(
+    authed_client,
+    *,
+    surface,
+    slug,
+    origin,
+    payload,
+    answers,
+    purpose,
+    accepted=True,
+    organization_id=None,
+):
+    phone_key = payload["messaging_consent"]["phone_field_key"]
+    scope = {"organization_id": str(organization_id)} if organization_id else {}
+    if surface == "intake":
+        return await authed_client.post(
+            f"/forms/public/intake/{slug}/submit",
+            params=scope,
+            data={
+                "answers": json.dumps(answers),
+                "published_version_id": payload["published_version_id"],
+                f"sms_{purpose}": str(accepted).lower(),
+                **({"sms_phone_field_key": phone_key} if phone_key is not None else {}),
+                **scope,
+            },
+        )
+    session = await authed_client.post(
+        f"/forms/public/embed/{slug}/session",
+        json={"parent_origin": origin, "attribution": {}},
+    )
+    assert session.status_code == 200
+    return await authed_client.post(
+        f"/forms/public/embed/{slug}/submit",
+        params=scope,
+        json={
+            "embed_session_token": session.json()["session_token"],
+            "idempotency_key": f"phone-consent-{uuid.uuid4().hex}",
+            "published_version_id": payload["published_version_id"],
+            "answers": answers,
+            f"sms_{purpose}": accepted,
+            "sms_phone_field_key": phone_key,
+            **scope,
+        },
+    )
+
+
+@pytest.mark.parametrize("surface", ["intake", "embed"])
+@pytest.mark.parametrize(
+    "variant,expected",
+    [
+        ("mapped", "mobile"),
+        ("plain", "phone"),
+        ("none", None),
+        ("unmapped", None),
+        ("draft_mapped", "phone"),
+    ],
+)
+async def test_public_sms_options_resolve_published_phone_field(
+    authed_client, messaging_consent_settings, surface, variant, expected
+):
+    slug, origin = await _create_sms_phone_form(authed_client, variant)
+    response = await authed_client.get(
+        f"/forms/public/{surface}/{slug}", headers={"origin": origin}
+    )
+    assert response.status_code == 200
+    options = response.json()["messaging_consent"]
+    assert options["phone_field_key"] == expected
+    for purpose in ("operational", "promotional"):
+        assert (options[purpose] is not None) is (expected is not None)
+
+
+@pytest.mark.parametrize("surface", ["intake", "embed"])
+@pytest.mark.parametrize("purpose", ["operational", "promotional"])
+@pytest.mark.parametrize(
+    "variant,answer",
+    [
+        ("none", "+14155550199"),
+        ("plain", None),
+        ("plain", ""),
+        ("plain", "invalid-secret-phone"),
+        ("plain", ["invalid-secret-phone"]),
+        ("mapped", None),
+        ("mapped", "invalid-secret-phone"),
+    ],
+)
+async def test_public_sms_consent_rejects_missing_or_invalid_phone_atomically(
+    authed_client, db, test_org, messaging_consent_settings, surface, purpose, variant, answer
+):
+    slug, origin = await _create_sms_phone_form(authed_client, variant)
+    payload = (await authed_client.get(f"/forms/public/{surface}/{slug}")).json()
+    answers = {
+        "full_name": "SMS Applicant",
+        "email": "sms-applicant@example.com",
+        "date_of_birth": "1993-04-12",
+        "phone": "+14155550198",
+    }
+    key = "mobile" if variant == "mapped" else "phone"
+    if answer is None:
+        answers.pop(key, None)
+    else:
+        answers[key] = answer
+    response = await _submit_sms_phone_form(
+        authed_client,
+        surface=surface,
+        slug=slug,
+        origin=origin,
+        payload=payload,
+        answers=answers,
+        purpose=purpose,
+    )
+    assert response.status_code == (409 if variant == "none" else 400)
+    assert response.json()["detail"] == (
+        "This form changed. Reload the page and try again."
+        if variant == "none"
+        else "A valid phone number is required to enroll in SMS"
+    )
+    _assert_no_sms_submission(db, test_org.id)
+
+
+def _assert_no_sms_submission(db, org_id):
+    for model in (
+        FormSubmission,
+        ConsentRecord,
+        MessagingContact,
+        MessagingConsentEvidence,
+        MessagingConsentState,
+    ):
+        assert db.query(model).filter(model.organization_id == org_id).count() == 0
+
+
+@pytest.mark.parametrize("surface", ["intake", "embed"])
+@pytest.mark.parametrize(
+    "variant,expected_phone",
+    [
+        ("mapped", "+14155550199"),
+        ("draft_mapped", "+14155550198"),
+    ],
+)
+async def test_public_sms_read_and_submit_use_same_phone_field(
+    authed_client,
+    db,
+    test_org,
+    messaging_consent_settings,
+    monkeypatch,
+    surface,
+    variant,
+    expected_phone,
+):
+    monkeypatch.setattr(
+        form_intake_service, "_attempt_form_submission_workflow_job", lambda *a, **k: None
+    )
+    slug, origin = await _create_sms_phone_form(authed_client, variant)
+    payload = (await authed_client.get(f"/forms/public/{surface}/{slug}")).json()
+    answers = {
+        "full_name": "SMS Applicant",
+        "email": "sms-applicant@example.com",
+        "date_of_birth": "1993-04-12",
+        "phone": "+14155550198",
+        "mobile": "+14155550199",
+    }
+    assert answers[payload["messaging_consent"]["phone_field_key"]] == expected_phone
+    response = await _submit_sms_phone_form(
+        authed_client,
+        surface=surface,
+        slug=slug,
+        origin=origin,
+        payload=payload,
+        answers=answers,
+        purpose="operational",
+    )
+    assert response.status_code == 200
+    contact = db.query(MessagingContact).filter_by(organization_id=test_org.id).one()
+    assert contact.phone_e164 == expected_phone
+    evidence = db.query(MessagingConsentEvidence).filter_by(organization_id=test_org.id).one()
+    assert evidence.contact_id == contact.id
+    # Workflow execution can follow a later mapping edit; it must use the saved snapshots.
+    remap = await authed_client.put(
+        f"/forms/{payload['form_id']}/mappings",
+        json={"mappings": [{"field_key": "phone", "surrogate_field": "phone"}]},
+    )
+    assert remap.status_code == 200
+    submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
+    form_intake_service.auto_match_submission(db, submission=submission)
+    _, lead = form_intake_service.create_intake_lead_for_submission(
+        db, submission=submission, user_id=None, allow_ambiguous=True
+    )
+    surrogate = db.get(Surrogate, lead.promoted_surrogate_id)
+    assert lead.phone == surrogate.phone == contact.phone_e164 == expected_phone
+
+
+@pytest.mark.parametrize("surface", ["intake", "embed"])
+@pytest.mark.parametrize("variant", ["mapped", "draft_mapped"])
+async def test_public_sms_auto_match_uses_submission_snapshots(
+    authed_client, db, test_org, test_user, default_stage, messaging_consent_settings,
+    monkeypatch, surface, variant,
+):
+    from tests.test_forms_public_shared_intake import _create_surrogate
+
+    monkeypatch.setattr(
+        form_intake_service, "_attempt_form_submission_workflow_job", lambda *a, **k: None
+    )
+    slug, origin = await _create_sms_phone_form(authed_client, variant)
+    payload = (await authed_client.get(f"/forms/public/{surface}/{slug}")).json()
+    response = await _submit_sms_phone_form(
+        authed_client,
+        surface=surface,
+        slug=slug,
+        origin=origin,
+        payload=payload,
+        answers={
+            "full_name": "SMS Applicant",
+            "email": "sms@example.com",
+            "date_of_birth": "1993-04-12",
+            "phone": "+14155550198",
+            "mobile": "+14155550199",
+        },
+        purpose="operational",
+    )
+    assert response.status_code == 200, response.text
+    contact = db.query(MessagingContact).filter_by(organization_id=test_org.id).one()
+    candidate = _create_surrogate(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=default_stage,
+        full_name="SMS Applicant",
+        email="different-email@example.com",
+        phone=contact.phone_e164,
+        date_of_birth="1993-04-12",
+    )
+    remap = await authed_client.put(
+        f"/forms/{payload['form_id']}/mappings",
+        json={
+            "mappings": [
+                {
+                    "field_key": "phone" if variant == "mapped" else "mobile",
+                    "surrogate_field": "phone",
+                }
+            ]
+        },
+    )
+    assert remap.status_code == 200
+    submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
+    _, outcome = form_intake_service.auto_match_submission(db, submission=submission)
+    assert outcome == "linked"
+    assert submission.surrogate_id == candidate.id
+    assert submission.match_reason == "phone_dob_name_exact"
+
+
+async def test_shared_draft_phone_ignores_unpublished_answer_keys(authed_client, db, test_org):
+    from app.core.encryption import hash_phone
+
+    slug, _origin = await _create_sms_phone_form(authed_client, "draft_mapped")
+    answers = {
+        "full_name": "Draft Applicant",
+        "date_of_birth": "1993-04-12",
+        "phone": "+14155550198",
+    }
+    response = await authed_client.put(
+        f"/forms/public/intake/{slug}/draft/saved-draft", json={"answers": answers}
+    )
+    assert response.status_code == 200
+    draft = db.query(FormIntakeDraft).filter_by(organization_id=test_org.id).one()
+    draft.answers_json = {**answers, "mobile": "+14155550199"}
+    db.commit()
+    response = await authed_client.put(
+        f"/forms/public/intake/{slug}/draft/saved-draft", json={"answers": {}}
+    )
+    assert response.status_code == 200
+    db.refresh(draft)
+    assert draft.phone_hash == hash_phone(answers["phone"])
+    lookup = await authed_client.post(
+        f"/forms/public/intake/{slug}/draft/lookup",
+        json={"answers": draft.answers_json, "current_draft_session_id": "new-draft"},
+    )
+    assert lookup.status_code == 200
+    assert lookup.json()["status"] == "match_found"
+
+
+@pytest.mark.parametrize("surface", ["intake", "embed"])
+@pytest.mark.parametrize("phone_key", [None, "phone", "mobile"])
+@pytest.mark.parametrize("purpose", ["operational", "promotional"])
+async def test_public_sms_consent_requires_matching_phone_field_key(
+    authed_client, db, test_org, messaging_consent_settings, surface, phone_key, purpose
+):
+    slug, origin = await _create_sms_phone_form(authed_client, "mapped")
+    payload = (await authed_client.get(f"/forms/public/{surface}/{slug}")).json()
+    payload["messaging_consent"]["phone_field_key"] = phone_key
+    response = await _submit_sms_phone_form(
+        authed_client,
+        surface=surface,
+        slug=slug,
+        origin=origin,
+        payload=payload,
+        answers={
+            "full_name": "SMS Applicant",
+            "email": "sms@example.com",
+            "date_of_birth": "1993-04-12",
+            "phone": "+14155550198",
+            "mobile": "+14155550199",
+        },
+        purpose=purpose,
+    )
+    if phone_key == "mobile":
+        assert response.status_code == 200, response.text
+        assert (
+            db.query(MessagingContact).filter_by(organization_id=test_org.id).one().phone_e164
+            == "+14155550199"
+        )
+    else:
+        assert response.status_code == 409
+        assert response.json()["detail"] == "This form changed. Reload the page and try again."
+        _assert_no_sms_submission(db, test_org.id)
+
+
+@pytest.mark.parametrize("surface", ["intake", "embed"])
+async def test_public_sms_remap_between_read_and_submit_is_rejected(
+    authed_client, db, test_org, messaging_consent_settings, surface
+):
+    slug, origin = await _create_sms_phone_form(authed_client, "mapped")
+    payload = (await authed_client.get(f"/forms/public/{surface}/{slug}")).json()
+    assert payload["messaging_consent"]["phone_field_key"] == "mobile"
+    remap = await authed_client.put(
+        f"/forms/{payload['form_id']}/mappings",
+        json={"mappings": [{"field_key": "phone", "surrogate_field": "phone"}]},
+    )
+    assert remap.status_code == 200
+    current = (await authed_client.get(f"/forms/public/{surface}/{slug}")).json()
+    assert current["published_version_id"] == payload["published_version_id"]
+    assert current["messaging_consent"]["phone_field_key"] == "phone"
+    response = await _submit_sms_phone_form(
+        authed_client,
+        surface=surface,
+        slug=slug,
+        origin=origin,
+        payload=payload,
+        answers={
+            "full_name": "SMS Applicant",
+            "email": "sms@example.com",
+            "date_of_birth": "1993-04-12",
+            "phone": "+14155550198",
+            "mobile": "+14155550199",
+        },
+        purpose="operational",
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "This form changed. Reload the page and try again."
+    _assert_no_sms_submission(db, test_org.id)
+
+
+@pytest.mark.parametrize("surface", ["intake", "embed"])
+@pytest.mark.parametrize("phone_key", [None, "outdated"])
+async def test_public_sms_phone_key_is_ignored_without_consent(
+    authed_client, db, test_org, messaging_consent_settings, surface, phone_key
+):
+    slug, origin = await _create_sms_phone_form(authed_client, "plain")
+    payload = (await authed_client.get(f"/forms/public/{surface}/{slug}")).json()
+    payload["messaging_consent"]["phone_field_key"] = phone_key
+    response = await _submit_sms_phone_form(
+        authed_client,
+        surface=surface,
+        slug=slug,
+        origin=origin,
+        payload=payload,
+        answers={
+            "full_name": "SMS Applicant",
+            "email": "sms@example.com",
+            "date_of_birth": "1993-04-12",
+            "phone": "+14155550198",
+        },
+        purpose="operational",
+        accepted=False,
+    )
+    assert response.status_code == 200, response.text
+    assert db.query(MessagingConsentEvidence).filter_by(organization_id=test_org.id).count() == 0
+
+
+@pytest.mark.parametrize("surface", ["intake", "embed"])
+@pytest.mark.parametrize("state", ["NY", "CA"])
+async def test_public_sms_requires_visible_phone_field(
+    authed_client, db, test_org, messaging_consent_settings, surface, state
+):
+    slug, origin = await _create_sms_phone_form(authed_client, "hidden")
+    payload = (await authed_client.get(f"/forms/public/{surface}/{slug}")).json()
+    response = await _submit_sms_phone_form(
+        authed_client,
+        surface=surface,
+        slug=slug,
+        origin=origin,
+        payload=payload,
+        answers={
+            "full_name": "SMS Applicant",
+            "email": "sms@example.com",
+            "date_of_birth": "1993-04-12",
+            "phone": "+14155550198",
+            "state": state,
+        },
+        purpose="operational",
+    )
+    if state == "CA":
+        assert response.status_code == 200, response.text
+    else:
+        assert response.status_code == 400
+        assert response.json()["detail"] == "A valid phone number is required to enroll in SMS"
+        _assert_no_sms_submission(db, test_org.id)
+
+
+@pytest.mark.parametrize("surface", ["intake", "embed"])
+async def test_public_sms_submit_uses_link_organization_for_ledger(
+    authed_client, db, test_org, messaging_consent_settings, surface
+):
+    slug, origin = await _create_sms_phone_form(authed_client, "plain")
+    payload = (await authed_client.get(f"/forms/public/{surface}/{slug}")).json()
+    other_org = Organization(id=uuid.uuid4(), name="Other Agency", slug=f"other-{uuid.uuid4().hex}")
+    db.add(other_org)
+    db.commit()
+    response = await _submit_sms_phone_form(
+        authed_client,
+        surface=surface,
+        slug=slug,
+        origin=origin,
+        payload=payload,
+        answers={
+            "full_name": "SMS Applicant",
+            "email": "sms@example.com",
+            "date_of_birth": "1993-04-12",
+            "phone": "+14155550198",
+        },
+        purpose="operational",
+        organization_id=other_org.id,
+    )
+    assert response.status_code == 200, response.text
+    for model in (MessagingContact, MessagingConsentEvidence):
+        assert db.query(model).filter_by(organization_id=test_org.id).count() == 1
+        assert db.query(model).filter_by(organization_id=other_org.id).count() == 0
+    # Consent state is projected per purpose; only the operational one was opted in.
+    states = db.query(MessagingConsentState).filter_by(organization_id=test_org.id).all()
+    assert {state.purpose for state in states if state.status == "opted_in"} == {"operational"}
+    assert db.query(MessagingConsentState).filter_by(organization_id=other_org.id).count() == 0
+
+
+@pytest.mark.parametrize("include_email", [True, False])
+async def test_embed_submit_validates_published_version_schema(
+    authed_client, db, test_org, messaging_consent_settings, include_email
+):
+    slug, origin = await _create_sms_phone_form(authed_client, "plain")
+    payload = (await authed_client.get(f"/forms/public/embed/{slug}")).json()
+    form = db.get(Form, uuid.UUID(payload["form_id"]))
+    version = db.get(PublishedIntakeVersion, uuid.UUID(payload["published_version_id"]))
+    replacement = deepcopy(form.published_schema_json)
+    fields = replacement["pages"][0]["fields"]
+    next(field for field in fields if field["key"] == "email")["required"] = False
+    fields.append({"key": "later_field", "label": "Later Field", "type": "text", "required": True})
+    form.published_schema_json = replacement
+    db.commit()
+    answers = {"full_name": "SMS Applicant", "date_of_birth": "1993-04-12", "phone": "+14155550198"}
+    if include_email:
+        answers["email"] = "sms@example.com"
+    else:
+        answers["later_field"] = "Only required by the replacement schema"
+    response = await _submit_sms_phone_form(
+        authed_client,
+        surface="embed",
+        slug=slug,
+        origin=origin,
+        payload=payload,
+        answers=answers,
+        purpose="operational",
+    )
+    if include_email:
+        assert response.status_code == 200, response.text
+        submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
+        assert submission.schema_snapshot == version.form_schema_snapshot_json
+    else:
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Missing required field: Email"
+        _assert_no_sms_submission(db, test_org.id)
+
+
+async def test_donor_sms_uses_published_mapping_snapshot(
+    authed_client, db, test_org, messaging_consent_settings, monkeypatch, tmp_path
+):
+    from app.core.config import settings
+    from tests.test_hosted_donor_forms import _create_donor_form, _png_bytes
+
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local")
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path))
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
+    form_id, slug = await _create_donor_form(authed_client, lead_kind="egg_donor")
+    payload = (await authed_client.get(f"/forms/public/intake/{slug}")).json()
+    assert payload["messaging_consent"]["phone_field_key"] == "mobile"
+    remap = await authed_client.put(f"/forms/{form_id}/mappings", json={"mappings": []})
+    assert remap.status_code == 200
+    current = (await authed_client.get(f"/forms/public/intake/{slug}")).json()
+    assert current["messaging_consent"]["phone_field_key"] == "mobile"
+    response = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "applicant_name": "SMS Donor",
+                    "email_address": "donor@example.com",
+                    "mobile": "+14155550199",
+                    "phone": "+14155550198",
+                }
+            ),
+            "published_version_id": payload["published_version_id"],
+            "file_field_keys": json.dumps(["headshot"]),
+            "sms_operational": "true",
+            "sms_phone_field_key": "mobile",
+        },
+        files=[("files", ("profile.png", _png_bytes(), "image/png"))],
+    )
+    assert response.status_code == 200, response.text
+    submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
+    version = db.get(PublishedIntakeVersion, uuid.UUID(payload["published_version_id"]))
+    assert submission.mapping_snapshot == version.mapping_snapshot_json
+    form_intake_service.auto_match_submission(db, submission=submission)
+    _, lead = form_intake_service.create_intake_lead_for_submission(
+        db, submission=submission, user_id=None, allow_ambiguous=True
+    )
+    contact = db.query(MessagingContact).filter_by(organization_id=test_org.id).one()
+    assert lead.phone == contact.phone_e164 == "+14155550199"
+
+
+@pytest.mark.parametrize("surface", ["intake", "embed"])
+async def test_public_sms_options_ignore_client_organization_id(
+    authed_client, db, messaging_consent_settings, surface
+):
+    slug, origin = await _create_sms_phone_form(authed_client, "plain")
+    other_org = Organization(id=uuid.uuid4(), name="Other Agency", slug=f"other-{uuid.uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    approved = messaging_consent_settings
+    db.add(
+        TwilioSettings(
+            organization_id=other_org.id,
+            **{
+                field: getattr(approved, field)
+                for field in (
+                    "legal_messaging_brand",
+                    "operational_disclosure",
+                    "promotional_disclosure",
+                    "sms_terms_url",
+                    "privacy_policy_url",
+                    "support_contact",
+                    "expected_frequency",
+                    "counsel_approved_at",
+                )
+            },
+        )
+    )
+    approved.counsel_approved_at = None
+    db.commit()
+
+    response = await authed_client.get(
+        f"/forms/public/{surface}/{slug}",
+        params={"organization_id": str(other_org.id)},
+        headers={"origin": origin},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["messaging_consent"] == {
+        "phone_field_key": "phone",
+        "operational": None,
+        "promotional": None,
     }
 
 
@@ -1094,3 +1736,20 @@ async def test_embed_health_blocks_privacy_safe_file_fields(authed_client, db):
     assert checks["tracking_policy"]["status"] == "block"
     assert "supporting documents" in checks["tracking_policy"]["message"].lower()
     assert "file" in checks["tracking_policy"]["message"].lower()
+
+
+@pytest.mark.parametrize(
+    ("schema_snapshot", "message"),
+    [
+        (None, "Submission has no schema snapshot"),
+        ({"pages": "not-a-list"}, "Submission schema snapshot is invalid"),
+    ],
+)
+def test_submission_identity_rejects_missing_or_invalid_schema_snapshot(schema_snapshot, message):
+    submission = FormSubmission(
+        schema_snapshot=schema_snapshot,
+        answers_json={"phone": "+14155550198"},
+        mapping_snapshot=[],
+    )
+    with pytest.raises(ValueError, match=f"^{message}$"):
+        form_intake_service.extract_submission_identity(submission)

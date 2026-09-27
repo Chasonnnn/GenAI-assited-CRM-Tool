@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.deps import get_db, is_owner_or_can_manage, require_csrf_header, require_permission
 from app.core.permissions import PermissionKey as P
 from app.schemas.auth import UserSession
-from app.services import attachment_service, match_service, match_work_service, note_service
+from app.services import attachment_service, match_access, match_work_service, note_service
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 
 router = APIRouter(prefix="/matches", tags=["matches"])
@@ -106,7 +106,7 @@ def add_note(match_id: UUID, data: WorkNoteCreate, session: SessionDep, db: Data
     "/{match_id}/notes/{note_id}", status_code=204, dependencies=[Depends(require_csrf_header)]
 )
 def delete_note(match_id: UUID, note_id: UUID, session: SessionDep, db: DatabaseDep) -> Response:
-    match = match_service.get_match_with_access(db, session, match_id)
+    match = match_access.load(db, session, match_id)
     if match.surrogate_id:
         match_work_service.require_permission(db, session, P.SURROGATES_EDIT_NOTES)
     match_work_service.require_permission(db, session, P.MATCHES_PROPOSE)

@@ -216,6 +216,31 @@ def _strict_owner_filters(role: Role | str | None, user_id: UUID) -> list:
     return []
 
 
+def _record_scope_filters(db, org_id, user_id, role) -> list | None:
+    from types import SimpleNamespace
+
+    from sqlalchemy import false
+
+    from app.services import permission_policy_service, permission_service, record_scope_service
+
+    if not permission_policy_service.is_enabled(db, org_id):
+        return None
+    if not permission_service.check_permission(
+        db, org_id, user_id, _to_role_value(role), "view_surrogates"
+    ):
+        return [false()]
+    return [
+        record_scope_service.build_visibility_filter(
+            db, SimpleNamespace(org_id=org_id, user_id=user_id, role=role), "surrogate"
+        )
+    ]
+
+
+def _suggestion_owner_filters(db, org_id, user_id, role) -> list:
+    scoped = _record_scope_filters(db, org_id, user_id, role)
+    return scoped if scoped is not None else _strict_owner_filters(role, user_id)
+
+
 def _business_days_elapsed(
     *,
     start_at_utc: datetime,
@@ -317,7 +342,22 @@ def _resolve_stage_for_org(
 
 
 def serialize_rule(db: Session, rule: OrgIntelligentSuggestionRule) -> dict:
-    stage = _resolve_stage_for_org(db, rule.organization_id, rule.stage_slug)
+    return serialize_rules(db, rule.organization_id, [rule])[0]
+
+
+def serialize_rules(
+    db: Session, org_id: UUID, rules: list[OrgIntelligentSuggestionRule]
+) -> list[dict]:
+    if not rules:
+        return []
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org_id)
+    stages = pipeline_service.resolve_stages_bulk(
+        db, org_id, pipeline.id, [rule.stage_slug for rule in rules]
+    )
+    return [_serialize_rule(rule, stage) for rule, stage in zip(rules, stages, strict=True)]
+
+
+def _serialize_rule(rule: OrgIntelligentSuggestionRule, stage: PipelineStage | None) -> dict:
     return {
         "id": str(rule.id),
         "organization_id": str(rule.organization_id),
@@ -672,7 +712,7 @@ def _stage_inactivity_ids(
         .filter(
             Surrogate.organization_id == org_id,
             Surrogate.is_archived.is_(False),
-            *_strict_owner_filters(user_role, user_id),
+            *_suggestion_owner_filters(db, org_id, user_id, user_role),
         )
     )
 
@@ -719,6 +759,9 @@ def _attention_owner_filters(
     user_id: UUID,
     user_role: Role | str,
 ) -> list:
+    scoped = _record_scope_filters(db, org_id, user_id, user_role)
+    if scoped is not None:
+        return scoped
     owner_only = dashboard_service._should_scope_attention_to_owner(db, org_id, user_id, user_role)
     effective_owner_id = user_id if owner_only else None
     if effective_owner_id:
@@ -967,11 +1010,9 @@ def get_intelligent_summary(
             counts[FILTER_INTELLIGENT_STUCK_PREAPPROVAL] += len(rule_ids)
 
     total = len({sid for ids in results.values() for sid in ids})
-    rule_summaries = []
-    for rule in rules:
-        serialized = serialize_rule(db, rule)
+    rule_summaries = serialize_rules(db, org_id, rules)
+    for rule, serialized in zip(rules, rule_summaries, strict=True):
         serialized["match_count"] = len(results.get(rule.id, set()))
-        rule_summaries.append(serialized)
 
     return {
         "total": total,

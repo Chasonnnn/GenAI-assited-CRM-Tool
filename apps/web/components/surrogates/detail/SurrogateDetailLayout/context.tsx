@@ -26,6 +26,8 @@ import {
 } from "@/lib/hooks/use-user-integrations"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { useAuth } from "@/lib/auth-context"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import type { EffectivePermissions } from "@/lib/api/permissions"
 import {
     canRoleAccessStage,
     getSurrogateStageContext,
@@ -109,6 +111,8 @@ interface SurrogateDetailDataContextValue {
     navigateToList: () => void
 
     // Permissions
+    effectivePermissions: EffectivePermissions | undefined
+    canEditSurrogate: boolean
     canManageQueue: boolean
     canClaimSurrogate: boolean
     canChangeStage: boolean
@@ -265,7 +269,8 @@ type SurrogateDetailAuthUser = ReturnType<typeof useAuth>["user"]
 type SurrogateDetailRouterPush = ReturnType<typeof useRouter>["push"]
 type ZoomIdempotencyKeyRef = React.MutableRefObject<string | null>
 
-function canUserViewSurrogateProfile(user: SurrogateDetailAuthUser) {
+function canUserViewSurrogateProfile(user: SurrogateDetailAuthUser, permissions?: EffectivePermissions) {
+    if (permissions?.policy_version === 2) return permissions.permissions.includes("view_surrogates")
     return user ? ["case_manager", "admin", "developer"].includes(user.role) : false
 }
 
@@ -273,10 +278,12 @@ function useSurrogateDetailTabNavigation({
     surrogateId,
     canViewProfile,
     canViewEmails,
+    permissionsLoading,
 }: {
     surrogateId: string
     canViewProfile: boolean
     canViewEmails: boolean
+    permissionsLoading: boolean
 }) {
     const { push, replace } = useRouter()
     const searchParams = useSearchParams()
@@ -295,7 +302,7 @@ function useSurrogateDetailTabNavigation({
         return appendSearchToPath(nextPath, detailSearch)
     }
 
-    if (segment === "overview" || (segment && !isTabValue(segment))) {
+    if (segment === "overview" || (segment && !isTabValue(segment) && !permissionsLoading)) {
         redirect(getTabUrl("overview") as Route)
     }
 
@@ -318,15 +325,21 @@ function useSurrogateDetailDataValue({
     surrogateId,
     user,
     canViewProfile,
+    permissions,
     push,
     returnTo,
 }: {
     surrogateId: string
     user: SurrogateDetailAuthUser
     canViewProfile: boolean
+    permissions: EffectivePermissions | undefined
     push: SurrogateDetailRouterPush
     returnTo: string
 }) {
+    const isV2 = permissions?.policy_version === 2
+    const canManageQueue = isV2
+        ? permissions.permissions.includes("assign_surrogates")
+        : !!user?.role && ["case_manager", "admin", "developer"].includes(user.role)
     const timezoneName = getLocalTimezoneName()
     const { data: surrogateData, isLoading, error, refetch, isFetching } = useSurrogate(surrogateId)
     const surrogate = surrogateData || null
@@ -338,14 +351,14 @@ function useSurrogateDetailDataValue({
         { enabled: !!surrogate },
     )
     const { data: queues = [] } = useQueues(false, {
-        enabled: !!user?.role && ["case_manager", "admin", "developer"].includes(user.role),
+        enabled: canManageQueue,
     })
     const { data: assigneesData = [] } = useAssignees()
     const { data: zoomStatus } = useZoomStatus()
     const stageOptions = defaultPipeline?.stages ?? EMPTY_STAGES
     const stageById = new Map(stageOptions.map((stage) => [stage.id, stage]))
     const visibleStageOptions = (() => {
-        if (!user?.role) return stageOptions
+        if (isV2 || !user?.role) return stageOptions
         return stageOptions.filter((stage) =>
             canRoleAccessStage(user.role, stage, defaultPipeline?.feature_config, false)
         )
@@ -362,7 +375,6 @@ function useSurrogateDetailDataValue({
     const statusColor = stage?.color || "#6B7280"
     const noteCount = notes?.length ?? 0
     const taskCount = tasksData?.items?.length ?? 0
-    const canManageQueue = user?.role ? ["case_manager", "admin", "developer"].includes(user.role) : false
     const isOwnedByCurrentUser = !!(
         surrogate?.owner_type === "user" &&
         user?.user_id &&
@@ -371,9 +383,11 @@ function useSurrogateDetailDataValue({
     const canChangeStage = !!(
         surrogate &&
         !surrogate.is_archived &&
-        (["admin", "developer"].includes(user?.role || "") ||
-            (user?.role === "case_manager" && isOwnedByCurrentUser) ||
-            (user?.role === "intake_specialist" && isOwnedByCurrentUser))
+        (isV2
+            ? permissions.permissions.includes("edit_surrogates") && permissions.permissions.includes("change_surrogate_status")
+            : ["admin", "developer"].includes(user?.role || "") ||
+              (user?.role === "case_manager" && isOwnedByCurrentUser) ||
+              (user?.role === "intake_specialist" && isOwnedByCurrentUser))
     )
     const isInQueue = surrogate?.owner_type === "queue"
     const isOwnedByUser = surrogate?.owner_type === "user"
@@ -382,6 +396,7 @@ function useSurrogateDetailDataValue({
         surrogate &&
         !surrogate.is_archived &&
         isInQueue &&
+        user?.role !== "intake_specialist" &&
         canManageQueue
     )
 
@@ -428,6 +443,8 @@ function useSurrogateDetailDataValue({
         canViewProfile,
         timezoneName,
         navigateToList,
+        effectivePermissions: permissions,
+        canEditSurrogate: !isV2 || (!!surrogate && !surrogate.is_archived && permissions.permissions.includes("edit_surrogates")),
         canManageQueue,
         canClaimSurrogate,
         canChangeStage,
@@ -764,16 +781,23 @@ function useSurrogateDetailActionsValue({
 
 function SurrogateDetailLayoutProviderContent({ surrogateId, children }: SurrogateDetailLayoutProviderProps) {
     const { user } = useAuth()
-    const canViewProfile = canUserViewSurrogateProfile(user)
+    const { data: permissions, isLoading: permissionsLoading } = useEffectivePermissions(user?.user_id ?? null)
+    const canViewProfile = canUserViewSurrogateProfile(user, permissions)
     const permissionCheck = usePermissionCheck()
     // The emails tab reads ticket data, which the API gates on view_tickets. While permissions
     // load, keep the tab routable so a direct link is not redirected before the check resolves.
     const canViewEmails = permissionCheck.isLoading || permissionCheck.can("view_tickets")
-    const navigation = useSurrogateDetailTabNavigation({ surrogateId, canViewProfile, canViewEmails })
+    const navigation = useSurrogateDetailTabNavigation({
+        surrogateId,
+        canViewProfile,
+        canViewEmails,
+        permissionsLoading,
+    })
     const data = useSurrogateDetailDataValue({
         surrogateId,
         user,
         canViewProfile,
+        permissions,
         push: navigation.push,
         returnTo: navigation.returnTo,
     })

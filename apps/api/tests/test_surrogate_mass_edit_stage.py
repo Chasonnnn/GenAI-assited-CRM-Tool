@@ -146,9 +146,9 @@ async def test_mass_edit_stage_preview_and_apply_updates_surrogates_and_history(
         json={
             "filters": {"states": ["CA"]},
             "stage_id": str(disqualified_stage.id),
+            "reason": "No longer eligible",
             "expected_total": 2,
             "trigger_workflows": False,
-            "reason": "Bulk disqualify obvious non-fits",
         },
     )
     assert apply_res.status_code == 200, apply_res.text
@@ -207,6 +207,7 @@ async def test_mass_edit_stage_can_filter_by_age(authed_client, db, test_auth):
         json={
             "filters": {"age_max": 35},
             "stage_id": str(disqualified_stage.id),
+            "reason": "No longer eligible",
             "expected_total": 1,
             "trigger_workflows": False,
         },
@@ -237,6 +238,7 @@ async def test_mass_edit_stage_can_filter_by_race(authed_client, db, test_auth):
         json={
             "filters": {"races": ["Hispanic or Latino"]},
             "stage_id": str(disqualified_stage.id),
+            "reason": "No longer eligible",
             "expected_total": 1,
             "trigger_workflows": False,
         },
@@ -293,6 +295,7 @@ async def test_mass_edit_stage_can_filter_by_owner_id(authed_client, db, test_au
         json={
             "filters": {"owner_id": str(other_user.id)},
             "stage_id": str(disqualified_stage.id),
+            "reason": "No longer eligible",
             "expected_total": 1,
             "trigger_workflows": False,
         },
@@ -334,6 +337,7 @@ async def test_mass_edit_stage_bmi_filter_uses_rounded_inches(authed_client, db,
         json={
             "filters": {"bmi_min": 33.9},
             "stage_id": str(disqualified_stage.id),
+            "reason": "No longer eligible",
             "expected_total": 1,
             "trigger_workflows": False,
         },
@@ -376,6 +380,7 @@ async def test_mass_edit_stage_bmi_filter_matches_legacy_height_rounding(
         json={
             "filters": {"bmi_min": 34.0},
             "stage_id": str(disqualified_stage.id),
+            "reason": "No longer eligible",
             "expected_total": 1,
             "trigger_workflows": False,
         },
@@ -418,6 +423,7 @@ async def test_mass_edit_stage_race_filter_handles_canonical_aliases(authed_clie
         json={
             "filters": {"races": ["black_or_african_american"]},
             "stage_id": str(disqualified_stage.id),
+            "reason": "No longer eligible",
             "expected_total": 1,
             "trigger_workflows": False,
         },
@@ -440,6 +446,7 @@ async def test_mass_edit_stage_rejects_effective_at_field(authed_client, db, tes
         json={
             "filters": {"states": ["CA"]},
             "stage_id": str(disqualified_stage.id),
+            "reason": "No longer eligible",
             "expected_total": 1,
             "effective_at": datetime.now(UTC).isoformat(),
         },

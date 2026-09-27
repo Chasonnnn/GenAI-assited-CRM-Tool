@@ -15,7 +15,7 @@ const mockUseRunRecipients = vi.fn()
 const mockUpdateCampaign = vi.fn()
 const mockDeleteCampaign = vi.fn()
 const mockSendCampaign = vi.fn()
-let mockPermissions = new Set(["manage_email_templates"])
+const mockPublishCampaign = vi.fn()
 let mockCampaignError: Error | null = null
 let mockSearchParams = new URLSearchParams()
 let mockPreviewData: {
@@ -30,6 +30,9 @@ let mockPreviewData: {
     }>
 } = { total_count: 0, sample_recipients: [] }
 let mockCampaignData = {
+    scope: "org" as "personal" | "org",
+    can_edit: true, can_send: true, can_publish: false,
+    proposed_by_name: null as string | null,
     id: "camp1",
     name: "Test Campaign",
     description: null as string | null,
@@ -101,21 +104,12 @@ vi.mock("@/lib/hooks/use-campaigns", () => ({
     useRunRecipients: (campaignId: string, runId: string, params?: { status?: string; limit?: number }) =>
         mockUseRunRecipients(campaignId, runId, params),
     useDeleteCampaign: () => ({ mutateAsync: mockDeleteCampaign, isPending: false }),
+    usePublishCampaign: () => ({ mutate: mockPublishCampaign, isPending: false }),
     useDuplicateCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useCancelCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSendCampaign: () => ({ mutateAsync: mockSendCampaign, isPending: false }),
     useUpdateCampaign: () => ({ mutateAsync: mockUpdateCampaign, isPending: false }),
     useRetryFailedCampaignRun: () => ({ mutateAsync: vi.fn(), isPending: false }),
-}))
-
-vi.mock("@/lib/hooks/use-permission-check", () => ({
-    usePermissionCheck: () => ({
-        isLoading: false,
-        isError: false,
-        retry: vi.fn(),
-        isRetrying: false,
-        can: (permission: string) => mockPermissions.has(permission),
-    }),
 }))
 
 vi.mock("@/lib/hooks/use-email-templates", () => ({
@@ -189,6 +183,7 @@ describe("CampaignDetailPage", () => {
         }) as never)
         mockSearchParams = new URLSearchParams()
         mockCampaignData = {
+            scope: "org", can_edit: true, can_send: true, can_publish: false, proposed_by_name: null,
             id: "camp1",
             name: "Test Campaign",
             description: null,
@@ -213,13 +208,13 @@ describe("CampaignDetailPage", () => {
             opened_count: 0,
             clicked_count: 0,
         }
+        mockPublishCampaign.mockReset()
         mockUpdateCampaign.mockReset()
         mockUpdateCampaign.mockResolvedValue({})
         mockDeleteCampaign.mockReset()
         mockDeleteCampaign.mockResolvedValue({})
         mockSendCampaign.mockReset()
         mockSendCampaign.mockResolvedValue({ run_id: "run2" })
-        mockPermissions = new Set(["manage_email_templates"])
         mockCampaignError = null
         mockUseRunRecipients.mockReturnValue({ data: [] })
         mockPreviewData = { total_count: 0, sample_recipients: [] }
@@ -487,8 +482,7 @@ describe("CampaignDetailPage", () => {
     })
 
     it("hides manage actions and the recipient preview without campaign access", () => {
-        mockPermissions = new Set()
-        mockCampaignData = { ...mockCampaignData, status: "draft" }
+        mockCampaignData = { ...mockCampaignData, status: "draft", can_edit: false, can_send: false }
         render(<CampaignDetailPage />)
 
         expect(screen.queryByRole("button", { name: /^edit$/i })).not.toBeInTheDocument()
@@ -513,4 +507,29 @@ describe("CampaignDetailPage", () => {
 
         expect(screen.getAllByText("No recipients in this run")).toHaveLength(1)
     })
+
+    it("uses separate edit and send capabilities", () => {
+        mockCampaignData = { ...mockCampaignData, status: "draft", can_edit: false, can_send: true }
+        const view = render(<CampaignDetailPage />)
+        expect(screen.getByRole("button", { name: "Send Now" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /^edit$/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "More campaign actions" })).not.toBeInTheDocument()
+        view.unmount()
+
+        mockCampaignData = { ...mockCampaignData, status: "draft", can_edit: true, can_send: false }
+        render(<CampaignDetailPage />)
+        expect(screen.getByRole("button", { name: /^edit$/i })).toBeEnabled()
+        expect(screen.getByRole("button", { name: "More campaign actions" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Send Now" })).not.toBeInTheDocument()
+    })
+
+    it("shows proposer credit in Details and publishes a separate organization campaign", () => {
+        mockCampaignData = { ...mockCampaignData, scope: "personal", can_publish: true, proposed_by_name: "Former teammate" }
+        render(<CampaignDetailPage />)
+        fireEvent.click(screen.getByRole("tab", { name: "Details" }))
+        expect(screen.getByText("Former teammate")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Publish to organization" }))
+        expect(mockPublishCampaign).toHaveBeenCalledWith("camp1", expect.any(Object))
+    })
+
 })

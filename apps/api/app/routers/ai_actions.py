@@ -7,7 +7,13 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.deps import (
+    get_current_session,
+    get_db,
+    require_ai_enabled,
+    require_csrf_header,
+    require_permission,
+)
 from app.core.permissions import PermissionKey as P
 from app.schemas.auth import UserSession
 from app.services import ai_action_approval_service
@@ -28,7 +34,7 @@ class ActionApprovalResponse(BaseModel):
 @router.post(
     "/actions/{approval_id}/approve",
     response_model=ActionApprovalResponse,
-    dependencies=[Depends(require_csrf_header)],
+    dependencies=[Depends(require_csrf_header), Depends(require_ai_enabled)],
 )
 def approve_action(
     approval_id: uuid.UUID,

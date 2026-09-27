@@ -1,0 +1,12 @@
+$ pnpm run typecheck && pnpm run lint && pnpm run test
+$ tsc --noEmit
+$ eslint .
+$ NODE_OPTIONS=--localstorage-file=/tmp/vitest-localstorage vitest run
+
+ RUN  v4.1.9 /Users/chason/GenAI-assited-CRM-Tool/apps/web
+
+
+ Test Files  281 passed (281)
+      Tests  1644 passed (1644)
+   Start at  00:45:53
+   Duration  22.06s (transform 16.37s, setup 39.22s, import 105.17s, tests 89.58s, environment 108.14s)

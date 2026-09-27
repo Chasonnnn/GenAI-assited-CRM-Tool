@@ -53,7 +53,7 @@ async def test_platform_create_org_allows_two_char_slug(authed_client, db, test_
         "egg_donor",
         "sperm_donor",
     }
-    assert all(len(pipeline.stages) == 13 for pipeline in donor_pipelines)
+    assert all(len(pipeline.stages) == 14 for pipeline in donor_pipelines)
 
 
 @pytest.mark.asyncio

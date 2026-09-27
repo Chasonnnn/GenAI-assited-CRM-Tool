@@ -21,6 +21,7 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { StageSelect } from "@/components/stage-select"
+import { stageRequiresReasonOnEnter } from "@/lib/surrogate-stage-context"
 import { formatRace } from "@/lib/formatters"
 import { pipelineStageOptions } from "@/lib/stage-options"
 import { cn } from "@/lib/utils"
@@ -712,7 +713,10 @@ function MassEditActionSection({
             )}
 
             <div className="space-y-2">
-                <Label htmlFor="mass-reason">Reason (optional)</Label>
+                <Label htmlFor="mass-reason">
+                    {actionMode === "change_stage" && stageRequiresReasonOnEnter(selectedStage)
+                        ? "Reason *" : "Reason (optional)"}
+                </Label>
                 <Textarea
                     id="mass-reason"
                     value={reason}
@@ -1041,7 +1045,8 @@ function useMassEditStageModel({
         !!preview &&
         !preview.over_limit &&
         !isApplying &&
-        (actionMode === "archive" || !!targetStageId)
+        (actionMode === "archive" || (!!targetStageId &&
+            (!stageRequiresReasonOnEnter(selectedStage) || reason.trim().length > 0)))
 
     const handlePreview = async () => {
         if (!canPreview) return
@@ -1056,7 +1061,7 @@ function useMassEditStageModel({
     }
 
     const handleApply = async () => {
-        if (!preview) return
+        if (!preview || !canApply) return
         try {
             if (actionMode === "archive") {
                 const result = await applyArchiveMutation.mutateAsync({

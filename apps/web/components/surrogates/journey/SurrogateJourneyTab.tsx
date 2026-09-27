@@ -25,9 +25,10 @@ const CAN_EDIT_ROLES = ["case_manager", "admin", "developer"]
 
 interface SurrogateJourneyTabProps {
     surrogateId: string
+    editPermission?: boolean | undefined
 }
 
-export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
+export function SurrogateJourneyTab({ surrogateId, editPermission }: SurrogateJourneyTabProps) {
     const { data: journey, isLoading, error } = useSurrogateJourney(surrogateId)
     const { user } = useAuth()
 
@@ -40,7 +41,7 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
     } | null>(null)
 
     // Check if user can edit images
-    const canEditImages = user?.role ? CAN_EDIT_ROLES.includes(user.role) : false
+    const canEditImages = editPermission ?? (user?.role ? CAN_EDIT_ROLES.includes(user.role) : false)
 
     const [exportingVariant, setExportingVariant] = useState<JourneyExportVariant | null>(null)
     const isExporting = exportingVariant !== null
@@ -108,6 +109,7 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
     }
 
     const handleEditImage = (milestoneSlug: string) => {
+        if (!canEditImages) return
         const milestone = milestoneBySlug.get(milestoneSlug)
         if (!milestone) return
 
@@ -205,7 +207,7 @@ export function SurrogateJourneyTab({ surrogateId }: SurrogateJourneyTabProps) {
             </CardContent>
 
             {/* Image selector dialog */}
-            {selectedMilestone && (
+            {canEditImages && selectedMilestone && (
                 <MilestoneImageSelector
                     open={selectorOpen}
                     onOpenChange={setSelectorOpen}

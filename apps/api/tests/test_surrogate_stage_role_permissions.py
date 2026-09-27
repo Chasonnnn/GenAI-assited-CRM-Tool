@@ -137,7 +137,7 @@ async def test_case_manager_can_change_from_post_approval_to_terminal(db, test_o
 
         to_terminal = await client.patch(
             f"/surrogates/{surrogate.id}/status",
-            json={"stage_id": str(terminal_stage_id)},
+            json={"stage_id": str(terminal_stage_id), "reason": "No longer eligible"},
         )
         assert to_terminal.status_code == 200, to_terminal.text
         assert to_terminal.json()["status"] == "applied"
@@ -178,7 +178,7 @@ async def test_intake_can_change_to_terminal_stages(db, test_org, terminal_slug)
 
         to_terminal = await client.patch(
             f"/surrogates/{surrogate_id}/status",
-            json={"stage_id": str(terminal_stage_id)},
+            json={"stage_id": str(terminal_stage_id), "reason": "No longer eligible"},
         )
         assert to_terminal.status_code == 200, to_terminal.text
         assert to_terminal.json()["status"] == "applied"

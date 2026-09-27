@@ -51,9 +51,9 @@ def change_status(
 
     # Disallow setting Matched directly unless there is an accepted Match row
     if pipeline_service.stage_matches_key(target_stage, "matched"):
-        from app.services import match_service
+        from app.services import match_queries
 
-        accepted = match_service.get_accepted_match_for_surrogate(
+        accepted = match_queries.get_accepted_match_for_surrogate(
             db=db,
             org_id=session.org_id,
             surrogate_id=surrogate.id,

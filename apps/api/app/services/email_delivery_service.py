@@ -1016,9 +1016,9 @@ def _prelock_campaign_source_for_claim(
     claim: DeliveryClaim,
 ) -> None:
     """Honor the run -> campaign -> delivery lock order for campaign sends."""
-    from app.services import campaign_service
+    from app.services import campaign_delivery_service
 
-    campaign_service.lock_campaign_run_for_email_log(
+    campaign_delivery_service.lock_campaign_run_for_email_log(
         db,
         organization_id=claim.organization_id,
         email_log_id=claim.email_log_id,
@@ -1044,9 +1044,9 @@ def _project_source_delivery(
     )
 
     if email_log.source_type == "campaign_recipient":
-        from app.services import campaign_service
+        from app.services import campaign_delivery_service
 
-        projected = campaign_service.project_campaign_recipient_delivery(
+        projected = campaign_delivery_service.project_campaign_recipient_delivery(
             db,
             organization_id=email_log.organization_id,
             email_log_id=email_log.id,

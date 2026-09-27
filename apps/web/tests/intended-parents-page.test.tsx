@@ -163,6 +163,25 @@ describe('IntendedParentsPage', () => {
         })
     })
 
+    it("uses Create independently of Edit under V2 and closes on revocation", async () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_intended_parents", "edit_intended_parents"] } })
+        const { rerender } = render(<IntendedParentsPage />)
+        expect(screen.queryByRole("button", { name: "New Intended Parent" })).not.toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_intended_parents", "create_intended_parents"] } })
+        rerender(<IntendedParentsPage />)
+        fireEvent.click(screen.getByRole("button", { name: "New Intended Parent" }))
+        expect(screen.getByRole("dialog")).toBeInTheDocument()
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_intended_parents"] } })
+        rerender(<IntendedParentsPage />)
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    })
+
+    it.each([{ data: undefined, isLoading: true }, { data: undefined, isError: true }])("hides Create until permissions load successfully", (result) => {
+        mockUseEffectivePermissions.mockReturnValue(result)
+        render(<IntendedParentsPage />)
+        expect(screen.queryByRole("button", { name: "New Intended Parent" })).not.toBeInTheDocument()
+    })
+
     it('renders the header count, toolbar and a list row without stat cards', () => {
         render(<IntendedParentsPage />)
         expect(screen.getByRole('heading', { level: 1, name: 'Intended Parents' })).toBeInTheDocument()

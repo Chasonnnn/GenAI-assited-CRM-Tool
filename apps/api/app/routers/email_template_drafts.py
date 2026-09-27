@@ -30,8 +30,8 @@ from app.schemas.email_template_drafts import (
 )
 from app.services import (
     email_service,
+    email_template_access,
     email_template_draft_service,
-    permission_service,
     version_service,
 )
 
@@ -40,20 +40,6 @@ router = APIRouter(
     tags=["Email Template Drafts"],
     dependencies=[Depends(require_permission(POLICIES["email_templates"].default))],
 )
-
-
-def _has_manage_permission(db: Session, session) -> bool:
-    manage_permission = POLICIES["email_templates"].actions["manage"]
-    permission_key = (
-        manage_permission.value if hasattr(manage_permission, "value") else str(manage_permission)
-    )
-    return permission_service.check_permission(
-        db,
-        session.org_id,
-        session.user_id,
-        session.role.value,
-        permission_key,
-    )
 
 
 def _is_admin(session) -> bool:
@@ -67,18 +53,16 @@ def _require_template_editor(
     scope: str,
     owner_user_id: UUID | None,
 ) -> None:
-    if scope == "org":
-        if not _has_manage_permission(db, session):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Missing permission: manage_email_templates",
-            )
+    if email_template_access.can_edit_template(
+        db, session, scope=scope, owner_user_id=owner_user_id
+    ):
         return
-    if owner_user_id != session.user_id and not _is_admin(session):
+    if scope == "org":
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Draft not found",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Missing permission: manage_email_templates",
         )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found")
 
 
 def _require_draft_editor(db: Session, session, draft: Any) -> None:
@@ -147,7 +131,7 @@ def list_email_template_drafts(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
 ):
-    can_manage = _has_manage_permission(db, session)
+    can_manage = email_template_access.has_manage_permission(db, session)
     if scope == "org" and not can_manage:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -162,6 +146,14 @@ def list_email_template_drafts(
         scope_filter=scope,
         show_all_personal=show_all_personal and _is_admin(session),
     )
+    audited = [
+        email_template_access.audit_private_read(
+            db, session, draft, target_type="email_template_draft"
+        )
+        for draft in drafts
+    ]
+    if any(audited):
+        db.commit()
     return [_build_draft_response(draft) for draft in drafts]
 
 
@@ -249,6 +241,10 @@ def get_email_template_draft(
     if draft is None:
         raise HTTPException(status_code=404, detail="Draft not found")
     _require_draft_editor(db, session, draft)
+    if email_template_access.audit_private_read(
+        db, session, draft, target_type="email_template_draft"
+    ):
+        db.commit()
     return _build_draft_response(draft)
 
 
