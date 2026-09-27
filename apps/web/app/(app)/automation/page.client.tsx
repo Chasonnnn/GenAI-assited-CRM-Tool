@@ -1477,8 +1477,11 @@ function useAutomationPageView({
                         }}
                         className="space-y-4"
                     >
-                        <div className="flex items-center justify-between">
-                            <TabsList>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <TabsList
+                                aria-label="Workflow scope"
+                                className="max-w-full justify-start overflow-x-auto"
+                            >
                                 <TabsTrigger value="personal" className="gap-2">
                                     <UserIcon className="size-4" />
                                     My Workflows
@@ -1493,7 +1496,7 @@ function useAutomationPageView({
                                 </TabsTrigger>
                             </TabsList>
                             {!isTemplatesTab && canCreateInActiveScope && (
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                     {canUseAI ? (
                                         <Button
                                             variant="outline"

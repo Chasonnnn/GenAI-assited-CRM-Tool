@@ -353,6 +353,18 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByRole("tab", { name: "My Signature" })).toBeInTheDocument()
     })
 
+    it("scrolls the template tabs and wraps the list filters at narrow widths", () => {
+        render(<EmailTemplatesPage />)
+
+        const tabList = screen.getByRole("tablist", { name: "Template type" })
+        expect(tabList).toHaveClass("max-w-full", "overflow-x-auto", "justify-start")
+        const row = tabList.parentElement
+        expect(row).toHaveClass("flex-wrap")
+        const filters = screen.getByRole("combobox").closest("div.flex-wrap")
+        expect(filters).not.toBe(row)
+        expect(row).toContainElement(filters as HTMLElement)
+    })
+
     it("shows a friendly label for the personal-template ownership filter", () => {
         render(<EmailTemplatesPage />)
 
@@ -792,6 +804,8 @@ describe("EmailTemplatesPage", () => {
 
         expect(screen.getByText("New Journey Draft")).toBeInTheDocument()
         expect(screen.getByText("Unpublished draft")).toBeInTheDocument()
+        // The header row must be allowed to shrink, or the badge is pushed out of the card at 390px.
+        expect(screen.getByText("Unpublished draft").parentElement).toHaveClass("min-w-0")
         fireEvent.click(screen.getByRole("button", { name: "Resume New Journey Draft" }))
 
         expect(mockRouterPush).toHaveBeenCalledWith(

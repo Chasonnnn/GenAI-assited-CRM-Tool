@@ -25,7 +25,13 @@ export function WizardStepper({
                     <li
                         key={label}
                         aria-current={isCurrent ? "step" : undefined}
-                        className={cn("flex min-w-0 items-center gap-2 sm:gap-3", index < steps.length - 1 && "flex-1")}
+                        className={cn(
+                            "flex min-w-0 items-center gap-2 sm:gap-3",
+                            index < steps.length - 1 && "flex-1",
+                            // The current step shows its label at every width; without this its
+                            // equal flex share is narrower than the label and it overlaps the next step.
+                            isCurrent && "min-w-fit",
+                        )}
                     >
                         <span className="flex shrink-0 items-center gap-2">
                             <span

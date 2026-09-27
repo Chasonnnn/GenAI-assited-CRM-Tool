@@ -1147,8 +1147,11 @@ function useEmailTemplatesPageView() {
             {/* Content */}
             <div className="flex-1 p-6">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <div className="flex items-center justify-between mb-6">
-                        <TabsList>
+                    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+                        <TabsList
+                            aria-label="Template type"
+                            className="max-w-full justify-start overflow-x-auto"
+                        >
                             <TabsTrigger value="personal" className="gap-2">
                                 <UserIcon className="size-4" />
                                 My Email Templates
@@ -1166,7 +1169,7 @@ function useEmailTemplatesPageView() {
 
                         {(activeTab === "personal" ||
                             (activeTab === "org" && canManageEmailTemplates)) && (
-                            <div className="flex items-center gap-4">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                                 <div className="flex items-center gap-2">
                                     <Checkbox
                                         id={`hide-inactive-${activeTab}-templates`}

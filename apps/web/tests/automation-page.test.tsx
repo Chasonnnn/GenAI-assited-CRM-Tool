@@ -237,6 +237,25 @@ describe('AutomationPage', () => {
         expect(screen.getByText('Workflow Templates')).toBeInTheDocument()
     })
 
+    it('scrolls the scope tabs and wraps the create actions at narrow widths', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_automation'] },
+        })
+        renderAutomationPage()
+
+        const tabList = screen.getByRole('tablist', { name: 'Workflow scope' })
+        expect(tabList).toHaveClass('max-w-full', 'overflow-x-auto', 'justify-start')
+
+        const row = tabList.parentElement
+        expect(row).toHaveClass('flex-wrap')
+        const createButton = getFirstElement(
+            screen.getAllByRole('button', { name: 'Create Org Workflow' }),
+            'Expected a create org workflow button',
+        )
+        expect(row).toContainElement(createButton)
+        expect(createButton.parentElement).toHaveClass('flex-wrap')
+    })
+
     it('uses org scope for the first admin workflow query when no scope is explicit', () => {
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ['manage_automation'] },

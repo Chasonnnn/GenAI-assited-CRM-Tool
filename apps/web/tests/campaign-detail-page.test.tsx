@@ -457,6 +457,20 @@ describe("CampaignDetailPage", () => {
         await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/automation/campaigns"))
     })
 
+    it("wraps the header actions below a long name at narrow widths", () => {
+        mockCampaignData = { ...mockCampaignData, status: "draft" }
+        render(<CampaignDetailPage />)
+
+        const title = screen.getByRole("heading", { level: 1, name: "Test Campaign" })
+        expect(title).toHaveClass("min-w-0", "break-words")
+        const actions = screen.getByRole("button", { name: "Send Now" }).parentElement
+        expect(actions).toHaveClass("flex-wrap")
+        const row = actions?.parentElement
+        expect(row).toHaveClass("flex-wrap")
+        expect(row).toContainElement(title)
+        expect(actions).toContainElement(screen.getByRole("button", { name: "More campaign actions" }))
+    })
+
     it("names the recipient count in the Send Now confirmation", async () => {
         mockCampaignData = { ...mockCampaignData, status: "draft" }
         mockPreviewData = { total_count: 12, sample_recipients: [] }
