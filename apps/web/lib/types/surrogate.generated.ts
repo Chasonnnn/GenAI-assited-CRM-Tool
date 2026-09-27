@@ -10,6 +10,7 @@ export interface SurrogateListItem {
     stage_slug?: string | null;
     stage_type?: string | null;
     status_label: string;
+    paused_from_stage_id?: string | null;
     source: SurrogateSource;
     full_name: string;
     email: string;

@@ -6,7 +6,14 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from app.db.enums import OwnerType, SurrogateSource
 from app.utils.height import canonicalize_height_ft
@@ -540,11 +547,39 @@ class BulkStageChangeFailure(BaseModel):
     reason: str
 
 
+class BulkStageInterviewTime(BaseModel):
+    """Interview start for one surrogate in a bulk move to Interview Scheduled."""
+
+    surrogate_id: UUID
+    scheduled_at: datetime
+
+
 class BulkStageChange(BaseModel):
-    """Request schema for selected-row bulk surrogate stage changes."""
+    """Request schema for selected-row bulk surrogate stage changes.
+
+    reason: shared by every row; copied to each history entry and stage note.
+    interview_times: one entry per surrogate when moving to Interview Scheduled.
+    override_availability: book interview times outside the owner's availability;
+        the shared reason is the override reason.
+    """
 
     surrogate_ids: list[UUID] = Field(min_length=1, max_length=100)
     stage_id: UUID
+    reason: str | None = Field(None, max_length=500)
+    on_hold_follow_up_months: Literal[1, 3, 6] | None = None
+    interview_times: list[BulkStageInterviewTime] = Field(default_factory=list, max_length=100)
+    override_availability: bool = False
+
+    @model_validator(mode="after")
+    def validate_selection(self):
+        if len(set(self.surrogate_ids)) != len(self.surrogate_ids):
+            raise ValueError("Each surrogate can be selected only once")
+        interview_ids = [entry.surrogate_id for entry in self.interview_times]
+        if len(set(interview_ids)) != len(interview_ids):
+            raise ValueError("Each surrogate can have only one interview time")
+        if not set(interview_ids) <= set(self.surrogate_ids):
+            raise ValueError("Interview times must belong to selected surrogates")
+        return self
 
 
 class BulkStageChangeResult(BaseModel):
@@ -552,6 +587,7 @@ class BulkStageChangeResult(BaseModel):
 
     requested: int
     applied: int
+    pending_approval: int
     failed: list[BulkStageChangeFailure]
 
 
@@ -766,6 +802,7 @@ class SurrogateListItem(BaseModel):
     stage_slug: str | None = None
     stage_type: str | None = None
     status_label: str
+    paused_from_stage_id: UUID | None = None
     source: SurrogateSource
     full_name: str
     email: str

@@ -26,7 +26,7 @@ import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
-import type { SurrogateSource } from "@/lib/types/surrogate"
+import type { SurrogateListItem, SurrogateSource } from "@/lib/types/surrogate"
 import { isDynamicSurrogateFilter, type DynamicSurrogateFilter, type SurrogateMassEditStageFilters } from "@/lib/api/surrogates"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { cn } from "@/lib/utils"
@@ -34,7 +34,11 @@ import { formatRace } from "@/lib/formatters"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { toast } from "@/components/ui/toast"
 import { MassEditStageModal } from "@/components/surrogates/MassEditStageModal"
-import { BulkChangeStageModal } from "@/components/surrogates/BulkChangeStageModal"
+import {
+    BulkChangeStageModal,
+    type BulkStageChangeInput,
+    type BulkStageSurrogate,
+} from "@/components/surrogates/BulkChangeStageModal"
 import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
@@ -71,20 +75,35 @@ function getInitials(name: string | null): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
+const BULK_STAGE_FAILURES_SHOWN = 5
+
+function pluralSurrogates(count: number): string {
+    return `${count} surrogate${count === 1 ? '' : 's'}`
+}
+
+function toBulkStageSurrogate(surrogate: SurrogateListItem): BulkStageSurrogate {
+    return {
+        id: surrogate.id,
+        full_name: surrogate.full_name,
+        stage_id: surrogate.stage_id,
+        paused_from_stage_id: surrogate.paused_from_stage_id ?? null,
+    }
+}
+
 // Floating Action Bar for bulk operations
 function FloatingActionBar({
-    selectedCount,
-    selectedSurrogateIds,
+    selectedSurrogates,
     stages,
     onClear,
     onSelectionChange,
 }: {
-    selectedCount: number
-    selectedSurrogateIds: string[]
+    selectedSurrogates: BulkStageSurrogate[]
     stages: PipelineStage[]
     onClear: () => void
     onSelectionChange: (surrogateIds: string[]) => void
 }) {
+    const selectedCount = selectedSurrogates.length
+    const selectedSurrogateIds = selectedSurrogates.map((surrogate) => surrogate.id)
     const { user } = useAuth()
     const { data: assignees } = useAssignees()
     const bulkAssignMutation = useBulkAssign()
@@ -112,34 +131,52 @@ function FloatingActionBar({
         onClear()
     }
 
-    const handleBulkStageChange = async (stageId: string) => {
+    const handleBulkStageChange = async (input: BulkStageChangeInput) => {
         try {
             const result = await bulkChangeStageMutation.mutateAsync({
                 surrogate_ids: selectedSurrogateIds,
-                stage_id: stageId,
+                ...input,
             })
             setIsChangeStageOpen(false)
 
+            const pendingText = result.pending_approval > 0
+                ? ` ${result.pending_approval} pending approval.`
+                : ''
+
             if (result.failed.length === 0) {
                 onClear()
-                toast.success(
-                    `Changed stage for ${result.applied} surrogate${result.applied === 1 ? '' : 's'}.`
-                )
+                toast.success(`Changed stage for ${pluralSurrogates(result.applied)}.${pendingText}`)
                 return
             }
 
             const failedIds = result.failed.map((entry) => entry.surrogate_id)
             onSelectionChange(failedIds)
 
-            if (result.applied > 0) {
+            const nameById = new Map(selectedSurrogates.map((surrogate) => [surrogate.id, surrogate.full_name]))
+            const hiddenFailures = result.failed.length - BULK_STAGE_FAILURES_SHOWN
+            // The toast renders its description inside a <p>, so each failure is a block span.
+            const failureList = (
+                <>
+                    {result.failed.slice(0, BULK_STAGE_FAILURES_SHOWN).map((entry) => (
+                        <span key={entry.surrogate_id} className="block">
+                            {nameById.get(entry.surrogate_id) ?? entry.surrogate_id}: {entry.reason}
+                        </span>
+                    ))}
+                    {hiddenFailures > 0 ? <span className="block">{hiddenFailures} more</span> : null}
+                </>
+            )
+            // Failure reasons are shown only in this toast, so it stays until dismissed.
+            const failureToast = { description: failureList, duration: 0 }
+
+            if (result.applied > 0 || result.pending_approval > 0) {
                 toast.warning(
-                    `Changed stage for ${result.applied} surrogate${result.applied === 1 ? '' : 's'}; ${result.failed.length} failed.`
+                    `Changed stage for ${result.applied} of ${pluralSurrogates(result.requested)}; ${result.failed.length} failed.${pendingText}`,
+                    failureToast,
                 )
                 return
             }
 
-            const firstReason = result.failed[0]?.reason ?? "Bulk stage change failed"
-            toast.error(`${firstReason} (${result.failed.length} failed).`)
+            toast.error(`Stage change failed for ${pluralSurrogates(result.failed.length)}.`, failureToast)
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to change stage"
             toast.error(message)
@@ -153,10 +190,11 @@ function FloatingActionBar({
 
     return (
         <>
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-                <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
+            {/* The full-width wrapper keeps a 16px gutter; only the bar itself takes clicks. */}
+            <div className="pointer-events-none fixed inset-x-4 bottom-6 z-50 flex justify-center">
+                <div className="pointer-events-auto bg-primary text-primary-foreground shadow-lg rounded-lg px-4 py-3 sm:px-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                     <span className="font-medium">{selectedCount} surrogate{selectedCount > 1 ? 's' : ''} selected</span>
-                    <div className="h-4 w-px bg-primary-foreground/30" />
+                    <div className="hidden h-4 w-px bg-primary-foreground/30 sm:block" />
 
                     {canAssign && (
                         <DropdownMenu>
@@ -204,7 +242,7 @@ function FloatingActionBar({
             <BulkChangeStageModal
                 open={isChangeStageOpen}
                 onOpenChange={setIsChangeStageOpen}
-                selectedCount={selectedCount}
+                surrogates={selectedSurrogates}
                 stages={stages}
                 isPending={bulkChangeStageMutation.isPending}
                 onSubmit={handleBulkStageChange}
@@ -587,7 +625,7 @@ export function SurrogatesPageClient() {
         value: debouncedSearch,
     }))
     const searchQuery = searchDraft.query === currentQuery ? searchDraft.value : debouncedSearch
-    const [selectedSurrogates, setSelectedSurrogates] = useState<Set<string>>(new Set())
+    const [selectedSurrogates, setSelectedSurrogates] = useState<Map<string, BulkStageSurrogate>>(new Map())
     const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false)
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [isMassEditOpen, setIsMassEditOpen] = useState(false)
@@ -996,7 +1034,7 @@ export function SurrogatesPageClient() {
         clearPendingSearchCommit()
         setSearchDraft({ query: "", value: "" })
         setIsMoreFiltersOpen(false)
-        setSelectedSurrogates(new Set())
+        setSelectedSurrogates(new Map())
         // Clear URL params
         replace('/surrogates', { scroll: false })
     }
@@ -1096,25 +1134,32 @@ export function SurrogatesPageClient() {
     // Multi-select handlers
     const handleSelectAll = (checked: boolean) => {
         if (checked && data?.items) {
-            setSelectedSurrogates(new Set(data.items.map(s => s.id)))
+            setSelectedSurrogates(new Map(data.items.map(s => [s.id, toBulkStageSurrogate(s)])))
         } else {
-            setSelectedSurrogates(new Set())
+            setSelectedSurrogates(new Map())
         }
     }
 
-    const handleSelectSurrogate = (surrogateId: string, checked: boolean) => {
-        const newSelected = new Set(selectedSurrogates)
+    const handleSelectSurrogate = (surrogate: SurrogateListItem, checked: boolean) => {
+        const newSelected = new Map(selectedSurrogates)
         if (checked) {
-            newSelected.add(surrogateId)
+            newSelected.set(surrogate.id, toBulkStageSurrogate(surrogate))
         } else {
-            newSelected.delete(surrogateId)
+            newSelected.delete(surrogate.id)
         }
         setSelectedSurrogates(newSelected)
     }
 
     const clearSelection = () => {
-        setSelectedSurrogates(new Set())
+        setSelectedSurrogates(new Map())
     }
+
+    // Selection can span pages; rows on the current page use fresh list data.
+    const visibleItemsById = new Map((data?.items ?? []).map(item => [item.id, item]))
+    const selectedRows = Array.from(selectedSurrogates.values(), (snapshot) => {
+        const visible = visibleItemsById.get(snapshot.id)
+        return visible ? toBulkStageSurrogate(visible) : snapshot
+    })
 
     const handleArchive = async (surrogateId: string) => {
         await archiveMutation.mutateAsync(surrogateId)
@@ -1619,7 +1664,7 @@ export function SurrogatesPageClient() {
                                                 <TableCell>
                                                     <Checkbox
                                                         checked={selectedSurrogates.has(surrogateItem.id)}
-                                                        onCheckedChange={(checked) => handleSelectSurrogate(surrogateItem.id, !!checked)}
+                                                        onCheckedChange={(checked) => handleSelectSurrogate(surrogateItem, !!checked)}
                                                         aria-label={`Select ${surrogateItem.full_name}`}
                                                     />
                                                 </TableCell>
@@ -1786,12 +1831,14 @@ export function SurrogatesPageClient() {
                 {/* Floating Action Bar for Multi-Select */}
                 {selectedSurrogates.size > 0 && (
                     <FloatingActionBar
-                        selectedCount={selectedSurrogates.size}
-                        selectedSurrogateIds={Array.from(selectedSurrogates)}
+                        selectedSurrogates={selectedRows}
                         stages={stageOptions}
                         onClear={clearSelection}
                         onSelectionChange={(surrogateIds) => {
-                            setSelectedSurrogates(new Set(surrogateIds))
+                            const keep = new Set(surrogateIds)
+                            setSelectedSurrogates((current) =>
+                                new Map(Array.from(current).filter(([id]) => keep.has(id)))
+                            )
                         }}
                     />
                 )}
