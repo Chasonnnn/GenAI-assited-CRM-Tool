@@ -4,8 +4,19 @@ import { useReducer } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from "@/components/app-link";
 import { useRouter } from 'next/navigation';
-import { listOrganizations } from '@/lib/api/platform';
+import { getPlatformStats, listOrganizations } from '@/lib/api/platform';
 import { buttonVariants } from '@/components/ui/button-variants';
+import { PageHeader } from '@/components/page-header';
+import { EmptyState } from '@/components/empty-state';
+import { QueryErrorState } from '@/components/error-state';
+import { toSelectOptions } from '@/lib/select-labels';
+import {
+    PLAN_BADGE_VARIANTS,
+    STATUS_BADGE_VARIANTS,
+    SUBSCRIPTION_STATUS_LABELS,
+    getSubscriptionPlanLabel,
+    getSubscriptionStatusLabel,
+} from '@/components/ops/agencies/agency-constants';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -26,19 +37,6 @@ import {
 import { RelativeTime } from '@/components/ui/time-display';
 import { Building2, Plus, Search, ChevronRight, Loader2, Users } from 'lucide-react';
 
-const STATUS_BADGE_VARIANTS: Record<string, string> = {
-    active: 'bg-green-500/10 text-green-600 border-green-500/20',
-    trial: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
-    past_due: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
-    canceled: 'bg-red-500/10 text-red-600 border-red-500/20',
-};
-
-const PLAN_BADGE_VARIANTS: Record<string, string> = {
-    starter: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300',
-    professional: 'bg-teal-500/10 text-teal-600 dark:text-teal-400',
-    enterprise: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
-};
-
 type AgenciesState = {
     search: string
     statusFilter: string
@@ -47,6 +45,7 @@ type AgenciesState = {
 type AgenciesAction =
     | { type: "set-search"; search: string }
     | { type: "set-status-filter"; statusFilter: string }
+    | { type: "clear-filters" }
 
 const INITIAL_AGENCIES_STATE: AgenciesState = {
     search: "",
@@ -59,6 +58,8 @@ function agenciesReducer(state: AgenciesState, action: AgenciesAction): Agencies
             return { ...state, search: action.search }
         case "set-status-filter":
             return { ...state, statusFilter: action.statusFilter }
+        case "clear-filters":
+            return INITIAL_AGENCIES_STATE
     }
 }
 
@@ -73,92 +74,114 @@ export default function AgenciesPage() {
             { search: search || null, status: statusFilter || null },
         ],
         queryFn: async () => {
-            try {
-                const data = await listOrganizations({
-                    ...(search ? { search } : {}),
-                    ...(statusFilter ? { status: statusFilter } : {}),
-                });
-                return {
-                    ...data,
-                    items: data.items.filter((item) => !item.deleted_at),
-                };
-            } catch (error) {
-                console.error('Failed to fetch agencies:', error);
-                throw error;
-            }
+            const data = await listOrganizations({
+                ...(search ? { search } : {}),
+                ...(statusFilter ? { status: statusFilter } : {}),
+            });
+            return {
+                ...data,
+                items: data.items.filter((item) => !item.deleted_at),
+            };
         },
         retry: false,
         staleTime: 30_000,
     });
+    // Same query the ops layout uses for the nav badge, so this reads from cache.
+    const statsQuery = useQuery({
+        queryKey: ['platform', 'stats'],
+        queryFn: getPlatformStats,
+        retry: false,
+        staleTime: 60_000,
+    });
     const agencies = agenciesQuery.data?.items ?? [];
-    const total = agenciesQuery.data?.total ?? 0;
     const isLoading = agenciesQuery.isFetching;
+    const hasActiveFilters = search.trim() !== '' || statusFilter !== '';
+    const clearFilters = () => dispatch({ type: "clear-filters" });
+
+    const createAgencyLink = (
+        <Link href="/ops/agencies/new" className={buttonVariants()}>
+            <Plus className="size-4" aria-hidden="true" />
+            Create Agency
+        </Link>
+    );
 
     return (
-        <div className="p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
-                        Agencies
-                    </h1>
-                    <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-                        {total} total agencies
-                    </p>
-                </div>
-                <Link href="/ops/agencies/new" className={buttonVariants()}>
-                    <Plus className="mr-2 size-4" />
-                    Create Agency
-                </Link>
-            </div>
+        <div>
+            <PageHeader
+                title="Agencies"
+                count={agenciesQuery.isSuccess ? agencies.length : null}
+                countTotal={statsQuery.data?.agency_count}
+                countLabel="agencies"
+                actions={createAgencyLink}
+            />
 
-            {/* Filters */}
-            <div className="flex gap-4">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-stone-400" />
-                    <Input
-                        placeholder="Search by name or slug..."
-                        value={search}
-                        onChange={(e) => dispatch({ type: "set-search", search: e.target.value })}
-                        className="pl-9"
+            <div className="p-6 space-y-6">
+                {/* Filters */}
+                <div className="flex flex-wrap gap-4">
+                    <div className="relative w-full sm:max-w-sm sm:flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" aria-hidden="true" />
+                        <Input
+                            placeholder="Search by name or slug..."
+                            aria-label="Search agencies"
+                            value={search}
+                            onChange={(e) => dispatch({ type: "set-search", search: e.target.value })}
+                            className="pl-9"
+                        />
+                    </div>
+                    <Select
+                        value={statusFilter}
+                        onValueChange={(v) => dispatch({ type: "set-status-filter", statusFilter: v || "" })}
+                    >
+                        <SelectTrigger className="w-full sm:w-[180px]" aria-label="Filter by status">
+                            <SelectValue placeholder="All statuses">{getSubscriptionStatusLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="">All statuses</SelectItem>
+                            {toSelectOptions(SUBSCRIPTION_STATUS_LABELS).map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                {/* Table */}
+                {agenciesQuery.isError ? (
+                <div className="border rounded-lg bg-card">
+                    <QueryErrorState
+                        error={agenciesQuery.error}
+                        onRetry={() => void agenciesQuery.refetch()}
+                        isRetrying={agenciesQuery.isFetching}
+                        title="Couldn't load agencies"
+                        headingLevel={2}
+                        className="min-h-0 py-12"
                     />
                 </div>
-                <Select
-                    value={statusFilter}
-                    onValueChange={(v) => dispatch({ type: "set-status-filter", statusFilter: v || "" })}
-                >
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="All statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="">All statuses</SelectItem>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="trial">Trial</SelectItem>
-                        <SelectItem value="past_due">Past Due</SelectItem>
-                        <SelectItem value="canceled">Canceled</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-
-            {/* Table */}
-            {isLoading ? (
+            ) : isLoading ? (
                 <div className="flex items-center justify-center py-16">
                     <Loader2 className="size-8 animate-spin text-muted-foreground" />
                 </div>
             ) : agencies.length === 0 ? (
-                <div className="text-center py-16 border rounded-lg bg-white dark:bg-stone-900">
-                    <Building2 className="mx-auto size-12 text-muted-foreground/50 mb-4" />
-                    <h3 className="text-lg font-medium text-foreground">No agencies yet</h3>
-                    <p className="text-muted-foreground mt-1 mb-4">
-                        Create your first agency to get started
-                    </p>
-                    <Link href="/ops/agencies/new" className={buttonVariants()}>
-                        <Plus className="mr-2 size-4" />
-                        Create Agency
-                    </Link>
+                <div className="border rounded-lg bg-card">
+                    {hasActiveFilters ? (
+                        <EmptyState
+                            icon={Building2}
+                            title="No matching agencies"
+                            headingLevel={2}
+                            onClearFilters={clearFilters}
+                        />
+                    ) : (
+                        <EmptyState
+                            icon={Building2}
+                            title="No agencies yet"
+                            headingLevel={2}
+                            action={createAgencyLink}
+                        />
+                    )}
                 </div>
             ) : (
-                <div className="border rounded-lg bg-white dark:bg-stone-900">
+                <div className="border rounded-lg bg-card">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -175,26 +198,26 @@ export default function AgenciesPage() {
                             {agencies.map((agency) => (
                                 <TableRow
                                     key={agency.id}
-                                    className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                                    className="cursor-pointer hover:bg-muted/50"
                                     onClick={() => push(`/ops/agencies/${agency.id}`)}
                                 >
                                     <TableCell>
                                         <div>
-                                            <div className="font-medium text-stone-900 dark:text-stone-100">
+                                            <div className="font-medium text-foreground">
                                                 {agency.name}
                                             </div>
-                                            <div className="text-xs font-mono text-stone-500">
+                                            <div className="text-xs font-mono text-muted-foreground">
                                                 {agency.slug}
                                             </div>
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-1.5 text-stone-600 dark:text-stone-300">
-                                            <Users className="size-3.5" />
+                                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                                            <Users className="size-3.5" aria-hidden="true" />
                                             {agency.member_count}
                                         </div>
                                     </TableCell>
-                                    <TableCell className="text-stone-600 dark:text-stone-300">
+                                    <TableCell className="text-muted-foreground">
                                         {agency.surrogate_count}
                                     </TableCell>
                                     <TableCell>
@@ -202,7 +225,7 @@ export default function AgenciesPage() {
                                             variant="outline"
                                             className={PLAN_BADGE_VARIANTS[agency.subscription_plan]}
                                         >
-                                            {agency.subscription_plan}
+                                            {getSubscriptionPlanLabel(agency.subscription_plan)}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>
@@ -210,14 +233,14 @@ export default function AgenciesPage() {
                                             variant="outline"
                                             className={STATUS_BADGE_VARIANTS[agency.subscription_status]}
                                         >
-                                            {agency.subscription_status}
+                                            {getSubscriptionStatusLabel(agency.subscription_status)}
                                         </Badge>
                                     </TableCell>
-                                    <TableCell className="text-stone-500 dark:text-stone-400 text-sm">
+                                    <TableCell className="text-muted-foreground text-sm">
                                         <RelativeTime value={agency.created_at} />
                                     </TableCell>
                                     <TableCell>
-                                        <ChevronRight className="size-4 text-stone-400" />
+                                        <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -225,6 +248,7 @@ export default function AgenciesPage() {
                     </Table>
                 </div>
             )}
+            </div>
         </div>
     );
 }

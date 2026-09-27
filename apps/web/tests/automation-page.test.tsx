@@ -2,6 +2,7 @@ import type { PropsWithChildren, ButtonHTMLAttributes, ReactNode } from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import AutomationPage from '../app/(app)/automation/page.client'
+import { ApiError } from '@/lib/api'
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -249,7 +250,9 @@ describe('AutomationPage', () => {
 
     it('shows server validation errors in the wizard', () => {
         mockCreateWorkflow.mutate.mockImplementation((_data: unknown, opts?: { onError?: (err: Error) => void }) => {
-            opts?.onError?.(new Error('Action 1: title is required; Action 1: assignee is required'))
+            opts?.onError?.(
+                new ApiError(422, 'Unprocessable Entity', 'Action 1: title is required; Action 1: assignee is required'),
+            )
         })
 
         renderAutomationPage()
@@ -279,6 +282,90 @@ describe('AutomationPage', () => {
 
         expect(screen.getByText(/fix these errors/i)).toBeInTheDocument()
         expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
+        expect(screen.queryByText('Please fill in all required fields')).not.toBeInTheDocument()
+    })
+
+    it('shows one plain message when saving an org workflow is forbidden', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_automation'] },
+        })
+        mockCreateWorkflow.mutate.mockImplementation((_data: unknown, opts?: { onError?: (err: Error) => void }) => {
+            opts?.onError?.(
+                new ApiError(403, 'Forbidden', 'Cannot create org workflows without manage_automation permission'),
+            )
+        })
+
+        renderAutomationPage()
+
+        fireEvent.click(
+            getFirstElement(
+                screen.getAllByRole('button', { name: 'Create Org Workflow' }),
+                'Expected a create org workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), { target: { value: 'Org Workflow' } })
+        fireEvent.change(
+            screen.getByRole('combobox', { name: 'Trigger type' }),
+            { target: { value: 'surrogate_created' } },
+        )
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(
+            getFirstElement(screen.getAllByTestId('select'), 'Expected an action select'),
+            { target: { value: 'add_note' } },
+        )
+        fireEvent.change(screen.getByPlaceholderText('Note content'), { target: { value: 'Note' } })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        const saveButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(getLastElement(saveButtons, 'Expected a save workflow button'))
+
+        expect(
+            screen.getByText("You don't have permission to create organization workflows"),
+        ).toBeInTheDocument()
+        expect(screen.queryByText(/manage_automation/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/fix these errors/i)).not.toBeInTheDocument()
+        expect(screen.queryByText('Please fill in all required fields')).not.toBeInTheDocument()
+    })
+
+    it('hides org workflow creation and Execution History without manage_automation', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: [] } })
+        render(
+            <AutomationPage
+                initialTab="workflows"
+                initialWorkflowScopeTab="org"
+                initialCreateOpen={false}
+                hasInitialScopeParam
+            />,
+        )
+
+        expect(screen.queryByRole('button', { name: 'Create Org Workflow' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Execution History' })).not.toBeInTheDocument()
+        expect(screen.getByText('No org workflows yet')).toBeInTheDocument()
+    })
+
+    it('shows Execution History for managers', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_automation'] },
+        })
+        renderAutomationPage()
+
+        expect(screen.getByRole('button', { name: 'Execution History' })).toBeInTheDocument()
+        expect(screen.getAllByRole('button', { name: 'Create Org Workflow' }).length).toBeGreaterThan(0)
+    })
+
+    it('labels the workflow wizard steps and the email template select', () => {
+        renderAutomationPage()
+
+        const createButtons = screen.getAllByRole('button', { name: /create workflow/i })
+        fireEvent.click(getLastElement(createButtons, 'Expected a create workflow button'))
+
+        const progress = screen.getByRole('list', { name: 'Progress' })
+        expect(progress).toHaveTextContent('Trigger')
+        expect(progress).toHaveTextContent('Conditions')
+        expect(progress).toHaveTextContent('Actions')
+        expect(progress).toHaveTextContent('Review')
+        expect(screen.queryByText(/Step 1 of 4/)).not.toBeInTheDocument()
     })
 
     it('clears server validation errors when condition logic changes', () => {
@@ -1066,6 +1153,36 @@ describe('AutomationPage', () => {
             }),
             expect.any(Object),
         )
+    })
+
+    it('names the workflow in its history dialog and shows the shared empty state', () => {
+        mockUseWorkflows.mockReturnValue({
+            data: [{
+                id: 'workflow-follow-up',
+                name: 'Application Follow-up',
+                description: null,
+                icon: 'activity',
+                subject_type: 'surrogate',
+                trigger_type: 'surrogate_created',
+                is_enabled: true,
+                run_count: 0,
+                last_run_at: null,
+                last_error: null,
+                created_at: '2026-08-29T00:00:00Z',
+                can_edit: true,
+            }],
+            isLoading: false,
+        })
+        renderAutomationPage()
+
+        fireEvent.click(
+            screen.getByRole('button', { name: 'Actions for workflow Application Follow-up' }),
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'View History' }))
+
+        expect(screen.getByText('History: Application Follow-up')).toBeInTheDocument()
+        expect(screen.getByText('No runs yet')).toBeInTheDocument()
+        expect(screen.queryByText('Recent workflow execution logs')).not.toBeInTheDocument()
     })
 
 })

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
@@ -37,6 +37,71 @@ describe("OpsAlertsPage filters", () => {
             </QueryClientProvider>
         )
     }
+
+    beforeEach(() => {
+        mockListAlerts.mockReset()
+    })
+
+    it("shows a retryable error state instead of the all-clear state when loading fails", async () => {
+        mockListAlerts.mockRejectedValueOnce(new Error("boom"))
+        mockListAlerts.mockResolvedValueOnce({ items: [], total: 0 })
+
+        renderAlertsPage()
+
+        expect(await screen.findByRole("heading", { name: "Couldn't load alerts" })).toBeInTheDocument()
+        expect(screen.queryByRole("heading", { name: "No alerts" })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: /Try again|Retry/ }))
+        expect(await screen.findByRole("heading", { name: "No alerts" })).toBeInTheDocument()
+    })
+
+    it("shows a filtered empty state with a clear action and labels the filter trigger", async () => {
+        mockListAlerts.mockResolvedValue({ items: [], total: 0 })
+
+        renderAlertsPage()
+        expect(await screen.findByRole("heading", { name: "No alerts" })).toBeInTheDocument()
+
+        const statusSelect = screen.getByRole("combobox", { name: "Filter by status" })
+        fireEvent.mouseDown(statusSelect)
+        const snoozed = await screen.findByRole("option", { name: "Snoozed" })
+        fireEvent.mouseMove(snoozed)
+        fireEvent.click(snoozed)
+
+        expect(await screen.findByRole("heading", { name: "No matching alerts" })).toBeInTheDocument()
+        expect(statusSelect).toHaveTextContent("Snoozed")
+        expect(statusSelect).not.toHaveTextContent("snoozed")
+
+        fireEvent.click(screen.getByRole("button", { name: "Clear filters" }))
+        expect(await screen.findByRole("heading", { name: "No alerts" })).toBeInTheDocument()
+        expect(statusSelect).toHaveTextContent("All statuses")
+    })
+
+    it("labels severity and status badges", async () => {
+        mockListAlerts.mockResolvedValue({
+            items: [
+                {
+                    id: "a1",
+                    organization_id: "org-1",
+                    org_name: "Agency One",
+                    alert_type: "integration",
+                    severity: "warn",
+                    status: "acknowledged",
+                    title: "Label check",
+                    occurrence_count: 1,
+                    first_seen_at: "2026-07-16T00:00:00Z",
+                    last_seen_at: "2026-07-16T00:00:00Z",
+                },
+            ],
+            total: 1,
+        })
+
+        renderAlertsPage()
+
+        expect(await screen.findByText("Label check")).toBeInTheDocument()
+        expect(screen.getByText("Warning")).toBeInTheDocument()
+        expect(screen.getByText("Acknowledged")).toBeInTheDocument()
+        expect(screen.queryByText("warn")).not.toBeInTheDocument()
+    })
 
     it("matches backend-supported alert enums", async () => {
         mockListAlerts.mockResolvedValue({

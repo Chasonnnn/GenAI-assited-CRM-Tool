@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import api from "@/lib/api"
@@ -35,7 +35,10 @@ import {
     UserIcon,
 } from "lucide-react"
 import { toast } from "@/components/ui/toast"
+import { EmptyState } from "@/components/empty-state"
+import { LoadErrorState, PermissionDeniedState, QueryErrorState } from "@/components/error-state"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
@@ -314,6 +317,8 @@ function TemplateSections({
     globalTemplates,
     orgTemplates,
     categoryLabels,
+    isFiltered,
+    onClearFilters,
     onSelectTemplate,
 }: {
     isLoading: boolean
@@ -321,6 +326,8 @@ function TemplateSections({
     globalTemplates: WorkflowTemplateListItem[]
     orgTemplates: WorkflowTemplateListItem[]
     categoryLabels: Record<string, string>
+    isFiltered: boolean
+    onClearFilters: () => void
     onSelectTemplate: (template: WorkflowTemplateListItem) => void
 }) {
     if (isLoading) {
@@ -332,12 +339,21 @@ function TemplateSections({
     }
 
     if (templates.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12">
-                <LayoutTemplateIcon className="size-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold">No templates found</h3>
-                <p className="text-sm text-muted-foreground">Try adjusting your filters.</p>
-            </div>
+        return isFiltered ? (
+            <EmptyState
+                icon={LayoutTemplateIcon}
+                title="No templates in this category"
+                headingLevel={3}
+                onClearFilters={onClearFilters}
+                className="rounded-lg border border-dashed"
+            />
+        ) : (
+            <EmptyState
+                icon={LayoutTemplateIcon}
+                title="No workflow templates"
+                headingLevel={3}
+                className="rounded-lg border border-dashed"
+            />
         )
     }
 
@@ -790,6 +806,7 @@ function UseTemplateDialogFooter({
 }
 
 interface WorkflowTemplatesPanelProps {
+    /** Rendered inside /automation, whose PageHeader owns the heading and the Create Workflow action. */
     embedded?: boolean
 }
 
@@ -798,6 +815,9 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
     const queryClient = useQueryClient()
     const { user } = useAuth()
     const isAdmin = user?.role === "admin" || user?.role === "developer"
+    const permissionCheck = usePermissionCheck()
+    // Every /templates route requires manage_automation.
+    const canViewTemplates = permissionCheck.can("manage_automation")
 
     const [categoryFilter, setCategoryFilter] = useState("all")
     const [selectedTemplate, setSelectedTemplate] = useState<WorkflowTemplateListItem | null>(null)
@@ -820,11 +840,14 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
     const { data: categoriesData } = useQuery({
         queryKey: ["template-categories"],
         queryFn: fetchTemplateCategories,
+        enabled: canViewTemplates,
     })
-    const { data: templates = [], isLoading } = useQuery({
+    const templatesQuery = useQuery({
         queryKey: ["templates", categoryFilter],
         queryFn: () => fetchTemplates(categoryFilter === "all" ? undefined : categoryFilter),
+        enabled: canViewTemplates,
     })
+    const { data: templates = [], isLoading } = templatesQuery
     const {
         data: selectedTemplateDetail,
         isLoading: isLoadingTemplateDetail,
@@ -946,23 +969,69 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
         onCreateWorkflow: () => useTemplateMutation.mutate(),
     }
 
+    const templatesAccessDenied = {
+        title: "No access to workflow templates",
+        description: "Ask an admin to update your role.",
+    }
+
+    let content: ReactNode
+    if (permissionCheck.isLoading) {
+        content = (
+            <div className="flex items-center justify-center py-12">
+                <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+            </div>
+        )
+    } else if (permissionCheck.isError) {
+        content = (
+            <LoadErrorState
+                onRetry={permissionCheck.retry}
+                isRetrying={permissionCheck.isRetrying}
+                title="Couldn't load workflow templates"
+            />
+        )
+    } else if (!canViewTemplates) {
+        content = <PermissionDeniedState {...templatesAccessDenied} />
+    } else if (templatesQuery.isError) {
+        content = (
+            <QueryErrorState
+                error={templatesQuery.error}
+                onRetry={() => {
+                    void templatesQuery.refetch()
+                }}
+                isRetrying={templatesQuery.isFetching}
+                title="Couldn't load workflow templates"
+                forbidden={templatesAccessDenied}
+            />
+        )
+    } else {
+        content = (
+            <>
+                <TemplateCategoryFilter
+                    categoryFilter={categoryFilter}
+                    categoryOptions={categoryOptions}
+                    onCategoryFilterChange={setCategoryFilter}
+                />
+                <TemplateSections
+                    isLoading={isLoading}
+                    templates={templates}
+                    globalTemplates={globalTemplates}
+                    orgTemplates={orgTemplates}
+                    categoryLabels={categoryLabels}
+                    isFiltered={categoryFilter !== "all"}
+                    onClearFilters={() => setCategoryFilter("all")}
+                    onSelectTemplate={handleSelectTemplate}
+                />
+                <UseTemplateDialog state={dialogState} handlers={dialogHandlers} />
+            </>
+        )
+    }
+
     return (
         <div className={cn("flex flex-col gap-6", embedded ? "" : "flex-1 p-6")}>
-            <WorkflowTemplatesHeader onCreateWorkflow={() => push("/automation?create=true")} />
-            <TemplateCategoryFilter
-                categoryFilter={categoryFilter}
-                categoryOptions={categoryOptions}
-                onCategoryFilterChange={setCategoryFilter}
-            />
-            <TemplateSections
-                isLoading={isLoading}
-                templates={templates}
-                globalTemplates={globalTemplates}
-                orgTemplates={orgTemplates}
-                categoryLabels={categoryLabels}
-                onSelectTemplate={handleSelectTemplate}
-            />
-            <UseTemplateDialog state={dialogState} handlers={dialogHandlers} />
+            {embedded ? null : (
+                <WorkflowTemplatesHeader onCreateWorkflow={() => push("/automation?create=true")} />
+            )}
+            {content}
         </div>
     )
 }

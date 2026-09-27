@@ -12,6 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeader } from "@/components/page-header"
+import { EmptyState } from "@/components/empty-state"
 import {
     BellIcon,
     CheckSquareIcon,
@@ -126,12 +128,7 @@ export default function NotificationsPage() {
     if (isLoading) {
         return (
             <div className="flex min-h-screen flex-col">
-                <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <div className="flex h-16 items-center justify-between px-6">
-                        <Skeleton className="h-8 w-48" />
-                        <Skeleton className="h-9 w-28" />
-                    </div>
-                </div>
+                <PageHeader title="Notifications" />
                 <div className="flex-1 space-y-6 p-6">
                     {Array.from({ length: 5 }).map((_, i) => (
                         <Skeleton key={i} className="h-20 w-full" />
@@ -144,14 +141,7 @@ export default function NotificationsPage() {
     if (notificationsError) {
         return (
             <div className="flex min-h-screen flex-col">
-                <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <div className="flex h-16 items-center justify-between px-6">
-                        <div className="flex items-center gap-3">
-                            <BellIcon className="size-6" />
-                            <h1 className="text-2xl font-semibold">Notifications</h1>
-                        </div>
-                    </div>
-                </div>
+                <PageHeader title="Notifications" />
                 <div className="flex-1 p-6">
                     <Card className="border-destructive/40 bg-destructive/5">
                         <CardHeader>
@@ -166,25 +156,17 @@ export default function NotificationsPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <div className="flex items-center gap-3">
-                        <BellIcon className="size-6" />
-                        <h1 className="text-2xl font-semibold">Notifications</h1>
-                        {unreadCount > 0 && (
-                            <Badge variant="secondary" className="bg-teal-500/10 text-teal-500 border-teal-500/20">
-                                {unreadCount} unread
-                            </Badge>
-                        )}
-                    </div>
-                    {unreadCount > 0 && (
+            <PageHeader
+                title="Notifications"
+                meta={unreadCount > 0 ? <Badge variant="secondary">{unreadCount} unread</Badge> : null}
+                actions={
+                    unreadCount > 0 ? (
                         <Button variant="outline" onClick={handleMarkAllRead} disabled={markAllRead.isPending}>
                             Mark all read
                         </Button>
-                    )}
-                </div>
-            </div>
+                    ) : null
+                }
+            />
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
@@ -341,14 +323,15 @@ export default function NotificationsPage() {
                                     })}
                                 </div>
                             </ScrollArea>
+                        ) : typeFilter !== "all" ? (
+                            <EmptyState
+                                icon={BellIcon}
+                                title="No matching notifications"
+                                headingLevel={3}
+                                onClearFilters={() => setTypeFilter("all")}
+                            />
                         ) : (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-muted">
-                                    <BellIcon className="size-8 text-muted-foreground" />
-                                </div>
-                                <h3 className="text-lg font-semibold">You're all caught up!</h3>
-                                <p className="mt-1 text-sm text-muted-foreground">No notifications to display</p>
-                            </div>
+                            <EmptyState icon={BellIcon} title="No notifications" headingLevel={3} />
                         )}
                     </CardContent>
                 </Card>

@@ -93,35 +93,26 @@ export function TasksApprovalsSection({
         (pendingStatusRequests?.length ?? 0) +
         (pendingImportApprovals?.length ?? 0)
     const isLoading = loadingApprovals || loadingStatusRequests || loadingImportApprovals
-    const isEmpty = totalApprovals === 0
+
+    // Nothing to review: render nothing, so the view below keeps its position.
+    if (totalApprovals === 0) return null
 
     return (
-        <Card
-            id="tasks-approvals"
-            className="overflow-hidden border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-transparent"
-        >
-            <div className="border-b border-amber-500/20 bg-amber-500/5 px-4 py-3 sm:px-6 sm:py-4">
-                <div className="flex items-center gap-3">
-                    <div className="flex size-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 sm:size-9">
-                        <ShieldCheckIcon className="size-4 sm:size-5" />
-                    </div>
-                    <div>
-                        <h2 className="text-sm font-semibold text-amber-700 dark:text-amber-500 sm:text-base">
-                            Pending Approvals
-                        </h2>
-                        <p className="text-xs text-amber-600/80 dark:text-amber-500/70 sm:text-sm">
-                            {totalApprovals} item{totalApprovals !== 1 ? "s" : ""} awaiting
-                            review
-                        </p>
-                    </div>
-                </div>
+        <Card id="tasks-approvals" className="gap-0 overflow-hidden py-0">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3 sm:px-6">
+                <ShieldCheckIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+                <h2 className="text-sm font-semibold">
+                    Pending Approvals
+                </h2>
+                <Badge variant="secondary" className="tabular-nums">
+                    {totalApprovals}
+                    <span className="sr-only"> awaiting review</span>
+                </Badge>
+                {isLoading ? (
+                    <Loader2Icon className="ml-auto size-4 animate-spin text-muted-foreground" aria-label="Loading approvals" />
+                ) : null}
             </div>
             <div className="divide-y divide-border">
-                {isLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                        <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
-                    </div>
-                ) : (
                     <>
                         {pendingStatusRequests.map((item) => {
                             const isIpRequest = item.request.entity_type === "intended_parent"
@@ -276,13 +267,7 @@ export function TasksApprovalsSection({
                             )
                         })}
 
-                        {isEmpty && (
-                            <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                                No pending approvals right now.
-                            </div>
-                        )}
                     </>
-                )}
             </div>
         </Card>
     )

@@ -37,6 +37,8 @@ export function Header() {
         ""
     )
     const renderedNote = renderProfileTemplate(profileNote, profile?.merged_view ?? {})
+    // Export, Sync and Edit all work on the submitted application; without one they do nothing.
+    const hasSubmission = Boolean(profile?.base_submission_id)
 
     return (
         <CardHeader className="pb-2 space-y-3">
@@ -62,6 +64,7 @@ export function Header() {
                     renderedNote ? <p className="mt-2 text-sm text-muted-foreground">{renderedNote}</p> : null
                 )}
             </div>
+            {hasSubmission ? (
             <div className="flex items-center gap-2">
                 <Button
                     size="sm"
@@ -111,6 +114,7 @@ export function Header() {
                     </Button>
                 )}
             </div>
+            ) : null}
         </CardHeader>
     )
 }

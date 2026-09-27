@@ -5,11 +5,11 @@ import {
     ActivityIcon,
     AlertCircleIcon,
     AlertTriangleIcon,
-    ArrowLeftIcon,
     CheckCircle2Icon,
     CircleHelpIcon,
     InfoIcon,
     MailCheckIcon,
+    MailIcon,
     RefreshCwIcon,
     SendIcon,
     ShieldCheckIcon,
@@ -17,6 +17,8 @@ import {
 } from "lucide-react"
 
 import Link from "@/components/app-link"
+import { EmptyState } from "@/components/empty-state"
+import { PageHeader } from "@/components/page-header"
 import {
     Accordion,
     AccordionContent,
@@ -227,8 +229,10 @@ function ReadinessCheckRow({
 
 function ReadinessSection({
     readiness,
+    canConfigure,
 }: {
     readiness: EmailOperationsReadiness
+    canConfigure: boolean
 }) {
     return (
         <Card>
@@ -304,11 +308,29 @@ function ReadinessSection({
 
                 <div>
                     <h3 className="text-sm font-semibold">Readiness checks</h3>
-                    <ul className="mt-3 grid gap-3 lg:grid-cols-2">
-                        {readiness.checks.map((check) => (
-                            <ReadinessCheckRow key={check.key} check={check} />
-                        ))}
-                    </ul>
+                    {/* Every check repeats the same missing-provider reason, so one empty state replaces them. */}
+                    {readiness.overall === "not_configured" ? (
+                        <EmptyState
+                            icon={MailIcon}
+                            title="No email provider configured"
+                            headingLevel={4}
+                            action={canConfigure ? (
+                                <Button
+                                    // AccordionContent underlines and recolors descendant links on hover.
+                                    className="no-underline! hover:text-primary-foreground!"
+                                    render={<Link href="/settings/integrations" />}
+                                >
+                                    Configure email
+                                </Button>
+                            ) : null}
+                        />
+                    ) : (
+                        <ul className="mt-3 grid gap-3 lg:grid-cols-2">
+                            {readiness.checks.map((check) => (
+                                <ReadinessCheckRow key={check.key} check={check} />
+                            ))}
+                        </ul>
+                    )}
                 </div>
             </CardContent>
         </Card>
@@ -654,25 +676,10 @@ export function EmailOperationsDashboard() {
 
     return (
         <div className="min-h-dvh bg-muted/10">
-            <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            render={<Link href="/settings/integrations" />}
-                            aria-label="Back to integrations"
-                        >
-                            <ArrowLeftIcon aria-hidden="true" />
-                        </Button>
-                        <div className="min-w-0">
-                            <h1 className="text-2xl font-semibold">Email Operations</h1>
-                            <p className="text-sm text-muted-foreground">
-                                Delivery readiness, recent activity, and sanitized provider
-                                diagnostics.
-                            </p>
-                        </div>
-                    </div>
+            <PageHeader
+                title="Email Operations"
+                back={{ href: "/settings/integrations", label: "Back to integrations" }}
+                actions={
                     <Button
                         type="button"
                         variant="outline"
@@ -690,10 +697,10 @@ export function EmailOperationsDashboard() {
                         />
                         Refresh
                     </Button>
-                </div>
-            </header>
+                }
+            />
 
-            <main className="mx-auto max-w-7xl space-y-6 p-6">
+            <div className="mx-auto max-w-7xl space-y-6 p-6">
                 {isInitialLoading ? (
                     <DashboardSkeleton />
                 ) : (
@@ -751,6 +758,7 @@ export function EmailOperationsDashboard() {
                                         {readinessQuery.data ? (
                                             <ReadinessSection
                                                 readiness={readinessQuery.data}
+                                                canConfigure={canCheckLiveReadiness}
                                             />
                                         ) : (
                                             <Alert variant="destructive">
@@ -826,7 +834,7 @@ export function EmailOperationsDashboard() {
                         ) : null}
                     </>
                 )}
-            </main>
+            </div>
 
             <EmailOperationDetailDialog
                 messageId={selectedMessageId}
