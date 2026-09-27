@@ -136,4 +136,16 @@ describe("TabsList layout", () => {
         expect(list).toHaveClass("justify-center-safe", "overflow-x-auto")
         expect(list).not.toHaveClass("justify-center")
     })
+
+    it("scrolls a horizontal list inside its container by default instead of clipping tabs at 390px", () => {
+        render(<ExampleTabs />)
+
+        const list = screen.getByRole("tablist")
+        expect(list).toHaveClass(
+            "group-data-horizontal/tabs:max-w-full",
+            "group-data-horizontal/tabs:overflow-x-auto",
+            "justify-center-safe",
+        )
+        expect(list.className).not.toMatch(/(^|\s)overflow-x-auto(\s|$)/)
+    })
 })

@@ -36,9 +36,10 @@ function Tabs({
   )
 }
 
-// Safe centering falls back to start alignment so an overflowing list can scroll to its first tab.
+// A horizontal list never grows past its container; extra tabs scroll instead of being clipped
+// on narrow screens. Safe centering falls back to start alignment so the scroll starts at the first tab.
 const tabsListVariants = cva(
-  "relative isolate rounded-4xl p-[3px] group-data-vertical/tabs:rounded-2xl data-[variant=line]:rounded-none group/tabs-list text-muted-foreground inline-flex w-fit items-center justify-center-safe group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
+  "relative isolate rounded-4xl p-[3px] group-data-vertical/tabs:rounded-2xl data-[variant=line]:rounded-none group/tabs-list text-muted-foreground inline-flex w-fit group-data-horizontal/tabs:max-w-full group-data-horizontal/tabs:overflow-x-auto items-center justify-center-safe group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
   {
     variants: {
       variant: {
