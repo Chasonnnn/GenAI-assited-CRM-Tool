@@ -29,6 +29,10 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -91,6 +95,12 @@
   --accent-foreground: oklch(0.289 0 89.876);
   /* #2B2B2B */
   --destructive: oklch(0.577 0.245 27.325);
+  /* Text on a solid destructive fill (existing "bg-destructive text-destructive-foreground" call sites). */
+  --destructive-foreground: oklch(0.985 0 89.876);
+  /* Success fill keeps 4.9:1 with white text; warning is for dots and icons. */
+  --success: oklch(0.527 0.154 150.069);
+  --success-foreground: oklch(0.985 0 89.876);
+  --warning: oklch(0.555 0.163 48.998);
   --border: oklch(0.922 0 89.876);
   /* #E5E5E5 */
   --input: oklch(0.922 0 89.876);
@@ -153,6 +163,11 @@
   /* #1A1A1A */
   --accent-foreground: oklch(0.97 0 89.876);
   --destructive: oklch(0.60 0.22 25);
+  --destructive-foreground: oklch(0.985 0 89.876);
+  /* Lighter success reads as text on dark surfaces; filled buttons use it at 60%. */
+  --success: oklch(0.72 0.17 150);
+  --success-foreground: oklch(0.985 0 89.876);
+  --warning: oklch(0.828 0.189 84.429);
   --border: oklch(0.289 0 89.876);
   /* #2B2B2B */
   --input: oklch(0.289 0 89.876);
@@ -287,5 +302,7 @@
   --border: oklch(0.922 0 89.876);
   --input: oklch(0.922 0 89.876);
   --ring: oklch(0.644 0.216 347.987);
+  --success: oklch(0.527 0.154 150.069);
+  --warning: oklch(0.555 0.163 48.998);
   color: oklch(0.289 0 89.876);
 }

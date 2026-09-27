@@ -1,6 +1,6 @@
 "use client"
 
-import type * as React from "react"
+import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from '@/lib/utils'
@@ -19,7 +19,7 @@ function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-const fieldVariants = cva("data-[invalid=true]:text-destructive gap-3 group/field flex w-full", {
+const fieldVariants = cva("gap-3 group/field flex w-full", {
   variants: {
     orientation: {
       vertical:
@@ -59,7 +59,7 @@ function FieldLabel({
     <Label
       data-slot="field-label"
       className={cn(
-        "has-data-checked:bg-primary/5 has-data-checked:border-primary/50 dark:has-data-checked:bg-primary/10 gap-2 group-data-[disabled=true]/field:opacity-50 has-[>[data-slot=field]]:rounded-xl has-[>[data-slot=field]]:border [&>*]:data-[slot=field]:p-4 group/field-label peer/field-label flex w-fit leading-snug",
+        "has-data-checked:bg-primary/5 has-data-checked:border-primary/50 dark:has-data-checked:bg-primary/10 gap-2 group-data-[disabled=true]/field:opacity-50 group-data-[invalid=true]/field:text-destructive has-[>[data-slot=field]]:rounded-xl has-[>[data-slot=field]]:border [&>*]:data-[slot=field]:p-4 group/field-label peer/field-label flex w-fit leading-snug",
         "has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col",
         className
       )}
@@ -131,10 +131,66 @@ function getUniqueErrors(errors: Array<{ message?: string } | undefined> | undef
   return Array.from(uniqueErrors.values())
 }
 
+type FieldControlProps = {
+  id: string
+  "aria-invalid": true | undefined
+  "aria-describedby": string | undefined
+}
+
+/**
+ * Label, control and inline error with the accessibility wiring in one place.
+ * Spread the render argument onto the control: `{(control) => <Input {...control} />}`.
+ */
+function ValidatedField({
+  label,
+  error,
+  description,
+  id,
+  className,
+  orientation,
+  children,
+}: {
+  label: React.ReactNode
+  /** Message shown under the control; the field is invalid while it is set. */
+  error?: string | null | undefined
+  /** Only for text that prevents an error, such as a required format. */
+  description?: React.ReactNode
+  id?: string | undefined
+  className?: string | undefined
+  orientation?: VariantProps<typeof fieldVariants>["orientation"]
+  children: (control: FieldControlProps) => React.ReactNode
+}) {
+  const generatedId = React.useId()
+  const controlId = id ?? generatedId
+  const invalid = Boolean(error)
+  const descriptionId = description ? `${controlId}-description` : undefined
+  const errorId = invalid ? `${controlId}-error` : undefined
+  const describedBy = [descriptionId, errorId].filter(Boolean).join(" ") || undefined
+
+  return (
+    <Field
+      data-invalid={invalid ? true : undefined}
+      orientation={orientation}
+      className={className}
+    >
+      <FieldLabel htmlFor={controlId}>{label}</FieldLabel>
+      {children({
+        id: controlId,
+        "aria-invalid": invalid ? true : undefined,
+        "aria-describedby": describedBy,
+      })}
+      {description ? <FieldDescription id={descriptionId}>{description}</FieldDescription> : null}
+      {invalid ? <FieldError id={errorId}>{error}</FieldError> : null}
+    </Field>
+  )
+}
+
 export {
   Field,
   FieldLabel,
   FieldDescription,
   FieldError,
   FieldGroup,
+  ValidatedField,
 }
+export type { FieldControlProps }
