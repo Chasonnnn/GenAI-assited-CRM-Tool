@@ -13,8 +13,8 @@ from httpx import ASGITransport, AsyncClient
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME
 from app.core.security import create_session_token
-from app.db.enums import Role
-from app.db.models import Match, Membership, Organization, User
+from app.db.enums import AuditEventType, Role
+from app.db.models import AuditLog, Match, Membership, Organization, User
 from app.main import app
 from app.services import session_service
 from tests.test_match_cancel_request import _create_intended_parent, _create_surrogate
@@ -106,6 +106,16 @@ async def test_list_matches_filters_by_inclusive_proposed_date_range(authed_clie
     only_from = await authed_client.get("/matches/", params={"proposed_from": "2026-09-21"})
     assert only_from.status_code == 200, only_from.text
     assert {item["id"] for item in only_from.json()["items"]} == {late["id"]}
+
+    audits = (
+        db.query(AuditLog)
+        .filter_by(event_type=AuditEventType.PHI_VIEWED.value, target_type="match_list")
+        .order_by(AuditLog.created_at)
+        .all()
+    )
+    assert [
+        (entry.details["proposed_from"], entry.details["proposed_to"]) for entry in audits[-2:]
+    ] == [("2026-09-01", "2026-09-20"), ("2026-09-21", None)]
 
 
 @pytest.mark.asyncio
