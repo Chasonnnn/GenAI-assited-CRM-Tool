@@ -23,6 +23,15 @@ vi.mock('@/lib/hooks/use-permissions', () => ({
     useEffectivePermissions: () => mockUseEffectivePermissions(),
 }))
 const mockUseBulkChangeStage = vi.fn()
+const mockToast = vi.hoisted(() => ({
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+}))
+vi.mock('@/components/ui/toast', async (original) => {
+    const actual = await original<typeof import('@/components/ui/toast')>()
+    return { ...actual, toast: Object.assign(vi.fn(), actual.toast, mockToast) }
+})
 
 // Mock Next.js navigation
 vi.mock('next/navigation', () => ({
@@ -47,13 +56,13 @@ vi.mock('@/components/surrogates/MassEditStageModal', () => ({
 vi.mock('@/components/surrogates/BulkChangeStageModal', () => ({
     BulkChangeStageModal: (props: {
         open: boolean
-        onSubmit: (stageId: string) => Promise<void> | void
+        onSubmit: (input: { stage_id: string; reason?: string }) => Promise<void> | void
     }) => {
         mockBulkChangeStageModal(props)
         if (!props.open) return null
         return (
             <dialog open aria-label="Bulk stage change">
-                <button type="button" onClick={() => props.onSubmit('s2')}>
+                <button type="button" onClick={() => props.onSubmit({ stage_id: 's2', reason: 'Batch review' })}>
                     Mock submit bulk stage change
                 </button>
             </dialog>
@@ -208,6 +217,9 @@ describe('SurrogatesPage', () => {
         mockRouterReplace.mockReset()
         mockMassEditStageModal.mockReset()
         mockBulkChangeStageModal.mockReset()
+        mockToast.success.mockReset()
+        mockToast.warning.mockReset()
+        mockToast.error.mockReset()
         mockUseAuth.mockReset()
         mockUseAuth.mockReturnValue({ user: { role: 'admin', user_id: 'admin-1' } })
         mockUseArchiveSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
@@ -531,14 +543,22 @@ describe('SurrogatesPage', () => {
         fireEvent.click(screen.getByLabelText('Select Jane Doe'))
         fireEvent.click(screen.getByLabelText('Select Mia Ross'))
         fireEvent.click(screen.getByRole('button', { name: 'Change stage' }))
+
+        const modalProps = mockBulkChangeStageModal.mock.lastCall?.[0] as { surrogates: unknown[] }
+        expect(modalProps.surrogates).toEqual([
+            { id: '1', full_name: 'Jane Doe', stage_id: 's1', paused_from_stage_id: null },
+            { id: '2', full_name: 'Mia Ross', stage_id: 's1', paused_from_stage_id: null },
+        ])
         fireEvent.click(screen.getByRole('button', { name: 'Mock submit bulk stage change' }))
 
         await waitFor(() =>
             expect(mutateAsync).toHaveBeenCalledWith({
                 surrogate_ids: ['1', '2'],
                 stage_id: 's2',
+                reason: 'Batch review',
             })
         )
+        expect(mockToast.success).toHaveBeenCalledWith('Changed stage for 2 surrogates.')
     })
 
     it('keeps failed surrogate ids selected after a partial bulk stage change failure', async () => {
@@ -578,6 +598,58 @@ describe('SurrogatesPage', () => {
         await waitFor(() => expect(screen.getByText('1 surrogate selected')).toBeInTheDocument())
         expect(screen.getByLabelText('Select Jane Doe')).not.toBeChecked()
         expect(screen.getByLabelText('Select Mia Ross')).toBeChecked()
+
+        const [title, options] = mockToast.warning.mock.lastCall as [
+            string,
+            { description: React.ReactNode; duration?: number },
+        ]
+        expect(title).toBe('Changed stage for 1 of 2 surrogates; 1 failed.')
+        // Failure reasons are shown only here, so the toast stays until dismissed.
+        expect(options.duration).toBe(0)
+        render(<>{options.description}</>)
+        expect(screen.getByText('Mia Ross: Target stage is same as current stage')).toBeInTheDocument()
+    })
+
+    it('reports a failed title when no surrogate changed stage', async () => {
+        const mutateAsync = vi.fn().mockResolvedValue({
+            requested: 2,
+            applied: 0,
+            pending_approval: 0,
+            failed: [
+                { surrogate_id: '1', reason: 'Cannot set to Matched without an accepted Match.' },
+                { surrogate_id: '2', reason: 'Cannot set to Matched without an accepted Match.' },
+            ],
+        })
+        mockUseBulkChangeStage.mockReturnValue({ mutateAsync, isPending: false })
+        mockUseSurrogates.mockReturnValue({
+            data: {
+                items: [
+                    buildSurrogateListItem({ id: '1', surrogate_number: 'S10001', full_name: 'Jane Doe' }),
+                    buildSurrogateListItem({ id: '2', surrogate_number: 'S10002', full_name: 'Mia Ross' }),
+                ],
+                total: 2,
+                pages: 1,
+            },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+
+        fireEvent.click(screen.getByLabelText('Select Jane Doe'))
+        fireEvent.click(screen.getByLabelText('Select Mia Ross'))
+        fireEvent.click(screen.getByRole('button', { name: 'Change stage' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Mock submit bulk stage change' }))
+
+        await waitFor(() => expect(mockToast.error).toHaveBeenCalled())
+        const [title, options] = mockToast.error.mock.lastCall as [
+            string,
+            { description: React.ReactNode; duration?: number },
+        ]
+        expect(title).toBe('Stage change failed for 2 surrogates.')
+        expect(options.duration).toBe(0)
+        expect(mockToast.warning).not.toHaveBeenCalled()
+        expect(screen.getByText('2 surrogates selected')).toBeInTheDocument()
     })
 
     it('opens New Surrogates dialog', () => {

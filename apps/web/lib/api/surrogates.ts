@@ -463,14 +463,24 @@ export interface BulkAssignResult {
     failed: { surrogate_id: string; reason: string }[];
 }
 
+export interface BulkChangeStageInterviewTime {
+    surrogate_id: string;
+    scheduled_at: string;
+}
+
 export interface BulkChangeStagePayload {
     surrogate_ids: string[];
     stage_id: string;
+    reason?: string;
+    on_hold_follow_up_months?: 1 | 3 | 6;
+    interview_times?: BulkChangeStageInterviewTime[];
+    override_availability?: boolean;
 }
 
 export interface BulkChangeStageResult {
     requested: number;
     applied: number;
+    pending_approval: number;
     failed: { surrogate_id: string; reason: string }[];
 }
 
