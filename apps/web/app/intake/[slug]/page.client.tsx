@@ -1055,7 +1055,9 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const publicTitle = formConfig?.form_schema.public_title?.trim() || formConfig?.name?.trim() || ""
     const publicEyebrow = formConfig?.form_schema.public_eyebrow?.trim() ?? ""
     const publicSubtitle = formConfig?.form_schema.public_subtitle?.trim() ?? ""
-    const logoUrl = formConfig?.form_schema.logo_url?.trim() || ""
+    const agencyName = formConfig?.agency_name?.trim() ?? ""
+    // A logo set on the form wins over the agency logo from Settings.
+    const logoUrl = formConfig?.form_schema.logo_url?.trim() || formConfig?.agency_logo_url?.trim() || ""
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ""
     const resolvedLogoUrl =
         logoUrl && logoUrl.startsWith("/") && apiBaseUrl
@@ -1451,6 +1453,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     return (
         <div className={cn(publicFormPageClassName, "pb-12")}>
             <PublicFormHeader
+                agencyName={agencyName}
                 eyebrow={publicEyebrow}
                 publicTitle={publicTitle}
                 description={publicSubtitle}
@@ -1677,11 +1680,6 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                     </Card>
                 ) : currentPage ? (
                     <Card className={publicFormCardClassName}>
-                        <CardHeader className={publicFormCardHeaderClassName}>
-                             <CardTitle className="text-lg text-stone-950">
-                                 {currentPage.title || `Step ${boundedCurrentStep}`}
-                             </CardTitle>
-                        </CardHeader>
                         <CardContent className={publicFormCardContentClassName}>
                             {currentVisibleFields.standardFields.length === 0 ? (
                                 <div className="rounded-lg border border-stone-200 p-4 text-sm text-stone-500">

@@ -26,7 +26,7 @@ export function ProgressStepper({
 
     return (
         <div className="space-y-3">
-            {/* The current page title is the card heading below; it is not repeated here. */}
+            {/* The step list below is the only place the current page title shows. */}
             <div className="text-center text-[11px] font-medium uppercase tracking-[0.22em] text-stone-500">
                 Step {currentStep} of {totalSteps}
             </div>
@@ -38,26 +38,37 @@ export function ProgressStepper({
             >
                 {progressValue}%
             </progress>
-            <div className="flex items-center justify-between gap-2 text-xs text-stone-500">
+            <div className="flex items-start justify-between gap-2 text-xs text-stone-500">
                 {start > 0 && <span className="shrink-0 px-1">…</span>}
-                {visibleSteps.map((step) => (
-                    <div key={step.id} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-                        <span
+                {visibleSteps.map((step) => {
+                    const isCurrent = step.id === currentStep
+                    return (
+                        <div
+                            key={step.id}
                             className={cn(
-                                "size-1.5 rounded-full transition-colors",
-                                step.id <= currentStep ? "bg-primary" : "bg-stone-300",
-                            )}
-                        />
-                        <span
-                            className={cn(
-                                "max-w-full truncate transition-colors",
-                                step.id === currentStep ? "font-semibold text-stone-950" : "text-stone-500",
+                                "flex min-w-0 flex-col items-center gap-1",
+                                isCurrent ? "flex-[2]" : "flex-1",
                             )}
                         >
-                            {step.shortLabel}
-                        </span>
-                    </div>
-                ))}
+                            <span
+                                className={cn(
+                                    "size-1.5 rounded-full transition-colors",
+                                    step.id <= currentStep ? "bg-primary" : "bg-stone-300",
+                                )}
+                            />
+                            <span
+                                className={cn(
+                                    "max-w-full transition-colors",
+                                    isCurrent
+                                        ? "line-clamp-3 break-words text-center font-semibold text-stone-950"
+                                        : "truncate text-stone-500",
+                                )}
+                            >
+                                {isCurrent ? step.label : step.shortLabel}
+                            </span>
+                        </div>
+                    )
+                })}
                 {end < totalSteps - 1 && <span className="shrink-0 px-1">…</span>}
             </div>
         </div>

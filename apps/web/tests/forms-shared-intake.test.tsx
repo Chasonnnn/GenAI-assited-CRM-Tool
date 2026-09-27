@@ -123,6 +123,7 @@ describe('Shared Intake Public Page', () => {
 
     afterEach(() => {
         vi.useRealTimers()
+        vi.unstubAllEnvs()
     })
 
     it('loads shared intake schema without probing a brand-new draft session', async () => {
@@ -282,6 +283,165 @@ describe('Shared Intake Public Page', () => {
         expect(screen.queryByText('E')).not.toBeInTheDocument()
     })
 
+    it('shows the agency name with its initials above the title when the agency has no logo', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            agency_name: 'Test Organization',
+            agency_logo_url: null,
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        const title = await screen.findByRole('heading', { name: 'Event Intake Form', level: 1 })
+        const agencyName = screen.getByText('Test Organization')
+        const agencyRow = agencyName.closest('[data-slot="public-form-agency"]')
+        expect(agencyRow).toHaveTextContent('TO')
+        expect(agencyRow?.compareDocumentPosition(title)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+        expect(screen.queryByRole('img')).not.toBeInTheDocument()
+        expect(screen.queryByText('E')).not.toBeInTheDocument()
+    })
+
+    it('shows the agency logo from the API when the form has no logo', async () => {
+        vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'https://api.example.com')
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            agency_name: 'Sunrise Surrogacy',
+            agency_logo_url: '/forms/public/org-1/signature-logo',
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        const logo = await screen.findByRole('img', { name: 'Sunrise Surrogacy logo' })
+        expect(logo).toHaveAttribute('src', 'https://api.example.com/forms/public/org-1/signature-logo')
+        expect(screen.getByText('Sunrise Surrogacy')).toBeInTheDocument()
+        expect(screen.queryByText('SS')).not.toBeInTheDocument()
+    })
+
+    it('prefers the form logo over the agency logo', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                logo_url: 'https://cdn.example.com/ewi-logo.png',
+            },
+            agency_name: 'Sunrise Surrogacy',
+            agency_logo_url: '/forms/public/org-1/signature-logo',
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        const logo = await screen.findByRole('img', { name: 'Sunrise Surrogacy logo' })
+        expect(logo).toHaveAttribute('src', 'https://cdn.example.com/ewi-logo.png')
+        expect(screen.getAllByRole('img')).toHaveLength(1)
+    })
+
+    it('falls back to agency initials when the logo fails to load', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            agency_name: 'Sunrise Surrogacy',
+            agency_logo_url: 'https://cdn.example.com/missing.png',
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        fireEvent.error(await screen.findByRole('img', { name: 'Sunrise Surrogacy logo' }))
+
+        expect(await screen.findByText('SS')).toBeInTheDocument()
+        expect(screen.queryByRole('img')).not.toBeInTheDocument()
+        expect(screen.getByText('Sunrise Surrogacy')).toBeInTheDocument()
+    })
+
+    it('wraps a long agency name instead of cutting it to one line', async () => {
+        const longName = 'Sunrise Surrogacy & Egg Donation Agency of Southern California, LLC'
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            agency_name: longName,
+            agency_logo_url: null,
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        await screen.findByRole('heading', { name: 'Event Intake Form', level: 1 })
+        const agencyName = screen.getByText(longName)
+        expect(agencyName).not.toHaveClass('truncate')
+        expect(agencyName).toHaveClass('line-clamp-2', 'break-words')
+    })
+
+    it('keeps the old header when the API sends no agency name', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            agency_name: null,
+            agency_logo_url: null,
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        await screen.findByRole('heading', { name: 'Event Intake Form', level: 1 })
+        expect(document.querySelector('[data-slot="public-form-agency"]')).toBeNull()
+        expect(screen.getByText('E')).toBeInTheDocument()
+    })
+
+    it('shows the full name of the current page in the step list', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Medical & Pregnancy History',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                        ],
+                    },
+                    {
+                        title: 'Background & Family Details',
+                        fields: [
+                            { key: 'height', label: 'Height', type: 'height', required: false },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        const currentLabel = screen.getByText('Medical & Pregnancy History')
+        expect(currentLabel).not.toHaveClass('truncate')
+        expect(currentLabel).toHaveClass('line-clamp-3', 'break-words')
+        expect(screen.queryByText('Medical Pregnancy')).not.toBeInTheDocument()
+        // Other steps keep their short labels.
+        expect(screen.getByText('Background Family')).toBeInTheDocument()
+        expect(screen.queryByText('Background & Family Details')).not.toBeInTheDocument()
+    })
+
+    it('starts the question card with the first question, not the page name', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Page 1',
+                        fields: [
+                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
+                        ],
+                    },
+                ],
+            },
+            agency_name: 'Sunrise Surrogacy',
+            agency_logo_url: null,
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        expect(screen.getAllByText('Page 1')).toHaveLength(1)
+        const card = screen.getByLabelText(/full name/i).closest('[data-slot="card"]')
+        expect(card).not.toHaveTextContent('Page 1')
+        expect(card?.querySelector('[data-slot="card-header"]')).toBeNull()
+    })
+
     it('renders the first intake step as active progress', async () => {
         getSharedPublicForm.mockResolvedValue({
             ...baseForm,
@@ -312,8 +472,8 @@ describe('Shared Intake Public Page', () => {
         expect(progress).toHaveAttribute('value', '33')
         expect(progress).toHaveAttribute('max', '100')
         expect(progress).toHaveClass('[&::-webkit-progress-value]:bg-primary')
-        // Page title shows as the card title and as its step label, not a third time above the bar.
-        expect(screen.getAllByText('Application')).toHaveLength(2)
+        // The page title shows only as its step label.
+        expect(screen.getAllByText('Application')).toHaveLength(1)
         expect(screen.getByText('Step 1 of 3')).toBeInTheDocument()
     })
 

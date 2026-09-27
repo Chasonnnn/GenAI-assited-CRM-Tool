@@ -5,6 +5,7 @@ import Image from "next/image"
 import { cn } from "@/lib/utils"
 
 interface PublicFormHeaderProps {
+    agencyName?: string | null | undefined
     eyebrow?: string | null | undefined
     publicTitle: string
     description?: string | null | undefined
@@ -13,6 +14,17 @@ interface PublicFormHeaderProps {
     onLogoError: () => void
     metadata: ReactNode
     children?: ReactNode
+}
+
+function getInitials(name: string): string {
+    return name
+        .split(/\s+/)
+        .map((part) => part.replace(/^[^A-Za-z0-9\u00C0-\uFFFF]+/, ""))
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0))
+        .join("")
+        .toUpperCase()
 }
 
 function getMetadataTone(metadata: ReactNode): "success" | "warning" | "error" | "neutral" {
@@ -24,6 +36,7 @@ function getMetadataTone(metadata: ReactNode): "success" | "warning" | "error" |
 }
 
 export function PublicFormHeader({
+    agencyName,
     eyebrow,
     publicTitle,
     description,
@@ -36,6 +49,7 @@ export function PublicFormHeader({
     const metadataTone = getMetadataTone(metadata)
     const titleText = publicTitle.trim()
     const fallbackInitial = titleText.charAt(0).toUpperCase()
+    const agencyText = agencyName?.trim()
     const eyebrowText = eyebrow?.trim()
     const descriptionText = description?.trim()
 
@@ -46,7 +60,9 @@ export function PublicFormHeader({
                     <div className="flex flex-col gap-5">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div className="flex min-w-0 items-start gap-4">
-                                {showLogo && resolvedLogoUrl ? (
+                                {/* With an agency name the tile moves into the agency row above the title;
+                                    the builder preview passes none and keeps the tile beside the title. */}
+                                {agencyText ? null : showLogo && resolvedLogoUrl ? (
                                     <div className="flex size-12 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 px-2 py-1">
                                         <Image
                                             src={resolvedLogoUrl}
@@ -66,6 +82,36 @@ export function PublicFormHeader({
                                     </div>
                                 ) : null}
                                 <div className="min-w-0">
+                                    {agencyText ? (
+                                        <div
+                                            data-slot="public-form-agency"
+                                            className="mb-3 flex min-w-0 items-center gap-2.5"
+                                        >
+                                            {showLogo && resolvedLogoUrl ? (
+                                                <div className="flex h-9 min-w-9 max-w-40 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 px-1.5">
+                                                    <Image
+                                                        src={resolvedLogoUrl}
+                                                        alt={`${agencyText} logo`}
+                                                        width={112}
+                                                        height={56}
+                                                        unoptimized
+                                                        className="max-h-7 w-auto max-w-full rounded-sm object-contain"
+                                                        onError={onLogoError}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div
+                                                    aria-hidden="true"
+                                                    className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-[13px] font-semibold text-primary-foreground"
+                                                >
+                                                    {getInitials(agencyText)}
+                                                </div>
+                                            )}
+                                            <p className="line-clamp-2 min-w-0 break-words text-[15px] font-medium leading-5 text-stone-900">
+                                                {agencyText}
+                                            </p>
+                                        </div>
+                                    ) : null}
                                     {eyebrowText ? (
                                         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
                                             {eyebrowText}

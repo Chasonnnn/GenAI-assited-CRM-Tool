@@ -353,6 +353,8 @@ export interface FormIntakePublicRead {
     campaign_name?: string | null
     event_name?: string | null
     messaging_consent?: MessagingConsentOptionsRead
+    agency_name: string | null
+    agency_logo_url: string | null
 }
 
 export interface MessagingConsentOptionRead {
@@ -371,7 +373,8 @@ interface FormEmbedConsentRead {
     privacy_policy_url?: string | null
 }
 
-export interface FormEmbedPublicRead extends FormIntakePublicRead {
+export interface FormEmbedPublicRead
+    extends Omit<FormIntakePublicRead, "agency_name" | "agency_logo_url"> {
     published_version_id: string
     tracking_mode: TrackingMode
     consent: FormEmbedConsentRead
