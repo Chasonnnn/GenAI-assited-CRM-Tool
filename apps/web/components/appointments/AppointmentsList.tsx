@@ -408,6 +408,8 @@ export function AppointmentsList() {
                                 customRange={customRange}
                                 onCustomRangeChange={setCustomRange}
                                 ariaLabel="Filter by date"
+                                // Shares a row with Format below sm, like the other filters; keeps its own width from sm.
+                                className="min-w-[calc(50%-0.375rem)] flex-1 sm:min-w-[13rem] sm:flex-none"
                             />
                         )}
                     </>

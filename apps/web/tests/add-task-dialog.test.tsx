@@ -11,6 +11,13 @@ vi.mock("@/lib/hooks/use-donors", () => ({
 
 vi.mock("@/components/ui/toast", () => ({ toast: mockToast }))
 
+vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ user: { user_id: "user-1" } }) }))
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: () => ({
+        data: { permissions: ["view_surrogates", "view_intended_parents", "view_donors"] },
+    }),
+}))
+
 vi.mock("@/lib/hooks/use-surrogates", () => ({
     useSurrogates: () => ({ data: { items: [] }, isLoading: false }),
 }))

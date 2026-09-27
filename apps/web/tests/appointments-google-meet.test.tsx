@@ -1189,6 +1189,14 @@ describe("Appointments Google Meet UI", () => {
         expect(screen.getByRole("button", { name: "Remove filter: Search: casey" })).toBeInTheDocument()
     })
 
+    it("sizes the date filter like the other filters so it shares a row below sm", () => {
+        render(<AppointmentsList />)
+
+        const dateFilter = screen.getByRole("button", { name: "Filter by date" })
+        expect(dateFilter).toHaveClass("min-w-[calc(50%-0.375rem)]", "flex-1", "sm:min-w-[13rem]", "sm:flex-none")
+        expect(dateFilter).not.toHaveClass("min-w-[13rem]")
+    })
+
     it("shows a neutral empty state per tab and Clear filters when filters are active", async () => {
         render(<AppointmentsList />)
 

@@ -930,31 +930,33 @@ function UnifiedCalendarHeader({
     onViewTypeChange: (viewType: ViewType) => void
 }) {
     return (
-        // Below sm the period switcher takes its own full-width row under the navigation.
+        // Below sm the navigation takes the full first row so the period title is not cut off, and
+        // Today shares the second row with the period switcher.
         <CardHeader className="flex flex-wrap items-center gap-3 border-b border-border/70 bg-muted/20 pb-4">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="flex min-w-0 flex-1 items-center rounded-xl border border-border/70 bg-background p-1 shadow-sm sm:flex-none">
-                    <Button variant="ghost" size="sm" onClick={() => onNavigate("prev")} aria-label="Previous period">
-                        <ChevronLeftIcon className="size-4" aria-hidden="true" />
-                    </Button>
-                    <div className="min-w-0 flex-1 px-2 text-center sm:min-w-[200px]">
-                        <h2 className="truncate text-lg font-semibold" aria-live="polite">
-                            {viewType === "month" && format(currentDate, "MMMM yyyy")}
-                            {viewType === "week" && `Week of ${format(startOfWeek(currentDate), "MMM d")}`}
-                            {viewType === "day" && format(currentDate, "MMMM d, yyyy")}
-                        </h2>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => onNavigate("next")} aria-label="Next period">
-                        <ChevronRightIcon className="size-4" aria-hidden="true" />
-                    </Button>
+            <div
+                data-testid="calendar-period-nav"
+                className="flex w-full min-w-0 items-center rounded-xl border border-border/70 bg-background p-1 shadow-sm sm:w-auto"
+            >
+                <Button variant="ghost" size="sm" onClick={() => onNavigate("prev")} aria-label="Previous period">
+                    <ChevronLeftIcon className="size-4" aria-hidden="true" />
+                </Button>
+                <div className="min-w-0 flex-1 px-2 text-center sm:min-w-[200px]">
+                    <h2 className="truncate text-lg font-semibold" aria-live="polite">
+                        {viewType === "month" && format(currentDate, "MMMM yyyy")}
+                        {viewType === "week" && `Week of ${format(startOfWeek(currentDate), "MMM d")}`}
+                        {viewType === "day" && format(currentDate, "MMMM d, yyyy")}
+                    </h2>
                 </div>
-                <Button variant="outline" size="sm" onClick={onTodayClick}>
-                    Today
+                <Button variant="ghost" size="sm" onClick={() => onNavigate("next")} aria-label="Next period">
+                    <ChevronRightIcon className="size-4" aria-hidden="true" />
                 </Button>
             </div>
+            <Button variant="outline" size="sm" onClick={onTodayClick}>
+                Today
+            </Button>
 
             <Select value={viewType} onValueChange={(value) => value && onViewTypeChange(value as ViewType)}>
-                <SelectTrigger aria-label="Calendar period" className="w-full shrink-0 bg-background sm:w-36">
+                <SelectTrigger aria-label="Calendar period" className="min-w-0 flex-1 bg-background sm:ml-auto sm:w-36 sm:flex-none">
                     <SelectValue placeholder="View">
                         {(value: string | null) => {
                             if (value === "month") return "Month"

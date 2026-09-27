@@ -15,9 +15,11 @@ import {
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { useAuth } from "@/lib/auth-context"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { useDonors } from "@/lib/hooks/use-donors"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
+import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import {
     getTaskRelatedRecords,
@@ -37,6 +39,12 @@ const RECORD_SEGMENTS: { value: RecordSegment; label: string }[] = [
 
 const isRecordSegment = (value: unknown): value is RecordSegment =>
     RECORD_SEGMENTS.some((segment) => segment.value === value)
+
+const RECORD_VIEW_PERMISSIONS: Record<Exclude<RecordSegment, "all">, string> = {
+    surrogate: "view_surrogates",
+    intended_parent: "view_intended_parents",
+    donor: "view_donors",
+}
 
 // Each type shows its first page; typing searches the server, so every record stays reachable.
 const RESULTS_PER_TYPE = 20
@@ -83,9 +91,19 @@ export function TaskRelatedRecordPicker({
     const debouncedQuery = useDebouncedValue(query.trim(), 300)
     const searchParams = debouncedQuery ? { q: debouncedQuery } : {}
 
-    const showSurrogates = open && (segment === "all" || segment === "surrogate")
-    const showIntendedParents = open && (segment === "all" || segment === "intended_parent")
-    const showDonors = open && (segment === "all" || segment === "donor")
+    // Record types the role cannot view are left out instead of failing with a 403. Until the
+    // permission lookup succeeds every type is offered; the API still enforces access.
+    const { user } = useAuth()
+    const permissions = useEffectivePermissions(user?.user_id ?? null).data?.permissions
+    const canView = (type: Exclude<RecordSegment, "all">) =>
+        !permissions || permissions.includes(RECORD_VIEW_PERMISSIONS[type])
+    const segments = RECORD_SEGMENTS.filter((option) => option.value === "all" || canView(option.value))
+    const activeSegment = segments.some((option) => option.value === segment) ? segment : "all"
+
+    const showSurrogates = open && canView("surrogate") && (activeSegment === "all" || activeSegment === "surrogate")
+    const showIntendedParents =
+        open && canView("intended_parent") && (activeSegment === "all" || activeSegment === "intended_parent")
+    const showDonors = open && canView("donor") && (activeSegment === "all" || activeSegment === "donor")
 
     const surrogatesQuery = useSurrogates(
         { per_page: RESULTS_PER_TYPE, include_archived: false, ...searchParams },
@@ -218,14 +236,14 @@ export function TaskRelatedRecordPicker({
                             variant="outline"
                             size="sm"
                             spacing={1}
-                            value={[segment]}
+                            value={[activeSegment]}
                             onValueChange={(next) => {
                                 const nextSegment = Array.isArray(next) ? next[0] : next
                                 if (isRecordSegment(nextSegment)) setSegment(nextSegment)
                             }}
                             className="w-full flex-wrap border-b p-2"
                         >
-                            {RECORD_SEGMENTS.map((option) => (
+                            {segments.map((option) => (
                                 <ToggleGroupItem key={option.value} value={option.value}>
                                     {option.label}
                                 </ToggleGroupItem>

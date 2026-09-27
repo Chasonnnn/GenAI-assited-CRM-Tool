@@ -2,7 +2,19 @@ import type { ReactNode } from "react"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const recordMocks = vi.hoisted(() => ({ donors: vi.fn(), surrogates: vi.fn(), intendedParents: vi.fn() }))
+const recordMocks = vi.hoisted(() => ({
+    donors: vi.fn(),
+    surrogates: vi.fn(),
+    intendedParents: vi.fn(),
+    permissions: ["view_surrogates", "view_intended_parents", "view_donors"] as string[] | undefined,
+}))
+
+vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ user: { user_id: "user-1" } }) }))
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: () => ({
+        data: recordMocks.permissions ? { permissions: recordMocks.permissions } : undefined,
+    }),
+}))
 
 vi.mock("@/lib/hooks/use-donors", () => ({
     useDonors: (params: unknown, options: unknown) => recordMocks.donors(params, options),
@@ -41,6 +53,29 @@ describe("TaskEditModal related record", () => {
         recordMocks.donors.mockReset().mockReturnValue(page())
         recordMocks.surrogates.mockReset().mockReturnValue(page())
         recordMocks.intendedParents.mockReset().mockReturnValue(page())
+        recordMocks.permissions = ["view_surrogates", "view_intended_parents", "view_donors"]
+    })
+
+    it("leaves out record types the role cannot view instead of requesting them", () => {
+        recordMocks.permissions = ["view_surrogates", "view_donors"]
+        render(<TaskEditModal open onClose={vi.fn()} onSave={vi.fn()} task={{ id: "task-1", title: "Review", description: null, task_type: "review", due_date: null, due_time: null, is_completed: false, surrogate_id: null }} />)
+
+        fireEvent.click(screen.getByRole("button", { name: /^Linked record/ }))
+        const recordType = screen.getByRole("group", { name: "Record type" })
+        expect(within(recordType).getByRole("button", { name: "Surrogates" })).toBeInTheDocument()
+        expect(within(recordType).getByRole("button", { name: "Donors" })).toBeInTheDocument()
+        expect(within(recordType).queryByRole("button", { name: "Intended Parents" })).not.toBeInTheDocument()
+        expect(recordMocks.surrogates).toHaveBeenLastCalledWith(expect.anything(), { enabled: true })
+        expect(recordMocks.intendedParents).toHaveBeenLastCalledWith(expect.anything(), { enabled: false })
+    })
+
+    it("offers every record type while the permission lookup is unavailable", () => {
+        recordMocks.permissions = undefined
+        render(<TaskEditModal open onClose={vi.fn()} onSave={vi.fn()} task={{ id: "task-1", title: "Review", description: null, task_type: "review", due_date: null, due_time: null, is_completed: false, surrogate_id: null }} />)
+
+        fireEvent.click(screen.getByRole("button", { name: /^Linked record/ }))
+        expect(within(screen.getByRole("group", { name: "Record type" })).getByRole("button", { name: "Intended Parents" })).toBeInTheDocument()
+        expect(recordMocks.intendedParents).toHaveBeenLastCalledWith(expect.anything(), { enabled: true })
     })
 
     it("preserves edited values and shows a failed save", async () => {

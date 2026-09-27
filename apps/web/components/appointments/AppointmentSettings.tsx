@@ -304,7 +304,7 @@ function BookingLinkCard() {
                 />
                 <Button variant="outline" size="sm" onClick={openBookingPreview}>
                     <EyeIcon className="size-4 mr-2" />
-                    Preview Booking Page
+                    Preview booking page
                 </Button>
                 <p className="text-xs text-muted-foreground">
                     This booking link stays the same, so previously shared links remain valid.

@@ -67,7 +67,7 @@ const mockSetAIContext = vi.fn()
 const mockClearAIContext = vi.fn()
 const mockUseDonors = vi.fn()
 
-vi.mock("@/lib/hooks/use-permissions", () => ({ useEffectivePermissions: () => ({ data: { permissions: ["edit_tasks", "delete_tasks"] } }) }))
+vi.mock("@/lib/hooks/use-permissions", () => ({ useEffectivePermissions: () => ({ data: { permissions: ["edit_tasks", "delete_tasks", "view_surrogates", "view_intended_parents", "view_donors"] } }) }))
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
     useTask: (id: string) => mockUseTask(id),

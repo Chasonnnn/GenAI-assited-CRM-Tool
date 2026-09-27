@@ -209,6 +209,17 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
         expect(screen.getByRole("group", { name: "Available times" })).toBeInTheDocument()
     })
 
+    it("gives the period navigation a full row below sm so the title is not cut off", () => {
+        render(<UnifiedCalendar />)
+
+        const nav = screen.getByTestId("calendar-period-nav")
+        expect(nav).toHaveClass("w-full", "sm:w-auto")
+        expect(within(nav).getByRole("button", { name: "Previous period" })).toBeInTheDocument()
+        expect(within(nav).queryByRole("button", { name: "Today" })).not.toBeInTheDocument()
+        // Today and the period switcher share the second row.
+        expect(screen.getByRole("combobox", { name: "Calendar period" })).toHaveClass("flex-1", "sm:w-36")
+    })
+
     it("renders calendar appointments as native draggable buttons", () => {
         render(<UnifiedCalendar />)
 

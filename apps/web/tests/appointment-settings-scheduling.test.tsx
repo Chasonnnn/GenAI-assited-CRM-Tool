@@ -60,13 +60,25 @@ describe("AppointmentSettings scheduling fixes", () => {
         render(<AppointmentSettings />)
 
         const tabList = screen.getByRole("tablist")
-        expect(tabList.className).not.toMatch(/\bw-full\b|\bgrid\b/)
+        // Compare whole class tokens: the primitive's max-w-full cap is fine, a stretched list is not.
+        const tabListClasses = tabList.className.split(/\s+/)
+        expect(tabListClasses).toContain("w-fit")
+        expect(tabListClasses).not.toContain("w-full")
+        expect(tabListClasses).not.toContain("grid")
         expect(screen.getByRole("tab", { name: "Appointment Types" })).toHaveAttribute("aria-selected", "true")
 
         const replaceState = vi.spyOn(window.history, "replaceState")
         fireEvent.click(screen.getByRole("tab", { name: "Booking Link" }))
         expect(replaceState).toHaveBeenCalledWith(null, "", "/settings/appointments?tab=link")
         replaceState.mockRestore()
+    })
+
+    it("uses sentence case for the booking page preview button", () => {
+        mocks.search = "tab=link"
+        render(<AppointmentSettings />)
+
+        expect(screen.getByRole("button", { name: "Preview booking page" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Preview Booking Page" })).not.toBeInTheDocument()
     })
 
     it("shows a neutral empty state with a create action for appointment types", () => {
