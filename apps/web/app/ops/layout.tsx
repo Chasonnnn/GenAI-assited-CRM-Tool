@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ShieldCheck, Building2, Bell, LogOut, Loader2, LayoutTemplate, Terminal } from 'lucide-react';
 import api, { ApiError } from '@/lib/api';
+import './ops-theme.css';
 
 function NavLink({
     href,
@@ -25,10 +26,11 @@ function NavLink({
     return (
         <Link
             href={href}
-            className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+            aria-current={isActive ? 'page' : undefined}
+            className={`shrink-0 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                 isActive
-                    ? 'bg-teal-600/10 text-teal-600 dark:text-teal-400'
-                    : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-stone-100'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             }`}
         >
             {children}
@@ -37,12 +39,10 @@ function NavLink({
 }
 
 function getOpsAccessRedirect(error: unknown) {
-    if (
-        error instanceof ApiError &&
-        error.status === 403 &&
-        error.message.toLowerCase().includes('mfa')
-    ) {
-        return '/mfa';
+    if (error instanceof ApiError && error.status === 403) {
+        return error.message.toLowerCase().includes('mfa')
+            ? '/mfa'
+            : '/ops/login?error=not_platform_admin';
     }
     return '/ops/login';
 }
@@ -101,10 +101,11 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
         return null;
     }
 
-    if (platformMeQuery.isPending || platformStatsQuery.isPending) {
+    // Stats only feed the Alerts badge, so the shell waits for the access check alone.
+    if (platformMeQuery.isPending) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-stone-950">
-                <Loader2 className="size-8 animate-spin text-teal-600" />
+            <div data-ops-console="" className="min-h-screen flex items-center justify-center bg-background">
+                <Loader2 className="size-8 animate-spin text-primary" aria-label="Loading" />
             </div>
         );
     }
@@ -113,23 +114,23 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
     const openAlertCount = platformStatsQuery.data?.open_alerts ?? 0;
 
     return (
-        <div className="min-h-screen bg-stone-50 dark:bg-stone-950">
+        <div data-ops-console="" className="min-h-screen bg-background">
             {/* Top Header */}
-            <header className="sticky top-0 z-50 border-b border-stone-200 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 backdrop-blur">
-                <div className="flex h-14 items-center justify-between px-6">
-                    <div className="flex items-center gap-6">
+            <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur">
+                <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
+                    <div className="flex min-w-0 items-center gap-6">
                         {/* Logo/Brand */}
-                        <Link href="/ops" className="flex items-center gap-2">
-                            <div className="size-8 rounded-lg bg-teal-600 flex items-center justify-center">
-                                <ShieldCheck className="size-5 text-white" />
+                        <Link href="/ops" className="flex shrink-0 items-center gap-2" aria-label="Ops Console">
+                            <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
+                                <ShieldCheck className="size-5 text-primary-foreground" aria-hidden="true" />
                             </div>
-                            <span className="font-semibold text-lg text-stone-900 dark:text-stone-100">
+                            <span className="hidden font-semibold text-lg text-foreground lg:inline">
                                 Ops Console
                             </span>
                         </Link>
 
                         {/* Nav Links */}
-                        <nav className="flex items-center gap-1">
+                        <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
                             <NavLink href="/ops" exact>
                                 Dashboard
                             </NavLink>
@@ -169,8 +170,8 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
                     </div>
 
                     {/* User Menu */}
-                    <div className="flex items-center gap-4">
-                        <span className="text-sm text-stone-500 dark:text-stone-400">
+                    <div className="flex shrink-0 items-center gap-4">
+                        <span className="hidden text-sm text-muted-foreground md:inline">
                             {user.email}
                         </span>
                         <Button

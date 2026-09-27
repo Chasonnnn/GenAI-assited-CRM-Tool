@@ -74,6 +74,70 @@ describe("OpsLayout", () => {
         expect(sessionStorage.getItem('ops_cli_login_pending')).toBeNull()
     })
 
+    it("sends a signed-in user without platform access to the login page with a reason", async () => {
+        const { ApiError } = await import("@/lib/api")
+        mockGetPlatformMe.mockRejectedValue(new ApiError("Platform admin access required", 403))
+        mockGetPlatformStats.mockResolvedValue({ open_alerts: 0 })
+
+        renderOpsLayout(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+
+        await waitFor(() =>
+            expect(mockReplace).toHaveBeenCalledWith("/ops/login?error=not_platform_admin")
+        )
+    })
+
+    it("still sends an MFA-gated 403 to the MFA page", async () => {
+        const { ApiError } = await import("@/lib/api")
+        mockGetPlatformMe.mockRejectedValue(new ApiError("MFA required", 403))
+        mockGetPlatformStats.mockResolvedValue({ open_alerts: 0 })
+
+        renderOpsLayout(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/mfa"))
+    })
+
+    it("renders the shell before stats load and adds the alerts badge when they arrive", async () => {
+        let resolveStats: (value: unknown) => void = () => undefined
+        mockGetPlatformMe.mockResolvedValue({ email: "admin@example.test" })
+        mockGetPlatformStats.mockReturnValue(
+            new Promise((resolve) => {
+                resolveStats = resolve
+            })
+        )
+
+        renderOpsLayout(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+
+        expect(await screen.findByText("Child")).toBeInTheDocument()
+        const alertsLink = screen.getByRole("link", { name: /Alerts/ })
+        expect(alertsLink).toHaveTextContent(/^Alerts$/)
+
+        resolveStats({ agency_count: 1, active_user_count: 1, open_alerts: 4 })
+        await waitFor(() => expect(alertsLink).toHaveTextContent("Alerts4"))
+    })
+
+    it("keeps the shell and hides the badge when stats fail", async () => {
+        mockGetPlatformMe.mockResolvedValue({ email: "admin@example.test" })
+        mockGetPlatformStats.mockRejectedValue(new Error("stats down"))
+
+        renderOpsLayout(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+
+        expect(await screen.findByText("Child")).toBeInTheDocument()
+        await waitFor(() => expect(mockGetPlatformStats).toHaveBeenCalled())
+        expect(screen.getByRole("link", { name: /Alerts/ })).toHaveTextContent(/^Alerts$/)
+        expect(document.querySelector("[data-ops-console]")).not.toBeNull()
+    })
+
+    it("marks the active nav link", async () => {
+        mockPathname.mockReturnValue("/ops/agencies")
+        mockGetPlatformMe.mockResolvedValue({ email: "admin@example.test" })
+        mockGetPlatformStats.mockResolvedValue({ open_alerts: 0 })
+
+        renderOpsLayout(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+
+        expect(await screen.findByRole("link", { name: "Agencies" })).toHaveAttribute("aria-current", "page")
+        expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current")
+    })
+
     it("starts stats fetch without waiting for platform me", async () => {
         const pendingMe = new Promise(() => {})
         mockGetPlatformMe.mockReturnValue(pendingMe)
