@@ -819,6 +819,24 @@ describe('SurrogateDetailPage', () => {
         expect(onBack).toHaveBeenCalled()
     })
 
+    it("wraps header actions inside the header width on narrow screens", () => {
+        render(
+            <SurrogateDetailHeader
+                surrogateNumber="S12345"
+                statusLabel="New Unread"
+                statusColor="#111111"
+                isArchived={false}
+                onBack={vi.fn()}
+            >
+                <button type="button">Change Stage</button>
+                <button type="button">More actions</button>
+            </SurrogateDetailHeader>
+        )
+
+        const actions = screen.getByRole("button", { name: "More actions" }).parentElement
+        expect(actions).toHaveClass("flex-wrap", "min-w-0", "max-w-full")
+    })
+
     it("shows only the contact outcome pill at the contacted stage", () => {
         render(
             <SurrogateDetailHeader
