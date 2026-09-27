@@ -88,9 +88,8 @@ async def test_policies_reference_known_permissions():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "method,path,permission",
-    [
+async def test_permission_guard_blocks_revoked(db, test_org, subtests):
+    for method, path, permission in [
         ("GET", "/surrogates", P.SURROGATES_VIEW),
         ("GET", "/intended-parents", P.INTENDED_PARENTS_VIEW),
         ("GET", "/matches/", P.MATCHES_VIEW),
@@ -108,20 +107,13 @@ async def test_policies_reference_known_permissions():
         ("GET", "/jobs", P.JOBS_MANAGE),
         ("GET", "/audit/", P.AUDIT_VIEW),
         ("GET", "/surrogates/import", P.SURROGATES_IMPORT),
-    ],
-)
-async def test_permission_guard_blocks_revoked(
-    db,
-    test_org,
-    method: str,
-    path: str,
-    permission: P,
-):
-    client = await _client_with_revoked_permission(db, test_org, permission)
-    async with client:
-        response = await client.request(method, path)
-    app.dependency_overrides.clear()
-    assert response.status_code == 403
+    ]:
+        with subtests.test(method=method, path=path, permission=permission.value):
+            client = await _client_with_revoked_permission(db, test_org, permission)
+            async with client:
+                response = await client.request(method, path)
+            app.dependency_overrides.clear()
+            assert response.status_code == 403
 
 
 @pytest.mark.asyncio

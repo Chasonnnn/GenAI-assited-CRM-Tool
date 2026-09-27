@@ -5,6 +5,7 @@ from httpx import ASGITransport, AsyncClient
 
 
 @pytest.mark.asyncio
+@pytest.mark.request_metrics
 async def test_liveness_does_not_depend_on_metrics_database(
     monkeypatch: pytest.MonkeyPatch,
 ):

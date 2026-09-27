@@ -120,12 +120,11 @@ async def test_application_links_expose_only_available_same_org_links_without_cr
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("endpoint", ["picker", "links"])
 @pytest.mark.parametrize(
     "denial", ["scope", "other_org", "view_form_submissions", "view_surrogates"]
 )
 async def test_application_metadata_requires_view_action_and_record_scope(
-    db, context, application, endpoint, denial
+    db, context, application, denial, subtests
 ):
     record_id = application.record.id
     if denial == "scope":
@@ -146,14 +145,18 @@ async def test_application_metadata_requires_view_action_and_record_scope(
             )
         )
     db.flush()
-    path = f"/forms/surrogates/{record_id}/application-forms"
-    if endpoint == "links":
-        path += f"/{application.form.id}/intake-links"
     async with authed_client_for_user(
         db, context.org.id, db.get(User, context.intake.user_id), Role.INTAKE_SPECIALIST
     ) as client:
-        response = await client.get(path)
-    assert response.status_code == (404 if denial == "other_org" else 403), response.text
+        for endpoint in ["picker", "links"]:
+            with subtests.test(endpoint=repr(endpoint)):
+                path = f"/forms/surrogates/{record_id}/application-forms"
+                if endpoint == "links":
+                    path += f"/{application.form.id}/intake-links"
+                response = await client.get(path)
+                assert response.status_code == (404 if denial == "other_org" else 403), (
+                    response.text
+                )
 
 
 @pytest.mark.asyncio
@@ -178,26 +181,27 @@ async def test_application_links_require_record_edit_and_email_send(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["other_org", "donor", "draft"])
-async def test_application_links_reject_incompatible_form(db, context, application, kind):
-    org_id = context.org.id
-    if kind == "other_org":
-        other = Organization(id=uuid4(), name="Other agency", slug=uuid4().hex)
-        db.add(other)
-        db.flush()
-        org_id = other.id
-    form = _form(
-        db,
-        org_id,
-        lead_kind="egg_donor" if kind == "donor" else "surrogate",
-        status="draft" if kind == "draft" else "published",
-    )
-    _link(db, form)
+async def test_application_links_reject_incompatible_form(db, context, application, subtests):
     async with authed_client_for_user(
         db, context.org.id, db.get(User, context.intake.user_id), Role.INTAKE_SPECIALIST
     ) as client:
-        response = await client.get(f"{_path(application)}/{form.id}/intake-links")
-    assert response.status_code == 404, response.text
+        for kind in ["other_org", "donor", "draft"]:
+            with subtests.test(kind=repr(kind)):
+                org_id = context.org.id
+                if kind == "other_org":
+                    other = Organization(id=uuid4(), name="Other agency", slug=uuid4().hex)
+                    db.add(other)
+                    db.flush()
+                    org_id = other.id
+                form = _form(
+                    db,
+                    org_id,
+                    lead_kind="egg_donor" if kind == "donor" else "surrogate",
+                    status="draft" if kind == "draft" else "published",
+                )
+                _link(db, form)
+                response = await client.get(f"{_path(application)}/{form.id}/intake-links")
+                assert response.status_code == 404, response.text
 
 
 @pytest.mark.asyncio
