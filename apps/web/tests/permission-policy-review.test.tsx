@@ -73,4 +73,36 @@ describe("permission policy activation review", () => {
         expect(await screen.findByRole("alert")).toHaveTextContent("Unable to prepare review")
         expect(screen.queryByRole("button", { name: "Review activation" })).not.toBeInTheDocument()
     })
+
+    it("shows gained and lost match actions from the server preview with readable labels", async () => {
+        vi.mocked(api.getAvailablePermissions).mockResolvedValue([
+            { key: "decide_matches", label: "Decide Matches", category: "Matches", description: "", developer_only: false },
+            { key: "close_matches", label: "Close Matches", category: "Matches", description: "", developer_only: false },
+        ])
+        vi.mocked(api.previewPolicy).mockResolvedValue({
+            ...initial,
+            match_action_baseline: "pre_step_7",
+            revokes: [], unresolved_revoke_ids: [], execution_review: [], unresolved_execution_ids: [],
+            members: [
+                { membership_id: "member-1", user_id: "user-1", role: "intake_specialist", current: ["view_matches"], proposed: ["view_matches"], gained: [], lost: [], previous_match_actions: [], proposed_match_actions: ["propose"], gained_match_actions: ["propose"], lost_match_actions: [] },
+                { membership_id: "member-2", user_id: "user-2", role: "case_manager", current: ["propose_matches"], proposed: ["decide_matches"], gained: ["decide_matches"], lost: ["close_matches"], previous_match_actions: ["complete", "request_cancel", "withdraw_cancel"], proposed_match_actions: ["accept", "decline"], gained_match_actions: ["accept", "decline"], lost_match_actions: ["complete", "request_cancel", "withdraw_cancel"] },
+                { membership_id: "member-3", user_id: "user-3", role: "admin", current: [], proposed: [], gained: [], lost: [], previous_match_actions: ["accept"], proposed_match_actions: ["accept"], gained_match_actions: [], lost_match_actions: [] },
+            ],
+        })
+        render(<PermissionPolicyReview />)
+        fireEvent.click(await screen.findByRole("button", { name: "Generate preview" }))
+        expect(await screen.findByText("Access changes")).toBeVisible()
+        const details = screen.getAllByRole("group")
+        expect(details).toHaveLength(2)
+        expect(details[0]).toHaveTextContent("+1 / −0")
+        expect(within(details[0]!).getByRole("list", { name: "Added match actions" })).toHaveTextContent("Propose")
+        expect(details[1]).toHaveTextContent("+3 / −4")
+        expect(within(details[1]!).getAllByText("Decide Matches")[0]).toBeInTheDocument()
+        expect(within(details[1]!).getByText("Close Matches")).toBeInTheDocument()
+        const added = within(details[1]!).getByRole("list", { name: "Added match actions" })
+        expect(within(added).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Accept", "Decline"])
+        const removed = within(details[1]!).getByRole("list", { name: "Removed match actions" })
+        expect(within(removed).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Complete", "Request cancellation", "Withdraw cancellation request"])
+        expect(screen.queryByText("No action permission changes.")).not.toBeInTheDocument()
+    })
 })

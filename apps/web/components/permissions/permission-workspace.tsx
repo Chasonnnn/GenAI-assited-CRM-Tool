@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, ChevronDown, Eye, Heart, Lock, Settings2, UsersRound, Zap } from "lucide-react"
+import { Check, ChevronDown, Eye, Heart, HeartHandshake, Lock, Settings2, UsersRound, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -19,7 +19,7 @@ import { PermissionIncludedFeatures } from "./permission-included-features"
 import { PermissionNavigation, type PermissionTab } from "./permission-navigation"
 
 const RECORD_MODULES: Partial<Record<PermissionTopic, RecordModule>> = { Surrogates: "surrogates", Donors: "donors", "Intended Parents": "intended_parents" }
-const TOPIC_ICONS = { Surrogates: UsersRound, Donors: Heart, "Intended Parents": UsersRound, Operations: Zap, Administration: Settings2 }
+const TOPIC_ICONS = { Surrogates: UsersRound, Donors: Heart, "Intended Parents": UsersRound, Matches: HeartHandshake, Operations: Zap, Administration: Settings2 }
 
 export function PermissionWorkspace({ initialRole = "case_manager", initialTab = "roles" }: { initialRole?: string; initialTab?: PermissionTab }) {
     const [role, setRole] = useState(initialRole)

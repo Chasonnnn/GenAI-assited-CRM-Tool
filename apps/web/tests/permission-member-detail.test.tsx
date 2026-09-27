@@ -129,4 +129,27 @@ describe("member permission administration", () => {
         expect(screen.queryByRole("button", { name: "Add record" })).not.toBeInTheDocument()
     })
 
+
+    it("labels match decision and closure actions in the role change review", async () => {
+        vi.mocked(api.getAvailablePermissions).mockResolvedValue([
+            { key: "view_surrogates", label: "View Surrogates", category: "Surrogates", description: "", developer_only: false, assignable: true },
+            { key: "decide_matches", label: "Decide Matches", category: "Matches", topic: "Matches", short_label: "Decide", description: "", developer_only: false, assignable: true },
+            { key: "close_matches", label: "Close Matches", category: "Matches", topic: "Matches", short_label: "Close", description: "", developer_only: false, assignable: true },
+        ])
+        vi.mocked(api.getMember).mockResolvedValue({ ...member, effective_permissions: ["view_surrogates", "close_matches"], overrides: [], access_sources: { view_surrogates: ["role_baseline"], close_matches: ["role_baseline"] } })
+        vi.mocked(api.getRoleDetail).mockImplementation(async (role) => ({ role, label: role, protected: false, permissions_by_category: { Matches: role === "operations"
+            ? [{ key: "decide_matches", label: "Decide Matches", description: "", is_granted: true, developer_only: false }, { key: "close_matches", label: "Close Matches", description: "", is_granted: false, developer_only: false }]
+            : [{ key: "close_matches", label: "Close Matches", description: "", is_granted: true, developer_only: false }], Surrogates: [{ key: "view_surrogates", label: "View Surrogates", description: "", is_granted: true, developer_only: false }] } }))
+        render(<PermissionMemberDetail memberId="member-1" />)
+        const roleSection = (await screen.findByText("Role permissions")).closest("section")!
+        expect(await within(roleSection).findByText("Close Matches")).toBeVisible()
+        await waitFor(() => expect(screen.getByRole("combobox", { name: "Role" })).toHaveTextContent("Case Manager"))
+        choose("Role", "Operations")
+        fireEvent.click(screen.getByRole("button", { name: "Review role change" }))
+        const dialog = await screen.findByRole("dialog")
+        const added = (await within(dialog).findByText("Added actions")).parentElement!
+        const removed = within(dialog).getByText("Removed actions").parentElement!
+        expect(added).toHaveTextContent("Decide Matches")
+        expect(removed).toHaveTextContent("Close Matches")
+    })
 })

@@ -4,7 +4,7 @@
 
 import api from '../api'
 
-export type PermissionTopic = "Surrogates" | "Donors" | "Intended Parents" | "Operations" | "Administration"
+export type PermissionTopic = "Surrogates" | "Donors" | "Intended Parents" | "Matches" | "Operations" | "Administration"
 
 export interface PermissionPresentation {
     topic?: PermissionTopic
@@ -210,12 +210,15 @@ export interface PolicyConfiguration {
     protected_roles: string[]
 }
 
+export type MatchPermissionAction = "propose" | "accept" | "decline" | "request_cancel" | "withdraw_cancel" | "complete"
+
 export interface PolicyPreview {
     digest: string
     current_version: number
     target_version: number
     configuration_revision: number
     ready: boolean
+    match_action_baseline?: "pre_step_7" | "current"
     members: {
         membership_id: string
         user_id: string
@@ -224,6 +227,10 @@ export interface PolicyPreview {
         proposed: string[]
         gained: string[]
         lost: string[]
+        previous_match_actions?: MatchPermissionAction[]
+        proposed_match_actions?: MatchPermissionAction[]
+        gained_match_actions?: MatchPermissionAction[]
+        lost_match_actions?: MatchPermissionAction[]
     }[]
     revokes: { override_id: string; user_id: string; role: string | null; permission: string; resolution: "remove" | "deny_for_role" | null; can_deny_for_role?: boolean }[]
     unresolved_revoke_ids: string[]

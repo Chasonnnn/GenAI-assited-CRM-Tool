@@ -1,6 +1,6 @@
 import type { PermissionPresentation, PermissionTopic, RoleDetail, RolePermission } from "@/lib/api/permissions"
 
-export const PERMISSION_TOPICS: PermissionTopic[] = ["Surrogates", "Donors", "Intended Parents", "Operations", "Administration"]
+export const PERMISSION_TOPICS: PermissionTopic[] = ["Surrogates", "Donors", "Intended Parents", "Matches", "Operations", "Administration"]
 
 const SECTION_ORDER = ["Records", "Progress & ownership", "Notes", "Matches", "Workflows", "Templates", "Campaigns", "Tasks", "Communications", "Inbox", "Appointments", "Forms", "Reports", "Team", "Organization", "Integrations", "AI", "Compliance", "System"]
 const ACTION_ORDER: Record<string, string[]> = {
@@ -17,7 +17,8 @@ export function groupRolePermissions(detail: RoleDetail | undefined) {
     for (const [category, permissions] of Object.entries(detail?.permissions_by_category ?? {})) {
         for (const permission of permissions) {
             if (isIncludedPermission(permission, detail?.policy_version === 2)) continue
-            const topic = permission.topic ?? (PERMISSION_TOPICS.includes(category as PermissionTopic) ? category as PermissionTopic : "Administration")
+            const declared = permission.topic ?? category
+            const topic = PERMISSION_TOPICS.includes(declared as PermissionTopic) ? declared as PermissionTopic : "Administration"
             const section = permission.section ?? (category === topic ? "Actions" : category)
             ;(topics[topic][section] ??= []).push(permission)
         }

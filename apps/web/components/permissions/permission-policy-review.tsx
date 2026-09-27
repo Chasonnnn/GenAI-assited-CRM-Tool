@@ -9,6 +9,7 @@ import { useActivatePolicy, useAvailablePermissions, useMembers, usePolicyConfig
 import type { PolicyChanges } from "@/lib/api/permissions"
 import { ChoiceField, PermissionError, PermissionLoading, ROLE_LABELS } from "./permission-controls"
 import { PermissionMigrationReview } from "./permission-migration-review"
+import { getMatchActionLabel } from "@/lib/match-status-definitions"
 
 export function PermissionPolicyReview() {
     const policy = usePolicyConfiguration()
@@ -31,7 +32,13 @@ export function PermissionPolicyReview() {
     if (policy.error || members.error || available.error) return <PermissionError error={policy.error || members.error || available.error} retry={() => { void policy.refetch(); void members.refetch(); void available.refetch() }} />
     if (policy.data?.version === 2 || activate.isSuccess) return <div role="status" className="flex items-center gap-3 rounded-2xl border bg-card p-8"><CheckCircle2 className="size-6 text-emerald-600" /><h2 className="text-xl font-semibold">Permission upgrade active</h2></div>
     const review = preview.data
-    const hasChanges = review?.members.some((member) => member.gained.length || member.lost.length)
+    type ReviewMember = NonNullable<typeof review>["members"][number]
+    const changeCount = (member: ReviewMember) => ({
+        gained: member.gained.length + (member.gained_match_actions?.length ?? 0),
+        lost: member.lost.length + (member.lost_match_actions?.length ?? 0),
+    })
+    const changedMembers = review?.members.filter((member) => { const count = changeCount(member); return count.gained || count.lost }) ?? []
+    const hasChanges = changedMembers.length > 0
     return <div className="mx-auto max-w-5xl space-y-6">
         <section className="rounded-2xl border bg-card p-6 sm:p-8">
             <div className="flex flex-wrap items-center justify-between gap-4"><h2 className="text-xl font-semibold">Review permission upgrade</h2><Button variant="outline" disabled={preview.isPending || activate.isPending} onClick={() => void generate()}>{preview.isPending ? "Preparing preview…" : review ? "Refresh preview" : "Generate preview"}</Button></div>
@@ -41,7 +48,7 @@ export function PermissionPolicyReview() {
         {review && <>
             <section className="rounded-2xl border bg-card p-6 sm:p-8"><h3 className="mb-5 font-semibold">Access changes</h3>
                 {!hasChanges && <p className="text-sm text-muted-foreground">No action permission changes.</p>}
-                <div className="space-y-3">{review.members.filter((member) => member.gained.length || member.lost.length).map((member) => <details key={member.membership_id} className="rounded-xl border p-4"><summary className="cursor-pointer text-sm font-medium">{memberName(member.user_id)} <span className="ml-2 font-normal text-muted-foreground">{ROLE_LABELS[member.role] || member.role} · +{member.gained.length} / −{member.lost.length}</span></summary><div className="mt-4 grid gap-4 sm:grid-cols-2"><div><h4 className="mb-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Added</h4><ul className="space-y-1 text-sm">{member.gained.map((key) => <li key={key}>{permissionName(key)}</li>)}</ul></div><div><h4 className="mb-2 text-xs font-semibold text-destructive">Removed</h4><ul className="space-y-1 text-sm">{member.lost.map((key) => <li key={key}>{permissionName(key)}</li>)}</ul></div></div></details>)}</div>
+                <div className="space-y-3">{changedMembers.map((member) => { const count = changeCount(member); return <details key={member.membership_id} className="rounded-xl border p-4"><summary className="cursor-pointer text-sm font-medium">{memberName(member.user_id)} <span className="ml-2 font-normal text-muted-foreground">{ROLE_LABELS[member.role] || member.role} · +{count.gained} / −{count.lost}</span></summary><div className="mt-4 grid gap-4 sm:grid-cols-2"><div><h4 className="mb-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Added</h4><ul className="space-y-1 text-sm">{member.gained.map((key) => <li key={key}>{permissionName(key)}</li>)}</ul></div><div><h4 className="mb-2 text-xs font-semibold text-destructive">Removed</h4><ul className="space-y-1 text-sm">{member.lost.map((key) => <li key={key}>{permissionName(key)}</li>)}</ul></div>{(member.gained_match_actions?.length || member.lost_match_actions?.length) ? <><div><h4 className="mb-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Added match actions</h4><ul aria-label="Added match actions" className="space-y-1 text-sm">{(member.gained_match_actions ?? []).map((action) => <li key={action}>{getMatchActionLabel(action)}</li>)}</ul></div><div><h4 className="mb-2 text-xs font-semibold text-destructive">Removed match actions</h4><ul aria-label="Removed match actions" className="space-y-1 text-sm">{(member.lost_match_actions ?? []).map((action) => <li key={action}>{getMatchActionLabel(action)}</li>)}</ul></div></> : null}</div></details> })}</div>
             </section>
             {review.revokes.length > 0 && <section className="space-y-4 rounded-2xl border bg-card p-6 sm:p-8"><h3 className="font-semibold">Individual revoke resolutions</h3>{review.revokes.map((revoke) => <div key={revoke.override_id} className="grid items-end gap-3 rounded-xl border p-4 sm:grid-cols-2"><p className="text-sm font-medium">{memberName(revoke.user_id)}<span className="mt-1 block font-normal text-muted-foreground">{permissionName(revoke.permission)}</span></p><ChoiceField label="Resolution" value={changes.revoke_resolutions?.find((item) => item.override_id === revoke.override_id)?.action ?? ""} options={revoke.can_deny_for_role ? { remove: "Remove individual revoke", deny_for_role: `Remove from all ${ROLE_LABELS[revoke.role || ""] || revoke.role} members` } : { remove: "Remove individual revoke" }} onChange={(action) => setChanges((previous) => ({ ...previous, revoke_resolutions: [...(previous.revoke_resolutions ?? []).filter((item) => item.override_id !== revoke.override_id), { override_id: revoke.override_id, action }] }))} disabled={preview.isPending || activate.isPending} /></div>)}</section>}
             <div className="rounded-2xl border bg-card p-6 sm:p-8"><PermissionMigrationReview review={review.scope_review} members={members.data ?? []} onResolved={() => { setScopeChanged(true); setReviewedChanges(null) }} /></div>
