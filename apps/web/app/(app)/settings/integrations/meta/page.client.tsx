@@ -3,6 +3,7 @@
 import { useReducer, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -36,7 +37,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { toast } from "@/components/ui/toast"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import { SettingsPageGate } from "../../settings-page-gate"
 import {
     AlertTriangleIcon,
     CheckCircleIcon,
@@ -280,8 +285,9 @@ function MetaAssetSelection({
             })
             onClose()
             push("/settings/integrations/meta")
-        } catch {
-            // Error handled by mutation
+        } catch (error) {
+            const message = getActionErrorMessage(error, "Couldn't connect the selected assets. Try again.")
+            if (message) toast.error(message)
         }
     }
 
@@ -427,7 +433,7 @@ function MetaAssetSelection({
                     </div>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleConnect(true)}>Overwrite</AlertDialogAction>
+                        <AlertDialogAction variant="destructive" onClick={() => handleConnect(true)}>Overwrite</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -436,6 +442,19 @@ function MetaAssetSelection({
 }
 
 export default function MetaIntegrationPage() {
+    return (
+        <SettingsPageGate
+            title="Meta Integration"
+            permission="manage_meta_leads"
+            deniedDescription="Meta Lead Ads settings need the Manage Meta Leads permission. Ask an admin to update your role."
+            back={{ href: "/settings/integrations", label: "Back to integrations" }}
+        >
+            <MetaIntegrationContent />
+        </SettingsPageGate>
+    )
+}
+
+function MetaIntegrationContent() {
     const searchParams = useSearchParams()
     const { push } = useRouter()
     const step = searchParams.get("step")
@@ -464,18 +483,17 @@ export default function MetaIntegrationPage() {
         try {
             const result = await connectUrlMutation.mutateAsync()
             window.location.href = result.auth_url
-        } catch {
-            // Error handled by mutation
+        } catch (error) {
+            const message = getActionErrorMessage(error, "Couldn't start the Meta connection. Try again.")
+            if (message) toast.error(message)
         }
     }
 
+    // Errors propagate so the confirm dialog stays open and shows them inline.
     const handleDisconnect = async (connectionId: string) => {
-        try {
-            await disconnectMutation.mutateAsync(connectionId)
-            setDisconnectConnectionId(null)
-        } catch {
-            // Error handled by mutation
-        }
+        await disconnectMutation.mutateAsync(connectionId)
+        setDisconnectConnectionId(null)
+        toast.success("Meta account disconnected")
     }
 
     const openEditAccount = (account: MetaAdAccount) => {
@@ -505,17 +523,15 @@ export default function MetaIntegrationPage() {
             })
             dispatchAccountEdit({ type: "close" })
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Failed to update ad account"
-            dispatchAccountEdit({ type: "setFormError", message })
+            const message = getActionErrorMessage(error, "Couldn't update the ad account. Try again.")
+            if (message) dispatchAccountEdit({ type: "setFormError", message })
         }
     }
 
+    // Errors propagate so the confirm dialog stays open and shows them inline.
     const handleDeleteAdAccount = async (accountId: string) => {
-        try {
-            await deleteAccountMutation.mutateAsync(accountId)
-        } catch (error) {
-            console.error("Failed to delete ad account:", error)
-        }
+        await deleteAccountMutation.mutateAsync(accountId)
+        toast.success("Ad account deleted")
     }
 
     return (
@@ -588,16 +604,15 @@ export default function MetaIntegrationPage() {
 
 function MetaIntegrationHeader() {
     return (
-        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center justify-between px-6">
-                <div>
-                    <h1 className="text-2xl font-semibold">Meta Integration</h1>
-                </div>
+        <PageHeader
+            title="Meta Integration"
+            back={{ href: "/settings/integrations", label: "Back to integrations" }}
+            actions={
                 <Button render={<Link href="/settings/integrations/meta/forms" />} variant="outline">
                     Manage lead forms
                 </Button>
-            </div>
-        </div>
+            }
+        />
     )
 }
 
@@ -757,7 +772,7 @@ function MetaAdAccountsCard({
     adAccountsLoading: boolean
     deletePending: boolean
     onEditAccount: (account: MetaAdAccount) => void
-    onDeleteAdAccount: (accountId: string) => void
+    onDeleteAdAccount: (accountId: string) => Promise<void>
 }) {
     return (
         <Card>
@@ -830,15 +845,23 @@ function MetaAdAccountsCard({
                                         >
                                             <PencilIcon className="size-4" aria-hidden="true" />
                                         </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => onDeleteAdAccount(account.id)}
-                                            disabled={deletePending}
-                                            aria-label="Delete ad account"
-                                        >
-                                            <TrashIcon className="size-4" aria-hidden="true" />
-                                        </Button>
+                                        <ConfirmDialog
+                                            trigger={
+                                                <Button
+                                                    variant="destructive-ghost"
+                                                    size="sm"
+                                                    disabled={deletePending}
+                                                    aria-label="Delete ad account"
+                                                >
+                                                    <TrashIcon className="size-4" aria-hidden="true" />
+                                                </Button>
+                                            }
+                                            title={`Delete ${account.ad_account_name || account.ad_account_external_id}?`}
+                                            description="Lead sync and CAPI stop for this ad account."
+                                            confirmLabel="Delete"
+                                            errorFallback="Couldn't delete the ad account. Try again."
+                                            onConfirm={() => onDeleteAdAccount(account.id)}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -956,24 +979,19 @@ function DisconnectMetaConnectionDialog({
 }: {
     connectionId: string | null
     onClose: () => void
-    onDisconnect: (connectionId: string) => void
+    onDisconnect: (connectionId: string) => Promise<void>
 }) {
     return (
-        <AlertDialog open={!!connectionId} onOpenChange={(open) => !open && onClose()}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Disconnect Meta account?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This will unlink all ad accounts and pages connected through this Facebook account.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => connectionId && onDisconnect(connectionId)}>
-                        Disconnect
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDialog
+            open={!!connectionId}
+            onOpenChange={(open) => {
+                if (!open) onClose()
+            }}
+            title="Disconnect Meta account?"
+            description="This will unlink all ad accounts and pages connected through this Facebook account."
+            confirmLabel="Disconnect"
+            errorFallback="Couldn't disconnect the Meta account. Try again."
+            onConfirm={() => (connectionId ? onDisconnect(connectionId) : undefined)}
+        />
     )
 }

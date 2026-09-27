@@ -1,8 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import MetaIntegrationsPage from '../app/(app)/settings/integrations/meta/page'
+import { ApiError } from '@/lib/api'
 
 let mockSearchParams = new URLSearchParams()
+let mockPermissions: string[] = ['manage_meta_leads']
+
+vi.mock('@/lib/hooks/use-permission-check', () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockPermissions.includes(permission),
+    }),
+}))
+
+const mockToast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
+vi.mock('@/components/ui/toast', () => ({ toast: mockToast }))
 
 vi.mock('next/navigation', () => ({
     useSearchParams: () => mockSearchParams,
@@ -44,6 +59,11 @@ vi.mock('@/lib/hooks/use-admin-meta', () => ({
 describe('MetaIntegrationsPage (OAuth)', () => {
     beforeEach(() => {
         mockSearchParams = new URLSearchParams()
+        mockPermissions = ['manage_meta_leads']
+        mockToast.success.mockReset()
+        mockToast.error.mockReset()
+        mockUseMetaConnections.mockReset()
+        mockUseAdminMetaAdAccounts.mockReset()
         mockUseMetaConnections.mockReturnValue({
             data: [],
             isLoading: false,
@@ -210,5 +230,97 @@ describe('MetaIntegrationsPage (OAuth)', () => {
         expect(
             screen.getByRole('link', { name: /manage lead forms/i })
         ).toBeInTheDocument()
+    })
+
+    it('shows the restricted state and sends no Meta requests without manage_meta_leads', () => {
+        mockPermissions = ['manage_integrations']
+
+        render(<MetaIntegrationsPage />)
+
+        expect(screen.getByRole('heading', { name: 'Permission required' })).toBeInTheDocument()
+        expect(screen.getByText(/Manage Meta Leads permission/)).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /connect with facebook/i })).not.toBeInTheDocument()
+        expect(mockUseMetaConnections).not.toHaveBeenCalled()
+        expect(mockUseAdminMetaAdAccounts).not.toHaveBeenCalled()
+    })
+
+    it('shows a sanitized toast when Connect with Facebook fails', async () => {
+        mockUseMetaConnectUrl.mockReturnValue({
+            mutateAsync: vi.fn().mockRejectedValue(
+                new ApiError(503, 'Service Unavailable', 'META_APP_SECRET is not configured'),
+            ),
+            isPending: false,
+        })
+
+        render(<MetaIntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /connect with facebook/i }))
+
+        await waitFor(() => {
+            expect(mockToast.error).toHaveBeenCalledWith("Couldn't start the Meta connection. Try again.")
+        })
+    })
+
+    it('deletes an ad account only after confirmation and keeps failures inline', async () => {
+        const deleteAccount = vi.fn()
+            .mockRejectedValueOnce(new ApiError(500, 'Internal Server Error', 'boom'))
+            .mockResolvedValueOnce(undefined)
+        mockUseDeleteMetaAdAccount.mockReturnValue({ mutateAsync: deleteAccount, isPending: false })
+        mockUseAdminMetaAdAccounts.mockReturnValue({
+            data: [
+                {
+                    id: 'acct-1',
+                    ad_account_external_id: 'act_123',
+                    ad_account_name: 'Main account',
+                    capi_enabled: true,
+                    is_active: true,
+                    hierarchy_synced_at: null,
+                    spend_synced_at: null,
+                },
+            ],
+            isLoading: false,
+        })
+
+        render(<MetaIntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Delete ad account' }))
+        expect(deleteAccount).not.toHaveBeenCalled()
+
+        const dialog = await screen.findByRole('alertdialog', { name: 'Delete Main account?' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+        expect(await within(dialog).findByText("Couldn't delete the ad account. Try again.")).toBeInTheDocument()
+        expect(dialog).toBeInTheDocument()
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+        await waitFor(() => expect(mockToast.success).toHaveBeenCalledWith('Ad account deleted'))
+        expect(deleteAccount).toHaveBeenCalledWith('acct-1')
+    })
+
+    it('disconnects a Meta account through a destructive confirmation', async () => {
+        const disconnect = vi.fn().mockResolvedValue(undefined)
+        mockUseDisconnectMetaConnection.mockReturnValue({ mutateAsync: disconnect, isPending: false })
+        mockUseMetaConnections.mockReturnValue({
+            data: [
+                {
+                    id: 'conn-1',
+                    meta_user_name: 'Meta User',
+                    last_error: null,
+                    last_error_code: null,
+                },
+            ],
+            isLoading: false,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+
+        render(<MetaIntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Disconnect connection' }))
+
+        const dialog = await screen.findByRole('alertdialog', { name: 'Disconnect Meta account?' })
+        const confirm = within(dialog).getByRole('button', { name: 'Disconnect' })
+        expect(confirm).toHaveClass('bg-destructive')
+        fireEvent.click(confirm)
+
+        await waitFor(() => expect(disconnect).toHaveBeenCalledWith('conn-1'))
+        await waitFor(() => expect(mockToast.success).toHaveBeenCalledWith('Meta account disconnected'))
     })
 })

@@ -1,21 +1,12 @@
 "use client"
 
 import Link from "@/components/app-link"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
     Table,
     TableBody,
@@ -28,6 +19,8 @@ import { useDeleteMetaForm, useMetaForms, useSyncMetaForms } from "@/lib/hooks/u
 import { formatRelativeTime } from "@/lib/formatters"
 import { AlertTriangleIcon, CheckCircleIcon, Loader2Icon, RefreshCwIcon, TrashIcon } from "lucide-react"
 import { toast } from "@/components/ui/toast"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import { SettingsPageGate } from "../../../settings-page-gate"
 
 const statusBadge = (status: string) => {
     if (status === "mapped") {
@@ -61,47 +54,61 @@ const leadKindLabel = {
 }
 
 export default function MetaFormsPage() {
+    return (
+        <SettingsPageGate
+            title="Meta Lead Form Mapping"
+            permission="manage_meta_leads"
+            deniedDescription="Meta lead forms need the Manage Meta Leads permission. Ask an admin to update your role."
+            back={{ href: "/settings/integrations/meta", label: "Back to Meta" }}
+        >
+            <MetaFormsContent />
+        </SettingsPageGate>
+    )
+}
+
+function MetaFormsContent() {
     const { data: forms = [], isLoading } = useMetaForms()
     const syncMutation = useSyncMetaForms()
     const deleteForm = useDeleteMetaForm()
 
     const needsMapping = forms.filter((form) => form.mapping_status !== "mapped")
 
+    // Errors propagate so the confirm dialog stays open and shows them inline.
     const handleDelete = async (formId: string) => {
-        try {
-            await deleteForm.mutateAsync(formId)
-            toast.success("Form deleted")
-        } catch {
-            toast.error("Failed to delete form")
-        }
+        await deleteForm.mutateAsync(formId)
+        toast.success("Form deleted")
+    }
+
+    const handleSync = () => {
+        syncMutation.mutate({}, {
+            onSuccess: () => toast.success("Forms synced"),
+            onError: (error) => {
+                const message = getActionErrorMessage(error, "Couldn't sync forms. Try again.")
+                if (message) toast.error(message)
+            },
+        })
     }
 
     return (
         <div className="flex min-h-screen flex-col">
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <div>
-                        <h1 className="text-2xl font-semibold">Meta Lead Form Mapping</h1>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => syncMutation.mutate({})}
-                            disabled={syncMutation.isPending}
-                        >
-                            {syncMutation.isPending ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                            ) : (
-                                <RefreshCwIcon className="mr-2 size-4" aria-hidden="true" />
-                            )}
-                            Sync forms
-                        </Button>
-                        <Button render={<Link href="/settings/integrations/meta" />} variant="ghost">
-                            Back to Meta
-                        </Button>
-                    </div>
-                </div>
-            </div>
+            <PageHeader
+                title="Meta Lead Form Mapping"
+                back={{ href: "/settings/integrations/meta", label: "Back to Meta" }}
+                actions={
+                    <Button
+                        variant="outline"
+                        onClick={handleSync}
+                        disabled={syncMutation.isPending}
+                    >
+                        {syncMutation.isPending ? (
+                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        ) : (
+                            <RefreshCwIcon className="mr-2 size-4" aria-hidden="true" />
+                        )}
+                        Sync forms
+                    </Button>
+                }
+            />
 
             <div className="flex-1 space-y-6 p-6">
                 {needsMapping.length > 0 && (
@@ -177,37 +184,23 @@ export default function MetaFormsPage() {
                                                     >
                                                         Manage mapping
                                                     </Button>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger
-                                                            disabled={deleteForm.isPending}
-                                                            render={
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    className="text-destructive hover:text-destructive"
-                                                                    disabled={deleteForm.isPending}
-                                                                >
-                                                                    <TrashIcon className="mr-2 size-4" aria-hidden="true" />
-                                                                    Delete
-                                                                </Button>
-                                                            }
-                                                        />
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Delete form mapping?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    This removes the form and its mapping rules. Incoming leads for this form
-                                                                    will pause until you re‑sync or paste fields again.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDelete(form.id)} disabled={deleteForm.isPending}>
-                                                                    {deleteForm.isPending ? "Deleting…" : "Delete form"}
-                                                                </AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
+                                                    <ConfirmDialog
+                                                        trigger={
+                                                            <Button
+                                                                size="sm"
+                                                                variant="destructive-ghost"
+                                                                disabled={deleteForm.isPending}
+                                                            >
+                                                                <TrashIcon aria-hidden="true" />
+                                                                Delete
+                                                            </Button>
+                                                        }
+                                                        title={`Delete ${form.form_name}?`}
+                                                        description="This removes the form and its mapping rules. Incoming leads for this form will pause until you re‑sync or paste fields again."
+                                                        confirmLabel="Delete form"
+                                                        errorFallback="Couldn't delete the form. Try again."
+                                                        onConfirm={() => handleDelete(form.id)}
+                                                    />
                                                 </div>
                                             </TableCell>
                                         </TableRow>
