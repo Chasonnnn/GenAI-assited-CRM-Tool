@@ -766,6 +766,7 @@ class SurrogateListItem(BaseModel):
     stage_slug: str | None = None
     stage_type: str | None = None
     status_label: str
+    paused_from_stage_id: UUID | None = None
     source: SurrogateSource
     full_name: str
     email: str

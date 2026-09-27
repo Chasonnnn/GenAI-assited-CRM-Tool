@@ -229,6 +229,7 @@ def _surrogate_to_list_item(surrogate, last_activity_at=None) -> SurrogateListIt
         stage_slug=surrogate.stage.slug if surrogate.stage else None,
         stage_type=surrogate.stage.stage_type if surrogate.stage else None,
         status_label=surrogate.status_label,
+        paused_from_stage_id=surrogate.paused_from_stage_id,
         source=SurrogateSource(surrogate.source),
         full_name=surrogate.full_name,
         email=surrogate.email,
