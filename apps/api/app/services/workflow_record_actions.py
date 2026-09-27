@@ -277,7 +277,7 @@ def update_field(
                 trigger_workflows=False,
                 execution_permissions=execution_permissions,
             )
-            if result.status != "applied":
+            if result["status"] != "applied":
                 return {
                     "success": False,
                     "error": "Workflow stage change requires regression approval",
