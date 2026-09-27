@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "@/components/app-link"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,7 +19,7 @@ import {
 } from "@/components/ui/table"
 import { useDeleteMetaForm, useMetaForms, useSyncMetaForms } from "@/lib/hooks/use-meta-forms"
 import { formatRelativeTime } from "@/lib/formatters"
-import { AlertTriangleIcon, CheckCircleIcon, Loader2Icon, RefreshCwIcon, TrashIcon } from "lucide-react"
+import { AlertTriangleIcon, CheckCircleIcon, FileTextIcon, Loader2Icon, RefreshCwIcon, TrashIcon } from "lucide-react"
 import { toast } from "@/components/ui/toast"
 import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import { SettingsPageGate } from "../../../settings-page-gate"
@@ -67,7 +69,10 @@ export default function MetaFormsPage() {
 }
 
 function MetaFormsContent() {
-    const { data: forms = [], isLoading } = useMetaForms()
+    const formsQuery = useMetaForms()
+    const forms = formsQuery.data ?? []
+    // A failed background refetch keeps the last list; only a failed first load replaces it.
+    const formsLoadFailed = formsQuery.isError && !formsQuery.data
     const syncMutation = useSyncMetaForms()
     const deleteForm = useDeleteMetaForm()
 
@@ -125,14 +130,20 @@ function MetaFormsContent() {
                         <CardTitle>Forms</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {isLoading ? (
+                        {formsQuery.isLoading ? (
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
+                        ) : formsLoadFailed ? (
+                            <QueryErrorState
+                                error={formsQuery.error}
+                                onRetry={() => void formsQuery.refetch()}
+                                isRetrying={formsQuery.isFetching}
+                                title="Couldn't load lead forms"
+                                className="min-h-0 py-10"
+                            />
                         ) : forms.length === 0 ? (
-                            <div className="text-sm text-muted-foreground">
-                                No forms synced yet. Click Sync forms to fetch.
-                            </div>
+                            <EmptyState icon={FileTextIcon} title="No lead forms" />
                         ) : (
                             <Table>
                                 <TableHeader>

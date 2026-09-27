@@ -94,6 +94,85 @@ describe('MetaIntegrationsPage (OAuth)', () => {
         ).toBeInTheDocument()
     })
 
+    it('shows a load error without the connect CTA when connections fail to load', () => {
+        const refetch = vi.fn()
+        mockUseMetaConnections.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(500, 'Internal Server Error', 'boom secret detail'),
+            isFetching: false,
+            refetch,
+        })
+
+        render(<MetaIntegrationsPage />)
+
+        expect(screen.getByText("Couldn't load Meta connections")).toBeInTheDocument()
+        expect(screen.queryByText('No connections yet.')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /connect with facebook/i })).not.toBeInTheDocument()
+        expect(screen.queryByText(/boom secret detail/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalled()
+    })
+
+    it('shows a load error instead of the empty state when ad accounts fail to load', () => {
+        const refetch = vi.fn()
+        mockUseAdminMetaAdAccounts.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(500, 'Internal Server Error', 'boom'),
+            isFetching: false,
+            refetch,
+        })
+
+        render(<MetaIntegrationsPage />)
+
+        expect(screen.getByText("Couldn't load ad accounts")).toBeInTheDocument()
+        expect(screen.queryByText('No ad accounts connected yet.')).not.toBeInTheDocument()
+        expect(screen.getByText('No connections yet.')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalled()
+    })
+
+    it('keeps loaded connections and ad accounts when a background refetch fails', () => {
+        const refetchError = new ApiError(500, 'Internal Server Error', 'boom')
+        mockUseMetaConnections.mockReturnValue({
+            data: [{ id: 'conn-1', meta_user_name: 'Meta User', meta_user_id: 'mu-1', last_error: null, last_error_code: null }],
+            isLoading: false,
+            isError: true,
+            error: refetchError,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+        mockUseAdminMetaAdAccounts.mockReturnValue({
+            data: [
+                {
+                    id: 'acct-1',
+                    ad_account_external_id: 'act_123',
+                    ad_account_name: 'Main account',
+                    capi_enabled: true,
+                    is_active: true,
+                    hierarchy_synced_at: null,
+                    spend_synced_at: null,
+                },
+            ],
+            isLoading: false,
+            isError: true,
+            error: refetchError,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+
+        render(<MetaIntegrationsPage />)
+
+        expect(screen.getByText('Meta User')).toBeInTheDocument()
+        expect(screen.getByText('Main account')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /connect with facebook/i })).toBeInTheDocument()
+        expect(screen.queryByText("Couldn't load Meta connections")).not.toBeInTheDocument()
+        expect(screen.queryByText("Couldn't load ad accounts")).not.toBeInTheDocument()
+    })
+
     it('shows asset selection when step=select-assets', () => {
         mockSearchParams = new URLSearchParams('step=select-assets&connection=conn-1')
         mockUseMetaConnections.mockReturnValue({

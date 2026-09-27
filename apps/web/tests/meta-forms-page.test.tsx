@@ -67,6 +67,52 @@ describe("MetaFormsPage", () => {
         expect(mockUseMetaForms).not.toHaveBeenCalled()
     })
 
+    it("shows a load error instead of the empty state when forms fail to load", () => {
+        const refetch = vi.fn()
+        mockUseMetaForms.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(500, "Internal Server Error", "boom secret detail"),
+            isFetching: false,
+            refetch,
+        })
+
+        render(<MetaFormsPage />)
+
+        expect(screen.getByText("Couldn't load lead forms")).toBeInTheDocument()
+        expect(screen.queryByText("No lead forms")).not.toBeInTheDocument()
+        expect(screen.queryByText(/boom secret detail/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(refetch).toHaveBeenCalled()
+    })
+
+    it("keeps the loaded forms when a background refetch fails", () => {
+        mockUseMetaForms.mockReturnValue({
+            data: [FORM],
+            isLoading: false,
+            isError: true,
+            error: new ApiError(500, "Internal Server Error", "boom"),
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+
+        render(<MetaFormsPage />)
+
+        expect(screen.getByText("Spring intake")).toBeInTheDocument()
+        expect(screen.queryByText("Couldn't load lead forms")).not.toBeInTheDocument()
+    })
+
+    it("shows the empty state without helper copy when no forms are synced", () => {
+        mockUseMetaForms.mockReturnValue({ data: [], isLoading: false, isError: false })
+
+        render(<MetaFormsPage />)
+
+        expect(screen.getByText("No lead forms")).toBeInTheDocument()
+        expect(screen.queryByText(/Click Sync forms/)).not.toBeInTheDocument()
+        expect(screen.getAllByRole("button", { name: /Sync forms/ })).toHaveLength(1)
+    })
+
     it("confirms Sync forms success with a toast", () => {
         const mutate = vi.fn((_input: unknown, options: { onSuccess: () => void }) => options.onSuccess())
         mockUseSyncMetaForms.mockReturnValue({ mutate, isPending: false })

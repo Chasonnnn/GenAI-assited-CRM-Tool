@@ -3,6 +3,7 @@
 import { useReducer, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
+import { QueryErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -125,6 +126,24 @@ function metaAccountEditReducer(
     }
 
     return { ...state, formError: action.message }
+}
+
+interface ListLoadError {
+    error: unknown
+    retry: () => void
+    isRetrying: boolean
+}
+
+// A failed background refetch keeps the last list; only a failed first load replaces it.
+function getListLoadError(query: {
+    data: unknown
+    isError: boolean
+    error: unknown
+    isFetching: boolean
+    refetch: () => unknown
+}): ListLoadError | null {
+    if (!query.isError || query.data !== undefined) return null
+    return { error: query.error, retry: () => void query.refetch(), isRetrying: query.isFetching }
 }
 
 // Connection health badge component
@@ -460,13 +479,15 @@ function MetaIntegrationContent() {
     const step = searchParams.get("step")
     const activeConnectionId = searchParams.get("connection")
 
-    const { data: connections = [], isLoading: connectionsLoading } = useMetaConnections()
+    const connectionsQuery = useMetaConnections()
+    const connections = connectionsQuery.data ?? []
     const connectUrlMutation = useMetaConnectUrl()
     const disconnectMutation = useDisconnectMetaConnection()
     const connectionsNeedingReauth = useMetaConnectionsNeedingReauth()
     const connectionsWithErrors = useMetaConnectionsWithErrors()
 
-    const { data: adAccounts = [], isLoading: adAccountsLoading } = useAdminMetaAdAccounts()
+    const adAccountsQuery = useAdminMetaAdAccounts()
+    const adAccounts = adAccountsQuery.data ?? []
     const updateAccountMutation = useUpdateMetaAdAccount()
     const deleteAccountMutation = useDeleteMetaAdAccount()
 
@@ -541,7 +562,8 @@ function MetaIntegrationContent() {
             <div className="flex-1 space-y-6 p-6">
                 <MetaConnectionsCard
                     connections={connections}
-                    connectionsLoading={connectionsLoading}
+                    connectionsLoading={connectionsQuery.isLoading}
+                    loadError={getListLoadError(connectionsQuery)}
                     connectUrlPending={connectUrlMutation.isPending}
                     onConnect={handleConnectWithFacebook}
                     onManageAssets={(connectionId) =>
@@ -567,7 +589,8 @@ function MetaIntegrationContent() {
 
                 <MetaAdAccountsCard
                     adAccounts={adAccounts}
-                    adAccountsLoading={adAccountsLoading}
+                    adAccountsLoading={adAccountsQuery.isLoading}
+                    loadError={getListLoadError(adAccountsQuery)}
                     deletePending={deleteAccountMutation.isPending}
                     onEditAccount={openEditAccount}
                     onDeleteAdAccount={handleDeleteAdAccount}
@@ -619,6 +642,7 @@ function MetaIntegrationHeader() {
 function MetaConnectionsCard({
     connections,
     connectionsLoading,
+    loadError,
     connectUrlPending,
     onConnect,
     onManageAssets,
@@ -626,6 +650,7 @@ function MetaConnectionsCard({
 }: {
     connections: MetaOAuthConnection[]
     connectionsLoading: boolean
+    loadError: ListLoadError | null
     connectUrlPending: boolean
     onConnect: () => void
     onManageAssets: (connectionId: string) => void
@@ -637,20 +662,31 @@ function MetaConnectionsCard({
                 <div>
                     <CardTitle>Connections</CardTitle>
                 </div>
-                <Button onClick={onConnect} disabled={connectUrlPending}>
-                    {connectUrlPending ? (
-                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                    ) : (
-                        <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
-                    )}
-                    Connect with Facebook
-                </Button>
+                {/* Hidden after a failed load, so the error does not read as "no connections, connect one". */}
+                {!loadError && (
+                    <Button onClick={onConnect} disabled={connectUrlPending}>
+                        {connectUrlPending ? (
+                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        ) : (
+                            <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
+                        )}
+                        Connect with Facebook
+                    </Button>
+                )}
             </CardHeader>
             <CardContent>
                 {connectionsLoading ? (
                     <div className="flex items-center justify-center py-12">
                         <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                     </div>
+                ) : loadError ? (
+                    <QueryErrorState
+                        error={loadError.error}
+                        onRetry={loadError.retry}
+                        isRetrying={loadError.isRetrying}
+                        title="Couldn't load Meta connections"
+                        className="min-h-0 py-10"
+                    />
                 ) : connections.length === 0 ? (
                     <div className="text-sm text-muted-foreground">No connections yet.</div>
                 ) : (
@@ -764,12 +800,14 @@ function MetaConnectionAlerts({
 function MetaAdAccountsCard({
     adAccounts,
     adAccountsLoading,
+    loadError,
     deletePending,
     onEditAccount,
     onDeleteAdAccount,
 }: {
     adAccounts: MetaAdAccount[]
     adAccountsLoading: boolean
+    loadError: ListLoadError | null
     deletePending: boolean
     onEditAccount: (account: MetaAdAccount) => void
     onDeleteAdAccount: (accountId: string) => Promise<void>
@@ -784,6 +822,14 @@ function MetaAdAccountsCard({
                     <div className="flex items-center justify-center py-12">
                         <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                     </div>
+                ) : loadError ? (
+                    <QueryErrorState
+                        error={loadError.error}
+                        onRetry={loadError.retry}
+                        isRetrying={loadError.isRetrying}
+                        title="Couldn't load ad accounts"
+                        className="min-h-0 py-10"
+                    />
                 ) : adAccounts.length === 0 ? (
                     <div className="text-sm text-muted-foreground">No ad accounts connected yet.</div>
                 ) : (
