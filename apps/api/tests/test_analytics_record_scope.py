@@ -23,7 +23,10 @@ def test_dataset_filters_aggregates_aliases_and_restores_session(db, context, ki
         assert db.query(func.count(model.id)).scalar() == 1
         alias = aliased(model)
         assert db.scalars(select(alias.id)).all() == [mine.id]
-    assert db.query(func.count(model.id)).scalar() == 3
+    # Parallel workers share the database; count only this test's org.
+    assert (
+        db.query(func.count(model.id)).filter(model.organization_id == context.org.id).scalar() == 3
+    )
     assert access.REQUEST_CACHE_KEY not in db.info
 
 
@@ -71,7 +74,7 @@ def test_exception_removes_dataset_listener(db, context):
     with pytest.raises(RuntimeError), access.authorized_dataset(db, context.intake):
         assert db.query(Surrogate).count() == 0
         raise RuntimeError("cancel report")
-    assert db.query(Surrogate).count() == 1
+    assert db.query(Surrogate).filter_by(organization_id=context.org.id).count() == 1
 
 
 def test_reports_never_include_another_organization(db, context):
