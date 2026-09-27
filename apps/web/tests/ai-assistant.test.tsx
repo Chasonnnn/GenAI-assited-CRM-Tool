@@ -8,9 +8,25 @@ const mockRejectAction = vi.fn()
 const mockUseAuth = vi.fn()
 
 let mockUser: { user_id: string } | null = { user_id: 'u1' }
+let mockAISettings = { is_enabled: true }
+let mockPermissions = new Set<string>()
+
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+}))
+
+vi.mock('@/lib/hooks/use-permission-check', () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockPermissions.has(permission),
+    }),
+}))
 
 vi.mock('@/lib/hooks/use-ai', () => ({
-    useAISettings: () => ({ data: { is_enabled: true } }),
+    useAISettings: () => ({ data: mockAISettings }),
     useStreamChatMessage: () => mockStreamMessage,
     useApproveAction: () => ({ mutateAsync: mockApproveAction, isPending: false }),
     useRejectAction: () => ({ mutateAsync: mockRejectAction, isPending: false }),
@@ -23,6 +39,8 @@ vi.mock('@/lib/auth-context', () => ({
 describe('AIAssistantPage', () => {
     beforeEach(() => {
         mockUser = { user_id: 'u1' }
+        mockAISettings = { is_enabled: true }
+        mockPermissions = new Set()
         mockUseAuth.mockReturnValue({ user: mockUser, isLoading: false, error: null, refetch: vi.fn() })
 
         mockStreamMessage.mockImplementation(async (_request, onEvent) => {
@@ -51,6 +69,17 @@ describe('AIAssistantPage', () => {
         mockApproveAction.mockClear()
         mockRejectAction.mockClear()
         sessionStorage.clear()
+    })
+
+    it('shows the shared AI-unavailable notice and disables the input when AI is off', () => {
+        mockAISettings = { is_enabled: false }
+        mockPermissions = new Set(['manage_integrations'])
+
+        render(<AIAssistantPage />)
+
+        expect(screen.getByRole('status')).toHaveTextContent('AI is turned off for this organization.')
+        expect(screen.getByRole('link', { name: 'AI settings' })).toHaveAttribute('href', '/settings/integrations')
+        expect(screen.getByRole('textbox')).toBeDisabled()
     })
 
     it('sends a message and can approve a proposed action in global mode', async () => {

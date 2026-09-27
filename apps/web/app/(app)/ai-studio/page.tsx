@@ -14,12 +14,17 @@ import {
     XIcon,
 } from "lucide-react"
 
+import { PageHeader } from "@/components/page-header"
+import {
+    AiUnavailableNotice,
+    getAiUnavailableReason,
+    type AiUnavailableReason,
+} from "@/components/ai/AiUnavailableNotice"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Card,
-    CardAction,
     CardContent,
     CardDescription,
     CardFooter,
@@ -460,6 +465,7 @@ function BriefComposer({
     errorMessage,
     onFiles,
     onRemove,
+    disabled = false,
 }: {
     value: string
     onChange: (value: string) => void
@@ -468,12 +474,13 @@ function BriefComposer({
     errorMessage: string
     onFiles: (files: File[]) => void | Promise<void>
     onRemove: (id: string) => void
+    disabled?: boolean
 }) {
     const inputRef = useRef<HTMLInputElement | null>(null)
 
     const handleFiles = (files: FileList | File[] | null) => {
         const fileList = files ? Array.from(files) : []
-        if (fileList.length === 0) return
+        if (disabled || fileList.length === 0) return
         void onFiles(fileList)
     }
 
@@ -503,6 +510,7 @@ function BriefComposer({
                     type="file"
                     accept={allowedReferenceMimeTypes.join(",")}
                     multiple
+                    disabled={disabled}
                     className="sr-only"
                     aria-label="Upload sample pictures"
                     onChange={(event) => {
@@ -544,6 +552,7 @@ function BriefComposer({
                     value={value}
                     onChange={(event) => onChange(event.target.value)}
                     onPaste={handlePaste}
+                    disabled={disabled}
                     placeholder="Launch announcement, patient education topic, campaign hook..."
                     className="min-h-32 resize-none rounded-none border-0 bg-transparent shadow-none focus-visible:border-transparent focus-visible:ring-0"
                 />
@@ -554,6 +563,7 @@ function BriefComposer({
                             variant="ghost"
                             size="icon-sm"
                             aria-label="Attach sample pictures"
+                            disabled={disabled}
                             onClick={() => inputRef.current?.click()}
                         >
                             <PaperclipIcon aria-hidden="true" />
@@ -590,6 +600,7 @@ function AIStudioSelectField<TValue extends string>({
     onChange,
     options,
     labels,
+    disabled = false,
 }: {
     id: string
     label: string
@@ -597,11 +608,13 @@ function AIStudioSelectField<TValue extends string>({
     onChange: (value: TValue) => void
     options: Array<AIStudioSelectOption<TValue>>
     labels: Record<TValue, string>
+    disabled?: boolean
 }) {
     return (
         <Field>
             <FieldLabel htmlFor={id}>{label}</FieldLabel>
             <Select
+                disabled={disabled}
                 value={value}
                 onValueChange={(nextValue) => {
                     if (nextValue) onChange(nextValue as TValue)
@@ -634,55 +647,50 @@ function AIStudioHeader({
     onOpenSettings: () => void
 }) {
     return (
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex max-w-3xl flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="text-2xl font-semibold tracking-tight">
-                        AI Studio Preview
-                    </h1>
-                    <Badge variant="outline">Balanced</Badge>
-                </div>
-                <p className="text-sm leading-6 text-muted-foreground">
-                    Create review-ready social copy and visuals. Nothing posts directly.
-                </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline">Copy: gpt-5.5</Badge>
-                <Badge variant="outline">Image: gpt-image-2</Badge>
-                {canManageSettings && (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={onOpenSettings}
-                    >
+        <PageHeader
+            title="AI Studio"
+            meta={<Badge variant="secondary">Beta</Badge>}
+            actions={
+                canManageSettings ? (
+                    <Button type="button" variant="outline" onClick={onOpenSettings}>
                         <Settings2Icon data-icon="inline-start" aria-hidden="true" />
                         Studio settings
                     </Button>
-                )}
-            </div>
-        </div>
+                ) : null
+            }
+        />
     )
 }
 
 function AIStudioAlerts({
-    aiAvailable,
+    unavailableReason,
+    canManageOrgAISettings,
+    canManageStudioSettings,
+    onOpenSettings,
     settingsError,
     errorMessage,
 }: {
-    aiAvailable: boolean
+    unavailableReason: AiUnavailableReason | null
+    canManageOrgAISettings: boolean
+    canManageStudioSettings: boolean
+    onOpenSettings: () => void
     settingsError: unknown
     errorMessage: string
 }) {
     return (
         <>
-            {!aiAvailable && (
-                <Alert variant="destructive">
-                    <AlertCircleIcon aria-hidden="true" />
-                    <AlertTitle>AI Studio is unavailable</AlertTitle>
-                    <AlertDescription>
-                        Your organization or role does not currently have AI access.
-                    </AlertDescription>
-                </Alert>
+            {unavailableReason && (
+                <AiUnavailableNotice
+                    reason={unavailableReason}
+                    canManageSettings={canManageOrgAISettings}
+                    action={
+                        unavailableReason === "no_api_key" && canManageStudioSettings ? (
+                            <Button type="button" variant="outline" size="sm" onClick={onOpenSettings}>
+                                Studio settings
+                            </Button>
+                        ) : undefined
+                    }
+                />
             )}
 
             {settingsError && (
@@ -714,7 +722,8 @@ function AIStudioLoadingShell() {
 }
 
 type DraftGeneratorCardProps = {
-    settings: AIStudioSettings | undefined
+    /** True while AI is unavailable; the page shows AiUnavailableNotice. */
+    inputsDisabled: boolean
     brief: string
     onBriefChange: (value: string) => void
     referenceImages: ReferenceImageDraft[]
@@ -740,7 +749,7 @@ type DraftGeneratorCardProps = {
 }
 
 function DraftGeneratorCard({
-    settings,
+    inputsDisabled,
     brief,
     onBriefChange,
     referenceImages,
@@ -771,11 +780,6 @@ function DraftGeneratorCard({
                 <CardDescription>
                     Start with a brief. AI Studio returns one caption and one image for review.
                 </CardDescription>
-                {!settings?.has_api_key && (
-                    <CardAction>
-                        <Badge variant="destructive">Key required</Badge>
-                    </CardAction>
-                )}
             </CardHeader>
             <CardContent>
                 <FieldGroup>
@@ -787,6 +791,7 @@ function DraftGeneratorCard({
                         errorMessage={referenceImageError}
                         onFiles={onReferenceFiles}
                         onRemove={onRemoveReferenceImage}
+                        disabled={inputsDisabled}
                     />
 
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -797,6 +802,7 @@ function DraftGeneratorCard({
                             onChange={onPlatformChange}
                             options={platformOptions}
                             labels={platformLabels}
+                            disabled={inputsDisabled}
                         />
                         <AIStudioSelectField
                             id="ai-studio-format"
@@ -805,6 +811,7 @@ function DraftGeneratorCard({
                             onChange={onFormatChange}
                             options={formatOptions}
                             labels={formatLabels}
+                            disabled={inputsDisabled}
                         />
                     </div>
 
@@ -816,6 +823,7 @@ function DraftGeneratorCard({
                             onChange={onToneChange}
                             options={toneOptions}
                             labels={toneLabels}
+                            disabled={inputsDisabled}
                         />
                         <Field>
                             <FieldLabel htmlFor="ai-studio-audience">Audience</FieldLabel>
@@ -824,6 +832,7 @@ function DraftGeneratorCard({
                                 value={audience}
                                 onChange={(event) => onAudienceChange(event.target.value)}
                                 placeholder="Auto-detect"
+                                disabled={inputsDisabled}
                             />
                             <FieldDescription>
                                 Leave blank to detect from the brief and samples.
@@ -839,6 +848,7 @@ function DraftGeneratorCard({
                             onChange={onImageSizeChange}
                             options={imageSizeOptions}
                             labels={imageSizeLabels}
+                            disabled={inputsDisabled}
                         />
                         <AIStudioSelectField
                             id="ai-studio-image-quality"
@@ -847,19 +857,9 @@ function DraftGeneratorCard({
                             onChange={onImageQualityChange}
                             options={imageQualityOptions}
                             labels={imageQualityLabels}
+                            disabled={inputsDisabled}
                         />
                     </div>
-
-                    {!settings?.has_api_key && (
-                        <Alert>
-                            <AlertCircleIcon aria-hidden="true" />
-                            <AlertTitle>Connect OpenAI</AlertTitle>
-                            <AlertDescription>
-                                Admins can add an organization API key in Studio settings. Keys are stored
-                                server-side only.
-                            </AlertDescription>
-                        </Alert>
-                    )}
 
                     <Button
                         type="button"
@@ -989,7 +989,7 @@ function AIStudioSettingsDialog({
                 onClose()
             }}
         >
-            <DialogContent className="sm:max-w-2xl">
+            <DialogContent size="2xl">
                 <DialogHeader>
                     <DialogTitle>Studio settings</DialogTitle>
                     <DialogDescription>
@@ -1088,7 +1088,11 @@ export default function AIStudioPage() {
     const canUseAI = isDeveloper || permissionSet.has("use_ai_assistant")
     const canManageSettings = isDeveloper || permissionSet.has("manage_ai_settings")
     const aiAvailable = Boolean(user?.ai_enabled && canUseAI)
+    const canManageOrgAISettings = isDeveloper || permissionSet.has("manage_integrations")
     const settings = settingsQuery.data
+    const unavailableReason: AiUnavailableReason | null =
+        getAiUnavailableReason({ aiEnabled: Boolean(user?.ai_enabled), canUseAI }) ??
+        (settings && !settings.has_api_key ? "no_api_key" : null)
     const {
         agentsMd,
         apiKey: settingsApiKey,
@@ -1208,14 +1212,16 @@ export default function AIStudioPage() {
 
     return (
         <div className="h-full overflow-y-auto bg-muted/20">
+            <AIStudioHeader
+                canManageSettings={canManageSettings}
+                onOpenSettings={openSettingsDialog}
+            />
             <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
-                <AIStudioHeader
-                    canManageSettings={canManageSettings}
-                    onOpenSettings={openSettingsDialog}
-                />
-
                 <AIStudioAlerts
-                    aiAvailable={aiAvailable}
+                    unavailableReason={unavailableReason}
+                    canManageOrgAISettings={canManageOrgAISettings}
+                    canManageStudioSettings={canManageSettings}
+                    onOpenSettings={openSettingsDialog}
                     settingsError={settingsQuery.isError ? settingsQuery.error : null}
                     errorMessage={errorMessage}
                 />
@@ -1235,7 +1241,7 @@ export default function AIStudioPage() {
 
                         <AIStudioCreateTab
                             activeTab={activeTab}
-                            settings={settings}
+                            inputsDisabled={unavailableReason !== null}
                             brief={brief}
                             onBriefChange={setBrief}
                             referenceImages={referenceImages}
