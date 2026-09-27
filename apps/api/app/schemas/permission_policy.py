@@ -49,6 +49,10 @@ class PermissionMemberDifference(BaseModel):
     proposed: list[str]
     gained: list[str]
     lost: list[str]
+    previous_match_actions: list[str] = Field(default_factory=list)
+    proposed_match_actions: list[str] = Field(default_factory=list)
+    gained_match_actions: list[str] = Field(default_factory=list)
+    lost_match_actions: list[str] = Field(default_factory=list)
 
 
 class LegacyRevoke(BaseModel):
@@ -66,6 +70,7 @@ class PermissionPolicyPreview(BaseModel):
     target_version: int = 2
     configuration_revision: int
     ready: bool
+    match_action_baseline: Literal["pre_step_7", "current"]
     members: list[PermissionMemberDifference]
     revokes: list[LegacyRevoke]
     unresolved_revoke_ids: list[UUID]

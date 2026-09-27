@@ -357,11 +357,13 @@ def get_match_stats(
 # =============================================================================
 
 
-def to_read(db: Session, match: Match, org_id: UUID | None = None) -> MatchRead:
+def to_read(db: Session, match: Match, *, session: UserSession) -> MatchRead:
     """Convert a match to MatchRead with org-scoped party lookups."""
-    from app.services import match_participants
+    from app.services import match_access, match_participants
 
-    org_id = org_id or match.organization_id
+    org_id = session.org_id
+    match_access.authorize(db, "view", match, session, allow_archived=True)
+    allowed, blocked = match_access.action_availability(db, match, session)
     surrogate = get_surrogate_with_stage(db, match.surrogate_id, org_id)
     ip = get_intended_parent(db, match.intended_parent_id, org_id)
     donor = (
@@ -381,6 +383,8 @@ def to_read(db: Session, match: Match, org_id: UUID | None = None) -> MatchRead:
         outcome=match.outcome,
         intended_parent_id=str(match.intended_parent_id),
         status=match.status,
+        allowed_actions=allowed,
+        blocked_reasons=blocked,
         accept_eligibility_warnings=(
             match_participants.accept_eligibility_warnings(db, match)
             if match.status in PENDING_STATUSES
@@ -524,4 +528,4 @@ def get_detail(db: Session, session: UserSession, match_id: UUID) -> MatchRead:
         },
     )
     db.commit()
-    return to_read(db, match, session.org_id)
+    return to_read(db, match, session=session)

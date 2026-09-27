@@ -721,7 +721,7 @@ async def test_accept_when_surrogate_has_other_committed_match_returns_400(
     response = await authed_client.put(f"/matches/{competing.id}/accept", json={})
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Surrogate already has an accepted match"
+    assert response.json()["detail"] == "Surrogate has an accepted match"
     assert _match_row(db, competing.id).status == "under_review"
     assert _match_row(db, first["id"]).status == committed_status
     assert _ip_stage_key(db, second_ip["id"]) == "ready_to_match"
@@ -1361,7 +1361,9 @@ MATCH_MUTATIONS = [
 
 
 @pytest.mark.asyncio
-async def test_user_without_propose_matches_cannot_propose(authed_client, db, test_auth):
+async def test_user_with_view_matches_can_propose_without_legacy_permission(
+    authed_client, db, test_auth
+):
     surrogate = await _create_surrogate(authed_client)
     ip = await _create_intended_parent(authed_client)
     count = db.query(Match).count()
@@ -1371,8 +1373,8 @@ async def test_user_without_propose_matches_cannot_propose(authed_client, db, te
             "/matches/", json={"surrogate_id": surrogate["id"], "intended_parent_id": ip["id"]}
         )
 
-    assert response.status_code == 403
-    assert db.query(Match).count() == count
+    assert response.status_code == 201
+    assert db.query(Match).count() == count + 1
 
 
 @pytest.mark.asyncio

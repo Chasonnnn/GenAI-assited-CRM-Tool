@@ -103,6 +103,7 @@ def test_every_permission_has_exactly_one_topic_and_short_label():
         "Surrogates",
         "Donors",
         "Intended Parents",
+        "Matches",
         "Operations",
         "Administration",
     ]

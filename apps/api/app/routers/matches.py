@@ -12,6 +12,7 @@ from app.core.deps import (
     require_csrf_header,
     require_permission,
 )
+from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.schemas.matches import (
@@ -45,7 +46,7 @@ router = APIRouter(
     dependencies=[Depends(require_permission(POLICIES["matches"].default))],
 )
 
-_propose_permission = require_permission(POLICIES["matches"].actions["propose"])
+_edit_permission = require_permission(PermissionKey.MATCHES_PROPOSE)
 
 
 def _refused(exc: ValueError) -> HTTPException:
@@ -67,7 +68,7 @@ def _transition(
         )
     except ValueError as exc:
         raise _refused(exc)
-    return match_queries.to_read(db, match, session.org_id)
+    return match_queries.to_read(db, match, session=session)
 
 
 @router.post(
@@ -79,12 +80,12 @@ def _transition(
 def create_match(
     data: MatchCreate,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchRead:
     """
     Propose a new match between a surrogate and intended parent.
 
-    Requires: Manager+ role
+    Requires: view_matches and access to both parties
     """
     match_access.authorize_proposal(
         db,
@@ -105,7 +106,7 @@ def create_match(
         )
     except match_lifecycle.TransitionError as exc:
         raise _refused(exc)
-    return match_queries.to_read(db, match, session.org_id)
+    return match_queries.to_read(db, match, session=session)
 
 
 @router.get("/", response_model=MatchListResponse)
@@ -137,7 +138,7 @@ def list_matches(
     """
     List matches with optional filters.
 
-    Requires: Manager+ role
+    Requires: view_matches and access to both parties
     """
     return match_queries.list_for_session(
         db,
@@ -185,17 +186,17 @@ def accept_match(
     match_id: UUID,
     data: MatchAcceptRequest,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchRead:
     """
     Accept a match.
 
     This will:
     - Set match status to accepted
-    - Decline all other pending matches for this surrogate
+    - Keep other proposals open with a surrogate conflict flag
     - Log activity
 
-    Requires: Manager+ role
+    Requires: decide_matches, party scope, and permission for each stage move
     """
     return _transition(db, session, match_id, "accept", notes=data.notes)
 
@@ -214,7 +215,7 @@ def decline_match(
     """
     Decline a match with reason.
 
-    Requires: Manager+ role
+    Requires: decide_matches, or view_matches for the proposer, plus party scope
     """
     return _transition(db, session, match_id, "decline", reason=data.reason, notes=data.notes)
 
@@ -228,10 +229,10 @@ def request_cancel_match(
     match_id: UUID,
     data: MatchCancelRequest,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchRead:
     """
-    Request cancellation of an accepted match (requires admin approval).
+    Request cancellation with close_matches (reviewed by an authorized approver).
 
     This will:
     - Create a pending status change request tied to the match
@@ -249,12 +250,12 @@ def update_match_notes(
     match_id: UUID,
     data: MatchUpdateNotesRequest,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(_edit_permission),
 ) -> MatchRead:
-    """Update match notes. Requires: Manager+ role."""
+    """Update match notes with propose_matches and access to both parties."""
     match = match_access.load(db, session, match_id, "edit_notes")
     match = match_lifecycle.update_notes(db, match, notes=data.notes)
-    return match_queries.to_read(db, match, session.org_id)
+    return match_queries.to_read(db, match, session=session)
 
 
 # =============================================================================
@@ -306,7 +307,7 @@ def create_match_event(
     match_id: UUID,
     data: MatchEventCreate,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(_edit_permission),
 ) -> MatchEventRead:
     """
     Create an event for a match.
@@ -341,7 +342,7 @@ def update_match_event(
     event_id: UUID,
     data: MatchEventUpdate,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(_edit_permission),
 ) -> MatchEventRead:
     """
     Update a match event.
@@ -360,7 +361,7 @@ def delete_match_event(
     match_id: UUID,
     event_id: UUID,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(_edit_permission),
 ) -> Response:
     """
     Delete a match event.
@@ -377,7 +378,7 @@ def complete_match(
     match_id: UUID,
     data: MatchCompleteRequest,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchRead:
     return _transition(db, session, match_id, "complete", outcome=data.outcome, reason=data.reason)
 
@@ -402,7 +403,7 @@ def create_attempt(
     match_id: UUID,
     data: AttemptCreate,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(_edit_permission),
 ):
     match = match_access.load(db, session, match_id, "edit_attempts")
     try:
@@ -423,7 +424,7 @@ def update_attempt(
     attempt_id: UUID,
     data: AttemptUpdate,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_propose_permission),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(_edit_permission),
 ):
     match = match_access.load(db, session, match_id, "edit_attempts")
     try:

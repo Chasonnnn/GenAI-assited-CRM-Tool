@@ -353,7 +353,7 @@ def accept_eligibility_warnings(db: Session, match: Match) -> list[str]:
     return [warning for party in parties(match) if (warning := party.accept_warning(db, match))]
 
 
-def _authorize_stage_move(db, match, actor_user_id, kind, record, target) -> None:
+def _authorize_stage_move(db, match, actor_user_id, kind, record, target, *, preview=False) -> None:
     from app.services import (
         approval_handoff_service,
         permission_service,
@@ -365,10 +365,15 @@ def _authorize_stage_move(db, match, actor_user_id, kind, record, target) -> Non
     if not member or not permission_service.check_permission(
         db, match.organization_id, actor_user_id, member.role, permission
     ):
-        raise ValueError("Stage change permission required")
+        raise ValueError(f"Missing permission: {permission}")
     if kind != "intended_parent":
         uses_record_policy = approval_handoff_service.authorize_stage_change(
-            db, record=record, kind=kind, target_stage=target, user_id=actor_user_id
+            db,
+            record=record,
+            kind=kind,
+            target_stage=target,
+            user_id=actor_user_id,
+            lock_configuration=not preview,
         )
         if not uses_record_policy and not pipeline_semantics_service.can_role_access_stage(
             member.role,
@@ -377,3 +382,41 @@ def _authorize_stage_move(db, match, actor_user_id, kind, record, target) -> Non
             mutation=True,
         ):
             raise ValueError(f"Role not permitted to change {kind} stage")
+
+
+def check_accept_stage_changes(db: Session, match: Match, actor_user_id: UUID) -> None:
+    """Read-only counterpart of the accept hooks, also used before engine writes."""
+    from app.services import permission_policy_service, permission_service, pipeline_service
+
+    member = permission_service.get_membership_for_user(db, match.organization_id, actor_user_id)
+    for party in parties(match):
+        record = (
+            db.query(party.model)
+            .filter(
+                party.model.id == party.party_id(match),
+                party.model.organization_id == match.organization_id,
+            )
+            .one_or_none()
+        )
+        if not record or not record.stage:
+            raise ValueError("Match participants not found")
+        entity = record.pipeline_entity_type if party.kind == "donor" else party.kind
+        if pipeline_service.stage_matches_system_role(record.stage, "matched", entity):
+            continue
+        target = pipeline_service.get_stage_by_system_role(
+            db, record.stage.pipeline_id, "matched", entity
+        )
+        if not target or not target.is_active or target.deleted_at:
+            label = (
+                "Intended parent" if party.kind == "intended_parent" else party.kind.capitalize()
+            )
+            raise ValueError(f"{label} Matched stage not found")
+        _authorize_stage_move(db, match, actor_user_id, party.kind, record, target, preview=True)
+        if (
+            party.kind == "surrogate"
+            and member
+            and member.role == "case_manager"
+            and not permission_policy_service.is_enabled(db, match.organization_id)
+            and (record.owner_type != "user" or record.owner_id != actor_user_id)
+        ):
+            raise ValueError("Surrogate must be claimed before changing stage")

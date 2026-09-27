@@ -313,29 +313,33 @@ async def test_v2_role_without_view_matches_is_denied_every_match_route(
 @pytest.mark.parametrize(
     "method,path,body,status,code,after", MATCH_WRITES, ids=[_write_id(r) for r in MATCH_WRITES]
 )
-async def test_v2_role_without_propose_matches_is_denied_every_mutation(
+async def test_v2_role_without_action_permission_is_denied_every_mutation(
     authed_client, db, v2_org, configured, method, path, body, status, code, after
 ):
     ids = await _target(authed_client, db, v2_org.id, status)
+    permission = {
+        "accept": "decide_matches",
+        "decline": "decide_matches",
+        "cancel-request": "close_matches",
+        "complete": "close_matches",
+    }.get(path.rsplit("/", 1)[-1], "propose_matches")
     role = Role.OPERATIONS
     if configured == "case_manager_role_denied":
         role = Role.CASE_MANAGER
-        _set_role_permission(db, v2_org.id, role, "propose_matches", False)
+        _set_role_permission(db, v2_org.id, role, permission, False)
     before = _state(db, ids["id"])
 
     async with _client_for(db, v2_org.id, role=role) as (_user, client):
         response = await client.request(method, path.format(**ids), json=body)
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Missing permission: propose_matches"
+    assert response.json()["detail"] == f"Missing permission: {permission}"
     assert _state(db, ids["id"]) == before
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("configured", ["operations_default", "case_manager_role_denied"])
-async def test_v2_role_without_propose_matches_cannot_propose(
-    authed_client, db, v2_org, configured
-):
+async def test_v2_role_with_view_matches_can_propose(authed_client, db, v2_org, configured):
     role = Role.OPERATIONS
     if configured == "case_manager_role_denied":
         role = Role.CASE_MANAGER
@@ -345,9 +349,8 @@ async def test_v2_role_without_propose_matches_cannot_propose(
     async with _client_for(db, v2_org.id, role=role) as (_user, client):
         response = await _propose(client, authed_client, db, v2_org.id)
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Missing permission: propose_matches"
-    assert _count(db, Match, v2_org.id) == count
+    assert response.status_code == 201
+    assert _count(db, Match, v2_org.id) == count + 1
 
 
 @pytest.mark.asyncio
@@ -407,7 +410,7 @@ async def test_v2_ignores_legacy_user_revoke_for_propose_and_detail(authed_clien
 async def test_v2_operations_granted_propose_matches_can_edit_but_not_accept(
     authed_client, db, v2_org, granted_by
 ):
-    # Accept moves the surrogate stage, which v2 checks against change_surrogate_status.
+    # Legacy editing authority does not grant the new decision action.
     ids = await _target(authed_client, db, v2_org.id, "under_review")
     grant = ("propose_matches",) if granted_by == "legacy_user_grant" else ()
     if granted_by == "role_grant":
@@ -418,8 +421,8 @@ async def test_v2_operations_granted_propose_matches_can_edit_but_not_accept(
         accept = await client.put(f"/matches/{ids['id']}/accept", json={})
 
     assert notes.status_code == 200, notes.text
-    assert accept.status_code == 400
-    assert accept.json()["detail"] == "Stage change permission required"
+    assert accept.status_code == 403
+    assert accept.json()["detail"] == "Missing permission: decide_matches"
     row = _match_row(db, ids["id"])
     assert (row.status, row.notes) == ("under_review", "Granted")
 
@@ -491,7 +494,7 @@ async def test_v2_intake_granted_view_matches_is_stopped_by_intended_parent_scop
         response = await client.get(f"/matches/{ids['id']}")
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "You don't have access to this intended_parent"
+    assert response.json()["detail"] == "You don't have access to this intended parent"
 
 
 # =============================================================================
@@ -810,6 +813,6 @@ async def test_v2_donor_accept_requires_change_donor_status(authed_client, db, v
         assert read.json()["surrogate_has_accepted_match"] is False
         accept = await client.put(f"/matches/{match['id']}/accept", json={})
     assert accept.status_code == 400
-    assert accept.json()["detail"] == "Stage change permission required"
+    assert accept.json()["detail"] == "Missing permission: change_donor_status"
     assert _match_row(db, match["id"]).status == "under_review"
     assert db.get(Donor, uuid.UUID(donor["id"])).stage.stage_key == "ready_to_match"

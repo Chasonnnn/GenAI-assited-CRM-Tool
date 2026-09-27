@@ -31,6 +31,8 @@ export interface MatchRead {
     closure_reason?: string | null
     outcome?: string | null
     intended_parent_id: string
+    allowed_actions: Array<'accept' | 'decline' | 'request_cancel' | 'withdraw_cancel' | 'complete'>
+    blocked_reasons: Record<string, string>
     accept_eligibility_warnings: string[]
     surrogate_has_accepted_match: boolean
     status: string

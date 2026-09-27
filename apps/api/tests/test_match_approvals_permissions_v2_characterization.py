@@ -91,7 +91,7 @@ async def test_v2_roles_without_approval_permission_cannot_reach_cancellation_re
 async def test_v2_case_manager_granted_approval_resolves_without_admin_role_check(
     authed_client, db, v2_org, granted_by, action, request_status, match_status
 ):
-    # v1 answers 400 "Only admins can ..." for the same grant.
+    # Both policy versions authorize review by permission alone.
     match, request = await _pending_cancellation(authed_client, db)
     grant = ("approve_status_change_requests",) if granted_by == "legacy_user_grant" else ()
     if granted_by == "role_grant":
@@ -168,7 +168,7 @@ async def test_v2_granted_approver_outside_donor_scope_gets_404(authed_client, d
     [
         ("none", 200, None),
         ("legacy_user_revoke", 200, None),
-        ("role_denied_propose_matches", 403, "Missing permission for request entity"),
+        ("role_denied_close_matches", 403, "Missing permission: close_matches"),
         ("role_denied_view_matches", 404, "Request not found"),
     ],
 )
@@ -198,14 +198,14 @@ async def test_v2_case_manager_requester_withdraws_cancellation(
 
 
 @pytest.mark.asyncio
-async def test_v2_withdraw_by_non_requester_admin_returns_400(authed_client, db, v2_org):
+async def test_v2_withdraw_by_non_requester_admin_returns_403(authed_client, db, v2_org):
     match, request = await _pending_cancellation(authed_client, db)
 
     async with _client_for(db, v2_org.id, role=Role.ADMIN) as (_user, client):
         response = await client.post(f"/status-change-requests/{request.id}/cancel")
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Only the requester can cancel their request"
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Only the requester can withdraw the cancellation request"
     assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
@@ -386,7 +386,7 @@ async def test_v2_donor_cancel_requires_stage_permission_only_when_last_match_cl
             approved = await client.post(f"/status-change-requests/{request.id}/approve")
         assert approved.status_code == (200 if index == 0 else 400), approved.text
         if index == 1:
-            assert approved.json()["detail"] == "Stage change permission required"
+            assert approved.json()["detail"] == "Missing permission: change_donor_status"
             assert _request_row(db, request.id).status == "pending"
         assert db.get(Donor, uuid.UUID(donor["id"])).stage.stage_key == "matched"
 
