@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '../api/status-change-requests';
 import type { ListStatusChangeRequestsParams } from '../api/status-change-requests';
+import { matchKeys } from '../queries/matches';
 
 // Query keys
 const statusChangeRequestKeys = {
@@ -54,6 +55,8 @@ export function useApproveStatusChangeRequest() {
             // Also invalidate surrogates since the approval changes the surrogate
             void queryClient.invalidateQueries({ queryKey: ['surrogates'] });
             void queryClient.invalidateQueries({ queryKey: ['notes', 'list'] });
+            // Match cancellation decisions change match status and allowed actions.
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all });
         },
     });
 }
@@ -69,6 +72,7 @@ export function useRejectStatusChangeRequest() {
             api.rejectRequest(requestId, reason),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: statusChangeRequestKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all });
         },
     });
 }
@@ -83,6 +87,7 @@ export function useCancelStatusChangeRequest() {
         mutationFn: (requestId: string) => api.cancelRequest(requestId),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: statusChangeRequestKeys.lists() });
+            void queryClient.invalidateQueries({ queryKey: matchKeys.all });
         },
     });
 }
