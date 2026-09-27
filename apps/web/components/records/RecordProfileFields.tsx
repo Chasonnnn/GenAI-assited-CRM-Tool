@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Button } from "@/components/ui/button"
-import { EmptyValue } from "@/components/ui/empty-value"
+import { EMPTY_VALUE_LABEL, EmptyValue } from "@/components/ui/empty-value"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckIcon, EyeIcon, PencilIcon, XIcon } from "lucide-react"
@@ -10,6 +10,7 @@ import { formatHeight } from "@/components/surrogates/detail/surrogate-detail-ut
 import { serializeHeightSelection, splitHeightFt } from "@/lib/height"
 import { formatRace } from "@/lib/formatters"
 import { useRecordEditing } from "@/components/records/RecordEditingContext"
+import { getSelectLabel, humanizeSelectKey } from "@/lib/select-labels"
 
 const RACE_OPTIONS = [
     "american_indian_or_alaska_native",
@@ -42,13 +43,21 @@ type SelectOption = {
     label: string
 }
 
+/** One label helper for the display, the trigger and the read-only name; never the raw key. */
 function formatSelectValue(
     value: string | null | undefined,
     options: readonly SelectOption[],
     placeholder: string
 ) {
-    if (!value) return placeholder
-    return options.find((option) => option.value === value)?.label ?? value
+    return getSelectLabel(value, options, {
+        emptyLabel: placeholder,
+        unknownLabel: humanizeSelectKey(value) ?? "Unknown",
+    })
+}
+
+/** Read-only fields render a disabled button; its name carries the value so it is not hidden. */
+function readOnlyFieldName(label: string, valueText: string | null | undefined) {
+    return `${label}: ${valueText || EMPTY_VALUE_LABEL}`
 }
 
 export function PersonalInfoRow({
@@ -89,7 +98,8 @@ export function InlineSelectField({
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
 
-    const displayValue = value ? formatSelectValue(value, options, placeholder) : <EmptyValue />
+    const displayText = value ? formatSelectValue(value, options, placeholder) : null
+    const displayValue = displayText ?? <EmptyValue />
 
     const handleStartEdit = () => {
         setEditValue(value ?? "")
@@ -130,7 +140,7 @@ export function InlineSelectField({
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 disabled={!canEdit}
                 onClick={handleStartEdit}
-                aria-label={`Edit ${label}`}
+                aria-label={canEdit ? `Edit ${label}` : readOnlyFieldName(label, displayText)}
             >
                 <span>{displayValue}</span>
                 <PencilIcon
@@ -256,7 +266,8 @@ export function InlineHeightField({
 
     // formatHeight returns "-" for unparseable or non-positive heights.
     const formattedHeight = value != null ? formatHeight(value) : null
-    const displayValue = formattedHeight && formattedHeight !== "-" ? formattedHeight : <EmptyValue />
+    const displayText = formattedHeight && formattedHeight !== "-" ? formattedHeight : null
+    const displayValue = displayText ?? <EmptyValue />
 
     const handleStartEdit = () => {
         const selection = splitHeightFt(value)
@@ -301,7 +312,7 @@ export function InlineHeightField({
                 className="group -mx-1 flex cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 disabled={!canEdit}
                 onClick={handleStartEdit}
-                aria-label="Edit Height"
+                aria-label={canEdit ? "Edit Height" : readOnlyFieldName("Height", displayText)}
             >
                 <span>{displayValue}</span>
                 <PencilIcon
@@ -432,7 +443,7 @@ export function InlineRaceField({
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 disabled={!canEdit}
                 onClick={handleStartEdit}
-                aria-label={`Edit ${fieldLabel}`}
+                aria-label={canEdit ? `Edit ${fieldLabel}` : readOnlyFieldName(fieldLabel, displayValue)}
             >
                 <span>{displayValue || <EmptyValue />}</span>
                 <PencilIcon
@@ -562,7 +573,9 @@ export function InlineWeightField({
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 disabled={!canEdit}
                 onClick={handleStartEdit}
-                aria-label="Edit Weight"
+                aria-label={
+                    canEdit ? "Edit Weight" : readOnlyFieldName("Weight", value != null ? `${value} lb` : null)
+                }
             >
                 <span>{value != null ? `${value} lb` : <EmptyValue />}</span>
                 <PencilIcon

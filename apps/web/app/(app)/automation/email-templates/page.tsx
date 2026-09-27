@@ -32,7 +32,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     Select,
@@ -56,7 +55,6 @@ import {
     BuildingIcon,
     LayoutTemplateIcon,
     AlertTriangleIcon,
-    SendIcon,
     HistoryIcon,
 } from "lucide-react"
 import {
@@ -121,7 +119,9 @@ import {
     type TemplateCardControls,
 } from "@/components/email/TemplateCard"
 import { TemplateDraftSection } from "@/components/email/TemplateDraftSection"
+import { SendTestEmailDialog } from "@/components/email/SendTestEmailDialog"
 import { getTemplateStudioHref } from "@/components/email/template-studio-route"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 
 // =============================================================================
 // Signature Override Field Component
@@ -339,6 +339,7 @@ type TestSendDialogState = {
     toEmail: string
     ignoreOptOut: boolean
     variables: Record<string, string>
+    error: string | null
 }
 
 type TestSendDialogAction =
@@ -347,6 +348,7 @@ type TestSendDialogAction =
     | { type: "changeToEmail"; value: string }
     | { type: "changeIgnoreOptOut"; value: boolean }
     | { type: "changeVariable"; name: string; value: string }
+    | { type: "setError"; value: string | null }
 
 const initialTestSendDialogState: TestSendDialogState = {
     isOpen: false,
@@ -354,6 +356,7 @@ const initialTestSendDialogState: TestSendDialogState = {
     toEmail: "",
     ignoreOptOut: false,
     variables: {},
+    error: null,
 }
 
 function testSendDialogReducer(
@@ -368,6 +371,7 @@ function testSendDialogReducer(
                 toEmail: action.toEmail,
                 ignoreOptOut: false,
                 variables: {},
+                error: null,
             }
         case "close":
             return initialTestSendDialogState
@@ -375,6 +379,8 @@ function testSendDialogReducer(
             return { ...state, toEmail: action.value }
         case "changeIgnoreOptOut":
             return { ...state, ignoreOptOut: action.value }
+        case "setError":
+            return { ...state, error: action.value }
         case "changeVariable":
             return {
                 ...state,
@@ -873,11 +879,9 @@ function useEmailTemplatesPageView() {
 
     const handleSendTest = async () => {
         if (!testSendState.target) return
+        // SendTestEmailDialog validates the address before calling this handler.
         const toEmail = testSendState.toEmail.trim()
-        if (!toEmail) {
-            toast.error("To email is required")
-            return
-        }
+        dispatchTestSend({ type: "setError", value: null })
 
         const overrides: Record<string, string> = {}
         for (const [key, value] of Object.entries(testSendState.variables)) {
@@ -912,7 +916,10 @@ function useEmailTemplatesPageView() {
             )
             handleCloseTestDialog()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to send test email")
+            dispatchTestSend({
+                type: "setError",
+                value: getActionErrorMessage(error, "Couldn't send the test email. Try again."),
+            })
         }
     }
 
@@ -1188,7 +1195,7 @@ function useEmailTemplatesPageView() {
                                         value={showAllPersonal ? "all" : "mine"}
                                         onValueChange={(v) => setShowAllPersonal(v === "all")}
                                     >
-                                        <SelectTrigger className="w-[180px]">
+                                        <SelectTrigger className="w-auto min-w-[180px]">
                                             <SelectValue>
                                                 {(value: string | null) =>
                                                     getPersonalTemplateVisibilityLabel(
@@ -1862,7 +1869,7 @@ function useEmailTemplatesPageView() {
                     }
                 }}
             >
-                <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                <DialogContent size="3xl" className="max-h-[90vh] overflow-hidden flex flex-col">
                     <DialogHeader>
                         <DialogTitle>
                             {editorState.template ? "Edit Template" : "Create Template"}
@@ -2383,144 +2390,42 @@ function useEmailTemplatesPageView() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* Send Test Email Dialog */}
-            <Dialog
+            <SendTestEmailDialog
                 open={testSendState.isOpen}
                 onOpenChange={(open) => {
                     if (!open) {
                         handleCloseTestDialog()
                     }
                 }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Send test email</DialogTitle>
-                        <DialogDescription>
-                            Send a test email for{" "}
-                            <span className="font-medium">{testSendState.target?.name || "this template"}</span>.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="test-send-to">To email</Label>
-                            <Input
-                                id="test-send-to"
-                                type="email"
-                                value={testSendState.toEmail}
-                                onChange={(e) => {
-                                    testSendOccurrenceIdRef.current = null
-                                    dispatchTestSend({
-                                        type: "changeToEmail",
-                                        value: e.target.value,
-                                    })
-                                }}
-                                placeholder="test@example.com"
-                            />
-                            <div className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3">
-                                <Checkbox
-                                    id="test-send-ignore-opt-out"
-                                    checked={testSendState.ignoreOptOut}
-                                    onCheckedChange={(checked) => {
-                                        testSendOccurrenceIdRef.current = null
-                                        dispatchTestSend({
-                                            type: "changeIgnoreOptOut",
-                                            value: checked === true,
-                                        })
-                                    }}
-                                />
-                                <div className="space-y-1">
-                                    <Label htmlFor="test-send-ignore-opt-out" className="cursor-pointer">
-                                        Send even if unsubscribed
-                                    </Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Test-only override for marketing opt-outs. Hard bounces and complaints
-                                        remain suppressed.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <Accordion defaultValue={[]} className="rounded-lg">
-                            <AccordionItem value="variables">
-                                <AccordionTrigger>Variables (optional)</AccordionTrigger>
-                                <AccordionContent>
-                                    <div className="space-y-3">
-                                        {testSendTemplateLoading ? (
-                                            <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-                                                <Loader2Icon className="size-4 animate-spin" />
-                                                Loading variables…
-                                            </div>
-                                        ) : (
-                                            <>
-                                                {testSendHasUnsubscribeUrl && (
-                                                    <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-                                                        <span className="font-mono">
-                                                            {"{{unsubscribe_url}}"}
-                                                        </span>{" "}
-                                                        is generated automatically for the recipient.
-                                                    </div>
-                                                )}
-
-                                                {testSendEditableVariables.length === 0 ? (
-                                                    <p className="text-sm text-muted-foreground">
-                                                        No variables found in this template.
-                                                    </p>
-                                                ) : (
-                                                    testSendEditableVariables.map((variableName) => (
-                                                        <div key={variableName} className="space-y-1">
-                                                            <Label
-                                                                htmlFor={`test-var-${variableName}`}
-                                                                className="font-mono text-xs"
-                                                            >
-                                                                {`{{${variableName}}}`}
-                                                            </Label>
-                                                            <Input
-                                                                id={`test-var-${variableName}`}
-                                                                value={testSendVariables[variableName] ?? ""}
-                                                                onChange={(e) => {
-                                                                    testSendOccurrenceIdRef.current = null
-                                                                    dispatchTestSend({
-                                                                        type: "changeVariable",
-                                                                        name: variableName,
-                                                                        value: e.target.value,
-                                                                    })
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-                                </AccordionContent>
-                            </AccordionItem>
-                        </Accordion>
-                    </div>
-
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={handleCloseTestDialog}
-                            disabled={sendTest.isPending}
-                        >
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSendTest} disabled={sendTest.isPending}>
-                            {sendTest.isPending ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                            ) : (
-                                <SendIcon className="mr-2 size-4" />
-                            )}
-                            Send test
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                description={testSendState.target?.name}
+                toEmail={testSendState.toEmail}
+                onToEmailChange={(value) => {
+                    testSendOccurrenceIdRef.current = null
+                    dispatchTestSend({ type: "changeToEmail", value })
+                }}
+                ignoreOptOut={testSendState.ignoreOptOut}
+                onIgnoreOptOutChange={(value) => {
+                    testSendOccurrenceIdRef.current = null
+                    dispatchTestSend({ type: "changeIgnoreOptOut", value })
+                }}
+                variableNames={testSendEditableVariables}
+                variables={testSendVariables}
+                onVariableChange={(name, value) => {
+                    testSendOccurrenceIdRef.current = null
+                    dispatchTestSend({ type: "changeVariable", name, value })
+                }}
+                variablesLoading={testSendTemplateLoading}
+                hasUnsubscribeUrl={testSendHasUnsubscribeUrl}
+                error={testSendState.error}
+                isSending={sendTest.isPending}
+                onSend={() => {
+                    void handleSendTest()
+                }}
+            />
 
             {/* Preview Modal */}
             <Dialog open={showPreview} onOpenChange={handlePreviewOpenChange}>
-                <DialogContent className="max-w-2xl max-h-[80vh]">
+                <DialogContent size="2xl" className="max-h-[80vh]">
                     <DialogHeader>
                         <DialogTitle>Email Preview</DialogTitle>
                         <DialogDescription>

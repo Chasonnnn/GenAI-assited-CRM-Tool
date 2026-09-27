@@ -48,6 +48,22 @@ export function createSelectLabelGetter(
     return (value) => getSelectLabel(value, source, options)
 }
 
+const SLUG_KEY = /^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$/
+const MIXED_ALPHANUMERIC = /[a-z]\d|\d[a-z]/
+
+/**
+ * Readable fallback for a stored enum key that is missing from the options ("no_answer" →
+ * "No answer"). Returns null for anything that is not a plain slug, such as ids or hashes,
+ * so callers show their unknown label instead.
+ */
+export function humanizeSelectKey(value: string | null | undefined): string | null {
+    if (!value || value.length > 48 || !SLUG_KEY.test(value)) return null
+    const words = value.split(/[_-]+/)
+    if (words.some((word) => MIXED_ALPHANUMERIC.test(word))) return null
+    const sentence = words.join(" ")
+    return sentence.charAt(0).toUpperCase() + sentence.slice(1)
+}
+
 /** Items in label-map order, so SelectItem children and the trigger read from one map. */
 export function toSelectOptions(labels: Readonly<Record<string, string>>): SelectOption[] {
     return Object.entries(labels).map(([value, label]) => ({ value, label }))

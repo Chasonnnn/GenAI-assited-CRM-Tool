@@ -106,6 +106,111 @@ describe("SelectValue placeholder", () => {
     })
 })
 
+const USER_ID = "7c0e5a52-7d7f-4cc4-9b1e-2d0f5c1a9e11"
+
+function UserOptions() {
+    return <SelectItem value={USER_ID}>Dana Lee</SelectItem>
+}
+
+describe("SelectValue never renders a raw stored value", () => {
+    it("shows the muted placeholder while async options have not loaded", () => {
+        const { rerender } = render(
+            <Select value={USER_ID}>
+                <SelectTrigger aria-label="Assignee">
+                    <SelectValue placeholder="Select a user" />
+                </SelectTrigger>
+                <SelectContent>{[]}</SelectContent>
+            </Select>
+        )
+
+        const trigger = screen.getByRole("combobox", { name: "Assignee" })
+        expect(trigger).toHaveTextContent("Select a user")
+        expect(trigger).not.toHaveTextContent(USER_ID)
+        expect(trigger.querySelector('[data-slot="select-value-unresolved"]')).toHaveClass("text-muted-foreground")
+
+        rerender(
+            <Select value={USER_ID}>
+                <SelectTrigger aria-label="Assignee">
+                    <SelectValue placeholder="Select a user" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value={USER_ID}>Dana Lee</SelectItem>
+                </SelectContent>
+            </Select>
+        )
+        expect(screen.getByRole("combobox", { name: "Assignee" })).toHaveTextContent("Dana Lee")
+    })
+
+    it("renders an empty trigger without a placeholder", () => {
+        render(
+            <Select value="post_approval">
+                <SelectTrigger aria-label="Category">
+                    <SelectValue />
+                </SelectTrigger>
+            </Select>
+        )
+
+        const trigger = screen.getByRole("combobox", { name: "Category" })
+        expect(trigger).not.toHaveTextContent("post_approval")
+        expect(trigger.querySelector('[data-slot="select-value"]')).toBeEmptyDOMElement()
+    })
+
+    it("does not leak the value when SelectItems render inside a custom child component", () => {
+        render(
+            <Select value={USER_ID}>
+                <SelectTrigger aria-label="Assignee">
+                    <SelectValue placeholder="Select a user" />
+                </SelectTrigger>
+                <SelectContent>
+                    <UserOptions />
+                </SelectContent>
+            </Select>
+        )
+
+        const trigger = screen.getByRole("combobox", { name: "Assignee" })
+        expect(trigger).not.toHaveTextContent(USER_ID)
+        expect(trigger).toHaveTextContent("Select a user")
+    })
+
+    it("resolves labels from the root items prop, including grouped items", () => {
+        const { rerender } = render(
+            <Select value="post_approval" items={{ intake: "Intake", post_approval: "Post-approval" }}>
+                <SelectTrigger aria-label="Category">
+                    <SelectValue />
+                </SelectTrigger>
+            </Select>
+        )
+        expect(screen.getByRole("combobox", { name: "Category" })).toHaveTextContent("Post-approval")
+
+        rerender(
+            <Select
+                value="terminal"
+                items={[{ value: "closed", items: [{ value: "terminal", label: "Terminal" }] }]}
+            >
+                <SelectTrigger aria-label="Category">
+                    <SelectValue />
+                </SelectTrigger>
+            </Select>
+        )
+        expect(screen.getByRole("combobox", { name: "Category" })).toHaveTextContent("Terminal")
+    })
+
+    it("keeps caller-provided children", () => {
+        render(
+            <Select value={USER_ID}>
+                <SelectTrigger aria-label="Assignee">
+                    <SelectValue placeholder="Select a user">{() => "Dana Lee"}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    <UserOptions />
+                </SelectContent>
+            </Select>
+        )
+
+        expect(screen.getByRole("combobox", { name: "Assignee" })).toHaveTextContent("Dana Lee")
+    })
+})
+
 describe("select label helpers", () => {
     const CATEGORY_LABELS = {
         intake: "Intake",
