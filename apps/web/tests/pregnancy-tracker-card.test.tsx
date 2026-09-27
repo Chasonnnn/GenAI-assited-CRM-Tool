@@ -105,6 +105,26 @@ describe("PregnancyTrackerCard", () => {
         expect(screen.queryByText(/days remaining/)).not.toBeInTheDocument()
     })
 
+    it("stops counting after delivery and shows the gestational age at delivery", () => {
+        vi.setSystemTime(new Date("2027-01-20T12:00:00-05:00"))
+        renderTracker({ actual_delivery_date: "2026-12-10" })
+
+        expect(screen.getByText("Delivered at 39w 5d")).toBeInTheDocument()
+        expect(screen.queryByText(/post transfer/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/days remaining/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Trimester/)).not.toBeInTheDocument()
+    })
+
+    it("hides the embryo-stage notice and manual due-date countdown once delivered", () => {
+        vi.setSystemTime(new Date("2027-01-20T12:00:00-05:00"))
+        renderTracker({ embryo_stage: "unknown", actual_delivery_date: "2026-12-10" })
+
+        expect(screen.queryByText("Unavailable until embryo stage is set")).not.toBeInTheDocument()
+        expect(screen.queryByText(/days remaining/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/post transfer/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Delivered at/)).not.toBeInTheDocument()
+    })
+
     it("retains the existing warning for a future transfer date", () => {
         renderTracker({ pregnancy_start_date: "2026-07-20" })
 
