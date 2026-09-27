@@ -73,8 +73,12 @@ describe("booking link copy on the appointments page", () => {
         writeText.mockRejectedValue(new Error("denied"))
         render(<AppointmentsPage />)
 
-        fireEvent.click(screen.getByRole("button", { name: "Share Booking Link" }))
+        fireEvent.click(screen.getByRole("button", { name: "Share booking link" }))
         const copyButton = await screen.findByRole("button", { name: "Copy booking link" })
+        // The full URL stays readable and the dialog opens on the copy button, not the field.
+        expect(screen.getByRole("textbox", { name: "Booking link" })).toHaveValue("https://example.com/book/abc")
+        await vi.waitFor(() => expect(copyButton).toHaveFocus())
+        expect(screen.getByRole("link", { name: "Scheduling settings" })).toHaveAttribute("href", "/settings/appointments")
         await act(async () => {
             fireEvent.click(copyButton)
         })

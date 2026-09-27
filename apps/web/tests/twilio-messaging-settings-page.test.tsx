@@ -236,6 +236,20 @@ describe("Messaging integration settings page", () => {
         expect(mockUseTwilioReadiness).toHaveBeenCalledWith(false)
     })
 
+    it("shows route webhook URLs as labeled read-only fields with the shared copy button", () => {
+        render(<MessagingIntegrationPageClient />)
+
+        const inbound = screen.getByLabelText("Operational inbound webhook URL")
+        expect(inbound).toHaveValue("https://api.example.test/webhooks/twilio/inbound/opaque-operational")
+        expect(inbound).toHaveAttribute("readonly")
+        expect(
+            screen.getByRole("button", { name: "Copy Operational inbound webhook URL" }),
+        ).toBeInTheDocument()
+        expect(screen.getByLabelText("Promotional status callback URL")).toHaveValue(
+            "https://api.example.test/webhooks/twilio/status/opaque-promotional",
+        )
+    })
+
     it("keeps provider capability evidence separate from local delivery operations", () => {
         render(<MessagingIntegrationPageClient />)
 
