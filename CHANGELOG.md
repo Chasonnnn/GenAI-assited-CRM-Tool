@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.73](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.72...surrogacy-crm-platform-v0.91.73) (2026-09-27)
+
+
+### Features
+
+* bind public SMS consent to the published phone field ([1ab3e1d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1ab3e1d8d11090a694e9848ede4b9117dfa2ace2))
+* show SMS consent beside the phone field on public forms ([9995e91](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9995e914e166aeaf1e4b87b9ed692f371c6f7ebd))
+* toll-free SMS readiness and phone-bound public SMS consent ([3843574](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/38435744fed80ff2b214fac2794f95ebe2b5d3ae))
+
 ## [0.91.72](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.71...surrogacy-crm-platform-v0.91.72) (2026-09-27)
 
 
