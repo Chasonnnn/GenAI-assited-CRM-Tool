@@ -171,6 +171,93 @@ async def test_intelligent_suggestion_templates_and_rule_crud(
 
 
 @pytest.mark.asyncio
+async def test_intelligent_suggestion_rule_rejects_duplicates(
+    authed_client,
+    db,
+    default_stage,
+):
+    _ensure_intelligent_schema(db)
+    payload = {
+        "template_key": "stage_followup_custom",
+        "name": "Stage check",
+        "stage_key": default_stage.stage_key,
+        "business_days": 7,
+        "enabled": True,
+    }
+
+    first = await authed_client.post("/settings/intelligent-suggestions/rules", json=payload)
+    assert first.status_code == 200, first.text
+
+    # Same template, stage and threshold under a different name.
+    duplicate = await authed_client.post(
+        "/settings/intelligent-suggestions/rules",
+        json={**payload, "name": "Another name"},
+    )
+    assert duplicate.status_code == 409, duplicate.text
+    assert duplicate.json()["detail"] == intelligent_suggestions_service.DUPLICATE_RULE_MESSAGE
+
+    other_threshold = await authed_client.post(
+        "/settings/intelligent-suggestions/rules",
+        json={**payload, "business_days": 8},
+    )
+    assert other_threshold.status_code == 200, other_threshold.text
+
+    # Editing a rule into an existing combination is rejected; other edits still work.
+    collide = await authed_client.patch(
+        f"/settings/intelligent-suggestions/rules/{other_threshold.json()['id']}",
+        json={"business_days": 7},
+    )
+    assert collide.status_code == 409, collide.text
+
+    rename = await authed_client.patch(
+        f"/settings/intelligent-suggestions/rules/{first.json()['id']}",
+        json={"name": "Renamed", "enabled": False},
+    )
+    assert rename.status_code == 200, rename.text
+
+
+def test_intelligent_suggestion_duplicate_check_is_org_scoped(db, test_org, default_stage):
+    from app.db.models import Organization
+
+    _ensure_intelligent_schema(db)
+    other_org = Organization(
+        id=uuid.uuid4(),
+        name="Other Org",
+        slug=f"other-org-{uuid.uuid4().hex[:8]}",
+        ai_enabled=True,
+    )
+    db.add(other_org)
+    db.flush()
+    other_pipeline = pipeline_service.get_or_create_default_pipeline(db, other_org.id)
+    other_stage = next(
+        stage
+        for stage in pipeline_service.get_stages(db, other_pipeline.id)
+        if stage.stage_key == default_stage.stage_key
+    )
+
+    payload = {
+        "template_key": "stage_followup_custom",
+        "name": "Stage check",
+        "business_days": 9,
+        "enabled": True,
+    }
+    intelligent_suggestions_service.create_rule(
+        db, test_org.id, {**payload, "stage_key": default_stage.stage_key}
+    )
+
+    # The same rule in another organization is not a duplicate.
+    other_rule = intelligent_suggestions_service.create_rule(
+        db, other_org.id, {**payload, "stage_key": other_stage.stage_key}
+    )
+    assert other_rule.organization_id == other_org.id
+
+    with pytest.raises(intelligent_suggestions_service.DuplicateRuleError):
+        intelligent_suggestions_service.create_rule(
+            db, other_org.id, {**payload, "stage_key": other_stage.stage_key}
+        )
+
+
+@pytest.mark.asyncio
 async def test_surrogates_dynamic_filter_new_unread_stale(
     authed_client,
     db,
