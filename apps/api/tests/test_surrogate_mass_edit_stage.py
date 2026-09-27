@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -539,3 +540,45 @@ async def test_mass_edit_archive_preview_and_apply_archives_matching_surrogates(
     assert s1_row.is_archived is True
     assert s2_row.is_archived is True
     assert s3_row.is_archived is False
+
+
+@pytest.mark.asyncio
+async def test_mass_edit_stage_shares_matched_guard_and_delivery_date(authed_client, db, test_auth):
+    matched_stage = _get_stage(db, test_auth.org.id, "matched")
+    delivered_stage = _get_stage(db, test_auth.org.id, "delivered")
+    surrogate = await _create_surrogate(authed_client, state="NV")
+
+    matched_res = await authed_client.post(
+        "/surrogates/mass-edit/stage",
+        json={
+            "filters": {"states": ["NV"]},
+            "stage_id": str(matched_stage.id),
+            "expected_total": 1,
+            "trigger_workflows": False,
+        },
+    )
+    assert matched_res.status_code == 200, matched_res.text
+    assert matched_res.json()["applied"] == 0
+    assert matched_res.json()["failed"] == [
+        {
+            "surrogate_id": surrogate["id"],
+            "reason": "Cannot set to Matched without an accepted Match.",
+        }
+    ]
+
+    delivered_res = await authed_client.post(
+        "/surrogates/mass-edit/stage",
+        json={
+            "filters": {"states": ["NV"]},
+            "stage_id": str(delivered_stage.id),
+            "expected_total": 1,
+            "trigger_workflows": False,
+        },
+    )
+    assert delivered_res.status_code == 200, delivered_res.text
+    assert delivered_res.json()["applied"] == 1
+    db.expire_all()
+    row = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate["id"])).one()
+    org_today = datetime.now(ZoneInfo(test_auth.org.timezone or "America/Los_Angeles")).date()
+    assert row.stage_id == delivered_stage.id
+    assert row.actual_delivery_date == org_today

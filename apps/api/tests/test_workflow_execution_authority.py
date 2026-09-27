@@ -14,8 +14,11 @@ from app.db.models import (
     FormSubmission,
     Membership,
     Organization,
+    PipelineStage,
     RolePermission,
+    StatusChangeRequest,
     Surrogate,
+    SurrogateStatusHistory,
     User,
     WorkflowExecution,
 )
@@ -360,6 +363,66 @@ def test_changed_org_reach_requires_new_authorization(setup, db):
     assert result.status == "skipped"
     assert adapter.calls == []
     assert "configuration authorization" in result.error_message
+
+
+def later_stage(db, default_stage, slug="contacted", order=2):
+    item = PipelineStage(
+        id=uuid4(),
+        pipeline_id=default_stage.pipeline_id,
+        stage_key=slug,
+        slug=slug,
+        label=slug.title(),
+        color="#3B82F6",
+        stage_type="intake",
+        order=order,
+        is_active=True,
+    )
+    db.add(item)
+    db.flush()
+    return item
+
+
+def stage_action(stage):
+    return [{"action_type": "update_field", "field": "stage_id", "value": str(stage.id)}]
+
+
+def test_org_workflow_stage_change_applies(setup, db, default_stage):
+    org, actor, record = setup
+    target = later_stage(db, default_stage)
+    item = workflow(db, org, actor, scope="org", actions=stage_action(target))
+    authority.authorize_configuration(db, item, actor.id)
+
+    result, _ = execute(db, item, record, DefaultWorkflowDomainAdapter())
+
+    assert result.status == "success", result.actions_executed
+    assert result.actions_executed[0]["success"] is True
+    db.refresh(record)
+    assert record.stage_id == target.id
+    history = db.query(SurrogateStatusHistory).filter_by(surrogate_id=record.id).one()
+    assert (history.from_stage_id, history.to_stage_id) == (default_stage.id, target.id)
+
+
+def test_personal_workflow_stage_regression_requests_approval(setup, db, default_stage):
+    org, _, record = setup
+    owner, _ = member(db, org)
+    current = later_stage(db, default_stage)
+    record.owner_id = owner.id
+    record.stage_id = current.id
+    record.status_label = current.label
+    item = workflow(db, org, owner, actions=stage_action(default_stage))
+    db.flush()
+
+    result, _ = execute(db, item, record, DefaultWorkflowDomainAdapter())
+
+    assert result.actions_executed[0]["success"] is False
+    assert result.actions_executed[0]["error"] == (
+        "Workflow stage change requires regression approval"
+    )
+    db.refresh(record)
+    assert record.stage_id == current.id
+    request = db.query(StatusChangeRequest).filter_by(entity_id=record.id).one()
+    assert (request.status, request.target_stage_id) == ("pending", default_stage.id)
+    assert request.requested_by_user_id == owner.id
 
 
 @pytest.mark.parametrize("binding", ["organization_id", "workflow_id"])
