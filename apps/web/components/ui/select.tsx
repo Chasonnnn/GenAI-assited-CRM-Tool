@@ -54,6 +54,14 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   )
 }
 
+function isUnselectedValue(value: unknown) {
+  return value == null || value === ""
+}
+
+function isBlankSelectLabel(label: React.ReactNode) {
+  return label == null || label === false || label === ""
+}
+
 function SelectValue({
   className,
   placeholder,
@@ -65,6 +73,8 @@ function SelectValue({
 }) {
   const itemLabels = React.useContext(SelectItemLabelsContext)
 
+  // Base UI ignores `placeholder` when children is a render function, so both render paths
+  // fall back to it here. "" counts as no selection, matching Base UI's data-placeholder state.
   if (typeof children === "function") {
     return (
       <SelectPrimitive.Value
@@ -73,7 +83,11 @@ function SelectValue({
         placeholder={placeholder}
         {...props}
       >
-        {(value) => children(value as string | null)}
+        {(value) => {
+          const label = children(value as string | null)
+          if (isBlankSelectLabel(label) && isUnselectedValue(value)) return placeholder ?? null
+          return label
+        }}
       </SelectPrimitive.Value>
     )
   }
@@ -87,6 +101,9 @@ function SelectValue({
         {...props}
       >
         {(value) => {
+          // An explicit <SelectItem value=""> ("Any stage") is a real choice and keeps its label.
+          if (value === "" && itemLabels.has("")) return itemLabels.get("")
+          if (isUnselectedValue(value)) return placeholder ?? itemLabels.get("") ?? null
           if (typeof value !== "string") return null
           return itemLabels.get(value) ?? "Unknown selection"
         }}
@@ -194,6 +211,32 @@ function SelectItem({
   )
 }
 
+function SelectLabel({
+  className,
+  ...props
+}: SelectPrimitive.GroupLabel.Props) {
+  return (
+    <SelectPrimitive.GroupLabel
+      data-slot="select-label"
+      className={cn("text-muted-foreground px-3 pt-2 pb-1 text-xs", className)}
+      {...props}
+    />
+  )
+}
+
+function SelectSeparator({
+  className,
+  ...props
+}: SelectPrimitive.Separator.Props) {
+  return (
+    <SelectPrimitive.Separator
+      data-slot="select-separator"
+      className={cn("bg-border/50 pointer-events-none my-1 h-px", className)}
+      {...props}
+    />
+  )
+}
+
 function SelectScrollUpButton({
   className,
   ...props
@@ -231,6 +274,8 @@ export {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 }

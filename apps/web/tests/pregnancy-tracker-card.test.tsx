@@ -74,7 +74,11 @@ describe("PregnancyTrackerCard", () => {
         renderTracker({ embryo_stage: "unknown" })
 
         expect(screen.getByText("Gestational Age")).toBeInTheDocument()
-        expect(screen.getByText("—")).toBeInTheDocument()
+        // Empty inline fields (the missing delivery date) render their own EmptyValue dash.
+        const gestationalAgeDash = screen
+            .getAllByText("—")
+            .filter((element) => !element.closest("[data-slot=empty-value]"))
+        expect(gestationalAgeDash).toHaveLength(1)
         expect(
             screen.getByText("Unavailable until embryo stage is set")
         ).toBeInTheDocument()

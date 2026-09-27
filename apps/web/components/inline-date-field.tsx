@@ -6,6 +6,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { CheckIcon, XIcon, PencilIcon, Loader2Icon, CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyValue } from "@/components/ui/empty-value"
 import { format, parseISO, isValid } from "date-fns"
 
 import { useRecordEditing } from "@/components/records/RecordEditingContext"
@@ -13,6 +14,7 @@ import { useRecordEditing } from "@/components/records/RecordEditingContext"
 interface InlineDateFieldProps {
     value: string | null | undefined
     onSave: (value: string | null) => Promise<void>
+    /** @deprecated Empty dates display as EmptyValue; remove this prop at call sites. */
     placeholder?: string
     className?: string
     displayClassName?: string
@@ -76,7 +78,6 @@ function inlineDateFieldReducer(
 export function InlineDateField({
     value,
     onSave,
-    placeholder = "Set date",
     className,
     displayClassName,
     label,
@@ -181,9 +182,7 @@ export function InlineDateField({
                 disabled={disabled}
                 aria-label={disabled ? label : `Edit ${label}`}
             >
-                <span className={cn("text-sm", !displayValue && "text-muted-foreground", className)}>
-                    {displayValue || placeholder}
-                </span>
+                <span className={cn("text-sm", className)}>{displayValue || <EmptyValue />}</span>
                 {!disabled && (
                     <PencilIcon
                         className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Button } from "@/components/ui/button"
+import { EmptyValue } from "@/components/ui/empty-value"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckIcon, EyeIcon, PencilIcon, XIcon } from "lucide-react"
@@ -88,8 +89,7 @@ export function InlineSelectField({
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
 
-    const displayValue = formatSelectValue(value, options, placeholder)
-    const isPlaceholder = !value
+    const displayValue = value ? formatSelectValue(value, options, placeholder) : <EmptyValue />
 
     const handleStartEdit = () => {
         setEditValue(value ?? "")
@@ -132,9 +132,7 @@ export function InlineSelectField({
                 onClick={handleStartEdit}
                 aria-label={`Edit ${label}`}
             >
-                <span className={isPlaceholder ? "text-muted-foreground" : undefined}>
-                    {displayValue}
-                </span>
+                <span>{displayValue}</span>
                 <PencilIcon
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
@@ -256,7 +254,9 @@ export function InlineHeightField({
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
 
-    const displayValue = value != null ? formatHeight(value) : "-"
+    // formatHeight returns "-" for unparseable or non-positive heights.
+    const formattedHeight = value != null ? formatHeight(value) : null
+    const displayValue = formattedHeight && formattedHeight !== "-" ? formattedHeight : <EmptyValue />
 
     const handleStartEdit = () => {
         const selection = splitHeightFt(value)
@@ -303,9 +303,7 @@ export function InlineHeightField({
                 onClick={handleStartEdit}
                 aria-label="Edit Height"
             >
-                <span className={value == null ? "text-muted-foreground" : undefined}>
-                    {displayValue}
-                </span>
+                <span>{displayValue}</span>
                 <PencilIcon
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
@@ -436,9 +434,7 @@ export function InlineRaceField({
                 onClick={handleStartEdit}
                 aria-label={`Edit ${fieldLabel}`}
             >
-                <span className={displayValue ? undefined : "text-muted-foreground"}>
-                    {displayValue || "-"}
-                </span>
+                <span>{displayValue || <EmptyValue />}</span>
                 <PencilIcon
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
@@ -568,9 +564,7 @@ export function InlineWeightField({
                 onClick={handleStartEdit}
                 aria-label="Edit Weight"
             >
-                <span className={value == null ? "text-muted-foreground" : undefined}>
-                    {value != null ? `${value} lb` : "-"}
-                </span>
+                <span>{value != null ? `${value} lb` : <EmptyValue />}</span>
                 <PencilIcon
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
@@ -702,7 +696,7 @@ export function SsnField({
     const [editValue, setEditValue] = React.useState("")
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
-    const displayValue = revealedValue || maskedValue || "-"
+    const displayValue = revealedValue || maskedValue || <EmptyValue />
 
     const save = async () => {
         setIsSaving(true)

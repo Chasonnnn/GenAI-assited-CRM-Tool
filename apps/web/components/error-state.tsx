@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "@/components/app-link"
-import { AlertCircle, ChevronDown, ShieldAlert } from "lucide-react"
+import { AlertCircle, ArrowLeftIcon, ChevronDown, Loader2Icon, SearchXIcon, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import {
@@ -11,9 +11,11 @@ import {
     EmptyMedia,
     EmptyTitle,
     EmptyDescription,
+    type EmptyTitleHeadingLevel,
 } from "@/components/ui/empty"
 import { cn } from "@/lib/utils"
 import { reportClientError } from "@/lib/client-error-telemetry"
+import { getQueryErrorKind } from "@/lib/error-utils"
 
 interface ErrorStateProps {
     error: Error & { digest?: string }
@@ -24,13 +26,53 @@ interface ErrorStateProps {
 }
 
 interface PermissionDeniedStateProps {
-    title?: string
+    title?: string | undefined
     description: string
-    onRetry?: () => void
-    secondaryHref?: string
-    secondaryLabel?: string
-    className?: string
+    onRetry?: (() => void) | undefined
+    secondaryHref?: string | undefined
+    secondaryLabel?: string | undefined
+    /** Heading semantics for the title. Pass 1 when the state replaces the whole page, including its header. */
+    headingLevel?: EmptyTitleHeadingLevel | undefined
+    className?: string | undefined
 }
+
+interface LoadErrorStateProps {
+    /** Names what failed, for example "Couldn't load alerts". */
+    title: string
+    onRetry: () => void
+    /** Pass query.isFetching: a failed query keeps isError while it refetches, so the state stays mounted. */
+    isRetrying?: boolean | undefined
+    /** Heading semantics for the title. Pass 1 when the state replaces the whole page, including its header. */
+    headingLevel?: EmptyTitleHeadingLevel | undefined
+    className?: string | undefined
+}
+
+interface NotFoundStateProps {
+    /** Names the missing record, for example "Surrogate not found". */
+    title: string
+    backHref: string
+    backLabel: string
+    /** Heading semantics for the title. Pass 1 when the state replaces the whole page, including its header. */
+    headingLevel?: EmptyTitleHeadingLevel | undefined
+    className?: string | undefined
+}
+
+interface QueryErrorStateProps {
+    error: unknown
+    onRetry: () => void
+    /** Load-error title for any failure that is not a handled 403 or 404. */
+    title: string
+    isRetrying?: boolean | undefined
+    /** Denied-state copy for a 403. Without it a generic denied state renders. */
+    forbidden?: Omit<PermissionDeniedStateProps, "className" | "headingLevel"> | undefined
+    /** Record routes only: a 404, or a 422 from a malformed id, renders this not-found state. */
+    notFound?: Omit<NotFoundStateProps, "className" | "headingLevel"> | undefined
+    /** Heading semantics for the title. Pass 1 when the state replaces the whole page, including its header. */
+    headingLevel?: EmptyTitleHeadingLevel | undefined
+    className?: string | undefined
+}
+
+const STATE_FRAME_CLASS = "flex min-h-[18rem] items-center justify-center p-6"
 
 function useReportErrorBoundary(error: Error): void {
     useEffect(() => {
@@ -39,10 +81,11 @@ function useReportErrorBoundary(error: Error): void {
 }
 
 /**
- * Reusable error state component with retry functionality.
+ * Route error boundary state with retry functionality.
  *
  * Shows a friendly error message with a "Try again" button.
  * In development, shows collapsible error details.
+ * For failed queries, use LoadErrorState or QueryErrorState instead.
  */
 export function ErrorState({
     error,
@@ -126,16 +169,17 @@ export function PermissionDeniedState({
     onRetry,
     secondaryHref,
     secondaryLabel = "Go to Dashboard",
+    headingLevel,
     className,
 }: PermissionDeniedStateProps) {
     return (
-        <div className={cn("flex min-h-[18rem] items-center justify-center p-6", className)}>
+        <div data-slot="permission-denied-state" className={cn(STATE_FRAME_CLASS, className)}>
             <Empty>
                 <EmptyHeader>
                     <EmptyMedia variant="icon">
-                        <ShieldAlert className="size-6 text-amber-600" />
+                        <ShieldAlert className="size-6 text-warning" aria-hidden="true" />
                     </EmptyMedia>
-                    <EmptyTitle>{title}</EmptyTitle>
+                    <EmptyTitle headingLevel={headingLevel}>{title}</EmptyTitle>
                     <EmptyDescription>{description}</EmptyDescription>
                 </EmptyHeader>
 
@@ -158,5 +202,93 @@ export function PermissionDeniedState({
                 )}
             </Empty>
         </div>
+    )
+}
+
+/** A query failed. Never shows the raw error message; the title says what did not load. */
+export function LoadErrorState({
+    title,
+    onRetry,
+    isRetrying = false,
+    headingLevel,
+    className,
+}: LoadErrorStateProps) {
+    return (
+        <div data-slot="load-error-state" className={cn(STATE_FRAME_CLASS, className)}>
+            <Empty>
+                <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                        <AlertCircle className="size-6 text-destructive" aria-hidden="true" />
+                    </EmptyMedia>
+                    <EmptyTitle headingLevel={headingLevel}>{title}</EmptyTitle>
+                </EmptyHeader>
+                {/* Stays focusable while disabled so keyboard focus is not dropped during the retry. */}
+                <Button onClick={onRetry} disabled={isRetrying} focusableWhenDisabled>
+                    {isRetrying ? <Loader2Icon className="animate-spin" aria-hidden="true" /> : null}
+                    Try again
+                </Button>
+            </Empty>
+        </div>
+    )
+}
+
+export function NotFoundState({ title, backHref, backLabel, headingLevel, className }: NotFoundStateProps) {
+    return (
+        <div data-slot="not-found-state" className={cn(STATE_FRAME_CLASS, className)}>
+            <Empty>
+                <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                        <SearchXIcon aria-hidden="true" />
+                    </EmptyMedia>
+                    <EmptyTitle headingLevel={headingLevel}>{title}</EmptyTitle>
+                </EmptyHeader>
+                <Link href={backHref} className={buttonVariants({ variant: "outline" })}>
+                    <ArrowLeftIcon aria-hidden="true" />
+                    {backLabel}
+                </Link>
+            </Empty>
+        </div>
+    )
+}
+
+/**
+ * Renders the right state for a failed query: 403 → PermissionDeniedState,
+ * 404 (with `notFound`) → NotFoundState, anything else → LoadErrorState with retry.
+ */
+export function QueryErrorState({
+    error,
+    onRetry,
+    title,
+    isRetrying,
+    forbidden,
+    notFound,
+    headingLevel,
+    className,
+}: QueryErrorStateProps) {
+    const kind = getQueryErrorKind(error, { includeInvalidId: notFound !== undefined })
+
+    if (kind === "forbidden") {
+        return (
+            <PermissionDeniedState
+                description="Ask an admin to update your role."
+                {...forbidden}
+                headingLevel={headingLevel}
+                className={className}
+            />
+        )
+    }
+
+    if (kind === "not_found" && notFound) {
+        return <NotFoundState {...notFound} headingLevel={headingLevel} className={className} />
+    }
+
+    return (
+        <LoadErrorState
+            title={title}
+            onRetry={onRetry}
+            isRetrying={isRetrying}
+            headingLevel={headingLevel}
+            className={className}
+        />
     )
 }
