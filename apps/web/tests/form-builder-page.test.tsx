@@ -948,6 +948,9 @@ describe("FormBuilderPage", () => {
             fireEvent.click(within(dialog).getByRole("button", { name: /^publish$/i }))
 
             await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Form published"))
+            await vi.waitFor(() =>
+                expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument(),
+            )
             expect(mockPublishForm).toHaveBeenCalledWith("form-1")
             expect(header().getByText("Published")).toBeInTheDocument()
             expect(publishButton()).toBeDisabled()

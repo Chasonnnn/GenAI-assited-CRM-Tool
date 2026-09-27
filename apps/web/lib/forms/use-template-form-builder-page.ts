@@ -395,9 +395,10 @@ export function useTemplateFormBuilderPage() {
             Boolean(state.formName.trim()) &&
             !state.isSaving &&
             !state.isPublishing,
+        scopeKey: templateKey,
         fingerprint: draftFingerprint,
         savedFingerprint: state.lastSavedFingerprint,
-        save: () => {
+        save: async () => {
             const payload = buildTemplateDraftPayload(pages, {
                 allowedMimeTypesText: state.allowedMimeTypesText,
                 formDescription: state.formDescription,
@@ -411,7 +412,7 @@ export function useTemplateFormBuilderPage() {
                 publicTitle: state.publicTitle,
                 templateSettings: state.templateSettings,
             })
-            return queueTemplateSave(saveQueueRef, () =>
+            const savedTemplate = await queueTemplateSave(saveQueueRef, () =>
                 persistTemplatePayload({
                     payload,
                     templateIdentityRef,
@@ -424,9 +425,10 @@ export function useTemplateFormBuilderPage() {
                     templateCurrentVersion: templateData?.current_version,
                 }),
             )
+            return buildSavedState(JSON.stringify(payload), savedTemplate)
         },
         onSaving: () => patchState({ autoSaveStatus: "saving" }),
-        onSaved: (savedForm) => patchState(buildSavedState(draftFingerprint, savedForm)),
+        onSaved: patchState,
         onError: () => patchState({ autoSaveStatus: "error" }),
     })
 

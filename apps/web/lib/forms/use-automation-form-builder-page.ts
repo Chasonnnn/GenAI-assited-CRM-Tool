@@ -523,9 +523,10 @@ export function useAutomationFormBuilderPage() {
             !createFormMutation.isPending &&
             !updateFormMutation.isPending &&
             !setMappingsMutation.isPending,
+        scopeKey: formKey,
         fingerprint: draftFingerprint,
         savedFingerprint: state.lastSavedFingerprint,
-        save: () => {
+        save: async () => {
             const payload = buildAutomationDraftPayload(pages, {
                 allowedMimeTypesText: state.allowedMimeTypesText,
                 defaultTemplateId: state.defaultTemplateId,
@@ -541,7 +542,7 @@ export function useAutomationFormBuilderPage() {
                 publicSubtitle: state.publicSubtitle,
                 publicTitle: state.publicTitle,
             })
-            return persistAutomationFormPayload({
+            const savedForm = await persistAutomationFormPayload({
                 payload,
                 isNewForm,
                 id,
@@ -552,9 +553,10 @@ export function useAutomationFormBuilderPage() {
                 router,
                 patchState,
             })
+            return buildSavedState(JSON.stringify(payload), JSON.stringify(payload.form_schema), savedForm)
         },
         onSaving: () => patchState({ autoSaveStatus: "saving" }),
-        onSaved: (savedForm) => patchState(buildSavedState(draftFingerprint, draftSchemaFingerprint, savedForm)),
+        onSaved: patchState,
         onError: () => patchState({ autoSaveStatus: "error" }),
     })
 

@@ -134,8 +134,12 @@ export function useUpdateForm() {
     return useMutation({
         mutationFn: ({ formId, payload }: { formId: string; payload: FormUpdatePayload }) =>
             updateForm(formId, payload),
-        onSuccess: (form) => {
+        onSuccess: async (form) => {
             void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            // A detail request that started before this save would land afterwards and put the
+            // older draft back. exact keeps the mappings, links, and submissions queries nested
+            // under the detail key fetching.
+            await queryClient.cancelQueries({ queryKey: formKeys.detail(form.id), exact: true })
             queryClient.setQueryData(formKeys.detail(form.id), form)
         },
     })

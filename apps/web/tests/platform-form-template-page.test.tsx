@@ -412,6 +412,46 @@ describe("PlatformFormTemplatePage", () => {
         }))
     })
 
+    it("autosaves a rename made during an in-flight autosave after that save finishes", async () => {
+        vi.useFakeTimers()
+        const saves: Array<{ name: string; finish: () => void }> = []
+        mockUpdate.mockImplementation(({ payload }: { payload: { name: string } }) =>
+            new Promise((resolve) => {
+                const version = saves.length + 2
+                saves.push({
+                    name: payload.name,
+                    finish: () => resolve({
+                        ...mockTemplateData,
+                        current_version: version,
+                        draft: { ...mockTemplateData.draft, name: payload.name },
+                    }),
+                })
+            }))
+        const advance = async (ms: number) => {
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(ms)
+            })
+        }
+
+        render(<PlatformFormTemplatePage />)
+        fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed once" } })
+        await advance(1200)
+        expect(saves.map((save) => save.name)).toEqual(["Renamed once"])
+
+        fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed twice" } })
+        await advance(10)
+        saves[0].finish()
+        await advance(10)
+        await advance(1200)
+        expect(saves.map((save) => save.name)).toEqual(["Renamed once", "Renamed twice"])
+
+        saves[1].finish()
+        await advance(10)
+        await advance(5000)
+        expect(saves).toHaveLength(2)
+        expect(screen.getByText(/^Saved /)).toBeInTheDocument()
+    })
+
     describe("publish state", () => {
         const liveSchema = {
             pages: [{ title: "Application", fields: [
