@@ -45,9 +45,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend-tests:
-    name: Backend Tests
+  backend-test-groups:
+    name: Backend Tests (${{ matrix.group }})
     runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: true
+      matrix:
+        group: [parallel-1, parallel-2, serial]
     
     services:
       postgres:
@@ -65,6 +69,7 @@ jobs:
           --health-retries 5
 
     env:
+      COVERAGE_FILE: .coverage.${{ matrix.group }}
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/crm_test
       # Keep >=32 bytes to avoid PyJWT InsecureKeyLengthWarning spam in CI.
       JWT_SECRET: test-jwt-secret-0123456789abcdef
@@ -98,26 +103,115 @@ jobs:
         run: uv run -m alembic upgrade head
 
       - name: Verify models have migrations
+        if: matrix.group == 'parallel-1'
         working-directory: apps/api
         run: uv run -m alembic check
 
       # Migrations change the schema; outbox tests commit rows visible to global claimers.
-      # Neither may overlap other workers on the shared test database.
+      # Each group gets its own PostgreSQL service; serial tests never share worker data.
       - name: Run parallel-safe tests
+        if: startsWith(matrix.group, 'parallel-')
         working-directory: apps/api
+        env:
+          TEST_GROUP: ${{ matrix.group }}
         run: |
-          PYTHONPATH=. uv run -m pytest tests/ -v --tb=short \
+          # Keep files together for loadscope; every safe file belongs to one shard.
+          python - <<'PYTHON' > /tmp/backend-test-files
+          import os
+          from pathlib import Path
+
+          files = sorted(
+              str(path) for path in Path("tests").rglob("test_*.py")
+              if not path.name.startswith("test_migration_")
+              and path.name != "test_email_delivery_outbox.py"
+          )
+          shard = int(os.environ["TEST_GROUP"].rsplit("-", 1)[1]) - 1
+          print("\n".join(files[shard::2]))
+          PYTHON
+          mapfile -t test_files < /tmp/backend-test-files
+          test "${#test_files[@]}" -gt 0
+          PYTHONPATH=. uv run -m pytest "${test_files[@]}" -v --tb=short \
             --ignore-glob 'tests/test_migration_*.py' \
             --ignore tests/test_email_delivery_outbox.py \
             -n 4 --dist loadscope \
-            --cov=app --cov-branch --cov-report=
+            --cov=app --cov-branch --cov-report= --cov-fail-under=0 --durations=30
 
-      - name: Run shared-database tests serially and finalize coverage
+      - name: Run shared-database tests serially
+        if: matrix.group == 'serial'
         working-directory: apps/api
         run: |
           PYTHONPATH=. uv run -m pytest tests/test_email_delivery_outbox.py tests/test_migration_*.py -v --tb=short \
-            --cov=app --cov-branch --cov-append \
-            --cov-report=xml --cov-report=term-missing:skip-covered
+            --cov=app --cov-branch --cov-report= --cov-fail-under=0 --durations=30
+
+      - name: Upload backend coverage data
+        uses: actions/upload-artifact@v6
+        with:
+          name: backend-coverage-data-${{ matrix.group }}
+          path: apps/api/.coverage.${{ matrix.group }}
+          include-hidden-files: true
+          if-no-files-found: error
+
+  backend-tests:
+    name: Backend Tests
+    runs-on: ubuntu-26.04
+    if: always()
+    needs: backend-test-groups
+
+    steps:
+      - name: Verify backend groups
+        env:
+          GROUP_RESULT: ${{ needs.backend-test-groups.result }}
+        run: test "$GROUP_RESULT" = success
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.6'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.12.0'
+          cache-suffix: ${{ github.job }}
+
+      - name: Install dependencies
+        working-directory: apps/api
+        run: uv sync --frozen --extra test
+
+      - name: Download backend coverage data
+        uses: actions/download-artifact@v7
+        with:
+          pattern: backend-coverage-data-*
+          path: apps/api
+          merge-multiple: true
+
+      - name: Combine coverage and enforce floors
+        working-directory: apps/api
+        run: |
+          uv run coverage combine
+          uv run coverage report
+          uv run coverage xml
+          uv run coverage json
+          uv run python - <<'PYTHON'
+          import json
+
+          with open("coverage.json") as report:
+              totals = json.load(report)["totals"]
+          for metric, covered, total, floor in (
+              ("lines", "covered_lines", "num_statements", 79.96),
+              ("branches", "covered_branches", "num_branches", 63.03),
+          ):
+              if totals[total] <= 0:
+                  raise SystemExit(f"No {metric} measured")
+              actual = 100 * totals[covered] / totals[total]
+              print(f"{metric}: {actual:.2f}% (floor {floor:.2f}%)")
+              if actual < floor:
+                  raise SystemExit(f"{metric} coverage below floor")
+          PYTHON
 
       - name: Upload backend coverage report
         uses: actions/upload-artifact@v6
@@ -295,7 +389,19 @@ jobs:
 
       - name: Run test shard
         working-directory: apps/web
-        run: pnpm test --shard=${{ matrix.shard }}/2
+        # The aggregate job enforces coverage floors after merging both shards.
+        run: |
+          pnpm test --shard=${{ matrix.shard }}/2 --coverage --reporter=default --reporter=blob \
+            --coverage.thresholds.lines=0 --coverage.thresholds.statements=0 \
+            --coverage.thresholds.branches=0 --coverage.thresholds.functions=0
+
+      - name: Upload test and coverage shard
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-test-blob-${{ matrix.shard }}
+          path: apps/web/.vitest/blob/*.json
+          include-hidden-files: true
+          if-no-files-found: error
 
   frontend-tests:
     name: Frontend Tests
@@ -310,6 +416,42 @@ jobs:
         run: |
           test "$BUILD_RESULT" = success
           test "$TEST_RESULT" = success
+
+      - uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          package-manager-cache: false
+
+      - name: Enable pnpm via corepack
+        working-directory: apps/web
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.18.0 --activate
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Download test and coverage shards
+        uses: actions/download-artifact@v7
+        with:
+          pattern: frontend-test-blob-*
+          path: apps/web/.vitest/blob
+          merge-multiple: true
+
+      - name: Merge reports and enforce frontend coverage floors
+        working-directory: apps/web
+        run: pnpm test --merge-reports --coverage
+
+      - name: Upload frontend coverage report
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-coverage
+          path: apps/web/coverage/coverage-summary.json
+          if-no-files-found: error
 
   lint:
     name: Lint

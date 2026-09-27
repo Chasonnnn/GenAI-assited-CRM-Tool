@@ -33,6 +33,7 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+apps/web/.vitest/
 .pytest_cache/
 
 # Misc
