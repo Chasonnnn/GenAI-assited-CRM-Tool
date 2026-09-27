@@ -693,32 +693,57 @@ describe("DonorDetailPage", () => {
         await waitFor(() => expect(mockRestoreDonor).toHaveBeenCalledWith("donor-1"))
     })
 
-    it("distinguishes not found from permission and retryable errors", () => {
+    it.each([
+        ["404", new ApiError(404, "Not Found", "Not Found")],
+        ["422 from a malformed id", new ApiError(422, "Unprocessable Entity", "Input should be a valid UUID")],
+    ])("renders the shared not-found state for a %s", (_label, error) => {
         mockDetailSearchParams.set("return_to", "/donors?type=sperm&page=3")
         mockUseDonor.mockReturnValueOnce({
             data: undefined,
             isLoading: false,
             isError: true,
-            error: new ApiError(404, "Not Found", "Not Found"),
+            isFetching: false,
+            error,
             refetch: vi.fn(),
         })
-        const { unmount } = render(<DonorDetailPage />)
-        expect(screen.getByRole("heading", { name: "Donor not found" })).toBeInTheDocument()
-        expect(screen.getByRole("link", { name: "Back to donors" })).toHaveAttribute(
+        render(<DonorDetailPage />)
+        expect(screen.getByRole("heading", { level: 1, name: "Donor not found" })).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to Donors" })).toHaveAttribute(
             "href",
             "/donors?type=sperm&page=3",
         )
-        unmount()
+        expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument()
+        expect(screen.queryByText("Input should be a valid UUID")).not.toBeInTheDocument()
+    })
 
+    it("renders the denied state without a retry for a 403", () => {
         mockUseDonor.mockReturnValueOnce({
             data: undefined,
             isLoading: false,
             isError: true,
+            isFetching: false,
+            error: new ApiError(403, "Forbidden", "Missing permission: view_donors"),
+            refetch: vi.fn(),
+        })
+        const { unmount } = render(<DonorDetailPage />)
+        expect(screen.getByRole("heading", { level: 1, name: "Permission required" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument()
+        expect(screen.queryByText("Missing permission: view_donors")).not.toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to Donors" })).toHaveAttribute("href", "/donors")
+        unmount()
+
+        // Without view_donors the list is denied too, so the link goes to the dashboard.
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: [] } })
+        mockUseDonor.mockReturnValueOnce({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
             error: new ApiError(403, "Forbidden", "Forbidden"),
             refetch: vi.fn(),
         })
         render(<DonorDetailPage />)
-        expect(screen.getByText("Permission required")).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Go to Dashboard" })).toHaveAttribute("href", "/dashboard")
     })
 
     it("rejects external and non-list return targets", () => {
@@ -757,13 +782,15 @@ describe("DonorDetailPage", () => {
             data: undefined,
             isLoading: false,
             isError: true,
-            error: new Error("Network failure"),
+            isFetching: false,
+            error: new ApiError(500, "Internal Server Error", "boom"),
             refetch,
         })
 
         render(<DonorDetailPage />)
-        expect(screen.getByRole("heading", { name: "Failed to load donor" })).toBeInTheDocument()
-        fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+        expect(screen.getByRole("heading", { level: 1, name: "Couldn't load donor" })).toBeInTheDocument()
+        expect(screen.queryByText("boom")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
         expect(refetch).toHaveBeenCalledTimes(1)
     })
 

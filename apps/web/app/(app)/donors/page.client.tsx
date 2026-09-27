@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react"
 import type { Route } from "next"
 import { useRouter, useSearchParams } from "next/navigation"
-import { AlertCircleIcon, Loader2Icon, PlusIcon, UsersIcon } from "lucide-react"
+import { Loader2Icon, PlusIcon, UsersIcon } from "lucide-react"
 
 import Link from "@/components/app-link"
 import { DonorFormFields, type DonorFieldValidation } from "@/components/donors/DonorFormFields"
@@ -11,7 +11,7 @@ import {
     EMPTY_DONOR_FORM_VALUES,
     type DonorFormValues,
 } from "@/components/donors/donor-form-values"
-import { PermissionDeniedState } from "@/components/error-state"
+import { QueryErrorState } from "@/components/error-state"
 import {
     ListToolbar,
     ListToolbarSearch,
@@ -41,7 +41,6 @@ import { useAuth } from "@/lib/auth-context"
 import type { DonorSortBy } from "@/lib/api/donors"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { getActiveDonorStages, getDonorStageLabel, getDonorStageStyle } from "@/lib/donor-stage-utils"
-import { isPermissionError } from "@/lib/error-utils"
 import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
 import { useCreateDonor, useDonors } from "@/lib/hooks/use-donors"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
@@ -231,6 +230,7 @@ function DonorListCard({
         data: DonorListResponse | undefined
         isLoading: boolean
         isError: boolean
+        isFetching: boolean
         error: unknown
         isFiltered: boolean
         currentListHref: string
@@ -247,6 +247,7 @@ function DonorListCard({
         data,
         isLoading,
         isError,
+        isFetching,
         error,
         isFiltered,
         currentListHref,
@@ -261,19 +262,18 @@ function DonorListCard({
                         <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                         <span className="ml-2 text-muted-foreground">Loading…</span>
                     </div>
-                ) : isPermissionError(error) ? (
-                    <PermissionDeniedState
-                        description="Your account does not have permission to view donors. Ask an admin to update your role or permissions."
-                        onRetry={onRetry}
-                    />
                 ) : isError ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <AlertCircleIcon className="mb-4 size-12 text-destructive" />
-                        <h2 className="text-lg font-medium">Failed to load donors</h2>
-                        <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
-                            Retry
-                        </Button>
-                    </div>
+                    <QueryErrorState
+                        error={error}
+                        onRetry={onRetry}
+                        isRetrying={isFetching}
+                        title="Couldn't load donors"
+                        forbidden={{
+                            description: "Your account does not have permission to view donors. Ask an admin to update your role or permissions.",
+                            secondaryHref: "/dashboard",
+                        }}
+                        headingLevel={2}
+                    />
                 ) : !data?.items.length ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                         <UsersIcon className="mb-4 size-12 text-muted-foreground" />
@@ -723,6 +723,7 @@ export default function DonorsPageClient() {
                         data,
                         isLoading: donorsQuery.isLoading,
                         isError: donorsQuery.isError,
+                        isFetching: donorsQuery.isFetching,
                         error: donorsQuery.error,
                         isFiltered,
                         currentListHref,

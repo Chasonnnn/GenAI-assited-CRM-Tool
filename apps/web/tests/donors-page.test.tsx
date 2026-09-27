@@ -475,18 +475,37 @@ describe("DonorsPage", () => {
         expect(mockRouterReplace).toHaveBeenLastCalledWith("/donors", { scroll: false })
     })
 
-    it("shows the donor permission state for a forbidden list", () => {
+    it("shows the donor permission state without a retry for a forbidden list", () => {
+        mockUseDonors.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(403, "Forbidden", "Missing permission: view_donors"),
+            refetch: vi.fn(),
+        })
+
+        render(<DonorsPage />)
+        expect(screen.getByRole("heading", { level: 2, name: "Permission required" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument()
+        expect(screen.queryByText("Missing permission: view_donors")).not.toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Go to Dashboard" })).toHaveAttribute("href", "/dashboard")
+    })
+
+    it("shows the shared load error with a retry for a failed list", () => {
         const refetch = vi.fn()
         mockUseDonors.mockReturnValue({
             data: undefined,
             isLoading: false,
             isError: true,
-            error: new ApiError(403, "Forbidden", "Forbidden"),
+            isFetching: false,
+            error: new ApiError(500, "Internal Server Error", "boom"),
             refetch,
         })
 
         render(<DonorsPage />)
-        expect(screen.getByText("Permission required")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 2, name: "Couldn't load donors" })).toBeInTheDocument()
+        expect(screen.queryByText("boom")).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Try again" }))
         expect(refetch).toHaveBeenCalledTimes(1)
     })

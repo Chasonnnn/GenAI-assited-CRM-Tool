@@ -3,16 +3,14 @@
 import { Suspense, useState } from "react"
 import type { Route } from "next"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
-import { AlertCircleIcon, Loader2Icon, SearchXIcon } from "lucide-react"
+import { Loader2Icon } from "lucide-react"
 
 import { DonorDetailSections } from "./components/DonorDetailSections"
-import Link from "@/components/app-link"
 import { DonorFormFields } from "@/components/donors/DonorFormFields"
 import type { DonorFormValues } from "@/components/donors/donor-form-values"
-import { PermissionDeniedState } from "@/components/error-state"
+import { QueryErrorState } from "@/components/error-state"
 import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
 import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
     Dialog,
@@ -22,10 +20,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/toast"
-import { ApiError } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { getActiveDonorStages } from "@/lib/donor-stage-utils"
-import { isPermissionError } from "@/lib/error-utils"
 import {
     useDonor,
     useDonorHistory,
@@ -36,6 +32,7 @@ import {
 } from "@/lib/hooks/use-donors"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { useEntityActivity } from "@/lib/hooks/use-entity-activity"
 import { useTasks } from "@/lib/hooks/use-tasks"
 import { getDonorPipelineEntityType, type Donor } from "@/lib/types/donor"
@@ -277,6 +274,37 @@ function LoadedDonorDetail({ donor, returnTo }: { donor: Donor; returnTo: string
     )
 }
 
+function DonorLoadError({
+    error,
+    onRetry,
+    isRetrying,
+    returnTo,
+}: {
+    error: unknown
+    onRetry: () => void
+    isRetrying: boolean
+    returnTo: string
+}) {
+    const { can } = usePermissionCheck()
+    // The donors router requires view_donors, so without it the list is denied too.
+    const canViewDonors = can("view_donors")
+    return (
+        <QueryErrorState
+            error={error}
+            onRetry={onRetry}
+            isRetrying={isRetrying}
+            title="Couldn't load donor"
+            forbidden={{
+                description: "Your account does not have permission to view this donor. Ask an admin to update your role or permissions.",
+                secondaryHref: canViewDonors ? DEFAULT_DONORS_LIST_PATH : "/dashboard",
+                secondaryLabel: canViewDonors ? "Back to Donors" : "Go to Dashboard",
+            }}
+            notFound={{ title: "Donor not found", backHref: returnTo, backLabel: "Back to Donors" }}
+            headingLevel={1}
+        />
+    )
+}
+
 function DonorDetailPageContent() {
     const params = useParams<{ id: string }>()
     const searchParams = useSearchParams()
@@ -293,40 +321,14 @@ function DonorDetailPageContent() {
         )
     }
 
-    if (isPermissionError(donorQuery.error)) {
-        return (
-            <PermissionDeniedState
-                description="Your account does not have permission to view this donor. Ask an admin to update your role or permissions."
-                onRetry={() => { void donorQuery.refetch() }}
-            />
-        )
-    }
-
-    if (donorQuery.error instanceof ApiError && donorQuery.error.status === 404) {
-        return (
-            <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-                <SearchXIcon className="mb-4 size-12 text-muted-foreground" />
-                <h1 className="text-xl font-semibold">Donor not found</h1>
-                <Link
-                    href={returnTo}
-                    className={buttonVariants({ variant: "outline", className: "mt-4" })}
-                    aria-label="Back to donors"
-                >
-                    Back to Donors
-                </Link>
-            </div>
-        )
-    }
-
     if (donorQuery.isError || !donor) {
         return (
-            <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-                <AlertCircleIcon className="mb-4 size-12 text-destructive" />
-                <h1 className="text-xl font-semibold">Failed to load donor</h1>
-                <Button variant="outline" className="mt-4" onClick={() => { void donorQuery.refetch() }}>
-                    Retry
-                </Button>
-            </div>
+            <DonorLoadError
+                error={donorQuery.error}
+                onRetry={() => { void donorQuery.refetch() }}
+                isRetrying={donorQuery.isFetching}
+                returnTo={returnTo}
+            />
         )
     }
 
