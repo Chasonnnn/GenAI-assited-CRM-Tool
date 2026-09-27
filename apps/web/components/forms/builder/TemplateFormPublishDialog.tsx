@@ -27,7 +27,7 @@ export function TemplateFormPublishDialog({
 }: TemplateFormPublishDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle>Publish Form Template</DialogTitle>
                     <DialogDescription>

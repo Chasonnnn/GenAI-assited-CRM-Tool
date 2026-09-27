@@ -146,6 +146,6 @@ export function DonorDetailSections({
                 </TabsContent>
             </Tabs>
         </div>
-        {correspondenceOpen && <Dialog open onOpenChange={setCorrespondenceOpen}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Correspondence</DialogTitle></DialogHeader><RecordCorrespondenceCard kind="donor" recordId={donor.id} canView={user?.role === "developer"} canEdit={canEdit} /></DialogContent></Dialog>}
+        {correspondenceOpen && <Dialog open onOpenChange={setCorrespondenceOpen}><DialogContent size="2xl"><DialogHeader><DialogTitle>Correspondence</DialogTitle></DialogHeader><RecordCorrespondenceCard kind="donor" recordId={donor.id} canView={user?.role === "developer"} canEdit={canEdit} /></DialogContent></Dialog>}
     </div>
 }

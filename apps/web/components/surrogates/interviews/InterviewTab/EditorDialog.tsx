@@ -54,7 +54,7 @@ export function EditorDialog() {
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && closeDialog()}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent size="2xl" className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>{isEditing ? "Edit Interview" : "Add Interview"}</DialogTitle>
                 </DialogHeader>

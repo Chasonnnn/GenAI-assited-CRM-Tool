@@ -16,7 +16,7 @@ export function CompleteMatchDialog({ onClose, onComplete, isPending }: { onClos
         try { await onComplete({ outcome: outcome.trim(), ...(reason.trim() ? { reason: reason.trim() } : {}) }); onClose() }
         catch (error) { setError(error instanceof Error ? error.message : "Unable to complete match") }
     }
-    return <Dialog open onOpenChange={(open) => { if (!open && !isPending) onClose() }}><DialogContent className="sm:max-w-md">
+    return <Dialog open onOpenChange={(open) => { if (!open && !isPending) onClose() }}><DialogContent size="md">
         <DialogHeader><DialogTitle>Complete Match</DialogTitle></DialogHeader>
         <div className="space-y-4 py-4">
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

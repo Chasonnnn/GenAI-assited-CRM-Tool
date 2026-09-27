@@ -35,7 +35,7 @@ export function MatchAttemptDialog({ matchId, kind, attempt, onClose }: { matchI
         } catch (error) { setError(error instanceof Error ? error.message : "Unable to save attempt") }
     }
     return <Dialog open onOpenChange={(open) => { if (!open && !mutation.isPending) onClose() }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="md">
             <DialogHeader><DialogTitle>{attempt ? `Edit Attempt ${attempt.sequence}` : "Add Attempt"}</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
                 {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

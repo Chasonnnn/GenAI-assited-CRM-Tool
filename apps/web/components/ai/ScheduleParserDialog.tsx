@@ -579,7 +579,7 @@ export function ScheduleParserDialog({
                 if (!nextOpen) handleClose()
             }}
         >
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent size="4xl" className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <SparklesIcon className="size-5 text-purple-600" />

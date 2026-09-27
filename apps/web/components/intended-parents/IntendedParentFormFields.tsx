@@ -1,6 +1,7 @@
 "use client"
 
 import { Separator } from "@/components/ui/separator"
+import { ValidatedField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -51,6 +52,14 @@ function FormSelect({
     )
 }
 
+export type ValidatedIntendedParentField = "full_name" | "email" | "partner_email"
+
+/** Subset of useFormValidation for the fields this component validates. */
+export type IntendedParentFieldValidation = {
+    errorFor: (field: ValidatedIntendedParentField) => string | undefined
+    touch: (field: ValidatedIntendedParentField) => void
+}
+
 interface IntendedParentFormFieldsProps {
     values: IntendedParentFormValues
     onChange: <K extends keyof IntendedParentFormValues>(
@@ -61,7 +70,11 @@ interface IntendedParentFormFieldsProps {
     showAddressSection?: boolean
     showClinicSection?: boolean
     showInternalNotes?: boolean
+    validation?: IntendedParentFieldValidation
 }
+
+// City gets the most room; State needs space for "New York (NY)"; ZIP is short.
+const CITY_STATE_ZIP_GRID = "grid gap-4 md:grid-cols-[1fr_1.4fr_0.8fr]"
 
 function PronounsField({
     id,
@@ -119,19 +132,28 @@ export function IntendedParentFormFields({
     showAddressSection = true,
     showClinicSection = true,
     showInternalNotes = true,
+    validation,
 }: IntendedParentFormFieldsProps) {
     return (
         <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                    <Label htmlFor={`${idPrefix}full_name`}>Full Name *</Label>
-                    <Input
-                        id={`${idPrefix}full_name`}
-                        value={values.full_name}
-                        onChange={(event) => onChange("full_name", event.target.value)}
-                        placeholder="John and Jane Doe"
-                    />
-                </div>
+                <ValidatedField
+                    id={`${idPrefix}full_name`}
+                    label="Full Name *"
+                    error={validation?.errorFor("full_name")}
+                    className="gap-2"
+                >
+                    {(control) => (
+                        <Input
+                            {...control}
+                            required
+                            value={values.full_name}
+                            onChange={(event) => onChange("full_name", event.target.value)}
+                            onBlur={() => validation?.touch("full_name")}
+                            placeholder="John and Jane Doe"
+                        />
+                    )}
+                </ValidatedField>
                 <PronounsField
                     id={`${idPrefix}pronouns`}
                     label="Pronouns"
@@ -141,16 +163,24 @@ export function IntendedParentFormFields({
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                    <Label htmlFor={`${idPrefix}email`}>Email *</Label>
-                    <Input
-                        id={`${idPrefix}email`}
-                        type="email"
-                        value={values.email}
-                        onChange={(event) => onChange("email", event.target.value)}
-                        placeholder="john@example.com"
-                    />
-                </div>
+                <ValidatedField
+                    id={`${idPrefix}email`}
+                    label="Email *"
+                    error={validation?.errorFor("email")}
+                    className="gap-2"
+                >
+                    {(control) => (
+                        <Input
+                            {...control}
+                            type="email"
+                            required
+                            value={values.email}
+                            onChange={(event) => onChange("email", event.target.value)}
+                            onBlur={() => validation?.touch("email")}
+                            placeholder="john@example.com"
+                        />
+                    )}
+                </ValidatedField>
                 <div className="space-y-2">
                     <Label htmlFor={`${idPrefix}phone`}>Phone</Label>
                     <Input
@@ -181,16 +211,23 @@ export function IntendedParentFormFields({
                     onChange={(value) => onChange("partner_pronouns", value)}
                 />
             </div>
-            <div className="space-y-2">
-                <Label htmlFor={`${idPrefix}partner_email`}>Partner Email</Label>
-                <Input
-                    id={`${idPrefix}partner_email`}
-                    type="email"
-                    value={values.partner_email}
-                    onChange={(event) => onChange("partner_email", event.target.value)}
-                    placeholder="partner@example.com"
-                />
-            </div>
+            <ValidatedField
+                id={`${idPrefix}partner_email`}
+                label="Partner Email"
+                error={validation?.errorFor("partner_email")}
+                className="gap-2"
+            >
+                {(control) => (
+                    <Input
+                        {...control}
+                        type="email"
+                        value={values.partner_email}
+                        onChange={(event) => onChange("partner_email", event.target.value)}
+                        onBlur={() => validation?.touch("partner_email")}
+                        placeholder="partner@example.com"
+                    />
+                )}
+            </ValidatedField>
 
             {showAddressSection && (
                 <>
@@ -214,7 +251,7 @@ export function IntendedParentFormFields({
                             placeholder="Suite, unit, etc."
                         />
                     </div>
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className={CITY_STATE_ZIP_GRID}>
                         <div className="space-y-2">
                             <Label htmlFor={`${idPrefix}city`}>City</Label>
                             <Input
@@ -305,7 +342,7 @@ export function IntendedParentFormFields({
                             placeholder="Suite, unit, etc."
                         />
                     </div>
-                    <div className="grid gap-4 md:grid-cols-3">
+                    <div className={CITY_STATE_ZIP_GRID}>
                         <div className="space-y-2">
                             <Label htmlFor={`${idPrefix}ip_clinic_city`}>IVF Clinic Locality</Label>
                             <Input

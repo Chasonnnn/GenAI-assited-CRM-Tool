@@ -49,7 +49,7 @@ function getAuthReturnTo(): "ops" | "app" {
 function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
     return (
         <Dialog open={true} onOpenChange={onClose}>
-            <DialogContent className="max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <KeyIcon className="size-5" />
