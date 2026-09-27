@@ -13,10 +13,19 @@ import { useTaskActions } from "@/lib/hooks/use-task-actions"
 export default function SurrogateTasksPage() {
     const params = useParams<{ id: string }>()
     const id = params.id
-    const { data: tasksData, isLoading: tasksLoading } = useTasks({
+    const tasksQuery = useTasks({
         surrogate_id: id,
         exclude_approvals: true,
     })
+    const tasksData = tasksQuery.data
+    // A failed background refetch keeps the loaded list; only a failed first load shows the error.
+    const tasksLoadError = tasksQuery.isError && !tasksData
+        ? {
+            error: tasksQuery.error,
+            onRetry: () => { void tasksQuery.refetch() },
+            isRetrying: tasksQuery.isFetching,
+        }
+        : null
     const taskActions = useTaskActions()
 
     const [addTaskDialogOpen, setAddTaskDialogOpen] = React.useState(false)
@@ -48,7 +57,8 @@ export default function SurrogateTasksPage() {
             <SurrogateTasksTab
                 surrogateId={id}
                 tasks={tasksData?.items || []}
-                isLoading={tasksLoading}
+                isLoading={tasksQuery.isLoading}
+                loadError={tasksLoadError}
                 onTaskToggle={handleTaskToggle}
                 onAddTask={() => setAddTaskDialogOpen(true)}
                 onTaskClick={handleTaskClick}

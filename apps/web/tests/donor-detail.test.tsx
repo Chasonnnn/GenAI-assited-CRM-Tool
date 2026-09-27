@@ -392,8 +392,8 @@ describe("DonorDetailPage", () => {
             refetch,
         })
         const second = render(<DonorDetailPage />)
-        expect(screen.getByText("Failed to load notes.")).toBeInTheDocument()
-        fireEvent.click(screen.getByRole("button", { name: "Retry notes" }))
+        expect(screen.getByText("Couldn't load notes")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
         expect(refetch).toHaveBeenCalledTimes(1)
         second.unmount()
 

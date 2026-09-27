@@ -268,8 +268,41 @@ describe('SurrogateInterviewTab', () => {
 
         render(<SurrogateInterviewTab surrogateId="c1" />)
 
-        expect(screen.getByText('No Interviews')).toBeDefined()
+        expect(screen.getByRole('heading', { level: 3, name: 'No interviews' })).toBeInTheDocument()
+        expect(screen.queryByText(/document phone calls/i)).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: /add interview/i })).toBeDefined()
+    })
+
+    it('omits the empty-state create action for roles that cannot edit interviews', () => {
+        authState.user = { role: 'intake_specialist', user_id: 'u1' }
+        mockUseInterviews.mockReturnValue({ data: [], isLoading: false })
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(screen.getByRole('heading', { level: 3, name: 'No interviews' })).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /add interview/i })).not.toBeInTheDocument()
+    })
+
+    it('shows a load error instead of the empty state when interviews fail to load', async () => {
+        const { ApiError } = await import('@/lib/api')
+        const refetch = vi.fn()
+        mockUseInterviews.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, 'Internal Server Error', 'boom'),
+            refetch,
+        })
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(screen.getByText("Couldn't load interviews")).toBeInTheDocument()
+        expect(screen.queryByText('No interviews')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /add interview/i })).not.toBeInTheDocument()
+        expect(screen.queryByText('boom')).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
     })
 
     it('labels the add interview button when interviews already exist', async () => {

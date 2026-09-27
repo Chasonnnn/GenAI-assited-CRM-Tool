@@ -131,6 +131,36 @@ describe('CSVImportPage', () => {
         expect(screen.getByText('Invalid phone number')).toBeInTheDocument()
     })
 
+    it('shows a first-run empty state without helper copy', () => {
+        mockUseImports.mockReturnValue({ data: [], isLoading: false, refetch: vi.fn() })
+
+        render(<CSVImportPage />)
+
+        expect(screen.getByText('No imports yet')).toBeInTheDocument()
+        expect(screen.queryByText(/to get started/i)).not.toBeInTheDocument()
+    })
+
+    it('shows a load error with retry instead of the empty history', async () => {
+        const { ApiError } = await import('@/lib/api')
+        const refetch = vi.fn()
+        mockUseImports.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, 'Internal Server Error', 'boom'),
+            refetch,
+        })
+
+        render(<CSVImportPage />)
+
+        expect(screen.getByText("Couldn't load imports")).toBeInTheDocument()
+        expect(screen.queryByText('No imports yet')).not.toBeInTheDocument()
+        expect(screen.queryByText('boom')).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
     it('does not repeat the history heading as a description', () => {
         render(<CSVImportPage />)
 

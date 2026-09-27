@@ -2,6 +2,8 @@
 
 import { useState } from "react"
 import { CSVUpload } from "@/components/import/CSVUpload"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -138,7 +140,8 @@ function normalizeImportErrors(importDetails: ImportDetail | undefined): Normali
 }
 
 export default function CSVImportPage() {
-    const { data: imports = [], isLoading, refetch } = useImports()
+    const importsQuery = useImports()
+    const { data: imports = [], isLoading, refetch } = importsQuery
     const { user } = useAuth()
     const cancelMutation = useCancelImport()
     const retryMutation = useRetryImport()
@@ -217,6 +220,13 @@ export default function CSVImportPage() {
                 <ImportHistoryTable
                     imports={imports}
                     isLoading={isLoading}
+                    loadError={importsQuery.isError && !importsQuery.data
+                        ? {
+                            error: importsQuery.error,
+                            onRetry: () => { void refetch() },
+                            isRetrying: importsQuery.isFetching,
+                        }
+                        : null}
                     userRole={user?.role}
                     pendingState={pendingState}
                     onViewErrors={setErrorTarget}
@@ -260,6 +270,7 @@ export default function CSVImportPage() {
 function ImportHistoryTable({
     imports,
     isLoading,
+    loadError,
     userRole,
     pendingState,
     onViewErrors,
@@ -269,6 +280,7 @@ function ImportHistoryTable({
 }: {
     imports: ImportHistoryItem[]
     isLoading: boolean
+    loadError: { error: unknown; onRetry: () => void; isRetrying: boolean } | null
     userRole: string | null | undefined
     pendingState: ImportPendingState
     onViewErrors: (imp: ImportHistoryItem) => void
@@ -286,12 +298,17 @@ function ImportHistoryTable({
                     <div className="flex items-center justify-center py-12">
                         <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                     </div>
+                ) : loadError ? (
+                    <QueryErrorState
+                        error={loadError.error}
+                        onRetry={loadError.onRetry}
+                        isRetrying={loadError.isRetrying}
+                        title="Couldn't load imports"
+                        className="min-h-0 py-10"
+                    />
                 ) : imports.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                        <FileUpIcon className="mb-4 size-12" />
-                        <p className="text-lg font-medium">No imports yet</p>
-                        <p className="text-sm">Upload a CSV file above to get started</p>
-                    </div>
+                    // The upload card above is the create action.
+                    <EmptyState icon={FileUpIcon} title="No imports yet" />
                 ) : (
                     <Table>
                         <TableHeader>

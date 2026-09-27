@@ -12,6 +12,23 @@ describe("SurrogateHistoryTab", () => {
         expect(screen.getByText("No activity recorded.")).toBeInTheDocument()
     })
 
+    it("shows the shared load error with retry when activity fails to load", () => {
+        const retry = vi.fn()
+        const { rerender } = render(
+            <SurrogateHistoryTab activities={[]} formatDateTime={formatDateTime} status="error" onRetry={retry} />
+        )
+
+        expect(screen.getByText("Couldn't load activity")).toBeInTheDocument()
+        expect(screen.queryByText("No activity recorded.")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(retry).toHaveBeenCalledOnce()
+
+        rerender(
+            <SurrogateHistoryTab activities={[]} formatDateTime={formatDateTime} status="error" onRetry={retry} isRetrying />
+        )
+        expect(screen.getByRole("button", { name: "Try again" })).toHaveAttribute("aria-disabled", "true")
+    })
+
     it("renders activity entries with details", () => {
         render(
             <SurrogateHistoryTab

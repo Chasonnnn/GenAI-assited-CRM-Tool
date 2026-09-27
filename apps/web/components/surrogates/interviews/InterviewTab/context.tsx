@@ -65,6 +65,8 @@ export interface InterviewTabContextValue {
     notes: InterviewNoteRead[]
     attachments: InterviewAttachmentRead[]
     isLoading: boolean
+    /** The interview list failed to load and nothing was loaded before. */
+    loadError: { error: unknown; retry: () => void; isRetrying: boolean } | null
 
     // Selection
     selectedId: string | null
@@ -311,7 +313,15 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
     const [chosenId, setSelectedId] = useState<string | null | undefined>(undefined)
     const isDesktop = useMediaQuery("(min-width: 1024px)")
     const linkedId = useSearchParams().get("interview")
-    const { data: interviews = [], isLoading } = useInterviews(surrogateId)
+    const interviewsQuery = useInterviews(surrogateId)
+    const { data: interviews = [], isLoading } = interviewsQuery
+    const loadError = interviewsQuery.isError && !interviewsQuery.data
+        ? {
+            error: interviewsQuery.error,
+            retry: () => { void interviewsQuery.refetch() },
+            isRetrying: interviewsQuery.isFetching,
+        }
+        : null
     const linkedInterviewId = interviews.some((interview) => interview.id === linkedId) ? linkedId : null
     const selectedId =
         chosenId !== undefined
@@ -506,6 +516,7 @@ export function InterviewTabProvider({ surrogateId, children }: InterviewTabProv
         notes,
         attachments,
         isLoading,
+        loadError,
 
         selectedId,
         selectInterview,

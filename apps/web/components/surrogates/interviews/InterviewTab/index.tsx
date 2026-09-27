@@ -18,6 +18,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2Icon, FileTextIcon, PlusIcon, ChevronLeftIcon } from "lucide-react"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import { InterviewWithComments } from "../InterviewComments"
 import { InterviewTabProvider, useInterviewTab } from "./context"
 import { List } from "./List"
@@ -63,6 +65,7 @@ function InterviewTabContent() {
     const {
         interviews,
         isLoading,
+        loadError,
         canEdit,
         openEditor,
     } = useInterviewTab()
@@ -83,26 +86,36 @@ function InterviewTabContent() {
         )
     }
 
+    if (loadError) {
+        return (
+            <div className="space-y-4">{appointmentRow}<Card>
+                <QueryErrorState
+                    error={loadError.error}
+                    onRetry={loadError.retry}
+                    isRetrying={loadError.isRetrying}
+                    title="Couldn't load interviews"
+                    className="min-h-0 py-10"
+                />
+            </Card></div>
+        )
+    }
+
     // Empty state
     if (interviews.length === 0) {
         return (
             <div className="space-y-4">{appointmentRow}<Card>
-                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                    <FileTextIcon className="size-16 text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">No Interviews</h3>
-                    <p className="text-sm text-muted-foreground mb-6 max-w-md">
-                        Document phone calls, video interviews, and in-person meetings with this candidate.
-                    </p>
-                    {canEdit && (
+                <EmptyState
+                    icon={FileTextIcon}
+                    title="No interviews"
+                    headingLevel={3}
+                    action={canEdit ? (
                         <Button onClick={() => openEditor()}>
                             <PlusIcon className="size-4 mr-2" />
                             Add Interview
                         </Button>
-                    )}
-
-                    {/* Dialogs */}
-                    <EditorDialog />
-                </CardContent>
+                    ) : undefined}
+                />
+                <EditorDialog />
             </Card></div>
         )
     }

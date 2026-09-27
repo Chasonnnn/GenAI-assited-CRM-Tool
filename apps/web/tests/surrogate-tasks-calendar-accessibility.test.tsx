@@ -148,3 +148,45 @@ describe("SurrogateTasksCalendar accessibility", () => {
         ).toBeInTheDocument()
     })
 })
+
+describe("SurrogateTasksCalendar load states", () => {
+    it("shows a load error with retry instead of the empty state", async () => {
+        const { ApiError } = await import("@/lib/api")
+        const onRetry = vi.fn()
+
+        render(
+            <SurrogateTasksCalendar
+                surrogateId="s1"
+                tasks={[]}
+                loadError={{
+                    error: new ApiError(500, "Internal Server Error", "boom"),
+                    onRetry,
+                    isRetrying: false,
+                }}
+                onTaskToggle={vi.fn()}
+                onAddTask={vi.fn()}
+            />
+        )
+
+        expect(screen.getByText("Couldn't load tasks")).toBeInTheDocument()
+        expect(screen.queryByText("No tasks yet")).not.toBeInTheDocument()
+        expect(screen.queryByText("boom")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(onRetry).toHaveBeenCalledTimes(1)
+    })
+
+    it("shows a first-run empty state without helper copy or a second create action", () => {
+        render(
+            <SurrogateTasksCalendar
+                surrogateId="s1"
+                tasks={[]}
+                onTaskToggle={vi.fn()}
+                onAddTask={vi.fn()}
+            />
+        )
+
+        expect(screen.getByText("No tasks yet")).toBeInTheDocument()
+        expect(screen.queryByText(/track work for this surrogate/i)).not.toBeInTheDocument()
+        expect(screen.getAllByRole("button", { name: /add .*task/i })).toHaveLength(1)
+    })
+})
