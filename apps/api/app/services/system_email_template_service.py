@@ -341,6 +341,11 @@ def create_platform_system_template(
     return template
 
 
+def is_builtin_system_template(system_key: str) -> bool:
+    """True for keys with shipped defaults; ensure_system_template recreates them after delete."""
+    return system_key in DEFAULT_SYSTEM_TEMPLATES
+
+
 def get_system_template_defaults(system_key: str) -> dict[str, str]:
     defaults = DEFAULT_SYSTEM_TEMPLATES.get(system_key)
     if not defaults:

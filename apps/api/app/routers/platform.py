@@ -24,7 +24,7 @@ from fastapi import (
     UploadFile,
 )
 from PIL import Image
-from pydantic import BaseModel, EmailStr, ValidationError, field_validator
+from pydantic import BaseModel, EmailStr, ValidationError, computed_field, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -194,6 +194,14 @@ class SystemEmailTemplateRead(BaseModel):
     is_active: bool
     current_version: int
     updated_at: str | None
+
+    @computed_field
+    @property
+    def is_builtin(self) -> bool:
+        """Built-in keys are recreated from their defaults on the next read, so delete resets them."""
+        from app.services import system_email_template_service
+
+        return system_email_template_service.is_builtin_system_template(self.system_key)
 
 
 class PlatformEmailBrandingRead(BaseModel):
