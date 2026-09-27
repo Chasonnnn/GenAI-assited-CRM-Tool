@@ -139,8 +139,10 @@ describe('ActivityTimeline', () => {
     })
 
     it.each(['interview_scheduled', 'interview_rescheduled', 'interview_cancelled'])(
-        'keeps Manage on the latest scheduling entry after %s',
+        'keeps the appointment action on the latest scheduling entry after %s',
         async (activityType) => {
+            // With no active appointment the action reads "Schedule" and opens the booking view directly.
+            const appointmentAction = /^(Manage|Schedule)$/
             const currentStageId = activityType === 'interview_cancelled' ? 'reschedule' : 'scheduled'
             mockUseSurrogateHistory.mockReturnValue({ data: [makeHistory({ to_stage_id: 'scheduled' })] })
             const activities = [
@@ -159,17 +161,17 @@ describe('ActivityTimeline', () => {
             />)
 
             const header = screen.getByRole('heading', { name: 'Activity' }).closest('[data-slot="card-header"]')
-            expect(within(header as HTMLElement).queryByRole('button', { name: 'Manage' })).not.toBeInTheDocument()
-            expect(screen.getAllByRole('button', { name: 'Manage' })).toHaveLength(1)
+            expect(within(header as HTMLElement).queryByRole('button', { name: appointmentAction })).not.toBeInTheDocument()
+            expect(screen.getAllByRole('button', { name: appointmentAction })).toHaveLength(1)
             const entry = screen.getByTestId('timeline-activity-latest')
-            const manage = within(entry).getByRole('button', { name: 'Manage' })
-            expect(manage).toBeVisible()
+            const schedule = within(entry).getByRole('button', { name: 'Schedule' })
+            expect(schedule).toBeVisible()
             expect(within(entry).getByText(/Appointment:/)).toBeInTheDocument()
             expect(screen.queryByText('Interview appointment')).not.toBeInTheDocument()
 
-            fireEvent.click(manage)
-            expect(await screen.findByRole('dialog', { name: 'Manage appointment' })).toBeInTheDocument()
-            expect(screen.getByText('No active appointment')).toBeInTheDocument()
+            fireEvent.click(schedule)
+            expect(await screen.findByRole('dialog', { name: 'Schedule interview' })).toBeInTheDocument()
+            expect(screen.queryByRole('dialog', { name: 'Manage appointment' })).not.toBeInTheDocument()
         },
     )
 
@@ -228,7 +230,7 @@ describe('ActivityTimeline', () => {
             activities={[makeActivity({ activity_type: 'interview_scheduled' })]}
             activityStatus={activityStatus}
         />)
-        expect(screen.queryByRole('button', { name: 'Manage' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /^(Manage|Schedule)$/ })).not.toBeInTheDocument()
     })
 
     it('shows only the current stage details by default', () => {

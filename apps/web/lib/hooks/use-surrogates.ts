@@ -84,10 +84,11 @@ export function useSurrogateCreatedDates(
 /**
  * Fetch paginated surrogates list.
  */
-export function useSurrogates(params: SurrogateListParams = {}) {
+export function useSurrogates(params: SurrogateListParams = {}, options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: surrogateKeys.list(params),
         queryFn: () => surrogatesApi.getSurrogates(params),
+        enabled: options.enabled ?? true,
     });
 }
 
@@ -288,11 +289,12 @@ export function useRestoreSurrogate() {
 /**
  * Fetch list of org members who can be assigned surrogates.
  */
-export function useAssignees() {
+export function useAssignees(options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: [...surrogateKeys.all, 'assignees'],
         queryFn: surrogatesApi.getAssignees,
         staleTime: 60 * 1000, // 1 minute
+        enabled: options.enabled ?? true,
     });
 }
 

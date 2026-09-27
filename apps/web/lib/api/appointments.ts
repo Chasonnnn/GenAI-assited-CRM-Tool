@@ -320,25 +320,54 @@ export function regenerateBookingLink(): Promise<BookingLink> {
 }
 
 // Appointments
-export function getAppointments(params: {
+/** Filters shared by the appointment list and its per-status counts. */
+export interface AppointmentFilterParams {
+    date_start?: string;
+    date_end?: string;
+    /** Client name or email. */
+    q?: string;
+    appointment_type_id?: string;
+    meeting_mode?: MeetingMode;
+}
+
+export interface AppointmentListParams extends AppointmentFilterParams {
     page?: number;
     per_page?: number;
     status?: string;
-    date_start?: string;
-    date_end?: string;
     donor_id?: string;
     match_id?: string;
     attempt_id?: string;
     include_record_history?: boolean;
     surrogate_id?: string;
     intended_parent_id?: string;
-}): Promise<AppointmentListResponse> {
+}
+
+export type AppointmentStatusCounts = Record<AppointmentListItem['status'], number>;
+
+function appendAppointmentFilters(searchParams: URLSearchParams, params: AppointmentFilterParams) {
+    if (params.date_start) searchParams.append('date_start', params.date_start);
+    if (params.date_end) searchParams.append('date_end', params.date_end);
+    const search = params.q?.trim();
+    if (search) searchParams.append('q', search);
+    if (params.appointment_type_id) searchParams.append('appointment_type_id', params.appointment_type_id);
+    if (params.meeting_mode) searchParams.append('meeting_mode', params.meeting_mode);
+}
+
+export function getAppointmentStatusCounts(
+    params: AppointmentFilterParams = {},
+): Promise<AppointmentStatusCounts> {
+    const searchParams = new URLSearchParams();
+    appendAppointmentFilters(searchParams, params);
+    const query = searchParams.toString() ? `?${searchParams}` : '';
+    return api.get<AppointmentStatusCounts>(`/appointments/status-counts${query}`);
+}
+
+export function getAppointments(params: AppointmentListParams): Promise<AppointmentListResponse> {
     const searchParams = new URLSearchParams();
     if (params.page) searchParams.append('page', String(params.page));
     if (params.per_page) searchParams.append('per_page', String(params.per_page));
     if (params.status) searchParams.append('status', params.status);
-    if (params.date_start) searchParams.append('date_start', params.date_start);
-    if (params.date_end) searchParams.append('date_end', params.date_end);
+    appendAppointmentFilters(searchParams, params);
     if (params.donor_id) searchParams.append('donor_id', params.donor_id);
     if (params.match_id) searchParams.append('match_id', params.match_id);
     if (params.attempt_id) searchParams.append('attempt_id', params.attempt_id);
