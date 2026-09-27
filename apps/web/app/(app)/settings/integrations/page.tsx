@@ -605,10 +605,11 @@ function getZapierMappingHealthPresentation({
             detail: pathDetails.join(" · "),
         }
     }
+    // The summary line already states that reporting is off, so no mapping detail is shown.
     return {
         label: "Reporting disabled",
         variant: "secondary",
-        detail: "Enable stage reporting to evaluate mapping",
+        detail: "",
     }
 }
 
@@ -6521,9 +6522,12 @@ export default function IntegrationsPage() {
     const messagingReadinessStatus = twilioReadiness?.overall_status
         ?? (twilioSettings?.enabled ? "unknown" : "not_configured")
     const messagingStatus = MESSAGING_STATUS_PRESENTATION[messagingReadinessStatus]
+    const messagingSetupStepCount = twilioReadiness?.issues?.length ?? 0
     const messagingDetail = twilioSettings?.enabled
         ? "Twilio delivery enabled for configured routes"
-        : "Configure SMS + MMS routes and consent controls"
+        : messagingSetupStepCount > 0
+            ? `${messagingSetupStepCount} setup step${messagingSetupStepCount === 1 ? "" : "s"} remaining`
+            : "SMS and MMS"
     const inboundWebhooks = zapierSettings?.inbound_webhooks ?? []
     const zapierInboundConfigured =
         inboundWebhooks.some((hook) => hook.secret_configured)
@@ -6582,14 +6586,10 @@ export default function IntegrationsPage() {
     if (metaCrmDatasetConfigured) {
         metaDetailParts.push(metaCrmDatasetActive ? "CRM dataset enabled" : "CRM dataset configured")
     }
-    if (metaConnectionsCount > 0 || metaFormsCount > 0) {
-        metaDetailParts.push(
-            `${metaFormsCount} form${metaFormsCount === 1 ? "" : "s"} · ${metaConnectionsCount} connection${metaConnectionsCount === 1 ? "" : "s"}`
-        )
-    }
-    const metaDetail = metaDetailParts.length > 0
-        ? metaDetailParts.join(" · ")
-        : "Connect Facebook or add a CRM dataset to get started"
+    metaDetailParts.push(
+        `${metaFormsCount} lead form${metaFormsCount === 1 ? "" : "s"} · ${metaConnectionsCount} connection${metaConnectionsCount === 1 ? "" : "s"}`
+    )
+    const metaDetail = metaDetailParts.join(" · ")
     const AiStatusIcon = aiStatusIcon
     const EmailStatusIcon = emailStatusIcon
     const MessagingStatusIcon = messagingStatus.Icon
@@ -6830,6 +6830,9 @@ function PersonalIntegrationsSection({
     onDisconnect: (integrationType: PersonalIntegrationType) => Promise<unknown>
 }) {
     const [googleCalendarDialogOpen, setGoogleCalendarDialogOpen] = useState(false)
+    // The calendar settings load after the dialog opens, so the default first-tabbable focus would
+    // land on the Appointment types link. Focus the dialog itself; Tab then starts at Sync now.
+    const googleCalendarDialogRef = useRef<HTMLDivElement>(null)
     const googleCalendarConnected = Boolean(googleCalendarIntegration?.connected)
     const disconnect = async (integrationType: PersonalIntegrationType) => {
         await onDisconnect(integrationType)
@@ -6937,7 +6940,12 @@ function PersonalIntegrationsSection({
                 open={googleCalendarDialogOpen && googleCalendarConnected}
                 onOpenChange={setGoogleCalendarDialogOpen}
             >
-                <DialogContent layout="sectioned" size="2xl">
+                <DialogContent
+                    ref={googleCalendarDialogRef}
+                    initialFocus={googleCalendarDialogRef}
+                    layout="sectioned"
+                    size="2xl"
+                >
                     <DialogHeader
                         icon={<CalendarIcon />}
                         status={<ConnectionStatusBadge connected />}
@@ -7245,7 +7253,7 @@ function OrganizationIntegrationsSection({
                 detail={(
                     <>
                         <p>{zapierDetail}</p>
-                        <p>{zapierMappingDetail}</p>
+                        {zapierMappingDetail ? <p>{zapierMappingDetail}</p> : null}
                     </>
                 )}
                 status={(

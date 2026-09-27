@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within, act } from '@testing-library/react'
+import { render, screen, fireEvent, within, act, waitFor } from '@testing-library/react'
 import IntegrationsPage from '../app/(app)/settings/integrations/page'
 import { ApiError } from '../lib/api'
 import type { ResendSettings } from '../lib/api/resend'
@@ -399,17 +399,32 @@ vi.mock('@/components/ui/dialog', async () => {
             className,
             size,
             layout,
-        }: SlotProps & { size?: string; layout?: string }) => (
-            <dialog
-                open
-                aria-label="Integration settings"
-                className={className}
-                data-size={size ?? 'md'}
-                data-layout={layout ?? 'default'}
-            >
-                {children}
-            </dialog>
-        ),
+            ref,
+            initialFocus,
+        }: SlotProps & {
+            size?: string
+            layout?: string
+            ref?: React.Ref<HTMLDialogElement>
+            initialFocus?: React.RefObject<HTMLElement | null>
+        }) => {
+            // Mirrors Base UI: a ref passed as initialFocus receives focus when the dialog opens.
+            React.useEffect(() => {
+                initialFocus?.current?.focus()
+            }, [initialFocus])
+            return (
+                <dialog
+                    ref={ref}
+                    open
+                    tabIndex={-1}
+                    aria-label="Integration settings"
+                    className={className}
+                    data-size={size ?? 'md'}
+                    data-layout={layout ?? 'default'}
+                >
+                    {children}
+                </dialog>
+            )
+        },
         DialogHeader: ({
             children,
             className,
@@ -1718,6 +1733,32 @@ describe('IntegrationsPage', () => {
         expect(within(zapierCard as HTMLElement).getByRole('button', { name: 'Configure Zapier' })).toBeInTheDocument()
     })
 
+    it('shows status details instead of setup prompts on organization rows', () => {
+        mockUseTwilioSettingsQuery.mockImplementation(() => ({ data: { enabled: false }, isLoading: false }))
+        mockUseTwilioReadinessQuery.mockImplementation(() => ({
+            data: {
+                overall_status: 'not_configured',
+                issues: [
+                    { code: 'disabled', severity: 'error', message: 'Messaging is disabled.', route: null },
+                    { code: 'credentials', severity: 'error', message: 'Credentials are missing.', route: null },
+                ],
+            },
+            isLoading: false,
+        }))
+        mockUseMetaFormsQuery.mockImplementation(() => ({ data: [], isLoading: false }))
+        mockUseMetaConnectionsQuery.mockImplementation(() => ({ data: [], isLoading: false }))
+
+        render(<IntegrationsPage />)
+
+        const row = (title: string) =>
+            screen.getByText(title, { selector: 'h3' }).closest('[data-slot="integration-row"]') as HTMLElement
+        expect(row('Messaging (Twilio)')).toHaveTextContent('2 setup steps remaining')
+        expect(row('Meta Lead Ads')).toHaveTextContent('0 lead forms · 0 connections')
+        // Reporting is off, so the Zapier row keeps its one summary line and adds no prompt.
+        expect(row('Zapier').querySelectorAll('p')).toHaveLength(1)
+        expect(screen.queryByText(/to get started|Configure SMS|Enable stage reporting/)).not.toBeInTheDocument()
+    })
+
     it('shows admin access required instead of configure actions for read-only viewers', () => {
         mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'u2' } })
         mockUseEffectivePermissions.mockReturnValue({ data: { permissions: [] } })
@@ -2700,7 +2741,7 @@ describe('IntegrationsPage', () => {
         expect(mockRetryMetaCrmDatasetEvent).toHaveBeenCalledWith({ eventId: 'meta-event-1' })
     })
 
-    it('shows last sync and keeps one sync action for connected Google Calendar', () => {
+    it('shows last sync and keeps one sync action for connected Google Calendar', async () => {
         const lastSyncAt = '2026-02-21T02:30:00Z'
         mockUseUserIntegrations.mockReturnValue({
             data: [
@@ -2743,6 +2784,8 @@ describe('IntegrationsPage', () => {
             .closest('[data-slot="dialog-header-status"]')).not.toBeNull()
         expect(within(dialog).getByRole('heading', { name: 'Google Meet' })).toBeInTheDocument()
 
+        // Focus starts on the dialog, not on the first link inside it.
+        await waitFor(() => expect(dialog).toHaveFocus())
         expect(within(dialog).getAllByRole('button', { name: /^sync now$/i })).toHaveLength(1)
         fireEvent.click(within(statusBar).getByRole('button', { name: /^sync now$/i }))
         expect(mockSyncGoogleCalendarNow).toHaveBeenCalled()

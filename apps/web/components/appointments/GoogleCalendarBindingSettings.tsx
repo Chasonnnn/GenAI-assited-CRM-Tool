@@ -278,8 +278,9 @@ function CalendarBindingSections({
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Calendar</TableHead>
-                                <TableHead className="w-32 text-center">Check conflicts</TableHead>
-                                <TableHead className="w-32 text-center">Show events</TableHead>
+                                {/* The checkbox headers wrap at phone width so both columns fit without clipping. */}
+                                <TableHead className="w-24 whitespace-normal text-center sm:w-32">Check conflicts</TableHead>
+                                <TableHead className="w-24 whitespace-normal text-center sm:w-32">Show events</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>

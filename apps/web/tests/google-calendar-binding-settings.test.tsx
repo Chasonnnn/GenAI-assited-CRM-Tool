@@ -73,6 +73,10 @@ describe("GoogleCalendarBindingSettings", () => {
         const table = screen.getByRole("table")
         expect(table).toHaveTextContent("Check conflicts")
         expect(table).toHaveTextContent("Show events")
+        // Narrow wrapping headers keep the Show events column inside the dialog at 390px.
+        for (const name of ["Check conflicts", "Show events"]) {
+            expect(screen.getByRole("columnheader", { name })).toHaveClass("w-24", "whitespace-normal", "sm:w-32")
+        }
         expect(screen.getByRole("checkbox", { name: "Check conflicts on Primary" })).toBeChecked()
         expect(screen.getByRole("checkbox", { name: "Show events from Team" })).not.toBeChecked()
         fireEvent.click(screen.getByRole("checkbox", { name: "Show events from Team" }))
