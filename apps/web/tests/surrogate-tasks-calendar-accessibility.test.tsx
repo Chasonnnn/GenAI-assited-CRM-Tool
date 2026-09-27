@@ -76,10 +76,11 @@ describe("SurrogateTasksCalendar accessibility", () => {
         expect(open).toHaveBeenCalled()
     })
 
-    it('disables the empty-state create action without create permission', () => {
+    it('disables the create action on an empty list without create permission', () => {
         installTaskViewStorage()
         render(<SurrogateTasksCalendar surrogateId="s1" tasks={[]} onAddTask={vi.fn()} onTaskToggle={vi.fn()} canCreateTask={false} />)
-        expect(screen.getByRole('button', { name: 'Add First Task' })).toBeDisabled()
+        expect(screen.getByText('No tasks yet')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Add Task' })).toBeDisabled()
     })
 
     it("renders task titles as buttons and provides checkbox aria-labels", async () => {
