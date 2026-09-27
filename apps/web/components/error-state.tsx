@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/empty"
 import { cn } from "@/lib/utils"
 import { reportClientError } from "@/lib/client-error-telemetry"
-import { getQueryErrorKind } from "@/lib/error-utils"
+import { getNonRoleForbiddenReason, getQueryErrorKind, type NonRoleForbiddenReason } from "@/lib/error-utils"
 
 interface ErrorStateProps {
     error: Error & { digest?: string }
@@ -73,6 +73,34 @@ interface QueryErrorStateProps {
 }
 
 const STATE_FRAME_CLASS = "flex min-h-[18rem] items-center justify-center p-6"
+
+/** Product copy for 403s that are not role denials; role-based copy would send the viewer to the wrong fix. */
+const NON_ROLE_FORBIDDEN_COPY: Record<NonRoleForbiddenReason, { title: string; description: string }> = {
+    ai_disabled: {
+        title: "AI is off for this organization",
+        description: "An admin can turn on AI in Settings.",
+    },
+    ai_consent: {
+        title: "AI consent required",
+        description: "An admin must accept the AI data processing consent in Settings.",
+    },
+    org_deleting: {
+        title: "Organization scheduled for deletion",
+        description: "Ask an admin to contact support to restore access.",
+    },
+    session_domain: {
+        title: "Wrong organization address",
+        description: "Sign in again from your organization's address.",
+    },
+    mfa_required: {
+        title: "Verification required",
+        description: "Sign in again and complete two-factor verification.",
+    },
+    membership: {
+        title: "No active membership",
+        description: "Ask an admin to restore your access to this organization.",
+    },
+}
 
 function useReportErrorBoundary(error: Error): void {
     useEffect(() => {
@@ -254,6 +282,8 @@ export function NotFoundState({ title, backHref, backLabel, headingLevel, classN
 /**
  * Renders the right state for a failed query: 403 → PermissionDeniedState,
  * 404 (with `notFound`) → NotFoundState, anything else → LoadErrorState with retry.
+ * A known non-role 403 (AI off, consent, org deletion, session domain, MFA, membership)
+ * shows its own product copy in place of `forbidden`'s role copy; the link is kept.
  */
 export function QueryErrorState({
     error,
@@ -268,10 +298,12 @@ export function QueryErrorState({
     const kind = getQueryErrorKind(error, { includeInvalidId: notFound !== undefined })
 
     if (kind === "forbidden") {
+        const nonRoleReason = getNonRoleForbiddenReason(error)
         return (
             <PermissionDeniedState
                 description="Ask an admin to update your role."
                 {...forbidden}
+                {...(nonRoleReason ? NON_ROLE_FORBIDDEN_COPY[nonRoleReason] : {})}
                 headingLevel={headingLevel}
                 className={className}
             />

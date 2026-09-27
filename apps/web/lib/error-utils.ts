@@ -30,6 +30,41 @@ export function isNotFoundError(
     return status === 404 || (includeInvalidId && status === 422)
 }
 
+/** A 403 that is not about the viewer's role or permissions. */
+export type NonRoleForbiddenReason =
+    | "ai_disabled"
+    | "ai_consent"
+    | "org_deleting"
+    | "session_domain"
+    | "mfa_required"
+    | "membership"
+
+// Exact 403 `detail` strings raised in apps/api (core/deps.py, routers/ai_*, interviews,
+// surrogates_import). Keep in sync when those messages change; any other 403 is a role
+// or permission denial. The detail text itself is never rendered.
+const NON_ROLE_FORBIDDEN_DETAILS: ReadonlyMap<string, NonRoleForbiddenReason> = new Map([
+    ["AI is not enabled", "ai_disabled"],
+    ["AI is not enabled for this organization", "ai_disabled"],
+    ["AI features are not enabled for this organization", "ai_disabled"],
+    ["AI consent not accepted", "ai_consent"],
+    [
+        "AI consent not accepted. An admin must accept the data processing consent before using AI.",
+        "ai_consent",
+    ],
+    ["AI consent has not been accepted for this organization", "ai_consent"],
+    ["Organization is scheduled for deletion", "org_deleting"],
+    ["Session invalid for this domain", "session_domain"],
+    ["MFA verification required", "mfa_required"],
+    ["No organization membership", "membership"],
+    ["Membership inactive", "membership"],
+])
+
+/** Returns the reason for a known non-role 403, or null for role denials and other errors. */
+export function getNonRoleForbiddenReason(error: unknown): NonRoleForbiddenReason | null {
+    if (!(error instanceof ApiError) || error.status !== 403) return null
+    return NON_ROLE_FORBIDDEN_DETAILS.get(error.message.trim()) ?? null
+}
+
 export type QueryErrorKind = "forbidden" | "not_found" | "error"
 
 /** Classifies a failed query so pages branch 403 → denied, 404 → not found, else → load error. */
