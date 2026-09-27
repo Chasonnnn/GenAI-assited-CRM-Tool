@@ -26,8 +26,28 @@ const LOCKED_STAGE_FIELDS = [
     "duplicate",
 ]
 
+const mockCan = vi.fn()
+
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => mockUseAuth(),
+}))
+
+vi.mock("@/lib/hooks/use-permission-check", () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockCan(permission),
+    }),
+}))
+
+vi.mock("@/components/app-link", () => ({
+    default: ({ children, href, ...props }: React.ComponentProps<"a">) => (
+        <a href={href} {...props}>
+            {children}
+        </a>
+    ),
 }))
 
 vi.mock("@/lib/hooks/use-pipelines", () => ({
@@ -541,6 +561,8 @@ describe("PipelinesSettingsPage", () => {
         mockUseRecommendedPipelineDraft.mockReset()
 
         mockUseAuth.mockReturnValue({ user: { role: "admin" } })
+        mockCan.mockReset()
+        mockCan.mockImplementation((permission: string) => permission === "manage_pipelines")
         mockUsePipelines.mockImplementation((entityType?: string) => ({
             data: [
                 entityType === "intended_parent"
@@ -599,7 +621,7 @@ describe("PipelinesSettingsPage", () => {
     it("renders editable slugs, hides stage keys until expanded, and keeps categories editable", () => {
         render(<PipelinesSettingsPage />)
 
-        expect(screen.getByText("Pipeline Settings")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 1, name: "Pipelines" })).toBeInTheDocument()
         expect(screen.getAllByLabelText("Stage slug")[1]).toBeEnabled()
         expect(screen.queryByLabelText("Stage key")).not.toBeInTheDocument()
         expect(screen.getAllByLabelText("Stage category")[1]).toBeEnabled()
@@ -709,13 +731,112 @@ describe("PipelinesSettingsPage", () => {
         expect(editableButtons.at(-1)).toHaveAccessibleName(/edit details for contacted/i)
     })
 
-    it("stacks the entity selector with version history in the sidebar column", () => {
+    it("puts the entity selector, version badge and version history in the page header", async () => {
         render(<PipelinesSettingsPage />)
 
-        const sidebar = screen.getByTestId("pipelines-sidebar")
+        const entityGroup = screen.getByRole("group", { name: "Entity" })
+        expect(within(entityGroup).getByRole("button", { name: "Surrogates" })).toHaveAttribute(
+            "aria-pressed",
+            "true",
+        )
+        expect(screen.getByText("v2")).toBeInTheDocument()
+        expect(screen.queryByText("Version History")).not.toBeInTheDocument()
+        expect(mockUsePipelineVersions).not.toHaveBeenCalled()
 
-        expect(within(sidebar).getByRole("combobox", { name: "Entity" })).toBeInTheDocument()
-        expect(within(sidebar).getByText("Version History")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Version history" }))
+
+        const sheet = await screen.findByRole("dialog", { name: "Version history" })
+        expect(within(sheet).getByText("v2")).toBeInTheDocument()
+        expect(within(sheet).getByText("Current")).toBeInTheDocument()
+        expect(within(sheet).queryByText("No version history")).not.toBeInTheDocument()
+    })
+
+    it("lists v1 as the initial version when no snapshots are stored", async () => {
+        currentSurrogatePipeline = { ...pipelineFixture, current_version: 1 }
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Version history" }))
+
+        const sheet = await screen.findByRole("dialog", { name: "Version history" })
+        expect(within(sheet).getByText("v1")).toBeInTheDocument()
+        expect(within(sheet).getByText("Initial version")).toBeInTheDocument()
+    })
+
+    it("shows a version history load error instead of a role message", async () => {
+        mockUsePipelineVersions.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new Error("boom"),
+            refetch: vi.fn(),
+            isFetching: false,
+        })
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Version history" }))
+
+        const sheet = await screen.findByRole("dialog", { name: "Version history" })
+        expect(within(sheet).getByText("Couldn't load version history")).toBeInTheDocument()
+        expect(within(sheet).queryByText(/requires developer role/i)).not.toBeInTheDocument()
+    })
+
+    it("shows the denied state and loads nothing without manage_pipelines", () => {
+        mockCan.mockReturnValue(false)
+
+        render(<PipelinesSettingsPage />)
+
+        expect(screen.getByRole("heading", { level: 1, name: "Pipelines" })).toBeInTheDocument()
+        expect(screen.getByText("Permission required")).toBeInTheDocument()
+        expect(mockUsePipelines).not.toHaveBeenCalled()
+        expect(screen.queryByRole("button", { name: "Add Custom Stage" })).not.toBeInTheDocument()
+    })
+
+    it("shows a load error instead of an empty editor", () => {
+        mockUsePipelines.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new Error("boom"),
+            refetch: vi.fn(),
+            isFetching: false,
+        })
+        mockUsePipeline.mockReturnValue({ data: undefined, isLoading: false })
+
+        render(<PipelinesSettingsPage />)
+
+        expect(screen.getByText("Couldn't load the pipeline")).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Add Custom Stage" })).not.toBeInTheDocument()
+    })
+
+    it("labels stage categories and keeps the current category of an unlocked terminal stage", async () => {
+        currentSurrogatePipeline = {
+            ...pipelineFixture,
+            stages: [
+                ...pipelineFixture.stages,
+                {
+                    ...pipelineFixture.stages[1],
+                    id: "s5",
+                    stage_key: "cold_leads",
+                    slug: "cold_leads",
+                    label: "Cold Leads",
+                    order: 5,
+                    stage_type: "terminal" as const,
+                },
+            ],
+        }
+        render(<PipelinesSettingsPage />)
+
+        const categories = screen.getAllByRole("combobox", { name: "Stage category" })
+        expect(categories[1]).toHaveTextContent("Intake")
+        expect(categories[3]).toHaveTextContent("Terminal")
+        const coldLeadsCategory = categories[4] as HTMLElement
+        expect(coldLeadsCategory).toHaveTextContent("Terminal")
+        expect(coldLeadsCategory).toBeEnabled()
+
+        fireEvent.mouseDown(coldLeadsCategory)
+        const options = await screen.findAllByRole("option")
+        expect(options.map((option) => option.textContent)).toEqual(["Intake", "Post-approval", "Terminal"])
+        expect(screen.getByRole("option", { name: "Terminal" })).toHaveAttribute("aria-disabled", "true")
     })
 
     it("hides stage details by default and expands them on demand", () => {
@@ -840,17 +961,16 @@ describe("PipelinesSettingsPage", () => {
         expect(screen.getAllByRole("button", { name: "Add Custom Stage" })).toHaveLength(1)
 
         fireEvent.click(screen.getByRole("button", { name: "Add Custom Stage" }))
-        const labelInputs = screen.getAllByPlaceholderText("Label")
-        const slugInputs = screen.getAllByLabelText("Stage slug")
-        fireEvent.change(labelInputs[labelInputs.length - 1] as HTMLInputElement, {
+        fireEvent.change(screen.getByDisplayValue("New Stage"), {
             target: { value: "Matching Review" },
         })
-        fireEvent.change(slugInputs[slugInputs.length - 1] as HTMLInputElement, {
+        fireEvent.change(screen.getByDisplayValue("custom_stage"), {
             target: { value: "matching_review" },
         })
 
-        expect(screen.getByText("Unsaved changes")).toBeInTheDocument()
-        fireEvent.click(screen.getByRole("button", { name: /save changes/i }))
+        const saveBar = screen.getByRole("region", { name: "Unsaved changes" })
+        expect(within(saveBar).getByText("1 unsaved change")).toBeInTheDocument()
+        fireEvent.click(within(saveBar).getByRole("button", { name: "Save changes" }))
 
         await waitFor(() => {
             expect(mockApplyPipelineDraft).toHaveBeenCalled()
@@ -866,6 +986,65 @@ describe("PipelinesSettingsPage", () => {
                     && stage.stage_key === "matching_review",
             ),
         ).toBe(true)
+    })
+
+    it("focuses the new stage label after Add Custom Stage", () => {
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Custom Stage" }))
+
+        const newLabel = screen.getByDisplayValue("New Stage")
+        expect(newLabel).toHaveFocus()
+    })
+
+    it("shows an inline error for an empty label and blocks Save", () => {
+        render(<PipelinesSettingsPage />)
+
+        const labelInput = screen.getAllByPlaceholderText("Label")[1] as HTMLInputElement
+        fireEvent.change(labelInput, { target: { value: " " } })
+
+        expect(labelInput).toHaveAttribute("aria-invalid", "true")
+        expect(screen.getByText("Enter a stage label.")).toBeInTheDocument()
+        const saveBar = screen.getByRole("region", { name: "Unsaved changes" })
+        expect(within(saveBar).getByRole("button", { name: "Save changes" })).toBeDisabled()
+
+        labelInput.blur()
+        fireEvent.click(within(saveBar).getByRole("button", { name: "1 error" }))
+        expect(labelInput).toHaveFocus()
+    })
+
+    it("keeps system stages locked after Reset to Default", async () => {
+        mockUseRecommendedPipelineDraft.mockResolvedValue({
+            data: {
+                name: pipelineFixture.name,
+                stages: pipelineFixture.stages.map((stage) => ({
+                    id: null,
+                    stage_key: stage.stage_key,
+                    slug: stage.slug,
+                    label: stage.label,
+                    color: stage.color,
+                    order: stage.order,
+                    stage_type: stage.stage_type,
+                    is_active: true,
+                    semantics: stage.semantics,
+                })),
+                feature_config: pipelineFixture.feature_config,
+            },
+        })
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: /reset to default/i }))
+
+        await waitFor(() => {
+            expect(mockUseRecommendedPipelineDraft).toHaveBeenCalled()
+        })
+        await waitFor(() => {
+            expect(screen.getByDisplayValue("New Unread")).toBeDisabled()
+        })
+        expect(screen.queryByRole("button", { name: /remove new unread/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /remove lost/i })).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /remove contacted/i })).toBeInTheDocument()
+        expect(screen.getAllByLabelText("System stage")).toHaveLength(3)
     })
 
     it("assigns an intake preset color to new custom stages instead of gray", () => {
@@ -1297,7 +1476,7 @@ describe("PipelinesSettingsPage", () => {
             target: { value: "Contacted Updated" },
         })
 
-        expect(screen.getByText("Unsaved changes")).toBeInTheDocument()
+        expect(screen.getByRole("region", { name: "Unsaved changes" })).toBeInTheDocument()
         expect(mockUsePipelineChangePreview.mock.lastCall?.[1]).toBeNull()
         expect(mockUsePipelineChangePreview.mock.lastCall?.[3]).toBe("")
 
@@ -1427,7 +1606,8 @@ describe("PipelinesSettingsPage", () => {
 
         render(<PipelinesSettingsPage />)
 
-        fireEvent.click(screen.getByRole("button", { name: /restore/i }))
+        fireEvent.click(screen.getByRole("button", { name: "Version history" }))
+        fireEvent.click(await screen.findByRole("button", { name: /restore/i }))
 
         await waitFor(() => {
             expect(mockRollbackPipeline).toHaveBeenCalledWith({
@@ -1438,18 +1618,17 @@ describe("PipelinesSettingsPage", () => {
         })
     })
 
-    it("switches to intended-parent scope from the shared entity dropdown and hides surrogate-only editors", async () => {
+    it("switches to intended-parent scope from the header entity selector and hides surrogate-only editors", async () => {
         render(<PipelinesSettingsPage />)
 
-        const entitySelect = screen.getByRole("combobox", { name: "Entity" })
-        expect(entitySelect.tagName).toBe("BUTTON")
-
-        fireEvent.mouseDown(entitySelect)
-        const intendedParentOption = await screen.findByRole("option", { name: "Intended Parents" })
-        fireEvent.mouseMove(intendedParentOption)
-        fireEvent.click(intendedParentOption)
+        const entityGroup = screen.getByRole("group", { name: "Entity" })
+        fireEvent.click(within(entityGroup).getByRole("button", { name: "Intended Parents" }))
 
         expect(mockUsePipelines).toHaveBeenLastCalledWith("intended_parent")
+        expect(within(entityGroup).getByRole("button", { name: "Intended Parents" })).toHaveAttribute(
+            "aria-pressed",
+            "true",
+        )
         expect(screen.queryByText("Journey Mapping")).not.toBeInTheDocument()
         expect(screen.queryByText("Analytics Funnel")).not.toBeInTheDocument()
 
@@ -1465,31 +1644,21 @@ describe("PipelinesSettingsPage", () => {
     it("exposes separately configurable egg- and sperm-donor pipelines", async () => {
         render(<PipelinesSettingsPage />)
 
-        const entitySelect = screen.getByRole("combobox", { name: "Entity" })
-        fireEvent.mouseDown(entitySelect)
+        const entityGroup = screen.getByRole("group", { name: "Entity" })
+        const eggDonors = within(entityGroup).getByRole("button", { name: "Egg Donors" })
+        const spermDonors = within(entityGroup).getByRole("button", { name: "Sperm Donors" })
 
-        const eggDonorOption = await screen.findByRole("option", { name: "Egg Donors" })
-        expect(screen.getByRole("option", { name: "Sperm Donors" })).toBeInTheDocument()
-        fireEvent.mouseMove(eggDonorOption)
-        fireEvent.click(eggDonorOption)
+        fireEvent.click(eggDonors)
 
         expect(mockUsePipelines).toHaveBeenLastCalledWith("egg_donor")
-        expect(entitySelect).toHaveTextContent("Egg Donors")
-        expect(
-            screen.getByText("Configure egg-donor stage identity, category, and stage semantics from one versioned draft."),
-        ).toBeInTheDocument()
+        expect(eggDonors).toHaveAttribute("aria-pressed", "true")
         expect(screen.queryByText("Journey Mapping")).not.toBeInTheDocument()
         expect(screen.queryByText("Analytics Funnel")).not.toBeInTheDocument()
 
-        fireEvent.mouseDown(entitySelect)
-        const spermDonorOption = await screen.findByRole("option", { name: "Sperm Donors" })
-        fireEvent.mouseMove(spermDonorOption)
-        fireEvent.click(spermDonorOption)
+        fireEvent.click(spermDonors)
 
         expect(mockUsePipelines).toHaveBeenLastCalledWith("sperm_donor")
-        expect(entitySelect).toHaveTextContent("Sperm Donors")
-        expect(
-            screen.getByText("Configure sperm-donor stage identity, category, and stage semantics from one versioned draft."),
-        ).toBeInTheDocument()
+        expect(spermDonors).toHaveAttribute("aria-pressed", "true")
+        expect(eggDonors).toHaveAttribute("aria-pressed", "false")
     })
 })

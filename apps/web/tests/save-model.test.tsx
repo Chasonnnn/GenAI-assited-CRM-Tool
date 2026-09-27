@@ -10,10 +10,28 @@ function renderSaveBar(props: Partial<React.ComponentProps<typeof SaveBar>> = {}
 }
 
 describe("SaveBar", () => {
-    it("renders nothing while the editor is clean", () => {
-        const { container } = renderSaveBar({ dirty: false })
+    it("renders only an empty live region while the editor is clean", () => {
+        renderSaveBar({ dirty: false })
 
-        expect(container).toBeEmptyDOMElement()
+        expect(screen.queryByRole("region", { name: "Unsaved changes" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button")).not.toBeInTheDocument()
+        expect(screen.getByRole("status")).toBeEmptyDOMElement()
+    })
+
+    it("keeps the same live region mounted so the bar's first appearance is announced", () => {
+        const { rerender, onSave, onDiscard } = renderSaveBar({ dirty: false })
+        const status = screen.getByRole("status")
+        expect(status).toBeEmptyDOMElement()
+
+        rerender(<SaveBar dirty changeCount={2} errorCount={1} onSave={onSave} onDiscard={onDiscard} />)
+        expect(screen.getByRole("status")).toBe(status)
+        expect(status).toHaveTextContent("2 unsaved changes, 1 error")
+        expect(screen.getByRole("region", { name: "Unsaved changes" })).toBeInTheDocument()
+
+        rerender(<SaveBar dirty={false} onSave={onSave} onDiscard={onDiscard} />)
+        expect(screen.getByRole("status")).toBe(status)
+        expect(status).toBeEmptyDOMElement()
+        expect(screen.getAllByRole("status")).toHaveLength(1)
     })
 
     it("shows the change count with Discard and Save when dirty", () => {

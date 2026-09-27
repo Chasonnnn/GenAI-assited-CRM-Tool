@@ -13,13 +13,21 @@ import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { ValidatedField } from "@/components/ui/field"
+import { SaveBar } from "@/components/ui/save-bar"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { PageHeader } from "@/components/page-header"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import { focusFirstInvalid, useFormValidation } from "@/lib/forms/use-form-validation"
+import { validateRequired } from "@/lib/forms/validators"
+import { getSelectLabel, type SelectOption } from "@/lib/select-labels"
 import DOMPurify from "dompurify"
 import {
   CameraIcon,
   MonitorIcon,
   SmartphoneIcon,
   Loader2Icon,
-  CheckIcon,
   UploadIcon,
   TrashIcon,
   PaletteIcon,
@@ -88,7 +96,6 @@ type OrgBrandingDraftState = {
 }
 
 type OrgBrandingUiState = {
-  saved: boolean
   saving: boolean
   previewLoading: boolean
   previewHtml: string | null
@@ -256,7 +263,7 @@ function OrganizationLogoField({
   logoUrl?: string | null
   fileInputRef: React.RefObject<HTMLInputElement | null>
   onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void
-  onDelete: () => void
+  onDelete: () => Promise<unknown>
   uploadPending: boolean
   deletePending: boolean
 }) {
@@ -274,15 +281,23 @@ function OrganizationLogoField({
               unoptimized
               className="h-16 w-auto rounded border"
             />
-            <Button unstyled
-              type="button"
-              onClick={onDelete}
-              disabled={deletePending}
-              className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-              aria-label="Remove organization logo"
-            >
-              <TrashIcon className="size-3" aria-hidden="true" />
-            </Button>
+            <ConfirmDialog
+              trigger={
+                <Button unstyled
+                  type="button"
+                  disabled={deletePending}
+                  className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  aria-label="Remove organization logo"
+                >
+                  <TrashIcon className="size-3" aria-hidden="true" />
+                </Button>
+              }
+              title="Remove the organization logo?"
+              description="Email signatures show no logo until a new one is uploaded."
+              confirmLabel="Remove logo"
+              errorFallback="Couldn't remove the logo. Try again."
+              onConfirm={onDelete}
+            />
           </div>
         ) : (
           <div className="flex h-16 w-32 items-center justify-center rounded border-2 border-dashed text-muted-foreground">
@@ -333,6 +348,9 @@ function SignaturePreviewPanel({ html }: { html: string }) {
     </div>
   )
 }
+
+// Matches the Input fill locally; changing components/ui/textarea.tsx would restyle every textarea.
+const SIGNATURE_TEXTAREA_CLASS = "bg-transparent shadow-xs dark:bg-input/30"
 
 function OrganizationBrandingFields({
   brandingForm,
@@ -427,6 +445,7 @@ function OrganizationBrandingFields({
             onChange={(event) => onFieldChange("address", event.target.value)}
             placeholder="123 Main St, City, State 12345"
             rows={2}
+            className={SIGNATURE_TEXTAREA_CLASS}
           />
         </div>
         <div className="space-y-2 md:col-span-2">
@@ -438,32 +457,22 @@ function OrganizationBrandingFields({
             onChange={(event) => onFieldChange("disclaimer", event.target.value)}
             placeholder="Confidentiality notice, legal disclaimer, etc."
             rows={3}
+            className={SIGNATURE_TEXTAREA_CLASS}
           />
-          <p className="text-xs text-muted-foreground">
-            Appears at the bottom of all email signatures (optional)
-          </p>
         </div>
       </div>
     </>
   )
 }
 
-function OrganizationBrandingActions({
+function SignaturePreviewActions({
   previewLoading,
-  saving,
-  saved,
   previewHtml,
   onPreview,
-  onSave,
-  saveDisabled,
 }: {
   previewLoading: boolean
-  saving: boolean
-  saved: boolean
   previewHtml: string | null
   onPreview: () => Promise<void>
-  onSave: () => Promise<void>
-  saveDisabled: boolean
 }) {
   return (
     <div className="space-y-4">
@@ -483,19 +492,6 @@ function OrganizationBrandingActions({
             </>
           )}
         </Button>
-        <Button onClick={onSave} disabled={saveDisabled}>
-          {saving ? (
-            <>
-              <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
-            </>
-          ) : saved ? (
-            <>
-              <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
-            </>
-          ) : (
-            "Save Organization Branding"
-          )}
-        </Button>
       </div>
 
       {previewHtml && (
@@ -509,19 +505,29 @@ function OrganizationBrandingActions({
 // Profile Section with Avatar Upload, Phone, Title
 // =============================================================================
 
+function validateProfileForm(values: ProfileFormState) {
+  return { name: validateRequired(values.name, "Enter your full name.") }
+}
+
 function ProfileSection() {
   const { user, refetch } = useAuth()
   const uploadAvatarMutation = useUploadAvatar()
   const deleteAvatarMutation = useDeleteAvatar()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const profileSectionRef = useRef<HTMLDivElement>(null)
 
   const [profileSaving, setProfileSaving] = useState(false)
-  const [profileSaved, setProfileSaved] = useState(false)
   const userId = user?.user_id || ""
   const userDisplayName = user?.display_name || ""
   const userPhone = user?.phone || ""
   const userTitle = user?.title || ""
   const activeProfileKey = createProfileDraftKey(userId, userDisplayName, userPhone, userTitle)
+  // useAuth().refetch is not awaitable. The saved values stand in as the baseline until the refreshed
+  // user changes activeProfileKey, so the save bar does not reappear between save and refetch.
+  const [savedProfile, setSavedProfile] = useState<{ profileKey: string; form: ProfileFormState } | null>(null)
+  const profileBaseline = savedProfile?.profileKey === activeProfileKey
+    ? savedProfile.form
+    : { name: userDisplayName, phone: userPhone, title: userTitle }
   const [profileDraft, setProfileDraft] = useState<ProfileDraftState>(() =>
     createProfileDraftState(activeProfileKey, userDisplayName, userPhone, userTitle)
   )
@@ -575,36 +581,58 @@ function ProfileSection() {
     })
   }
 
-  const handleDeleteAvatar = () => {
-    if (confirm("Remove your profile photo?")) {
-      deleteAvatarMutation.mutate(undefined, {
-        onSuccess: () => refetch(),
-      })
-    }
+  const profileValidation = useFormValidation({ values: profileForm, validate: validateProfileForm })
+
+  const handleDeleteAvatar = async () => {
+    await deleteAvatarMutation.mutateAsync()
+    void refetch()
   }
 
-  const handleSaveProfile = async () => {
+  const profileChangeCount = (["name", "title", "phone"] as const).filter(
+    (field) => profileForm[field] !== profileBaseline[field]
+  ).length
+
+  const handleDiscardProfile = () => {
+    setProfileDraft({ profileKey: activeProfileKey, form: profileBaseline })
+    profileValidation.reset()
+  }
+
+  const showProfileErrors = () => {
+    focusFirstInvalid(profileSectionRef.current)
+  }
+
+  const handleSaveProfile = profileValidation.handleSubmit(async (values) => {
     setProfileSaving(true)
     try {
-      const trimmedName = profileForm.name.trim()
-      const trimmedPhone = profileForm.phone.trim()
-      const trimmedTitle = profileForm.title.trim()
+      const saved = {
+        name: values.name.trim(),
+        phone: values.phone.trim(),
+        title: values.title.trim(),
+      }
+      // The API clears phone and title when it receives an empty string.
       await updateProfile({
-        ...(trimmedName ? { display_name: trimmedName } : {}),
-        ...(trimmedPhone ? { phone: trimmedPhone } : {}),
-        ...(trimmedTitle ? { title: trimmedTitle } : {}),
+        display_name: saved.name,
+        phone: saved.phone,
+        title: saved.title,
       })
-      setProfileSaved(true)
-      setTimeout(() => setProfileSaved(false), 2000)
+      setSavedProfile({ profileKey: activeProfileKey, form: saved })
+      setProfileDraft({ profileKey: activeProfileKey, form: saved })
+      profileValidation.reset()
+      toast.success("Profile saved")
       refetch()
     } catch (error) {
-      console.error("Failed to save profile:", error)
+      const message = profileValidation.applyApiError(error, {
+        fields: ["name", "phone", "title"],
+        fallback: "Couldn't save your profile. Try again.",
+      })
+      if (message) toast.error(message)
+    } finally {
+      setProfileSaving(false)
     }
-    setProfileSaving(false)
-  }
+  })
 
   return (
-    <div className="space-y-6">
+    <div ref={profileSectionRef} className="space-y-6">
       <div className="flex items-center gap-4">
         <div className="relative group">
           <Avatar className="size-20">
@@ -635,15 +663,22 @@ function ProfileSection() {
             )}
           </Button>
           {user?.avatar_url && (
-          <Button unstyled
-            type="button"
-            onClick={handleDeleteAvatar}
-            disabled={deleteAvatarMutation.isPending}
-            className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-            aria-label="Remove profile photo"
-          >
-              <TrashIcon className="size-3" aria-hidden="true" />
-            </Button>
+            <ConfirmDialog
+              trigger={
+                <Button unstyled
+                  type="button"
+                  disabled={deleteAvatarMutation.isPending}
+                  className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                  aria-label="Remove profile photo"
+                >
+                  <TrashIcon className="size-3" aria-hidden="true" />
+                </Button>
+              }
+              title="Remove your profile photo?"
+              confirmLabel="Remove photo"
+              errorFallback="Couldn't remove your profile photo. Try again."
+              onConfirm={handleDeleteAvatar}
+            />
           )}
         </div>
         <div>
@@ -653,16 +688,22 @@ function ProfileSection() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="fullName">Full Name</Label>
-          <Input
-            id="fullName"
-            name="fullName"
-            autoComplete="name"
-            value={profileForm.name}
-            onChange={(e) => updateProfileForm("name", e.target.value)}
-          />
-        </div>
+        <ValidatedField label="Full Name" id="fullName" error={profileValidation.errorFor("name")}>
+          {(control) => (
+            <Input
+              {...control}
+              name="fullName"
+              autoComplete="name"
+              value={profileForm.name}
+              onChange={(e) => {
+                updateProfileForm("name", e.target.value)
+                // Show the error while typing so the field agrees with the save bar's error count.
+                profileValidation.touch("name")
+              }}
+              onBlur={() => profileValidation.touch("name")}
+            />
+          )}
+        </ValidatedField>
 
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
@@ -714,19 +755,16 @@ function ProfileSection() {
         </div>
       </div>
 
-      <Button onClick={handleSaveProfile} disabled={profileSaving}>
-        {profileSaving ? (
-          <>
-            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
-          </>
-        ) : profileSaved ? (
-          <>
-            <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
-          </>
-        ) : (
-          "Save Changes"
-        )}
-      </Button>
+      <SaveBar
+        className="-mx-6"
+        dirty={profileChangeCount > 0}
+        changeCount={profileChangeCount}
+        errorCount={profileValidation.isValid ? 0 : 1}
+        onErrorsClick={showProfileErrors}
+        saving={profileSaving}
+        onSave={() => void handleSaveProfile()}
+        onDiscard={handleDiscardProfile}
+      />
     </div>
   )
 }
@@ -739,17 +777,13 @@ function ActiveSessionsSection() {
   const { data: sessions, isLoading } = useSessions()
   const revokeSession = useRevokeSession()
   const revokeAllSessions = useRevokeAllSessions()
+  const [pendingRevokeId, setPendingRevokeId] = useState<string | null>(null)
+  const [revokeOpen, setRevokeOpen] = useState(false)
+  const pendingRevokeSession = sessions?.find((session) => session.id === pendingRevokeId)
 
-  const handleRevokeSession = (sessionId: string) => {
-    if (confirm("Revoke this session? The device will be logged out.")) {
-      revokeSession.mutate(sessionId)
-    }
-  }
-
-  const handleRevokeAllSessions = () => {
-    if (confirm("Log out from all other devices?")) {
-      revokeAllSessions.mutate()
-    }
+  const handleConfirmRevokeSession = async () => {
+    if (!pendingRevokeId) return
+    await revokeSession.mutateAsync(pendingRevokeId)
   }
 
   if (isLoading) {
@@ -770,18 +804,18 @@ function ActiveSessionsSection() {
       <div className="flex items-center justify-between">
         <h4 className="font-medium">Active Sessions</h4>
         {otherSessions.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRevokeAllSessions}
-            disabled={revokeAllSessions.isPending}
-            className="text-destructive hover:text-destructive"
-          >
-            {revokeAllSessions.isPending ? (
-              <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            ) : null}
-            Log out all others
-          </Button>
+          <ConfirmDialog
+            trigger={
+              <Button variant="destructive-ghost" size="sm" disabled={revokeAllSessions.isPending}>
+                Log out all others
+              </Button>
+            }
+            title="Log out all other devices?"
+            description={`${otherSessions.length} ${otherSessions.length === 1 ? "session is" : "sessions are"} signed out. This device stays signed in.`}
+            confirmLabel="Log out others"
+            errorFallback="Couldn't log out the other devices. Try again."
+            onConfirm={() => revokeAllSessions.mutateAsync()}
+          />
         )}
       </div>
 
@@ -811,14 +845,13 @@ function ActiveSessionsSection() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handleRevokeSession(session.id)}
-              disabled={revokeSession.isPending}
+              onClick={() => {
+                setPendingRevokeId(session.id)
+                setRevokeOpen(true)
+              }}
+              aria-label={`Revoke session on ${session.device_info || "unknown device"}`}
             >
-              {revokeSession.isPending ? (
-                <Loader2Icon className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-              ) : (
-                "Revoke"
-              )}
+              Revoke
             </Button>
           )}
         </div>
@@ -829,6 +862,16 @@ function ActiveSessionsSection() {
           No active sessions found
         </div>
       )}
+
+      <ConfirmDialog
+        open={revokeOpen}
+        onOpenChange={setRevokeOpen}
+        title={`Revoke the session on ${pendingRevokeSession?.device_info || "this device"}?`}
+        description="The device is signed out."
+        confirmLabel="Revoke session"
+        errorFallback="Couldn't revoke this session. Try again."
+        onConfirm={handleConfirmRevokeSession}
+      />
     </div>
   )
 }
@@ -850,81 +893,78 @@ function AppVersion() {
 // Social Links Section
 // =============================================================================
 
-function SocialLinksSection() {
-  const { data: orgSig, isLoading } = useOrgSignature()
+// The API renders the stored platform text as the link label, so each value is its display text.
+const SOCIAL_PLATFORMS = ["LinkedIn", "Instagram", "Facebook", "X", "TikTok", "Website"] as const
+const SOCIAL_PLATFORM_ALIASES: Record<string, string> = { twitter: "X" }
+const MAX_SOCIAL_LINKS = 6
 
-  return (
-    <SocialLinksSectionContent
-      key={orgSig ? "loaded" : "loading"}
-      orgSig={orgSig}
-      isLoading={isLoading}
-    />
-  )
+type SocialLinkDraft = SocialLink & { id: string }
+type SocialLinkErrors = { platform?: string | undefined; url?: string | undefined }
+
+/** Maps older free-text values such as "linkedin" onto the known platform spelling. */
+function normalizeSocialPlatform(platform: string): string {
+  const trimmed = platform.trim()
+  const key = trimmed.toLowerCase()
+  return SOCIAL_PLATFORMS.find((option) => option.toLowerCase() === key) ?? SOCIAL_PLATFORM_ALIASES[key] ?? trimmed
 }
 
-function SocialLinksSectionContent({
-  orgSig,
-  isLoading,
+/** Known platforms plus the row's current value when it is an older custom one, so it still shows. */
+function getSocialPlatformOptions(current: string): SelectOption[] {
+  const options: SelectOption[] = SOCIAL_PLATFORMS.map((platform) => ({ value: platform, label: platform }))
+  if (current && !options.some((option) => option.value === current)) {
+    options.push({ value: current, label: current })
+  }
+  return options
+}
+
+function getSocialPlatformLabel(value: string | null | undefined): string {
+  return getSelectLabel(value, getSocialPlatformOptions(value ?? ""), { emptyLabel: "Select platform" })
+}
+
+function createSavedSocialLinks(links: SocialLink[] | null | undefined): SocialLinkDraft[] {
+  return (links ?? []).map((link, index) => ({
+    id: `saved-${index}`,
+    platform: normalizeSocialPlatform(link.platform),
+    url: link.url,
+  }))
+}
+
+function getSocialLinkErrors(link: SocialLink): SocialLinkErrors {
+  const platform = link.platform.trim()
+  const url = link.url.trim()
+  if (!platform && !url) return {}
+  return {
+    platform: platform ? undefined : "Select a platform.",
+    url: !url ? "Enter a URL." : url.startsWith("https://") ? undefined : "Enter a URL that starts with https://.",
+  }
+}
+
+function countSocialLinkChanges(saved: SocialLink[], draft: SocialLink[]): number {
+  let changes = 0
+  for (let index = 0; index < Math.max(saved.length, draft.length); index += 1) {
+    const before = saved[index]
+    const after = draft[index]
+    if (before?.platform !== after?.platform || before?.url !== after?.url) changes += 1
+  }
+  return changes
+}
+
+function SocialLinksFields({
+  links,
+  errors,
+  onChange,
+  onUrlBlur,
+  onAdd,
+  onRemove,
 }: {
-  orgSig: ReturnType<typeof useOrgSignature>["data"]
-  isLoading: boolean
+  links: SocialLinkDraft[]
+  /** Errors to show, keyed by row id. */
+  errors: Record<string, SocialLinkErrors>
+  onChange: (id: string, field: keyof SocialLink, value: string) => void
+  onUrlBlur: (id: string) => void
+  onAdd: () => void
+  onRemove: (id: string) => void
 }) {
-  const updateOrgSig = useUpdateOrgSignature()
-
-  const [links, setLinks] = useState<SocialLink[]>(() => [
-    ...(orgSig?.signature_social_links ?? []),
-  ])
-  const [saved, setSaved] = useState(false)
-
-  const addLink = () => {
-    if (links.length >= 6) {
-      toast.error("Maximum 6 social links allowed")
-      return
-    }
-    setLinks((currentLinks) => [...currentLinks, { platform: "", url: "" }])
-  }
-
-  const removeLink = (index: number) => {
-    setLinks(links.filter((_, i) => i !== index))
-  }
-
-  const updateLink = (index: number, field: keyof SocialLink, value: string) => {
-    const newLinks = [...links]
-    const current = newLinks[index]
-    if (!current) return
-    newLinks[index] = { ...current, [field]: value }
-    setLinks(newLinks)
-  }
-
-  const handleSave = async () => {
-    // Filter out empty links
-    const validLinks = links.filter((l) => l.platform.trim() && l.url.trim())
-
-    // Validate URLs
-    for (const link of validLinks) {
-      if (!link.url.startsWith("https://")) {
-        toast.error(`URL must start with https:// (${link.platform})`)
-        return
-      }
-    }
-
-    await updateOrgSig.mutateAsync({
-      signature_social_links: validLinks.length > 0 ? validLinks : null,
-    })
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="animate-pulse motion-reduce:animate-none flex gap-4">
-          <div className="h-24 w-full bg-muted rounded" />
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -932,72 +972,76 @@ function SocialLinksSectionContent({
           <LinkIcon className="size-4" aria-hidden="true" />
           Social Links
         </h3>
-        <p className="text-sm text-muted-foreground">
-          Social media links shown in email signatures (max 6)
-        </p>
       </div>
 
       <div className="space-y-3">
         {links.map((link, i) => {
-          const linkOccurrence = links
-            .slice(0, i + 1)
-            .filter((candidate) => candidate.platform === link.platform && candidate.url === link.url).length
-          const linkKey = `${link.platform}-${link.url}-${linkOccurrence}`
+          const rowErrors = errors[link.id] ?? {}
+          const platformErrorId = rowErrors.platform ? `social-platform-${link.id}-error` : undefined
+          const urlErrorId = rowErrors.url ? `social-url-${link.id}-error` : undefined
           return (
-            <div key={linkKey} className="flex items-center gap-3">
-              <Input
-                value={link.platform}
-                onChange={(e) => updateLink(i, "platform", e.target.value)}
-                placeholder="Platform (e.g., LinkedIn)"
-                className="w-40"
-                name={`social-platform-${i}`}
-                autoComplete="off"
-                aria-label={`Social platform ${i + 1}`}
-              />
-              <Input
-                value={link.url}
-                onChange={(e) => updateLink(i, "url", e.target.value)}
-                placeholder="https://…"
-                className="flex-1"
-                name={`social-url-${i}`}
-                autoComplete="url"
-                aria-label={`Social URL ${i + 1}`}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => removeLink(i)}
-                className="text-destructive hover:text-destructive"
-                aria-label={`Remove social link ${i + 1}`}
-              >
-                <TrashIcon className="size-4" aria-hidden="true" />
-              </Button>
+            <div key={link.id} className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-3 sm:flex-nowrap">
+                <Select
+                  value={link.platform}
+                  onValueChange={(value) => onChange(link.id, "platform", value ?? "")}
+                >
+                  <SelectTrigger
+                    className="w-40"
+                    aria-label={`Social platform ${i + 1}`}
+                    aria-invalid={rowErrors.platform ? true : undefined}
+                    aria-describedby={platformErrorId}
+                  >
+                    <SelectValue placeholder="Select platform">{getSocialPlatformLabel}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getSocialPlatformOptions(link.platform).map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={link.url}
+                  onChange={(e) => onChange(link.id, "url", e.target.value)}
+                  onBlur={() => onUrlBlur(link.id)}
+                  placeholder="https://…"
+                  className="min-w-0 flex-1"
+                  name={`social-url-${i}`}
+                  autoComplete="url"
+                  aria-label={`Social URL ${i + 1}`}
+                  aria-invalid={rowErrors.url ? true : undefined}
+                  aria-describedby={urlErrorId}
+                />
+                <Button
+                  type="button"
+                  variant="destructive-ghost"
+                  size="icon"
+                  onClick={() => onRemove(link.id)}
+                  className="text-muted-foreground"
+                  aria-label={`Remove social link ${i + 1}`}
+                >
+                  <TrashIcon className="size-4" aria-hidden="true" />
+                </Button>
+              </div>
+              {rowErrors.platform ? (
+                <p id={platformErrorId} className="text-sm text-destructive">{rowErrors.platform}</p>
+              ) : null}
+              {rowErrors.url ? (
+                <p id={urlErrorId} className="text-sm text-destructive">{rowErrors.url}</p>
+              ) : null}
             </div>
           )
         })}
 
-        {links.length < 6 && (
-          <Button type="button" variant="outline" size="sm" onClick={addLink}>
+        {links.length < MAX_SOCIAL_LINKS && (
+          <Button type="button" variant="outline" size="sm" onClick={onAdd}>
             <PlusIcon className="mr-2 size-4" aria-hidden="true" />
             Add Social Link
           </Button>
         )}
       </div>
-
-      <Button onClick={handleSave} disabled={updateOrgSig.isPending}>
-        {updateOrgSig.isPending ? (
-          <>
-            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Saving…
-          </>
-        ) : saved ? (
-          <>
-            <CheckIcon className="mr-2 size-4" aria-hidden="true" /> Saved!
-          </>
-        ) : (
-          "Save Social Links"
-        )}
-      </Button>
     </div>
   )
 }
@@ -1006,7 +1050,8 @@ function SocialLinksSectionContent({
 // Organization Branding Section
 // =============================================================================
 
-function OrganizationBrandingSection() {
+/** Email Signature tab: branding fields and social links share one draft and one save bar. */
+function EmailSignatureSettings() {
   const { user, refetch } = useAuth()
   const { data: orgSig, isLoading: sigLoading } = useOrgSignature()
   const updateOrgSig = useUpdateOrgSignature()
@@ -1021,15 +1066,84 @@ function OrganizationBrandingSection() {
   const [brandingDraft, setBrandingDraft] = useState<OrgBrandingDraftState>(() =>
     createOrgBrandingDraftState(activeBrandingKey, orgSig, orgSettings, orgName)
   )
+  const savedBrandingForm = createOrgBrandingDraftState(activeBrandingKey, orgSig, orgSettings, orgName).form
   const brandingForm = brandingDraft.brandingKey === activeBrandingKey
     ? brandingDraft.form
-    : createOrgBrandingDraftState(activeBrandingKey, orgSig, orgSettings, orgName).form
+    : savedBrandingForm
   const [brandingUi, setBrandingUi] = useState<OrgBrandingUiState>({
-    saved: false,
     saving: false,
     previewLoading: false,
     previewHtml: null,
   })
+
+  // Social links follow the same pattern: the draft resets when the saved links change.
+  const savedSocialLinks = orgSig?.signature_social_links ?? null
+  const activeLinksKey = JSON.stringify(savedSocialLinks ?? [])
+  const savedLinks = createSavedSocialLinks(savedSocialLinks)
+  const [linksDraft, setLinksDraft] = useState<{ linksKey: string; links: SocialLinkDraft[] }>(() => ({
+    linksKey: activeLinksKey,
+    links: savedLinks,
+  }))
+  const links = linksDraft.linksKey === activeLinksKey ? linksDraft.links : savedLinks
+  const nextLinkIdRef = useRef(0)
+  const [revealedLinkIds, setRevealedLinkIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [showAllLinkErrors, setShowAllLinkErrors] = useState(false)
+  const editorRef = useRef<HTMLDivElement>(null)
+
+  const linkErrors: Record<string, SocialLinkErrors> = {}
+  let linkErrorCount = 0
+  for (const link of links) {
+    const rowErrors = getSocialLinkErrors(link)
+    const rowErrorCount = Number(Boolean(rowErrors.platform)) + Number(Boolean(rowErrors.url))
+    linkErrorCount += rowErrorCount
+    if (rowErrorCount > 0 && (showAllLinkErrors || revealedLinkIds.has(link.id))) {
+      linkErrors[link.id] = rowErrors
+    }
+  }
+
+  const brandingChangeCount = (Object.keys(savedBrandingForm) as (keyof OrgBrandingFormState)[]).filter(
+    (field) => brandingForm[field] !== savedBrandingForm[field]
+  ).length
+  const changeCount = brandingChangeCount + countSocialLinkChanges(savedLinks, links)
+
+  const updateLinks = (update: (current: SocialLinkDraft[]) => SocialLinkDraft[]) => {
+    setLinksDraft((current) => ({
+      linksKey: activeLinksKey,
+      links: update(current.linksKey === activeLinksKey ? current.links : savedLinks),
+    }))
+  }
+
+  const addLink = () => {
+    nextLinkIdRef.current += 1
+    const id = `new-${nextLinkIdRef.current}`
+    updateLinks((current) =>
+      current.length >= MAX_SOCIAL_LINKS ? current : [...current, { id, platform: "", url: "" }]
+    )
+  }
+
+  const removeLink = (id: string) => {
+    updateLinks((current) => current.filter((link) => link.id !== id))
+  }
+
+  const changeLink = (id: string, field: keyof SocialLink, value: string) => {
+    updateLinks((current) => current.map((link) => (link.id === id ? { ...link, [field]: value } : link)))
+  }
+
+  const revealLinkErrors = (id: string) => {
+    setRevealedLinkIds((current) => (current.has(id) ? current : new Set(current).add(id)))
+  }
+
+  const showLinkErrors = () => {
+    setShowAllLinkErrors(true)
+    window.requestAnimationFrame(() => focusFirstInvalid(editorRef.current))
+  }
+
+  const handleDiscard = () => {
+    setBrandingDraft(createOrgBrandingDraftState(activeBrandingKey, orgSig, orgSettings, orgName))
+    setLinksDraft({ linksKey: activeLinksKey, links: savedLinks })
+    setRevealedLinkIds(new Set())
+    setShowAllLinkErrors(false)
+  }
   const orgSettingsLoading = Boolean(user?.org_id) && orgSettingsQuery.isLoading
   const orgSettingsError = orgSettingsQuery.isError
     ? "Unable to load organization settings. Please retry."
@@ -1054,8 +1168,15 @@ function OrganizationBrandingSection() {
   }
 
   const handleSave = async () => {
+    if (linkErrorCount > 0) {
+      showLinkErrors()
+      return
+    }
     setBrandingUi((current) => ({ ...current, saving: true }))
     try {
+      const validLinks = links
+        .map((link) => ({ platform: link.platform.trim(), url: link.url.trim() }))
+        .filter((link) => link.platform && link.url)
       const trimmedCompanyName = brandingForm.companyName.trim()
       const trimmedAddress = brandingForm.address.trim()
       const trimmedPhone = brandingForm.phone.trim()
@@ -1071,6 +1192,7 @@ function OrganizationBrandingSection() {
         signature_phone: trimmedPhone || null,
         signature_website: trimmedWebsite || null,
         signature_disclaimer: trimmedDisclaimer || null,
+        signature_social_links: validLinks.length > 0 ? validLinks : null,
       }
 
       if (orgSettingsError) {
@@ -1088,15 +1210,15 @@ function OrganizationBrandingSection() {
         refetch()
       }
 
-      setBrandingUi((current) => ({ ...current, saved: true }))
-      setTimeout(() => {
-        setBrandingUi((current) => ({ ...current, saved: false }))
-      }, 2000)
+      setRevealedLinkIds(new Set())
+      setShowAllLinkErrors(false)
+      toast.success("Email signature saved")
     } catch (error) {
-      console.error("Failed to save organization branding:", error)
-      toast.error("Failed to save organization branding")
+      const message = getActionErrorMessage(error, "Couldn't save the email signature. Try again.")
+      if (message) toast.error(message)
+    } finally {
+      setBrandingUi((current) => ({ ...current, saving: false }))
     }
-    setBrandingUi((current) => ({ ...current, saving: false }))
   }
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1115,11 +1237,7 @@ function OrganizationBrandingSection() {
     }
   }
 
-  const handleDeleteLogo = () => {
-    if (confirm("Delete organization logo?")) {
-      deleteLogo.mutate()
-    }
-  }
+  const handleDeleteLogo = () => deleteLogo.mutateAsync()
 
   const handlePreviewTemplate = async () => {
     setBrandingUi((current) => ({ ...current, previewLoading: true }))
@@ -1134,11 +1252,13 @@ function OrganizationBrandingSection() {
 
   if (sigLoading || orgSettingsLoading) {
     return (
-      <div className="space-y-6">
-        <div className="animate-pulse motion-reduce:animate-none flex gap-4">
-          <div className="h-24 w-full bg-muted rounded" />
-        </div>
-      </div>
+      <Card>
+        <CardContent>
+          <div className="animate-pulse motion-reduce:animate-none flex gap-4" role="status" aria-label="Loading">
+            <div className="h-24 w-full bg-muted rounded" />
+          </div>
+        </CardContent>
+      </Card>
     )
   }
 
@@ -1151,15 +1271,21 @@ function OrganizationBrandingSection() {
   ]
 
   return (
+    <>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <MailIcon className="size-5" aria-hidden="true" />
+          Organization Email Signature
+        </CardTitle>
+      </CardHeader>
+      <CardContent ref={editorRef} className="space-y-10">
     <div className="space-y-6">
       <div>
         <h3 className="font-medium flex items-center gap-2">
           <PaletteIcon className="size-4" aria-hidden="true" />
           Organization Branding
         </h3>
-        <p className="text-sm text-muted-foreground">
-          Organization-wide branding used in email signatures
-        </p>
       </div>
 
       {orgSettingsError && (
@@ -1199,16 +1325,37 @@ function OrganizationBrandingSection() {
         onFieldChange={updateBrandingForm}
       />
 
-      <OrganizationBrandingActions
+      <SignaturePreviewActions
         previewLoading={brandingUi.previewLoading}
-        saving={brandingUi.saving}
-        saved={brandingUi.saved}
         previewHtml={sanitizedPreviewHtml}
         onPreview={handlePreviewTemplate}
-        onSave={handleSave}
-        saveDisabled={brandingUi.saving || sigLoading || orgSettingsLoading}
       />
     </div>
+
+    <div className="border-t border-border" />
+
+    <SocialLinksFields
+      links={links}
+      errors={linkErrors}
+      onChange={changeLink}
+      onUrlBlur={revealLinkErrors}
+      onAdd={addLink}
+      onRemove={removeLink}
+    />
+      </CardContent>
+    </Card>
+
+    <SaveBar
+      className="-mx-6"
+      dirty={changeCount > 0}
+      changeCount={changeCount}
+      errorCount={linkErrorCount}
+      onErrorsClick={showLinkErrors}
+      saving={brandingUi.saving}
+      onSave={() => void handleSave()}
+      onDiscard={handleDiscard}
+    />
+    </>
   )
 }
 
@@ -1239,14 +1386,8 @@ function SettingsPageContent({ searchParams }: { searchParams: SettingsPageSearc
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Page Header */}
-      <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center px-6">
-          <h1 className="text-2xl font-semibold">Settings</h1>
-        </div>
-      </div>
+      <PageHeader title="Settings" />
 
-      {/* Main Content */}
       <div className="flex-1 p-6">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="mb-6">
@@ -1310,25 +1451,7 @@ function SettingsPageContent({ searchParams }: { searchParams: SettingsPageSearc
           {/* Email Signature Tab (Admin only) */}
           {isAdmin && (
             <TabsContent value="email-signature">
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <MailIcon className="size-5" aria-hidden="true" />
-                      Organization Email Signature
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-10">
-                    {/* Organization Branding (includes preview) */}
-                    <OrganizationBrandingSection />
-
-                    <div className="border-t border-border" />
-
-                    {/* Social Links */}
-                    <SocialLinksSection />
-                  </CardContent>
-                </Card>
-              </div>
+              <EmailSignatureSettings />
             </TabsContent>
           )}
 

@@ -139,3 +139,17 @@ describe("App shell at 390px", () => {
         expect(screen.getByRole("link", { name: "Campaigns" })).toBeInTheDocument()
     })
 })
+
+describe("App shell main element", () => {
+    it("clips horizontal overflow without becoming the sticky container", () => {
+        // overflow-hidden on <main> would make it the sticky container, so the
+        // sticky SaveBar and PageHeader would never stick while the document scrolls.
+        mockNavigationState.pathname = "/dashboard"
+        renderShell()
+        const main = screen.getByRole("main")
+
+        expect(main).toHaveClass("overflow-x-clip", "print:overflow-visible")
+        expect(main).not.toHaveClass("overflow-hidden")
+        expect(main.className).not.toMatch(/(^|\s)overflow-(auto|scroll|y-auto|y-hidden)(\s|$)/)
+    })
+})
