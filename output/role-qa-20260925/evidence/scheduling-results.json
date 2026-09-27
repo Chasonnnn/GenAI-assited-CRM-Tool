@@ -1,0 +1,13 @@
+[
+  {
+    "journey": "Manual calendar sync and retry recover availability; reschedule persists",
+    "status": 200,
+    "scheduled_start": "2026-10-05T13:00:00Z",
+    "google_state": "completed"
+  },
+  {
+    "journey": "Appointment cancellation persists and synthetic calendar delivery completes",
+    "status": "cancelled",
+    "google_state": "completed"
+  }
+]

@@ -1,0 +1,2218 @@
+[
+  {
+    "role": "admin",
+    "route": "/dashboard",
+    "url": "/dashboard",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nWelcome back, Test\n\nFriday, September 25, 2026\n\nAll Time\nAll Assignees\nUpdated less than a minute ago\nActive Surrogates\n4\n\n4 new this week\n\nNew Leads\n4\n\nLast 24h\n\nMy Tasks\n0\n\nAll caught up!\n\nSurrogates Trend\nDay\nWeek\nMonth\nDaily new surrogates (last 30 days) (4 total)\nSep 25\n0\n1\n2\n3\n4\nPipeline Distribution\nCount\n%\n4 surrogates in pipeline\n0\n1\n2\n3\nNew Unread\nApproved\n3\n1\nView New Unread surrogates\nView Approved surrogates\nAttention Needed\nView all\nItems needing follow-up\nAll caught up!\n\nNo items need your attention right now\n\nUpcoming This Week\nView all\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files\n\n0",
+    "headings": [
+      "Welcome back, Test",
+      "All caught up!",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/surrogates",
+    "url": "/surrogates",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nSurrogates\n\n4 total surrogates\n\nNew Surrogates\nAll Stages\nAll Time\nMore Filters\n\t\nSurrogate #\n\t\nName\n\tAge\tBMI\t\nRace\n\t\nState\n\tPhone\tStage\tAssigned To\t\nCreated\n\t\nLast Modified\n\t\nSource\n\t\n\n\t#S10101\tQA Surrogate Mine\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tNew Unread\t\nTI\n\tSep 25, 2026\tSep 25, 2026\tManual\t\n\n\n\t#S10102\tQA Surrogate Other\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tNew Unread\t\nTC\n\tSep 25, 2026\tSep 25, 2026\tManual\t\n\n\n\t#S10103\tQA Surrogate Approved\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tApproved\t\nTC\n\tSep 25, 2026\tSep 25, 2026\tManual\t\n\n\n\t#S10001\tQA Surrogate\t\u2014\t\u2014\t\u2014\tNY\t+12125550101\tNew Unread\t\nTA\n\tSep 25, 2026\tSep 25, 2026\tManual\t\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogates",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/donors",
+    "url": "/donors",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nDonors\nNew Donor\nEgg Donors\nSperm Donors\nActive Donors\nAll Time\nAll Stages\nDonor #\n\t\nName\n\tEmail\tPhone\t\nState\n\t\nEducation\n\t\nStage\n\t\nCreated\n\nD10103\tQA Donor Approved\tscope-record-f7181b32-0b5c-48e6-9063-ab9e4c83bb0b@example.test\t\u2014\t\u2014\t\u2014\t\nApproved\n\tSep 25, 2026\nD10101\tQA Donor Mine\tscope-record-b32e1a60-03a3-456a-98b6-9a282f139269@example.test\t\u2014\t\u2014\t\u2014\t\nNew\n\tSep 25, 2026\nD10102\tQA Donor Other\tscope-record-7b5d0058-5d62-4b1c-845a-ebcf1ac4eb16@example.test\t\u2014\t\u2014\t\u2014\t\nNew\n\tSep 25, 2026\nD10001\tQA Donor\tqa-donor@example.com\t+12125550102\tNY\t\u2014\t\nNew\n\tSep 25, 2026\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donors",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/intended-parents",
+    "url": "/intended-parents",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nIntended Parents\nNew Intended Parent\nTotal\n3\nNew\n3\nReady to Match\n0\nMatched\n0\nDelivered\n0\nAll Stages\nAll Time\nIP#\n\t\nName\n\t\nEmail\n\t\nPhone\n\t\nState\n\t\nPartner\n\t\nStage\n\t\nCreated\n\nI10102\tQA Intended_Parent Other\tscope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\t\u2014\t\u2014\t\u2014\tNew\tSep 25, 2026\nI10101\tQA Intended_Parent Mine\tscope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\t\u2014\t\u2014\t\u2014\tNew\tSep 25, 2026\nI10001\tQA Intended Parent\tqa-intended-parent@example.com\t+12125550104\tNY\t\u2014\tNew\tSep 25, 2026\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Intended Parents",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/matches",
+    "url": "/matches",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nMatches\nNew Match\n0\n\nProposed\n\n0\n\nUnder Review\n\n0\n\nAccepted\n\n0\n\nRejected\n\nMatch Pipeline\nView and manage match proposals\nAll Kinds\nProposed\nReviewing\nAccepted\nCancel Pending\nRejected\nCancelled\nCompleted\nAll\n\nNo matches found\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Matches",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/tasks",
+    "url": "/tasks",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nTasks\nAdd Task\n\nManage your tasks and appointments in one unified view.\n\nMy Tasks\nAll Tasks\nList\nCalendar\n\nCALENDAR\n\nSeptember 2026\nToday\nMonth\nSun\nMon\nTue\nWed\nThu\nFri\nSat\n30\n31\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n1\n2\n1 item\n6:00 AM - QA Client\n3\n1 item\n7:00 AM - QA Client\nLEGEND\nPending\nConfirmed\nCompleted\nCancelled\nNo Show\nExpired\nGoogle Calendar\nTasks\nDrag pending or confirmed appointments to open the reschedule picker.\nPending Approvals\n\n0 items awaiting review\n\nNo pending approvals right now.\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Tasks",
+      "September 2026",
+      "Pending Approvals",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/appointments",
+    "url": "/appointments",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nAppointments\nShare Booking Link\nUpcoming\nPending\nPast\nCancelled\nExpired\nQC\nQA Client\nConfirmed\nGoogle updating\nOct 4, 2026\n9:00 AM\n30 min\nQA phone\nQC\nQA Client\nConfirmed\nGoogle updating\nOct 3, 2026\n7:00 AM\n30 min\nQA Google Meet\nQC\nQA Client\nConfirmed\nGoogle updating\nOct 2, 2026\n6:00 AM\n30 min\nQA phone\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Appointments",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/automation",
+    "url": "/automation",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Builder\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nTest Admin\nadmin@test.com\nWorkflows\nExecution History\nTotal Workflows\n13\nEnabled\n0\nSuccess Rate 24h\n0.0%\n0\nExecutions 24h\n0\nMy Workflows\nOrg Workflows\nWorkflow Templates\nGenerate with AI\nCreate Org Workflow\nApplication Follow-up\n\nSends next steps email when status changes to Application Submitted\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nApplication Submitted Review\n\nNotifies the owner and creates a review task when an application is submitted\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nAppointment Reminder\n\nSends a reminder email 24 hours before an appointment\n\nSurrogate\nScheduled\n0 runs \u2022 Last run Never\nAppointment Scheduled Notice\n\nNotifies the owner when an appointment is scheduled\n\nAppointment\nAppointment Scheduled\n0 runs \u2022 Last run Never\nApproved Booking Invite\n\nSends a booking invite when a case is approved\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nInactivity Nudge\n\nSends a follow-up email after 7 days of inactivity\n\nSurrogate\nInactivity\n0 runs \u2022 Last run Never\nLead Marked Lost\n\nNotifies the owner when a case is marked lost\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nMatch Notification\n\nNotifies case manager and sends intro email when a match is proposed\n\nMatch\nMatch Proposed\n0 runs \u2022 Last run Never\nNew Lead Outreach Task\n\nCreates an outreach task and notifies the owner when a new case is created\n\nSurrogate\nSurrogate Created\n0 runs \u2022 Last run Never\nNew Lead Welcome\n\nSends a welcome email when a new case is created\n\nSurrogate\nSurrogate Created\n0 runs \u2022 Last run Never\nTask Overdue Escalation\n\nNotifies admins when tasks become overdue\n\nSurrogate\nTask Overdue\n0 runs \u2022 Last run Never\nWeekly Nurture Campaign\n\nSends weekly promotional content to inactive leads\n\nSurrogate\nScheduled\n0 runs \u2022 Last run Never\nZapier Meta Conversion Sync\n\nQueues outbound Zapier conversion events for conversion-critical stage changes\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Workflows",
+      "Application Follow-up",
+      "Application Submitted Review",
+      "Appointment Reminder",
+      "Appointment Scheduled Notice",
+      "Approved Booking Invite",
+      "Inactivity Nudge",
+      "Lead Marked Lost",
+      "Match Notification",
+      "New Lead Outreach Task",
+      "New Lead Welcome",
+      "Task Overdue Escalation",
+      "Weekly Nurture Campaign",
+      "Zapier Meta Conversion Sync",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/automation/campaigns",
+    "url": "/automation/campaigns",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Builder\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nTest Admin\nadmin@test.com\nCampaigns\nAll campaigns\nCreate Campaign\nAll\nDraft\nScheduled\nSending\nSent\nNo campaigns found\n\nCreate your first campaign to send consent-gated email or text messages\n\nCreate Campaign\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Campaigns",
+      "No campaigns found",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/automation/form-submissions",
+    "url": "/automation/form-submissions",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Builder\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nTest Admin\nadmin@test.com\nForm Submissions\nSelect form\n\nNo submissions available\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Form Submissions",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/reports",
+    "url": "/reports",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nReports\nAll Time\nAll\nExport PDF\nTotal Surrogates\n4\n\nActive surrogates\n\nNew This Period\n4\n\nLast 30 days\n\nQualification Rate\n25%\n\nReached the qualification stage or later\n\nMeta Funnel\nQualified\n0%\nConverted\n0%\n\n0 leads received\n\nAd Spend\n$0\n\nCPL: $N/A\n\nNo sync data yet\n\nAI Summary\nLightweight insights from the current report data.\n\nTREND SHIFT\n\nTrend: not enough data yet.\n\nANOMALIES\n\nAnomalies: not enough daily data.\n\nBOTTLENECKS\n\nBottleneck: New Unread holds 75% of active surrogates.\n\nSurrogates by Stage\nNew Unread\nApproved\n0\n0.75\n1.5\n2.25\n3\nNew Unread: 3 surrogates\nCurrent distribution by stage\nSurrogates Trend\n2026-09-26\n0\n1\n2\n3\n4\n4 surrogates in period\n1 data points\nTeam Performance\n0\n0.5\n1\n1.5\n2\nspecialist\nintake\nadmin\nTop: specialist (2 surrogates)\n3 team members\nMeta Lead Ads Performance\nNo conversion data yet\n0 leads received \u2022 0% conversion rate\nConversion Funnel\nNew Unread\n4 (100%)\n\u2193\nContacted\n1 (25%)\n\u2193\nPre-Qualified\n1 (25%)\n\u2193\nReady to Match\n0 (0%)\n\u2193\nMatched\n0 (0%)\n\u2193\nMedical Clearance Passed\n0 (0%)\nLead \u2192 Qualified \u2192 Active\nSurrogates by State\nTotal: 1 surrogates\nLow\nHigh\nNY\n1\nDonors\nEgg Donors\nSperm Donors\nTotal\n4\nNew This Period\n4\nQualification Rate\n0%\nAverage to Qualification\n\u2014\nEgg Donors by Stage\nNew\n3\nContacted\n0\nPre-Screening\n0\nApplication Submitted\n0\nMedical Records Review\n0\nPsychological Screening\n0\nApproved\n1\nReady to Match\n0\nMatched\n0\nCycle in Progress\n0\nRetrieval Complete\n0\nOn-Hold\n0\nDisqualified\n0\nClosed\n0\nEgg Donors Creation Trend\n4\n2026-09-25\nMeta Ads Spend\n\nCampaign performance from stored sync data\n\nNot synced\nAll Ad Accounts\nNo Spend Data Yet\n\nConfigure your Meta ad account in Settings and trigger a sync to see spend analytics.\n\nIndividual Performance\nMode:\nCreated Cohort\n\nShowing metrics for surrogates created within the selected date range, grouped by current owner.\n\nConversion Rate by Team Member\nTeam average: 0.0% conversion rate\n0%\n15%\n30%\n45%\n50%\nTest\nTest\nTest\n30%+\n20-30%\n10-20%\n<10%\nIndividual Performance\nData as of Sep 25, 2026 at 10:46 PM\nTeam Member\n\tSurrogates\n\tContacted\n\tPre-Qualified\n\tReady to Match\n\tMatched\n\tApplication Submitted\n\tOn-Hold\n\tLost\n\tConv. Rate\n\tAvg to Match\n\tAvg to Conversion\n\nTest Case Manager1 archived\t3\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Admin\t1\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Intake\t1\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Developer\t0\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nQA Operations\t0\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files\n\nTest",
+    "headings": [
+      "Reports",
+      "Donors",
+      "Meta Ads Spend",
+      "No Spend Data Yet",
+      "Individual Performance",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/settings",
+    "url": "/settings",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nTeam\nPipelines\nQueue Management\nAudit Log\nCompliance\nIntegrations\nSystem Alerts\nTest Admin\nadmin@test.com\nSettings\nGeneral\nEmail Signature\nIntelligent Suggestions\nGeneral\nTA\nProfile\n\nManaged via Google SSO\n\nFull Name\nEmail\n\nEmail is managed by SSO\n\nTitle\n\nDisplayed in email signatures\n\nPhone\n\nDisplayed in email signatures\n\nRole\nAdmin\nSave Changes\nAccess\nTwo-factor authentication\n\nManaged by Google Workspace + Duo\n\nActive Sessions\nLog out all others\n\nChrome 153.0.0 on Mac OS X 10.15.7(this device)\n\n127.0.0.1 \u00b7 Last active Sep 25, 10:45 PM\n\nCurrent\n\nChrome 153.0.0 on Mac OS X 10.15.7\n\n127.0.0.1 \u00b7 Last active Sep 25, 10:45 PM\n\nRevoke\n\nChrome 153.0.0 on Mac OS X 10.15.7\n\n127.0.0.1 \u00b7 Last active Sep 25, 10:44 PM\n\nRevoke\n\nAccount deletion is managed by your organization admin.\n\nv0.91.71\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Settings",
+      "Profile",
+      "Access",
+      "Active Sessions",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/settings/team",
+    "url": "/settings/team",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nTeam\nPipelines\nQueue Management\nAudit Log\nCompliance\nIntegrations\nSystem Alerts\nTest Admin\nadmin@test.com\nPermissions\nRoles\nPeople\nCheck access\nPeople\nInvite Member\nTeam\n5 members \u2022 0 actionable invitations\nMembers (5)\nInvitations (0)\nInclude inactive members\nSearch people\nFilter by role\nAll roles\n\tName\tEmail\tRole\tLast Login\tActions\n\n\tQA Operations\toperations@example.test\tOperations\tNever\t\nManage\n\n\n\tTest Admin\tadmin@test.com\tAdmin\tNever\t\nManage\nYou\n\n\n\tTest Case Manager\tspecialist@test.com\tCase Manager\tNever\t\nManage\n\n\n\tTest Developer\tdeveloper@test.com\tDev\tNever\t\nManage\n\n\n\tTest Intake\tintake@test.com\tIntake Specialist\tNever\t\nManage\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Permissions",
+      "People",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/settings/team/roles",
+    "url": "/settings/team/roles",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nTeam\nPipelines\nQueue Management\nAudit Log\nCompliance\nIntegrations\nSystem Alerts\nTest Admin\nadmin@test.com\nPermissions\nRoles\nPeople\nCheck access\nIntake Specialist\nCase Manager\nOperations\nAdmin\nDev\nSurrogates\nDonors\nIntended Parents\nOperations\nAdministration\nSurrogates\nRecord scope\nAssignment\nAll records\nPhase\nAfter approval\nSpecific stages\nRecords\nView\nCreate\nEdit\nArchive\nDelete\nImport\nProgress & ownership\nChange status\nApprove\nAssign\nApprove status corrections\nNotes\nEdit\nView\nAccess preview\n\nSurrogates\n\nAll records \u00b7 After approval\n\nAllowed actions\nView\nCreate\nEdit\nArchive\nImport\nChange status\nAssign\nEdit notes\nView notes\nIncluded for everyone\nPersonal workspace\nIncluded\nWorkflows \u00b7 Templates \u00b7 Campaigns\nAI Assistant\nDisabled\nOrganization setting\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Permissions",
+      "Surrogates",
+      "Record scope",
+      "Records",
+      "Progress & ownership",
+      "Notes",
+      "Access preview",
+      "Allowed actions",
+      "Included for everyone",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/settings/appointments",
+    "url": "/settings/appointments",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nAppointment Settings\n\nConfigure your availability, appointment types, and booking link.\n\nAvailability\nAppointment Types\nBooking Link\nWeekly Availability\nMonday\nUnknown time\nto\nUnknown time\nTuesday\nUnknown time\nto\nUnknown time\nWednesday\nUnknown time\nto\nUnknown time\nThursday\nUnknown time\nto\nUnknown time\nFriday\nUnknown time\nto\nUnknown time\nSaturday\nUnavailable\nSunday\nUnavailable\nTimezone:\nEastern Time\nSave Availability\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Appointment Settings",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/settings/integrations",
+    "url": "/settings/integrations",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nTeam\nPipelines\nQueue Management\nAudit Log\nCompliance\nIntegrations\nSystem Alerts\nTest Admin\nadmin@test.com\nIntegrations\nPersonal\nOrganization\nRefresh\nOrganization Integrations\n\nConfigure shared services like AI, email, messaging, and Zapier for the organization.\n\nAI Assistant\nCopilot, summaries, and AI workflows\nDisabled\n\nProvider: Google Gemini\n\nConfigure AI\nMessaging Delivery\nTwilio SMS + MMS sending, replies, and opt-out handling\nNot configured\n\nConfigure SMS + MMS routes and consent controls\n\nConfigure Messaging\nEmail Delivery\nCampaign + transactional sending\nNot configured\n\nChoose a provider to start sending\n\nView email operationsConfigure Email\nZapier\nInbound leads + stage event delivery\nActive\nReporting disabled\n\n1 inbound webhook \u00b7 Surrogate reporting disabled \u00b7 Donor reporting disabled\n\nEnable stage reporting to evaluate mapping\n\nConfigure Zapier\nMeta Lead Ads\nFacebook/Instagram lead capture + CAPI\nNot configured\n\nConnect Facebook or add a CRM dataset to get started\n\nConfigure Meta\nSystem Integrations\n\nOrganization-level integrations managed by administrators.\n\nNo integrations configured\n\nAdd integrations to see their health status here\n\nNeed help?\n\nIntegration tokens are managed via CLI commands. To update a Meta page token:\n\npython -m app.cli update-meta-page-token --page-id YOUR_PAGE_ID\n\nContact your administrator if you need to add or reconfigure integrations.\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Integrations",
+      "Organization Integrations",
+      "System Integrations",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/settings/admin",
+    "url": "/settings/admin",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nTeam\nPipelines\nQueue Management\nAudit Log\nCompliance\nIntegrations\nSystem Alerts\nTest Admin\nadmin@test.com\nThis page is only accessible to developers.\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c",
+    "url": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nBack\nSurrogate #S10101\nNew Unread\nChange Stage\nSend Email\nLog Contact\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Mine\nEmail:\nscope-record-8f918c9a-c00d-43fe-bc81-151348852118@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\n\nNo personal information added yet.\n\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew Unread\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Qualified\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10101",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de",
+    "url": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nBack\nSurrogate #S10102\nNew Unread\nChange Stage\nSend Email\nLog Contact\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Other\nEmail:\nscope-record-50b996e5-a1da-448d-b555-a1ec75d4307c@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\n\nNo personal information added yet.\n\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew Unread\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Qualified\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10102",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8",
+    "url": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nBack\nSurrogate #S10103\nApproved\nChange Stage\nSend Email\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Approved\nEmail:\nscope-record-0abf75d0-0206-4afa-b9d1-0bac25269fa1@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\n\nNo personal information added yet.\n\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nPending-DocuSign\n--\nUnder Review\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10103",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b",
+    "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nBack\nSurrogate #S10104\nApproved\nArchived\nChange Stage\nSend Email\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Archived\nEmail:\nscope-record-4b849f1c-8063-4d60-acb7-11ad2612ef75@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\n\nNo personal information added yet.\n\nMedical & Insurance\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nPending-DocuSign\n--\nUnder Review\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10104",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4",
+    "url": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nBack\nDonor #D10101\nNew\nChange Stage\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Mine\nEmail:\nscope-record-b32e1a60-03a3-456a-98b6-9a282f139269@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Screening\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10101",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e",
+    "url": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nBack\nDonor #D10102\nNew\nChange Stage\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Other\nEmail:\nscope-record-7b5d0058-5d62-4b1c-845a-ebcf1ac4eb16@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Screening\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10102",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82",
+    "url": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nBack\nDonor #D10103\nApproved\nChange Stage\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Approved\nEmail:\nscope-record-f7181b32-0b5c-48e6-9063-ab9e4c83bb0b@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nMedical Records Review\n--\nPsychological Screening\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10103",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f",
+    "url": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nBack\nDonor #D10104\nApproved\nArchived\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Archived\nEmail:\nscope-record-e9f0958f-161d-40eb-a9ad-6c46f3cd2296@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nMedical Records Review\n--\nPsychological Screening\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10104",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6",
+    "url": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nBack to intended parents\nQA Intended_Parent Mine\n\nI10101 \u2022 scope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\n\nPropose Match\nChange Stage\nNew\nContact Information\n\nEmail\n\nscope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\n\nPhone\n\nNot provided\n\nPronouns\n\nNot provided\n\nDate of Birth\n\nNot provided\n\nAddress\n\nNot provided\nMarital Status\nNot provided\nTrust Info\n\nProvider\n\nNot provided\n\nPrimary Contact\n\nNot provided\n\nEmail\n\nNot provided\n\nPhone\n\nNot provided\n\nReference ID\n\nNot provided\n\nFunding Status\n\nNot provided\n\nPortal URL\n\nNot provided\n\nAddress\n\nNot provided\n\nNotes\n\nNot provided\nMedical Information\nEdit Info\n\nNo medical information added yet.\n\nRelated Matches\n\nNo matches yet.\n\nAppointments\nSchedule\n\nNo appointments\n\nNotes\n\n\n\n\nAdd Note\n\nNo notes yet.\n\nTasks\nAdd Task\nOpen\nCompleted\nAll\n\nNo tasks yet.\n\nDocuments\n\nDrag & drop files here, or click to select\n\nPDF, images, Word, Excel \u2022 Max 25 MB\n\nNo documents yet\n\nActivity\nNew\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "QA Intended_Parent Mine",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "admin",
+    "route": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3",
+    "url": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Admin\nadmin@test.com\nBack to intended parents\nQA Intended_Parent Other\n\nI10102 \u2022 scope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\n\nPropose Match\nChange Stage\nNew\nContact Information\n\nEmail\n\nscope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\n\nPhone\n\nNot provided\n\nPronouns\n\nNot provided\n\nDate of Birth\n\nNot provided\n\nAddress\n\nNot provided\nMarital Status\nNot provided\nTrust Info\n\nProvider\n\nNot provided\n\nPrimary Contact\n\nNot provided\n\nEmail\n\nNot provided\n\nPhone\n\nNot provided\n\nReference ID\n\nNot provided\n\nFunding Status\n\nNot provided\n\nPortal URL\n\nNot provided\n\nAddress\n\nNot provided\n\nNotes\n\nNot provided\nMedical Information\nEdit Info\n\nNo medical information added yet.\n\nRelated Matches\n\nNo matches yet.\n\nAppointments\nSchedule\n\nNo appointments\n\nNotes\n\n\n\n\nAdd Note\n\nNo notes yet.\n\nTasks\nAdd Task\nOpen\nCompleted\nAll\n\nNo tasks yet.\n\nDocuments\n\nDrag & drop files here, or click to select\n\nPDF, images, Word, Excel \u2022 Max 25 MB\n\nNo documents yet\n\nActivity\nNew\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "QA Intended_Parent Other",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/dashboard",
+    "url": "/dashboard",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nWelcome back, Test\n\nFriday, September 25, 2026\n\nAll Time\nMine\nUpdated less than a minute ago\nActive Surrogates\n1\n\n1 new this week\n\nNew Leads\n1\n\nLast 24h\n\nMy Tasks\n0\n\nAll caught up!\n\nSurrogates Trend\nDay\nWeek\nMonth\nDaily new surrogates (last 30 days) (1 total)\nSep 25\n0\n1\n2\n3\n4\nPipeline Distribution\nCount\n%\n1 surrogates in pipeline\n0\n0.35\n0.7\n1.05\nNew Unread\n1\nView New Unread surrogates\nAttention Needed\nView all\nItems needing follow-up\nAll caught up!\n\nNo items need your attention right now\n\nUpcoming This Week\nView all\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files\n\n0.35",
+    "headings": [
+      "Welcome back, Test",
+      "All caught up!",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/surrogates",
+    "url": "/surrogates",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nSurrogates\n\n1 total surrogates\n\nNew Surrogates\nAll Stages\nAll Time\nMore Filters\n\t\nSurrogate #\n\t\nName\n\tAge\tBMI\t\nRace\n\t\nState\n\tPhone\tStage\tAssigned To\t\nCreated\n\t\nLast Modified\n\t\nSource\n\t\n\n\t#S10101\tQA Surrogate Mine\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tNew Unread\t\nTI\n\tSep 25, 2026\tSep 25, 2026\tManual\t\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogates",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/donors",
+    "url": "/donors",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nDonors\nNew Donor\nEgg Donors\nSperm Donors\nActive Donors\nAll Time\nAll Stages\nDonor #\n\t\nName\n\tEmail\tPhone\t\nState\n\t\nEducation\n\t\nStage\n\t\nCreated\n\nD10101\tQA Donor Mine\tscope-record-b32e1a60-03a3-456a-98b6-9a282f139269@example.test\t\u2014\t\u2014\t\u2014\t\nNew\n\tSep 25, 2026\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donors",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/intended-parents",
+    "url": "/intended-parents",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nIntended Parents\nTotal\n0\nNew\n0\nReady to Match\n0\nMatched\n0\nDelivered\n0\nAll Stages\nAll Time\nPermission required\nYour account does not have permission to view intended parents. Ask an admin to update your role or permissions.\nTry again\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Intended Parents",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/intended-parents/created-dates"
+      },
+      {
+        "status": 403,
+        "url": "/intended-parents"
+      },
+      {
+        "status": 403,
+        "url": "/intended-parents/stats"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/matches",
+    "url": "/matches",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nPermission required\nYour account does not have permission to view matches. Ask an admin to update your role or permissions.\nGo to Dashboard\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/tasks",
+    "url": "/tasks",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nSettings\nTest Intake\nintake@test.com\nTasks\nAdd Task\n\nManage your tasks and appointments in one unified view.\n\nMy Tasks\nAll Tasks\nList\nCalendar\n\nCALENDAR\n\nSeptember 2026\nToday\nMonth\nGoogle Calendar not connected\nConnect Google Calendar to show Google Calendar events alongside appointments.\nReconnect\nSun\nMon\nTue\nWed\nThu\nFri\nSat\n30\n31\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n1\n2\n3\nLEGEND\nPending\nConfirmed\nCompleted\nCancelled\nNo Show\nExpired\nGoogle Calendar\nTasks\nDrag pending or confirmed appointments to open the reschedule picker.\nPending Approvals\n\n0 items awaiting review\n\nNo pending approvals right now.\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Tasks",
+      "September 2026",
+      "Pending Approvals",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/appointments",
+    "url": "/appointments",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nSettings\nTest Intake\nintake@test.com\nAppointments\nShare Booking Link\nUpcoming\nPending\nPast\nCancelled\nExpired\n\nNo upcoming appointments.\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Appointments",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/automation",
+    "url": "/automation",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Submissions\nAI Builder\nExecutions\nSettings\nTest Intake\nintake@test.com\nWorkflows\nExecution History\nTotal Workflows\n13\nEnabled\n0\nSuccess Rate 24h\n0.0%\n0\nExecutions 24h\n0\nMy Workflows\nOrg Workflows\nWorkflow Templates\nGenerate with AI\nCreate Workflow\nNo personal workflows yet\n\nCreate personal workflows to automate your tasks\n\nCreate Workflow\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Workflows",
+      "No personal workflows yet",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/automation/campaigns",
+    "url": "/automation/campaigns",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Submissions\nAI Builder\nExecutions\nSettings\nTest Intake\nintake@test.com\nCampaigns\nAll campaigns\nCreate Campaign\nAll\nDraft\nScheduled\nSending\nSent\nNo campaigns found\n\nCreate your first campaign to send consent-gated email or text messages\n\nCreate Campaign\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Campaigns",
+      "No campaigns found",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/messaging/templates"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/automation/form-submissions",
+    "url": "/automation/form-submissions",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Submissions\nAI Builder\nExecutions\nSettings\nTest Intake\nintake@test.com\nForm Submissions\nSelect form\n\nNo submissions available\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Form Submissions",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/reports",
+    "url": "/reports",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nReports\nAll Time\nAll\nExport PDF\nTotal Surrogates\nUnable to load\nNew This Period\nUnable to load\nQualification Rate\nUnable to load\nMeta Funnel\nUnable to load\nAI Summary\nLightweight insights from the current report data.\n\nTREND SHIFT\n\nTrend: not enough data yet.\n\nANOMALIES\n\nAnomalies: not enough daily data.\n\nBOTTLENECKS\n\nBottleneck: New Unread holds 100% of active surrogates.\n\nSurrogates by Stage\nNew Unread\n0\n0.25\n0.5\n0.75\n1\nNew Unread: 1 surrogates\nCurrent distribution by stage\nSurrogates Trend\n2026-09-26\n0\n0.25\n0.5\n0.75\n1\n1 surrogates in period\n1 data points\nTeam Performance\nUnable to load data\nUnable to load team data\nPlease try again later\nMeta Lead Ads Performance\nUnable to load data\nUnable to load performance data\nPlease try again later\nConversion Funnel\nUnable to load funnel data\nSurrogates by State\nUnable to load geographic data\nDonors\nEgg Donors\nSperm Donors\nUnable to load donor analytics\nIndividual Performance\nMode:\nCreated Cohort\n\nShowing metrics for surrogates created within the selected date range, grouped by current owner.\n\nConversion Rate by Team Member\nUnable to load performance data\nIndividual Performance\nUnable to load performance data\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files\n\n2026-09-26",
+    "headings": [
+      "Reports",
+      "Donors",
+      "Individual Performance",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/analytics/summary"
+      },
+      {
+        "status": 403,
+        "url": "/analytics/surrogates/by-assignee"
+      },
+      {
+        "status": 403,
+        "url": "/analytics/meta/performance"
+      },
+      {
+        "status": 403,
+        "url": "/analytics/campaigns"
+      },
+      {
+        "status": 403,
+        "url": "/analytics/funnel/compare"
+      },
+      {
+        "status": 403,
+        "url": "/analytics/surrogates/by-state/compare"
+      },
+      {
+        "status": 403,
+        "url": "/analytics/performance/by-user"
+      },
+      {
+        "status": 403,
+        "url": "/analytics/donors/summary"
+      },
+      {
+        "status": 403,
+        "url": "/analytics/donors/trend"
+      },
+      {
+        "status": 403,
+        "url": "/analytics/donors/by-status"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/settings",
+    "url": "/settings",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nGeneral\nNotification\nMy Integrations\nTest Intake\nintake@test.com\nSettings\nGeneral\nGeneral\nTI\nProfile\n\nManaged via Google SSO\n\nFull Name\nEmail\n\nEmail is managed by SSO\n\nTitle\n\nDisplayed in email signatures\n\nPhone\n\nDisplayed in email signatures\n\nRole\nIntake Specialist\nSave Changes\nAccess\nTwo-factor authentication\n\nManaged by Google Workspace + Duo\n\nActive Sessions\n\nChrome 153.0.0 on Mac OS X 10.15.7(this device)\n\n127.0.0.1 \u00b7 Last active Sep 25, 10:46 PM\n\nCurrent\n\nAccount deletion is managed by your organization admin.\n\nv0.91.71\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Settings",
+      "Profile",
+      "Access",
+      "Active Sessions",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/settings/team",
+    "url": "/settings/team",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nGeneral\nNotification\nMy Integrations\nTest Intake\nintake@test.com\nPermissions\nRoles\nPeople\nTeam\n0 members \u2022 0 actionable invitations\nMembers (0)\nInvitations (0)\n\nMissing permission: manage_team\n\nTry again\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Permissions",
+      "People",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/settings/permissions/members"
+      },
+      {
+        "status": 403,
+        "url": "/settings/invites"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/settings/team/roles",
+    "url": "/settings/team/roles",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nGeneral\nNotification\nMy Integrations\nTest Intake\nintake@test.com\nPermissions unavailable\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Permissions unavailable",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/settings/appointments",
+    "url": "/settings/appointments",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nSettings\nTest Intake\nintake@test.com\nAppointment Settings\n\nConfigure your availability, appointment types, and booking link.\n\nGoogle Calendar Integration Recommended\n\nConnect your Google Calendar to enable calendar sync and Google Meet links for appointments.\n\nConnect Google Calendar\nDismiss\nAvailability\nAppointment Types\nBooking Link\nWeekly Availability\nMonday\nUnknown time\nto\nUnknown time\nTuesday\nUnknown time\nto\nUnknown time\nWednesday\nUnknown time\nto\nUnknown time\nThursday\nUnknown time\nto\nUnknown time\nFriday\nUnknown time\nto\nUnknown time\nSaturday\nUnavailable\nSunday\nUnavailable\nTimezone:\nEastern Time\nSave Availability\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Appointment Settings",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/settings/integrations",
+    "url": "/settings/integrations",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nGeneral\nNotification\nMy Integrations\nTest Intake\nintake@test.com\nIntegrations\nPersonal Integrations\n\nConnect your personal accounts to enable features like Zoom appointments and email sending.\n\nZoom\nVideo appointments\nConnect Zoom\nGmail\nEmail sending\nConnect Gmail\nGoogle Calendar + Meeting\nTwo-way calendar sync + meeting links\nConnect Google Calendar\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Integrations",
+      "Personal Integrations",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/settings/admin",
+    "url": "/settings/admin",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nGeneral\nNotification\nMy Integrations\nTest Intake\nintake@test.com\nThis page is only accessible to developers.\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c",
+    "url": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nBack\nSurrogate #S10101\nNew Unread\nChange Stage\nSend Email\nLog Contact\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Mine\nEmail:\nscope-record-8f918c9a-c00d-43fe-bc81-151348852118@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\n\nNo personal information added yet.\n\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew Unread\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Qualified\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10101",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de",
+    "url": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\n\nError loading surrogate: You don't have access to this surrogate\n\nBack to Surrogates\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de"
+      },
+      {
+        "status": 403,
+        "url": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de/notes"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8",
+    "url": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\n\nError loading surrogate: You don't have access to this surrogate\n\nBack to Surrogates\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8"
+      },
+      {
+        "status": 403,
+        "url": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8/notes"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b",
+    "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\n\nError loading surrogate: You don't have access to this surrogate\n\nBack to Surrogates\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      },
+      {
+        "status": 403,
+        "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b/notes"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4",
+    "url": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nBack\nDonor #D10101\nNew\nChange Stage\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Mine\nEmail:\nscope-record-b32e1a60-03a3-456a-98b6-9a282f139269@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Screening\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10101",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e",
+    "url": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nPermission required\nYour account does not have permission to view this donor. Ask an admin to update your role or permissions.\nTry again\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82",
+    "url": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nPermission required\nYour account does not have permission to view this donor. Ask an admin to update your role or permissions.\nTry again\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f",
+    "url": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nPermission required\nYour account does not have permission to view this donor. Ask an admin to update your role or permissions.\nTry again\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6",
+    "url": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nNot Found\n\nThis intended parent doesn't exist.\n\nBack to List\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Not Found",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6"
+      },
+      {
+        "status": 403,
+        "url": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6/history"
+      },
+      {
+        "status": 403,
+        "url": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6/activity"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3",
+    "url": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nDonors (beta)\nTasks & Scheduling\nOperations\nSettings\nTest Intake\nintake@test.com\nNot Found\n\nThis intended parent doesn't exist.\n\nBack to List\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Not Found",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3"
+      },
+      {
+        "status": 403,
+        "url": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3/history"
+      },
+      {
+        "status": 403,
+        "url": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3/activity"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/dashboard",
+    "url": "/dashboard",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nWelcome back, Test\n\nFriday, September 25, 2026\n\nAll Time\nMine\nUpdated less than a minute ago\nActive Surrogates\n1\n\n1 new this week\n\nNew Leads\n1\n\nLast 24h\n\nMy Tasks\n0\n\nAll caught up!\n\nSurrogates Trend\nDay\nWeek\nMonth\nDaily new surrogates (last 30 days) (1 total)\nSep 25\n0\n1\n2\n3\n4\nPipeline Distribution\nCount\n%\n1 surrogates in pipeline\n0\n0.35\n0.7\n1.05\nApproved\n1\nView Approved surrogates\nAttention Needed\nView all\nItems needing follow-up\nAll caught up!\n\nNo items need your attention right now\n\nUpcoming This Week\nView all\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files\n\n0.35",
+    "headings": [
+      "Welcome back, Test",
+      "All caught up!",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/surrogates",
+    "url": "/surrogates",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nSurrogates\n\n1 total surrogates\n\nNew Surrogates\nAll Stages\nAll Time\nMore Filters\n\t\nSurrogate #\n\t\nName\n\tAge\tBMI\t\nRace\n\t\nState\n\tPhone\tStage\tAssigned To\t\nCreated\n\t\nLast Modified\n\t\nSource\n\t\n\n\t#S10103\tQA Surrogate Approved\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tApproved\t\nTC\n\tSep 25, 2026\tSep 25, 2026\tManual\t\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogates",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/donors",
+    "url": "/donors",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nDonors\nNew Donor\nEgg Donors\nSperm Donors\nActive Donors\nAll Time\nAll Stages\nDonor #\n\t\nName\n\tEmail\tPhone\t\nState\n\t\nEducation\n\t\nStage\n\t\nCreated\n\nD10103\tQA Donor Approved\tscope-record-f7181b32-0b5c-48e6-9063-ab9e4c83bb0b@example.test\t\u2014\t\u2014\t\u2014\t\nApproved\n\tSep 25, 2026\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donors",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/intended-parents",
+    "url": "/intended-parents",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nIntended Parents\nNew Intended Parent\nTotal\n3\nNew\n3\nReady to Match\n0\nMatched\n0\nDelivered\n0\nAll Stages\nAll Time\nIP#\n\t\nName\n\t\nEmail\n\t\nPhone\n\t\nState\n\t\nPartner\n\t\nStage\n\t\nCreated\n\nI10102\tQA Intended_Parent Other\tscope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\t\u2014\t\u2014\t\u2014\tNew\tSep 25, 2026\nI10101\tQA Intended_Parent Mine\tscope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\t\u2014\t\u2014\t\u2014\tNew\tSep 25, 2026\nI10001\tQA Intended Parent\tqa-intended-parent@example.com\t+12125550104\tNY\t\u2014\tNew\tSep 25, 2026\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Intended Parents",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/matches",
+    "url": "/matches",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nMatches\nNew Match\n0\n\nProposed\n\n0\n\nUnder Review\n\n0\n\nAccepted\n\n0\n\nRejected\n\nMatch Pipeline\nView and manage match proposals\nAll Kinds\nProposed\nReviewing\nAccepted\nCancel Pending\nRejected\nCancelled\nCompleted\nAll\n\nNo matches found\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Matches",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/tasks",
+    "url": "/tasks",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nTasks\nAdd Task\n\nManage your tasks and appointments in one unified view.\n\nMy Tasks\nAll Tasks\nList\nCalendar\n\nCALENDAR\n\nSeptember 2026\nToday\nMonth\nGoogle Calendar not connected\nConnect Google Calendar to show Google Calendar events alongside appointments.\nReconnect\nSun\nMon\nTue\nWed\nThu\nFri\nSat\n30\n31\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n1\n2\n3\nLEGEND\nPending\nConfirmed\nCompleted\nCancelled\nNo Show\nExpired\nGoogle Calendar\nTasks\nDrag pending or confirmed appointments to open the reschedule picker.\nPending Approvals\n\n0 items awaiting review\n\nNo pending approvals right now.\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Tasks",
+      "September 2026",
+      "Pending Approvals",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/appointments",
+    "url": "/appointments",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nAppointments\nShare Booking Link\nUpcoming\nPending\nPast\nCancelled\nExpired\n\nNo upcoming appointments.\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Appointments",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/automation",
+    "url": "/automation",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nWorkflows\nExecution History\nTotal Workflows\n13\nEnabled\n0\nSuccess Rate 24h\n0.0%\n0\nExecutions 24h\n0\nMy Workflows\nOrg Workflows\nWorkflow Templates\nGenerate with AI\nCreate Workflow\nNo personal workflows yet\n\nCreate personal workflows to automate your tasks\n\nCreate Workflow\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Workflows",
+      "No personal workflows yet",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/automation/campaigns",
+    "url": "/automation/campaigns",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nCampaigns\nAll campaigns\nCreate Campaign\nAll\nDraft\nScheduled\nSending\nSent\nNo campaigns found\n\nCreate your first campaign to send consent-gated email or text messages\n\nCreate Campaign\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Campaigns",
+      "No campaigns found",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/messaging/templates"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/automation/form-submissions",
+    "url": "/automation/form-submissions",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nForm Submissions\nSelect form\n\nNo submissions available\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Form Submissions",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/reports",
+    "url": "/reports",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nReports\nAll Time\nAll\nExport PDF\nTotal Surrogates\n1\n\nActive surrogates\n\nNew This Period\n1\n\nLast 30 days\n\nQualification Rate\n100%\n\nReached the qualification stage or later\n\nMeta Funnel\nQualified\n0%\nConverted\n0%\n\n0 leads received\n\nAI Summary\nLightweight insights from the current report data.\n\nTREND SHIFT\n\nTrend: not enough data yet.\n\nANOMALIES\n\nAnomalies: not enough daily data.\n\nBOTTLENECKS\n\nBottleneck: Approved holds 100% of active surrogates.\n\nSurrogates by Stage\nApproved\n0\n0.25\n0.5\n0.75\n1\nApproved: 1 surrogates\nCurrent distribution by stage\nSurrogates Trend\n2026-09-26\n0\n0.25\n0.5\n0.75\n1\n1 surrogates in period\n1 data points\nTeam Performance\n0\n0.25\n0.5\n0.75\n1\nspecialist\nTop: specialist (1 surrogates)\n1 team members\nMeta Lead Ads Performance\nNo conversion data yet\n0 leads received \u2022 0% conversion rate\nConversion Funnel\nNew Unread\n1 (100%)\n\u2193\nContacted\n1 (100%)\n\u2193\nPre-Qualified\n1 (100%)\n\u2193\nReady to Match\n0 (0%)\n\u2193\nMatched\n0 (0%)\n\u2193\nMedical Clearance Passed\n0 (0%)\nLead \u2192 Qualified \u2192 Active\nSurrogates by State\nNo geographic data available\nDonors\nEgg Donors\nSperm Donors\nTotal\n1\nNew This Period\n1\nQualification Rate\n0%\nAverage to Qualification\n\u2014\nEgg Donors by Stage\nNew\n0\nContacted\n0\nPre-Screening\n0\nApplication Submitted\n0\nMedical Records Review\n0\nPsychological Screening\n0\nApproved\n1\nReady to Match\n0\nMatched\n0\nCycle in Progress\n0\nRetrieval Complete\n0\nOn-Hold\n0\nDisqualified\n0\nClosed\n0\nEgg Donors Creation Trend\n1\n2026-09-25\nIndividual Performance\nMode:\nCreated Cohort\n\nShowing metrics for surrogates created within the selected date range, grouped by current owner.\n\nConversion Rate by Team Member\nTeam average: 0.0% conversion rate\n0%\n15%\n30%\n45%\n50%\nTest\n30%+\n20-30%\n10-20%\n<10%\nIndividual Performance\nData as of Sep 25, 2026 at 10:47 PM\nTeam Member\n\tSurrogates\n\tContacted\n\tPre-Qualified\n\tReady to Match\n\tMatched\n\tApplication Submitted\n\tOn-Hold\n\tLost\n\tConv. Rate\n\tAvg to Match\n\tAvg to Conversion\n\nTest Case Manager1 archived\t2\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Admin\t0\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Intake\t0\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Developer\t0\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nQA Operations\t0\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files\n\nTest",
+    "headings": [
+      "Reports",
+      "Donors",
+      "Individual Performance",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/settings",
+    "url": "/settings",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nMy Integrations\nTest Case Manager\nspecialist@test.com\nSettings\nGeneral\nGeneral\nTC\nProfile\n\nManaged via Google SSO\n\nFull Name\nEmail\n\nEmail is managed by SSO\n\nTitle\n\nDisplayed in email signatures\n\nPhone\n\nDisplayed in email signatures\n\nRole\nCase Manager\nSave Changes\nAccess\nTwo-factor authentication\n\nManaged by Google Workspace + Duo\n\nActive Sessions\n\nChrome 153.0.0 on Mac OS X 10.15.7(this device)\n\n127.0.0.1 \u00b7 Last active Sep 25, 10:47 PM\n\nCurrent\n\nAccount deletion is managed by your organization admin.\n\nv0.91.71\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Settings",
+      "Profile",
+      "Access",
+      "Active Sessions",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/settings/team",
+    "url": "/settings/team",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nMy Integrations\nTest Case Manager\nspecialist@test.com\nPermissions\nRoles\nPeople\nTeam\n0 members \u2022 0 actionable invitations\nMembers (0)\nInvitations (0)\n\nMissing permission: manage_team\n\nTry again\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Permissions",
+      "People",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/settings/permissions/members"
+      },
+      {
+        "status": 403,
+        "url": "/settings/invites"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/settings/team/roles",
+    "url": "/settings/team/roles",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nMy Integrations\nTest Case Manager\nspecialist@test.com\nPermissions unavailable\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Permissions unavailable",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/settings/appointments",
+    "url": "/settings/appointments",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nAppointment Settings\n\nConfigure your availability, appointment types, and booking link.\n\nGoogle Calendar Integration Recommended\n\nConnect your Google Calendar to enable calendar sync and Google Meet links for appointments.\n\nConnect Google Calendar\nDismiss\nAvailability\nAppointment Types\nBooking Link\nWeekly Availability\nMonday\nUnknown time\nto\nUnknown time\nTuesday\nUnknown time\nto\nUnknown time\nWednesday\nUnknown time\nto\nUnknown time\nThursday\nUnknown time\nto\nUnknown time\nFriday\nUnknown time\nto\nUnknown time\nSaturday\nUnavailable\nSunday\nUnavailable\nTimezone:\nEastern Time\nSave Availability\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Appointment Settings",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/settings/integrations",
+    "url": "/settings/integrations",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nMy Integrations\nTest Case Manager\nspecialist@test.com\nIntegrations\nPersonal Integrations\n\nConnect your personal accounts to enable features like Zoom appointments and email sending.\n\nZoom\nVideo appointments\nConnect Zoom\nGmail\nEmail sending\nConnect Gmail\nGoogle Calendar + Meeting\nTwo-way calendar sync + meeting links\nConnect Google Calendar\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Integrations",
+      "Personal Integrations",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/settings/admin",
+    "url": "/settings/admin",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nMy Integrations\nTest Case Manager\nspecialist@test.com\nThis page is only accessible to developers.\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c",
+    "url": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\n\nError loading surrogate: You don't have access to this surrogate\n\nBack to Surrogates\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c"
+      },
+      {
+        "status": 403,
+        "url": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c/notes"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de",
+    "url": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\n\nError loading surrogate: You don't have access to this surrogate\n\nBack to Surrogates\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de"
+      },
+      {
+        "status": 403,
+        "url": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de/notes"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8",
+    "url": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nBack\nSurrogate #S10103\nApproved\nChange Stage\nSend Email\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Approved\nEmail:\nscope-record-0abf75d0-0206-4afa-b9d1-0bac25269fa1@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\n\nNo personal information added yet.\n\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nPending-DocuSign\n--\nUnder Review\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10103",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b",
+    "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\n\nError loading surrogate: You don't have access to this surrogate\n\nBack to Surrogates\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b"
+      },
+      {
+        "status": 403,
+        "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b/notes"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4",
+    "url": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nPermission required\nYour account does not have permission to view this donor. Ask an admin to update your role or permissions.\nTry again\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e",
+    "url": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nPermission required\nYour account does not have permission to view this donor. Ask an admin to update your role or permissions.\nTry again\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82",
+    "url": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nBack\nDonor #D10103\nApproved\nChange Stage\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Approved\nEmail:\nscope-record-f7181b32-0b5c-48e6-9063-ab9e4c83bb0b@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nMedical Records Review\n--\nPsychological Screening\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10103",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f",
+    "url": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nBack\nDonor #D10104\nApproved\nArchived\nOverview\nNotes\nTasks\nHistory\n\nUnable to load donor information.\n\nRetry donor information\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10104",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f/profile"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      }
+    ],
+    "overflow": false,
+    "screenshot": "case_manager-24.png"
+  },
+  {
+    "role": "case_manager",
+    "route": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6",
+    "url": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nBack to intended parents\nQA Intended_Parent Mine\n\nI10101 \u2022 scope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\n\nPropose Match\nChange Stage\nNew\nContact Information\n\nEmail\n\nscope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\n\nPhone\n\nNot provided\n\nPronouns\n\nNot provided\n\nDate of Birth\n\nNot provided\n\nAddress\n\nNot provided\nMarital Status\nNot provided\nTrust Info\n\nProvider\n\nNot provided\n\nPrimary Contact\n\nNot provided\n\nEmail\n\nNot provided\n\nPhone\n\nNot provided\n\nReference ID\n\nNot provided\n\nFunding Status\n\nNot provided\n\nPortal URL\n\nNot provided\n\nAddress\n\nNot provided\n\nNotes\n\nNot provided\nMedical Information\nEdit Info\n\nNo medical information added yet.\n\nRelated Matches\n\nNo matches yet.\n\nAppointments\nSchedule\n\nNo appointments\n\nNotes\n\n\n\n\nAdd Note\n\nNo notes yet.\n\nTasks\nAdd Task\nOpen\nCompleted\nAll\n\nNo tasks yet.\n\nDocuments\n\nDrag & drop files here, or click to select\n\nPDF, images, Word, Excel \u2022 Max 25 MB\n\nNo documents yet\n\nActivity\nNew\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "QA Intended_Parent Mine",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "case_manager",
+    "route": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3",
+    "url": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Case Manager\nspecialist@test.com\nBack to intended parents\nQA Intended_Parent Other\n\nI10102 \u2022 scope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\n\nPropose Match\nChange Stage\nNew\nContact Information\n\nEmail\n\nscope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\n\nPhone\n\nNot provided\n\nPronouns\n\nNot provided\n\nDate of Birth\n\nNot provided\n\nAddress\n\nNot provided\nMarital Status\nNot provided\nTrust Info\n\nProvider\n\nNot provided\n\nPrimary Contact\n\nNot provided\n\nEmail\n\nNot provided\n\nPhone\n\nNot provided\n\nReference ID\n\nNot provided\n\nFunding Status\n\nNot provided\n\nPortal URL\n\nNot provided\n\nAddress\n\nNot provided\n\nNotes\n\nNot provided\nMedical Information\nEdit Info\n\nNo medical information added yet.\n\nRelated Matches\n\nNo matches yet.\n\nAppointments\nSchedule\n\nNo appointments\n\nNotes\n\n\n\n\nAdd Note\n\nNo notes yet.\n\nTasks\nAdd Task\nOpen\nCompleted\nAll\n\nNo tasks yet.\n\nDocuments\n\nDrag & drop files here, or click to select\n\nPDF, images, Word, Excel \u2022 Max 25 MB\n\nNo documents yet\n\nActivity\nNew\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "QA Intended_Parent Other",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/dashboard",
+    "url": "/dashboard",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nWelcome back, QA\n\nFriday, September 25, 2026\n\nAll Time\nMine\nUpdated less than a minute ago\nActive Surrogates\n0\n\n0 new this week\n\nNew Leads\n0\n\nLast 24h\n\nMy Tasks\n0\n\nAll caught up!\n\nSurrogates Trend\nDay\nWeek\nMonth\nDaily new surrogates (last 30 days)\nNo new surrogates in the last 30 days\n\nReview existing surrogates or switch the trend view.\n\nView surrogates\nPipeline Distribution\nCount\n%\n0 surrogates in pipeline\nNo surrogates match your filters\n\nTry adjusting or clearing filters to see results.\n\nReset filters\nAttention Needed\nView all\nItems needing follow-up\nAll caught up!\n\nNo items need your attention right now\n\nUpcoming This Week\nView all\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Welcome back, QA",
+      "No new surrogates in the last 30 days",
+      "No surrogates match your filters",
+      "All caught up!",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/surrogates",
+    "url": "/surrogates",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nSurrogates\n\n4 total surrogates\n\nAll Stages\nAll Time\nMore Filters\n\t\nSurrogate #\n\t\nName\n\tAge\tBMI\t\nRace\n\t\nState\n\tPhone\tStage\tAssigned To\t\nCreated\n\t\nLast Modified\n\t\nSource\n\t\n\n\t#S10101\tQA Surrogate Mine\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tNew Unread\t\nTI\n\tSep 25, 2026\tSep 25, 2026\tManual\t\n\n\n\t#S10102\tQA Surrogate Other\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tNew Unread\t\nTC\n\tSep 25, 2026\tSep 25, 2026\tManual\t\n\n\n\t#S10103\tQA Surrogate Approved\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tApproved\t\nTC\n\tSep 25, 2026\tSep 25, 2026\tManual\t\n\n\n\t#S10001\tQA Surrogate\t\u2014\t\u2014\t\u2014\tNY\t+12125550101\tNew Unread\t\nTA\n\tSep 25, 2026\tSep 25, 2026\tManual\t\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogates",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/donors",
+    "url": "/donors",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nDonors\nEgg Donors\nSperm Donors\nActive Donors\nAll Time\nAll Stages\nDonor #\n\t\nName\n\tEmail\tPhone\t\nState\n\t\nEducation\n\t\nStage\n\t\nCreated\n\nD10103\tQA Donor Approved\tscope-record-f7181b32-0b5c-48e6-9063-ab9e4c83bb0b@example.test\t\u2014\t\u2014\t\u2014\t\nApproved\n\tSep 25, 2026\nD10101\tQA Donor Mine\tscope-record-b32e1a60-03a3-456a-98b6-9a282f139269@example.test\t\u2014\t\u2014\t\u2014\t\nNew\n\tSep 25, 2026\nD10102\tQA Donor Other\tscope-record-7b5d0058-5d62-4b1c-845a-ebcf1ac4eb16@example.test\t\u2014\t\u2014\t\u2014\t\nNew\n\tSep 25, 2026\nD10001\tQA Donor\tqa-donor@example.com\t+12125550102\tNY\t\u2014\t\nNew\n\tSep 25, 2026\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donors",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/intended-parents",
+    "url": "/intended-parents",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nIntended Parents\nTotal\n3\nNew\n3\nReady to Match\n0\nMatched\n0\nDelivered\n0\nAll Stages\nAll Time\nIP#\n\t\nName\n\t\nEmail\n\t\nPhone\n\t\nState\n\t\nPartner\n\t\nStage\n\t\nCreated\n\nI10102\tQA Intended_Parent Other\tscope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\t\u2014\t\u2014\t\u2014\tNew\tSep 25, 2026\nI10101\tQA Intended_Parent Mine\tscope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\t\u2014\t\u2014\t\u2014\tNew\tSep 25, 2026\nI10001\tQA Intended Parent\tqa-intended-parent@example.com\t+12125550104\tNY\t\u2014\tNew\tSep 25, 2026\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Intended Parents",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/matches",
+    "url": "/matches",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nMatches\nNew Match\n0\n\nProposed\n\n0\n\nUnder Review\n\n0\n\nAccepted\n\n0\n\nRejected\n\nMatch Pipeline\nView and manage match proposals\nAll Kinds\nProposed\nReviewing\nAccepted\nCancel Pending\nRejected\nCancelled\nCompleted\nAll\n\nNo matches found\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Matches",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/tasks",
+    "url": "/tasks",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nTasks\nAdd Task\n\nManage your tasks and appointments in one unified view.\n\nMy Tasks\nAll Tasks\nList\nCalendar\n\nCALENDAR\n\nSeptember 2026\nToday\nMonth\nGoogle Calendar not connected\nConnect Google Calendar to show Google Calendar events alongside appointments.\nReconnect\nSun\nMon\nTue\nWed\nThu\nFri\nSat\n30\n31\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n1\n2\n3\nLEGEND\nPending\nConfirmed\nCompleted\nCancelled\nNo Show\nExpired\nGoogle Calendar\nTasks\nDrag pending or confirmed appointments to open the reschedule picker.\nPending Approvals\n\n0 items awaiting review\n\nNo pending approvals right now.\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Tasks",
+      "September 2026",
+      "Pending Approvals",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/appointments"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/appointments",
+    "url": "/appointments",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nAppointments\nUnable to load booking link\nRetry\nUpcoming\nPending\nPast\nCancelled\nExpired\n\nUnable to load appointments\n\nPlease try again.\n\nRetry\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Appointments",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/appointments/booking-link"
+      },
+      {
+        "status": 403,
+        "url": "/appointments"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/automation",
+    "url": "/automation",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nQA Operations\noperations@example.test\nWorkflows\nExecution History\nTotal Workflows\n13\nEnabled\n0\nSuccess Rate 24h\n0.0%\n0\nExecutions 24h\n0\nMy Workflows\nOrg Workflows\nWorkflow Templates\nGenerate with AI\nCreate Org Workflow\nApplication Follow-up\n\nSends next steps email when status changes to Application Submitted\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nApplication Submitted Review\n\nNotifies the owner and creates a review task when an application is submitted\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nAppointment Reminder\n\nSends a reminder email 24 hours before an appointment\n\nSurrogate\nScheduled\n0 runs \u2022 Last run Never\nAppointment Scheduled Notice\n\nNotifies the owner when an appointment is scheduled\n\nAppointment\nAppointment Scheduled\n0 runs \u2022 Last run Never\nApproved Booking Invite\n\nSends a booking invite when a case is approved\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nInactivity Nudge\n\nSends a follow-up email after 7 days of inactivity\n\nSurrogate\nInactivity\n0 runs \u2022 Last run Never\nLead Marked Lost\n\nNotifies the owner when a case is marked lost\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nMatch Notification\n\nNotifies case manager and sends intro email when a match is proposed\n\nMatch\nMatch Proposed\n0 runs \u2022 Last run Never\nNew Lead Outreach Task\n\nCreates an outreach task and notifies the owner when a new case is created\n\nSurrogate\nSurrogate Created\n0 runs \u2022 Last run Never\nNew Lead Welcome\n\nSends a welcome email when a new case is created\n\nSurrogate\nSurrogate Created\n0 runs \u2022 Last run Never\nTask Overdue Escalation\n\nNotifies admins when tasks become overdue\n\nSurrogate\nTask Overdue\n0 runs \u2022 Last run Never\nWeekly Nurture Campaign\n\nSends weekly promotional content to inactive leads\n\nSurrogate\nScheduled\n0 runs \u2022 Last run Never\nZapier Meta Conversion Sync\n\nQueues outbound Zapier conversion events for conversion-critical stage changes\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Workflows",
+      "Application Follow-up",
+      "Application Submitted Review",
+      "Appointment Reminder",
+      "Appointment Scheduled Notice",
+      "Approved Booking Invite",
+      "Inactivity Nudge",
+      "Lead Marked Lost",
+      "Match Notification",
+      "New Lead Outreach Task",
+      "New Lead Welcome",
+      "Task Overdue Escalation",
+      "Weekly Nurture Campaign",
+      "Zapier Meta Conversion Sync",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/automation/campaigns",
+    "url": "/automation/campaigns",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nQA Operations\noperations@example.test\nCampaigns\nAll campaigns\nCreate Campaign\nAll\nDraft\nScheduled\nSending\nSent\nNo campaigns found\n\nCreate your first campaign to send consent-gated email or text messages\n\nCreate Campaign\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Campaigns",
+      "No campaigns found",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/messaging/templates"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/automation/form-submissions",
+    "url": "/automation/form-submissions",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nQA Operations\noperations@example.test\nForm Submissions\nSelect form\n\nNo submissions available\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Form Submissions",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/reports",
+    "url": "/reports",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nReports\nAll Time\nAll\nExport PDF\nTotal Surrogates\n4\n\nActive surrogates\n\nNew This Period\n4\n\nLast 30 days\n\nQualification Rate\n25%\n\nReached the qualification stage or later\n\nMeta Funnel\nQualified\n0%\nConverted\n0%\n\n0 leads received\n\nAd Spend\n$0\n\nCPL: $N/A\n\nNo sync data yet\n\nAI Summary\nLightweight insights from the current report data.\n\nTREND SHIFT\n\nTrend: not enough data yet.\n\nANOMALIES\n\nAnomalies: not enough daily data.\n\nBOTTLENECKS\n\nBottleneck: New Unread holds 75% of active surrogates.\n\nSurrogates by Stage\nNew Unread\nApproved\n0\n0.75\n1.5\n2.25\n3\nNew Unread: 3 surrogates\nCurrent distribution by stage\nSurrogates Trend\n2026-09-26\n0\n1\n2\n3\n4\n4 surrogates in period\n1 data points\nTeam Performance\n0\n0.5\n1\n1.5\n2\nspecialist\nintake\nadmin\nTop: specialist (2 surrogates)\n3 team members\nMeta Lead Ads Performance\nNo conversion data yet\n0 leads received \u2022 0% conversion rate\nConversion Funnel\nNew Unread\n4 (100%)\n\u2193\nContacted\n1 (25%)\n\u2193\nPre-Qualified\n1 (25%)\n\u2193\nReady to Match\n0 (0%)\n\u2193\nMatched\n0 (0%)\n\u2193\nMedical Clearance Passed\n0 (0%)\nLead \u2192 Qualified \u2192 Active\nSurrogates by State\nTotal: 1 surrogates\nLow\nHigh\nNY\n1\nDonors\nEgg Donors\nSperm Donors\nTotal\n4\nNew This Period\n4\nQualification Rate\n0%\nAverage to Qualification\n\u2014\nEgg Donors by Stage\nNew\n3\nContacted\n0\nPre-Screening\n0\nApplication Submitted\n0\nMedical Records Review\n0\nPsychological Screening\n0\nApproved\n1\nReady to Match\n0\nMatched\n0\nCycle in Progress\n0\nRetrieval Complete\n0\nOn-Hold\n0\nDisqualified\n0\nClosed\n0\nEgg Donors Creation Trend\n4\n2026-09-25\nMeta Ads Spend\n\nCampaign performance from stored sync data\n\nNot synced\nAll Ad Accounts\nNo Spend Data Yet\n\nConfigure your Meta ad account in Settings and trigger a sync to see spend analytics.\n\nIndividual Performance\nMode:\nCreated Cohort\n\nShowing metrics for surrogates created within the selected date range, grouped by current owner.\n\nConversion Rate by Team Member\nTeam average: 0.0% conversion rate\n0%\n15%\n30%\n45%\n50%\nTest\nTest\nTest\n30%+\n20-30%\n10-20%\n<10%\nIndividual Performance\nData as of Sep 25, 2026 at 10:48 PM\nTeam Member\n\tSurrogates\n\tContacted\n\tPre-Qualified\n\tReady to Match\n\tMatched\n\tApplication Submitted\n\tOn-Hold\n\tLost\n\tConv. Rate\n\tAvg to Match\n\tAvg to Conversion\n\nTest Case Manager1 archived\t3\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Admin\t1\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Intake\t1\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Developer\t0\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nQA Operations\t0\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files\n\nTest",
+    "headings": [
+      "Reports",
+      "Donors",
+      "Meta Ads Spend",
+      "No Spend Data Yet",
+      "Individual Performance",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/settings",
+    "url": "/settings",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nQA Operations\noperations@example.test\nSettings\nGeneral\nGeneral\nQO\nProfile\n\nManaged via Google SSO\n\nFull Name\nEmail\n\nEmail is managed by SSO\n\nTitle\n\nDisplayed in email signatures\n\nPhone\n\nDisplayed in email signatures\n\nRole\nOperations\nSave Changes\nAccess\nTwo-factor authentication\n\nManaged by Google Workspace + Duo\n\nActive Sessions\n\nChrome 153.0.0 on Mac OS X 10.15.7(this device)\n\n127.0.0.1 \u00b7 Last active Sep 25, 10:48 PM\n\nCurrent\n\nAccount deletion is managed by your organization admin.\n\nv0.91.71\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Settings",
+      "Profile",
+      "Access",
+      "Active Sessions",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/settings/team",
+    "url": "/settings/team",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nQA Operations\noperations@example.test\nPermissions\nRoles\nPeople\nTeam\n0 members \u2022 0 actionable invitations\nMembers (0)\nInvitations (0)\n\nMissing permission: manage_team\n\nTry again\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Permissions",
+      "People",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/settings/permissions/members"
+      },
+      {
+        "status": 403,
+        "url": "/settings/invites"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/settings/team/roles",
+    "url": "/settings/team/roles",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nQA Operations\noperations@example.test\nPermissions unavailable\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Permissions unavailable",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/settings/appointments",
+    "url": "/settings/appointments",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nAppointment Settings\n\nConfigure your availability, appointment types, and booking link.\n\nGoogle Calendar Integration Recommended\n\nConnect your Google Calendar to enable calendar sync and Google Meet links for appointments.\n\nConnect Google Calendar\nDismiss\nAvailability\nAppointment Types\nBooking Link\nWeekly Availability\nMonday\nUnavailable\nTuesday\nUnavailable\nWednesday\nUnavailable\nThursday\nUnavailable\nFriday\nUnavailable\nSaturday\nUnavailable\nSunday\nUnavailable\nTimezone:\nEastern Time\nSave Availability\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Appointment Settings",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/appointments/availability"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/settings/integrations",
+    "url": "/settings/integrations",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nQA Operations\noperations@example.test\nIntegrations\nPersonal Integrations\n\nConnect your personal accounts to enable features like Zoom appointments and email sending.\n\nZoom\nVideo appointments\nConnect Zoom\nGmail\nEmail sending\nConnect Gmail\nGoogle Calendar + Meeting\nTwo-way calendar sync + meeting links\nConnect Google Calendar\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Integrations",
+      "Personal Integrations",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/settings/admin",
+    "url": "/settings/admin",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nQA Operations\noperations@example.test\nThis page is only accessible to developers.\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c",
+    "url": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nBack\nSurrogate #S10101\nNew Unread\nChange Stage\nSend Email\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Mine\nEmail:\nscope-record-8f918c9a-c00d-43fe-bc81-151348852118@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\n\nNo personal information added yet.\n\nMedical & Insurance\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew Unread\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Qualified\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10101",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de",
+    "url": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nBack\nSurrogate #S10102\nNew Unread\nChange Stage\nSend Email\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Other\nEmail:\nscope-record-50b996e5-a1da-448d-b555-a1ec75d4307c@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\n\nNo personal information added yet.\n\nMedical & Insurance\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew Unread\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Qualified\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10102",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8",
+    "url": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nBack\nSurrogate #S10103\nApproved\nChange Stage\nSend Email\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Approved\nEmail:\nscope-record-0abf75d0-0206-4afa-b9d1-0bac25269fa1@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\n\nNo personal information added yet.\n\nMedical & Insurance\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nPending-DocuSign\n--\nUnder Review\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10103",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b",
+    "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\n\nError loading surrogate: You don't have access to this surrogate\n\nBack to Surrogates\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      },
+      {
+        "status": 403,
+        "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b/notes"
+      }
+    ],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4",
+    "url": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nBack\nDonor #D10101\nNew\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Mine\nEmail:\nscope-record-b32e1a60-03a3-456a-98b6-9a282f139269@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Screening\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10101",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e",
+    "url": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nBack\nDonor #D10102\nNew\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Other\nEmail:\nscope-record-7b5d0058-5d62-4b1c-845a-ebcf1ac4eb16@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Screening\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10102",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82",
+    "url": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nBack\nDonor #D10103\nApproved\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Approved\nEmail:\nscope-record-f7181b32-0b5c-48e6-9063-ab9e4c83bb0b@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nMedical Records Review\n--\nPsychological Screening\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10103",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f",
+    "url": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nBack\nDonor #D10104\nApproved\nArchived\nOverview\nNotes\nTasks\nHistory\n\nUnable to load donor information.\n\nRetry donor information\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10104",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [
+      {
+        "status": 403,
+        "url": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f/profile"
+      },
+      {
+        "status": 403,
+        "url": "/tasks"
+      }
+    ],
+    "overflow": false,
+    "screenshot": "operations-24.png"
+  },
+  {
+    "role": "operations",
+    "route": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6",
+    "url": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nBack to intended parents\nQA Intended_Parent Mine\n\nI10101 \u2022 scope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\n\nPropose Match\nChange Stage\nNew\nContact Information\n\nEmail\n\nscope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\n\nPhone\n\nNot provided\n\nPronouns\n\nNot provided\n\nDate of Birth\n\nNot provided\n\nAddress\n\nNot provided\nMarital Status\nNot provided\nTrust Info\n\nProvider\n\nNot provided\n\nPrimary Contact\n\nNot provided\n\nEmail\n\nNot provided\n\nPhone\n\nNot provided\n\nReference ID\n\nNot provided\n\nFunding Status\n\nNot provided\n\nPortal URL\n\nNot provided\n\nAddress\n\nNot provided\n\nNotes\n\nNot provided\nMedical Information\nEdit Info\n\nNo medical information added yet.\n\nRelated Matches\n\nNo matches yet.\n\nNotes\n\nNo notes yet.\n\nTasks\nOpen\nCompleted\nAll\n\nNo tasks yet.\n\nDocuments\n\nNo documents yet\n\nActivity\nNew\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "QA Intended_Parent Mine",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "operations",
+    "route": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3",
+    "url": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nQA Operations\noperations@example.test\nBack to intended parents\nQA Intended_Parent Other\n\nI10102 \u2022 scope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\n\nPropose Match\nChange Stage\nNew\nContact Information\n\nEmail\n\nscope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\n\nPhone\n\nNot provided\n\nPronouns\n\nNot provided\n\nDate of Birth\n\nNot provided\n\nAddress\n\nNot provided\nMarital Status\nNot provided\nTrust Info\n\nProvider\n\nNot provided\n\nPrimary Contact\n\nNot provided\n\nEmail\n\nNot provided\n\nPhone\n\nNot provided\n\nReference ID\n\nNot provided\n\nFunding Status\n\nNot provided\n\nPortal URL\n\nNot provided\n\nAddress\n\nNot provided\n\nNotes\n\nNot provided\nMedical Information\nEdit Info\n\nNo medical information added yet.\n\nRelated Matches\n\nNo matches yet.\n\nNotes\n\nNo notes yet.\n\nTasks\nOpen\nCompleted\nAll\n\nNo tasks yet.\n\nDocuments\n\nNo documents yet\n\nActivity\nNew\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "QA Intended_Parent Other",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/dashboard",
+    "url": "/dashboard",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nWelcome back, Test\n\nFriday, September 25, 2026\n\nAll Time\nAll Assignees\nUpdated less than a minute ago\nActive Surrogates\n4\n\n4 new this week\n\nNew Leads\n4\n\nLast 24h\n\nMy Tasks\n0\n\nAll caught up!\n\nSurrogates Trend\nDay\nWeek\nMonth\nDaily new surrogates (last 30 days) (4 total)\nSep 25\n0\n1\n2\n3\n4\nPipeline Distribution\nCount\n%\n4 surrogates in pipeline\n0\n1\n2\n3\nNew Unread\nApproved\n3\n1\nView New Unread surrogates\nView Approved surrogates\nAttention Needed\nView all\nItems needing follow-up\nAll caught up!\n\nNo items need your attention right now\n\nUpcoming This Week\nView all\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files\n\n0",
+    "headings": [
+      "Welcome back, Test",
+      "All caught up!",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/surrogates",
+    "url": "/surrogates",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nSurrogates\n\n4 total surrogates\n\nMass Edit\nNew Surrogates\nAll Stages\nAll Time\nMore Filters\n\t\nSurrogate #\n\t\nName\n\tAge\tBMI\t\nRace\n\t\nState\n\tPhone\tStage\tAssigned To\t\nCreated\n\t\nLast Modified\n\t\nSource\n\t\n\n\t#S10101\tQA Surrogate Mine\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tNew Unread\t\nTI\n\tSep 25, 2026\tSep 25, 2026\tManual\t\n\n\n\t#S10102\tQA Surrogate Other\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tNew Unread\t\nTC\n\tSep 25, 2026\tSep 25, 2026\tManual\t\n\n\n\t#S10103\tQA Surrogate Approved\t\u2014\t\u2014\t\u2014\t\u2014\t\u2014\tApproved\t\nTC\n\tSep 25, 2026\tSep 25, 2026\tManual\t\n\n\n\t#S10001\tQA Surrogate\t\u2014\t\u2014\t\u2014\tNY\t+12125550101\tNew Unread\t\nTA\n\tSep 25, 2026\tSep 25, 2026\tManual\t\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogates",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/donors",
+    "url": "/donors",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nDonors\nNew Donor\nEgg Donors\nSperm Donors\nActive Donors\nAll Time\nAll Stages\nDonor #\n\t\nName\n\tEmail\tPhone\t\nState\n\t\nEducation\n\t\nStage\n\t\nCreated\n\nD10103\tQA Donor Approved\tscope-record-f7181b32-0b5c-48e6-9063-ab9e4c83bb0b@example.test\t\u2014\t\u2014\t\u2014\t\nApproved\n\tSep 25, 2026\nD10101\tQA Donor Mine\tscope-record-b32e1a60-03a3-456a-98b6-9a282f139269@example.test\t\u2014\t\u2014\t\u2014\t\nNew\n\tSep 25, 2026\nD10102\tQA Donor Other\tscope-record-7b5d0058-5d62-4b1c-845a-ebcf1ac4eb16@example.test\t\u2014\t\u2014\t\u2014\t\nNew\n\tSep 25, 2026\nD10001\tQA Donor\tqa-donor@example.com\t+12125550102\tNY\t\u2014\t\nNew\n\tSep 25, 2026\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donors",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/intended-parents",
+    "url": "/intended-parents",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nIntended Parents\nNew Intended Parent\nTotal\n3\nNew\n3\nReady to Match\n0\nMatched\n0\nDelivered\n0\nAll Stages\nAll Time\nIP#\n\t\nName\n\t\nEmail\n\t\nPhone\n\t\nState\n\t\nPartner\n\t\nStage\n\t\nCreated\n\nI10102\tQA Intended_Parent Other\tscope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\t\u2014\t\u2014\t\u2014\tNew\tSep 25, 2026\nI10101\tQA Intended_Parent Mine\tscope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\t\u2014\t\u2014\t\u2014\tNew\tSep 25, 2026\nI10001\tQA Intended Parent\tqa-intended-parent@example.com\t+12125550104\tNY\t\u2014\tNew\tSep 25, 2026\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Intended Parents",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/matches",
+    "url": "/matches",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nMatches\nNew Match\n0\n\nProposed\n\n0\n\nUnder Review\n\n0\n\nAccepted\n\n0\n\nRejected\n\nMatch Pipeline\nView and manage match proposals\nAll Kinds\nProposed\nReviewing\nAccepted\nCancel Pending\nRejected\nCancelled\nCompleted\nAll\n\nNo matches found\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Matches",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/tasks",
+    "url": "/tasks",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nTasks\nAdd Task\n\nManage your tasks and appointments in one unified view.\n\nMy Tasks\nAll Tasks\nList\nCalendar\n\nCALENDAR\n\nSeptember 2026\nToday\nMonth\nGoogle Calendar not connected\nConnect Google Calendar to show Google Calendar events alongside appointments.\nReconnect\nSun\nMon\nTue\nWed\nThu\nFri\nSat\n30\n31\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n1\n2\n3\nLEGEND\nPending\nConfirmed\nCompleted\nCancelled\nNo Show\nExpired\nGoogle Calendar\nTasks\nDrag pending or confirmed appointments to open the reschedule picker.\nPending Approvals\n\n0 items awaiting review\n\nNo pending approvals right now.\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Tasks",
+      "September 2026",
+      "Pending Approvals",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/appointments",
+    "url": "/appointments",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nAppointments\nShare Booking Link\nUpcoming\nPending\nPast\nCancelled\nExpired\n\nNo upcoming appointments.\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Appointments",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/automation",
+    "url": "/automation",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Builder\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nTest Developer\ndeveloper@test.com\nWorkflows\nExecution History\nTotal Workflows\n13\nEnabled\n0\nSuccess Rate 24h\n0.0%\n0\nExecutions 24h\n0\nMy Workflows\nOrg Workflows\nWorkflow Templates\nGenerate with AI\nCreate Org Workflow\nApplication Follow-up\n\nSends next steps email when status changes to Application Submitted\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nApplication Submitted Review\n\nNotifies the owner and creates a review task when an application is submitted\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nAppointment Reminder\n\nSends a reminder email 24 hours before an appointment\n\nSurrogate\nScheduled\n0 runs \u2022 Last run Never\nAppointment Scheduled Notice\n\nNotifies the owner when an appointment is scheduled\n\nAppointment\nAppointment Scheduled\n0 runs \u2022 Last run Never\nApproved Booking Invite\n\nSends a booking invite when a case is approved\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nInactivity Nudge\n\nSends a follow-up email after 7 days of inactivity\n\nSurrogate\nInactivity\n0 runs \u2022 Last run Never\nLead Marked Lost\n\nNotifies the owner when a case is marked lost\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nMatch Notification\n\nNotifies case manager and sends intro email when a match is proposed\n\nMatch\nMatch Proposed\n0 runs \u2022 Last run Never\nNew Lead Outreach Task\n\nCreates an outreach task and notifies the owner when a new case is created\n\nSurrogate\nSurrogate Created\n0 runs \u2022 Last run Never\nNew Lead Welcome\n\nSends a welcome email when a new case is created\n\nSurrogate\nSurrogate Created\n0 runs \u2022 Last run Never\nTask Overdue Escalation\n\nNotifies admins when tasks become overdue\n\nSurrogate\nTask Overdue\n0 runs \u2022 Last run Never\nWeekly Nurture Campaign\n\nSends weekly promotional content to inactive leads\n\nSurrogate\nScheduled\n0 runs \u2022 Last run Never\nZapier Meta Conversion Sync\n\nQueues outbound Zapier conversion events for conversion-critical stage changes\n\nSurrogate\nStatus Changed\n0 runs \u2022 Last run Never\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Workflows",
+      "Application Follow-up",
+      "Application Submitted Review",
+      "Appointment Reminder",
+      "Appointment Scheduled Notice",
+      "Approved Booking Invite",
+      "Inactivity Nudge",
+      "Lead Marked Lost",
+      "Match Notification",
+      "New Lead Outreach Task",
+      "New Lead Welcome",
+      "Task Overdue Escalation",
+      "Weekly Nurture Campaign",
+      "Zapier Meta Conversion Sync",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/automation/campaigns",
+    "url": "/automation/campaigns",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Builder\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nTest Developer\ndeveloper@test.com\nCampaigns\nAll campaigns\nCreate Campaign\nAll\nDraft\nScheduled\nSending\nSent\nNo campaigns found\n\nCreate your first campaign to send consent-gated email or text messages\n\nCreate Campaign\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Campaigns",
+      "No campaigns found",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/automation/form-submissions",
+    "url": "/automation/form-submissions",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nCampaigns\nEmail Templates\nForm Builder\nForm Submissions\nAI Builder\nExecutions\nReports\nSettings\nTest Developer\ndeveloper@test.com\nForm Submissions\nSelect form\n\nNo submissions available\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Form Submissions",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/reports",
+    "url": "/reports",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nReports\nAll Time\nAll\nExport PDF\nTotal Surrogates\n4\n\nActive surrogates\n\nNew This Period\n4\n\nLast 30 days\n\nQualification Rate\n25%\n\nReached the qualification stage or later\n\nMeta Funnel\nQualified\n0%\nConverted\n0%\n\n0 leads received\n\nAd Spend\n$0\n\nCPL: $N/A\n\nNo sync data yet\n\nAI Summary\nLightweight insights from the current report data.\n\nTREND SHIFT\n\nTrend: not enough data yet.\n\nANOMALIES\n\nAnomalies: not enough daily data.\n\nBOTTLENECKS\n\nBottleneck: New Unread holds 75% of active surrogates.\n\nSurrogates by Stage\nNew Unread\nApproved\n0\n0.75\n1.5\n2.25\n3\nNew Unread: 3 surrogates\nCurrent distribution by stage\nSurrogates Trend\n2026-09-26\n0\n1\n2\n3\n4\n4 surrogates in period\n1 data points\nTeam Performance\n0\n0.5\n1\n1.5\n2\nspecialist\nintake\nadmin\nTop: specialist (2 surrogates)\n3 team members\nMeta Lead Ads Performance\nNo conversion data yet\n0 leads received \u2022 0% conversion rate\nConversion Funnel\nNew Unread\n4 (100%)\n\u2193\nContacted\n1 (25%)\n\u2193\nPre-Qualified\n1 (25%)\n\u2193\nReady to Match\n0 (0%)\n\u2193\nMatched\n0 (0%)\n\u2193\nMedical Clearance Passed\n0 (0%)\nLead \u2192 Qualified \u2192 Active\nSurrogates by State\nTotal: 1 surrogates\nLow\nHigh\nNY\n1\nDonors\nEgg Donors\nSperm Donors\nTotal\n4\nNew This Period\n4\nQualification Rate\n0%\nAverage to Qualification\n\u2014\nEgg Donors by Stage\nNew\n3\nContacted\n0\nPre-Screening\n0\nApplication Submitted\n0\nMedical Records Review\n0\nPsychological Screening\n0\nApproved\n1\nReady to Match\n0\nMatched\n0\nCycle in Progress\n0\nRetrieval Complete\n0\nOn-Hold\n0\nDisqualified\n0\nClosed\n0\nEgg Donors Creation Trend\n4\n2026-09-25\nMeta Ads Spend\n\nCampaign performance from stored sync data\n\nNot synced\nAll Ad Accounts\nNo Spend Data Yet\n\nConfigure your Meta ad account in Settings and trigger a sync to see spend analytics.\n\nIndividual Performance\nMode:\nCreated Cohort\n\nShowing metrics for surrogates created within the selected date range, grouped by current owner.\n\nConversion Rate by Team Member\nTeam average: 0.0% conversion rate\n0%\n15%\n30%\n45%\n50%\nTest\nTest\nTest\n30%+\n20-30%\n10-20%\n<10%\nIndividual Performance\nData as of Sep 25, 2026 at 10:49 PM\nTeam Member\n\tSurrogates\n\tContacted\n\tPre-Qualified\n\tReady to Match\n\tMatched\n\tApplication Submitted\n\tOn-Hold\n\tLost\n\tConv. Rate\n\tAvg to Match\n\tAvg to Conversion\n\nTest Case Manager1 archived\t3\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Admin\t1\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Intake\t1\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nTest Developer\t0\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nQA Operations\t0\t0\t0\t0\t0\t0\t0\t0\t0%\t-\t-\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files\n\nTest",
+    "headings": [
+      "Reports",
+      "Donors",
+      "Meta Ads Spend",
+      "No Spend Data Yet",
+      "Individual Performance",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/settings",
+    "url": "/settings",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nTeam\nPipelines\nQueue Management\nAudit Log\nCompliance\nIntegrations\nSystem Alerts\nTest Developer\ndeveloper@test.com\nSettings\nGeneral\nEmail Signature\nIntelligent Suggestions\nGeneral\nTD\nProfile\n\nManaged via Google SSO\n\nFull Name\nEmail\n\nEmail is managed by SSO\n\nTitle\n\nDisplayed in email signatures\n\nPhone\n\nDisplayed in email signatures\n\nRole\nDeveloper\nSave Changes\nAccess\nTwo-factor authentication\n\nManaged by Google Workspace + Duo\n\nActive Sessions\n\nChrome 153.0.0 on Mac OS X 10.15.7(this device)\n\n127.0.0.1 \u00b7 Last active Sep 25, 10:48 PM\n\nCurrent\n\nAccount deletion is managed by your organization admin.\n\nv0.91.71\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Settings",
+      "Profile",
+      "Access",
+      "Active Sessions",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/settings/team",
+    "url": "/settings/team",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nTeam\nPipelines\nQueue Management\nAudit Log\nCompliance\nIntegrations\nSystem Alerts\nTest Developer\ndeveloper@test.com\nPermissions\nRoles\nPeople\nCheck access\nPeople\nInvite Member\nTeam\n5 members \u2022 0 actionable invitations\nMembers (5)\nInvitations (0)\nInclude inactive members\nSearch people\nFilter by role\nAll roles\n\tName\tEmail\tRole\tLast Login\tActions\n\n\tQA Operations\toperations@example.test\tOperations\tNever\t\nManage\n\n\n\tTest Admin\tadmin@test.com\tAdmin\tNever\t\nManage\n\n\n\tTest Case Manager\tspecialist@test.com\tCase Manager\tNever\t\nManage\n\n\n\tTest Developer\tdeveloper@test.com\tDev\tNever\t\nManage\nYou\n\n\n\tTest Intake\tintake@test.com\tIntake Specialist\tNever\t\nManage\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Permissions",
+      "People",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/settings/team/roles",
+    "url": "/settings/team/roles",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nTeam\nPipelines\nQueue Management\nAudit Log\nCompliance\nIntegrations\nSystem Alerts\nTest Developer\ndeveloper@test.com\nPermissions\nRoles\nPeople\nCheck access\nIntake Specialist\nCase Manager\nOperations\nAdmin\nDev\nSurrogates\nDonors\nIntended Parents\nOperations\nAdministration\nSurrogates\nRecord scope\nAssignment\nAll records\nPhase\nAfter approval\nSpecific stages\nRecords\nView\nCreate\nEdit\nArchive\nDelete\nImport\nProgress & ownership\nChange status\nApprove\nAssign\nApprove status corrections\nNotes\nEdit\nView\nAccess preview\n\nSurrogates\n\nAll records \u00b7 After approval\n\nAllowed actions\nView\nCreate\nEdit\nArchive\nImport\nChange status\nAssign\nEdit notes\nView notes\nIncluded for everyone\nPersonal workspace\nIncluded\nWorkflows \u00b7 Templates \u00b7 Campaigns\nAI Assistant\nDisabled\nOrganization setting\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Permissions",
+      "Surrogates",
+      "Record scope",
+      "Records",
+      "Progress & ownership",
+      "Notes",
+      "Access preview",
+      "Allowed actions",
+      "Included for everyone",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/settings/appointments",
+    "url": "/settings/appointments",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nMy Tasks\nAppointments\nAppointment Settings\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nAppointment Settings\n\nConfigure your availability, appointment types, and booking link.\n\nGoogle Calendar Integration Recommended\n\nConnect your Google Calendar to enable calendar sync and Google Meet links for appointments.\n\nConnect Google Calendar\nDismiss\nAvailability\nAppointment Types\nBooking Link\nWeekly Availability\nMonday\nUnknown time\nto\nUnknown time\nTuesday\nUnknown time\nto\nUnknown time\nWednesday\nUnknown time\nto\nUnknown time\nThursday\nUnknown time\nto\nUnknown time\nFriday\nUnknown time\nto\nUnknown time\nSaturday\nUnavailable\nSunday\nUnavailable\nTimezone:\nEastern Time\nSave Availability\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Appointment Settings",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/settings/integrations",
+    "url": "/settings/integrations",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nTeam\nPipelines\nQueue Management\nAudit Log\nCompliance\nIntegrations\nSystem Alerts\nTest Developer\ndeveloper@test.com\nIntegrations\nPersonal\nOrganization\nRefresh\nOrganization Integrations\n\nConfigure shared services like AI, email, messaging, and Zapier for the organization.\n\nAI Assistant\nCopilot, summaries, and AI workflows\nDisabled\n\nProvider: Google Gemini\n\nConfigure AI\nMessaging Delivery\nTwilio SMS + MMS sending, replies, and opt-out handling\nNot configured\n\nConfigure SMS + MMS routes and consent controls\n\nConfigure Messaging\nEmail Delivery\nCampaign + transactional sending\nNot configured\n\nChoose a provider to start sending\n\nView email operationsConfigure Email\nZapier\nInbound leads + stage event delivery\nActive\nReporting disabled\n\n1 inbound webhook \u00b7 Surrogate reporting disabled \u00b7 Donor reporting disabled\n\nEnable stage reporting to evaluate mapping\n\nConfigure Zapier\nMeta Lead Ads\nFacebook/Instagram lead capture + CAPI\nNot configured\n\nConnect Facebook or add a CRM dataset to get started\n\nConfigure Meta\nSystem Integrations\n\nOrganization-level integrations managed by administrators.\n\nNo integrations configured\n\nAdd integrations to see their health status here\n\nNeed help?\n\nIntegration tokens are managed via CLI commands. To update a Meta page token:\n\npython -m app.cli update-meta-page-token --page-id YOUR_PAGE_ID\n\nContact your administrator if you need to add or reconfigure integrations.\n\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Integrations",
+      "Organization Integrations",
+      "System Integrations",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/settings/admin",
+    "url": "/settings/admin",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nGeneral\nNotification\nTeam\nPipelines\nQueue Management\nAudit Log\nCompliance\nIntegrations\nSystem Alerts\nTest Developer\ndeveloper@test.com\nData Management\nDeveloper Only. These tools export and import organization data for backup, restore, and development purposes. Imports are only available in dev/test environments.\nExport Data\nImport Data\nSurrogates\nExport all surrogates as CSV with full profile data\nExport Surrogates CSV\nDonors\nExport egg and sperm donors with exact pipeline stages\nExport Donors CSV\nConfiguration\nExport org config: pipelines, templates, workflows, settings\nExport Config ZIP\nAnalytics\nExport analytics datasets used by Reports page\nExport Analytics ZIP\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Data Management",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c",
+    "url": "/surrogates/b3181a18-2438-449e-b39a-d0ad2ff6c09c",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nBack\nSurrogate #S10101\nNew Unread\nChange Stage\nSend Email\nLog Contact\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Mine\nEmail:\nscope-record-8f918c9a-c00d-43fe-bc81-151348852118@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\n\nNo personal information added yet.\n\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew Unread\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Qualified\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10101",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de",
+    "url": "/surrogates/9b04c978-697b-44d2-a496-18d7703792de",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nBack\nSurrogate #S10102\nNew Unread\nChange Stage\nSend Email\nLog Contact\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Other\nEmail:\nscope-record-50b996e5-a1da-448d-b555-a1ec75d4307c@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\n\nNo personal information added yet.\n\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew Unread\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Qualified\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10102",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8",
+    "url": "/surrogates/0b0fc98a-81e7-47c3-82f9-c85b5305e0f8",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nBack\nSurrogate #S10103\nApproved\nChange Stage\nSend Email\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Approved\nEmail:\nscope-record-0abf75d0-0206-4afa-b9d1-0bac25269fa1@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\n\nNo personal information added yet.\n\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nPending-DocuSign\n--\nUnder Review\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10103",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b",
+    "url": "/surrogates/501ce323-54e0-4666-aa28-f74652d4095b",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nBack\nSurrogate #S10104\nApproved\nArchived\nChange Stage\nSend Email\nOverview\nEmails\nNotes\nTasks\nInterviews\nApplication\nProfile\nHistory\nJourney\nAI\nContact Information\nName:\nQA Surrogate Archived\nEmail:\nscope-record-4b849f1c-8063-4d60-acb7-11ad2612ef75@example.test\nPhone:\n-\nState:\n-\nSource:\nManual\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\n\nNo personal information added yet.\n\nMedical & Insurance\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nPending-DocuSign\n--\nUnder Review\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nNotes & Attachments \u2192\nEligibility Checklist\n-\nAge Eligible (21-36)\n-\nUS Citizen or PR\n-\nHas Child\n-\nNon-Smoker\n-\nPrior Surrogate Experience\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Surrogate #S10104",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4",
+    "url": "/donors/6f3c8c73-e941-4d30-a5b5-a17aa47d10e4",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nBack\nDonor #D10101\nNew\nChange Stage\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Mine\nEmail:\nscope-record-b32e1a60-03a3-456a-98b6-9a282f139269@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Screening\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10101",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e",
+    "url": "/donors/3c3366f2-30b4-4449-bf7d-0e9c0916525e",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nBack\nDonor #D10102\nNew\nChange Stage\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Other\nEmail:\nscope-record-7b5d0058-5d62-4b1c-845a-ebcf1ac4eb16@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nNew\n\u2014\nNo activity in this stage.\nContacted\n--\nPre-Screening\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10102",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82",
+    "url": "/donors/ec27c62c-a4a4-444e-ba0b-8e03ed730e82",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nBack\nDonor #D10103\nApproved\nChange Stage\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Approved\nEmail:\nscope-record-f7181b32-0b5c-48e6-9063-ab9e4c83bb0b@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nEdit Info\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\nEdit Info\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nMedical Records Review\n--\nPsychological Screening\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10103",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f",
+    "url": "/donors/9fedf0db-545f-4f7a-8551-d69ab561f71f",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nBack\nDonor #D10104\nApproved\nArchived\nOverview\nNotes\nTasks\nHistory\nContact Information\nName:\nQA Donor Archived\nEmail:\nscope-record-e9f0958f-161d-40eb-a9ad-6c46f3cd2296@example.test\nPhone:\n-\nState:\n-\nSource:\nCreated:\nSep 25, 2026\nDemographics\nDate of Birth:\n-\nRace / Ethnicity:\n-\nHeight:\n-\nWeight:\n-\nBMI:\n-\nPersonal Information\nDonor\nDonor Type:\nEgg Donor\nEducation:\nNot answered\nMarital Status:\nNot provided\nSSN:\n-\nAddress Line 1:\n-\nAddress Line 2:\n-\nCity:\n-\nState:\n-\nPostal Code:\n-\nMedical & Insurance\n\nNo medical or insurance information added yet.\n\nActivity\nShow full journey\nMedical Records Review\n--\nPsychological Screening\n--\nApproved\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nEligibility Checklist\nEducation level:\nNot answered\nUniversity / college:\nNot answered\nNicotine / tobacco use:\nNot answered\nCannabis use:\nNot answered\nInfectious disease / STI history:\nNot answered\nPrevious donation:\nNot answered\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "Donor #D10104",
+      "Donor",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6",
+    "url": "/intended-parents/65d3067b-1ff2-4ee5-983b-014b57f5fcb6",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nBack to intended parents\nQA Intended_Parent Mine\n\nI10101 \u2022 scope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\n\nPropose Match\nChange Stage\nNew\nContact Information\n\nEmail\n\nscope-record-e576dede-43db-4d34-af69-4f5bf611aa9d@example.test\n\nPhone\n\nNot provided\n\nPronouns\n\nNot provided\n\nDate of Birth\n\nNot provided\n\nAddress\n\nNot provided\nMarital Status\nNot provided\nTrust Info\n\nProvider\n\nNot provided\n\nPrimary Contact\n\nNot provided\n\nEmail\n\nNot provided\n\nPhone\n\nNot provided\n\nReference ID\n\nNot provided\n\nFunding Status\n\nNot provided\n\nPortal URL\n\nNot provided\n\nAddress\n\nNot provided\n\nNotes\n\nNot provided\nMedical Information\nEdit Info\n\nNo medical information added yet.\n\nRelated Matches\n\nNo matches yet.\n\nAppointments\nSchedule\n\nNo appointments\n\nCorrespondence\nLink Conversation\n\nNo linked correspondence\n\nNotes\n\n\n\n\nAdd Note\n\nNo notes yet.\n\nTasks\nAdd Task\nOpen\nCompleted\nAll\n\nNo tasks yet.\n\nDocuments\n\nDrag & drop files here, or click to select\n\nPDF, images, Word, Excel \u2022 Max 25 MB\n\nNo documents yet\n\nActivity\nNew\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "QA Intended_Parent Mine",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  },
+  {
+    "role": "developer",
+    "route": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3",
+    "url": "/intended-parents/77a5e488-05ff-4208-a239-ff4d831cc8e3",
+    "text": "Surrogacy Force\nTest Organization\nSearch\nNavigation\nDashboard\nTickets (beta)\nSurrogates\nIntended Parents\nDonors (beta)\nMatches\nTasks & Scheduling\nOperations\nReports\nSettings\nTest Developer\ndeveloper@test.com\nBack to intended parents\nQA Intended_Parent Other\n\nI10102 \u2022 scope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\n\nPropose Match\nChange Stage\nNew\nContact Information\n\nEmail\n\nscope-record-0daff134-822d-41dd-9f95-e3b96214569c@example.test\n\nPhone\n\nNot provided\n\nPronouns\n\nNot provided\n\nDate of Birth\n\nNot provided\n\nAddress\n\nNot provided\nMarital Status\nNot provided\nTrust Info\n\nProvider\n\nNot provided\n\nPrimary Contact\n\nNot provided\n\nEmail\n\nNot provided\n\nPhone\n\nNot provided\n\nReference ID\n\nNot provided\n\nFunding Status\n\nNot provided\n\nPortal URL\n\nNot provided\n\nAddress\n\nNot provided\n\nNotes\n\nNot provided\nMedical Information\nEdit Info\n\nNo medical information added yet.\n\nRelated Matches\n\nNo matches yet.\n\nAppointments\nSchedule\n\nNo appointments\n\nCorrespondence\nLink Conversation\n\nNo linked correspondence\n\nNotes\n\n\n\n\nAdd Note\n\nNo notes yet.\n\nTasks\nAdd Task\nOpen\nCompleted\nAll\n\nNo tasks yet.\n\nDocuments\n\nDrag & drop files here, or click to select\n\nPDF, images, Word, Excel \u2022 Max 25 MB\n\nNo documents yet\n\nActivity\nNew\n\u2014\nNo activity in this stage.\nReady to Match\n--\nMatched\n--\nView full history \u2192\nSearch\n\nSearch across surrogates, intended parents, donors, notes, and files",
+    "headings": [
+      "QA Intended_Parent Other",
+      "Notes",
+      "Tasks",
+      "Documents",
+      "Activity",
+      "Search"
+    ],
+    "errors": [],
+    "failed": [],
+    "overflow": false
+  }
+]

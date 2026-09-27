@@ -1,0 +1,14 @@
+[
+  {
+    "journey": "Admin grants reports",
+    "reviewed_save": true,
+    "persisted": true,
+    "intake_browser_correct": true
+  },
+  {
+    "journey": "Admin removes reports",
+    "reviewed_save": true,
+    "persisted": true,
+    "intake_browser_correct": true
+  }
+]
