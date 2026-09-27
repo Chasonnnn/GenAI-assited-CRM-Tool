@@ -15,6 +15,7 @@ from app.schemas.auth import UserSession
 from app.schemas.interview_appointment import (
     InterviewAppointmentRead,
     InterviewGoogleSyncCheck,
+    InterviewOpenDaysRead,
     InterviewSlotRead,
     InterviewSlotsRead,
     InterviewStageRead,
@@ -32,6 +33,8 @@ from app.services import (
 from app.services.calendar_binding_service import CalendarAvailabilityUnavailable
 
 router = APIRouter()
+# A fixed detail keeps provider text out of the response whatever the exception carries.
+CALENDAR_UNAVAILABLE_DETAIL = "Required Google Calendar availability is unavailable"
 
 
 def _state(db: Session, surrogate, session: UserSession) -> SurrogateInterviewAppointmentState:
@@ -113,20 +116,7 @@ def get_interview_appointment(
     return _state(db, _load(db, session, surrogate_id), session)
 
 
-@router.get(
-    "/{surrogate_id:uuid}/interview-appointment/slots",
-    response_model=InterviewSlotsRead,
-    dependencies=[Depends(require_permission(POLICIES["appointments"].default))],
-)
-def get_interview_slots(
-    surrogate_id: UUID,
-    date_start: Annotated[date, Query(alias="date")],
-    client_timezone: Annotated[str | None, Query()] = None,
-    session: Annotated[UserSession, "fastapi_param"] = Depends(
-        require_permission(POLICIES["surrogates"].actions["change_status"])
-    ),
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-) -> InterviewSlotsRead:
+def _load_for_preview(db: Session, session: UserSession, surrogate_id: UUID):
     surrogate = _load(db, session, surrogate_id)
     if surrogate.is_archived or not can_modify_surrogate(
         surrogate, session.user_id, session.role, db=db, org_id=session.org_id
@@ -142,6 +132,24 @@ def get_interview_slots(
         and appointment.user_id != session.user_id
     ):
         raise HTTPException(403, "Only the appointment owner can manage this interview")
+    return surrogate
+
+
+@router.get(
+    "/{surrogate_id:uuid}/interview-appointment/slots",
+    response_model=InterviewSlotsRead,
+    dependencies=[Depends(require_permission(POLICIES["appointments"].default))],
+)
+def get_interview_slots(
+    surrogate_id: UUID,
+    date_start: Annotated[date, Query(alias="date")],
+    client_timezone: Annotated[str | None, Query()] = None,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["change_status"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> InterviewSlotsRead:
+    surrogate = _load_for_preview(db, session, surrogate_id)
     try:
         timezone, slots = surrogate_interview_appointment_service.preview_slots(
             db,
@@ -152,13 +160,46 @@ def get_interview_slots(
             client_timezone=client_timezone,
         )
     except CalendarAvailabilityUnavailable as exc:
-        raise HTTPException(503, str(exc)) from exc
+        raise HTTPException(503, CALENDAR_UNAVAILABLE_DETAIL) from exc
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return InterviewSlotsRead(
         timezone=timezone,
         slots=[InterviewSlotRead(start=slot.start, end=slot.end) for slot in slots],
     )
+
+
+@router.get(
+    "/{surrogate_id:uuid}/interview-appointment/open-days",
+    response_model=InterviewOpenDaysRead,
+    dependencies=[Depends(require_permission(POLICIES["appointments"].default))],
+)
+def get_interview_open_days(
+    surrogate_id: UUID,
+    date_start: Annotated[date, Query()],
+    date_end: Annotated[date, Query()],
+    client_timezone: Annotated[str | None, Query()] = None,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["surrogates"].actions["change_status"])
+    ),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> InterviewOpenDaysRead:
+    surrogate = _load_for_preview(db, session, surrogate_id)
+    try:
+        timezone, dates = surrogate_interview_appointment_service.preview_open_days(
+            db,
+            surrogate=surrogate,
+            org_id=session.org_id,
+            actor_user_id=session.user_id,
+            date_start=date_start,
+            date_end=date_end,
+            client_timezone=client_timezone,
+        )
+    except CalendarAvailabilityUnavailable as exc:
+        raise HTTPException(503, CALENDAR_UNAVAILABLE_DETAIL) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return InterviewOpenDaysRead(timezone=timezone, dates=dates)
 
 
 @router.post(
