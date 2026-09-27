@@ -13,12 +13,19 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
+import { LoadErrorState } from "@/components/error-state"
 import type { PlatformAlert } from "@/lib/api/platform"
-import { ALERT_SEVERITY_BADGES, ALERT_STATUS_BADGES } from "@/components/ops/agencies/agency-constants"
+import {
+    ALERT_SEVERITY_BADGES,
+    ALERT_STATUS_BADGES,
+    getAlertSeverityLabel,
+    getAlertStatusLabel,
+} from "@/components/ops/agencies/agency-constants"
 
 type AgencyAlertsTabProps = {
     orgAlerts: PlatformAlert[]
     alertsLoading: boolean
+    alertsError?: boolean
     alertsUpdating: string | null
     onRefresh: () => void
     onAcknowledge: (alertId: string) => void
@@ -28,6 +35,7 @@ type AgencyAlertsTabProps = {
 export function AgencyAlertsTab({
     orgAlerts,
     alertsLoading,
+    alertsError = false,
     alertsUpdating,
     onRefresh,
     onAcknowledge,
@@ -42,7 +50,13 @@ export function AgencyAlertsTab({
                 </Button>
             </CardHeader>
             <CardContent>
-                {alertsLoading ? (
+                {alertsError && !alertsLoading ? (
+                    <LoadErrorState
+                        title="Couldn't load alerts"
+                        onRetry={onRefresh}
+                        className="min-h-0 py-10"
+                    />
+                ) : alertsLoading ? (
                     <div className="flex items-center justify-center py-10">
                         <Loader2 className="size-6 animate-spin text-muted-foreground" />
                     </div>
@@ -78,7 +92,7 @@ export function AgencyAlertsTab({
                                             variant="outline"
                                             className={ALERT_SEVERITY_BADGES[alert.severity]}
                                         >
-                                            {alert.severity}
+                                            {getAlertSeverityLabel(alert.severity)}
                                         </Badge>
                                     </TableCell>
                                     <TableCell>
@@ -86,7 +100,7 @@ export function AgencyAlertsTab({
                                             variant="outline"
                                             className={ALERT_STATUS_BADGES[alert.status]}
                                         >
-                                            {alert.status}
+                                            {getAlertStatusLabel(alert.status)}
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">

@@ -34,14 +34,18 @@ import {
     usePlatformEmailStatus,
     useRequestPlatformEmailReadinessCheck,
 } from '@/lib/hooks/use-platform-email';
-import { getErrorMessage } from '@/lib/error-utils';
+import { getErrorMessage, isNotFoundError } from '@/lib/error-utils';
+import { QueryErrorState } from '@/components/error-state';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AgencyOverviewTab } from '@/components/ops/agencies/AgencyOverviewTab';
 import { AgencyUsersTab } from '@/components/ops/agencies/AgencyUsersTab';
 import { AgencyInvitesTab } from '@/components/ops/agencies/AgencyInvitesTab';
-import { AgencySubscriptionTab } from '@/components/ops/agencies/AgencySubscriptionTab';
+import {
+    AgencySubscriptionTab,
+    type SubscriptionLoadStatus,
+} from '@/components/ops/agencies/AgencySubscriptionTab';
 import { AgencyAlertsTab } from '@/components/ops/agencies/AgencyAlertsTab';
 import { AgencyAuditTab } from '@/components/ops/agencies/AgencyAuditTab';
 import { SupportSessionDialog } from '@/components/ops/agencies/SupportSessionDialog';
@@ -49,15 +53,18 @@ import {
     INVITE_ROLE_OPTIONS,
     PLAN_BADGE_VARIANTS,
     STATUS_BADGE_VARIANTS,
+    getSubscriptionPlanLabel,
+    getSubscriptionStatusLabel,
     type InviteRole,
 } from '@/components/ops/agencies/agency-constants';
-import { ChevronRight, Globe, Loader2, AlertTriangle } from 'lucide-react';
+import { ChevronRight, Globe, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
 
 
 type AgencyDetailData = {
     org: OrganizationDetail;
     subscription: OrganizationSubscription | null;
+    subscriptionStatus: SubscriptionLoadStatus;
     members: OrgMember[];
     invites: OrgInvite[];
     actionLogs: AdminActionLog[];
@@ -74,6 +81,7 @@ function useAgencyDetailController() {
     const [activeTab, setActiveTab] = useState('overview');
     const [alertsUpdating, setAlertsUpdating] = useState<string | null>(null);
     const [mfaResetting, setMfaResetting] = useState<string | null>(null);
+    const [memberReactivating, setMemberReactivating] = useState<string | null>(null);
     const [inviteOpen, setInviteOpen] = useState(false);
     const [inviteSubmitting, setInviteSubmitting] = useState(false);
     const [inviteForm, setInviteForm] = useState<{ email: string; role: InviteRole }>({
@@ -94,26 +102,29 @@ function useAgencyDetailController() {
     const agencyDetailQuery = useQuery({
         queryKey: agencyDetailQueryKey,
         queryFn: async (): Promise<AgencyDetailData> => {
-            try {
-                const [orgData, subData, membersData, invitesData, logsData] = await Promise.all([
-                    getOrganization(orgId),
-                    getSubscription(orgId).catch(() => null),
-                    listMembers(orgId),
-                    listInvites(orgId),
-                    getAdminActionLogs(orgId, { limit: 20 }),
-                ]);
-                return {
-                    org: orgData,
-                    subscription: subData,
-                    members: membersData,
-                    invites: invitesData,
-                    actionLogs: logsData.items,
-                };
-            } catch (error) {
-                console.error('Failed to fetch agency data:', error);
-                toast.error('Failed to load agency details');
-                throw error;
-            }
+            const [orgData, subscriptionResult, membersData, invitesData, logsData] = await Promise.all([
+                getOrganization(orgId),
+                // A missing subscription row is a normal state; any other failure is shown in the tab.
+                getSubscription(orgId).then(
+                    (subscription) => ({ subscription, subscriptionStatus: 'found' as const }),
+                    (error: unknown) => ({
+                        subscription: null,
+                        subscriptionStatus: isNotFoundError(error)
+                            ? ('missing' as const)
+                            : ('error' as const),
+                    }),
+                ),
+                listMembers(orgId),
+                listInvites(orgId),
+                getAdminActionLogs(orgId, { limit: 20 }),
+            ]);
+            return {
+                org: orgData,
+                ...subscriptionResult,
+                members: membersData,
+                invites: invitesData,
+                actionLogs: logsData.items,
+            };
         },
         retry: false,
         staleTime: 30_000,
@@ -142,13 +153,7 @@ function useAgencyDetailController() {
         queryKey: orgAlertsQueryKey,
         queryFn: async () => {
             if (!orgId) return { items: [], total: 0 };
-        try {
-                return await listAlerts({ org_id: orgId });
-        } catch (error) {
-                console.error('Failed to fetch org alerts:', error);
-                toast.error('Failed to load organization alerts');
-                throw error;
-        }
+            return await listAlerts({ org_id: orgId });
         },
         retry: false,
         staleTime: 30_000,
@@ -298,6 +303,26 @@ function useAgencyDetailController() {
         }
     };
 
+    const handleReactivateMember = async (memberId: string) => {
+        setMemberReactivating(memberId);
+        try {
+            await updateMember(orgId, memberId, { is_active: true });
+            updateAgencyDetail((current) => ({
+                ...current,
+                members: current.members.map((member) =>
+                    member.id === memberId
+                        ? { ...member, is_active: true }
+                        : member
+                ),
+            }));
+            toast.success('Member reactivated');
+        } catch (error) {
+            console.error('Failed to reactivate member:', error);
+            toast.error(getErrorMessage(error, 'Failed to reactivate member'));
+        }
+        setMemberReactivating(null);
+    };
+
     const handleRevokeInvite = async (inviteId: string) => {
         try {
             await revokeInvite(orgId, inviteId);
@@ -426,8 +451,15 @@ function useAgencyDetailController() {
         return { status: 'loading' as const };
     }
 
-    if (!org) {
-        return { status: 'missing' as const };
+    if (agencyDetailQuery.isError || !org) {
+        return {
+            status: 'error' as const,
+            error: agencyDetailQuery.error,
+            isRetrying: agencyDetailQuery.isFetching,
+            retry: () => {
+                void agencyDetailQuery.refetch();
+            },
+        };
     }
 
     const isDeleted = Boolean(org.deleted_at);
@@ -437,6 +469,7 @@ function useAgencyDetailController() {
         status: 'ready' as const,
         actionLogs,
         activeTab,
+        alertsError: alertsQuery.isError,
         alertsLoading,
         alertsUpdating,
         deleteSubmitting,
@@ -447,6 +480,7 @@ function useAgencyDetailController() {
         handleDeleteOrganization,
         handleExtendSubscription,
         handlePurgeOrganization,
+        handleReactivateMember,
         handleResetMfa,
         handleResendInvite,
         handleResolveAlert,
@@ -461,6 +495,7 @@ function useAgencyDetailController() {
         inviteSubmitting,
         invites,
         isDeleted,
+        memberReactivating,
         members,
         mfaResetting,
         notesDirty,
@@ -469,6 +504,10 @@ function useAgencyDetailController() {
         openAlertCount,
         org,
         orgAlerts,
+        refetchAgency: () => {
+            void agencyDetailQuery.refetch();
+        },
+        agencyRefetching: agencyDetailQuery.isFetching,
         platformEmailCheckError: platformEmailReadinessCheck.isError,
         platformEmailCheckPending: platformEmailReadinessCheck.isPending,
         platformEmailReadiness,
@@ -485,6 +524,7 @@ function useAgencyDetailController() {
         setInviteOpen,
         setNotesDraft,
         subscription,
+        subscriptionStatus: agencyDetail?.subscriptionStatus ?? 'missing',
     };
 }
 
@@ -501,13 +541,34 @@ function AgencyDetailLoadingState() {
     );
 }
 
-function AgencyDetailMissingState() {
+function AgencyDetailErrorState({
+    error,
+    isRetrying,
+    onRetry,
+}: {
+    error: unknown;
+    isRetrying: boolean;
+    onRetry: () => void;
+}) {
     return (
         <div className="p-6">
-            <div className="text-center py-16">
-                <AlertTriangle className="size-12 mx-auto mb-4 text-muted-foreground/50" />
-                <h3 className="text-lg font-medium">Agency not found</h3>
-            </div>
+            <QueryErrorState
+                error={error}
+                onRetry={onRetry}
+                isRetrying={isRetrying}
+                title="Couldn't load agency"
+                forbidden={{
+                    description: 'This account cannot view this agency.',
+                    secondaryHref: '/ops/agencies',
+                    secondaryLabel: 'Back to Agencies',
+                }}
+                notFound={{
+                    title: 'Agency not found',
+                    backHref: '/ops/agencies',
+                    backLabel: 'Back to Agencies',
+                }}
+                headingLevel={1}
+            />
         </div>
     );
 }
@@ -522,39 +583,39 @@ function AgencyDetailHeader({ controller }: { controller: ReadyAgencyDetailContr
     } = controller;
 
     return (
-        <div className="border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900">
+        <div className="border-b border-border bg-card">
             <div className="px-6 py-4">
-                <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 mb-2">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                     <Link
                         href="/ops/agencies"
-                        className="hover:text-stone-900 dark:hover:text-stone-100"
+                        className="hover:text-foreground"
                     >
                         Agencies
                     </Link>
                     <ChevronRight className="size-4" />
-                    <span className="text-stone-900 dark:text-stone-100">{org.name}</span>
+                    <span className="text-foreground">{org.name}</span>
                 </div>
 
-                <div className="flex items-start justify-between">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <div className="flex items-center gap-3">
-                            <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
+                            <h1 className="text-2xl font-semibold text-foreground">
                                 {org.name}
                             </h1>
                             <Badge
                                 variant="outline"
                                 className={STATUS_BADGE_VARIANTS[org.subscription_status]}
                             >
-                                {org.subscription_status}
+                                {getSubscriptionStatusLabel(org.subscription_status)}
                             </Badge>
                             {isDeleted && <Badge variant="destructive">Deletion scheduled</Badge>}
                         </div>
-                        <div className="flex items-center gap-4 mt-1 text-sm text-stone-500 dark:text-stone-400">
+                        <div className="flex flex-wrap items-center gap-4 mt-1 text-sm text-muted-foreground">
                             <span className="font-mono">{org.slug}</span>
                             <CopyButton
                                 variant="ghost"
                                 size="sm"
-                                className="h-6 px-2 text-xs text-stone-500"
+                                className="h-6 px-2 text-xs text-muted-foreground"
                                 iconClassName="size-3 mr-1"
                                 value={org.id}
                             >
@@ -578,7 +639,7 @@ function AgencyDetailHeader({ controller }: { controller: ReadyAgencyDetailContr
                             variant="outline"
                             className={PLAN_BADGE_VARIANTS[org.subscription_plan]}
                         >
-                            {org.subscription_plan} plan
+                            {getSubscriptionPlanLabel(org.subscription_plan)} plan
                         </Badge>
                         <SupportSessionDialog
                             orgId={org.id}
@@ -620,6 +681,8 @@ function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailC
     const {
         actionLogs,
         activeTab,
+        agencyRefetching,
+        alertsError,
         alertsLoading,
         alertsUpdating,
         deleteSubmitting,
@@ -630,6 +693,7 @@ function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailC
         handleDeleteOrganization,
         handleExtendSubscription,
         handlePurgeOrganization,
+        handleReactivateMember,
         handleResetMfa,
         handleResendInvite,
         handleResolveAlert,
@@ -644,6 +708,7 @@ function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailC
         inviteSubmitting,
         invites,
         isDeleted,
+        memberReactivating,
         members,
         mfaResetting,
         notesDirty,
@@ -651,6 +716,7 @@ function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailC
         notesSaving,
         org,
         orgAlerts,
+        refetchAgency,
         platformEmailCheckError,
         platformEmailCheckPending,
         platformEmailReadiness,
@@ -667,6 +733,7 @@ function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailC
         setInviteOpen,
         setNotesDraft,
         subscription,
+        subscriptionStatus,
     } = controller;
 
     return (
@@ -691,8 +758,10 @@ function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailC
                         members={members}
                         orgName={org.name}
                         mfaResetting={mfaResetting}
+                        reactivating={memberReactivating}
                         onResetMfa={handleResetMfa}
                         onDeactivateMember={handleDeactivateMember}
+                        onReactivateMember={handleReactivateMember}
                     />
                 </TabsContent>
 
@@ -731,6 +800,9 @@ function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailC
                 <TabsContent value="subscription" className="mt-0 space-y-6">
                     <AgencySubscriptionTab
                         subscription={subscription}
+                        subscriptionStatus={subscriptionStatus}
+                        isRetrying={agencyRefetching}
+                        onRetry={refetchAgency}
                         notesDraft={notesDraft}
                         notesDirty={notesDirty}
                         notesSaving={notesSaving}
@@ -745,6 +817,7 @@ function AgencyDetailTabContent({ controller }: { controller: ReadyAgencyDetailC
                     <AgencyAlertsTab
                         orgAlerts={orgAlerts}
                         alertsLoading={alertsLoading}
+                        alertsError={alertsError}
                         alertsUpdating={alertsUpdating}
                         onRefresh={fetchOrgAlerts}
                         onAcknowledge={handleAcknowledgeAlert}
@@ -767,8 +840,14 @@ export default function AgencyDetailPage() {
         return <AgencyDetailLoadingState />;
     }
 
-    if (controller.status === 'missing') {
-        return <AgencyDetailMissingState />;
+    if (controller.status === 'error') {
+        return (
+            <AgencyDetailErrorState
+                error={controller.error}
+                isRetrying={controller.isRetrying}
+                onRetry={controller.retry}
+            />
+        );
     }
 
     return (
