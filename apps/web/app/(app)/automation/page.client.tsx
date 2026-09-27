@@ -21,7 +21,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
     PlusIcon,
     MoreVerticalIcon,
@@ -41,6 +40,7 @@ import {
     AlertCircleIcon,
     BuildingIcon,
     SparklesIcon,
+    HistoryIcon,
 } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -68,7 +68,10 @@ import type {
     WorkflowExecution,
 } from "@/lib/api/workflows"
 import { useAuth } from "@/lib/auth-context"
-import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+import { isPermissionError } from "@/lib/error-utils"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
+import { EmptyState } from "@/components/empty-state"
+import { WizardStepper } from "@/components/automation/wizard-stepper"
 import { useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { ApiError } from "@/lib/api"
@@ -803,8 +806,16 @@ function testWorkflowReducer(state: TestWorkflowState, action: TestWorkflowActio
     }
 }
 
-function parseServerErrors(error: unknown): string[] {
+const WORKFLOW_WIZARD_STEPS = ["Trigger", "Conditions", "Actions", "Review"] as const
+
+function parseServerErrors(
+    error: unknown,
+    { forbiddenMessage }: { forbiddenMessage: string },
+): string[] {
+    // A 403 detail names internal permission keys; show one plain sentence instead.
+    if (isPermissionError(error)) return [forbiddenMessage]
     if (error instanceof ApiError) {
+        if (error.status >= 500) return ["Couldn't save the workflow. Try again."]
         if (error.message) {
             const messages: string[] = []
             for (const rawMessage of error.message.split(";")) {
@@ -874,10 +885,9 @@ function useAutomationPageView({
 }: AutomationPageClientProps) {
     const { push } = useRouter()
     const { user } = useAuth()
-    const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
-    const permissions = effectivePermissions?.permissions || []
-    const canUseAI = Boolean(user?.ai_enabled) && permissions.includes("use_ai_assistant")
-    const canManageAutomation = permissions.includes("manage_automation")
+    const { can } = usePermissionCheck()
+    const canUseAI = Boolean(user?.ai_enabled) && can("use_ai_assistant")
+    const canManageAutomation = can("manage_automation")
     const [activeTab] = useState(initialTab)
 
     const [workflowScopeSelection, setWorkflowScopeSelection] = useState<{
@@ -980,6 +990,8 @@ function useAutomationPageView({
 
     const isTemplatesTab = workflowScopeTab === "templates"
     const activeWorkflowScope: WorkflowScope = workflowScopeTab === "templates" ? "personal" : workflowScopeTab
+    // POST /workflows with scope "org" requires manage_automation; personal workflows do not.
+    const canCreateInActiveScope = activeWorkflowScope !== "org" || canManageAutomation
 
     const workflowSetupSessionIdRef = useRef<string | null>(null)
 
@@ -1016,6 +1028,7 @@ function useAutomationPageView({
     const updateFields = options?.update_fields ?? []
     const conditionOperators = options?.condition_operators ?? []
     const { data: executions } = useWorkflowExecutions(selectedWorkflowId || "", { limit: 20 })
+    const historyWorkflowName = workflows?.find((workflow) => workflow.id === selectedWorkflowId)?.name
 
     const stageIdOptions: SelectOption[] = statusOptions.map((status) => ({
         value: status.id ?? status.value,
@@ -1337,7 +1350,12 @@ function useAutomationPageView({
                 { id: editingWorkflowId, data: updateData },
                 {
                     onSuccess: () => resetWizard(),
-                    onError: (error) => setServerErrors(parseServerErrors(error)),
+                    onError: (error) =>
+                        setServerErrors(
+                            parseServerErrors(error, {
+                                forbiddenMessage: "You don't have permission to change this workflow",
+                            }),
+                        ),
                 }
             )
         } else {
@@ -1346,7 +1364,15 @@ function useAutomationPageView({
                     completeWorkflowSetup(workflowSetupSessionIdRef.current, workflowScope)
                     resetWizard()
                 },
-                onError: (error) => setServerErrors(parseServerErrors(error)),
+                onError: (error) =>
+                    setServerErrors(
+                        parseServerErrors(error, {
+                            forbiddenMessage:
+                                workflowScope === "org"
+                                    ? "You don't have permission to create organization workflows"
+                                    : "You don't have permission to create workflows",
+                        }),
+                    ),
             })
         }
     }
@@ -1431,6 +1457,8 @@ function useAutomationPageView({
                 activeTab={activeTab}
                 onOpenExecutions={() => push("/automation/executions")}
                 onCreateTemplate={() => handleOpenTemplateModal()}
+                canViewExecutions={canManageAutomation}
+                onCreateWorkflow={isTemplatesTab ? () => handleCreate("personal") : undefined}
             />
 
             {/* Main Content */}
@@ -1464,9 +1492,9 @@ function useAutomationPageView({
                                     Workflow Templates
                                 </TabsTrigger>
                             </TabsList>
-                            {!isTemplatesTab && (
+                            {!isTemplatesTab && canCreateInActiveScope && (
                                 <div className="flex items-center gap-2">
-                                    {canUseAI && !(activeWorkflowScope === "org" && !canManageAutomation) ? (
+                                    {canUseAI ? (
                                         <Button
                                             variant="outline"
                                             title="Generate workflow with AI"
@@ -1483,11 +1511,7 @@ function useAutomationPageView({
                                         <Button
                                             variant="outline"
                                             disabled
-                                            title={
-                                                !canUseAI
-                                                    ? "AI is disabled or permission is missing"
-                                                    : "Requires manage automation permission"
-                                            }
+                                            title="AI is disabled or permission is missing"
                                         >
                                             <SparklesIcon className="mr-2 size-4" />
                                             Generate with AI
@@ -1510,31 +1534,26 @@ function useAutomationPageView({
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
                         ) : !workflows?.length ? (
-                            <Card>
-                                <CardContent className="flex flex-col items-center justify-center py-12">
-                                    {activeWorkflowScope === "personal" ? (
-                                        <UserIcon className="size-12 text-muted-foreground/50" />
-                                    ) : (
-                                        <BuildingIcon className="size-12 text-muted-foreground/50" />
-                                    )}
-                                    <h3 className="mt-4 text-lg font-medium">
-                                        {activeWorkflowScope === "personal"
+                            <Card className="py-0">
+                                <EmptyState
+                                    icon={activeWorkflowScope === "personal" ? UserIcon : BuildingIcon}
+                                    title={
+                                        activeWorkflowScope === "personal"
                                             ? "No personal workflows yet"
-                                            : "No org workflows yet"}
-                                    </h3>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        {activeWorkflowScope === "personal"
-                                            ? "Create personal workflows to automate your tasks"
-                                            : "Create organization workflows visible to all team members"
-                                        }
-                                    </p>
-                                    <Button className="mt-4" onClick={() => handleCreate(activeWorkflowScope)}>
-                                        <PlusIcon className="mr-2 size-4" />
-                                        {activeWorkflowScope === "personal"
-                                            ? "Create Workflow"
-                                            : "Create Org Workflow"}
-                                    </Button>
-                                </CardContent>
+                                            : "No org workflows yet"
+                                    }
+                                    headingLevel={3}
+                                    action={
+                                        canCreateInActiveScope ? (
+                                            <Button onClick={() => handleCreate(activeWorkflowScope)}>
+                                                <PlusIcon className="mr-2 size-4" />
+                                                {activeWorkflowScope === "personal"
+                                                    ? "Create Workflow"
+                                                    : "Create Org Workflow"}
+                                            </Button>
+                                        ) : undefined
+                                    }
+                                />
                             </Card>
                         ) : (
                             workflows.toSorted((a, b) => {
@@ -1546,14 +1565,14 @@ function useAutomationPageView({
                                 const IconComponent = triggerIcons[workflow.trigger_type] || WorkflowIcon
                                 const canEdit = workflow.can_edit !== false
                                 return (
-                                    <Card key={workflow.id}>
-                                        <CardContent className="flex items-center justify-between p-6">
-                                            <div className="flex items-start gap-4">
-                                                <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
-                                                    <IconComponent className="size-6" />
+                                    <Card key={workflow.id} className="py-0">
+                                        <CardContent className="flex items-center justify-between gap-4 px-4 py-3">
+                                            <div className="flex min-w-0 items-start gap-3">
+                                                <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
+                                                    <IconComponent className="size-5" />
                                                 </div>
 
-                                                <div className="flex-1">
+                                                <div className="min-w-0 flex-1">
                                                     <div className="flex items-center gap-2">
                                                         <h3 className="font-semibold">{workflow.name}</h3>
                                                         {workflow.owner_name && (
@@ -1563,8 +1582,8 @@ function useAutomationPageView({
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <p className="text-sm text-muted-foreground">{workflow.description || "No description"}</p>
-                                                    <div className="mt-2 flex items-center gap-3">
+                                                    <p className="truncate text-sm text-muted-foreground">{workflow.description || "No description"}</p>
+                                                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                                                         <Badge variant="outline" className="text-xs">
                                                             {WORKFLOW_SUBJECT_LABELS[workflow.subject_type ?? "surrogate"]}
                                                         </Badge>
@@ -1634,30 +1653,12 @@ function useAutomationPageView({
                 </div>
             </div>
             <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent size="3xl">
                     <DialogHeader>
                         <DialogTitle>{editingWorkflowId ? "Edit Workflow" : "Create Workflow"}</DialogTitle>
-                        <DialogDescription>Step {wizardStep} of 4</DialogDescription>
                     </DialogHeader>
 
-                    {/* Step Progress */}
-                    <div className="flex items-center justify-between w-full">
-                        {[1, 2, 3, 4].map((step, index) => (
-                            <div key={step} className={`flex items-center ${index < 3 ? 'flex-1' : 'flex-none'}`}>
-                                <div
-                                    className={`flex size-8 items-center justify-center rounded-full text-sm font-medium ${step === wizardStep
-                                        ? "bg-teal-500 text-white"
-                                        : step < wizardStep
-                                            ? "bg-teal-500/20 text-teal-500"
-                                            : "bg-muted text-muted-foreground"
-                                        }`}
-                                >
-                                    {step}
-                                </div>
-                                {step < 4 && <div className="mx-2 h-0.5 flex-1 bg-muted" />}
-                            </div>
-                        ))}
-                    </div>
+                    <WizardStepper steps={WORKFLOW_WIZARD_STEPS} currentStep={wizardStep} />
 
                     <div className="py-4">
                         {/* Step 1: Trigger */}
@@ -2083,12 +2084,15 @@ function useAutomationPageView({
                                         {conditions.map((condition, index) => (
                                             <Card key={condition.clientId}>
                                                 <CardContent className="space-y-3 p-4">
-                                                    <div className="flex items-center gap-3">
+                                                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_9rem_minmax(0,1fr)_auto] sm:gap-3">
                                                         <Select
                                                             value={condition.field}
                                                             onValueChange={(v) => v && updateCondition(index, { field: v })}
                                                         >
-                                                            <SelectTrigger className="flex-1">
+                                                            <SelectTrigger
+                                                                aria-label={`Condition ${index + 1} field`}
+                                                                className="w-full"
+                                                            >
                                                                 <SelectValue placeholder="Field">
                                                                     {(value: string | null) => {
                                                                         if (!value) return "Field"
@@ -2106,7 +2110,10 @@ function useAutomationPageView({
                                                             value={condition.operator}
                                                             onValueChange={(v) => v && updateCondition(index, { operator: v })}
                                                         >
-                                                            <SelectTrigger className="w-32">
+                                                            <SelectTrigger
+                                                                aria-label={`Condition ${index + 1} operator`}
+                                                                className="col-span-2 w-full sm:col-span-1"
+                                                            >
                                                                 <SelectValue placeholder="Operator">
                                                                     {(value: string | null) => {
                                                                         if (!value) return "Operator"
@@ -2121,15 +2128,18 @@ function useAutomationPageView({
                                                                 ))}
                                                             </SelectContent>
                                                         </Select>
-                                                        <ConditionValueInput
-                                                            condition={condition}
-                                                            options={getConditionOptions(condition.field)}
-                                                            onChange={(value) => updateCondition(index, { value })}
-                                                        />
+                                                        <div className="col-span-2 flex min-w-0 sm:col-span-1">
+                                                            <ConditionValueInput
+                                                                condition={condition}
+                                                                options={getConditionOptions(condition.field)}
+                                                                onChange={(value) => updateCondition(index, { value })}
+                                                            />
+                                                        </div>
                                                         <Button
                                                             size="icon"
                                                             variant="ghost"
                                                             aria-label="Remove condition"
+                                                            className="col-start-2 row-start-1 sm:col-start-auto sm:row-start-auto"
                                                             onClick={() => removeCondition(index)}
                                                         >
                                                             <XIcon className="size-4" />
@@ -2203,25 +2213,30 @@ function useAutomationPageView({
                                                 </div>
                                                 {action.action_type === "send_email" && (
                                                     <div className="space-y-3">
-                                                        <Select
-                                                            value={typeof action.template_id === "string" ? action.template_id : ""}
-                                                            onValueChange={(v) => v && updateAction(index, { template_id: v })}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Select email template">
-                                                                    {(value: string | null) => {
-                                                                        if (!value) return "Select email template"
-                                                                        const template = options?.email_templates.find(t => t.id === value)
-                                                                        return template?.name ?? "Unknown template"
-                                                                    }}
-                                                                </SelectValue>
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {options?.email_templates.map((t) => (
-                                                                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                        <div className="grid gap-2">
+                                                            <Label htmlFor={`workflow-action-${action.clientId}-email-template`}>
+                                                                Email template
+                                                            </Label>
+                                                            <Select
+                                                                value={typeof action.template_id === "string" ? action.template_id : ""}
+                                                                onValueChange={(v) => v && updateAction(index, { template_id: v })}
+                                                            >
+                                                                <SelectTrigger id={`workflow-action-${action.clientId}-email-template`}>
+                                                                    <SelectValue placeholder="Select email template">
+                                                                        {(value: string | null) => {
+                                                                            if (!value) return "Select email template"
+                                                                            const template = options?.email_templates.find(t => t.id === value)
+                                                                            return template?.name ?? "Unknown template"
+                                                                        }}
+                                                                    </SelectValue>
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {options?.email_templates.map((t) => (
+                                                                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
                                                         <div className="grid gap-2">
                                                             <Label>Recipient</Label>
                                                             <Select
@@ -2696,32 +2711,40 @@ function useAutomationPageView({
                                         </div>
                                     </div>
                                 </div>
-                                {!workflowValidationError && !hasServerErrors ? (
-                                    <div className="flex items-center gap-2 rounded-lg border border-teal-500/20 bg-teal-500/5 p-3 text-sm">
-                                        <CheckCircle2Icon className="size-4 text-teal-500" />
-                                        <span>Ready to activate workflow</span>
-                                    </div>
-                                ) : (
+                                {/* Server errors render once below; this row reflects only client validation. */}
+                                {workflowValidationError ? (
                                     <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm">
                                         <AlertCircleIcon className="size-4 text-destructive" />
                                         <span>Please fill in all required fields</span>
                                     </div>
-                                )}
+                                ) : !hasServerErrors ? (
+                                    <div className="flex items-center gap-2 rounded-lg border border-teal-500/20 bg-teal-500/5 p-3 text-sm">
+                                        <CheckCircle2Icon className="size-4 text-teal-500" />
+                                        <span>Ready to activate workflow</span>
+                                    </div>
+                                ) : null}
                             </div>
                         )}
                     </div>
 
                     {hasServerErrors && (
-                        <div className="mt-4 flex items-start gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm">
+                        <div
+                            role="alert"
+                            className="mt-4 flex items-start gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm"
+                        >
                             <AlertCircleIcon className="mt-0.5 size-4 text-destructive" />
-                            <div className="space-y-2">
-                                <p className="font-medium text-destructive">Fix these errors</p>
-                                <ul className="space-y-1 text-xs text-destructive">
-                                    {serverErrors.map((message) => (
-                                        <li key={message}>• {message}</li>
-                                    ))}
-                                </ul>
-                            </div>
+                            {serverErrors.length === 1 ? (
+                                <p className="text-destructive">{serverErrors[0]}</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    <p className="font-medium text-destructive">Fix these errors</p>
+                                    <ul className="space-y-1 text-xs text-destructive">
+                                        {serverErrors.map((message) => (
+                                            <li key={message}>• {message}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                         </div>
                     )}
                     {validationError && (
@@ -2764,7 +2787,7 @@ function useAutomationPageView({
 
             {/* Email Template Modal */}
             <Dialog open={isTemplateModalOpen} onOpenChange={handleTemplateModalOpenChange}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent size="2xl">
                     <DialogHeader>
                         <DialogTitle>{editingTemplate ? "Edit Template" : "New Email Template"}</DialogTitle>
                     </DialogHeader>
@@ -2830,15 +2853,16 @@ function useAutomationPageView({
 
             {/* Execution History Dialog */}
             <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
-                <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
+                <DialogContent size="2xl" className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0">
                     <DialogHeader className="shrink-0 border-b px-6 py-5 pr-14">
-                        <DialogTitle>Execution History</DialogTitle>
-                        <DialogDescription>Recent workflow execution logs</DialogDescription>
+                        <DialogTitle>
+                            {historyWorkflowName ? `History: ${historyWorkflowName}` : "History"}
+                        </DialogTitle>
                     </DialogHeader>
-                    <ScrollArea className="h-[min(70dvh,40rem)] min-h-0">
+                    <div className="max-h-[min(70dvh,40rem)] min-h-0 overflow-y-auto">
                         <div className="space-y-4 p-6">
                             {!executions?.items?.length ? (
-                                <p className="text-sm text-muted-foreground">No execution history yet</p>
+                                <EmptyState icon={HistoryIcon} title="No runs yet" className="py-6" />
                             ) : (
                                 executions.items.map((execution, index) => (
                                     <div key={execution.id} className="relative">
@@ -2884,13 +2908,13 @@ function useAutomationPageView({
                                 ))
                             )}
                         </div>
-                    </ScrollArea>
+                    </div>
                 </DialogContent>
             </Dialog>
 
             {/* Test Workflow Dialog */}
             <Dialog open={showTestModal} onOpenChange={handleTestDialogOpenChange}>
-                <DialogContent className="max-w-lg">
+                <DialogContent size="lg">
                     <DialogHeader>
                         <DialogTitle>Test Workflow</DialogTitle>
                         <DialogDescription>

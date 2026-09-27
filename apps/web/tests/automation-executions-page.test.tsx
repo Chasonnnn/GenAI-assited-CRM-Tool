@@ -8,6 +8,18 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 })
 
 import WorkflowExecutionsPage from '../app/(app)/automation/executions/page'
+import { ApiError } from '@/lib/api'
+
+let mockPermissions = new Set(['manage_automation'])
+vi.mock('@/lib/hooks/use-permission-check', () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockPermissions.has(permission),
+    }),
+}))
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({
@@ -59,6 +71,7 @@ const mockExecution = {
 describe('WorkflowExecutionsPage', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mockPermissions = new Set(['manage_automation'])
         ;(useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
             if (queryKey[0] === 'workflow-executions') {
                 return { data: { items: [mockExecution], total: 1 }, isLoading: false, error: null }
@@ -75,6 +88,41 @@ describe('WorkflowExecutionsPage', () => {
             }
             return { data: null, isLoading: false, error: null }
         })
+    })
+
+    it('shows a denied state and sends no execution requests without manage_automation', () => {
+        mockPermissions = new Set()
+
+        render(<WorkflowExecutionsPage />)
+
+        expect(screen.getByText('No access to workflow executions')).toBeInTheDocument()
+        expect(screen.queryByText('Success Rate')).not.toBeInTheDocument()
+        expect(screen.queryByText('No executions found')).not.toBeInTheDocument()
+        expect(screen.getByRole('link', { name: 'Back to Workflows' })).toHaveAttribute('href', '/automation')
+        const calls = (useQuery as ReturnType<typeof vi.fn>).mock.calls.map(([options]) => options)
+        expect(calls.length).toBeGreaterThan(0)
+        expect(calls.every((options) => options.enabled === false)).toBe(true)
+    })
+
+    it('renders a 403 from the executions request as the denied state', () => {
+        ;(useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+            if (queryKey[0] === 'workflow-executions') {
+                return {
+                    data: undefined,
+                    isLoading: false,
+                    isError: true,
+                    isFetching: false,
+                    error: new ApiError(403, 'Forbidden', 'Cannot view org executions'),
+                    refetch: vi.fn(),
+                }
+            }
+            return { data: undefined, isLoading: false, error: null }
+        })
+
+        render(<WorkflowExecutionsPage />)
+
+        expect(screen.getByText('No access to workflow executions')).toBeInTheDocument()
+        expect(screen.queryByText('Cannot view org executions')).not.toBeInTheDocument()
     })
 
     it('renders action details from execution results', () => {

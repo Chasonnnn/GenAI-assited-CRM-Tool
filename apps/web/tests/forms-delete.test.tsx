@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import FormsListPage from "../app/(app)/automation/forms/page"
+import { ApiError } from "@/lib/api"
 
 const mockPush = vi.fn()
 const mockCreateForm = vi.fn()
@@ -33,15 +34,39 @@ vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: mockPush }),
 }))
 
-vi.mock("@/lib/hooks/use-forms", () => ({
-    useForms: () => ({
-        data: mockForms,
+let mockPermissions = new Set(["manage_forms"])
+let mockFormsError: Error | null = null
+vi.mock("@/lib/hooks/use-permission-check", () => ({
+    usePermissionCheck: () => ({
         isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockPermissions.has(permission),
     }),
+}))
+
+const mockUseForms = vi.fn()
+const mockUseFormTemplates = vi.fn()
+vi.mock("@/lib/hooks/use-forms", () => ({
+    useForms: (options?: { enabled?: boolean }) => {
+        mockUseForms(options)
+        return {
+            data: mockFormsError ? undefined : mockForms,
+            isLoading: false,
+            isError: Boolean(mockFormsError),
+            error: mockFormsError,
+            isFetching: false,
+            refetch: vi.fn(),
+        }
+    },
     useCreateForm: () => ({ mutateAsync: mockCreateForm, isPending: false }),
     useDeleteForm: () => ({ mutateAsync: mockDeleteForm, isPending: false }),
     useDeleteFormTemplate: () => ({ mutateAsync: mockDeleteTemplate, isPending: false }),
-    useFormTemplates: () => ({ data: mockTemplates, isLoading: false }),
+    useFormTemplates: (options?: { enabled?: boolean }) => {
+        mockUseFormTemplates(options)
+        return { data: mockTemplates, isLoading: false }
+    },
     useUseFormTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
@@ -52,6 +77,10 @@ describe("FormsListPage delete", () => {
         mockCreateForm.mockReset()
         mockDeleteForm.mockReset()
         mockDeleteTemplate.mockReset()
+        mockUseForms.mockReset()
+        mockUseFormTemplates.mockReset()
+        mockPermissions = new Set(["manage_forms"])
+        mockFormsError = null
         mockForms = [
             {
                 id: "form-1",
@@ -163,5 +192,53 @@ describe("FormsListPage delete", () => {
             }),
         )
         expect(mockPush).toHaveBeenCalledWith("/automation/forms/created-donor")
+    })
+
+    it("shows a denied state with no Create Form or empty state without manage_forms", () => {
+        mockPermissions = new Set()
+        mockForms = []
+
+        render(<FormsListPage />)
+
+        expect(screen.getByText("No access to Form Builder")).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /create form/i })).not.toBeInTheDocument()
+        expect(screen.queryByText("No forms yet")).not.toBeInTheDocument()
+        expect(mockUseForms).toHaveBeenCalledWith({ enabled: false })
+        expect(mockUseFormTemplates).toHaveBeenCalledWith({ enabled: false })
+    })
+
+    it("renders a 403 from the forms request as the denied state", () => {
+        mockFormsError = new ApiError(403, "Forbidden", "Missing permission: manage_forms")
+
+        render(<FormsListPage />)
+
+        expect(screen.getByText("No access to Form Builder")).toBeInTheDocument()
+        expect(screen.queryByText(/manage_forms/)).not.toBeInTheDocument()
+        expect(screen.queryByText("No forms yet")).not.toBeInTheDocument()
+    })
+
+    it("puts Use Template in the template card footer, apart from the menu", () => {
+        mockTemplates = [
+            {
+                id: "template-1",
+                name: "Surrogate Application Form Template",
+                description: "Full application.",
+                updated_at: new Date().toISOString(),
+                published_at: null,
+            },
+        ]
+
+        render(<FormsListPage />)
+        fireEvent.click(screen.getByRole("tab", { name: /form templates/i }))
+
+        const useButton = screen.getByRole("button", {
+            name: "Use template Surrogate Application Form Template",
+        })
+        const menuButton = screen.getByLabelText(
+            "Open menu for template Surrogate Application Form Template",
+        )
+        const title = screen.getByText("Surrogate Application Form Template")
+        expect(useButton.closest('[data-slot="card-header"]')).toBeNull()
+        expect(menuButton.closest('[data-slot="card-header"]')).toContainElement(title)
     })
 })

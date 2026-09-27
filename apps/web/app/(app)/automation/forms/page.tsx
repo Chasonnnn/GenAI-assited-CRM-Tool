@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useSyncExternalStore } from "react"
+import { useState, useSyncExternalStore, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import {
-    ArrowLeftIcon,
     EditIcon,
     FileTextIcon,
     LinkIcon,
@@ -26,6 +25,8 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { LoadErrorState, PermissionDeniedState, QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -55,6 +56,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError } from "@/lib/api"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import {
     listFormIntakeLinks,
     type FormIntakeLinkRead,
@@ -207,33 +209,19 @@ async function runWithPendingState(
     }
 }
 
-function FormsPageHeader({
-    onBack,
-    onCreateForm,
-}: {
-    onBack: () => void
-    onCreateForm: () => void
-}) {
+function FormsPageHeader({ onCreateForm }: { onCreateForm?: (() => void) | undefined }) {
     return (
-        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center justify-between px-6">
-                <div className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Back to automation"
-                        onClick={onBack}
-                    >
-                        <ArrowLeftIcon className="size-4" aria-hidden="true" />
+        <PageHeader
+            title="Form Builder"
+            actions={
+                onCreateForm ? (
+                    <Button onClick={onCreateForm}>
+                        <PlusIcon className="mr-2 size-4" />
+                        Create Form
                     </Button>
-                    <h1 className="text-2xl font-semibold">Form Builder</h1>
-                </div>
-                <Button onClick={onCreateForm}>
-                    <PlusIcon className="mr-2 size-4" />
-                    Create Form
-                </Button>
-            </div>
-        </div>
+                ) : null
+            }
+        />
     )
 }
 
@@ -546,14 +534,14 @@ function FormTemplateCard({
     onDeleteTemplate: (target: DeleteTarget) => void
 }) {
     return (
-        <Card>
+        <Card className="flex flex-col">
             <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
                             <FileTextIcon className="size-5" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                             <CardTitle className="text-base">{template.name}</CardTitle>
                             {template.published_at && (
                                 <Badge variant="outline" className="mt-1 text-xs">
@@ -562,15 +550,7 @@ function FormTemplateCard({
                             )}
                         </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                        <Button
-                            size="sm"
-                            onClick={() => onUseTemplate(template.id, template.name)}
-                            disabled={isTemplateActionPending || isApplying}
-                        >
-                            {isApplying && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                            Use Template
-                        </Button>
+                    <div className="flex shrink-0 items-center">
                         <DropdownMenu>
                             <DropdownMenuTrigger
                                 render={
@@ -601,13 +581,24 @@ function FormTemplateCard({
                     </div>
                 </div>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="flex flex-1 flex-col pt-0">
                 <p className="text-sm text-muted-foreground">
                     {template.description || "No description provided."}
                 </p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                    <FormRelativeTime dateString={template.updated_at} />
-                </p>
+                <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+                    <p className="text-xs text-muted-foreground">
+                        <FormRelativeTime dateString={template.updated_at} />
+                    </p>
+                    <Button
+                        size="sm"
+                        onClick={() => onUseTemplate(template.id, template.name)}
+                        disabled={isTemplateActionPending || isApplying}
+                        aria-label={`Use template ${template.name}`}
+                    >
+                        {isApplying && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                        Use Template
+                    </Button>
+                </div>
             </CardContent>
         </Card>
     )
@@ -828,11 +819,17 @@ function ShareFormDialog({
 
 export default function FormsListPage() {
     const { push } = useRouter()
-    const { data: forms, isLoading } = useForms()
+    const permissionCheck = usePermissionCheck()
+    // Every /forms route requires manage_forms.
+    const canManageForms = permissionCheck.can("manage_forms")
+    const formsQuery = useForms({ enabled: canManageForms })
+    const { data: forms, isLoading } = formsQuery
     const createFormMutation = useCreateForm()
     const deleteFormMutation = useDeleteForm()
     const deleteFormTemplateMutation = useDeleteFormTemplate()
-    const { data: templates, isLoading: templatesLoading } = useFormTemplates()
+    const { data: templates, isLoading: templatesLoading } = useFormTemplates({
+        enabled: canManageForms,
+    })
     const useTemplateMutation = useUseFormTemplate()
 
     const [showCreateModal, setShowCreateModal] = useState(false)
@@ -1012,20 +1009,56 @@ export default function FormsListPage() {
         })
     }
 
+    const formBuilderDenied = {
+        title: "No access to Form Builder",
+        description: "Ask an admin to update your role.",
+    }
+    let blockedState: ReactNode = null
+    if (permissionCheck.isLoading) {
+        blockedState = (
+            <div className="flex items-center justify-center py-12">
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
+            </div>
+        )
+    } else if (permissionCheck.isError) {
+        blockedState = (
+            <LoadErrorState
+                title="Couldn't load forms"
+                onRetry={permissionCheck.retry}
+                isRetrying={permissionCheck.isRetrying}
+            />
+        )
+    } else if (!canManageForms) {
+        blockedState = <PermissionDeniedState {...formBuilderDenied} />
+    } else if (formsQuery.isError) {
+        blockedState = (
+            <QueryErrorState
+                error={formsQuery.error}
+                onRetry={() => {
+                    void formsQuery.refetch()
+                }}
+                isRetrying={formsQuery.isFetching}
+                title="Couldn't load forms"
+                forbidden={formBuilderDenied}
+            />
+        )
+    }
+
+    if (blockedState) {
+        return (
+            <div className="flex min-h-screen flex-col">
+                <FormsPageHeader />
+                {blockedState}
+            </div>
+        )
+    }
+
     return (
         <div className="flex min-h-screen flex-col">
-            <FormsPageHeader
-                onBack={() => push("/automation")}
-                onCreateForm={() => setShowCreateModal(true)}
-            />
+            <FormsPageHeader onCreateForm={() => setShowCreateModal(true)} />
 
             <div className="flex-1 p-6">
                 <div className="space-y-6">
-                    <p className="max-w-2xl text-sm text-muted-foreground">
-                        Create dynamic application forms to collect information from candidates.
-                        Forms can be sent via secure links and submissions can be reviewed and approved.
-                    </p>
-
                     <FormsPageTabs
                         activeTab={activeTab}
                         onActiveTabChange={setActiveTab}

@@ -181,6 +181,24 @@ describe("AppSidebar permission visibility", () => {
         })
     })
 
+    it("names settings links after their page titles", async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_queues"] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText("Notifications")).toBeInTheDocument()
+        })
+        expect(screen.getByText("Queues")).toBeInTheDocument()
+        expect(screen.queryByText("Queue Management")).not.toBeInTheDocument()
+    })
+
     it("hides Tickets for non-developers even when view_tickets permission exists", async () => {
         mockUseAuth.mockReturnValue({
             user: {
@@ -422,6 +440,38 @@ describe("AppSidebar permission visibility", () => {
 
         expect(html).toContain("General")
         expect(html).toContain("Team")
+    })
+
+    it("shows Form Builder and Executions only with their automation permissions", async () => {
+        mockNavigationState.pathname = "/automation"
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_reports"] },
+        })
+
+        const view = render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        expect(await screen.findByRole("link", { name: "Campaigns" })).toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Form Builder" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Executions" })).not.toBeInTheDocument()
+
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_forms", "manage_automation"] },
+        })
+        view.rerender(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        expect(screen.getByRole("link", { name: "Form Builder" })).toHaveAttribute(
+            "href",
+            "/automation/forms",
+        )
+        expect(screen.getByRole("link", { name: "Executions" })).toBeInTheDocument()
     })
 
     it("places AI Studio (beta) directly under Automation when AI access is enabled", async () => {

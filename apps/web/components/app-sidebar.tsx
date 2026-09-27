@@ -609,6 +609,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const canAccessIntegrations = canViewIntegrations || canAccessPersonalIntegrations
     const canViewAlerts = isDeveloper || permissionSet.has("manage_ops")
     const canViewAutomationExecutions = isDeveloper || permissionSet.has("manage_automation")
+    const canViewFormBuilder = isDeveloper || permissionSet.has("manage_forms")
     const isMobile = useIsMobile()
 
     const canViewReports = isDeveloper || permissionSet.has("view_reports")
@@ -681,10 +682,10 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "General", url: "/settings", tab: null },
-        { title: "Notification", url: "/settings/notifications" },
+        { title: "Notifications", url: "/settings/notifications" },
         ...(canViewTeam ? [{ title: "Team", url: "/settings/team" }] : []),
         ...(canViewPipelines ? [{ title: "Pipelines", url: "/settings/pipelines" }] : []),
-        ...(canViewQueues ? [{ title: "Queue Management", url: "/settings/queues" }] : []),
+        ...(canViewQueues ? [{ title: "Queues", url: "/settings/queues" }] : []),
         ...(canViewAudit ? [{ title: "Audit Log", url: "/settings/audit" }] : []),
         ...(canViewCompliance ? [{ title: "Compliance", url: "/settings/compliance" }] : []),
         ...(canAccessIntegrations
@@ -700,15 +701,15 @@ export function AppSidebar({ children }: AppSidebarProps) {
         { title: "Workflows", url: "/automation", tab: null },
         { title: "Campaigns", url: "/automation/campaigns" },
         { title: "Email Templates", url: "/automation/email-templates" },
-        { title: "Form Builder", url: "/automation/forms" },
+        ...(canViewFormBuilder ? [{ title: "Form Builder", url: "/automation/forms" }] : []),
         { title: "AI Builder", url: "/automation/ai-builder" },
         ...(canViewAutomationExecutions ? [{ title: "Executions", url: "/automation/executions" }] : []),
     ]
 
     const tasksItems: Array<{ title: string; url: string }> = [
-        { title: "My Tasks", url: "/tasks" },
+        { title: "Tasks", url: "/tasks" },
         { title: "Appointments", url: "/appointments" },
-        { title: "Appointment Settings", url: "/settings/appointments" },
+        { title: "Scheduling Settings", url: "/settings/appointments" },
     ]
 
     const isSettingsItemActive = (item: { url: string; tab?: string | null }) => {
@@ -825,7 +826,9 @@ export function AppSidebar({ children }: AppSidebarProps) {
                         <ThemeToggle />
                     </div>
                 </header>
-                <main className="flex-1 min-w-0 overflow-hidden print:overflow-visible">{children}</main>
+                {/* overflow-x-clip, not overflow-hidden: hidden makes <main> the sticky
+                    container, so sticky SaveBar and PageHeader never stick while the document scrolls. */}
+                <main className="flex-1 min-w-0 overflow-x-clip print:overflow-visible">{children}</main>
             </div>
 
             <SearchCommandDialog
