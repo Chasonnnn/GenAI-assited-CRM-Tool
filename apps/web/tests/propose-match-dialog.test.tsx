@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import "@testing-library/jest-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -86,5 +86,53 @@ describe("ProposeMatchDialog", () => {
             { per_page: 100 },
             { enabled: true }
         )
+    })
+
+    it("focuses the intended parent picker on open and has no title icon", async () => {
+        renderDialog(true)
+
+        const picker = screen.getByRole("button", { name: /intended parent\(s\)/i })
+        await waitFor(() => expect(picker).toHaveFocus())
+        expect(screen.getByRole("dialog").querySelector("h2 svg")).toBeNull()
+        expect(screen.getByRole("textbox", { name: /notes/i })).not.toHaveFocus()
+    })
+
+    it("focuses the picker even while the intended parent list is loading", async () => {
+        mockUseIntendedParents.mockReturnValue({ data: undefined, isLoading: true })
+        renderDialog(true)
+
+        const picker = screen.getByRole("button", { name: /intended parent\(s\)/i })
+        await waitFor(() => expect(picker).toHaveFocus())
+
+        fireEvent.click(picker)
+        expect(await screen.findByRole("status")).toHaveTextContent("Loading…")
+    })
+
+    it("filters intended parents by typed text and selects one", async () => {
+        mockUseIntendedParents.mockReturnValue({
+            data: {
+                items: [
+                    { id: "ip-1", full_name: "Jordan Lee", email: "jordan@example.com", intended_parent_number: "I10001" },
+                    { id: "ip-2", full_name: "Morgan Diaz", email: "morgan@example.com", intended_parent_number: "I10002" },
+                ],
+            },
+            isLoading: false,
+        })
+        renderDialog(true)
+
+        fireEvent.click(screen.getByRole("button", { name: /intended parent\(s\)/i }))
+        const search = await screen.findByRole("combobox", { name: "Search intended parents" })
+        fireEvent.change(search, { target: { value: "morg" } })
+
+        expect(screen.queryByText("Jordan Lee")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByText("Morgan Diaz"))
+
+        await waitFor(() =>
+            expect(screen.queryByRole("combobox", { name: "Search intended parents" })).not.toBeInTheDocument(),
+        )
+        const picker = document.getElementById("ip-select")
+        expect(picker).toHaveTextContent("Morgan Diaz")
+        expect(picker).toHaveAttribute("aria-labelledby", "ip-select-label ip-select")
+        expect(screen.getByText("Propose Match", { selector: "button" })).toBeEnabled()
     })
 })
