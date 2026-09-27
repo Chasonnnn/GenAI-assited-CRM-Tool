@@ -56,6 +56,12 @@ async def test_match_stats_returns_zero_filled_statuses_and_grouped_total(
     )
     assert accepted_response.status_code == 201, accepted_response.text
 
+    from tests.test_match_cancel_request import _move_to_handoff
+
+    await _move_to_handoff(authed_client, "surrogates", surrogate_two["id"], "surrogate")
+    await _move_to_handoff(
+        authed_client, "intended-parents", intended_parent_two["id"], "intended_parent"
+    )
     accept = await authed_client.put(
         f"/matches/{accepted_response.json()['id']}/accept",
         json={},

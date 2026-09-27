@@ -49,6 +49,8 @@ class MatchRead(BaseModel):
     decline_reason: str | None
     created_at: str
     updated_at: str
+    accept_eligibility_warnings: list[str] = Field(default_factory=list)
+    surrogate_has_accepted_match: bool = False
     # Denormalized for convenience
     surrogate_number: str | None = None
     surrogate_name: str | None = None

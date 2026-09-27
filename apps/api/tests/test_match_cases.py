@@ -9,20 +9,27 @@ from sqlalchemy.exc import IntegrityError
 from app.db.enums import Role
 from app.db.models import AuditLog, IntendedParent, Match, MatchAttempt, StatusChangeRequest
 from app.services import match_access, match_lifecycle, match_queries
-from tests.test_match_cancel_request import _create_intended_parent, _create_surrogate
+from tests.test_match_cancel_request import (
+    _create_intended_parent,
+    _create_surrogate,
+    _move_to_handoff,
+)
 
 
-async def _donor(client):
+async def _donor(client, *, donor_type="egg", ready=True):
     response = await client.post(
         "/donors",
         json={
-            "donor_type": "egg",
+            "donor_type": donor_type,
             "full_name": "Case Donor",
             "email": f"donor-{uuid.uuid4().hex}@example.com",
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    record = response.json()
+    if ready:
+        await _move_to_handoff(client, "donors", record["id"], f"{donor_type}_donor")
+    return record
 
 
 async def _case(client, ip, *, donor=None, surrogate=None):
@@ -256,10 +263,10 @@ def test_concurrent_acceptances_reserve_one_surrogate(db_engine, monkeypatch):
 
     from sqlalchemy.orm import Session
 
-    from app.db.models import Organization, User
+    from app.db.models import Membership, Organization, User
     from app.services import audit_service, pipeline_service
     from tests.test_match_events import _create_case
-    from tests.test_match_events import _create_intended_parent as create_ip
+    from tests.test_match_lifecycle_concurrency import create_ip
 
     # This connection-concurrency test uses committed fixtures. Atomic audit
     # persistence is covered separately; avoid immutable audit cleanup here.
@@ -280,9 +287,15 @@ def test_concurrent_acceptances_reserve_one_surrogate(db_engine, monkeypatch):
                 token_version=1,
             )
         )
+        setup.flush()
+        setup.add(
+            Membership(
+                organization_id=org_id, user_id=user_id, role=Role.DEVELOPER.value, is_active=True
+            )
+        )
         setup.commit()
         pipeline = pipeline_service.get_or_create_default_pipeline(setup, org_id)
-        stage = pipeline_service.get_stage_by_system_role(setup, pipeline.id, "matched")
+        stage = pipeline_service.get_stage_by_system_role(setup, pipeline.id, "handoff")
         surrogate = _create_case(setup, org_id, user_id, stage)
         ids = []
         for number in ("M10001", "M10002"):

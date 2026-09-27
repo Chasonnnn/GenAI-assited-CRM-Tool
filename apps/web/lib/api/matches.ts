@@ -31,6 +31,8 @@ export interface MatchRead {
     closure_reason?: string | null
     outcome?: string | null
     intended_parent_id: string
+    accept_eligibility_warnings: string[]
+    surrogate_has_accepted_match: boolean
     status: string
     proposed_by_user_id: string | null
     proposed_at: string

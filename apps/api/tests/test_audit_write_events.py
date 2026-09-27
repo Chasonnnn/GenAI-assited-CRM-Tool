@@ -679,6 +679,10 @@ async def test_match_write_routes_emit_semantic_audit_events(authed_client, db, 
         actor_user_id=test_auth.user.id,
     )
 
+    from tests.test_match_cancel_request import _move_to_handoff
+
+    await _move_to_handoff(authed_client, "surrogates", surrogate_1["id"], "surrogate")
+    await _move_to_handoff(authed_client, "intended-parents", ip_1["id"], "intended_parent")
     accept_1 = await authed_client.put(f"/matches/{match_1_id}/accept", json={"notes": "accept"})
     assert accept_1.status_code == 200, accept_1.text
     assert _latest_event(

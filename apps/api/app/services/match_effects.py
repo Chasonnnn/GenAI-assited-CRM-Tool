@@ -180,3 +180,83 @@ def cancel_request_resolved_notification(
         )
 
     return [("cancel_request_resolved_notification", run)]
+
+
+def surrogate_conflict_notifications(db: Session, match: Match) -> list[Effect]:
+    if not match.surrogate_id:
+        return []
+    org_id, surrogate_id = match.organization_id, match.surrogate_id
+    actor_user_id = match.reviewed_by_user_id or match.proposed_by_user_id
+
+    def notify(proposal_id: UUID) -> None:
+        from app.db.enums import NotificationType
+        from app.db.models import Membership
+        from app.services import match_queries, notification_service
+
+        # Serialize dedupe with another accept/propose effect for the same proposal.
+        # These locks are in a separate transaction, after the domain locks release.
+        proposal = (
+            db.query(Match)
+            .filter(Match.id == proposal_id, Match.organization_id == org_id)
+            .populate_existing()
+            .with_for_update()
+            .one()
+        )
+        if proposal.status not in match_queries.PENDING_STATUSES:
+            return
+        committed = match_queries.get_accepted_match_for_surrogate(db, org_id, surrogate_id)
+        if not committed or not proposal.proposed_by_user_id:
+            return
+        member = (
+            db.query(Membership)
+            .filter_by(organization_id=org_id, user_id=proposal.proposed_by_user_id, is_active=True)
+            .first()
+        )
+        if not member:
+            return
+        notification_service.create_notification(
+            db,
+            org_id=org_id,
+            user_id=proposal.proposed_by_user_id,
+            type=NotificationType.MATCH_CONFLICT,
+            title="Surrogate has an accepted match",
+            body=f"{proposal.match_number} remains under review. Accept is blocked until the other match ends.",
+            entity_type="match",
+            entity_id=proposal.id,
+            dedupe_key=f"match_conflict:{proposal.id}:{committed.id}",
+            dedupe_window_hours=None,
+        )
+
+    def run() -> None:
+        from functools import partial
+
+        from app.services import match_queries
+
+        # Discover after commit to include proposals committed while accept waited
+        # for the surrogate lock. Propose also runs this effect for the opposite race.
+        if not match_queries.get_accepted_match_for_surrogate(db, org_id, surrogate_id):
+            return
+        proposals = (
+            db.query(Match.id)
+            .filter(
+                Match.organization_id == org_id,
+                Match.surrogate_id == surrogate_id,
+                Match.status.in_(match_queries.PENDING_STATUSES),
+            )
+            .order_by(Match.id)
+            .all()
+        )
+        dispatch(
+            db,
+            TransitionEvent(
+                "surrogate_conflict",
+                match,
+                actor_user_id,
+                [
+                    (f"surrogate_conflict_notification:{proposal_id}", partial(notify, proposal_id))
+                    for (proposal_id,) in proposals
+                ],
+            ),
+        )
+
+    return [("surrogate_conflict_notifications", run)]

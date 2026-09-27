@@ -7,7 +7,16 @@ from app.db.models import EntityActivityLog, IntendedParent, Match, StatusChange
 from app.services import pipeline_service
 
 
-async def _create_surrogate(authed_client) -> dict:
+async def _move_to_handoff(client, route, record_id, entity_type):
+    pipeline = await client.get("/settings/pipelines/default", params={"entity_type": entity_type})
+    assert pipeline.status_code == 200, pipeline.text
+    key = "available" if entity_type == "sperm_donor" else "ready_to_match"
+    stage = next(s for s in pipeline.json()["stages"] if s["stage_key"] == key)
+    response = await client.patch(f"/{route}/{record_id}/status", json={"stage_id": stage["id"]})
+    assert response.status_code == 200, response.text
+
+
+async def _create_surrogate(authed_client, *, ready=True) -> dict:
     response = await authed_client.post(
         "/surrogates",
         json={
@@ -16,10 +25,13 @@ async def _create_surrogate(authed_client) -> dict:
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    record = response.json()
+    if ready:
+        await _move_to_handoff(authed_client, "surrogates", record["id"], "surrogate")
+    return record
 
 
-async def _create_intended_parent(authed_client) -> dict:
+async def _create_intended_parent(authed_client, *, ready=True) -> dict:
     response = await authed_client.post(
         "/intended-parents",
         json={
@@ -28,7 +40,10 @@ async def _create_intended_parent(authed_client) -> dict:
         },
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    record = response.json()
+    if ready:
+        await _move_to_handoff(authed_client, "intended-parents", record["id"], "intended_parent")
+    return record
 
 
 async def _create_accepted_match(authed_client) -> dict:

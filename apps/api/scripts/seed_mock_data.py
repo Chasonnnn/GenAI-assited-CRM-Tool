@@ -41,8 +41,10 @@ from app.db.models import (
 from app.db.session import SessionLocal
 from app.services import (
     dev_service,
+    intended_parent_status_service,
     match_lifecycle,
     match_queries,
+    permission_policy_service,
     pipeline_service,
     template_seeder,
 )
@@ -326,7 +328,7 @@ MATCH_STATUS_FLOW = [
     MatchStatus.CANCELLED.value,
     MatchStatus.COMPLETED.value,
 ]
-MATCH_ACCEPTABLE_SURROGATE_STAGES = {"approved", "ready_to_match"}
+MATCH_ACCEPTABLE_SURROGATE_STAGES = {"ready_to_match"}
 
 
 def mask_email(email: str) -> str:
@@ -1044,6 +1046,8 @@ def _promote_surrogate_to_ready(
         return None
     surrogate = random.choice(pool)
     surrogate.stage_id = stage.id
+    surrogate.stage = stage
+    surrogate.status_label = stage.label
     db.flush()
     return surrogate
 
@@ -1087,8 +1091,6 @@ def create_matches(
     accepted_surrogates = [
         s for s, slug in surrogate_rows if slug in MATCH_ACCEPTABLE_SURROGATE_STAGES
     ]
-    if not accepted_surrogates:
-        accepted_surrogates = general_surrogates
 
     proposer = _pick_actor(
         users_by_role,
@@ -1121,7 +1123,12 @@ def create_matches(
         for _ in range(120):
             pool = accepted_surrogates if needs_acceptance else general_surrogates
             if needs_acceptance:
-                pool = [s for s in pool if s.id not in used_accepted_surrogates]
+                pool = [
+                    s
+                    for s in pool
+                    if s.id not in used_accepted_surrogates
+                    and s.stage.stage_key == "ready_to_match"
+                ]
                 if not pool:
                     # Random stage seeding rarely leaves enough acceptable surrogates;
                     # promote one so every status in the flow is seeded deterministically.
@@ -1166,7 +1173,7 @@ def create_matches(
                     dispatch_effects=False,
                 )
             except match_lifecycle.TransitionError:
-                # propose refuses this pair (accepted surrogate, open match, or missing parent); pick another.
+                # The pair is already open or a participant is missing; pick another.
                 continue
 
             if target_status == MatchStatus.UNDER_REVIEW.value:
@@ -1175,6 +1182,24 @@ def create_matches(
                 break
 
             if needs_acceptance:
+                if intended_parent.status not in {"ready_to_match", "matched"}:
+                    pipeline = pipeline_service.get_or_create_default_pipeline(
+                        db, org_id, entity_type="intended_parent"
+                    )
+                    stage = pipeline_service.get_stage_by_system_role(
+                        db, pipeline.id, "handoff", "intended_parent"
+                    )
+                    now = datetime.now(UTC)
+                    intended_parent_status_service.apply_status_change(
+                        db,
+                        ip=intended_parent,
+                        old_stage=intended_parent.stage,
+                        new_stage=stage,
+                        user_id=decider.id,
+                        reason="Seed match eligibility",
+                        effective_at=now,
+                        recorded_at=now,
+                    )
                 try:
                     match = match_lifecycle.transition(
                         db,
@@ -1211,6 +1236,8 @@ def create_matches(
                         dispatch_effects=False,
                     )
                 if target_status == MatchStatus.CANCELLED.value:
+                    if permission_policy_service.is_enabled(db, org_id):
+                        permission_policy_service.lock_configuration(db, org_id)
                     request = (
                         db.query(StatusChangeRequest)
                         .filter(

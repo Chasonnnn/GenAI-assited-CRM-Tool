@@ -449,7 +449,9 @@ async def test_v2_case_manager_cannot_reach_match_with_pre_approval_surrogate(
     authed_client, db, v2_org
 ):
     ip = await _create_intended_parent(authed_client)
-    created = await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client))
+    created = await _case(
+        authed_client, ip, surrogate=await _create_surrogate(authed_client, ready=False)
+    )
 
     async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_user, client):
         detail = await client.get(f"/matches/{created['id']}")
@@ -468,7 +470,7 @@ async def test_v2_case_manager_cannot_reach_match_with_pre_approval_donor(
     authed_client, db, v2_org
 ):
     ip = await _create_intended_parent(authed_client)
-    created = await _case(authed_client, ip, donor=await _donor(authed_client))
+    created = await _case(authed_client, ip, donor=await _donor(authed_client, ready=False))
 
     async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_user, client):
         detail = await client.get(f"/matches/{created['id']}")
@@ -587,7 +589,9 @@ async def test_v2_ai_routes_ignore_legacy_user_revoke_of_view_matches(
 @pytest.mark.parametrize("method,path,kind", AI_ROUTES)
 async def test_v2_ai_routes_apply_party_record_scope(authed_client, db, v2_org, method, path, kind):
     ip = await _create_intended_parent(authed_client)
-    created = await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client))
+    created = await _case(
+        authed_client, ip, surrogate=await _create_surrogate(authed_client, ready=False)
+    )
     count = _count(db, Task, v2_org.id)
 
     async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_user, client):
@@ -790,3 +794,22 @@ async def test_v2_proposer_decline_exception_preserves_view_and_party_scope(
         assert response.json()["decline_reason"] == "Withdrawn"
         assert _match_row(db, match["id"]).status == "declined"
         assert history.one().actor_user_id == user.id
+
+
+@pytest.mark.asyncio
+async def test_v2_donor_accept_requires_change_donor_status(authed_client, db, v2_org):
+    from app.db.models import Donor
+
+    donor = await _donor(authed_client)
+    match = await _case(authed_client, await _create_intended_parent(authed_client), donor=donor)
+    _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "change_donor_status", False)
+    async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_, client):
+        read = await client.get(f"/matches/{match['id']}")
+        assert read.status_code == 200
+        assert read.json()["accept_eligibility_warnings"] == []
+        assert read.json()["surrogate_has_accepted_match"] is False
+        accept = await client.put(f"/matches/{match['id']}/accept", json={})
+    assert accept.status_code == 400
+    assert accept.json()["detail"] == "Stage change permission required"
+    assert _match_row(db, match["id"]).status == "under_review"
+    assert db.get(Donor, uuid.UUID(donor["id"])).stage.stage_key == "ready_to_match"

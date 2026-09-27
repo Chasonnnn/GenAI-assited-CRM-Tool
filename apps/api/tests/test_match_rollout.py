@@ -40,7 +40,7 @@ async def test_disabled_expansion_preserves_legacy_match_operations(authed_clien
 
 
 @pytest.mark.asyncio
-async def test_disabled_expansion_rejects_repeat_pairs(authed_client, db, monkeypatch):
+async def test_disabled_expansion_rejects_repeat_pairs(authed_client, db, test_auth, monkeypatch):
     ip = await _create_intended_parent(authed_client)
     surrogate = await _create_surrogate(authed_client)
     case = await _case(authed_client, ip, surrogate=surrogate)
@@ -53,7 +53,7 @@ async def test_disabled_expansion_rejects_repeat_pairs(authed_client, db, monkey
         "/matches/", json={"surrogate_id": surrogate["id"], "intended_parent_id": ip["id"]}
     )
     assert response.status_code == 503
-    assert db.query(Match).count() == 1
+    assert db.query(Match).filter(Match.organization_id == test_auth.org.id).count() == 1
 
 
 @pytest.mark.asyncio
