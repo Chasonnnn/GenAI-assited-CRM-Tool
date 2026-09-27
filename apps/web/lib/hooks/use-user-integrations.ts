@@ -206,6 +206,9 @@ export function useSyncGoogleCalendarBindings() {
         mutationFn: syncGoogleCalendarBindings,
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: integrationKeys.googleCalendarBindings() })
+            // Last sync in the Google Calendar dialog and the integrations list reads these.
+            void queryClient.invalidateQueries({ queryKey: integrationKeys.googleCalendarStatus() })
+            void queryClient.invalidateQueries({ queryKey: integrationKeys.list() })
             void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
         },
     })

@@ -11,8 +11,6 @@ import {
 
 import {
     classTokens,
-    countByFile,
-    exceedAllowlist,
     scanJsxElements,
     SOURCE_SCAN_TIMEOUT_MS,
 } from "./fixtures/jsx-class-scan"
@@ -53,10 +51,11 @@ describe("DialogContent width", () => {
         expect(dialog.className).not.toMatch(/(^|\s)sm:max-w-md/)
     })
 
-    it("keeps breakpoint-prefixed className widths working", () => {
-        const dialog = renderDialog({ className: "sm:max-w-lg" })
+    it("keeps a larger-breakpoint className width on top of the size", () => {
+        const dialog = renderDialog({ size: "xl", className: "lg:max-w-2xl" })
 
-        expect(dialog).toHaveClass("max-w-md", "sm:max-w-lg")
+        expect(dialog).toHaveAttribute("data-size", "xl")
+        expect(dialog).toHaveClass("max-w-xl", "lg:max-w-2xl")
     })
 
     it("keeps a custom width class in place of the gutter width", () => {
@@ -108,50 +107,18 @@ describe("DialogFooter start slot", () => {
     })
 })
 
-// Call sites that still set an unprefixed named max width in className. It renders correctly now,
-// but new code uses the size prop. Remove a file's entry when its dialogs move to `size`.
-const UNPREFIXED_MAX_WIDTH_ALLOWLIST: Readonly<Record<string, number>> = {
-    "app/(app)/automation/campaigns/[id]/page.client.tsx": 1,
-    "app/(app)/automation/campaigns/page.tsx": 1,
-    "app/(app)/automation/email-templates/page.tsx": 2,
-    "app/(app)/automation/page.client.tsx": 3,
-    "app/(app)/donors/[id]/page.tsx": 1,
-    "app/(app)/donors/page.client.tsx": 1,
-    "app/(app)/intended-parents/[id]/components/IntendedParentDetailSections.tsx": 1,
-    "app/(app)/intended-parents/page.client.tsx": 1,
-    "app/(app)/matches/page.tsx": 1,
-    "app/(app)/settings/integrations/page.tsx": 3,
-    "app/(app)/settings/queues/page.tsx": 1,
-    "app/(app)/settings/security/page.tsx": 1,
-    "app/(app)/surrogates/page.client.tsx": 1,
-    "app/auth/duo/callback/page.client.tsx": 1,
-    "app/ops/templates/system/[systemKey]/page.client.tsx": 1,
-    "components/ai/ScheduleParserDialog.tsx": 1,
-    "components/appointments/UnifiedCalendar.tsx": 1,
-    "components/email/EmailComposeDialog.tsx": 1,
-    "components/forms/builder/TemplateFormPublishDialog.tsx": 1,
-    "components/matches/ProposeMatchDialog.tsx": 1,
-    "components/matches/ProposeMatchFromIPDialog.tsx": 1,
-    "components/ops/templates/PublishDialog.tsx": 1,
-    "components/surrogates/detail/SurrogateDetailLayout/dialogs/EditDialog.tsx": 1,
-    "components/surrogates/interviews/InterviewTab/EditorDialog.tsx": 1,
-    "components/surrogates/interviews/InterviewVersionHistory.tsx": 2,
-    "components/surrogates/journey/MilestoneImageSelector.tsx": 1,
-}
+// A named max-w-* or sm:max-w-* on DialogContent duplicates the size prop. Arbitrary values
+// (max-w-[640px]) and widths at md or larger breakpoints (lg:max-w-2xl on top of a size) stay allowed.
+const NAMED_BASE_MAX_WIDTH = /^(sm:)?!?max-w-(xs|sm|md|lg|xl|[2-7]xl)!?$/
 
 describe("DialogContent width policy", () => {
-    it("uses the size prop instead of an unprefixed named max-w class", () => {
+    it("uses the size prop instead of a named max-w or sm:max-w class", () => {
         const offenders = scanJsxElements(["DialogContent"]).filter(({ attributes }) => {
             const className = attributes.className
             if (typeof className !== "string") return false
-            return classTokens(className).some((token) =>
-                /^max-w-(xs|sm|md|lg|xl|[2-7]xl)$/.test(token),
-            )
+            return classTokens(className).some((token) => NAMED_BASE_MAX_WIDTH.test(token))
         })
 
-        expect(
-            exceedAllowlist(countByFile(offenders), UNPREFIXED_MAX_WIDTH_ALLOWLIST),
-            offenders.map(({ file, line }) => `${file}:${line}`).join("\n"),
-        ).toEqual([])
+        expect(offenders.map(({ file, line }) => `${file}:${line}`)).toEqual([])
     }, SOURCE_SCAN_TIMEOUT_MS)
 })

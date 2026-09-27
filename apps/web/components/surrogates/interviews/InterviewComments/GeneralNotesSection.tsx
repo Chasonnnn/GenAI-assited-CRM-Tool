@@ -9,9 +9,11 @@ import { useInterviewComments } from "./context"
 
 interface GeneralNotesSectionProps {
     className?: string
+    /** False when a parent row already shows the "General Notes" title and add button. */
+    showHeader?: boolean
 }
 
-export function GeneralNotesSection({ className }: GeneralNotesSectionProps) {
+export function GeneralNotesSection({ className, showHeader = true }: GeneralNotesSectionProps) {
     const {
         generalNotes,
         newComment,
@@ -31,21 +33,23 @@ export function GeneralNotesSection({ className }: GeneralNotesSectionProps) {
 
     return (
         <div className={className}>
-            <div className="p-2 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-sm">
-                <h4 className="text-xs font-medium text-muted-foreground">General Notes</h4>
-                {canEdit && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={startAddingGeneralNote}
-                        className="h-6 px-1.5 text-xs"
-                        disabled={isAddingNote}
-                        aria-label="Add general note"
-                    >
-                        <PlusIcon className="size-3" aria-hidden="true" />
-                    </Button>
-                )}
-            </div>
+            {showHeader && (
+                <div className="p-2 border-b border-stone-200 dark:border-stone-700 flex items-center justify-between shrink-0 bg-background/80 backdrop-blur-sm">
+                    <h4 className="text-xs font-medium text-muted-foreground">General Notes</h4>
+                    {canEdit && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={startAddingGeneralNote}
+                            className="h-6 px-1.5 text-xs"
+                            disabled={isAddingNote}
+                            aria-label="Add general note"
+                        >
+                            <PlusIcon className="size-3" aria-hidden="true" />
+                        </Button>
+                    )}
+                </div>
+            )}
 
             <ScrollArea className="flex-1">
                 <div className="p-2 space-y-2">

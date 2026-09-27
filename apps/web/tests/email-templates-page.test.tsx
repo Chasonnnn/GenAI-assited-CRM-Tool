@@ -494,11 +494,11 @@ describe("EmailTemplatesPage", () => {
         fireEvent.click(screen.getByRole("checkbox", { name: "Send even if unsubscribed" }))
         fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
 
-        const fullNameInput = await screen.findByLabelText("{{full_name}}")
+        const fullNameInput = await screen.findByLabelText("Full name")
         expect(fullNameInput).toHaveValue("Jordan Smith")
         fireEvent.change(fullNameInput, { target: { value: "Custom Recipient" } })
 
-        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
 
         await waitFor(() => {
             expect(mockSendTestEmailTemplate).toHaveBeenCalledWith({
@@ -524,18 +524,42 @@ describe("EmailTemplatesPage", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
         fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
-        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
 
         await waitFor(() => expect(mockSendTestEmailTemplate).toHaveBeenCalledTimes(1))
         expect(await screen.findByRole("dialog")).toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
         await waitFor(() => expect(mockSendTestEmailTemplate).toHaveBeenCalledTimes(2))
 
         const firstKey = mockSendTestEmailTemplate.mock.calls[0][0].payload.idempotency_key
         const retriedKey = mockSendTestEmailTemplate.mock.calls[1][0].payload.idempotency_key
         expect(firstKey).toEqual(expect.any(String))
         expect(retriedKey).toBe(firstKey)
+    })
+
+    it("validates the test recipient inline and shows a failed send in the dialog", async () => {
+        mockSendTestEmailTemplate.mockRejectedValueOnce(new Error("provider stack trace"))
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
+        const toEmailInput = await screen.findByLabelText("To email")
+        fireEvent.change(toEmailInput, { target: { value: "not-an-email" } })
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
+
+        expect(await screen.findByText("Enter a valid email address.")).toBeInTheDocument()
+        expect(toEmailInput).toHaveAttribute("aria-invalid", "true")
+        expect(mockSendTestEmailTemplate).not.toHaveBeenCalled()
+
+        fireEvent.change(toEmailInput, { target: { value: "qa@example.com" } })
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
+
+        expect(
+            await screen.findByText("Couldn't send the test email. Try again."),
+        ).toBeInTheDocument()
+        expect(screen.queryByText("provider stack trace")).not.toBeInTheDocument()
+        expect(screen.getByRole("dialog")).toBeInTheDocument()
     })
 
     it("updates untouched email variable samples when the test recipient changes", async () => {
@@ -546,12 +570,12 @@ describe("EmailTemplatesPage", () => {
         fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
         fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
 
-        expect(await screen.findByLabelText("{{email}}")).toHaveValue("admin@example.com")
+        expect(await screen.findByLabelText("Email")).toHaveValue("admin@example.com")
         fireEvent.change(screen.getByLabelText("To email"), {
             target: { value: "qa@example.com" },
         })
 
-        expect(screen.getByLabelText("{{email}}")).toHaveValue("qa@example.com")
+        expect(screen.getByLabelText("Email")).toHaveValue("qa@example.com")
     })
 
     it("provides donor-specific samples for test sends", async () => {
@@ -563,9 +587,9 @@ describe("EmailTemplatesPage", () => {
         fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
         fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
 
-        expect(await screen.findByLabelText("{{donor_number}}")).toHaveValue("D10001")
-        expect(screen.getByLabelText("{{donor_type}}")).toHaveValue("Egg Donor")
-        expect(screen.getByLabelText("{{education}}")).toHaveValue("Bachelor's degree")
+        expect(await screen.findByLabelText("Donor number")).toHaveValue("D10001")
+        expect(screen.getByLabelText("Donor type")).toHaveValue("Egg Donor")
+        expect(screen.getByLabelText("Education")).toHaveValue("Bachelor's degree")
     })
 
     it("labels organization template action menus with template context", async () => {

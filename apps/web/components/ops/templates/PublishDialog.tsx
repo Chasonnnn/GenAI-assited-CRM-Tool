@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
+import { getSubscriptionPlanLabel } from "@/components/ops/agencies/agency-constants"
 import { Building2Icon, GlobeIcon, Loader2Icon, SearchIcon } from "lucide-react"
 
 type PublishDialogProps = {
@@ -33,6 +34,8 @@ type PublishDialogState = {
     mode: "all" | "selected"
     search: string
     selectedOrgIds: string[]
+    /** The empty-selection message waits until the user picks "selected" or changes the selection. */
+    selectionTouched: boolean
 }
 
 function createPublishDialogState(defaultPublishAll: boolean, initialOrgIds: string[]): PublishDialogState {
@@ -40,6 +43,7 @@ function createPublishDialogState(defaultPublishAll: boolean, initialOrgIds: str
         mode: defaultPublishAll ? "all" : "selected",
         search: "",
         selectedOrgIds: [...initialOrgIds],
+        selectionTouched: false,
     }
 }
 
@@ -85,27 +89,36 @@ function PublishDialogContent({
         setDialogState((current) => {
             if (allFilteredSelected) {
                 const remaining = current.selectedOrgIds.filter((id) => !filteredOrgs.some((org) => org.id === id))
-                return { ...current, selectedOrgIds: remaining }
+                return { ...current, selectedOrgIds: remaining, selectionTouched: true }
             }
             const merged = new Set(current.selectedOrgIds)
             filteredOrgs.forEach((org) => merged.add(org.id))
-            return { ...current, selectedOrgIds: Array.from(merged) }
+            return { ...current, selectedOrgIds: Array.from(merged), selectionTouched: true }
         })
     }
 
     const toggleOrg = (orgId: string, checked: boolean) => {
         setDialogState((current) => {
             if (checked) {
-                return { ...current, selectedOrgIds: Array.from(new Set([...current.selectedOrgIds, orgId])) }
+                return {
+                    ...current,
+                    selectedOrgIds: Array.from(new Set([...current.selectedOrgIds, orgId])),
+                    selectionTouched: true,
+                }
             }
-            return { ...current, selectedOrgIds: current.selectedOrgIds.filter((id) => id !== orgId) }
+            return {
+                ...current,
+                selectedOrgIds: current.selectedOrgIds.filter((id) => id !== orgId),
+                selectionTouched: true,
+            }
         })
     }
 
     const canPublish = state.mode === "all" || state.selectedOrgIds.length > 0
+    const showSelectionMessage = state.mode === "selected" && !canPublish && state.selectionTouched
 
     return (
-            <DialogContent className="max-w-2xl">
+            <DialogContent size="2xl">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>
@@ -118,6 +131,7 @@ function PublishDialogContent({
                             setDialogState((current) => ({
                                 ...current,
                                 mode: value as "all" | "selected",
+                                selectionTouched: current.selectionTouched || value === "selected",
                             }))
                         }
                         className="space-y-3"
@@ -126,7 +140,7 @@ function PublishDialogContent({
                             <RadioGroupItem id={MODE_ALL_ID} value="all" />
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2 font-medium">
-                                    <GlobeIcon className="size-4 text-teal-500" />
+                                    <GlobeIcon className="size-4 text-primary" aria-hidden="true" />
                                     Publish to all organizations
                                     <Badge variant="secondary">Global</Badge>
                                 </div>
@@ -139,7 +153,7 @@ function PublishDialogContent({
                             <RadioGroupItem id={MODE_SELECTED_ID} value="selected" />
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2 font-medium">
-                                    <Building2Icon className="size-4 text-stone-500" />
+                                    <Building2Icon className="size-4 text-muted-foreground" aria-hidden="true" />
                                     Publish to selected organizations
                                 </div>
                                 <p className="text-sm text-muted-foreground">
@@ -199,7 +213,7 @@ function PublishDialogContent({
                                                     <label
                                                         htmlFor={checkboxId}
                                                         key={org.id}
-                                                        className="flex items-center justify-between gap-3 p-3 text-sm hover:bg-stone-50 dark:hover:bg-stone-800/40"
+                                                        className="flex items-center justify-between gap-3 p-3 text-sm hover:bg-muted/50"
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <Checkbox
@@ -210,7 +224,7 @@ function PublishDialogContent({
                                                                 }
                                                             />
                                                             <div>
-                                                                <div className="font-medium text-stone-900 dark:text-stone-100">
+                                                                <div className="font-medium text-foreground">
                                                                     {org.name}
                                                                 </div>
                                                                 <div className="text-xs text-muted-foreground">
@@ -219,7 +233,7 @@ function PublishDialogContent({
                                                             </div>
                                                         </div>
                                                         <Badge variant="outline" className="text-xs">
-                                                            {org.subscription_plan}
+                                                            {getSubscriptionPlanLabel(org.subscription_plan)}
                                                         </Badge>
                                                     </label>
                                                 )
@@ -233,11 +247,9 @@ function PublishDialogContent({
                 </div>
 
                 <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-                    {state.mode === "selected" && !canPublish && (
-                        <span className="text-xs text-amber-600">
-                            Select at least one organization to continue.
-                        </span>
-                    )}
+                    <span role="status" className="text-xs text-destructive">
+                        {showSelectionMessage ? "Select at least one organization to continue." : null}
+                    </span>
                     <div className="flex gap-2">
                         <Button variant="outline" onClick={() => onOpenChange(false)}>
                             Cancel

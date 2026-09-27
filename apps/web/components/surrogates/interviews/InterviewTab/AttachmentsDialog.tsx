@@ -13,12 +13,47 @@ import {
 } from "lucide-react"
 import type { InterviewAttachmentRead } from "@/lib/api/interviews"
 
+interface AttachmentsUploadButtonProps {
+    onUploadFiles: (files: FileList | null) => void
+    uploadInputRef: React.RefObject<HTMLInputElement | null>
+    isUploading: boolean
+}
+
+function AttachmentsUploadButton({ onUploadFiles, uploadInputRef, isUploading }: AttachmentsUploadButtonProps) {
+    const uploadInputId = useId()
+
+    return (
+        <>
+            <input
+                id={uploadInputId}
+                name="interview_attachments_upload"
+                ref={uploadInputRef}
+                type="file"
+                aria-label="Upload interview attachments"
+                className="hidden"
+                multiple
+                onChange={(event) => onUploadFiles(event.target.files)}
+            />
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => uploadInputRef.current?.click()}
+                disabled={isUploading}
+            >
+                {isUploading ? (
+                    <Loader2Icon className="size-4 mr-2 animate-spin" aria-hidden="true" />
+                ) : (
+                    <Upload className="size-4 mr-2" aria-hidden="true" />
+                )}
+                Upload
+            </Button>
+        </>
+    )
+}
+
 interface AttachmentsSectionProps {
     attachments: InterviewAttachmentRead[]
-    canUpload: boolean
-    onUploadFiles: (files: FileList | null) => void
     uploadError: string | null
-    uploadInputRef: React.RefObject<HTMLInputElement | null>
     isUploading: boolean
     onRequestTranscription: (attachmentId: string) => void
     transcribingAttachmentId: string | null
@@ -26,49 +61,13 @@ interface AttachmentsSectionProps {
 
 function AttachmentsSection({
     attachments,
-    canUpload,
-    onUploadFiles,
     uploadError,
-    uploadInputRef,
     isUploading,
     onRequestTranscription,
     transcribingAttachmentId,
 }: AttachmentsSectionProps) {
-    const uploadInputId = useId()
-
     return (
         <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-medium">Attachments</div>
-                {canUpload && (
-                    <>
-                        <input
-                            id={uploadInputId}
-                            name="interview_attachments_upload"
-                            ref={uploadInputRef}
-                            type="file"
-                            aria-label="Upload interview attachments"
-                            className="hidden"
-                            multiple
-                            onChange={(event) => onUploadFiles(event.target.files)}
-                        />
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => uploadInputRef.current?.click()}
-                            disabled={isUploading}
-                        >
-                            {isUploading ? (
-                                <Loader2Icon className="size-4 mr-2 animate-spin" />
-                            ) : (
-                                <Upload className="size-4 mr-2" />
-                            )}
-                            Upload
-                        </Button>
-                    </>
-                )}
-            </div>
-
             {uploadError && (
                 <div className="text-sm text-destructive">{uploadError}</div>
             )}
@@ -168,10 +167,20 @@ export function AttachmentsDialog({
 }: AttachmentsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
+            <DialogContent size="lg">
+                <DialogHeader
+                    status={
+                        canUpload ? (
+                            <AttachmentsUploadButton
+                                onUploadFiles={onUploadFiles}
+                                uploadInputRef={uploadInputRef}
+                                isUploading={isUploading}
+                            />
+                        ) : undefined
+                    }
+                >
                     <DialogTitle className="flex items-center gap-2">
-                        <PaperclipIcon className="size-5" />
+                        <PaperclipIcon className="size-5" aria-hidden="true" />
                         Attachments
                         {attachments.length > 0 && (
                             <Badge variant="secondary" className="text-xs">{attachments.length}</Badge>
@@ -181,10 +190,7 @@ export function AttachmentsDialog({
                 <div className="max-h-[60vh] overflow-auto py-2">
                     <AttachmentsSection
                         attachments={attachments}
-                        canUpload={canUpload}
-                        onUploadFiles={onUploadFiles}
                         uploadError={uploadError}
-                        uploadInputRef={uploadInputRef}
                         isUploading={isUploading}
                         onRequestTranscription={onRequestTranscription}
                         transcribingAttachmentId={transcribingAttachmentId}

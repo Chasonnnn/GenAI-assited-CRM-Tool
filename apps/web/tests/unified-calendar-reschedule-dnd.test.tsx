@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { render, screen, fireEvent, within } from "@testing-library/react"
 import "@testing-library/jest-dom"
 import { UnifiedCalendar } from "@/components/appointments/UnifiedCalendar"
 import { format } from "date-fns"
@@ -171,9 +171,20 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
     it("does not fetch intended parents before appointment link editing starts", () => {
         render(<UnifiedCalendar />)
 
+        fireEvent.click(screen.getByRole("button", { name: /Test Zhang/i }))
         expect(mockUseIntendedParents).toHaveBeenCalledWith(
             { per_page: 100 },
             { enabled: false }
+        )
+        expect(mockUseIntendedParents).not.toHaveBeenCalledWith(
+            { per_page: 100 },
+            { enabled: true }
+        )
+
+        fireEvent.click(screen.getByRole("button", { name: "Link" }))
+        expect(mockUseIntendedParents).toHaveBeenLastCalledWith(
+            { per_page: 100 },
+            { enabled: true }
         )
     })
 
@@ -280,6 +291,36 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
             calendarError: null,
         })
 
+        // The detail dialog reads links from the appointment detail, not the calendar list item.
+        mockUseAppointment.mockReturnValue({
+            data: {
+                id: "appt-linked",
+                appointment_type_name: "Initial Interview",
+                client_name: "Linked Appointment",
+                client_email: "linked@example.com",
+                client_phone: "+1-555-123-4567",
+                client_timezone: "America/Los_Angeles",
+                client_notes: null,
+                scheduled_start: appointmentStartLocal.toISOString(),
+                scheduled_end: appointmentEndLocal.toISOString(),
+                duration_minutes: 30,
+                meeting_mode: "zoom",
+                meeting_location: null,
+                dial_in_number: null,
+                status: "confirmed",
+                pending_expires_at: null,
+                zoom_join_url: null,
+                google_meet_url: null,
+                surrogate_id: "surrogate-1",
+                surrogate_number: "S10001",
+                intended_parent_id: "ip-1",
+                intended_parent_name: "Casey Parent",
+            },
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        })
+
         render(<UnifiedCalendar includeGoogleEvents={false} />)
 
         fireEvent.click(screen.getByText(/Linked Appointment/i))
@@ -374,12 +415,114 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
 
         expect(screen.queryByText("Task 5")).not.toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole("button", { name: "View all 7 items" }))
+        fireEvent.click(screen.getByRole("button", { name: "+4 more items" }))
 
         expect(
             screen.getByRole("heading", { name: format(overflowDay, "EEEE, MMMM d") })
         ).toBeInTheDocument()
         expect(screen.getByText("Task 5")).toBeInTheDocument()
         expect(screen.getByText("Appointment 2")).toBeInTheDocument()
+    })
+
+    it("orders same-day month-cell tasks by due time and shows no count badge", () => {
+        const dueDate = format(new Date(now.getFullYear(), now.getMonth(), 20), "yyyy-MM-dd")
+        // Listed in creation order; untimed first, as the API used to return them.
+        const tasks = [
+            { id: "t-untimed", title: "Delta", due_time: null },
+            { id: "t-3pm", title: "Alpha", due_time: "15:00:00" },
+            { id: "t-11am", title: "Bravo", due_time: "11:00:00" },
+            { id: "t-9am", title: "Charlie", due_time: "09:00:00" },
+        ].map((task) => ({
+            ...task,
+            description: null,
+            task_type: "other",
+            surrogate_id: null,
+            surrogate_number: null,
+            owner_type: "user",
+            owner_id: "u1",
+            owner_name: "Owner",
+            created_by_user_id: "u1",
+            created_by_name: "Owner",
+            due_date: dueDate,
+            duration_minutes: null,
+            is_completed: false,
+            completed_at: null,
+            completed_by_name: null,
+            created_at: "2026-02-20T00:00:00Z",
+        }))
+        mockUseUnifiedCalendarData.mockReturnValue({
+            appointments: [],
+            appointmentsLoading: false,
+            tasks,
+            tasksLoading: false,
+            googleEvents: [],
+            calendarConnected: true,
+            calendarError: null,
+        })
+
+        render(<UnifiedCalendar includeGoogleEvents={false} />)
+
+        const charlie = screen.getByText(/Charlie$/)
+        const bravo = screen.getByText(/Bravo$/)
+        const alpha = screen.getByText(/Alpha$/)
+        expect(charlie.compareDocumentPosition(bravo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(bravo.compareDocumentPosition(alpha) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(screen.queryByText(/Delta$/)).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "+1 more items" })).toBeInTheDocument()
+        expect(screen.queryByText("4 items")).not.toBeInTheDocument()
+        expect(screen.queryByText(/^View all/)).not.toBeInTheDocument()
+    })
+
+    it("shows day-view events at 6 AM and 9 PM", async () => {
+        const early = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 6, 0, 0, 0)
+        const late = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 21, 0, 0, 0)
+        const appointment = (id: string, name: string, start: Date) => ({
+            id,
+            appointment_type_name: "Initial Interview",
+            client_name: name,
+            client_email: `${id}@example.com`,
+            client_phone: null,
+            client_timezone: "America/Los_Angeles",
+            scheduled_start: start.toISOString(),
+            scheduled_end: new Date(start.getTime() + 30 * 60 * 1000).toISOString(),
+            duration_minutes: 30,
+            meeting_mode: "zoom",
+            meeting_location: null,
+            dial_in_number: null,
+            status: "confirmed",
+            zoom_join_url: null,
+            google_meet_url: null,
+            surrogate_id: null,
+            surrogate_number: null,
+            intended_parent_id: null,
+            intended_parent_name: null,
+            created_at: "2026-02-20T00:00:00Z",
+        })
+        mockUseUnifiedCalendarData.mockReturnValue({
+            appointments: [
+                appointment("appt-early", "Early Client", early),
+                appointment("appt-late", "Late Client", late),
+            ],
+            appointmentsLoading: false,
+            tasks: [],
+            tasksLoading: false,
+            googleEvents: [],
+            calendarConnected: true,
+            calendarError: null,
+        })
+
+        render(<UnifiedCalendar includeGoogleEvents={false} />)
+
+        fireEvent.click(screen.getByRole("combobox", { name: "Calendar period" }))
+        const dayOption = await screen.findByRole("option", { name: "Day" })
+        fireEvent.mouseMove(dayOption)
+        fireEvent.click(dayOption)
+
+        const hours = await screen.findByTestId("day-view-hours")
+        expect(hours.querySelectorAll("[data-hour]")).toHaveLength(24)
+        const earlyRow = hours.querySelector('[data-hour="6"]') as HTMLElement
+        const lateRow = hours.querySelector('[data-hour="21"]') as HTMLElement
+        expect(within(earlyRow).getByText(/Early Client/)).toBeInTheDocument()
+        expect(within(lateRow).getByText(/Late Client/)).toBeInTheDocument()
     })
 })

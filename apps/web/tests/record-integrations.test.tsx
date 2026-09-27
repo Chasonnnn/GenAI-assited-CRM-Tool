@@ -11,7 +11,7 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
     useAppointmentTypes: () => mocks.types(),
     useBookingPreviewSlots: (...args: unknown[]) => mocks.slots(...args),
 }))
-vi.mock("@/components/appointments/AppointmentsList", () => ({ AppointmentDetailDialog: ({ appointmentId, open }: { appointmentId: string | null; open: boolean }) => open ? <div role="dialog">Manage {appointmentId}</div> : null }))
+vi.mock("@/components/appointments/AppointmentDetailDialog", () => ({ AppointmentDetailDialog: ({ appointmentId, open }: { appointmentId: string | null; open: boolean }) => open ? <div role="dialog">Manage {appointmentId}</div> : null }))
 vi.mock("@/lib/api", () => ({ default: { get: (...args: unknown[]) => mocks.get(...args), put: (...args: unknown[]) => mocks.put(...args), delete: (...args: unknown[]) => mocks.remove(...args) } }))
 vi.mock("@/lib/api/appointments", () => ({ createStaffAppointment: (...args: unknown[]) => mocks.create(...args), createSchedulingRequestId: () => "request-1" }))
 vi.mock("@/lib/api/tickets", () => ({ getTickets: (...args: unknown[]) => mocks.tickets(...args) }))

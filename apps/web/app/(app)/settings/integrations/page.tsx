@@ -1,18 +1,28 @@
 "use client"
 
-import { useReducer, useState, type ReactNode } from "react"
+import { useReducer, useRef, useState, type ReactNode } from "react"
 import Link from "@/components/app-link"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
     Dialog,
+    DialogBody,
+    DialogClose,
     DialogContent,
     DialogDescription,
     DialogFooter,
     DialogHeader,
+    DialogStatusBar,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { CopyButton } from "@/components/ui/copy-button"
+import { CopyField } from "@/components/ui/copy-field"
+import { ValidatedField } from "@/components/ui/field"
+import { SaveStatus, type SaveStatusState } from "@/components/ui/save-bar"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -30,7 +40,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import {
     CheckCircleIcon,
@@ -113,7 +122,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Checkbox } from "@/components/ui/checkbox"
 import { PencilIcon } from "lucide-react"
 import { formatDateTime, formatRelativeTime } from "@/lib/formatters"
-import { CopyIcon, SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
+import { SendIcon, RotateCwIcon, ActivityIcon, PlusIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { toast } from "@/components/ui/toast"
 import type { IntegrationStatus, GoogleCalendarStatusResponse } from "@/lib/api/integrations"
@@ -670,18 +679,6 @@ function formatZapierAttribution(event: ZapierOutboundEvent): string {
     return `Lead: ${event.lead_id || "—"}`
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-    if (error instanceof Error && error.message) return error.message
-    return fallback
-}
-
-function copyToClipboard(text: string) {
-    navigator.clipboard
-        .writeText(text)
-        .then(() => toast.success("Copied to clipboard"))
-        .catch(() => toast.error("Failed to copy"))
-}
-
 // AI provider options
 const AI_PROVIDERS = [
     {
@@ -1133,13 +1130,13 @@ function getZapierDonorSettingsState({
     }
 }
 
-function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+/** DialogBody and DialogFooter of the AI Configuration dialog. */
+function AIConfigurationSection() {
     const { data: aiSettings, isLoading } = useAISettings()
 
     return (
         <AIConfigurationSectionContent
             key={aiSettings ? "loaded" : "loading"}
-            variant={variant}
             aiSettings={aiSettings}
             isLoading={isLoading}
         />
@@ -1147,11 +1144,9 @@ function AIConfigurationSection({ variant = "page" }: { variant?: "page" | "dial
 }
 
 function AIConfigurationSectionContent({
-    variant,
     aiSettings,
     isLoading,
 }: {
-    variant: "page" | "dialog"
     aiSettings: ReturnType<typeof useAISettings>["data"]
     isLoading: boolean
 }) {
@@ -1206,8 +1201,6 @@ function AIConfigurationSectionContent({
             && aiForm.vertexServiceAccount.trim()
             && aiForm.vertexAudience.trim()
         )
-    const showHeading = variant === "page"
-    const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
 
     const handleTestKey = async () => {
         if (aiForm.provider === "vertex_wif" || !aiForm.apiKey.trim()) return
@@ -1274,7 +1267,13 @@ function AIConfigurationSectionContent({
                 location: aiForm.vertexUseExpress ? null : aiForm.vertexLocation.trim() || null,
             }
         }
-        await updateSettings.mutateAsync(update)
+        try {
+            await updateSettings.mutateAsync(update)
+        } catch (error) {
+            const message = getActionErrorMessage(error, "Couldn't save AI configuration")
+            if (message) toast.error(message)
+            return
+        }
         setAiForm((current) => ({ ...current, apiKey: "" }))
         setAiUi((current) => ({
             ...current,
@@ -1293,72 +1292,79 @@ function AIConfigurationSectionContent({
             await acceptConsent.mutateAsync()
             toast.success("AI consent accepted")
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to accept consent")
+            const message = getActionErrorMessage(error, "Couldn't accept AI consent")
+            if (message) toast.error(message)
         }
     }
 
     if (isLoading) {
-        return (
-            <AIConfigurationLoadingState
-                containerClass={containerClass}
-                showHeading={showHeading}
-            />
-        )
+        return <IntegrationDialogLoadingState />
     }
 
     return (
-        <div className={containerClass}>
-            {showHeading && <AIConfigurationHeading />}
+        <>
+            <DialogBody>
+                {!consentAccepted && consentInfo ? (
+                    <AIConsentCard
+                        consentText={consentInfo.consent_text}
+                        pending={acceptConsent.isPending}
+                        onAccept={handleAcceptConsent}
+                    />
+                ) : null}
 
-            {!consentAccepted && consentInfo ? (
-                <AIConsentCard
-                    consentText={consentInfo.consent_text}
-                    pending={acceptConsent.isPending}
-                    onAccept={handleAcceptConsent}
+                <AISettingsFields
+                    aiForm={aiForm}
+                    aiUi={aiUi}
+                    apiKeyMasked={aiSettings?.api_key_masked ?? null}
+                    consentAccepted={consentAccepted}
+                    selectedProviderModels={selectedProviderModels}
+                    gcpIntegration={gcpIntegration}
+                    pendingState={{
+                        keyTest: testKey.isPending,
+                        gcpConnect: connectGcp.isPending,
+                        gcpDisconnect: disconnectIntegration.isPending,
+                    }}
+                    updateAiForm={updateAiForm}
+                    onProviderChange={(provider) => {
+                        setAiForm((current) => ({
+                            ...current,
+                            provider,
+                            model: "",
+                        }))
+                        setAiUi((current) => ({
+                            ...current,
+                            keyTested: null,
+                            editingKey: false,
+                        }))
+                    }}
+                    onApiKeyChange={(apiKey) => {
+                        updateAiForm("apiKey", apiKey)
+                        setAiUi((current) => ({ ...current, keyTested: null }))
+                    }}
+                    onEditKey={() => {
+                        updateAiForm("apiKey", "")
+                        setAiUi((current) => ({ ...current, editingKey: true }))
+                    }}
+                    onTestKey={handleTestKey}
+                    onConnectGcp={() => connectGcp.mutate()}
+                    onDisconnectGcp={async () => {
+                        await disconnectIntegration.mutateAsync("gcp")
+                        toast.success("Google Cloud disconnected")
+                    }}
                 />
-            ) : null}
-
-            <AISettingsCard
-                aiForm={aiForm}
-                aiUi={aiUi}
-                apiKeyMasked={aiSettings?.api_key_masked ?? null}
-                consentAccepted={consentAccepted}
-                selectedProviderModels={selectedProviderModels}
-                gcpIntegration={gcpIntegration}
-                vertexReady={vertexReady}
-                pendingState={{
-                    keyTest: testKey.isPending,
-                    settingsUpdate: updateSettings.isPending,
-                    gcpConnect: connectGcp.isPending,
-                    gcpDisconnect: disconnectIntegration.isPending,
-                }}
-                updateAiForm={updateAiForm}
-                onProviderChange={(provider) => {
-                    setAiForm((current) => ({
-                        ...current,
-                        provider,
-                        model: "",
-                    }))
-                    setAiUi((current) => ({
-                        ...current,
-                        keyTested: null,
-                        editingKey: false,
-                    }))
-                }}
-                onApiKeyChange={(apiKey) => {
-                    updateAiForm("apiKey", apiKey)
-                    setAiUi((current) => ({ ...current, keyTested: null }))
-                }}
-                onEditKey={() => {
-                    updateAiForm("apiKey", "")
-                    setAiUi((current) => ({ ...current, editingKey: true }))
-                }}
-                onTestKey={handleTestKey}
-                onConnectGcp={() => connectGcp.mutate()}
-                onDisconnectGcp={() => disconnectIntegration.mutate("gcp")}
-                onSave={handleSave}
-            />
-        </div>
+            </DialogBody>
+            <DialogFooter>
+                <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+                <AISaveButton
+                    pending={updateSettings.isPending}
+                    saved={aiUi.saved}
+                    disabled={!vertexReady}
+                    onSave={() => {
+                        void handleSave()
+                    }}
+                />
+            </DialogFooter>
+        </>
     )
 }
 
@@ -1367,33 +1373,22 @@ type UpdateAiConfigurationForm = <K extends keyof AiConfigurationFormState>(
     value: AiConfigurationFormState[K],
 ) => void
 
-function AIConfigurationLoadingState({
-    containerClass,
-    showHeading,
-}: {
-    containerClass: string
-    showHeading: boolean
-}) {
-    return (
-        <div className={containerClass}>
-            {showHeading ? <h2 className="mb-4 text-lg font-semibold">AI Configuration</h2> : null}
-            <div className="flex items-center justify-center py-8">
-                <Loader2Icon
-                    className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground"
-                    aria-hidden="true"
-                />
-            </div>
-        </div>
-    )
-}
-
-function AIConfigurationHeading() {
+/** Loading body and footer shared by the sectioned integration dialogs. */
+function IntegrationDialogLoadingState() {
     return (
         <>
-            <h2 className="mb-4 text-lg font-semibold">AI Configuration</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-                Configure AI assistant settings for your organization. Use BYOK (OpenAI/Gemini), Vertex API key (express mode), or Vertex AI via Workload Identity Federation.
-            </p>
+            <DialogBody>
+                <div role="status" className="flex items-center justify-center py-8">
+                    <Loader2Icon
+                        className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground"
+                        aria-hidden="true"
+                    />
+                    <span className="sr-only">Loading</span>
+                </div>
+            </DialogBody>
+            <DialogFooter>
+                <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            </DialogFooter>
         </>
     )
 }
@@ -1437,14 +1432,13 @@ function AIConsentCard({
     )
 }
 
-function AISettingsCard({
+function AISettingsFields({
     aiForm,
     aiUi,
     apiKeyMasked,
     consentAccepted,
     selectedProviderModels,
     gcpIntegration,
-    vertexReady,
     pendingState,
     updateAiForm,
     onProviderChange,
@@ -1453,7 +1447,6 @@ function AISettingsCard({
     onTestKey,
     onConnectGcp,
     onDisconnectGcp,
-    onSave,
 }: {
     aiForm: AiConfigurationFormState
     aiUi: AiConfigurationUiState
@@ -1461,10 +1454,8 @@ function AISettingsCard({
     consentAccepted: boolean
     selectedProviderModels: ReadonlyArray<string>
     gcpIntegration: IntegrationStatus | undefined
-    vertexReady: boolean
     pendingState: {
         keyTest: boolean
-        settingsUpdate: boolean
         gcpConnect: boolean
         gcpDisconnect: boolean
     }
@@ -1474,36 +1465,21 @@ function AISettingsCard({
     onEditKey: () => void
     onTestKey: () => void
     onConnectGcp: () => void
-    onDisconnectGcp: () => void
-    onSave: () => void
+    onDisconnectGcp: () => Promise<unknown>
 }) {
     return (
-        <Card>
-            <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900">
-                            <SparklesIcon className="size-5 text-purple-600 dark:text-purple-400" aria-hidden="true" />
-                        </div>
-                        <div>
-                            <CardTitle className="text-base">AI Assistant</CardTitle>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Label htmlFor="ai-enabled" className="text-sm">
-                            {aiForm.isEnabled ? "Enabled" : "Disabled"}
-                        </Label>
-                        <Switch
-                            id="ai-enabled"
-                            checked={aiForm.isEnabled}
-                            onCheckedChange={(checked) => updateAiForm("isEnabled", checked)}
-                            disabled={!consentAccepted && !aiForm.isEnabled}
-                        />
-                    </div>
-                </div>
-            </CardHeader>
+        <>
+            <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+                <Label htmlFor="ai-enabled">Enable AI assistant</Label>
+                <Switch
+                    id="ai-enabled"
+                    checked={aiForm.isEnabled}
+                    onCheckedChange={(checked) => updateAiForm("isEnabled", checked)}
+                    disabled={!consentAccepted && !aiForm.isEnabled}
+                />
+            </div>
 
-            <CardContent className="space-y-4">
+            <div className="space-y-4">
                 <AIProviderField
                     provider={aiForm.provider}
                     onProviderChange={onProviderChange}
@@ -1546,15 +1522,8 @@ function AISettingsCard({
                     selectedProviderModels={selectedProviderModels}
                     onModelChange={(model) => updateAiForm("model", model)}
                 />
-
-                <AISaveButton
-                    pending={pendingState.settingsUpdate}
-                    saved={aiUi.saved}
-                    disabled={!vertexReady}
-                    onSave={onSave}
-                />
-            </CardContent>
-        </Card>
+            </div>
+        </>
     )
 }
 
@@ -1759,7 +1728,7 @@ function VertexWifSettings({
     }
     updateAiForm: UpdateAiConfigurationForm
     onConnectGcp: () => void
-    onDisconnectGcp: () => void
+    onDisconnectGcp: () => Promise<unknown>
 }) {
     return (
         <div className="space-y-4 rounded-lg border p-4">
@@ -1784,14 +1753,18 @@ function VertexWifSettings({
                         : "Connect a Google Cloud account to verify access."}
                 </div>
                 {gcpIntegration ? (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={onDisconnectGcp}
-                        disabled={pendingState.gcpDisconnect}
-                    >
-                        Disconnect
-                    </Button>
+                    <ConfirmDialog
+                        trigger={(
+                            <Button variant="outline" size="sm" disabled={pendingState.gcpDisconnect}>
+                                Disconnect…
+                            </Button>
+                        )}
+                        title="Disconnect Google Cloud?"
+                        description="Vertex AI (WIF) requests stop until an account is connected again."
+                        confirmLabel="Disconnect"
+                        errorFallback="Couldn't disconnect Google Cloud. Try again."
+                        onConfirm={onDisconnectGcp}
+                    />
                 ) : (
                     <Button size="sm" onClick={onConnectGcp} disabled={pendingState.gcpConnect}>
                         {pendingState.gcpConnect ? (
@@ -1923,19 +1896,19 @@ function AISaveButton({
     onSave: () => void
 }) {
     return (
-        <Button onClick={onSave} disabled={pending || disabled} className="w-full">
+        <Button onClick={onSave} disabled={pending || disabled}>
             {pending ? (
                 <>
                     <Loader2Icon
-                        className="mr-2 size-4 animate-spin motion-reduce:animate-none"
+                        className="animate-spin motion-reduce:animate-none"
                         aria-hidden="true"
                     />
                     Saving…
                 </>
             ) : saved ? (
                 <>
-                    <CheckIcon className="mr-2 size-4" aria-hidden="true" />
-                    Saved!
+                    <CheckIcon aria-hidden="true" />
+                    Saved
                 </>
             ) : (
                 "Save AI Configuration"
@@ -1944,13 +1917,13 @@ function AISaveButton({
     )
 }
 
-function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+/** DialogBody and DialogFooter of the Email Configuration dialog. */
+function EmailConfigurationSection() {
     const { data: settings, isLoading } = useResendSettings()
 
     return (
         <EmailConfigurationSectionContent
             key={settings ? "loaded" : "loading"}
-            variant={variant}
             settings={settings}
             isLoading={isLoading}
         />
@@ -1958,11 +1931,9 @@ function EmailConfigurationSection({ variant = "page" }: { variant?: "page" | "d
 }
 
 function EmailConfigurationSectionContent({
-    variant,
     settings,
     isLoading,
 }: {
-    variant: "page" | "dialog"
     settings: ReturnType<typeof useResendSettings>["data"]
     isLoading: boolean
 }) {
@@ -2011,7 +1982,7 @@ function EmailConfigurationSectionContent({
             const result = await testKey.mutateAsync(emailForm.apiKey)
             setEmailUi((current) => ({ ...current, keyTested: result }))
         } catch (error) {
-            const message = getErrorMessage(error, "Failed to test key")
+            const message = getActionErrorMessage(error, "Couldn't test the API key") ?? "Couldn't test the API key"
             setEmailUi((current) => ({
                 ...current,
                 keyTested: {
@@ -2095,23 +2066,15 @@ function EmailConfigurationSectionContent({
                 setEmailUi((current) => ({ ...current, saved: false }))
             }, 2000)
         } catch (error) {
-            const message = getErrorMessage(error, "Failed to save email configuration")
-            toast.error(message)
+            const message = getActionErrorMessage(error, "Couldn't save email configuration")
+            if (message) toast.error(message)
         }
     }
 
+    // Runs from the rotate confirmation, which shows a failure inline and stays open.
     const handleRotateWebhook = async () => {
-        try {
-            const result = await rotateWebhook.mutateAsync()
-            toast.success("Webhook URL rotated. Update Resend to use the new URL.")
-            // Optional convenience: copy the new URL
-            if (result?.webhook_url) {
-                const write = navigator.clipboard?.writeText(result.webhook_url)
-                write?.catch(() => {})
-            }
-        } catch (error) {
-            toast.error(getErrorMessage(error, "Failed to rotate webhook URL"))
-        }
+        await rotateWebhook.mutateAsync()
+        toast.success("Webhook URL rotated. Update Resend to use the new URL.")
     }
 
     const hasResendKey = Boolean(emailForm.apiKey.trim() || settings?.api_key_masked)
@@ -2179,69 +2142,76 @@ function EmailConfigurationSectionContent({
         !rateLimitGroupTokenInvalid &&
         webhookTrackingReady
     const showMaskedKey = Boolean(settings?.api_key_masked) && !emailUi.isEditingKey && !emailForm.apiKey
-    const showHeading = variant === "page"
-    const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
 
     if (isLoading) {
-        return (
-            <EmailConfigurationLoadingState
-                containerClass={containerClass}
-                showHeading={showHeading}
-            />
-        )
+        return <IntegrationDialogLoadingState />
     }
 
     return (
-        <div className={containerClass}>
-            {showHeading && <EmailConfigurationHeading />}
-
-            <EmailSettingsCard
-                form={emailForm}
-                ui={emailUi}
-                settings={settings}
-                eligibleSenders={eligibleSenders ?? []}
-                eligibleSendersLoading={eligibleSendersLoading}
-                showMaskedKey={showMaskedKey}
-                storedCredentialRetestRequired={storedCredentialRetestRequired}
-                rateLimitGroupTokenInvalid={rateLimitGroupTokenInvalid}
-                canSave={canSave}
-                pendingState={{
-                    keyTest: testKey.isPending,
-                    settingsUpdate: updateSettings.isPending,
-                    webhookRotate: rotateWebhook.isPending,
-                }}
-                onProviderChange={handleProviderChange}
-                updateEmailForm={updateEmailForm}
-                onApiKeyChange={(apiKey) => {
-                    updateEmailForm("apiKey", apiKey, true)
-                    setEmailUi((current) => ({
-                        ...current,
-                        keyTested: null,
-                        isEditingKey: true,
-                    }))
-                }}
-                onEditKey={() => {
-                    updateEmailForm("apiKey", "", true)
-                    setEmailUi((current) => ({
-                        ...current,
-                        isEditingKey: true,
-                        keyTested: null,
-                    }))
-                }}
-                onCancelKeyEdit={() => {
-                    updateEmailForm("apiKey", "")
-                    setEmailUi((current) => ({
-                        ...current,
-                        isEditingKey: false,
-                        keyTested: null,
-                    }))
-                }}
-                onTestKey={handleTestKey}
-                onCopyWebhookUrl={copyToClipboard}
-                onRotateWebhook={handleRotateWebhook}
-                onSave={handleSave}
-            />
-        </div>
+        <>
+            <DialogBody>
+                <EmailSettingsFields
+                    form={emailForm}
+                    ui={emailUi}
+                    settings={settings}
+                    eligibleSenders={eligibleSenders ?? []}
+                    eligibleSendersLoading={eligibleSendersLoading}
+                    showMaskedKey={showMaskedKey}
+                    storedCredentialRetestRequired={storedCredentialRetestRequired}
+                    rateLimitGroupTokenInvalid={rateLimitGroupTokenInvalid}
+                    pendingState={{
+                        keyTest: testKey.isPending,
+                        webhookRotate: rotateWebhook.isPending,
+                    }}
+                    onProviderChange={handleProviderChange}
+                    updateEmailForm={updateEmailForm}
+                    onApiKeyChange={(apiKey) => {
+                        updateEmailForm("apiKey", apiKey, true)
+                        setEmailUi((current) => ({
+                            ...current,
+                            keyTested: null,
+                            isEditingKey: true,
+                        }))
+                    }}
+                    onEditKey={() => {
+                        updateEmailForm("apiKey", "", true)
+                        setEmailUi((current) => ({
+                            ...current,
+                            isEditingKey: true,
+                            keyTested: null,
+                        }))
+                    }}
+                    onCancelKeyEdit={() => {
+                        updateEmailForm("apiKey", "")
+                        setEmailUi((current) => ({
+                            ...current,
+                            isEditingKey: false,
+                            keyTested: null,
+                        }))
+                    }}
+                    onTestKey={handleTestKey}
+                    onRotateWebhook={handleRotateWebhook}
+                />
+            </DialogBody>
+            <DialogFooter
+                start={(
+                    <Button variant="ghost" render={<Link href="/settings/integrations/email" />}>
+                        <ActivityIcon aria-hidden="true" />
+                        View email operations
+                    </Button>
+                )}
+            >
+                <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+                <EmailSaveButton
+                    pending={updateSettings.isPending}
+                    saved={emailUi.saved}
+                    disabled={!canSave}
+                    onSave={() => {
+                        void handleSave()
+                    }}
+                />
+            </DialogFooter>
+        </>
     )
 }
 
@@ -2251,38 +2221,7 @@ type UpdateEmailConfigurationForm = <K extends keyof EmailConfigurationFormState
     markEdited?: boolean,
 ) => void
 
-function EmailConfigurationLoadingState({
-    containerClass,
-    showHeading,
-}: {
-    containerClass: string
-    showHeading: boolean
-}) {
-    return (
-        <div className={containerClass}>
-            {showHeading ? <h2 className="mb-4 text-lg font-semibold">Email Configuration</h2> : null}
-            <div className="flex items-center justify-center py-8">
-                <Loader2Icon
-                    className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground"
-                    aria-hidden="true"
-                />
-            </div>
-        </div>
-    )
-}
-
-function EmailConfigurationHeading() {
-    return (
-        <>
-            <h2 className="mb-4 text-lg font-semibold">Email Configuration</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-                Configure the email provider for campaigns. Choose between Resend (recommended for deliverability) or Gmail.
-            </p>
-        </>
-    )
-}
-
-function EmailSettingsCard({
+function EmailSettingsFields({
     form,
     ui,
     settings,
@@ -2291,7 +2230,6 @@ function EmailSettingsCard({
     showMaskedKey,
     storedCredentialRetestRequired,
     rateLimitGroupTokenInvalid,
-    canSave,
     pendingState,
     onProviderChange,
     updateEmailForm,
@@ -2299,9 +2237,7 @@ function EmailSettingsCard({
     onEditKey,
     onCancelKeyEdit,
     onTestKey,
-    onCopyWebhookUrl,
     onRotateWebhook,
-    onSave,
 }: {
     form: EmailConfigurationFormState
     ui: EmailConfigurationUiState
@@ -2311,10 +2247,8 @@ function EmailSettingsCard({
     showMaskedKey: boolean
     storedCredentialRetestRequired: boolean
     rateLimitGroupTokenInvalid: boolean
-    canSave: boolean
     pendingState: {
         keyTest: boolean
-        settingsUpdate: boolean
         webhookRotate: boolean
     }
     onProviderChange: (provider: "resend" | "gmail" | "") => void
@@ -2323,76 +2257,45 @@ function EmailSettingsCard({
     onEditKey: () => void
     onCancelKeyEdit: () => void
     onTestKey: () => void
-    onCopyWebhookUrl: (webhookUrl: string) => void
-    onRotateWebhook: () => void
-    onSave: () => void
+    onRotateWebhook: () => Promise<void>
 }) {
-    const statusLabel =
-        settings?.email_provider === "resend"
-            ? "Resend"
-            : settings?.email_provider === "gmail"
-                ? "Gmail"
-                : "Not configured"
-
     return (
-        <Card>
-            <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-lg bg-teal-100 dark:bg-teal-900">
-                        <SendIcon className="size-5 text-teal-600 dark:text-teal-400" aria-hidden="true" />
-                    </div>
-                    <div>
-                        <CardTitle className="text-base">Campaign Email Provider</CardTitle>
-                        <CardDescription className="text-xs">{statusLabel}</CardDescription>
-                    </div>
-                </div>
-            </CardHeader>
+        <div className="space-y-6">
+            <EmailProviderField
+                provider={form.provider}
+                onProviderChange={onProviderChange}
+            />
 
-            <CardContent className="space-y-6">
-                <EmailProviderField
-                    provider={form.provider}
-                    onProviderChange={onProviderChange}
+            {form.provider === "resend" ? (
+                <ResendConfigurationFields
+                    form={form}
+                    ui={ui}
+                    settings={settings}
+                    showMaskedKey={showMaskedKey}
+                    storedCredentialRetestRequired={storedCredentialRetestRequired}
+                    rateLimitGroupTokenInvalid={rateLimitGroupTokenInvalid}
+                    pendingState={pendingState}
+                    updateEmailForm={updateEmailForm}
+                    onApiKeyChange={onApiKeyChange}
+                    onEditKey={onEditKey}
+                    onCancelKeyEdit={onCancelKeyEdit}
+                    onTestKey={onTestKey}
+                    onRotateWebhook={onRotateWebhook}
                 />
+            ) : null}
 
-                {form.provider === "resend" ? (
-                    <ResendConfigurationFields
-                        form={form}
-                        ui={ui}
-                        settings={settings}
-                        showMaskedKey={showMaskedKey}
-                        storedCredentialRetestRequired={storedCredentialRetestRequired}
-                        rateLimitGroupTokenInvalid={rateLimitGroupTokenInvalid}
-                        pendingState={pendingState}
-                        updateEmailForm={updateEmailForm}
-                        onApiKeyChange={onApiKeyChange}
-                        onEditKey={onEditKey}
-                        onCancelKeyEdit={onCancelKeyEdit}
-                        onTestKey={onTestKey}
-                        onCopyWebhookUrl={onCopyWebhookUrl}
-                        onRotateWebhook={onRotateWebhook}
-                    />
-                ) : null}
-
-                {form.provider === "gmail" ? (
-                    <GmailConfigurationFields
-                        defaultSender={form.defaultSender}
-                        eligibleSenders={eligibleSenders}
-                        eligibleSendersLoading={eligibleSendersLoading}
-                        settings={settings}
-                        onDefaultSenderChange={(defaultSender) =>
-                            updateEmailForm("defaultSender", defaultSender, true)
-                        }
-                    />
-                ) : null}
-
-                <EmailSaveButton
-                    pending={pendingState.settingsUpdate}
-                    saved={ui.saved}
-                    disabled={!canSave}
-                    onSave={onSave}
+            {form.provider === "gmail" ? (
+                <GmailConfigurationFields
+                    defaultSender={form.defaultSender}
+                    eligibleSenders={eligibleSenders}
+                    eligibleSendersLoading={eligibleSendersLoading}
+                    settings={settings}
+                    onDefaultSenderChange={(defaultSender) =>
+                        updateEmailForm("defaultSender", defaultSender, true)
+                    }
                 />
-            </CardContent>
-        </Card>
+            ) : null}
+        </div>
     )
 }
 
@@ -2445,7 +2348,6 @@ function ResendConfigurationFields({
     onEditKey,
     onCancelKeyEdit,
     onTestKey,
-    onCopyWebhookUrl,
     onRotateWebhook,
 }: {
     form: EmailConfigurationFormState
@@ -2463,8 +2365,7 @@ function ResendConfigurationFields({
     onEditKey: () => void
     onCancelKeyEdit: () => void
     onTestKey: () => void
-    onCopyWebhookUrl: (webhookUrl: string) => void
-    onRotateWebhook: () => void
+    onRotateWebhook: () => Promise<void>
 }) {
     return (
         <div className="space-y-4 rounded-lg border p-4">
@@ -2564,7 +2465,6 @@ function ResendConfigurationFields({
                 settings={settings}
                 pending={pendingState.webhookRotate}
                 updateEmailForm={updateEmailForm}
-                onCopyWebhookUrl={onCopyWebhookUrl}
                 onRotateWebhook={onRotateWebhook}
             />
 
@@ -2582,15 +2482,13 @@ function ResendWebhookTrackingField({
     settings,
     pending,
     updateEmailForm,
-    onCopyWebhookUrl,
     onRotateWebhook,
 }: {
     form: EmailConfigurationFormState
     settings: ResendSettings | undefined
     pending: boolean
     updateEmailForm: UpdateEmailConfigurationForm
-    onCopyWebhookUrl: (webhookUrl: string) => void
-    onRotateWebhook: () => void
+    onRotateWebhook: () => Promise<void>
 }) {
     const [disableTrackingDialogOpen, setDisableTrackingDialogOpen] =
         useState(false)
@@ -2659,7 +2557,6 @@ function ResendWebhookTrackingField({
                         <ResendWebhookUrlField
                             webhookUrl={settings.webhook_url}
                             pending={pending}
-                            onCopyWebhookUrl={onCopyWebhookUrl}
                             onRotateWebhook={onRotateWebhook}
                         />
                     ) : null}
@@ -3187,47 +3084,46 @@ function ResendVerifiedDomainField({
 function ResendWebhookUrlField({
     webhookUrl,
     pending,
-    onCopyWebhookUrl,
     onRotateWebhook,
 }: {
     webhookUrl: string
     pending: boolean
-    onCopyWebhookUrl: (webhookUrl: string) => void
-    onRotateWebhook: () => void
+    onRotateWebhook: () => Promise<void>
 }) {
     return (
         <div className="space-y-2">
-            <Label>Webhook URL</Label>
-            <div className="flex gap-2">
-                <Input
+            <Label htmlFor="resend-webhook-url">Webhook URL</Label>
+            <div className="flex min-w-0 gap-2">
+                <CopyField
+                    id="resend-webhook-url"
                     value={webhookUrl}
-                    readOnly
-                    className="flex-1 text-xs font-mono"
+                    copyLabel="Copy webhook URL"
+                    className="flex-1"
                 />
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onCopyWebhookUrl(webhookUrl)}
-                    aria-label="Copy webhook URL"
-                >
-                    <CopyIcon className="size-4" aria-hidden="true" />
-                </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onRotateWebhook}
-                    disabled={pending}
-                    aria-label="Rotate webhook URL"
-                >
-                    {pending ? (
-                        <Loader2Icon
-                            className="size-4 animate-spin motion-reduce:animate-none"
-                            aria-hidden="true"
-                        />
-                    ) : (
-                        <RotateCwIcon className="size-4" aria-hidden="true" />
+                <ConfirmDialog
+                    trigger={(
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            disabled={pending}
+                            aria-label="Rotate webhook URL"
+                        >
+                            {pending ? (
+                                <Loader2Icon
+                                    className="animate-spin motion-reduce:animate-none"
+                                    aria-hidden="true"
+                                />
+                            ) : (
+                                <RotateCwIcon aria-hidden="true" />
+                            )}
+                        </Button>
                     )}
-                </Button>
+                    title="Rotate webhook URL?"
+                    description="The current URL stops accepting Resend events. Update the endpoint in Resend after rotating."
+                    confirmLabel="Rotate URL"
+                    errorFallback="Couldn't rotate the webhook URL. Try again."
+                    onConfirm={onRotateWebhook}
+                />
             </div>
             <p className="text-xs text-muted-foreground">
                 Create a webhook endpoint in Resend pointing to this URL and subscribe to: email.delivered, email.bounced, email.complained, email.opened, email.clicked.
@@ -3306,19 +3202,19 @@ function EmailSaveButton({
     onSave: () => void
 }) {
     return (
-        <Button onClick={onSave} disabled={pending || disabled} className="w-full">
+        <Button onClick={onSave} disabled={pending || disabled}>
             {pending ? (
                 <>
                     <Loader2Icon
-                        className="mr-2 size-4 animate-spin motion-reduce:animate-none"
+                        className="animate-spin motion-reduce:animate-none"
                         aria-hidden="true"
                     />
                     Saving…
                 </>
             ) : saved ? (
                 <>
-                    <CheckIcon className="mr-2 size-4" aria-hidden="true" />
-                    Saved!
+                    <CheckIcon aria-hidden="true" />
+                    Saved
                 </>
             ) : (
                 "Save Email Configuration"
@@ -3563,6 +3459,7 @@ function ZapierInboundWebhooksCard({
     onToggleInbound,
     onRotateInbound,
     onDeleteInbound,
+    inlineSaveStates,
     children,
 }: {
     inboundWebhooks: ZapierInboundWebhookView[]
@@ -3578,69 +3475,63 @@ function ZapierInboundWebhooksCard({
     onToggleInbound: (webhookId: string, enabled: boolean) => Promise<void>
     onRotateInbound: (webhookId: string) => Promise<void>
     onDeleteInbound: (webhookId: string) => Promise<void>
+    inlineSaveStates: Record<string, SaveStatusState>
     children?: ReactNode
 }) {
     return (
-        <Card>
-            <CardContent className="space-y-6 pt-6">
-                <div className="space-y-4">
-                    <div
-                        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                        data-testid="zapier-inbound-header"
-                    >
-                        <div>
-                            <Label>Webhooks</Label>
-                            <p className="text-xs text-muted-foreground">
-                                Create a webhook per Zapier flow or lead source.
-                            </p>
-                        </div>
-                        <Button
-                            variant="outline"
-                            onClick={onCreateInbound}
-                            disabled={createPending}
-                        >
-                            {createPending ? (
-                                <>
-                                    <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                    Creating…
-                                </>
-                            ) : (
-                                <>
-                                    <PlusIcon className="mr-2 size-4" aria-hidden="true" />
-                                    Add webhook
-                                </>
-                            )}
-                        </Button>
-                    </div>
-
-                    {!inboundWebhooks.length ? (
-                        <p className="text-xs text-muted-foreground">No inbound webhooks configured yet.</p>
+        <section className="space-y-4" aria-labelledby="zapier-webhooks-heading">
+            <div
+                className="flex flex-wrap items-center justify-between gap-3"
+                data-testid="zapier-inbound-header"
+            >
+                <h3 id="zapier-webhooks-heading" className="text-base font-medium">Webhooks</h3>
+                <Button
+                    variant="outline"
+                    onClick={onCreateInbound}
+                    disabled={createPending}
+                >
+                    {createPending ? (
+                        <>
+                            <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                            Creating…
+                        </>
                     ) : (
-                        <div className="grid gap-4 lg:grid-cols-2">
-                            {inboundWebhooks.map((webhook) => (
-                                <ZapierInboundWebhookItem
-                                    key={webhook.webhook_id}
-                                    webhook={webhook}
-                                    labelValue={labelDrafts[webhook.webhook_id] ?? ""}
-                                    secret={webhookSecrets[webhook.webhook_id]}
-                                    canDelete={inboundWebhooks.length > 1}
-                                    rotatePending={rotatePending}
-                                    rotatingWebhookId={rotatingWebhookId}
-                                    deletingWebhookId={deletingWebhookId}
-                                    onUpdateWebhookDraft={onUpdateWebhookDraft}
-                                    onLabelBlur={onLabelBlur}
-                                    onToggleInbound={onToggleInbound}
-                                    onRotateInbound={onRotateInbound}
-                                    onDeleteInbound={onDeleteInbound}
-                                />
-                            ))}
-                        </div>
+                        <>
+                            <PlusIcon aria-hidden="true" />
+                            Add webhook
+                        </>
                     )}
-                </div>
+                </Button>
+            </div>
 
-                {children ? <div className="border-t pt-4">{children}</div> : null}
-            </CardContent>
-        </Card>
+            {!inboundWebhooks.length ? (
+                <p className="text-sm text-muted-foreground">No inbound webhooks configured yet.</p>
+            ) : (
+                <div className="space-y-4">
+                    {inboundWebhooks.map((webhook) => (
+                        <ZapierInboundWebhookItem
+                            key={webhook.webhook_id}
+                            webhook={webhook}
+                            labelValue={labelDrafts[webhook.webhook_id] ?? ""}
+                            secret={webhookSecrets[webhook.webhook_id]}
+                            canDelete={inboundWebhooks.length > 1}
+                            rotatePending={rotatePending}
+                            rotatingWebhookId={rotatingWebhookId}
+                            deletingWebhookId={deletingWebhookId}
+                            labelSaveState={inlineSaveStates[`${webhook.webhook_id}:label`] ?? "idle"}
+                            activeSaveState={inlineSaveStates[`${webhook.webhook_id}:active`] ?? "idle"}
+                            onUpdateWebhookDraft={onUpdateWebhookDraft}
+                            onLabelBlur={onLabelBlur}
+                            onToggleInbound={onToggleInbound}
+                            onRotateInbound={onRotateInbound}
+                            onDeleteInbound={onDeleteInbound}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {children ? <div className="border-t pt-4">{children}</div> : null}
+        </section>
     )
 }
 
@@ -3652,6 +3543,8 @@ function ZapierInboundWebhookItem({
     rotatePending,
     rotatingWebhookId,
     deletingWebhookId,
+    labelSaveState,
+    activeSaveState,
     onUpdateWebhookDraft,
     onLabelBlur,
     onToggleInbound,
@@ -3665,6 +3558,8 @@ function ZapierInboundWebhookItem({
     rotatePending: boolean
     rotatingWebhookId: string | null
     deletingWebhookId: string | null
+    labelSaveState: SaveStatusState
+    activeSaveState: SaveStatusState
     onUpdateWebhookDraft: UpdateZapierWebhookDraft
     onLabelBlur: (webhookId: string) => Promise<void>
     onToggleInbound: (webhookId: string, enabled: boolean) => Promise<void>
@@ -3673,13 +3568,18 @@ function ZapierInboundWebhookItem({
 }) {
     const isRotating = rotatePending && rotatingWebhookId === webhook.webhook_id
     const isDeleting = deletingWebhookId === webhook.webhook_id
+    const fieldId = `zapier-webhook-${webhook.webhook_id}`
 
     return (
-        <div className="space-y-3 rounded-md border p-4">
+        <div className="min-w-0 space-y-4 rounded-md border p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex-1 space-y-2">
-                    <Label>Label</Label>
+                <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                        <Label htmlFor={`${fieldId}-label`}>Label</Label>
+                        <SaveStatus state={labelSaveState} />
+                    </div>
                     <Input
+                        id={`${fieldId}-label`}
                         value={labelValue}
                         onChange={(event) =>
                             onUpdateWebhookDraft((current) => ({
@@ -3700,7 +3600,8 @@ function ZapierInboundWebhookItem({
                         Created {formatRelativeTime(webhook.created_at)}
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 sm:pt-7">
+                    <SaveStatus state={activeSaveState} />
                     <Badge variant={webhook.is_active ? "default" : "secondary"}>
                         {webhook.is_active ? "Active" : "Inactive"}
                     </Badge>
@@ -3715,25 +3616,12 @@ function ZapierInboundWebhookItem({
             </div>
 
             <div className="space-y-2">
-                <Label>Webhook URL</Label>
-                <div className="flex min-w-0 gap-2">
-                    <div
-                        className="flex h-9 min-w-0 flex-1 items-center rounded-md border border-input bg-transparent px-3 py-1 text-xs font-mono shadow-xs dark:bg-input/30"
-                        title={webhook.webhook_url}
-                    >
-                        <span className="min-w-0 flex-1 truncate">
-                            {webhook.webhook_url}
-                        </span>
-                    </div>
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => copyToClipboard(webhook.webhook_url)}
-                        aria-label="Copy webhook URL"
-                    >
-                        <CopyIcon className="size-4" aria-hidden="true" />
-                    </Button>
-                </div>
+                <Label htmlFor={`${fieldId}-url`}>Webhook URL</Label>
+                <CopyField
+                    id={`${fieldId}-url`}
+                    value={webhook.webhook_url}
+                    copyLabel="Copy webhook URL"
+                />
             </div>
 
             <div className="space-y-2">
@@ -3750,61 +3638,37 @@ function ZapierInboundWebhookItem({
 
             <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                        variant="outline"
-                        onClick={() => {
-                            void onRotateInbound(webhook.webhook_id)
-                        }}
-                        disabled={isRotating}
-                    >
-                        {isRotating ? (
-                            <>
-                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                Rotating…
-                            </>
-                        ) : (
-                            <>
-                                <RotateCwIcon className="mr-2 size-4" aria-hidden="true" />
-                                Rotate Webhook Secret
-                            </>
+                    <ConfirmDialog
+                        trigger={(
+                            <Button variant="outline" disabled={isRotating}>
+                                {isRotating ? (
+                                    <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                ) : (
+                                    <RotateCwIcon aria-hidden="true" />
+                                )}
+                                {isRotating ? "Rotating…" : "Rotate Webhook Secret"}
+                            </Button>
                         )}
-                    </Button>
+                        title="Rotate webhook secret?"
+                        description="Zaps that send the current secret fail until you update them with the new one."
+                        confirmLabel="Rotate secret"
+                        errorFallback="Couldn't rotate the webhook secret. Try again."
+                        onConfirm={() => onRotateInbound(webhook.webhook_id)}
+                    />
 
-                    <AlertDialog>
-                        <AlertDialogTrigger
-                            disabled={!canDelete || isDeleting}
-                            render={
-                                <Button
-                                    variant="ghost"
-                                    className="text-destructive hover:text-destructive"
-                                    disabled={!canDelete || isDeleting}
-                                >
-                                    <TrashIcon className="mr-2 size-4" aria-hidden="true" />
-                                    Delete Webhook
-                                </Button>
-                            }
-                        />
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Delete webhook?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    This will disable the incoming URL immediately. Any Zapier
-                                    flows using it will fail until updated.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                    onClick={() => {
-                                        void onDeleteInbound(webhook.webhook_id)
-                                    }}
-                                    disabled={!canDelete || isDeleting}
-                                >
-                                    {isDeleting ? "Deleting…" : "Delete"}
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
+                    <ConfirmDialog
+                        trigger={(
+                            <Button variant="destructive-ghost" disabled={!canDelete || isDeleting}>
+                                <TrashIcon aria-hidden="true" />
+                                Delete Webhook
+                            </Button>
+                        )}
+                        title="Delete webhook?"
+                        description="The incoming URL stops working at once. Zaps that use it fail until updated."
+                        confirmLabel="Delete"
+                        errorFallback="Couldn't delete the webhook. Try again."
+                        onConfirm={() => onDeleteInbound(webhook.webhook_id)}
+                    />
                 </div>
 
                 {!canDelete ? (
@@ -3819,17 +3683,15 @@ function ZapierInboundWebhookItem({
                             New Webhook Secret (copy now, shown once):
                         </p>
                         <div className="flex items-center gap-2">
-                            <code className="flex-1 break-all">
+                            <code className="min-w-0 flex-1 break-all">
                                 {secret}
                             </code>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => copyToClipboard(secret)}
+                            <CopyButton
+                                value={secret}
                                 aria-label="Copy webhook secret"
-                            >
-                                <CopyIcon className="size-4" aria-hidden="true" />
-                            </Button>
+                                variant="outline"
+                                size="icon-sm"
+                            />
                         </div>
                     </div>
                 ) : null}
@@ -3843,6 +3705,7 @@ function ZapierFieldPasteCard({
     inboundWebhooks,
     activeWebhookId,
     fieldPaste,
+    fieldPasteError,
     fieldPasteResult,
     parsePending,
     onWebhookChange,
@@ -3854,6 +3717,7 @@ function ZapierFieldPasteCard({
     inboundWebhooks: ZapierInboundWebhookView[]
     activeWebhookId: string
     fieldPaste: string
+    fieldPasteError: string | null
     fieldPasteResult: ZapierFieldPasteResponse | null
     parsePending: boolean
     onWebhookChange: (webhookId: string) => void
@@ -3863,14 +3727,6 @@ function ZapierFieldPasteCard({
 }) {
     return (
         <div className="space-y-4">
-            <div className="space-y-2">
-                <Label>Paste Zapier Field List</Label>
-                <p className="text-xs text-muted-foreground">
-                    Paste the field list from Zapier (either the token lines or the sample field/value list).
-                    We’ll extract keys, build a form schema, and open the mapping suggestions.
-                </p>
-            </div>
-
             {inboundWebhooks.length ? (
                 <div className="space-y-2">
                     <Label>Webhook</Label>
@@ -3894,13 +3750,23 @@ function ZapierFieldPasteCard({
                 </div>
             ) : null}
 
-            <Textarea
-                value={fieldPaste}
-                onChange={(event) => onFieldPasteChange(event.target.value)}
-                placeholder={'Paste lines like {{=gives["312067957"]["full_name"]}} or "Full Name: Jane Doe"'}
-                rows={6}
-                name="zapier-field-paste"
-            />
+            <ValidatedField
+                id="zapier-field-paste"
+                label="Paste Zapier Field List"
+                error={fieldPasteError}
+                description="Paste the token lines or the sample field/value list from Zapier."
+            >
+                {(control) => (
+                    <Textarea
+                        {...control}
+                        value={fieldPaste}
+                        onChange={(event) => onFieldPasteChange(event.target.value)}
+                        placeholder={'Paste lines like {{=gives["312067957"]["full_name"]}} or "Full Name: Jane Doe"'}
+                        rows={6}
+                        name="zapier-field-paste"
+                    />
+                )}
+            </ValidatedField>
             <div className="flex flex-wrap items-center gap-2">
                 <Button
                     variant="outline"
@@ -4257,7 +4123,7 @@ function ZapierStageMappingRows({
     return (
         <div className="space-y-2">
             <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <Label>Stage → Event Mapping</Label>
+                <h4 className="text-sm font-medium">Stage → Event Mapping</h4>
                 <Button
                     type="button"
                     variant="outline"
@@ -4269,109 +4135,143 @@ function ZapierStageMappingRows({
                 </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-                Set each stage bucket for Meta conversion status mapping. Dedupe runs once per lead per bucket.
+                Map each stage to the event sent to Zapier.
             </p>
-            <div className="space-y-2">
-                {eventMapping.map((item, index) => (
-                    <ZapierStageMappingRow
-                        key={item.stage_key}
-                        item={item}
-                        index={index}
-                        eventMapping={eventMapping}
-                        recommendedBucketByStage={recommendedBucketByStage}
-                        getStageKeyLabel={getStageKeyLabel}
-                        onOutboundFormChange={onOutboundFormChange}
-                    />
-                ))}
-            </div>
+            <StageEventMappingTable
+                items={eventMapping}
+                namePrefix="zapier"
+                getStageKeyLabel={getStageKeyLabel}
+                getSendLabel={(stageLabel) => `Send ${stageLabel} event`}
+                getUntrackedEnabled={(item) =>
+                    recommendedBucketByStage[item.stage_key] ? false : item.enabled
+                }
+                onChange={(next) => onOutboundFormChange("eventMapping", next)}
+            />
         </div>
     )
 }
 
-function ZapierStageMappingRow({
-    item,
-    index,
-    eventMapping,
-    recommendedBucketByStage,
+/**
+ * Stage → event bucket table shared by the Meta CRM dataset and the Zapier surrogate mapping.
+ * A tracked bucket fixes the event name; "Not Tracked" rows take a custom event name.
+ */
+function StageEventMappingTable<T extends StageEventMappingLike>({
+    items,
+    namePrefix,
     getStageKeyLabel,
-    onOutboundFormChange,
+    getSendLabel,
+    getUntrackedEnabled,
+    onChange,
 }: {
-    item: ZapierEventMappingItem
-    index: number
-    eventMapping: ZapierEventMappingItem[]
-    recommendedBucketByStage: Record<string, ZapierStageBucket>
+    items: T[]
+    namePrefix: string
     getStageKeyLabel: (stageKey: string) => string
-    onOutboundFormChange: UpdateZapierOutboundForm
+    getSendLabel: (stageLabel: string) => string
+    /** Send state after a row is set to Not Tracked. */
+    getUntrackedEnabled: (item: T) => boolean
+    onChange: (next: T[]) => void
 }) {
-    const updateItem = (updater: (existing: ZapierEventMappingItem) => ZapierEventMappingItem) => {
-        const next = [...eventMapping]
-        const existing = next[index]
+    const updateItem = (index: number, updater: (existing: T) => T) => {
+        const existing = items[index]
         if (!existing) return
+        const next = [...items]
         next[index] = updater(existing)
-        onOutboundFormChange("eventMapping", next)
+        onChange(next)
     }
 
     return (
-        <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-center">
-            <div className="text-sm font-medium">
-                {getStageKeyLabel(item.stage_key)}
-            </div>
-            <Select
-                value={isZapierStageBucket(item.bucket) ? item.bucket : UNTRACKED_BUCKET_VALUE}
-                onValueChange={(value) => {
-                    if (value === UNTRACKED_BUCKET_VALUE) {
-                        updateItem((existing) => ({
-                            ...existing,
-                            bucket: null,
-                            enabled: recommendedBucketByStage[existing.stage_key]
-                                ? false
-                                : existing.enabled,
-                        }))
-                    } else if (isZapierStageBucket(value)) {
-                        updateItem((existing) => ({
-                            ...existing,
-                            bucket: value,
-                            event_name: ZAPIER_BUCKET_EVENT_NAME[value],
-                            enabled: true,
-                        }))
-                    }
-                }}
-            >
-                <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Bucket">
-                        {(value: string | null) => getBucketSelectLabel(value)}
-                    </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value={UNTRACKED_BUCKET_VALUE}>Not Tracked</SelectItem>
-                    {ZAPIER_BUCKET_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-            {!isZapierStageBucket(item.bucket) ? (
-                <Input
-                    value={item.event_name}
-                    onChange={(event) => {
-                        updateItem((existing) => ({ ...existing, event_name: event.target.value }))
-                    }}
-                    placeholder="Event name"
-                    name={`zapier-event-${item.stage_key}`}
-                    autoComplete="off"
-                />
-            ) : null}
-            <div className="flex items-center gap-2">
-                <Switch
-                    checked={item.enabled}
-                    onCheckedChange={(checked) => {
-                        updateItem((existing) => ({ ...existing, enabled: checked }))
-                    }}
-                    aria-label={`Enable ${item.stage_key} event`}
-                />
-                <span className="text-xs text-muted-foreground">Enabled</span>
-            </div>
+        <div className="rounded-lg border">
+            <Table className="min-w-[36rem]">
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Stage</TableHead>
+                        <TableHead className="w-48">Event bucket</TableHead>
+                        <TableHead className="w-56">Event name</TableHead>
+                        <TableHead className="w-16 text-center">Send</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {items.map((item, index) => {
+                        const stageLabel = getStageKeyLabel(item.stage_key)
+                        const tracked = isZapierStageBucket(item.bucket)
+                        return (
+                            <TableRow key={item.stage_key}>
+                                <TableCell className="whitespace-normal font-medium">{stageLabel}</TableCell>
+                                <TableCell>
+                                    <Select
+                                        value={tracked ? item.bucket : UNTRACKED_BUCKET_VALUE}
+                                        onValueChange={(value) => {
+                                            if (value === UNTRACKED_BUCKET_VALUE) {
+                                                updateItem(index, (existing) => ({
+                                                    ...existing,
+                                                    bucket: null,
+                                                    enabled: getUntrackedEnabled(existing),
+                                                }))
+                                            } else if (isZapierStageBucket(value)) {
+                                                updateItem(index, (existing) => ({
+                                                    ...existing,
+                                                    bucket: value,
+                                                    event_name: ZAPIER_BUCKET_EVENT_NAME[value],
+                                                    enabled: true,
+                                                }))
+                                            }
+                                        }}
+                                    >
+                                        <SelectTrigger
+                                            size="sm"
+                                            className="w-full"
+                                            aria-label={`Event bucket for ${stageLabel}`}
+                                        >
+                                            <SelectValue placeholder="Bucket">
+                                                {(value: string | null) => getBucketSelectLabel(value)}
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value={UNTRACKED_BUCKET_VALUE}>
+                                                {getBucketSelectLabel(UNTRACKED_BUCKET_VALUE)}
+                                            </SelectItem>
+                                            {ZAPIER_BUCKET_OPTIONS.map((option) => (
+                                                <SelectItem key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </TableCell>
+                                <TableCell>
+                                    {tracked ? (
+                                        <span className="text-muted-foreground">{item.event_name}</span>
+                                    ) : (
+                                        <Input
+                                            value={item.event_name}
+                                            onChange={(event) => {
+                                                const eventName = event.target.value
+                                                updateItem(index, (existing) => ({ ...existing, event_name: eventName }))
+                                            }}
+                                            placeholder="Event name"
+                                            aria-label={`Event name for ${stageLabel}`}
+                                            name={`${namePrefix}-event-${item.stage_key}`}
+                                            autoComplete="off"
+                                            className="h-8"
+                                        />
+                                    )}
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex justify-center">
+                                        <Checkbox
+                                            checked={item.enabled}
+                                            onCheckedChange={(checked) => {
+                                                updateItem(index, (existing) => ({ ...existing, enabled: checked === true }))
+                                            }}
+                                            aria-label={getSendLabel(stageLabel)}
+                                        />
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        )
+                    })}
+                </TableBody>
+            </Table>
         </div>
     )
 }
@@ -4741,8 +4641,10 @@ function useZapierWebhookController(variant: "page" | "dialog") {
     const updateOutbound = useUpdateZapierOutboundSettings()
     const [rotatingWebhookId, setRotatingWebhookId] = useState<string | null>(null)
     const [deletingWebhookId, setDeletingWebhookId] = useState<string | null>(null)
+    const [inlineSaveStates, setInlineSaveStates] = useState<Record<string, SaveStatusState>>({})
     const [testFormId, setTestFormId] = useState('')
     const [fieldPaste, setFieldPaste] = useState('')
+    const [fieldPasteError, setFieldPasteError] = useState<string | null>(null)
     const [fieldPasteWebhookId, setFieldPasteWebhookId] = useState('')
     const [fieldPasteResult, setFieldPasteResult] = useState<ZapierFieldPasteResponse | null>(null)
     const sendTestLead = useZapierTestLead()
@@ -4837,9 +4739,10 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         }
     }
 
+    // Rotate and delete run from confirm dialogs, which show a failure inline, so errors propagate.
     const handleRotateInbound = async (webhookId: string) => {
+        setRotatingWebhookId(webhookId)
         try {
-            setRotatingWebhookId(webhookId)
             const result = await rotateInboundWebhook.mutateAsync({ webhookId })
             const secretId = result.webhook_id ?? webhookId
             updateWebhookDraft((current) => ({
@@ -4850,15 +4753,14 @@ function useZapierWebhookController(variant: "page" | "dialog") {
                 },
             }))
             toast.success("Webhook secret rotated")
-        } catch {
-            toast.error("Failed to rotate webhook secret")
+        } finally {
+            setRotatingWebhookId(null)
         }
-        setRotatingWebhookId(null)
     }
 
     const handleDeleteInbound = async (webhookId: string) => {
+        setDeletingWebhookId(webhookId)
         try {
-            setDeletingWebhookId(webhookId)
             await deleteInboundWebhook.mutateAsync({ webhookId })
             updateWebhookDraft((current) => {
                 const webhookSecrets = { ...current.webhookSecrets }
@@ -4872,11 +4774,14 @@ function useZapierWebhookController(variant: "page" | "dialog") {
                 }
             })
             toast.success("Webhook deleted")
-        } catch (error) {
-            const message = error instanceof Error ? error.message : null
-            toast.error(message || "Failed to delete webhook")
+        } finally {
+            setDeletingWebhookId(null)
         }
-        setDeletingWebhookId(null)
+    }
+
+    // The label and Active switch save on their own; SaveStatus next to each shows the result.
+    const setInlineSaveState = (key: string, state: SaveStatusState) => {
+        setInlineSaveStates((current) => ({ ...current, [key]: state }))
     }
 
     const handleLabelBlur = async (webhookId: string) => {
@@ -4885,26 +4790,34 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         if (draft === (current || "")) {
             return
         }
+        const key = `${webhookId}:label`
+        setInlineSaveState(key, "saving")
         try {
             await updateInboundWebhook.mutateAsync({
                 webhookId,
                 payload: { label: draft || null },
             })
-            toast.success("Webhook updated")
-        } catch {
-            toast.error("Failed to update webhook")
+            setInlineSaveState(key, "saved")
+        } catch (error) {
+            setInlineSaveState(key, "error")
+            const message = getActionErrorMessage(error, "Couldn't update the webhook label")
+            if (message) toast.error(message)
         }
     }
 
     const handleToggleInbound = async (webhookId: string, enabled: boolean) => {
+        const key = `${webhookId}:active`
+        setInlineSaveState(key, "saving")
         try {
             await updateInboundWebhook.mutateAsync({
                 webhookId,
                 payload: { is_active: enabled },
             })
-            toast.success(enabled ? "Webhook enabled" : "Webhook disabled")
-        } catch {
-            toast.error("Failed to update webhook")
+            setInlineSaveState(key, "saved")
+        } catch (error) {
+            setInlineSaveState(key, "error")
+            const message = getActionErrorMessage(error, "Couldn't update the webhook")
+            if (message) toast.error(message)
         }
     }
 
@@ -4921,17 +4834,18 @@ function useZapierWebhookController(variant: "page" | "dialog") {
                 toast.message(result.message ?? `Test lead stored with status: ${result.status}`)
             }
         } catch (error) {
-            const message = error instanceof Error ? error.message : null
-            toast.error(message || "Failed to send test lead")
+            const message = getActionErrorMessage(error, "Couldn't send the test lead")
+            if (message) toast.error(message)
         }
     }
 
     const handleFieldPaste = async () => {
         const paste = fieldPaste.trim()
         if (!paste) {
-            toast.error("Paste the Zapier field list first.")
+            setFieldPasteError("Paste the Zapier field list first.")
             return
         }
+        setFieldPasteError(null)
         try {
             const payload: { paste: string; webhook_id?: string } = { paste }
             if (activeFieldPasteWebhookId) {
@@ -4951,6 +4865,12 @@ function useZapierWebhookController(variant: "page" | "dialog") {
     const handleFieldPasteClear = () => {
         setFieldPaste('')
         setFieldPasteResult(null)
+        setFieldPasteError(null)
+    }
+
+    const handleFieldPasteChange = (value: string) => {
+        setFieldPaste(value)
+        if (value.trim()) setFieldPasteError(null)
     }
 
     const handleSaveOutbound = async () => {
@@ -4994,7 +4914,8 @@ function useZapierWebhookController(variant: "page" | "dialog") {
             setOutboundSecret('')
             toast.success("Zapier configuration saved")
         } catch (error) {
-            toast.error(getErrorMessage(error, "Failed to save Zapier configuration"))
+            const message = getActionErrorMessage(error, "Couldn't save Zapier configuration")
+            if (message) toast.error(message)
         }
     }
 
@@ -5059,11 +4980,13 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         donorPipelinesLoading,
         donorSettingsAvailable,
         fieldPaste,
+        fieldPasteError,
         fieldPasteResult,
         getStageKeyLabel,
         handleCreateInbound,
         handleDeleteInbound,
         handleFieldPaste,
+        handleFieldPasteChange,
         handleFieldPasteClear,
         handleLabelBlur,
         handleOutboundTest,
@@ -5072,6 +4995,7 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         handleTestLead,
         handleToggleInbound,
         inboundWebhooks,
+        inlineSaveStates,
         isDialog,
         isError,
         isLoading,
@@ -5103,88 +5027,64 @@ function useZapierWebhookController(variant: "page" | "dialog") {
     }
 }
 
-function IntegrationConfigurationWorkspace({
-    header,
-    children,
-    footer,
-}: {
-    header: ReactNode
-    children: ReactNode
-    footer: ReactNode
-}) {
-    return (
-        <div className="flex min-h-0 flex-1 flex-col">
-            <div className="shrink-0 border-b px-4 pt-5 pb-4 sm:px-6">{header}</div>
-            {children}
-            <div className="shrink-0 border-t bg-background px-4 py-3 sm:px-6">{footer}</div>
-        </div>
-    )
+type ZapierDialogTab = "incoming" | "routing" | "reporting" | "activity"
+
+function isZapierDialogTab(value: unknown): value is ZapierDialogTab {
+    return value === "incoming" || value === "routing" || value === "reporting" || value === "activity"
 }
 
+/** Header, tabbed DialogBody and DialogFooter of the Zapier dialog (sectioned layout). */
 function ZapierWebhookSection({
     statusLabel,
     statusVariant,
     StatusIcon,
     mappingBadgeLabel,
     mappingBadgeVariant,
-    onClose,
 }: {
     statusLabel: string
     statusVariant: BadgeVariant
     StatusIcon: IconComponent
     mappingBadgeLabel: string
     mappingBadgeVariant: BadgeVariant
-    onClose: () => void
 }) {
     const variant = "dialog" as const
     const controller = useZapierWebhookController(variant)
+    const [activeTab, setActiveTab] = useState<ZapierDialogTab>("incoming")
+    // All tabs share one scroll body, so it returns to the top on each tab change.
+    const bodyRef = useRef<HTMLDivElement | null>(null)
 
     return (
-        <IntegrationConfigurationWorkspace
-            header={(
-                <DialogHeader className="pr-10">
-                    <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
-                        <div className="space-y-1">
-                            <DialogTitle>Zapier Configuration</DialogTitle>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant={statusVariant} className="flex items-center gap-1">
-                                <StatusIcon className="size-3" aria-hidden="true" />
-                                {statusLabel}
-                            </Badge>
-                            <Badge
-                                data-testid="zapier-mapping-health-dialog-badge"
-                                variant={mappingBadgeVariant}
-                            >
-                                {mappingBadgeLabel}
-                            </Badge>
-                        </div>
-                    </div>
-                </DialogHeader>
-            )}
-            footer={(
-                <DialogFooter className="flex-row justify-end">
-                    <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button
-                        onClick={() => {
-                            void controller.handleSaveOutbound()
-                        }}
-                        disabled={controller.updateOutboundPending || controller.isLoading || controller.isError}
-                    >
-                        {controller.updateOutboundPending ? (
-                            <>
-                                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                                Saving…
-                            </>
-                        ) : (
-                            "Save configuration"
-                        )}
-                    </Button>
-                </DialogFooter>
-            )}
-        >
-            <Tabs defaultValue="incoming" className="min-h-0 flex-1 gap-0">
-                <div className="shrink-0 overflow-x-auto border-b px-4 sm:px-6">
+        <>
+            <DialogHeader
+                icon={<ZapIcon />}
+                status={(
+                    <Badge variant={statusVariant}>
+                        <StatusIcon aria-hidden="true" />
+                        {statusLabel}
+                    </Badge>
+                )}
+            >
+                <DialogTitle>Zapier Configuration</DialogTitle>
+            </DialogHeader>
+            {/* The header holds one status badge; mapping health gets its own row so the title keeps its width at 390px. */}
+            <DialogStatusBar>
+                <span className="text-muted-foreground">Stage reporting</span>
+                <Badge
+                    data-testid="zapier-mapping-health-dialog-badge"
+                    variant={mappingBadgeVariant}
+                >
+                    {mappingBadgeLabel}
+                </Badge>
+            </DialogStatusBar>
+            <Tabs
+                value={activeTab}
+                onValueChange={(value) => {
+                    if (isZapierDialogTab(value)) setActiveTab(value)
+                }}
+                resetScrollRef={bodyRef}
+                className="min-h-0 flex-1 gap-0"
+            >
+                <div className="shrink-0 overflow-x-auto border-b px-6">
                     <TabsList variant="line" aria-label="Zapier configuration sections">
                         <TabsTrigger value="incoming">Incoming leads</TabsTrigger>
                         <TabsTrigger value="routing">Form routing</TabsTrigger>
@@ -5192,8 +5092,9 @@ function ZapierWebhookSection({
                         <TabsTrigger value="activity">Activity</TabsTrigger>
                     </TabsList>
                 </div>
-                <div
-                    className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 sm:px-6"
+                <DialogBody
+                    ref={bodyRef}
+                    className="overflow-x-hidden"
                     data-testid="zapier-dialog-body"
                 >
                     {controller.isLoading ? (
@@ -5225,6 +5126,7 @@ function ZapierWebhookSection({
                         onToggleInbound={controller.handleToggleInbound}
                         onRotateInbound={controller.handleRotateInbound}
                         onDeleteInbound={controller.handleDeleteInbound}
+                        inlineSaveStates={controller.inlineSaveStates}
                     />
                 </TabsContent>
 
@@ -5239,10 +5141,11 @@ function ZapierWebhookSection({
                             inboundWebhooks={controller.inboundWebhooks}
                             activeWebhookId={controller.activeFieldPasteWebhookId}
                             fieldPaste={controller.fieldPaste}
+                            fieldPasteError={controller.fieldPasteError}
                             fieldPasteResult={controller.fieldPasteResult}
                             parsePending={controller.parseFieldPastePending}
                             onWebhookChange={controller.setFieldPasteWebhookId}
-                            onFieldPasteChange={controller.setFieldPaste}
+                            onFieldPasteChange={controller.handleFieldPasteChange}
                             onParse={() => {
                                 void controller.handleFieldPaste()
                             }}
@@ -5322,9 +5225,34 @@ function ZapierWebhookSection({
                 </TabsContent>
                         </>
                     )}
-                </div>
+                </DialogBody>
             </Tabs>
-        </IntegrationConfigurationWorkspace>
+            {/* Only Stage reporting has a draft to save; the other tabs save each change on its own. */}
+            <DialogFooter>
+                {activeTab === "reporting" ? (
+                    <>
+                        <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+                        <Button
+                            onClick={() => {
+                                void controller.handleSaveOutbound()
+                            }}
+                            disabled={controller.updateOutboundPending || controller.isLoading || controller.isError}
+                        >
+                            {controller.updateOutboundPending ? (
+                                <>
+                                    <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Saving…
+                                </>
+                            ) : (
+                                "Save configuration"
+                            )}
+                        </Button>
+                    </>
+                ) : (
+                    <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+                )}
+            </DialogFooter>
+        </>
     )
 }
 
@@ -5494,38 +5422,44 @@ function MetaCrmDatasetMonitoringSection({ variant = "page" }: { variant?: "page
     )
 }
 
-function MetaCrmDatasetSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+/**
+ * Tabs, DialogBody and DialogFooter of the Meta dialog. The CRM dataset form owns the footer
+ * Save, so the legacy setup (which saves each action on its own) is passed in as a slot.
+ */
+function MetaCrmDatasetSection({ legacySetup }: { legacySetup: ReactNode }) {
     const { data: pipelines } = usePipelines()
     const { data: settings, isLoading } = useMetaCrmDatasetSettings()
 
     return (
         <MetaCrmDatasetSectionContent
             key={settings && pipelines ? "loaded" : "loading"}
-            variant={variant}
             pipelines={pipelines}
             settings={settings}
             isLoading={isLoading}
+            legacySetup={legacySetup}
         />
     )
 }
 
 function MetaCrmDatasetSectionContent({
-    variant,
     pipelines,
     settings,
     isLoading,
+    legacySetup,
 }: {
-    variant: "page" | "dialog"
     pipelines: ReturnType<typeof usePipelines>["data"]
     settings: ReturnType<typeof useMetaCrmDatasetSettings>["data"]
     isLoading: boolean
+    legacySetup: ReactNode
 }) {
     const recommendedBucketByStage = buildRecommendedBucketByStage(pipelines)
     const stageLabelByKey = buildStageLabelByKey(pipelines)
     const getStageKeyLabel = (stageKey: string) => stageLabelByKey[stageKey] ?? "Unknown stage"
     const updateSettings = useUpdateMetaCrmDatasetSettings()
     const sendOutboundTest = useMetaCrmDatasetOutboundTest()
-    const isDialog = variant === "dialog"
+    const [activeTab, setActiveTab] = useState<"configuration" | "monitoring">("configuration")
+    // Both tabs share one scroll body, so it returns to the top on each tab change.
+    const bodyRef = useRef<HTMLDivElement | null>(null)
     const initialEventMapping = mergeEventMappingWithPipelineStages(
         settings?.event_mapping || [],
         pipelines,
@@ -5582,8 +5516,8 @@ function MetaCrmDatasetSectionContent({
             setMetaForm((current) => ({ ...current, accessToken: "" }))
             toast.success("CRM dataset settings saved")
         } catch (error) {
-            const message = error instanceof Error ? error.message : null
-            toast.error(message || "Failed to save CRM dataset settings")
+            const message = getActionErrorMessage(error, "Couldn't save CRM dataset settings")
+            if (message) toast.error(message)
         }
     }
 
@@ -5610,8 +5544,8 @@ function MetaCrmDatasetSectionContent({
             const result = await sendOutboundTest.mutateAsync(payload)
             toast.success(`Test event queued: ${result.event_name} for ${result.lead_id}`)
         } catch (error) {
-            const message = error instanceof Error ? error.message : null
-            toast.error(message || "Failed to send Meta CRM dataset test event")
+            const message = getActionErrorMessage(error, "Couldn't send the Meta CRM dataset test event")
+            if (message) toast.error(message)
         }
     }
 
@@ -5633,56 +5567,88 @@ function MetaCrmDatasetSectionContent({
         toast.success("Applied recommended Meta CRM dataset stage mapping")
     }
 
-    if (isLoading) {
-        return (
-            <Card>
-                <CardContent className="flex items-center justify-center py-8">
-                    <Loader2Icon className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
-                </CardContent>
-            </Card>
-        )
-    }
-
     return (
-        <Card>
-            <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                    <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900">
-                        <ServerIcon className="size-5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-                    </div>
-                    <div>
-                        <CardTitle className="text-base">CRM Dataset</CardTitle>
-                        <CardDescription className="text-xs">
-                            Direct Meta Conversions API delivery using a dataset ID and access token.
-                        </CardDescription>
-                    </div>
+        <>
+            <Tabs
+                value={activeTab}
+                onValueChange={(value) => {
+                    if (value === "configuration" || value === "monitoring") setActiveTab(value)
+                }}
+                resetScrollRef={bodyRef}
+                className="min-h-0 flex-1 gap-0"
+            >
+                <div className="shrink-0 overflow-x-auto border-b px-6">
+                    <TabsList variant="line" aria-label="Meta configuration sections">
+                        <TabsTrigger value="configuration">Configuration</TabsTrigger>
+                        <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+                    </TabsList>
                 </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                <MetaCrmDatasetSettingsFields
-                    metaForm={metaForm}
-                    accessTokenConfigured={Boolean(settings?.access_token_configured)}
-                    updateMetaForm={updateMetaForm}
-                />
-                <MetaCrmDatasetStageMapping
-                    eventMapping={metaForm.eventMapping}
-                    isDialog={isDialog}
-                    updateEventMapping={updateEventMapping}
-                    getStageKeyLabel={getStageKeyLabel}
-                    applyRecommendedBucketMapping={applyRecommendedBucketMapping}
-                />
-                <MetaCrmDatasetTestControls
-                    metaForm={metaForm}
-                    isDialog={isDialog}
-                    updateMetaForm={updateMetaForm}
-                    getStageKeyLabel={getStageKeyLabel}
-                    isSaving={updateSettings.isPending}
-                    isSendingTest={sendOutboundTest.isPending}
-                    handleSave={handleSave}
-                    handleOutboundTest={handleOutboundTest}
-                />
-            </CardContent>
-        </Card>
+                <DialogBody ref={bodyRef} className="overflow-x-hidden">
+                    <TabsContent value="configuration" className="space-y-6">
+                        <section className="space-y-6" aria-labelledby="meta-crm-dataset-heading">
+                            <h3 id="meta-crm-dataset-heading" className="text-base font-semibold">CRM dataset</h3>
+                            {isLoading ? (
+                                <div role="status" className="flex items-center justify-center py-8">
+                                    <Loader2Icon className="size-6 animate-spin text-muted-foreground motion-reduce:animate-none" aria-hidden="true" />
+                                    <span className="sr-only">Loading</span>
+                                </div>
+                            ) : (
+                                <>
+                                    <MetaCrmDatasetSettingsFields
+                                        metaForm={metaForm}
+                                        accessTokenConfigured={Boolean(settings?.access_token_configured)}
+                                        updateMetaForm={updateMetaForm}
+                                    />
+                                    <MetaCrmDatasetStageMapping
+                                        eventMapping={metaForm.eventMapping}
+                                        updateEventMapping={updateEventMapping}
+                                        getStageKeyLabel={getStageKeyLabel}
+                                        applyRecommendedBucketMapping={applyRecommendedBucketMapping}
+                                    />
+                                    <MetaCrmDatasetTestControls
+                                        metaForm={metaForm}
+                                        updateMetaForm={updateMetaForm}
+                                        getStageKeyLabel={getStageKeyLabel}
+                                        isSendingTest={sendOutboundTest.isPending}
+                                        handleOutboundTest={handleOutboundTest}
+                                    />
+                                </>
+                            )}
+                        </section>
+                        {legacySetup}
+                    </TabsContent>
+
+                    <TabsContent value="monitoring" keepMounted>
+                        <MetaCrmDatasetMonitoringSection variant="dialog" />
+                    </TabsContent>
+                </DialogBody>
+            </Tabs>
+            {/* Save applies to the CRM dataset form only; legacy actions save on their own. */}
+            <DialogFooter>
+                {activeTab === "configuration" ? (
+                    <>
+                        <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+                        <Button
+                            onClick={() => {
+                                void handleSave()
+                            }}
+                            disabled={isLoading || updateSettings.isPending}
+                        >
+                            {updateSettings.isPending ? (
+                                <>
+                                    <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                                    Saving…
+                                </>
+                            ) : (
+                                "Save CRM Dataset Settings"
+                            )}
+                        </Button>
+                    </>
+                ) : (
+                    <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+                )}
+            </DialogFooter>
+        </>
     )
 }
 
@@ -5784,176 +5750,58 @@ function MetaCrmDatasetSettingsFields({
 
 function MetaCrmDatasetStageMapping({
     eventMapping,
-    isDialog,
     updateEventMapping,
     getStageKeyLabel,
     applyRecommendedBucketMapping,
 }: {
     eventMapping: MetaCrmDatasetEventMappingItem[]
-    isDialog: boolean
     updateEventMapping: UpdateMetaCrmDatasetEventMapping
     getStageKeyLabel: (stageKey: string) => string
     applyRecommendedBucketMapping: () => void
 }) {
     return (
         <div className="space-y-2">
-            <div className="flex items-center justify-between">
-                <Label>Stage → Event Mapping</Label>
+            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <h4 className="text-sm font-medium">Stage → Event Mapping</h4>
                 <Button
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="w-full sm:w-auto"
                     onClick={applyRecommendedBucketMapping}
                 >
                     Apply Recommended Mapping
                 </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-                Map each internal surrogate stage to the Meta CRM event bucket you want to report.
-            </p>
-            <div className="space-y-2">
-                {eventMapping.map((item, index) => (
-                    <MetaCrmDatasetStageMappingRow
-                        key={item.stage_key}
-                        item={item}
-                        index={index}
-                        isDialog={isDialog}
-                        updateEventMapping={updateEventMapping}
-                        getStageKeyLabel={getStageKeyLabel}
-                    />
-                ))}
-            </div>
-        </div>
-    )
-}
-
-function MetaCrmDatasetStageMappingRow({
-    item,
-    index,
-    isDialog,
-    updateEventMapping,
-    getStageKeyLabel,
-}: {
-    item: MetaCrmDatasetEventMappingItem
-    index: number
-    isDialog: boolean
-    updateEventMapping: UpdateMetaCrmDatasetEventMapping
-    getStageKeyLabel: (stageKey: string) => string
-}) {
-    return (
-        <div className={`flex flex-col gap-2 rounded-md border p-3 ${isDialog ? "" : "md:flex-row md:items-center"}`}>
-            <div className="w-32 text-sm font-medium">
-                {getStageKeyLabel(item.stage_key)}
-            </div>
-            <Select
-                value={isZapierStageBucket(item.bucket) ? item.bucket : UNTRACKED_BUCKET_VALUE}
-                onValueChange={(value) => {
-                    updateEventMapping((current) => {
-                        const next = [...current]
-                        const existing = next[index]
-                        if (!existing) return current
-                        if (value === UNTRACKED_BUCKET_VALUE) {
-                            next[index] = {
-                                ...existing,
-                                bucket: null,
-                                enabled: false,
-                            }
-                        } else if (isZapierStageBucket(value)) {
-                            next[index] = {
-                                ...existing,
-                                bucket: value,
-                                event_name: ZAPIER_BUCKET_EVENT_NAME[value],
-                                enabled: true,
-                            }
-                        }
-                        return next
-                    })
-                }}
-            >
-                <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-44"}>
-                    <SelectValue placeholder="Bucket">
-                        {(value: string | null) => getBucketSelectLabel(value)}
-                    </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value={UNTRACKED_BUCKET_VALUE}>Not Tracked</SelectItem>
-                    {ZAPIER_BUCKET_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-            {!isZapierStageBucket(item.bucket) ? (
-                <Input
-                    value={item.event_name}
-                    onChange={(event) => {
-                        updateEventMapping((current) => {
-                            const next = [...current]
-                            const existing = next[index]
-                            if (!existing) return current
-                            next[index] = { ...existing, event_name: event.target.value }
-                            return next
-                        })
-                    }}
-                    placeholder="Event name"
-                    name={`meta-crm-dataset-event-${item.stage_key}`}
-                    autoComplete="off"
-                />
-            ) : null}
-            <div className="flex items-center gap-2">
-                <Switch
-                    checked={item.enabled}
-                    onCheckedChange={(checked) => {
-                        updateEventMapping((current) => {
-                            const next = [...current]
-                            const existing = next[index]
-                            if (!existing) return current
-                            next[index] = { ...existing, enabled: checked }
-                            return next
-                        })
-                    }}
-                    aria-label={`Enable ${item.stage_key} Meta CRM dataset event`}
-                />
-                <span className="text-xs text-muted-foreground">Enabled</span>
-            </div>
+            <StageEventMappingTable
+                items={eventMapping}
+                namePrefix="meta-crm-dataset"
+                getStageKeyLabel={getStageKeyLabel}
+                getSendLabel={(stageLabel) => `Send ${stageLabel} to Meta CRM dataset`}
+                getUntrackedEnabled={() => false}
+                onChange={(next) => updateEventMapping(() => next)}
+            />
         </div>
     )
 }
 
 function MetaCrmDatasetTestControls({
     metaForm,
-    isDialog,
     updateMetaForm,
     getStageKeyLabel,
-    isSaving,
     isSendingTest,
-    handleSave,
     handleOutboundTest,
 }: {
     metaForm: MetaCrmDatasetFormState
-    isDialog: boolean
     updateMetaForm: UpdateMetaCrmDatasetForm
     getStageKeyLabel: (stageKey: string) => string
-    isSaving: boolean
     isSendingTest: boolean
-    handleSave: () => Promise<void>
     handleOutboundTest: () => Promise<void>
 }) {
     return (
-        <div className={`flex flex-col gap-2 ${isDialog ? "" : "md:flex-row md:items-start"}`}>
-            <Button onClick={() => { void handleSave() }} disabled={isSaving}>
-                {isSaving ? (
-                    <>
-                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                        Saving…
-                    </>
-                ) : (
-                    "Save CRM Dataset Settings"
-                )}
-            </Button>
-            <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 flex-col gap-2"}>
-                <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
+        <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2">
+                <div className="space-y-2">
                     <Label htmlFor="meta-crm-dataset-test-lead-id">Real Meta Lead ID</Label>
                     <Input
                         id="meta-crm-dataset-test-lead-id"
@@ -5966,7 +5814,7 @@ function MetaCrmDatasetTestControls({
                         Meta CRM funnel updates generally only work for leads created within 90 days.
                     </p>
                 </div>
-                <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
+                <div className="space-y-2">
                     <Label htmlFor="meta-crm-dataset-test-fbc">Click ID (fbc)</Label>
                     <Input
                         id="meta-crm-dataset-test-fbc"
@@ -5979,12 +5827,12 @@ function MetaCrmDatasetTestControls({
                         Send Meta click ID when you have it. This maps to <code>user_data.fbc</code>.
                     </p>
                 </div>
-                <div className={isDialog ? "flex flex-col gap-2" : "flex flex-1 items-center gap-2"}>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Select
                         value={metaForm.selectedStage}
                         onValueChange={(value) => updateMetaForm("selectedStage", value ?? "")}
                     >
-                        <SelectTrigger className={isDialog ? "w-full" : "w-full md:w-56"} aria-label="Select Meta CRM dataset stage">
+                        <SelectTrigger className="w-full sm:flex-1" aria-label="Select Meta CRM dataset stage">
                             <SelectValue placeholder="Select stage">
                                 {(value: string | null) => (value ? getStageKeyLabel(value) : "")}
                             </SelectValue>
@@ -6001,7 +5849,7 @@ function MetaCrmDatasetTestControls({
                         variant="outline"
                         onClick={() => { void handleOutboundTest() }}
                         disabled={isSendingTest}
-                        className={isDialog ? "w-full" : undefined}
+                        className="w-full sm:w-auto"
                     >
                         {isSendingTest ? (
                             <>
@@ -6095,39 +5943,6 @@ function ConnectionHealthBadge({ connection }: { connection: MetaOAuthConnection
     )
 }
 
-function MetaConfigurationLoadingState({
-    containerClass,
-    showHeading,
-}: {
-    containerClass: string
-    showHeading: boolean
-}) {
-    return (
-        <div className={containerClass}>
-            {showHeading && (
-                <h2 className="mb-4 text-lg font-semibold">Meta Integration</h2>
-            )}
-            <div className="flex items-center justify-center py-8">
-                <Loader2Icon
-                    className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground"
-                    aria-hidden="true"
-                />
-            </div>
-        </div>
-    )
-}
-
-function MetaConfigurationHeading() {
-    return (
-        <>
-            <h2 className="mb-4 text-lg font-semibold">Meta Integration</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-                Connect Meta accounts to sync lead forms, and configure direct CRM dataset delivery for Meta conversion reporting.
-            </p>
-        </>
-    )
-}
-
 function LegacyMetaSetupSection({
     connections,
     adAccounts,
@@ -6144,7 +5959,7 @@ function LegacyMetaSetupSection({
     adAccountActions: {
         isDeleting: boolean
         onEdit: (account: MetaAdAccount) => void
-        onDelete: (accountId: string) => void
+        onDelete: (accountId: string) => Promise<unknown>
     }
 }) {
     return (
@@ -6268,7 +6083,7 @@ function LegacyMetaAdAccountsCard({
     actions: {
         isDeleting: boolean
         onEdit: (account: MetaAdAccount) => void
-        onDelete: (accountId: string) => void
+        onDelete: (accountId: string) => Promise<unknown>
     }
 }) {
     return (
@@ -6324,15 +6139,23 @@ function LegacyMetaAdAccountsCard({
                                         >
                                             <PencilIcon className="size-4" aria-hidden="true" />
                                         </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => actions.onDelete(account.id)}
-                                            disabled={actions.isDeleting}
-                                            aria-label="Delete ad account"
-                                        >
-                                            <TrashIcon className="size-4" aria-hidden="true" />
-                                        </Button>
+                                        <ConfirmDialog
+                                            trigger={
+                                                <Button
+                                                    variant="destructive-ghost"
+                                                    size="sm"
+                                                    disabled={actions.isDeleting}
+                                                    aria-label="Delete ad account"
+                                                >
+                                                    <TrashIcon className="size-4" aria-hidden="true" />
+                                                </Button>
+                                            }
+                                            title={`Delete ${account.ad_account_name || account.ad_account_external_id}?`}
+                                            description="Lead sync and CAPI stop for this ad account."
+                                            confirmLabel="Delete"
+                                            errorFallback="Couldn't delete the ad account. Try again."
+                                            onConfirm={() => actions.onDelete(account.id)}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -6471,31 +6294,24 @@ function MetaDisconnectDialog({
 }: {
     connectionId: string | null
     onClose: () => void
-    onConfirm: (connectionId: string) => void
+    onConfirm: (connectionId: string) => Promise<void>
 }) {
     return (
-        <AlertDialog open={!!connectionId} onOpenChange={(open) => !open && onClose()}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Disconnect Meta account?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This will unlink all ad accounts and pages connected through this Facebook account.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                        onClick={() => connectionId && onConfirm(connectionId)}
-                    >
-                        Disconnect
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDialog
+            open={!!connectionId}
+            onOpenChange={(open) => {
+                if (!open) onClose()
+            }}
+            title="Disconnect Meta account?"
+            description="This will unlink all ad accounts and pages connected through this Facebook account."
+            confirmLabel="Disconnect"
+            errorFallback="Couldn't disconnect the Meta account. Try again."
+            onConfirm={() => (connectionId ? onConfirm(connectionId) : undefined)}
+        />
     )
 }
 
-function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "dialog" }) {
+function MetaConfigurationSection() {
     const { data: connections = [], isLoading: connectionsLoading } = useMetaConnections()
     const connectUrlMutation = useMetaConnectUrl()
     const disconnectMutation = useDisconnectMetaConnection()
@@ -6521,18 +6337,17 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
         try {
             const result = await connectUrlMutation.mutateAsync()
             window.location.href = result.auth_url
-        } catch {
-            // Error handled by mutation
+        } catch (error) {
+            const message = getActionErrorMessage(error, "Couldn't start the Meta connection. Try again.")
+            if (message) toast.error(message)
         }
     }
 
+    // Errors propagate so the confirm dialog stays open and shows them inline.
     const handleDisconnect = async (connectionId: string) => {
-        try {
-            await disconnectMutation.mutateAsync(connectionId)
-            setDisconnectConnectionId(null)
-        } catch {
-            // Error handled by mutation
-        }
+        await disconnectMutation.mutateAsync(connectionId)
+        setDisconnectConnectionId(null)
+        toast.success("Meta account disconnected")
     }
 
     const openEditAccount = (account: MetaAdAccount) => {
@@ -6562,45 +6377,24 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
             })
             dispatchAccountEdit({ type: "close" })
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Failed to update ad account"
-            dispatchAccountEdit({ type: "setError", error: message })
+            const message = getActionErrorMessage(error, "Couldn't update the ad account. Try again.")
+            if (message) dispatchAccountEdit({ type: "setError", error: message })
         }
     }
 
     const handleDeleteAdAccount = async (accountId: string) => {
-        try {
-            await deleteAccountMutation.mutateAsync(accountId)
-        } catch (error) {
-            console.error("Failed to delete ad account:", error)
-        }
+        await deleteAccountMutation.mutateAsync(accountId)
+        toast.success("Ad account deleted")
     }
 
-    const showHeading = variant === "page"
-    const containerClass = showHeading ? "border-t pt-6" : "space-y-6"
-
-    const isLoading = connectionsLoading || adAccountsLoading
-
-    if (isLoading) {
-        return (
-            <MetaConfigurationLoadingState
-                containerClass={containerClass}
-                showHeading={showHeading}
-            />
-        )
+    if (connectionsLoading || adAccountsLoading) {
+        return <IntegrationDialogLoadingState />
     }
 
     return (
-        <div className={containerClass}>
-            {showHeading && <MetaConfigurationHeading />}
-            <Tabs defaultValue="configuration" className="space-y-4">
-                <TabsList variant="line">
-                    <TabsTrigger value="configuration">Configuration</TabsTrigger>
-                    <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="configuration" className="space-y-4">
-                    <MetaCrmDatasetSection variant={variant} />
-
+        <>
+            <MetaCrmDatasetSection
+                legacySetup={
                     <LegacyMetaSetupSection
                         connections={connections}
                         adAccounts={adAccounts}
@@ -6614,18 +6408,11 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                         adAccountActions={{
                             isDeleting: deleteAccountMutation.isPending,
                             onEdit: openEditAccount,
-                            onDelete: (accountId) => {
-                                void handleDeleteAdAccount(accountId)
-                            },
+                            onDelete: handleDeleteAdAccount,
                         }}
                     />
-                </TabsContent>
-
-                <TabsContent value="monitoring" keepMounted>
-                    <MetaCrmDatasetMonitoringSection variant={variant} />
-                </TabsContent>
-            </Tabs>
-
+                }
+            />
             <MetaAdAccountEditDialog
                 editState={accountEditState}
                 isSaving={updateAccountMutation.isPending}
@@ -6638,7 +6425,7 @@ function MetaConfigurationSection({ variant = "page" }: { variant?: "page" | "di
                 onClose={() => setDisconnectConnectionId(null)}
                 onConfirm={handleDisconnect}
             />
-        </div>
+        </>
     )
 }
 
@@ -6658,7 +6445,7 @@ export default function IntegrationsPage() {
         : requestedScope
     const organizationIntegrationsEnabled =
         canManageOrganizationIntegrations && activeScope === "organization"
-    const { data: healthData, isLoading, refetch, isFetching } = useIntegrationHealth(
+    const { data: healthData, refetch, isFetching } = useIntegrationHealth(
         organizationIntegrationsEnabled
     )
     const personalIntegrationsEnabled = activeScope === "personal"
@@ -6829,6 +6616,7 @@ export default function IntegrationsPage() {
                         gmailIntegration={gmailIntegration}
                         googleCalendarIntegration={googleCalendarIntegration}
                         googleCalendarStatus={googleCalendarStatus}
+                        googleHasSynced={Boolean(googleLastSyncAt)}
                         googleLastSyncLabel={googleLastSyncLabel}
                         googleLastSyncAbsoluteLabel={googleLastSyncAbsoluteLabel}
                         pendingState={{
@@ -6842,7 +6630,7 @@ export default function IntegrationsPage() {
                         onConnectGmail={() => connectGmail.mutate()}
                         onConnectGoogleCalendar={() => connectGoogleCalendar.mutate()}
                         onSyncGoogleCalendar={() => syncGoogleCalendarNow.mutate()}
-                        onDisconnect={(integrationType) => disconnectIntegration.mutate(integrationType)}
+                        onDisconnect={(integrationType) => disconnectIntegration.mutateAsync(integrationType)}
                     />
                 ) : (
                     <>
@@ -6911,26 +6699,25 @@ export default function IntegrationsPage() {
                             onMetaDialogOpenChange={setMetaDialogOpen}
                         />
 
-                        <SystemIntegrationsSection
-                            isLoading={isLoading}
-                            healthData={healthData ?? []}
-                            canManageOrganizationIntegrations={canManageOrganizationIntegrations}
-                            metaFormsCount={metaFormsCount}
-                            metaMappedFormsCount={metaMappedFormsCount}
-                            metaAdAccounts={metaAdAccounts}
-                            inboundWebhooksCount={inboundWebhooks.length}
-                            zapierOutboundEnabled={Boolean(zapierSettings?.outbound_enabled)}
-                            zapierDonorOutboundEnabled={
-                                Object.prototype.hasOwnProperty.call(
-                                    zapierSettings ?? {},
-                                    "donor_outbound_enabled",
-                                )
-                                    ? Boolean(zapierSettings?.donor_outbound_enabled)
-                                    : null
-                            }
-                        />
-
-                        <IntegrationsHelpCard />
+                        {healthData?.length ? (
+                            <SystemIntegrationsSection
+                                healthData={healthData}
+                                canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                                metaFormsCount={metaFormsCount}
+                                metaMappedFormsCount={metaMappedFormsCount}
+                                metaAdAccounts={metaAdAccounts}
+                                inboundWebhooksCount={inboundWebhooks.length}
+                                zapierOutboundEnabled={Boolean(zapierSettings?.outbound_enabled)}
+                                zapierDonorOutboundEnabled={
+                                    Object.prototype.hasOwnProperty.call(
+                                        zapierSettings ?? {},
+                                        "donor_outbound_enabled",
+                                    )
+                                        ? Boolean(zapierSettings?.donor_outbound_enabled)
+                                        : null
+                                }
+                            />
+                        ) : null}
                     </>
                 )}
             </div>
@@ -6966,46 +6753,44 @@ function IntegrationsPageHeader({
     onScopeChange: (scope: IntegrationScope) => void
     onRefresh: () => void
 }) {
+    const hasActions = canManageOrganizationIntegrations || activeScope === "organization"
     return (
-        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 px-6 py-3">
-                <h1 className="text-2xl font-semibold">Integrations</h1>
-                <div className="flex items-center gap-3">
-                    {canManageOrganizationIntegrations ? (
-                        <ToggleGroup
-                            aria-label="Integration scope"
-                            multiple={false}
-                            value={[activeScope]}
-                            onValueChange={(value) => {
-                                const nextScope = value[0]
-                                if (nextScope === "personal" || nextScope === "organization") {
-                                    onScopeChange(nextScope)
-                                }
-                            }}
-                            variant="outline"
-                            size="sm"
-                        >
-                            <ToggleGroupItem value="personal">Personal</ToggleGroupItem>
-                            <ToggleGroupItem value="organization">Organization</ToggleGroupItem>
-                        </ToggleGroup>
-                    ) : null}
-                    {activeScope === "organization" ? (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={onRefresh}
-                            disabled={isFetching}
-                        >
-                            <RefreshCwIcon
-                                className={`mr-2 size-4 ${isFetching ? "animate-spin" : ""} motion-reduce:animate-none`}
-                                aria-hidden="true"
-                            />
-                            Refresh
-                        </Button>
-                    ) : null}
-                </div>
-            </div>
-        </div>
+        <PageHeader
+            title="Integrations"
+            actions={
+                hasActions ? (
+                    <>
+                        {canManageOrganizationIntegrations ? (
+                            <ToggleGroup
+                                aria-label="Integration scope"
+                                multiple={false}
+                                value={[activeScope]}
+                                onValueChange={(value) => {
+                                    const nextScope = value[0]
+                                    if (nextScope === "personal" || nextScope === "organization") {
+                                        onScopeChange(nextScope)
+                                    }
+                                }}
+                                variant="outline"
+                                size="sm"
+                            >
+                                <ToggleGroupItem value="personal">Personal</ToggleGroupItem>
+                                <ToggleGroupItem value="organization">Organization</ToggleGroupItem>
+                            </ToggleGroup>
+                        ) : null}
+                        {activeScope === "organization" ? (
+                            <Button variant="outline" size="sm" onClick={onRefresh} disabled={isFetching}>
+                                <RefreshCwIcon
+                                    className={`mr-2 size-4 ${isFetching ? "animate-spin" : ""} motion-reduce:animate-none`}
+                                    aria-hidden="true"
+                                />
+                                Refresh
+                            </Button>
+                        ) : null}
+                    </>
+                ) : null
+            }
+        />
     )
 }
 
@@ -7014,6 +6799,7 @@ function PersonalIntegrationsSection({
     gmailIntegration,
     googleCalendarIntegration,
     googleCalendarStatus,
+    googleHasSynced,
     googleLastSyncLabel,
     googleLastSyncAbsoluteLabel,
     pendingState,
@@ -7027,6 +6813,7 @@ function PersonalIntegrationsSection({
     gmailIntegration: IntegrationStatus | undefined
     googleCalendarIntegration: IntegrationStatus | undefined
     googleCalendarStatus: GoogleCalendarStatusResponse | undefined
+    googleHasSynced: boolean
     googleLastSyncLabel: string
     googleLastSyncAbsoluteLabel: string
     pendingState: {
@@ -7040,178 +6827,266 @@ function PersonalIntegrationsSection({
     onConnectGmail: () => void
     onConnectGoogleCalendar: () => void
     onSyncGoogleCalendar: () => void
-    onDisconnect: (integrationType: string) => void
+    onDisconnect: (integrationType: PersonalIntegrationType) => Promise<unknown>
 }) {
     const [googleCalendarDialogOpen, setGoogleCalendarDialogOpen] = useState(false)
+    const googleCalendarConnected = Boolean(googleCalendarIntegration?.connected)
+    const disconnect = async (integrationType: PersonalIntegrationType) => {
+        await onDisconnect(integrationType)
+        toast.success(`${PERSONAL_INTEGRATION_LABELS[integrationType]} disconnected`)
+    }
+    const googleDetail = googleCalendarIntegration
+        ? [
+            googleCalendarIntegration.account_email,
+            googleHasSynced ? `Last sync ${googleLastSyncLabel}` : googleLastSyncLabel,
+        ]
+            .filter(Boolean)
+            .join(" · ")
+        : "Calendar sync and Meet links"
 
     return (
-        <div>
-            <h2 className="mb-4 text-lg font-semibold">Personal Integrations</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-                Connect your personal accounts to enable features like Zoom appointments and email sending.
-            </p>
-            <div
-                data-testid="personal-integrations-grid"
-                className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-            >
-                <PersonalIntegrationCard
+        <>
+            <IntegrationList title="Your accounts" testId="personal-integrations-list">
+                <IntegrationRow
                     Icon={VideoIcon}
                     iconContainerClassName="bg-blue-100 dark:bg-blue-900"
                     iconClassName="text-blue-600 dark:text-blue-400"
                     title="Zoom"
-                    description="Video appointments"
-                    integration={zoomIntegration}
-                    connectLabel="Connect Zoom"
-                    isConnectPending={pendingState.zoomConnect}
-                    isDisconnectPending={pendingState.disconnect}
-                    onConnect={onConnectZoom}
-                    onDisconnect={() => onDisconnect("zoom")}
+                    detail={zoomIntegration?.account_email ?? "Video appointments"}
+                    status={<ConnectionStatusBadge connected={Boolean(zoomIntegration)} />}
+                    action={zoomIntegration ? (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            aria-label="Manage Zoom"
+                            render={<Link href="/settings/integrations/zoom" />}
+                        >
+                            Manage
+                        </Button>
+                    ) : (
+                        <IntegrationConnectButton
+                            label="Connect Zoom"
+                            pending={pendingState.zoomConnect}
+                            onConnect={onConnectZoom}
+                        />
+                    )}
                 />
 
-                <PersonalIntegrationCard
+                <IntegrationRow
                     Icon={MailIcon}
                     iconContainerClassName="bg-red-100 dark:bg-red-900"
                     iconClassName="text-red-600 dark:text-red-400"
                     title="Gmail"
-                    description="Email sending"
-                    integration={gmailIntegration}
-                    connectLabel="Connect Gmail"
-                    isConnectPending={pendingState.gmailConnect}
-                    isDisconnectPending={pendingState.disconnect}
-                    onConnect={onConnectGmail}
-                    onDisconnect={() => onDisconnect("gmail")}
+                    detail={gmailIntegration?.account_email ?? "Email sending"}
+                    status={<ConnectionStatusBadge connected={Boolean(gmailIntegration)} />}
+                    action={gmailIntegration ? (
+                        <ConfirmDialog
+                            trigger={(
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    aria-label="Disconnect Gmail"
+                                    disabled={pendingState.disconnect}
+                                >
+                                    Disconnect…
+                                </Button>
+                            )}
+                            title="Disconnect Gmail?"
+                            description="Emails can no longer be sent from this Gmail account."
+                            confirmLabel="Disconnect"
+                            errorFallback="Couldn't disconnect Gmail. Try again."
+                            onConfirm={() => disconnect("gmail")}
+                        />
+                    ) : (
+                        <IntegrationConnectButton
+                            label="Connect Gmail"
+                            pending={pendingState.gmailConnect}
+                            onConnect={onConnectGmail}
+                        />
+                    )}
                 />
 
-                <PersonalIntegrationCard
+                <IntegrationRow
                     Icon={CalendarIcon}
                     iconContainerClassName="bg-emerald-100 dark:bg-emerald-900"
                     iconClassName="text-emerald-600 dark:text-emerald-400"
-                    title="Google Calendar + Meeting"
-                    description="Two-way calendar sync + meeting links"
-                    integration={googleCalendarIntegration}
-                    connectLabel="Connect Google Calendar"
-                    isConnectPending={pendingState.googleCalendarConnect}
-                    isDisconnectPending={pendingState.disconnect}
-                    onConnect={onConnectGoogleCalendar}
-                    onDisconnect={() => onDisconnect("google_calendar")}
-                    hideDisconnect
-                >
-                    <Button className="w-full" variant="outline" onClick={() => setGoogleCalendarDialogOpen(true)}>Manage</Button>
-                </PersonalIntegrationCard>
-            </div>
-            <Dialog open={googleCalendarDialogOpen && Boolean(googleCalendarIntegration?.connected)} onOpenChange={setGoogleCalendarDialogOpen}>
-                <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden rounded-2xl sm:max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Google Calendar</DialogTitle>
-                    </DialogHeader>
-                    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
-                        <p className="text-xs text-muted-foreground" title={googleLastSyncAbsoluteLabel ?? undefined}>
-                            Last sync: {googleLastSyncLabel}
-                        </p>
-                        {googleCalendarStatus && !googleCalendarStatus.tasks_accessible ? (
-                            <p className="text-xs text-amber-700">
-                                Google Tasks sync is not accessible ({googleCalendarStatus.tasks_error ?? "unknown"}).
-                            </p>
+                    title="Google Calendar & Meet"
+                    detail={googleDetail}
+                    status={<ConnectionStatusBadge connected={Boolean(googleCalendarIntegration)} />}
+                    action={googleCalendarIntegration ? (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            aria-label="Manage Google Calendar & Meet"
+                            onClick={() => setGoogleCalendarDialogOpen(true)}
+                            disabled={!googleCalendarConnected}
+                        >
+                            Manage
+                        </Button>
+                    ) : (
+                        <IntegrationConnectButton
+                            label="Connect Google Calendar"
+                            pending={pendingState.googleCalendarConnect}
+                            onConnect={onConnectGoogleCalendar}
+                        />
+                    )}
+                />
+            </IntegrationList>
+
+            <Dialog
+                open={googleCalendarDialogOpen && googleCalendarConnected}
+                onOpenChange={setGoogleCalendarDialogOpen}
+            >
+                <DialogContent layout="sectioned" size="2xl">
+                    <DialogHeader
+                        icon={<CalendarIcon />}
+                        status={<ConnectionStatusBadge connected />}
+                    >
+                        <DialogTitle>Google Calendar &amp; Meet</DialogTitle>
+                        {googleCalendarIntegration?.account_email ? (
+                            <DialogDescription className="truncate">
+                                {googleCalendarIntegration.account_email}
+                            </DialogDescription>
                         ) : null}
-                        {googleCalendarDialogOpen ? <GoogleCalendarBindingSettings
-                            enabled={Boolean(googleCalendarIntegration?.connected)}
+                    </DialogHeader>
+                    {googleCalendarDialogOpen ? (
+                        <GoogleCalendarBindingSettings
+                            enabled={googleCalendarConnected}
+                            lastSyncLabel={googleLastSyncLabel}
+                            lastSyncTitle={googleLastSyncAbsoluteLabel || undefined}
                             onLegacySync={onSyncGoogleCalendar}
                             legacySyncPending={pendingState.googleCalendarSync}
-                        /> : null}
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => onDisconnect("google_calendar")} disabled={pendingState.disconnect}>
-                            <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
-                            Disconnect
-                        </Button>
-                    </DialogFooter>
+                            onSaved={() => setGoogleCalendarDialogOpen(false)}
+                            notice={googleCalendarStatus && !googleCalendarStatus.tasks_accessible ? (
+                                // tasks_error holds raw provider codes and messages, so it is never shown.
+                                <Alert role="status" className="border-warning/40 bg-warning/10">
+                                    <AlertTriangleIcon className="text-warning" aria-hidden="true" />
+                                    <AlertTitle>Google Tasks sync unavailable</AlertTitle>
+                                    <AlertDescription>Tasks are not added to Google Tasks.</AlertDescription>
+                                </Alert>
+                            ) : null}
+                            footerStart={(
+                                <ConfirmDialog
+                                    trigger={(
+                                        <Button variant="destructive-ghost" disabled={pendingState.disconnect}>
+                                            Disconnect…
+                                        </Button>
+                                    )}
+                                    title="Disconnect Google Calendar?"
+                                    description="Calendar sync stops and new Google Meet links are no longer created."
+                                    confirmLabel="Disconnect"
+                                    errorFallback="Couldn't disconnect Google Calendar. Try again."
+                                    onConfirm={async () => {
+                                        await disconnect("google_calendar")
+                                        setGoogleCalendarDialogOpen(false)
+                                    }}
+                                />
+                            )}
+                        />
+                    ) : null}
                 </DialogContent>
             </Dialog>
-        </div>
+        </>
     )
 }
 
-function PersonalIntegrationCard({
+type PersonalIntegrationType = "zoom" | "gmail" | "google_calendar"
+
+const PERSONAL_INTEGRATION_LABELS: Record<PersonalIntegrationType, string> = {
+    zoom: "Zoom",
+    gmail: "Gmail",
+    google_calendar: "Google Calendar",
+}
+
+// Token colors keep the connected state readable in both themes; the Badge has no success variant.
+function ConnectionStatusBadge({ connected }: { connected: boolean }) {
+    return connected ? (
+        <Badge variant="outline" className="border-success/30 bg-success/10 text-success">
+            <CheckCircleIcon aria-hidden="true" />
+            Connected
+        </Badge>
+    ) : (
+        <Badge variant="secondary">Not connected</Badge>
+    )
+}
+
+function IntegrationConnectButton({
+    label,
+    pending,
+    onConnect,
+}: {
+    label: string
+    pending: boolean
+    onConnect: () => void
+}) {
+    return (
+        <Button size="sm" onClick={onConnect} disabled={pending} aria-label={label}>
+            {pending ? (
+                <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+            ) : (
+                <LinkIcon aria-hidden="true" />
+            )}
+            Connect
+        </Button>
+    )
+}
+
+function IntegrationList({
+    title,
+    testId,
+    children,
+}: {
+    title: string
+    testId: string
+    children: ReactNode
+}) {
+    const headingId = `${testId}-heading`
+    return (
+        <section aria-labelledby={headingId}>
+            <h2 id={headingId} className="mb-3 text-lg font-semibold">{title}</h2>
+            <ul data-testid={testId} className="divide-y rounded-xl border bg-card">
+                {children}
+            </ul>
+        </section>
+    )
+}
+
+function IntegrationRow({
     Icon,
     iconContainerClassName,
     iconClassName,
     title,
-    description,
-    integration,
-    connectLabel,
-    isConnectPending,
-    isDisconnectPending,
-    onConnect,
-    onDisconnect,
-    className,
-    hideDisconnect = false,
-    children,
+    detail,
+    status,
+    action,
 }: {
     Icon: IconComponent
     iconContainerClassName: string
     iconClassName: string
     title: string
-    description: string
-    integration: IntegrationStatus | undefined
-    connectLabel: string
-    isConnectPending: boolean
-    isDisconnectPending: boolean
-    onConnect: () => void
-    onDisconnect: () => void
-    className?: string
-    hideDisconnect?: boolean
-    children?: ReactNode
+    detail: ReactNode
+    status: ReactNode
+    action: ReactNode
 }) {
     return (
-        <Card className={`flex h-full flex-col ${className ?? ""}`}>
-            <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                    <div className={`flex size-10 items-center justify-center rounded-lg ${iconContainerClassName}`}>
-                        <Icon className={`size-5 ${iconClassName}`} aria-hidden="true" />
-                    </div>
-                    <div>
-                        <CardTitle className="text-base">{title}</CardTitle>
-                        <CardDescription className="text-xs">{description}</CardDescription>
-                    </div>
+        <li
+            data-slot="integration-row"
+            className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4"
+        >
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${iconContainerClassName}`}>
+                    <Icon className={`size-5 ${iconClassName}`} aria-hidden="true" />
                 </div>
-            </CardHeader>
-            <CardContent className="flex flex-1 flex-col">
-                {integration ? (
-                    <div className="flex flex-1 flex-col gap-3">
-                        <div className="flex items-center gap-2">
-                            <Badge variant="default" className="bg-green-600">
-                                <CheckCircleIcon className="mr-1 size-3" aria-hidden="true" />
-                                Connected
-                            </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">{integration.account_email}</p>
-                        {children ? <div className="mt-auto">{children}</div> : null}
-                        {!hideDisconnect ? <Button
-                            variant="outline"
-                            size="sm"
-                            className={`w-full${children ? "" : " mt-auto"}`}
-                            onClick={onDisconnect}
-                            disabled={isDisconnectPending}
-                        >
-                            <UnlinkIcon className="mr-2 size-3" aria-hidden="true" />
-                            Disconnect
-                        </Button> : null}
-                    </div>
-                ) : (
-                    <Button className="mt-auto w-full" onClick={onConnect} disabled={isConnectPending}>
-                        {isConnectPending ? (
-                            <Loader2Icon
-                                className="mr-2 size-4 animate-spin motion-reduce:animate-none"
-                                aria-hidden="true"
-                            />
-                        ) : (
-                            <LinkIcon className="mr-2 size-4" aria-hidden="true" />
-                        )}
-                        {connectLabel}
-                    </Button>
-                )}
-            </CardContent>
-        </Card>
+                <div className="min-w-0 space-y-0.5">
+                    <h3 className="text-sm font-medium">{title}</h3>
+                    <div className="text-xs break-words text-muted-foreground">{detail}</div>
+                </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 pl-13 sm:shrink-0 sm:justify-end sm:pl-0">
+                <div className="flex flex-wrap items-center gap-2">{status}</div>
+                {action}
+            </div>
+        </li>
     )
 }
 
@@ -7290,216 +7165,163 @@ function OrganizationIntegrationsSection({
     onConfigureZapier: () => void
     onConfigureMeta: () => void
 }) {
+    const statusBadge = (
+        isLoading: boolean,
+        label: string,
+        variant: BadgeVariant,
+        StatusIcon: IconComponent,
+    ) => isLoading ? (
+        <span role="status">
+            <Loader2Icon
+                className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none"
+                aria-hidden="true"
+            />
+            <span className="sr-only">Loading status</span>
+        </span>
+    ) : (
+        <Badge variant={variant}>
+            <StatusIcon aria-hidden="true" />
+            {label}
+        </Badge>
+    )
+
     return (
-        <div>
-            <h2 className="mb-4 text-lg font-semibold">Organization Integrations</h2>
-            <p className="mb-4 text-sm text-muted-foreground">
-                Configure shared services like AI, email, messaging, and Zapier for the organization.
-            </p>
-            {!canManageOrganizationIntegrations ? (
-                <Alert className="mb-4">
-                    <AlertTriangleIcon className="size-4" aria-hidden="true" />
-                    <AlertTitle>Read-only access</AlertTitle>
-                    <AlertDescription>
-                        You can view organization integration status, but only administrators can configure these integrations.
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-            <div
-                data-testid="organization-integrations-grid"
-                className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-            >
-                <OrganizationIntegrationCard
-                    Icon={SparklesIcon}
-                    iconContainerClassName="bg-purple-100 dark:bg-purple-900"
-                    iconClassName="text-purple-600 dark:text-purple-400"
-                    title="AI Assistant"
-                    description="Copilot, summaries, and AI workflows"
-                    isLoading={aiSettingsLoading}
-                    statusLabel={aiStatusLabel}
-                    statusVariant={aiStatusVariant}
-                    StatusIcon={AiStatusIcon}
-                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
-                    actionLabel="Configure AI"
-                    onConfigure={onConfigureAI}
-                >
-                    <p className="text-xs text-muted-foreground">
-                        {aiSettingsProvider ? `Provider: ${aiProviderLabel}` : "No provider configured"}
-                    </p>
-                </OrganizationIntegrationCard>
-
-                <OrganizationIntegrationCard
-                    Icon={MessageSquareTextIcon}
-                    iconContainerClassName="bg-cyan-100 dark:bg-cyan-900"
-                    iconClassName="text-cyan-700 dark:text-cyan-300"
-                    title="Messaging Delivery"
-                    description="Twilio SMS + MMS sending, replies, and opt-out handling"
-                    isLoading={messagingSettingsLoading}
-                    statusLabel={messagingStatusLabel}
-                    statusVariant={messagingStatusVariant}
-                    StatusIcon={MessagingStatusIcon}
-                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
-                    actionLabel="Configure Messaging"
-                    actionHref="/settings/integrations/messaging"
-                >
-                    <p className="text-xs text-muted-foreground">{messagingDetail}</p>
-                </OrganizationIntegrationCard>
-
-                <OrganizationIntegrationCard
-                    Icon={SendIcon}
-                    iconContainerClassName="bg-teal-100 dark:bg-teal-900"
-                    iconClassName="text-teal-600 dark:text-teal-400"
-                    title="Email Delivery"
-                    description="Campaign + transactional sending"
-                    isLoading={resendSettingsLoading}
-                    statusLabel={emailStatusLabel}
-                    statusVariant={emailStatusVariant}
-                    StatusIcon={EmailStatusIcon}
-                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
-                    actionLabel="Configure Email"
-                    onConfigure={onConfigureEmail}
-                >
-                    <p className="text-xs text-muted-foreground">
-                        {emailConfigured ? `${emailProviderLabel} · ${emailDetail}` : "Choose a provider to start sending"}
-                    </p>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full"
-                        render={<Link href="/settings/integrations/email" />}
-                    >
-                        <ActivityIcon aria-hidden="true" />
-                        View email operations
-                    </Button>
-                </OrganizationIntegrationCard>
-
-                <OrganizationIntegrationCard
-                    Icon={LinkIcon}
-                    iconContainerClassName="bg-primary/10 dark:bg-primary/20"
-                    iconClassName="text-primary"
-                    title="Zapier"
-                    description="Inbound leads + stage event delivery"
-                    isLoading={zapierSettingsLoading}
-                    statusLabel={zapierStatusLabel}
-                    statusVariant={zapierStatusVariant}
-                    StatusIcon={ZapierStatusIcon}
-                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
-                    actionLabel="Configure Zapier"
-                    onConfigure={onConfigureZapier}
-                >
-                    <Badge
-                        data-testid="zapier-mapping-health-card-badge"
-                        variant={zapierMappingBadgeVariant}
-                        className="w-fit"
-                    >
-                        {zapierMappingBadgeLabel}
-                    </Badge>
-                    <p className="text-xs text-muted-foreground">{zapierDetail}</p>
-                    <p className="text-xs text-muted-foreground">{zapierMappingDetail}</p>
-                </OrganizationIntegrationCard>
-
-                <OrganizationIntegrationCard
-                    Icon={MegaphoneIcon}
-                    iconContainerClassName="bg-blue-100 dark:bg-blue-900"
-                    iconClassName="text-blue-600 dark:text-blue-400"
-                    title="Meta Lead Ads"
-                    description="Facebook/Instagram lead capture + CAPI"
-                    isLoading={metaCrmDatasetSettingsLoading}
-                    statusLabel={metaStatusLabel}
-                    statusVariant={metaStatusVariant}
-                    StatusIcon={MetaStatusIcon}
-                    canManageOrganizationIntegrations={canManageOrganizationIntegrations}
-                    actionLabel="Configure Meta"
-                    onConfigure={onConfigureMeta}
-                >
-                    <p className="text-xs text-muted-foreground">{metaDetail}</p>
-                </OrganizationIntegrationCard>
-            </div>
-        </div>
+        <IntegrationList title="Organization" testId="organization-integrations-list">
+            <IntegrationRow
+                Icon={SparklesIcon}
+                iconContainerClassName="bg-purple-100 dark:bg-purple-900"
+                iconClassName="text-purple-600 dark:text-purple-400"
+                title="AI Assistant"
+                detail={aiSettingsProvider ? aiProviderLabel : "No provider configured"}
+                status={statusBadge(aiSettingsLoading, aiStatusLabel, aiStatusVariant, AiStatusIcon)}
+                action={(
+                    <OrganizationIntegrationAction
+                        title="AI Assistant"
+                        canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                        onConfigure={onConfigureAI}
+                    />
+                )}
+            />
+            <IntegrationRow
+                Icon={SendIcon}
+                iconContainerClassName="bg-teal-100 dark:bg-teal-900"
+                iconClassName="text-teal-600 dark:text-teal-400"
+                title="Email delivery"
+                detail={emailConfigured ? `${emailProviderLabel} · ${emailDetail}` : "No provider"}
+                status={statusBadge(resendSettingsLoading, emailStatusLabel, emailStatusVariant, EmailStatusIcon)}
+                action={(
+                    <OrganizationIntegrationAction
+                        title="Email delivery"
+                        canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                        onConfigure={onConfigureEmail}
+                    />
+                )}
+            />
+            <IntegrationRow
+                Icon={MessageSquareTextIcon}
+                iconContainerClassName="bg-cyan-100 dark:bg-cyan-900"
+                iconClassName="text-cyan-700 dark:text-cyan-300"
+                title="Messaging (Twilio)"
+                detail={messagingDetail}
+                status={statusBadge(
+                    messagingSettingsLoading,
+                    messagingStatusLabel,
+                    messagingStatusVariant,
+                    MessagingStatusIcon,
+                )}
+                action={(
+                    <OrganizationIntegrationAction
+                        title="Messaging"
+                        canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                        href="/settings/integrations/messaging"
+                    />
+                )}
+            />
+            <IntegrationRow
+                Icon={LinkIcon}
+                iconContainerClassName="bg-primary/10 dark:bg-primary/20"
+                iconClassName="text-primary"
+                title="Zapier"
+                detail={(
+                    <>
+                        <p>{zapierDetail}</p>
+                        <p>{zapierMappingDetail}</p>
+                    </>
+                )}
+                status={(
+                    <>
+                        {statusBadge(zapierSettingsLoading, zapierStatusLabel, zapierStatusVariant, ZapierStatusIcon)}
+                        {zapierSettingsLoading ? null : (
+                            <Badge
+                                data-testid="zapier-mapping-health-card-badge"
+                                variant={zapierMappingBadgeVariant}
+                            >
+                                {zapierMappingBadgeLabel}
+                            </Badge>
+                        )}
+                    </>
+                )}
+                action={(
+                    <OrganizationIntegrationAction
+                        title="Zapier"
+                        canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                        onConfigure={onConfigureZapier}
+                    />
+                )}
+            />
+            <IntegrationRow
+                Icon={MegaphoneIcon}
+                iconContainerClassName="bg-blue-100 dark:bg-blue-900"
+                iconClassName="text-blue-600 dark:text-blue-400"
+                title="Meta Lead Ads"
+                detail={metaDetail}
+                status={statusBadge(metaCrmDatasetSettingsLoading, metaStatusLabel, metaStatusVariant, MetaStatusIcon)}
+                action={(
+                    <OrganizationIntegrationAction
+                        title="Meta Lead Ads"
+                        canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                        onConfigure={onConfigureMeta}
+                    />
+                )}
+            />
+        </IntegrationList>
     )
 }
 
-function OrganizationIntegrationCard({
-    Icon,
-    iconContainerClassName,
-    iconClassName,
+function OrganizationIntegrationAction({
     title,
-    description,
-    isLoading,
-    statusLabel,
-    statusVariant,
-    StatusIcon,
     canManageOrganizationIntegrations,
-    actionLabel,
-    actionHref,
+    href,
     onConfigure,
-    children,
 }: {
-    Icon: IconComponent
-    iconContainerClassName: string
-    iconClassName: string
     title: string
-    description: string
-    isLoading: boolean
-    statusLabel: string
-    statusVariant: BadgeVariant
-    StatusIcon: IconComponent
     canManageOrganizationIntegrations: boolean
-    actionLabel: string
-    actionHref?: string
+    href?: string
     onConfigure?: () => void
-    children: ReactNode
 }) {
+    if (!canManageOrganizationIntegrations) {
+        return (
+            <Button variant="outline" size="sm" disabled>
+                Admin access required
+            </Button>
+        )
+    }
+    if (href) {
+        return (
+            <Button
+                variant="outline"
+                size="sm"
+                aria-label={`Configure ${title}`}
+                render={<Link href={href} />}
+            >
+                Configure
+            </Button>
+        )
+    }
     return (
-        <Card>
-            <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                    <div className={`flex size-10 items-center justify-center rounded-lg ${iconContainerClassName}`}>
-                        <Icon className={`size-5 ${iconClassName}`} aria-hidden="true" />
-                    </div>
-                    <div>
-                        <CardTitle className="text-base">{title}</CardTitle>
-                        <CardDescription className="text-xs">{description}</CardDescription>
-                    </div>
-                </div>
-            </CardHeader>
-            <CardContent>
-                {isLoading ? (
-                    <div className="flex items-center justify-center py-6">
-                        <Loader2Icon
-                            className="size-5 animate-spin motion-reduce:animate-none text-muted-foreground"
-                            aria-hidden="true"
-                        />
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        <Badge variant={statusVariant} className="w-fit flex items-center gap-1">
-                            <StatusIcon className="size-3" aria-hidden="true" />
-                            {statusLabel}
-                        </Badge>
-                        {children}
-                        {canManageOrganizationIntegrations && actionHref ? (
-                            <Button
-                                variant="outline"
-                                className="w-full"
-                                render={<Link href={actionHref} />}
-                            >
-                                {actionLabel}
-                            </Button>
-                        ) : (
-                            <Button
-                                variant="outline"
-                                className="w-full"
-                                onClick={onConfigure}
-                                disabled={!canManageOrganizationIntegrations}
-                            >
-                                {canManageOrganizationIntegrations ? actionLabel : "Admin access required"}
-                            </Button>
-                        )}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+        <Button variant="outline" size="sm" aria-label={`Configure ${title}`} onClick={onConfigure}>
+            Configure
+        </Button>
     )
 }
 
@@ -7561,22 +7383,19 @@ function IntegrationConfigurationDialogs({
                     onAiDialogOpenChange(open)
                 }}
             >
-                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden sm:max-w-4xl">
-                    <DialogHeader>
-                        <div className="flex items-start justify-between gap-4">
-                            <div className="space-y-1">
-                                <DialogTitle>AI Configuration</DialogTitle>
-                                <DialogDescription>
-                                    Configure the AI provider, model, and safety controls for your organization.
-                                </DialogDescription>
-                            </div>
-                            <Badge variant={aiStatusVariant} className="mt-1 flex items-center gap-1">
-                                <AiStatusIcon className="size-3" aria-hidden="true" />
+                <DialogContent layout="sectioned" size="4xl">
+                    <DialogHeader
+                        icon={<SparklesIcon />}
+                        status={(
+                            <Badge variant={aiStatusVariant}>
+                                <AiStatusIcon aria-hidden="true" />
                                 {aiStatusLabel}
                             </Badge>
-                        </div>
+                        )}
+                    >
+                        <DialogTitle>AI Configuration</DialogTitle>
                     </DialogHeader>
-                    {aiDialogOpen ? <AIConfigurationSection variant="dialog" /> : null}
+                    {aiDialogOpen ? <AIConfigurationSection /> : null}
                 </DialogContent>
             </Dialog>
 
@@ -7587,22 +7406,19 @@ function IntegrationConfigurationDialogs({
                     onEmailDialogOpenChange(open)
                 }}
             >
-                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden sm:max-w-4xl">
-                    <DialogHeader className="pr-10">
-                        <div className="flex flex-col items-start gap-3 sm:flex-row sm:justify-between sm:gap-4">
-                            <div className="space-y-1">
-                                <DialogTitle>Email Configuration</DialogTitle>
-                                <DialogDescription>
-                                    Choose a provider and set sender defaults for campaigns and automation.
-                                </DialogDescription>
-                            </div>
-                            <Badge variant={emailStatusVariant} className="mt-1 flex items-center gap-1">
-                                <EmailStatusIcon className="size-3" aria-hidden="true" />
+                <DialogContent layout="sectioned" size="4xl">
+                    <DialogHeader
+                        icon={<SendIcon />}
+                        status={(
+                            <Badge variant={emailStatusVariant}>
+                                <EmailStatusIcon aria-hidden="true" />
                                 {emailStatusLabel}
                             </Badge>
-                        </div>
+                        )}
+                    >
+                        <DialogTitle>Email Configuration</DialogTitle>
                     </DialogHeader>
-                    {emailDialogOpen ? <EmailConfigurationSection variant="dialog" /> : null}
+                    {emailDialogOpen ? <EmailConfigurationSection /> : null}
                 </DialogContent>
             </Dialog>
 
@@ -7613,7 +7429,12 @@ function IntegrationConfigurationDialogs({
                     onZapierDialogOpenChange(open)
                 }}
             >
-                <DialogContent className="flex h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[1240px] flex-col gap-0 overflow-hidden p-0 sm:h-[calc(100vh-3rem)] sm:max-h-[880px] sm:max-w-[1240px]">
+                {/* Wider than size="5xl" so the Activity tables fit; a fixed height stops tab switches from resizing it. */}
+                <DialogContent
+                    layout="sectioned"
+                    size="5xl"
+                    className="h-[min(calc(100dvh-2rem),55rem)] max-w-[1240px]"
+                >
                     {zapierDialogOpen ? (
                         <ZapierWebhookSection
                             statusLabel={zapierStatusLabel}
@@ -7621,7 +7442,6 @@ function IntegrationConfigurationDialogs({
                             StatusIcon={ZapierStatusIcon}
                             mappingBadgeLabel={zapierMappingBadgeLabel}
                             mappingBadgeVariant={zapierMappingBadgeVariant}
-                            onClose={() => onZapierDialogOpenChange(false)}
                         />
                     ) : null}
                 </DialogContent>
@@ -7634,30 +7454,28 @@ function IntegrationConfigurationDialogs({
                     onMetaDialogOpenChange(open)
                 }}
             >
-                <DialogContent className="max-h-[85vh] w-[95vw] max-w-4xl overflow-y-auto overflow-x-hidden sm:max-w-4xl">
-                    <DialogHeader>
-                        <div className="flex items-start justify-between gap-4">
-                            <div className="space-y-1">
-                                <DialogTitle>Meta Lead Ads + CRM Dataset</DialogTitle>
-                                <DialogDescription>
-                                    Configure direct CRM dataset delivery and manage the legacy app-based Meta setup.
-                                </DialogDescription>
-                            </div>
-                            <Badge variant={metaStatusVariant} className="mt-1 flex items-center gap-1">
-                                <MetaStatusIcon className="size-3" aria-hidden="true" />
+                <DialogContent layout="sectioned" size="4xl">
+                    <DialogHeader
+                        icon={<MegaphoneIcon />}
+                        status={(
+                            <Badge variant={metaStatusVariant}>
+                                <MetaStatusIcon aria-hidden="true" />
                                 {metaStatusLabel}
                             </Badge>
-                        </div>
+                        )}
+                    >
+                        <DialogTitle>Meta Lead Ads + CRM Dataset</DialogTitle>
                     </DialogHeader>
-                    {metaDialogOpen ? <MetaConfigurationSection variant="dialog" /> : null}
+                    {metaDialogOpen ? <MetaConfigurationSection /> : null}
                 </DialogContent>
             </Dialog>
         </>
     )
 }
 
+// Rendered only when the health endpoint returns rows; the organization list above already
+// covers the empty case, so no empty state is shown here.
 function SystemIntegrationsSection({
-    isLoading,
     healthData,
     canManageOrganizationIntegrations,
     metaFormsCount,
@@ -7667,7 +7485,6 @@ function SystemIntegrationsSection({
     zapierOutboundEnabled,
     zapierDonorOutboundEnabled,
 }: {
-    isLoading: boolean
     healthData: IntegrationHealth[]
     canManageOrganizationIntegrations: boolean
     metaFormsCount: number
@@ -7678,49 +7495,27 @@ function SystemIntegrationsSection({
     zapierDonorOutboundEnabled: boolean | null
 }) {
     return (
-        <>
-            <div className="border-t pt-6">
-                <h2 className="mb-4 text-lg font-semibold">System Integrations</h2>
-                <p className="mb-4 text-sm text-muted-foreground">
-                    Organization-level integrations managed by administrators.
-                </p>
-            </div>
-            {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                    <Loader2Icon
-                        className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground"
-                        aria-hidden="true"
+        <section aria-labelledby="system-integrations-heading">
+            <h2 id="system-integrations-heading" className="mb-3 text-lg font-semibold">System health</h2>
+            <div
+                data-testid="system-integrations-grid"
+                className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+            >
+                {healthData.map((integration) => (
+                    <SystemIntegrationCard
+                        key={integration.id}
+                        integration={integration}
+                        canManageOrganizationIntegrations={canManageOrganizationIntegrations}
+                        metaFormsCount={metaFormsCount}
+                        metaMappedFormsCount={metaMappedFormsCount}
+                        metaAdAccounts={metaAdAccounts}
+                        inboundWebhooksCount={inboundWebhooksCount}
+                        zapierOutboundEnabled={zapierOutboundEnabled}
+                        zapierDonorOutboundEnabled={zapierDonorOutboundEnabled}
                     />
-                </div>
-            ) : healthData.length === 0 ? (
-                <Card>
-                    <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                        <ServerIcon className="mb-4 size-12" aria-hidden="true" />
-                        <p className="text-lg font-medium">No integrations configured</p>
-                        <p className="text-sm">Add integrations to see their health status here</p>
-                    </CardContent>
-                </Card>
-            ) : (
-                <div
-                    data-testid="system-integrations-grid"
-                    className="grid gap-6 md:grid-cols-2 xl:grid-cols-3"
-                >
-                    {healthData.map((integration) => (
-                        <SystemIntegrationCard
-                            key={integration.id}
-                            integration={integration}
-                            canManageOrganizationIntegrations={canManageOrganizationIntegrations}
-                            metaFormsCount={metaFormsCount}
-                            metaMappedFormsCount={metaMappedFormsCount}
-                            metaAdAccounts={metaAdAccounts}
-                            inboundWebhooksCount={inboundWebhooksCount}
-                            zapierOutboundEnabled={zapierOutboundEnabled}
-                            zapierDonorOutboundEnabled={zapierDonorOutboundEnabled}
-                        />
-                    ))}
-                </div>
-            )}
-        </>
+                ))}
+            </div>
+        </section>
     )
 }
 
@@ -7942,25 +7737,4 @@ function getIntegrationStatusBarClass(status: IntegrationHealth["status"]): stri
     if (status === "healthy") return "bg-green-500"
     if (status === "degraded") return "bg-yellow-500"
     return "bg-red-500"
-}
-
-function IntegrationsHelpCard() {
-    return (
-        <Card className="bg-muted/50">
-            <CardHeader>
-                <CardTitle className="text-base">Need help?</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-                <p>
-                    Integration tokens are managed via CLI commands. To update a Meta page token:
-                </p>
-                <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 text-xs">
-                    python -m app.cli update-meta-page-token --page-id YOUR_PAGE_ID
-                </pre>
-                <p className="mt-3">
-                    Contact your administrator if you need to add or reconfigure integrations.
-                </p>
-            </CardContent>
-        </Card>
-    )
 }
