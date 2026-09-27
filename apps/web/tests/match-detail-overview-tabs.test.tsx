@@ -124,7 +124,9 @@ describe("MatchDetailOverviewTabs", () => {
         expect(screen.getByRole("tab", { name: "Notes" })).toHaveAttribute("aria-selected", "true")
         expect(screen.getByRole("tabpanel")).toHaveTextContent("Retained participant history")
         for (const icon of tabList.querySelectorAll("svg")) {
-            expect(icon).toHaveClass("hidden", "xl:inline")
+            // Icons only from 2xl: with icons the four tabs overflow the column up to 1440px.
+            expect(icon).toHaveClass("hidden", "2xl:inline")
+            expect(icon).not.toHaveClass("xl:inline")
         }
 
         fireEvent.click(screen.getByRole("tab", { name: "Files" }))

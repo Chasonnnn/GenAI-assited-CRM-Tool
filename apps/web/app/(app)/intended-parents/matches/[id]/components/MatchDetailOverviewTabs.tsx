@@ -135,14 +135,15 @@ const OVERVIEW_TABS: Array<{ value: TabType; label: string; icon: typeof StickyN
     { value: "activity", label: "Activity", icon: HistoryIcon },
 ]
 
-// Icons show from xl only: the right column is too narrow for four icon + label tabs below it.
+// Icons show from 2xl only: below 1536px the right column is too narrow for four icon + label
+// tabs (at 1280-1440px "Activity" was cut off).
 function OverviewTabList() {
     return (
         <div className="shrink-0 border-b px-1.5 pt-1">
             <TabsList variant="line" className="w-full overflow-x-auto" aria-label="Case work">
                 {OVERVIEW_TABS.map(({ value, label, icon: Icon }) => (
                     <TabsTrigger key={value} value={value}>
-                        <Icon className="hidden size-3.5 xl:inline" aria-hidden="true" />
+                        <Icon className="hidden size-3.5 2xl:inline" aria-hidden="true" />
                         {label}
                     </TabsTrigger>
                 ))}

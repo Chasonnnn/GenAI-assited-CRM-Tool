@@ -94,6 +94,23 @@ describe("NewMatchDialog", () => {
         expect(screen.queryByRole("option", { name: /ineligible surrogate/i })).not.toBeInTheDocument()
     })
 
+    it("focuses the surrogate picker on open, not Notes", async () => {
+        render(<NewMatchDialog open onOpenChange={vi.fn()} />)
+
+        const picker = screen.getByRole("combobox", { name: /surrogate \(matching queue only\)/i })
+        await waitFor(() => expect(picker).toHaveFocus())
+        expect(screen.getByRole("textbox", { name: /notes/i })).not.toHaveFocus()
+    })
+
+    it("focuses the dialog while surrogates load, not Notes", async () => {
+        mockUseSurrogates.mockReturnValue({ data: undefined, isLoading: true })
+        render(<NewMatchDialog open onOpenChange={vi.fn()} />)
+
+        const dialog = screen.getByRole("dialog", { name: "New Match" })
+        await waitFor(() => expect(dialog).toHaveFocus())
+        expect(screen.getByRole("textbox", { name: /notes/i })).not.toHaveFocus()
+    })
+
     it("creates the match, closes, and shows a toast with a View action", async () => {
         const onOpenChange = vi.fn()
         mockMutateAsync.mockResolvedValue({ id: "match-42", match_number: "M10042" })

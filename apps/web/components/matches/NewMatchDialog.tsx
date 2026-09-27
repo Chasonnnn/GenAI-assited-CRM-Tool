@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { AlertCircleIcon, Loader2Icon } from "lucide-react"
@@ -34,6 +34,8 @@ export function NewMatchDialog({ open, onOpenChange }: NewMatchDialogProps) {
     const [selectedIpId, setSelectedIpId] = useState("")
     const [notes, setNotes] = useState("")
     const [error, setError] = useState<string | null>(null)
+    const popupRef = useRef<HTMLDivElement | null>(null)
+    const surrogateTriggerRef = useRef<HTMLButtonElement | null>(null)
 
     const { data: surrogatesData, isLoading: surrogatesLoading } = useSurrogates({ per_page: 100 })
     const { data: ipsData, isLoading: ipsLoading } = useIntendedParents({ per_page: 100 })
@@ -72,7 +74,13 @@ export function NewMatchDialog({ open, onOpenChange }: NewMatchDialogProps) {
 
     return (
         <Dialog open={open} onOpenChange={(next) => { if (!next) close() }}>
-            <DialogContent size="md">
+            <DialogContent
+                size="md"
+                ref={popupRef}
+                // The surrogate picker renders after its list loads. Until then, focus the dialog
+                // itself; the default first tabbable would be Notes.
+                initialFocus={() => surrogateTriggerRef.current ?? popupRef.current}
+            >
                 <DialogHeader>
                     <DialogTitle>New Match</DialogTitle>
                 </DialogHeader>
@@ -98,7 +106,7 @@ export function NewMatchDialog({ open, onOpenChange }: NewMatchDialogProps) {
                             </div>
                         ) : (
                             <Select value={selectedSurrogateId} onValueChange={(value) => setSelectedSurrogateId(value || "")}>
-                                <SelectTrigger id="new-match-surrogate" className="w-full">
+                                <SelectTrigger id="new-match-surrogate" ref={surrogateTriggerRef} className="w-full">
                                     <SelectValue placeholder="Select a surrogate">
                                         {(value: string | null) =>
                                             eligibleSurrogates.find((surrogate) => surrogate.id === value)?.full_name ??
