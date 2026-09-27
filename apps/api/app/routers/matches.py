@@ -341,6 +341,12 @@ def list_matches(
     q: Annotated[str | None, "fastapi_param"] = Query(
         None, max_length=100, description="Search surrogate/IP names"
     ),
+    proposed_from: Annotated[date_type | None, "fastapi_param"] = Query(
+        None, description="Proposed on or after this date (YYYY-MM-DD, UTC)"
+    ),
+    proposed_to: Annotated[date_type | None, "fastapi_param"] = Query(
+        None, description="Proposed on or before this date (YYYY-MM-DD, UTC)"
+    ),
     page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
     per_page: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100),
     sort_by: Annotated[str | None, "fastapi_param"] = Query(None, description="Column to sort by"),
@@ -364,6 +370,8 @@ def list_matches(
         surrogate_id=surrogate_id,
         intended_parent_id=intended_parent_id,
         q=q,
+        proposed_from=proposed_from,
+        proposed_to=proposed_to,
         page=page,
         per_page=per_page,
         sort_by=sort_by,
@@ -415,6 +423,8 @@ def list_matches(
             "surrogate_id": str(surrogate_id) if surrogate_id else None,
             "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
             "q_type": "text" if q else None,
+            "proposed_from": proposed_from.isoformat() if proposed_from else None,
+            "proposed_to": proposed_to.isoformat() if proposed_to else None,
         },
     )
     db.commit()

@@ -1,6 +1,6 @@
 """Match service - query helpers for matches and match events."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, asc, desc, func, or_, text
@@ -178,13 +178,19 @@ def list_matches(
     surrogate_id: UUID | None = None,
     intended_parent_id: UUID | None = None,
     q: str | None = None,
+    proposed_from: date | None = None,
+    proposed_to: date | None = None,
     page: int = 1,
     per_page: int = 20,
     sort_by: str | None = None,
     sort_order: str = "desc",
     session=None,
 ) -> tuple[list[Match], int]:
-    """List matches with filters and pagination."""
+    """List matches with filters and pagination.
+
+    proposed_from and proposed_to are inclusive UTC calendar days, matching the
+    created_from/created_to filters on the surrogate and donor lists.
+    """
     query = db.query(Match).filter(Match.organization_id == org_id)
     if session is not None:
         query = query.filter(match_visibility_filter(db, session))
@@ -195,6 +201,15 @@ def list_matches(
         query = query.filter(Match.match_kind == match_kind)
     if status_filter:
         query = query.filter(Match.status == status_filter)
+    if proposed_from:
+        query = query.filter(
+            Match.proposed_at >= datetime.combine(proposed_from, time.min, tzinfo=UTC)
+        )
+    if proposed_to:
+        query = query.filter(
+            Match.proposed_at
+            < datetime.combine(proposed_to + timedelta(days=1), time.min, tzinfo=UTC)
+        )
     if surrogate_id:
         query = query.filter(Match.surrogate_id == surrogate_id)
     if intended_parent_id:
