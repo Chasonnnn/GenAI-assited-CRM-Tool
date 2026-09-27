@@ -138,6 +138,8 @@ describe("HeaderActions", () => {
 
     function setV2Access(permissions: string[], role = 'case_manager', options: { readyToMatch?: boolean; archived?: boolean } = {}) {
         mockUseAuth.mockReturnValue({ user: { role, user_id: 'member-1' } })
+        // usePermissionCheck reads the same effective list the detail context holds.
+        mockGrantedPermissions.value = permissions
         const data = mockUseSurrogateDetailData()
         const stage = options.readyToMatch
             ? { stage_key: 'ready_to_match', stage_type: 'post_approval', order: 10 }

@@ -4,7 +4,19 @@ import SurrogateEmailsPage from "@/app/(app)/surrogates/[id]/emails/page"
 
 const mocks = vi.hoisted(() => ({ permissions: vi.fn(), create: vi.fn(), deactivate: vi.fn() }))
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "surrogate-1" }) }))
-vi.mock("@/components/surrogates/detail/SurrogateDetailLayout/context", () => ({ useSurrogateDetailData: () => ({ effectivePermissions: mocks.permissions() }) }))
+vi.mock("@/lib/hooks/use-permission-check", () => ({
+    usePermissionCheck: () => {
+        const effective = mocks.permissions() as { policy_version: number; permissions: string[] }
+        return {
+            isLoading: false,
+            isError: false,
+            retry: vi.fn(),
+            isRetrying: false,
+            can: (permission: string) => effective.permissions.includes(permission),
+            policyVersion: effective.policy_version,
+        }
+    },
+}))
 vi.mock("@/lib/hooks/use-surrogate-emails", () => ({
     useSurrogateEmails: () => ({ data: { items: [] }, isLoading: false }),
     useSurrogateEmailContacts: () => ({ data: { items: [{ id: "contact-1", email: "contact@example.test", source: "manual", is_active: true }] }, isLoading: false }),
@@ -23,7 +35,7 @@ describe("surrogate email contact permissions", () => {
         expect(screen.getByText("contact@example.test")).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Add Contact" })).toBeDisabled()
         expect(screen.getByRole("button", { name: "Deactivate" })).toBeDisabled()
-        expect(screen.getByPlaceholderText("Email")).toBeDisabled()
+        expect(screen.getByLabelText("Email")).toBeDisabled()
         fireEvent.click(screen.getByRole("button", { name: "Deactivate" }))
         expect(mocks.deactivate).not.toHaveBeenCalled()
     })

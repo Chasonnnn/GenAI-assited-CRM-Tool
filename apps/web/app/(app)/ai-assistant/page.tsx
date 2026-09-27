@@ -1168,7 +1168,7 @@ export default function AIAssistantPage() {
             {chat.showDisabledWarning && (
                 <AiUnavailableNotice
                     reason="org_disabled"
-                    canManageSettings={can("manage_integrations")}
+                    canManageSettings={can("manage_integrations") && can("manage_ai_settings")}
                     className="mx-6 mt-4 w-auto"
                 />
             )}

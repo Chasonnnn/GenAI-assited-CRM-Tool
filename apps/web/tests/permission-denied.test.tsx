@@ -267,6 +267,53 @@ describe("usePermissionCheck", () => {
         expect(result.current.isLoading).toBe(false)
         expect(result.current.can("manage_ops")).toBe(true)
     })
+
+    it("uses the loaded list for developers, which omits AI keys under policy v2 when AI is off", () => {
+        mocks.useAuth.mockReturnValue({ user: { user_id: "dev", role: "developer" }, isLoading: false })
+        mocks.useEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_ops", "create_surrogates"], policy_version: 2 },
+            isLoading: false,
+        })
+
+        const { result } = renderHook(() => usePermissionCheck())
+
+        expect(result.current.can("manage_ops")).toBe(true)
+        expect(result.current.can("use_ai_assistant")).toBe(false)
+    })
+
+    it("exposes the policy version so callers can pick per-version keys", () => {
+        mocks.useAuth.mockReturnValue({ user: { user_id: "u1", role: "case_manager" }, isLoading: false })
+        mocks.useEffectivePermissions.mockReturnValue({
+            data: { permissions: ["edit_intended_parents"], policy_version: 1 },
+            isLoading: false,
+        })
+
+        const { result, rerender } = renderHook(() => usePermissionCheck())
+        const createKey = () =>
+            result.current.policyVersion === 2 ? "create_intended_parents" : "edit_intended_parents"
+
+        expect(result.current.policyVersion).toBe(1)
+        expect(result.current.can(createKey())).toBe(true)
+
+        mocks.useEffectivePermissions.mockReturnValue({
+            data: { permissions: ["edit_intended_parents"], policy_version: 2 },
+            isLoading: false,
+        })
+        rerender()
+
+        expect(result.current.policyVersion).toBe(2)
+        expect(result.current.can(createKey())).toBe(false)
+    })
+
+    it("leaves the policy version undefined until the lookup loads", () => {
+        mocks.useAuth.mockReturnValue({ user: { user_id: "u1", role: "admin" }, isLoading: false })
+        mocks.useEffectivePermissions.mockReturnValue({ data: undefined, isLoading: true })
+
+        const { result } = renderHook(() => usePermissionCheck())
+
+        expect(result.current.policyVersion).toBeUndefined()
+        expect(result.current.can("view_surrogates")).toBe(false)
+    })
 })
 
 describe("PermissionDeniedState actions", () => {

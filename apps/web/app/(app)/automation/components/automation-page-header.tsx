@@ -14,7 +14,10 @@ export function AutomationPageHeader({
     activeTab: string
     onOpenExecutions: () => void
     onCreateTemplate: () => void
-    /** Pass can("manage_automation"): the executions API denies every other role. */
+    /**
+     * Pass the org workflow management check: the executions API requires manage_automation,
+     * plus manage_org_workflows under policy v2.
+     */
     canViewExecutions?: boolean
     /** Set on the Workflow Templates tab, which has no create action of its own. */
     onCreateWorkflow?: (() => void) | undefined

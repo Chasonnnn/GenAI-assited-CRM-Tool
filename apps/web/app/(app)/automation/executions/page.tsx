@@ -710,8 +710,12 @@ export default function WorkflowExecutionsPage() {
     const [retryTarget, setRetryTarget] = useState<Execution | null>(null)
     const retryExecutionMutation = useRetryWorkflowExecution()
     const permissionCheck = usePermissionCheck()
-    // GET /workflows/executions and /executions/stats deny every role without manage_automation.
-    const canViewExecutions = permissionCheck.can("manage_automation")
+    // GET /workflows/executions and /executions/stats require manage_automation, plus
+    // manage_org_workflows under policy v2 (workflow_access.has_manage_permission).
+    const policyV2 = (permissionCheck.policyVersion ?? 1) >= 2
+    const canViewExecutions =
+        permissionCheck.can("manage_automation") &&
+        (!policyV2 || permissionCheck.can("manage_org_workflows"))
 
     // Fetch data
     const executionsQuery = useQuery({
