@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import pytest
 
 from app.db.enums import Role
-from app.db.models import StatusChangeRequest, Surrogate
+from app.db.models import Match, StatusChangeRequest, Surrogate
 from tests.test_match_cancel_request import _create_intended_parent, _create_surrogate
 from tests.test_match_cases import _case
 from tests.test_match_lifecycle_characterization import _client_for, _match_row, _other_org
@@ -145,7 +145,7 @@ async def test_every_action_is_org_scoped(authed_client, db, test_auth, version,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("version", [1, 2])
-async def test_view_only_member_can_propose_and_decline_own_match(
+async def test_view_only_member_proposal_follows_policy_version(
     authed_client, db, test_auth, version
 ):
     if version == 2:
@@ -160,9 +160,15 @@ async def test_view_only_member_can_propose_and_decline_own_match(
         role=Role.CASE_MANAGER,
         revoke=("propose_matches",) if version == 1 else (),
     ) as (_, client):
+        before = db.query(Match).count()
         proposed = await client.post(
             "/matches/", json={"surrogate_id": surrogate["id"], "intended_parent_id": ip["id"]}
         )
+        if version == 1:
+            assert proposed.status_code == 403
+            assert proposed.json()["detail"] == "Missing permission: propose_matches"
+            assert db.query(Match).count() == before
+            return
         assert proposed.status_code == 201, proposed.text
         assert proposed.json()["allowed_actions"] == ["decline"]
         response = await client.put(

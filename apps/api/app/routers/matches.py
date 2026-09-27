@@ -85,7 +85,7 @@ def create_match(
     """
     Propose a new match between a surrogate and intended parent.
 
-    Requires: view_matches and access to both parties
+    Requires: party scope and view_matches; v1 also requires propose_matches
     """
     match_access.authorize_proposal(
         db,

@@ -532,7 +532,7 @@ def check_action(db: Session, match: Match, action: str, *, actor_user_id: UUID)
             raise TransitionError("Surrogate has an accepted match")
         warnings = match_participants.accept_eligibility_warnings(db, match)
         if warnings:
-            raise TransitionError(warnings[0])
+            raise TransitionError("; ".join(warnings))
         match_participants.check_accept_stage_changes(db, match, actor_user_id)
     elif action == "complete":
         require_expansion()

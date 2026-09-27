@@ -1361,9 +1361,7 @@ MATCH_MUTATIONS = [
 
 
 @pytest.mark.asyncio
-async def test_user_with_view_matches_can_propose_without_legacy_permission(
-    authed_client, db, test_auth
-):
+async def test_user_without_propose_matches_cannot_propose(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     ip = await _create_intended_parent(authed_client)
     count = db.query(Match).count()
@@ -1373,8 +1371,9 @@ async def test_user_with_view_matches_can_propose_without_legacy_permission(
             "/matches/", json={"surrogate_id": surrogate["id"], "intended_parent_id": ip["id"]}
         )
 
-    assert response.status_code == 201
-    assert db.query(Match).count() == count + 1
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Missing permission: propose_matches"
+    assert db.query(Match).count() == count
 
 
 @pytest.mark.asyncio

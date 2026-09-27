@@ -578,3 +578,38 @@ async def test_accept_denied_by_pipeline_role_rule_changes_nothing(
         "entity_activity": {},
         "stage_history": {},
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("policy", [1, 2])
+@pytest.mark.parametrize("kind", ["surrogate", "egg", "sperm"])
+async def test_accept_reports_all_ineligible_parties_in_preview_and_http(
+    authed_client, db, test_auth, policy, kind
+):
+    if policy == 2:
+        _activate_v2(db, test_auth.org.id)
+    is_donor = kind != "surrogate"
+    party = (
+        await _donor(authed_client, donor_type=kind)
+        if is_donor
+        else await _create_surrogate(authed_client)
+    )
+    ip = await _create_intended_parent(authed_client)
+    primary = db.get(Donor if is_donor else Surrogate, uuid.UUID(party["id"]))
+    intended_parent = db.get(IntendedParent, uuid.UUID(ip["id"]))
+    primary_stage = _stage(db, primary, "new" if is_donor else "new_unread")
+    ip_stage = _stage(db, intended_parent, "new")
+    match = await _case(authed_client, ip, **{"donor" if is_donor else "surrogate": party})
+    warnings = match["accept_eligibility_warnings"]
+    assert len(warnings) == 2
+    assert warnings[0].startswith("Donor at" if is_donor else "Surrogate at")
+    assert warnings[1].startswith("Intended parent at")
+    expected = "; ".join(warnings)
+    assert match["blocked_reasons"]["accept"] == expected
+    assert "accept" not in match["allowed_actions"]
+    response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
+    assert response.status_code == 400
+    assert response.json()["detail"] == expected
+    assert _match_row(db, match["id"]).status == "under_review"
+    assert primary.stage_id == primary_stage.id
+    assert intended_parent.stage_id == ip_stage.id

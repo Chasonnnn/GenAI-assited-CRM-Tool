@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Match, StatusChangeRequest
 from app.schemas.auth import UserSession
-from app.services import match_queries, permission_service, record_access_service
+from app.services import (
+    match_queries,
+    permission_policy_service,
+    permission_service,
+    record_access_service,
+)
 
 MatchAction = Literal[
     "view",
@@ -40,11 +45,14 @@ _ACTION_PERMISSIONS = {
 PUBLIC_ACTIONS = ("accept", "decline", "request_cancel", "withdraw_cancel", "complete")
 
 
-def required_permissions(action: MatchAction) -> list[str]:
-    return [
+def required_permissions(db: Session, session: UserSession, action: MatchAction) -> list[str]:
+    permissions = [
         "view_matches",
         *([_ACTION_PERMISSIONS[action]] if action in _ACTION_PERMISSIONS else []),
     ]
+    if action == "propose" and not permission_policy_service.is_enabled(db, session.org_id):
+        permissions.append("propose_matches")
+    return permissions
 
 
 def pending_cancellation(db: Session, match: Match) -> StatusChangeRequest | None:
@@ -72,9 +80,9 @@ def authorize(
     """Raise 403 without the action permission and 403/404 without scope on either party."""
     if match.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Match not found")
-    permissions = required_permissions(action)
+    permissions = required_permissions(db, session, action)
     if action == "decline" and match.proposed_by_user_id == session.user_id:
-        permissions = required_permissions("view")
+        permissions = required_permissions(db, session, "view")
     for permission in permissions:
         if not permission_service.check_permission(
             db, session.org_id, session.user_id, session.role.value, permission
@@ -131,11 +139,12 @@ def authorize_proposal(
     donor_id: UUID | None,
     intended_parent_id: UUID,
 ) -> None:
-    """Authorize proposal viewing and record scope on both proposed parties."""
-    if not permission_service.check_permission(
-        db, session.org_id, session.user_id, session.role.value, "view_matches"
-    ):
-        raise HTTPException(status_code=403, detail="Missing permission: view_matches")
+    """Authorize proposing under the org's policy and scope both proposed parties."""
+    for permission in required_permissions(db, session, "propose"):
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, permission
+        ):
+            raise HTTPException(status_code=403, detail=f"Missing permission: {permission}")
     record_access_service.get_record_with_access(
         db, session, "donor" if donor_id else "surrogate", donor_id or surrogate_id
     )

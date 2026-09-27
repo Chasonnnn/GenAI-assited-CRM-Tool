@@ -94,12 +94,15 @@ def _actor_session(db, org_id, user_id):
     return UserSession(org_id=org_id, user_id=user_id, role=member.role, email="", display_name="")
 
 
-def _reviewer_session(db, org_id, user_id):
+def _reviewer_session(db, org_id, user_id, *, legacy_match=False):
     from fastapi import HTTPException
 
     from app.services import permission_policy_service, permission_service
 
-    if permission_policy_service.is_enabled(db, org_id):
+    uses_v2 = permission_policy_service.is_enabled(db, org_id)
+    if not uses_v2 and not legacy_match:
+        return None
+    if uses_v2:
         permission_policy_service.lock_configuration(db, org_id)
     actor = _actor_session(db, org_id, user_id)
     if not permission_service.check_permission(
@@ -262,7 +265,7 @@ def approve_request(
         db: Database session
         request_id: Request ID to approve
         admin_user_id: User ID of the approving admin
-        admin_role: Legacy caller argument; authority comes from effective permissions
+        admin_role: Legacy v1 non-match role gate; match and v2 review use permissions
 
     Returns:
         Updated StatusChangeRequest
@@ -297,6 +300,13 @@ def approve_request(
 
     if request.status != "pending":
         raise ValueError(f"Request is not pending (status: {request.status})")
+
+    # Permission-only review is limited to match cancellations under v1.
+    if actor is None and request.entity_type == "match":
+        actor = _reviewer_session(db, org_id, admin_user_id, legacy_match=True)
+    role_str = admin_role.value if hasattr(admin_role, "value") else admin_role
+    if actor is None and role_str not in [Role.ADMIN.value, Role.DEVELOPER.value]:
+        raise ValueError("Only admins can approve status change requests")
 
     now = datetime.now(UTC)
     surrogate_stage_event = None
@@ -561,7 +571,7 @@ def reject_request(
         db: Database session
         request_id: Request ID to reject
         admin_user_id: User ID of the rejecting admin
-        admin_role: Legacy caller argument; authority comes from effective permissions
+        admin_role: Legacy v1 non-match role gate; match and v2 review use permissions
         reason: Optional rejection reason
 
     Returns:
@@ -588,6 +598,13 @@ def reject_request(
 
     if request.status != "pending":
         raise ValueError(f"Request is not pending (status: {request.status})")
+
+    # Permission-only review is limited to match cancellations under v1.
+    if actor is None and request.entity_type == "match":
+        actor = _reviewer_session(db, org_id, admin_user_id, legacy_match=True)
+    role_str = admin_role.value if hasattr(admin_role, "value") else admin_role
+    if actor is None and role_str not in [Role.ADMIN.value, Role.DEVELOPER.value]:
+        raise ValueError("Only admins can reject status change requests")
 
     now = datetime.now(UTC)
 
