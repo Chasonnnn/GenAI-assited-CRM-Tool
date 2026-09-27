@@ -137,6 +137,35 @@ describe("TicketsPage", () => {
         expect(mockPush).not.toHaveBeenCalled()
     })
 
+    it("renders ticket rows as links with labeled badges and a visible focus ring", () => {
+        mockUseTickets.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: "ticket-1",
+                        ticket_code: "T10001",
+                        status: "pending",
+                        priority: "urgent",
+                        subject: "Clinic records",
+                        requester_email: "clinic@example.com",
+                        surrogate_link_status: "linked",
+                    },
+                ],
+                next_cursor: null,
+            },
+            isLoading: false,
+        })
+
+        render(<TicketsPage />)
+
+        const row = screen.getByRole("link", { name: /T10001/ })
+        expect(row).toHaveAttribute("href", "/tickets/ticket-1")
+        expect(within(row).getByText("Pending")).toBeInTheDocument()
+        expect(within(row).getByText("Urgent")).toBeInTheDocument()
+        // accent equals card in dark mode, so keyboard focus needs a ring, not only a background.
+        expect(row).toHaveClass("focus-visible:ring-2", "focus-visible:ring-inset", "focus-visible:ring-ring")
+    })
+
     it("offers Clear filters when a filtered search is empty", () => {
         render(<TicketsPage />)
         fireEvent.change(screen.getByRole("textbox", { name: "Search tickets" }), { target: { value: "zzz" } })

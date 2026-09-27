@@ -31,10 +31,12 @@ vi.mock("@/components/app-link", () => ({
     default: ({
         children,
         href,
+        className,
     }: {
         children: ReactNode
         href: string
-    }) => <a href={href}>{children}</a>,
+        className?: string
+    }) => <a href={href} className={className}>{children}</a>,
 }))
 
 vi.mock("@/components/ui/command", () => ({
@@ -209,6 +211,12 @@ describe("Search debounce and query options", () => {
         )
         // Each result is its own list row, so rows stack with separators instead of touching cards.
         expect(screen.getAllByRole("listitem")).toHaveLength(2)
+        // accent equals card in dark mode, so keyboard focus needs a ring, not only a background.
+        expect(screen.getByRole("link", { name: /Note on Avery Searchable/ })).toHaveClass(
+            "focus-visible:ring-2",
+            "focus-visible:ring-inset",
+            "focus-visible:ring-ring",
+        )
     })
 
     it("seeds the query from ?q= and writes typing back to the URL", () => {

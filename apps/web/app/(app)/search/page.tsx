@@ -181,7 +181,7 @@ function SearchPageContent() {
                                     <li key={`${result.entity_type}-${result.entity_id}`}>
                                         <Link
                                             href={url}
-                                            className="flex items-start gap-4 px-4 py-3 transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
+                                            className="flex items-start gap-4 px-4 py-3 transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                                         >
                                             <div
                                                 className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${config.color}`}

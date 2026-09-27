@@ -349,7 +349,7 @@ function EmailTicketsView() {
                 onReset={resetFilters}
             />
 
-            <div className="rounded-xl border bg-card">
+            <div className="overflow-hidden rounded-xl border bg-card">
                 {isLoading ? (
                     <div className="flex min-h-56 items-center justify-center" aria-label="Loading tickets">
                         <Loader2Icon className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
@@ -368,7 +368,7 @@ function EmailTicketsView() {
                             <li key={ticket.id}>
                                 <Link
                                     href={`/tickets/${ticket.id}`}
-                                    className="block px-4 py-3 transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                                    className="block px-4 py-3 transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                                 >
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-sm font-semibold">{ticket.ticket_code}</span>
