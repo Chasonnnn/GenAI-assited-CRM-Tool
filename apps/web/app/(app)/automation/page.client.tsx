@@ -71,6 +71,7 @@ import { useAuth } from "@/lib/auth-context"
 import { isPermissionError } from "@/lib/error-utils"
 import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import { WizardStepper } from "@/components/automation/wizard-stepper"
 import { useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
@@ -996,7 +997,8 @@ function useAutomationPageView({
     const workflowSetupSessionIdRef = useRef<string | null>(null)
 
     // API hooks
-    const { data: workflows, isLoading: workflowsLoading } = useWorkflows({ scope: activeWorkflowScope })
+    const workflowsQuery = useWorkflows({ scope: activeWorkflowScope })
+    const { data: workflows, isLoading: workflowsLoading } = workflowsQuery
     const { data: stats, isLoading: statsLoading } = useWorkflowStats()
     const { data: options } = useWorkflowOptions(workflowScope, subjectType)
     const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
@@ -1536,6 +1538,18 @@ function useAutomationPageView({
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
+                        ) : workflowsQuery.isError && workflows === undefined ? (
+                            <Card className="py-0">
+                                <QueryErrorState
+                                    error={workflowsQuery.error}
+                                    onRetry={() => {
+                                        void workflowsQuery.refetch()
+                                    }}
+                                    isRetrying={workflowsQuery.isFetching}
+                                    title="Couldn't load workflows"
+                                    headingLevel={3}
+                                />
+                            </Card>
                         ) : !workflows?.length ? (
                             <Card className="py-0">
                                 <EmptyState

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import CampaignsPage from "../app/(app)/automation/campaigns/page"
+import { ApiError } from "@/lib/api"
 
 const mockCreateCampaign = vi.fn()
 const mockPreviewFilters = vi.fn()
@@ -11,6 +12,8 @@ const mockSendCampaign = vi.fn()
 const mockPreviewFiltersReset = vi.fn()
 let mockPermissions = new Set(["manage_email_templates"])
 let mockEmptyCampaigns = false
+let mockCampaignsError = false
+const mockRefetchCampaigns = vi.fn()
 let mockMessagingTemplates: Array<{ id: string; name: string; body: string }> = []
 
 vi.mock("next/navigation", () => ({
@@ -76,7 +79,14 @@ vi.mock("@/lib/hooks/use-permission-check", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-campaigns", () => ({
-    useCampaigns: () => ({
+    useCampaigns: () => mockCampaignsError ? {
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        isFetching: false,
+        error: new ApiError(500, "Internal Server Error", "database exploded"),
+        refetch: mockRefetchCampaigns,
+    } : ({
         data: mockEmptyCampaigns ? [] : [{
             id: "campaign-egg",
             name: "Egg donor screening",
@@ -178,6 +188,8 @@ describe("donor campaign creation", () => {
         })
         mockPermissions = new Set(["manage_email_templates"])
         mockEmptyCampaigns = false
+        mockCampaignsError = false
+        mockRefetchCampaigns.mockReset()
         mockMessagingTemplates = [{
             id: "message-template-1",
             name: "Promotional message",
@@ -359,6 +371,17 @@ describe("donor campaign creation", () => {
         mockPermissions = new Set(["manage_email_templates"])
         render(<CampaignsPage />)
         expect(screen.getAllByRole("button", { name: "Create Campaign" })).toHaveLength(2)
+    })
+
+    it("shows a load error instead of the empty state when campaigns fail to load", () => {
+        mockCampaignsError = true
+        render(<CampaignsPage />)
+
+        expect(screen.getByRole("heading", { name: "Couldn't load campaigns", level: 3 })).toBeInTheDocument()
+        expect(screen.queryByRole("heading", { name: "No campaigns yet" })).not.toBeInTheDocument()
+        expect(screen.queryByText(/database exploded/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(mockRefetchCampaigns).toHaveBeenCalledTimes(1)
     })
 
     it("shows the recipient count in the list Send Now confirmation", async () => {

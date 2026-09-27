@@ -363,6 +363,35 @@ describe('AutomationPage', () => {
         expect(screen.getByText('No org workflows yet')).toBeInTheDocument()
     })
 
+    it('shows a load error instead of the empty state when workflows fail to load', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_automation'] },
+        })
+        const refetch = vi.fn()
+        mockUseWorkflows.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, 'Internal Server Error', 'database exploded'),
+            refetch,
+        })
+        mockUseWorkflowStats.mockReturnValue({
+            data: { total_workflows: 14, enabled_workflows: 3, success_rate_24h: 0, total_executions_24h: 0 },
+            isLoading: false,
+        })
+
+        renderAutomationPage()
+
+        expect(
+            screen.getByRole('heading', { level: 3, name: "Couldn't load workflows" }),
+        ).toBeInTheDocument()
+        expect(screen.queryByText('No org workflows yet')).not.toBeInTheDocument()
+        expect(screen.queryByText(/database exploded/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
     it('shows Execution History for managers', () => {
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ['manage_automation'] },

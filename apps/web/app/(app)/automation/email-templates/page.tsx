@@ -110,6 +110,8 @@ import { insertAtCursor } from "@/lib/insert-at-cursor"
 import { SafeHtmlContent } from "@/components/safe-html-content"
 import { EmailTemplateHistoryDialog } from "@/components/email/EmailTemplateHistoryDialog"
 import { EmailTemplatesPageHeader } from "@/components/email/EmailTemplatesPageHeader"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import { OrgSignaturePreview } from "@/components/email/OrgSignaturePreview"
 import { SignaturePhotoField } from "@/components/email/SignaturePhotoField"
 import { SignaturePreview } from "@/components/email/SignaturePreview"
@@ -538,6 +540,26 @@ function getPersonalTemplateVisibilityLabel(value: string | null) {
 // Main Page Component
 // =============================================================================
 
+function TemplateListLoadError({
+    query,
+}: {
+    query: { error: unknown; isFetching: boolean; refetch: () => Promise<unknown> }
+}) {
+    return (
+        <Card className="py-0">
+            <QueryErrorState
+                error={query.error}
+                onRetry={() => {
+                    void query.refetch()
+                }}
+                isRetrying={query.isFetching}
+                title="Couldn't load email templates"
+                headingLevel={2}
+            />
+        </Card>
+    )
+}
+
 function useEmailTemplatesPageView() {
     const router = useRouter()
     const { user } = useAuth()
@@ -599,15 +621,17 @@ function useEmailTemplatesPageView() {
     const { data: templateVariables = [], isLoading: templateVariablesLoading } = useEmailTemplateVariables()
 
     // API hooks for templates
-    const { data: personalTemplates, isLoading: loadingPersonal } = useEmailTemplates({
+    const personalTemplatesQuery = useEmailTemplates({
         activeOnly: hideInactivePersonal,
         scope: "personal",
         showAllPersonal: isAdmin && showAllPersonal,
     })
-    const { data: orgTemplates, isLoading: loadingOrg } = useEmailTemplates({
+    const { data: personalTemplates, isLoading: loadingPersonal } = personalTemplatesQuery
+    const orgTemplatesQuery = useEmailTemplates({
         activeOnly: canManageEmailTemplates ? hideInactiveOrg : true,
         scope: "org",
     })
+    const { data: orgTemplates, isLoading: loadingOrg } = orgTemplatesQuery
     const {
         data: personalDrafts = [],
         isLoading: loadingPersonalDrafts,
@@ -630,7 +654,8 @@ function useEmailTemplatesPageView() {
             (draft) => draft.template_id === templateStatusTarget.id,
         ) ?? null
         : null
-    const { data: libraryTemplates, isLoading: loadingLibrary } = useEmailTemplateLibrary()
+    const libraryTemplatesQuery = useEmailTemplateLibrary()
+    const { data: libraryTemplates, isLoading: loadingLibrary } = libraryTemplatesQuery
     const discardDraft = useDiscardEmailTemplateDraft()
 
     const createTemplate = useCreateEmailTemplate()
@@ -1223,6 +1248,8 @@ function useEmailTemplatesPageView() {
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
+                        ) : personalTemplatesQuery.isError && personalTemplates === undefined ? (
+                            <TemplateListLoadError query={personalTemplatesQuery} />
                         ) : personalDraftsError ? (
                             <Alert variant="destructive">
                                 <AlertTriangleIcon aria-hidden="true" />
@@ -1245,27 +1272,26 @@ function useEmailTemplatesPageView() {
                                 </AlertDescription>
                             </Alert>
                         ) : !personalTemplates?.length && !personalDrafts.length ? (
-                            <Card>
-                                <CardContent className="flex flex-col items-center justify-center py-12">
-                                    <UserIcon className="size-12 text-muted-foreground mb-4" />
-                                    <p className="text-muted-foreground mb-4">
-                                        {showAllPersonal
-                                            ? "No personal templates found"
-                                            : "You don't have any personal templates yet"}
-                                    </p>
-                                    {!showAllPersonal && (
-                                        <Button
-                                            onClick={() =>
-                                                router.push(
-                                                    "/automation/email-templates/personal/new" as Route,
-                                                )
-                                            }
-                                        >
-                                            <PlusIcon className="mr-2 size-4" />
-                                            Create Your First Template
-                                        </Button>
-                                    )}
-                                </CardContent>
+                            <Card className="py-0">
+                                <EmptyState
+                                    icon={UserIcon}
+                                    title="No personal templates yet"
+                                    headingLevel={2}
+                                    action={
+                                        showAllPersonal ? undefined : (
+                                            <Button
+                                                onClick={() =>
+                                                    router.push(
+                                                        "/automation/email-templates/personal/new" as Route,
+                                                    )
+                                                }
+                                            >
+                                                <PlusIcon className="mr-2 size-4" />
+                                                Create Template
+                                            </Button>
+                                        )
+                                    }
+                                />
                             </Card>
                         ) : (
                             <>
@@ -1354,18 +1380,23 @@ function useEmailTemplatesPageView() {
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
+                        ) : orgTemplatesQuery.isError && orgTemplates === undefined ? (
+                            <TemplateListLoadError query={orgTemplatesQuery} />
                         ) : !orgTemplates?.length && !orgDrafts.length ? (
-                            <Card>
-                                <CardContent className="flex flex-col items-center justify-center py-12">
-                                    <BuildingIcon className="size-12 text-muted-foreground mb-4" />
-                                    <p className="text-muted-foreground mb-4">No organization templates yet</p>
-                                    {canManageEmailTemplates && (
-                                        <Button onClick={() => router.push("/automation/email-templates/org/new")}>
-                                            <PlusIcon className="mr-2 size-4" />
-                                            Create Org Template
-                                        </Button>
-                                    )}
-                                </CardContent>
+                            <Card className="py-0">
+                                <EmptyState
+                                    icon={BuildingIcon}
+                                    title="No organization templates yet"
+                                    headingLevel={2}
+                                    action={
+                                        canManageEmailTemplates ? (
+                                            <Button onClick={() => router.push("/automation/email-templates/org/new")}>
+                                                <PlusIcon className="mr-2 size-4" />
+                                                Create Org Template
+                                            </Button>
+                                        ) : undefined
+                                    }
+                                />
                             </Card>
                         ) : (
                             <>
@@ -1446,12 +1477,15 @@ function useEmailTemplatesPageView() {
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
+                        ) : libraryTemplatesQuery.isError && libraryTemplates === undefined ? (
+                            <TemplateListLoadError query={libraryTemplatesQuery} />
                         ) : !libraryTemplates?.length ? (
-                            <Card>
-                                <CardContent className="flex flex-col items-center justify-center py-12">
-                                    <LayoutTemplateIcon className="size-12 text-muted-foreground mb-4" />
-                                    <p className="text-muted-foreground">No platform templates available</p>
-                                </CardContent>
+                            <Card className="py-0">
+                                <EmptyState
+                                    icon={LayoutTemplateIcon}
+                                    title="No platform templates yet"
+                                    headingLevel={2}
+                                />
                             </Card>
                         ) : (
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

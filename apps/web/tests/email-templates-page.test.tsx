@@ -10,6 +10,7 @@ import type {
 } from "@/lib/api/email-templates"
 import type { EmailTemplateVersion } from "@/lib/api/email-template-history"
 import type { EmailTemplateDraft } from "@/lib/api/email-template-drafts"
+import { ApiError } from "@/lib/api"
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -23,6 +24,8 @@ const mockRollbackEmailTemplate = vi.fn()
 const mockDiscardEmailTemplateDraft = vi.fn()
 const mockRefetchPersonalDrafts = vi.fn()
 const mockPersonalDraftsError = vi.fn()
+const mockPersonalTemplatesError = vi.fn()
+const mockRefetchPersonalTemplates = vi.fn()
 const mockRouterPush = vi.fn()
 let userSignatureData: Record<string, string | null> | null = null
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
@@ -223,6 +226,16 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
             }
         }
         if (params?.scope === "personal") {
+            if (mockPersonalTemplatesError()) {
+                return {
+                    data: undefined,
+                    isLoading: false,
+                    isError: true,
+                    isFetching: false,
+                    error: new ApiError(500, "Internal Server Error", "database exploded"),
+                    refetch: mockRefetchPersonalTemplates,
+                }
+            }
             return {
                 data: params?.activeOnly === false
                     ? personalTemplatesFixture
@@ -313,6 +326,9 @@ describe("EmailTemplatesPage", () => {
         mockRefetchPersonalDrafts.mockReset()
         mockPersonalDraftsError.mockReset()
         mockPersonalDraftsError.mockReturnValue(false)
+        mockPersonalTemplatesError.mockReset()
+        mockPersonalTemplatesError.mockReturnValue(false)
+        mockRefetchPersonalTemplates.mockReset()
         mockRouterPush.mockReset()
         mockSendTestEmailTemplate.mockResolvedValue({ provider_used: "resend" })
         mockRollbackEmailTemplate.mockResolvedValue({
@@ -914,9 +930,7 @@ describe("EmailTemplatesPage", () => {
         expect(
             screen.getByText("Unable to load personal drafts"),
         ).toBeInTheDocument()
-        expect(
-            screen.queryByText("You don't have any personal templates yet"),
-        ).not.toBeInTheDocument()
+        expect(screen.queryByText("No personal templates yet")).not.toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Retry drafts" }))
         expect(mockRefetchPersonalDrafts).toHaveBeenCalledTimes(1)
@@ -1004,7 +1018,25 @@ describe("EmailTemplatesPage", () => {
         render(<EmailTemplatesPage />)
 
         expect(screen.queryByText("Deleted Personal Template")).not.toBeInTheDocument()
-        expect(screen.getByText("You don't have any personal templates yet")).toBeInTheDocument()
+        expect(
+            screen.getByRole("heading", { level: 2, name: "No personal templates yet" }),
+        ).toBeInTheDocument()
+        fireEvent.click(screen.getAllByRole("button", { name: "Create Template" }).at(-1)!)
+        expect(mockRouterPush).toHaveBeenCalledWith("/automation/email-templates/personal/new")
+    })
+
+    it("shows a load error instead of the empty state when personal templates fail to load", () => {
+        mockPersonalTemplatesError.mockReturnValue(true)
+
+        render(<EmailTemplatesPage />)
+
+        expect(
+            screen.getByRole("heading", { level: 2, name: "Couldn't load email templates" }),
+        ).toBeInTheDocument()
+        expect(screen.queryByText("No personal templates yet")).not.toBeInTheDocument()
+        expect(screen.queryByText(/database exploded/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(mockRefetchPersonalTemplates).toHaveBeenCalledTimes(1)
     })
 
     it("hides inactive personal templates by default and lets users reveal them", async () => {

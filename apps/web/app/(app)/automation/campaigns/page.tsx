@@ -20,6 +20,7 @@ import { ValidatedField } from "@/components/ui/field"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { useCurrentMinuteTimestamp } from "@/components/ui/use-current-minute-timestamp"
 import { WizardStepper } from "@/components/automation/wizard-stepper"
@@ -273,7 +274,8 @@ function useCampaignsPageController() {
     const [cancelDialogId, setCancelDialogId] = useState<string | null>(null)
     const [sendNowDialogId, setSendNowDialogId] = useState<string | null>(null)
 
-    const { data: campaigns, isLoading } = useCampaigns(statusFilter)
+    const campaignsQuery = useCampaigns(statusFilter)
+    const { data: campaigns, isLoading } = campaignsQuery
     const { data: emailTemplates, isLoading: emailTemplatesLoading } = useEmailTemplates()
     const { data: messageTemplates, isLoading: messageTemplatesLoading } = useQuery({
         queryKey: ["messaging-templates", "promotional", "published"],
@@ -504,6 +506,14 @@ function useCampaignsPageController() {
             onStatusFilterChange: setStatusFilter,
             campaigns: filteredCampaigns,
             isLoading,
+            loadError:
+                campaignsQuery.isError && campaigns === undefined
+                    ? {
+                          error: campaignsQuery.error,
+                          retry: () => void campaignsQuery.refetch(),
+                          isRetrying: campaignsQuery.isFetching,
+                      }
+                    : null,
             page,
             perPage,
             onPageChange: setPage,
@@ -566,6 +576,7 @@ function CampaignsListSection({
     onStatusFilterChange,
     campaigns,
     isLoading,
+    loadError,
     page,
     perPage,
     onPageChange,
@@ -582,6 +593,7 @@ function CampaignsListSection({
     onStatusFilterChange: StateSetter<string | undefined>
     campaigns: CampaignListItem[]
     isLoading: boolean
+    loadError: { error: unknown; retry: () => void; isRetrying: boolean } | null
     page: number
     perPage: number
     onPageChange: StateSetter<number>
@@ -615,6 +627,16 @@ function CampaignsListSection({
                 <TabsContent value={statusFilter || "all"} className="space-y-4">
                     {isLoading ? (
                         <CampaignsLoadingState />
+                    ) : loadError ? (
+                        <Card className="py-0">
+                            <QueryErrorState
+                                error={loadError.error}
+                                onRetry={loadError.retry}
+                                isRetrying={loadError.isRetrying}
+                                title="Couldn't load campaigns"
+                                headingLevel={3}
+                            />
+                        </Card>
                     ) : campaigns.length === 0 ? (
                         <CampaignsEmptyState onCreateCampaign={onCreateCampaign} isFiltered={Boolean(statusFilter)} />
                     ) : (

@@ -211,6 +211,12 @@ async function runWithPendingState(
     }
 }
 
+type LoadErrorInfo = {
+    error: unknown
+    retry: () => void
+    isRetrying: boolean
+}
+
 function FormsPageHeader({ onCreateForm }: { onCreateForm?: (() => void) | undefined }) {
     return (
         <PageHeader
@@ -239,6 +245,7 @@ function FormsPageTabs({
     onShareForm,
     templates,
     templatesLoading,
+    templatesLoadError,
     applyingTemplateId,
     isTemplateActionPending,
     onUseTemplate,
@@ -255,6 +262,7 @@ function FormsPageTabs({
     onShareForm: (form: FormSummary) => void
     templates: FormTemplateLibraryItem[] | undefined
     templatesLoading: boolean
+    templatesLoadError: LoadErrorInfo | null
     applyingTemplateId: string | null
     isTemplateActionPending: boolean
     onUseTemplate: (templateId: string, templateName: string) => void
@@ -285,16 +293,10 @@ function FormsPageTabs({
             </TabsContent>
 
             <TabsContent value="templates" className="space-y-6">
-                <Card>
-                    <CardContent className="py-6 text-sm text-muted-foreground">
-                        Platform templates are shared across your organization for consistent intake flows.
-                        Apply a template to create a new form that you can customize and send.
-                    </CardContent>
-                </Card>
-
                 <FormTemplatesGrid
                     templates={templates}
                     isLoading={templatesLoading}
+                    loadError={templatesLoadError}
                     applyingTemplateId={applyingTemplateId}
                     isTemplateActionPending={isTemplateActionPending}
                     onUseTemplate={onUseTemplate}
@@ -332,18 +334,18 @@ function FormsGrid({
 
     if (!forms?.length) {
         return (
-            <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                    <FileTextIcon className="size-12 text-muted-foreground/50" />
-                    <h3 className="mt-4 text-lg font-medium">No forms yet</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Create your first form to start collecting applications
-                    </p>
-                    <Button className="mt-4" onClick={onCreateForm}>
-                        <PlusIcon className="mr-2 size-4" />
-                        Create Form
-                    </Button>
-                </CardContent>
+            <Card className="py-0">
+                <EmptyState
+                    icon={FileTextIcon}
+                    title="No forms yet"
+                    headingLevel={2}
+                    action={
+                        <Button onClick={onCreateForm}>
+                            <PlusIcon className="mr-2 size-4" />
+                            Create Form
+                        </Button>
+                    }
+                />
             </Card>
         )
     }
@@ -472,6 +474,7 @@ function FormCard({
 function FormTemplatesGrid({
     templates,
     isLoading,
+    loadError,
     applyingTemplateId,
     isTemplateActionPending,
     onUseTemplate,
@@ -479,6 +482,7 @@ function FormTemplatesGrid({
 }: {
     templates: FormTemplateLibraryItem[] | undefined
     isLoading: boolean
+    loadError: LoadErrorInfo | null
     applyingTemplateId: string | null
     isTemplateActionPending: boolean
     onUseTemplate: (templateId: string, templateName: string) => void
@@ -492,16 +496,25 @@ function FormTemplatesGrid({
         )
     }
 
+    if (loadError) {
+        return (
+            <Card className="py-0">
+                <QueryErrorState
+                    error={loadError.error}
+                    onRetry={loadError.retry}
+                    isRetrying={loadError.isRetrying}
+                    title="Couldn't load form templates"
+                    forbidden={FORM_BUILDER_DENIED}
+                    headingLevel={2}
+                />
+            </Card>
+        )
+    }
+
     if (!templates?.length) {
         return (
-            <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                    <FileTextIcon className="size-12 text-muted-foreground/50" />
-                    <h3 className="mt-4 text-lg font-medium">No templates yet</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Platform templates will appear here once available
-                    </p>
-                </CardContent>
+            <Card className="py-0">
+                <EmptyState icon={FileTextIcon} title="No form templates yet" headingLevel={2} />
             </Card>
         )
     }
@@ -829,9 +842,10 @@ export default function FormsListPage() {
     const createFormMutation = useCreateForm()
     const deleteFormMutation = useDeleteForm()
     const deleteFormTemplateMutation = useDeleteFormTemplate()
-    const { data: templates, isLoading: templatesLoading } = useFormTemplates({
+    const templatesQuery = useFormTemplates({
         enabled: canManageForms,
     })
+    const { data: templates, isLoading: templatesLoading } = templatesQuery
     const useTemplateMutation = useUseFormTemplate()
 
     const [showCreateModal, setShowCreateModal] = useState(false)
@@ -1069,6 +1083,15 @@ export default function FormsListPage() {
                         onShareForm={(form) => void handleOpenSharePrompt(form)}
                         templates={templates}
                         templatesLoading={templatesLoading}
+                        templatesLoadError={
+                            templatesQuery.isError && templates === undefined
+                                ? {
+                                      error: templatesQuery.error,
+                                      retry: () => void templatesQuery.refetch(),
+                                      isRetrying: templatesQuery.isFetching,
+                                  }
+                                : null
+                        }
                         applyingTemplateId={applyingTemplateId}
                         isTemplateActionPending={
                             useTemplateMutation.isPending || deleteFormTemplateMutation.isPending

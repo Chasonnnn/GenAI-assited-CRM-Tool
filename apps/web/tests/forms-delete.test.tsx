@@ -36,6 +36,8 @@ vi.mock("next/navigation", () => ({
 
 let mockPermissions = new Set(["manage_forms"])
 let mockFormsError: Error | null = null
+let mockTemplatesError: Error | null = null
+const mockRefetchTemplates = vi.fn()
 vi.mock("@/lib/hooks/use-permission-check", () => ({
     usePermissionCheck: () => ({
         isLoading: false,
@@ -65,7 +67,14 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useDeleteFormTemplate: () => ({ mutateAsync: mockDeleteTemplate, isPending: false }),
     useFormTemplates: (options?: { enabled?: boolean }) => {
         mockUseFormTemplates(options)
-        return { data: mockTemplates, isLoading: false }
+        return {
+            data: mockTemplatesError ? undefined : mockTemplates,
+            isLoading: false,
+            isError: Boolean(mockTemplatesError),
+            error: mockTemplatesError,
+            isFetching: false,
+            refetch: mockRefetchTemplates,
+        }
     },
     useUseFormTemplate: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
@@ -81,6 +90,8 @@ describe("FormsListPage delete", () => {
         mockUseFormTemplates.mockReset()
         mockPermissions = new Set(["manage_forms"])
         mockFormsError = null
+        mockTemplatesError = null
+        mockRefetchTemplates.mockReset()
         mockForms = [
             {
                 id: "form-1",
@@ -215,6 +226,39 @@ describe("FormsListPage delete", () => {
         expect(screen.getByText("No access to Form Builder")).toBeInTheDocument()
         expect(screen.queryByText(/manage_forms/)).not.toBeInTheDocument()
         expect(screen.queryByText("No forms yet")).not.toBeInTheDocument()
+    })
+
+    it("shows the first-run empty state with one create action and no helper line", () => {
+        mockForms = []
+
+        render(<FormsListPage />)
+
+        expect(screen.getByRole("heading", { level: 2, name: "No forms yet" })).toBeInTheDocument()
+        expect(screen.queryByText(/create your first form/i)).not.toBeInTheDocument()
+        expect(screen.getAllByRole("button", { name: "Create Form" })).toHaveLength(2)
+    })
+
+    it("shows the form templates empty state without helper copy", () => {
+        render(<FormsListPage />)
+        fireEvent.click(screen.getByRole("tab", { name: /form templates/i }))
+
+        expect(screen.getByRole("heading", { level: 2, name: "No form templates yet" })).toBeInTheDocument()
+        expect(screen.queryByText(/platform templates/i)).not.toBeInTheDocument()
+    })
+
+    it("shows a load error, not the empty state, when form templates fail to load", () => {
+        mockTemplatesError = new ApiError(500, "Internal Server Error", "database exploded")
+
+        render(<FormsListPage />)
+        fireEvent.click(screen.getByRole("tab", { name: /form templates/i }))
+
+        expect(
+            screen.getByRole("heading", { level: 2, name: "Couldn't load form templates" }),
+        ).toBeInTheDocument()
+        expect(screen.queryByText("No form templates yet")).not.toBeInTheDocument()
+        expect(screen.queryByText(/database exploded/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(mockRefetchTemplates).toHaveBeenCalledTimes(1)
     })
 
     it("puts Use Template in the template card footer, apart from the menu", () => {
