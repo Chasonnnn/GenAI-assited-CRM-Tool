@@ -23,7 +23,7 @@ vi.mock("@/lib/hooks/use-matches", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-surrogates", () => ({
-    useSurrogates: () => mockUseSurrogates(),
+    useSurrogates: (...args: unknown[]) => mockUseSurrogates(...args),
 }))
 
 vi.mock("@/lib/hooks/use-intended-parents", () => ({
@@ -92,6 +92,15 @@ describe("NewMatchDialog", () => {
         fireEvent.mouseDown(screen.getByRole("combobox", { name: /surrogate \(matching queue only\)/i }))
         expect(await screen.findByRole("option", { name: /eligible surrogate/i })).toBeInTheDocument()
         expect(screen.queryByRole("option", { name: /ineligible surrogate/i })).not.toBeInTheDocument()
+    })
+
+    it("asks the API for surrogates in the eligible stage instead of filtering the first page", () => {
+        render(<NewMatchDialog open onOpenChange={vi.fn()} />)
+
+        expect(mockUseSurrogates).toHaveBeenCalledWith(
+            { per_page: 100, stage_id: "stage-ready" },
+            { enabled: true },
+        )
     })
 
     it("focuses the surrogate picker on open, not Notes", async () => {

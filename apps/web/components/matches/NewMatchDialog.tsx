@@ -18,6 +18,7 @@ import { useCreateMatch } from "@/lib/hooks/use-matches"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import {
+    getEligibleForMatchingStageId,
     getEligibleForMatchingStageLabel,
     isEligibleForMatchingCandidate,
 } from "@/lib/match-pipeline-stage-utils"
@@ -37,9 +38,14 @@ export function NewMatchDialog({ open, onOpenChange }: NewMatchDialogProps) {
     const popupRef = useRef<HTMLDivElement | null>(null)
     const surrogateTriggerRef = useRef<HTMLButtonElement | null>(null)
 
-    const { data: surrogatesData, isLoading: surrogatesLoading } = useSurrogates({ per_page: 100 })
+    const { data: surrogatePipeline, isLoading: pipelineLoading } = useDefaultPipeline("surrogate")
+    const eligibleStageId = getEligibleForMatchingStageId(surrogatePipeline?.stages)
+    const { data: surrogatesData, isLoading: surrogatesQueryLoading } = useSurrogates(
+        { per_page: 100, ...(eligibleStageId ? { stage_id: eligibleStageId } : {}) },
+        { enabled: Boolean(eligibleStageId) },
+    )
+    const surrogatesLoading = pipelineLoading || surrogatesQueryLoading
     const { data: ipsData, isLoading: ipsLoading } = useIntendedParents({ per_page: 100 })
-    const { data: surrogatePipeline } = useDefaultPipeline("surrogate")
     const createMatch = useCreateMatch()
 
     const eligibleStageLabel = getEligibleForMatchingStageLabel(surrogatePipeline?.stages)

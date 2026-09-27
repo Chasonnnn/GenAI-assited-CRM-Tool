@@ -19,6 +19,7 @@ import { useCreateMatch } from "@/lib/hooks/use-matches"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import {
+    getEligibleForMatchingStageId,
     getEligibleForMatchingStageLabel,
     isEligibleForMatchingCandidate,
 } from "@/lib/match-pipeline-stage-utils"
@@ -47,10 +48,13 @@ export function ProposeMatchFromIPDialog({
     const [notes, setNotes] = useState("")
     const [error, setError] = useState<string | null>(null)
 
-    const { data: surrogatesData, isLoading: surrogatesLoading } = useSurrogates({
-        per_page: 100
-    })
-    const { data: surrogatePipeline } = useDefaultPipeline("surrogate")
+    const { data: surrogatePipeline, isLoading: pipelineLoading } = useDefaultPipeline("surrogate")
+    const eligibleStageId = getEligibleForMatchingStageId(surrogatePipeline?.stages)
+    const { data: surrogatesData, isLoading: surrogatesQueryLoading } = useSurrogates(
+        { per_page: 100, ...(eligibleStageId ? { stage_id: eligibleStageId } : {}) },
+        { enabled: open && Boolean(eligibleStageId) },
+    )
+    const surrogatesLoading = pipelineLoading || surrogatesQueryLoading
     const createMatch = useCreateMatch()
 
     const eligibleStageLabel = getEligibleForMatchingStageLabel(surrogatePipeline?.stages)
