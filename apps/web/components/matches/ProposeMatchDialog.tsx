@@ -1,5 +1,7 @@
 "use client"
 
+import type { Route } from "next"
+import { useRouter } from "next/navigation"
 import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -9,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircleIcon, ChevronsUpDownIcon, Loader2Icon } from "lucide-react"
-import { toast } from "@/components/ui/toast"
+import { showMatchProposedToast } from "@/components/matches/match-proposed-toast"
 import { useAuth } from "@/lib/auth-context"
 import { useCreateMatch } from "@/lib/hooks/use-matches"
 import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
@@ -61,6 +63,7 @@ export function ProposeMatchDialog({
     const [ipQuery, setIpQuery] = useState("")
     const ipTriggerRef = useRef<HTMLButtonElement | null>(null)
 
+    const router = useRouter()
     const { user } = useAuth()
     const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
     const permissions = permissionsQuery.data?.permissions ?? []
@@ -87,12 +90,12 @@ export function ProposeMatchDialog({
         setError(null)
 
         try {
-            await createMatch.mutateAsync({
+            const match = await createMatch.mutateAsync({
                 ...(donorId ? { donor_id: donorId, match_kind: "donor" as const } : { surrogate_id: surrogateId! }),
                 intended_parent_id: selectedIpId,
                 ...(notes.trim() ? { notes: notes.trim() } : {}),
             })
-            toast.success("Match proposed successfully!")
+            showMatchProposedToast(match, (href) => router.push(href as Route))
             onOpenChange(false)
             setSelectedIpId("")
             setNotes("")
