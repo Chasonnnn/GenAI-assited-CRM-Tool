@@ -273,3 +273,17 @@ export function useSaveMatchAttempt(matchId: string) {
         },
     })
 }
+
+import { cancelRequest as cancelStatusChangeRequest } from '@/lib/api/status-change-requests'
+export function useWithdrawMatchCancellation() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ requestId }: { matchId: string; requestId: string }) => cancelStatusChangeRequest(requestId),
+        onSuccess: (_result, { matchId }) => {
+            void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.lists() })
+            void queryClient.invalidateQueries({ queryKey: matchKeys.stats() })
+            void queryClient.invalidateQueries({ queryKey: ['status-change-requests'] })
+        },
+    })
+}
