@@ -308,6 +308,17 @@ class AppointmentListResponse(BaseModel):
     pages: int
 
 
+class AppointmentStatusCounts(BaseModel):
+    """Appointment counts per status for the list tabs."""
+
+    pending: int = 0
+    confirmed: int = 0
+    completed: int = 0
+    cancelled: int = 0
+    no_show: int = 0
+    expired: int = 0
+
+
 # =============================================================================
 # Link Updates
 # =============================================================================

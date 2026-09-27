@@ -16,7 +16,7 @@ from typing import NamedTuple
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.db.enums import AppointmentEmailType, AppointmentStatus, AuditEventType, MeetingMode
@@ -43,6 +43,7 @@ from app.schemas.appointment import (
     AppointmentSchedulingRead,
 )
 from app.services import appointment_integrations
+from app.utils.normalization import escape_like_string
 from app.utils.pagination import paginate_query_by_offset
 
 # =============================================================================
@@ -2111,6 +2112,72 @@ def _validate_self_service_appointment_state(
     return appt
 
 
+def _filter_user_appointments(
+    query,
+    *,
+    user_id: UUID,
+    org_id: UUID,
+    date_start: date | None = None,
+    date_end: date | None = None,
+    q: str | None = None,
+    appointment_type_id: UUID | None = None,
+    meeting_mode: str | None = None,
+):
+    """Scope a query to one user's appointments in one org and apply the list filters."""
+    query = query.filter(
+        Appointment.user_id == user_id,
+        Appointment.organization_id == org_id,
+    )
+    if date_start:
+        start_dt = datetime.combine(date_start, time.min, tzinfo=UTC)
+        query = query.filter(Appointment.scheduled_start >= start_dt)
+    if date_end:
+        end_dt = datetime.combine(date_end, time.max, tzinfo=UTC)
+        query = query.filter(Appointment.scheduled_start <= end_dt)
+    search = (q or "").strip()
+    if search:
+        pattern = f"%{escape_like_string(search)}%"
+        query = query.filter(
+            or_(
+                Appointment.client_name.ilike(pattern, escape="\\"),
+                Appointment.client_email.ilike(pattern, escape="\\"),
+            )
+        )
+    if appointment_type_id:
+        query = query.filter(Appointment.appointment_type_id == appointment_type_id)
+    if meeting_mode:
+        query = query.filter(Appointment.meeting_mode == meeting_mode)
+    return query
+
+
+def count_appointments_by_status(
+    db: Session,
+    user_id: UUID,
+    org_id: UUID,
+    *,
+    date_start: date | None = None,
+    date_end: date | None = None,
+    q: str | None = None,
+    appointment_type_id: UUID | None = None,
+    meeting_mode: str | None = None,
+) -> dict[str, int]:
+    """Count one user's appointments per status with the same filters as the list."""
+    query = _filter_user_appointments(
+        db.query(Appointment.status, func.count(Appointment.id)),
+        user_id=user_id,
+        org_id=org_id,
+        date_start=date_start,
+        date_end=date_end,
+        q=q,
+        appointment_type_id=appointment_type_id,
+        meeting_mode=meeting_mode,
+    )
+    counts = {status.value: 0 for status in AppointmentStatus}
+    for status, count in query.group_by(Appointment.status).all():
+        counts[status] = count
+    return counts
+
+
 def list_appointments(
     db: Session,
     user_id: UUID,
@@ -2124,6 +2191,9 @@ def list_appointments(
     match_id: UUID | None = None,
     attempt_id: UUID | None = None,
     include_record_history: bool = False,
+    q: str | None = None,
+    appointment_type_id: UUID | None = None,
+    meeting_mode: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Appointment], int]:
@@ -2131,6 +2201,7 @@ def list_appointments(
 
     When surrogate_id and/or intended_parent_id are provided, filters to appointments
     matching EITHER the surrogate_id OR the intended_parent_id (used for match-scoped views).
+    q matches the client name or email.
     """
     from app.core.config import settings
 
@@ -2156,21 +2227,19 @@ def list_appointments(
 
     if not settings.SCHEDULING_V2_ENABLED:
         expire_pending_appointments(db, org_id=org_id, user_id=user_id)
-    query = db.query(Appointment).filter(
-        Appointment.user_id == user_id,
-        Appointment.organization_id == org_id,
+    query = _filter_user_appointments(
+        db.query(Appointment),
+        user_id=user_id,
+        org_id=org_id,
+        date_start=date_start,
+        date_end=date_end,
+        q=q,
+        appointment_type_id=appointment_type_id,
+        meeting_mode=meeting_mode,
     )
 
     if status:
         query = query.filter(Appointment.status == status)
-
-    if date_start:
-        start_dt = datetime.combine(date_start, time.min, tzinfo=UTC)
-        query = query.filter(Appointment.scheduled_start >= start_dt)
-
-    if date_end:
-        end_dt = datetime.combine(date_end, time.max, tzinfo=UTC)
-        query = query.filter(Appointment.scheduled_start <= end_dt)
 
     if match_id:
         context_filter = Appointment.match_id == match_id

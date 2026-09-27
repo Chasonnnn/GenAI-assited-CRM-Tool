@@ -35,6 +35,8 @@ from app.services import membership_service, permission_service, queue_service
 from app.utils.normalization import escape_like_string
 from app.utils.pagination import paginate_query_by_offset
 
+TaskLinkedType = Literal["surrogate", "intended_parent", "donor", "none"]
+
 logger = logging.getLogger(__name__)
 
 
@@ -916,6 +918,7 @@ def list_tasks(
     intended_parent_id: UUID | None = None,
     donor_id: UUID | None = None,
     donor_type: Literal["egg", "sperm"] | None = None,
+    linked_type: TaskLinkedType | None = None,
     match_id: UUID | None = None,
     attempt_id: UUID | None = None,
     include_record_history: bool = False,
@@ -1074,6 +1077,21 @@ def list_tasks(
             Donor.donor_type == donor_type,
         )
 
+    # Linked record kind filter
+    if linked_type == "surrogate":
+        query = query.filter(Task.surrogate_id.is_not(None))
+    elif linked_type == "intended_parent":
+        query = query.filter(Task.intended_parent_id.is_not(None))
+    elif linked_type == "donor":
+        query = query.filter(Task.donor_id.is_not(None))
+    elif linked_type == "none":
+        query = query.filter(
+            Task.surrogate_id.is_(None),
+            Task.intended_parent_id.is_(None),
+            Task.donor_id.is_(None),
+            Task.match_id.is_(None),
+        )
+
     # Completion filter
     if is_completed is not None:
         query = query.filter(Task.is_completed == is_completed)
@@ -1111,9 +1129,11 @@ def list_tasks(
             Task.created_at.desc(),
         )
     else:
+        # Untimed tasks sort after timed ones on the same day, matching the calendar agenda.
         query = query.order_by(
             Task.is_completed.asc(),
             Task.due_date.asc().nullslast(),
+            Task.due_time.asc().nullslast(),
             Task.created_at.desc(),
         )
 
@@ -1136,6 +1156,7 @@ def list_tasks_for_session(
     intended_parent_id: UUID | None = None,
     donor_id: UUID | None = None,
     donor_type: Literal["egg", "sperm"] | None = None,
+    linked_type: TaskLinkedType | None = None,
     match_id: UUID | None = None,
     attempt_id: UUID | None = None,
     include_record_history: bool = False,
@@ -1197,6 +1218,7 @@ def list_tasks_for_session(
         intended_parent_id=intended_parent_id,
         donor_id=donor_id,
         donor_type=donor_type,
+        linked_type=linked_type,
         match_id=match_id,
         attempt_id=attempt_id,
         include_record_history=include_record_history,
@@ -1230,6 +1252,7 @@ def list_tasks_for_session(
             "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
             "donor_id": str(donor_id) if donor_id else None,
             "donor_type": donor_type,
+            "linked_type": linked_type,
             "pipeline_id": str(pipeline_id) if pipeline_id else None,
             "is_completed": is_completed,
             "task_type": task_type.value if task_type else None,

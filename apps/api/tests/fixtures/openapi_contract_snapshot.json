@@ -612,6 +612,12 @@
       "422"
     ]
   },
+  "/appointments/status-counts": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/appointments/{appointment_id}": {
     "GET": [
       "200",
