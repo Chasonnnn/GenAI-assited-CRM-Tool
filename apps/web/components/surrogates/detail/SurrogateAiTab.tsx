@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "@/components/app-link"
+import { getAiUnavailableMessage } from "@/components/ai/AiUnavailableNotice"
 import { EmptyState } from "@/components/empty-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -50,25 +51,26 @@ export function SurrogateAiTab({
     const draftEmailPending = draftEmailStatus === "drafting"
 
     if (!aiEnabled) {
+        // Same copy and settings link as AiUnavailableNotice on the other AI pages.
         return (
             <Card>
                 <CardContent>
                     {canManageAI ? (
                         <EmptyState
                             icon={BrainIcon}
-                            title="AI is off"
+                            title={getAiUnavailableMessage("org_disabled")}
                             headingLevel={2}
                             action={
                                 <Link
                                     href="/settings/integrations"
                                     className={buttonVariants({ variant: "outline", size: "sm" })}
                                 >
-                                    Open AI settings
+                                    AI settings
                                 </Link>
                             }
                         />
                     ) : (
-                        <EmptyState icon={BrainIcon} title="AI is off for this organization" headingLevel={2} />
+                        <EmptyState icon={BrainIcon} title={getAiUnavailableMessage("org_disabled")} headingLevel={2} />
                     )}
                 </CardContent>
             </Card>

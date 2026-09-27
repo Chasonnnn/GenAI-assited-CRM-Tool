@@ -35,8 +35,8 @@ describe("SurrogateAiTab", () => {
     it("sends admins to the AI settings when AI is off", () => {
         renderEnabledTab({ aiEnabled: false, canManageAI: true })
 
-        expect(screen.getByRole("heading", { name: "AI is off" })).toBeInTheDocument()
-        expect(screen.getByRole("link", { name: "Open AI settings" })).toHaveAttribute(
+        expect(screen.getByRole("heading", { name: "AI is turned off for this organization." })).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "AI settings" })).toHaveAttribute(
             "href",
             "/settings/integrations",
         )
@@ -47,8 +47,8 @@ describe("SurrogateAiTab", () => {
     it("tells other roles AI is off for the organization without a settings link", () => {
         renderEnabledTab({ aiEnabled: false, canManageAI: false })
 
-        expect(screen.getByRole("heading", { name: "AI is off for this organization" })).toBeInTheDocument()
-        expect(screen.queryByRole("link", { name: "Open AI settings" })).not.toBeInTheDocument()
+        expect(screen.getByRole("heading", { name: "AI is turned off for this organization." })).toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "AI settings" })).not.toBeInTheDocument()
     })
 
     it("triggers summary generation when enabled", () => {
