@@ -21,6 +21,13 @@ describe("EntityNotes", () => {
         expect(screen.getByRole("textbox", { name: "New note" })).toHaveAttribute("data-emoji", "true")
     })
 
+    it("rests the row delete muted and turns it destructive on hover", () => {
+        render(<EntityNotes {...props} />)
+        const rowDelete = screen.getByRole("button", { name: "Delete note by Alex" })
+        expect(rowDelete).toHaveClass("text-muted-foreground", "hover:text-destructive")
+        expect(rowDelete).not.toHaveClass("text-destructive")
+    })
+
     it("preserves the rich-text draft on failure and clears it after successful retry", async () => {
         add.mockRejectedValueOnce(new Error("Save failed"))
         render(<EntityNotes {...props} />)

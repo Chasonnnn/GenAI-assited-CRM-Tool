@@ -148,11 +148,11 @@ function ReplyItem({
                 </div>
                 {canDelete && (
                     <Button
-                        variant="ghost"
+                        variant="destructive-ghost"
                         size="sm"
                         onClick={() => onDelete(reply.id)}
                         data-comment-card-interaction="true"
-                        className="size-6 p-0 opacity-0 text-muted-foreground transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:text-destructive"
+                        className="size-6 p-0 opacity-0 text-muted-foreground transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                         aria-label={`Delete reply from ${reply.author_name}`}
                     >
                         <Trash2Icon className="size-3" aria-hidden="true" />
@@ -409,11 +409,11 @@ export function CommentCard({
 
                         {canDelete && (
                             <Button
-                                variant="ghost"
+                                variant="destructive-ghost"
                                 size="sm"
                                 onClick={onDelete}
                                 data-comment-card-interaction="true"
-                                className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                                className="h-7 px-2 text-xs text-muted-foreground"
                             >
                                 <Trash2Icon className="size-3 mr-1" aria-hidden="true" />
                                 Delete

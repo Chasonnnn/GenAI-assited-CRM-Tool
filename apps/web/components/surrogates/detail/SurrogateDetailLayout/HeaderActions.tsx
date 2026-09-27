@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -63,6 +64,8 @@ export function HeaderActions() {
         isReleasePending,
     } = useSurrogateDetailActions()
     const [isExporting, setIsExporting] = React.useState(false)
+    // Menu items unmount on click, so the archive confirm is rendered outside the menu.
+    const [isArchiveConfirmOpen, setIsArchiveConfirmOpen] = React.useState(false)
 
     if (!surrogate) return null
 
@@ -277,10 +280,24 @@ export function HeaderActions() {
                     {surrogate.is_archived ? (
                         <DropdownMenuItem onClick={restoreSurrogate}>Restore</DropdownMenuItem>
                     ) : (
-                        <DropdownMenuItem onClick={archiveSurrogate}>Archive</DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={() => setIsArchiveConfirmOpen(true)}
+                            className="text-destructive"
+                        >
+                            Archive
+                        </DropdownMenuItem>
                     )}
                 </DropdownMenuContent>
             </DropdownMenu>
+
+            <ConfirmDialog
+                open={isArchiveConfirmOpen}
+                onOpenChange={setIsArchiveConfirmOpen}
+                title={`Archive ${surrogate.surrogate_number}?`}
+                confirmLabel="Archive"
+                errorFallback="Couldn't archive surrogate. Try again."
+                onConfirm={archiveSurrogate}
+            />
         </>
     )
 }

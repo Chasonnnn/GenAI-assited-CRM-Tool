@@ -319,11 +319,11 @@ export function EntityDocuments({
                                     <Download className="size-4" aria-hidden="true" />
                                 </Button>
                                 {canEdit && <Button
-                                    variant="ghost"
+                                    variant="destructive-ghost"
                                     size="sm"
                                     onClick={() => handleDelete(attachment.id)}
                                     disabled={isDeleting}
-                                    className="text-destructive hover:text-destructive"
+                                    className="text-muted-foreground"
                                     aria-label={`Delete ${attachment.filename}`}
                                 >
                                     <Trash2 className="size-4" aria-hidden="true" />
@@ -358,9 +358,9 @@ export function EntityDocuments({
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
                         <Button
+                            variant="destructive"
                             onClick={() => { void confirmDelete() }}
                             disabled={isDeleting}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             {isDeleting && (
                                 <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />

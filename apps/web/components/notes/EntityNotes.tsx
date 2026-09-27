@@ -103,7 +103,7 @@ export function EntityNotes({
                                 <div className="min-w-0 flex-1">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-medium">{name}</span><time className="text-xs text-muted-foreground" dateTime={note.created_at}>{formatDateTime(note.created_at)}</time></div>
-                                        {canDeleteNote(note) ? <Button variant="ghost" size="icon-sm" aria-label={`Delete note by ${name}`} onClick={() => { setError(null); setDeletingNote(note) }}><TrashIcon className="size-3.5 text-muted-foreground" /></Button> : null}
+                                        {canDeleteNote(note) ? <Button variant="destructive-ghost" size="icon-sm" className="text-muted-foreground" aria-label={`Delete note by ${name}`} onClick={() => { setError(null); setDeletingNote(note) }}><TrashIcon className="size-3.5" aria-hidden="true" /></Button> : null}
                                     </div>
                                     <RichTextPreview html={note.body} className="mt-2 [overflow-wrap:anywhere] text-sm" />
                                 </div>

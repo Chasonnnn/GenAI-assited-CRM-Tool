@@ -1,6 +1,6 @@
 import type { ReactNode, ButtonHTMLAttributes } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import CSVImportPage from '../app/(app)/surrogates/import/page'
 
 const mockUseImports = vi.fn()
@@ -129,5 +129,43 @@ describe('CSVImportPage', () => {
         expect(screen.getByText('Email is required')).toBeInTheDocument()
         expect(screen.getByText('Row 5')).toBeInTheDocument()
         expect(screen.getByText('Invalid phone number')).toBeInTheDocument()
+    })
+
+    it('does not repeat the history heading as a description', () => {
+        render(<CSVImportPage />)
+
+        expect(screen.getByText('Import History')).toBeInTheDocument()
+        expect(screen.queryByText('View past imports and their results')).not.toBeInTheDocument()
+    })
+
+    it('confirms delete with Cancel and a destructive Delete action', async () => {
+        mockCancelImport.mockResolvedValue({ message: 'Import deleted' })
+        render(<CSVImportPage />)
+
+        fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[0])
+
+        const dialog = await screen.findByRole('alertdialog')
+        expect(within(dialog).getByText('Delete surrogates.csv?')).toBeInTheDocument()
+        expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+        expect(within(dialog).queryByRole('button', { name: 'Keep' })).not.toBeInTheDocument()
+        const confirm = within(dialog).getByRole('button', { name: 'Delete' })
+        expect(confirm).toHaveClass('bg-destructive')
+
+        fireEvent.click(confirm)
+
+        await waitFor(() => expect(mockCancelImport).toHaveBeenCalledWith('import-1'))
+        await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    })
+
+    it('keeps the delete confirm open with an inline error when delete fails', async () => {
+        mockCancelImport.mockRejectedValue(new Error('Network down'))
+        render(<CSVImportPage />)
+
+        fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[0])
+        const dialog = await screen.findByRole('alertdialog')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+        expect(await within(dialog).findByRole('alert')).toHaveTextContent("Couldn't delete import. Try again.")
+        expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     })
 })
