@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { useQuery } from "@tanstack/react-query"
+import { PageHeader } from "@/components/page-header"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
     Search,
@@ -70,8 +71,32 @@ const ENTITY_CONFIG = {
 }
 
 export default function SearchPage() {
-    const [query, setQuery] = useState("")
+    return (
+        <Suspense fallback={null}>
+            <SearchPageContent />
+        </Suspense>
+    )
+}
+
+function SearchPageContent() {
+    const searchParams = useSearchParams()
+    const pathname = usePathname()
+    // The URL seeds the input once; typing then writes ?q= so a search can be linked or reloaded.
+    const [query, setQueryState] = useState(() => searchParams.get("q") ?? "")
     const debouncedQuery = useDebouncedValue(query, 400)
+
+    const setQuery = (value: string) => {
+        setQueryState(value)
+        const params = new URLSearchParams(searchParams.toString())
+        if (value) {
+            params.set("q", value)
+        } else {
+            params.delete("q")
+        }
+        const nextQuery = params.toString()
+        // replaceState keeps typing out of history and avoids a server round trip per keystroke.
+        window.history.replaceState(null, "", nextQuery ? `${pathname}?${nextQuery}` : pathname)
+    }
 
     const {
         data: results = createEmptySearchResponse(debouncedQuery),
@@ -93,95 +118,75 @@ export default function SearchPage() {
     }
 
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6">
-            {/* Header */}
-            <div>
-                <h1 className="text-2xl font-semibold">Search</h1>
-            </div>
+        <div className="flex flex-1 flex-col">
+            <PageHeader title="Search" />
 
-            {/* Search Input */}
-            <div className="relative max-w-2xl">
-                <Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                    placeholder="Search surrogates, intended parents, donors, notes, files"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    className="pl-10 h-12 text-lg"
-                />
-                {query && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setQuery("")}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 h-8 px-2 text-muted-foreground hover:text-foreground"
-                    >
-                        Clear
-                    </Button>
-                )}
-            </div>
-
-            {/* Search Tips */}
-            {!query && (
-                <Card className="max-w-2xl">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium">Search Tips</CardTitle>
-                    </CardHeader>
-                    <CardContent className="text-sm text-muted-foreground space-y-2">
-                        <p>• Search by name, email, phone, or record number</p>
-                        <p>• Use quotes for exact phrases: &quot;contract signed&quot;</p>
-                        <p>• Results are ranked by relevance</p>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Loading State */}
-            {isLoading && debouncedQuery.length >= 2 && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                    <Loader2 className="size-5 animate-spin" />
-                    <span>Searching&hellip;</span>
+            <div className="flex flex-1 flex-col gap-6 p-6">
+                <div className="relative max-w-2xl">
+                    <Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                    <Input
+                        type="search"
+                        aria-label="Search"
+                        placeholder="Search surrogates, intended parents, donors, notes, files"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        className="pl-10 pr-16 h-12 text-lg [&::-webkit-search-cancel-button]:hidden"
+                    />
+                    {query && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setQuery("")}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 h-8 px-2 text-muted-foreground hover:text-foreground"
+                        >
+                            Clear
+                        </Button>
+                    )}
                 </div>
-            )}
 
-            {/* Error State */}
-            {isError && (
-                <div className="flex items-center gap-2 text-destructive">
-                    <AlertCircle className="size-5" />
-                    <span>Failed to search. Please try again.</span>
-                </div>
-            )}
-
-            {/* No Results */}
-            {results && results.total === 0 && debouncedQuery.length >= 2 && (
-                <div className="text-muted-foreground">
-                    No results found for &quot;{debouncedQuery}&quot;
-                </div>
-            )}
-
-            {/* Results */}
-            {results && results.total > 0 && (
-                <div className="space-y-4">
-                    <div className="text-sm text-muted-foreground">
-                        {results.total} result{results.total !== 1 ? "s" : ""} for &quot;{results.query}&quot;
+                {isLoading && debouncedQuery.length >= 2 && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+                        <span>Searching&hellip;</span>
                     </div>
+                )}
 
-                    <div className="space-y-3 max-w-4xl">
-                        {results.results.map((result) => {
-                            const config = ENTITY_CONFIG[result.entity_type]
-                            const Icon = config.icon
-                            const url = config.getUrl(result)
+                {isError && (
+                    <div className="flex items-center gap-2 text-destructive">
+                        <AlertCircle className="size-5" aria-hidden="true" />
+                        <span>Failed to search. Please try again.</span>
+                    </div>
+                )}
 
-                            return (
-                                <Link
-                                    key={`${result.entity_type}-${result.entity_id}`}
-                                    href={url}
-                                >
-                                    <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
-                                        <CardContent className="flex items-start gap-4 p-4">
+                {results && results.total === 0 && debouncedQuery.length >= 2 && (
+                    <div className="text-muted-foreground">
+                        No results found for &quot;{debouncedQuery}&quot;
+                    </div>
+                )}
+
+                {results && results.total > 0 && (
+                    <div className="space-y-3">
+                        <div className="text-sm text-muted-foreground">
+                            {results.total} result{results.total !== 1 ? "s" : ""} for &quot;{results.query}&quot;
+                        </div>
+
+                        <ul className="max-w-4xl divide-y overflow-hidden rounded-xl border bg-card">
+                            {results.results.map((result) => {
+                                const config = ENTITY_CONFIG[result.entity_type]
+                                const Icon = config.icon
+                                const url = config.getUrl(result)
+
+                                return (
+                                    <li key={`${result.entity_type}-${result.entity_id}`}>
+                                        <Link
+                                            href={url}
+                                            className="flex items-start gap-4 px-4 py-3 transition-colors hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
+                                        >
                                             <div
-                                                className={`flex size-10 items-center justify-center rounded-lg ${config.color}`}
+                                                className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${config.color}`}
                                             >
-                                                <Icon className="size-5" />
+                                                <Icon className="size-4" aria-hidden="true" />
                                             </div>
                                             <div className="flex-1 space-y-1 min-w-0">
                                                 <div className="flex items-center gap-2">
@@ -205,15 +210,15 @@ export default function SearchPage() {
                                                         </p>
                                                     )}
                                             </div>
-                                            <ArrowRight className="size-5 text-muted-foreground shrink-0" />
-                                        </CardContent>
-                                    </Card>
-                                </Link>
-                            )
-                        })}
+                                            <ArrowRight className="mt-2 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                                        </Link>
+                                    </li>
+                                )
+                            })}
+                        </ul>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     )
 }
