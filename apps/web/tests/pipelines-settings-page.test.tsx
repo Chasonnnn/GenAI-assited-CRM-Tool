@@ -905,6 +905,35 @@ describe("PipelinesSettingsPage", () => {
         expect(screen.getByText("2 mapped stages")).toBeInTheDocument()
     })
 
+    it("truncates the mapped stage chip and keeps the overflow count visible", () => {
+        currentSurrogatePipeline = {
+            ...pipelineFixture,
+            feature_config: {
+                ...pipelineFixture.feature_config,
+                journey: {
+                    ...pipelineFixture.feature_config.journey,
+                    milestones: [
+                        {
+                            ...pipelineFixture.feature_config.journey.milestones[0],
+                            mapped_stage_keys: ["new_unread", "contacted", "on_hold", "lost"],
+                        },
+                    ],
+                },
+            },
+        }
+
+        render(<PipelinesSettingsPage />)
+
+        const milestoneRow = screen
+            .getByRole("button", { name: /edit details for application & intake/i })
+            .closest(".rounded-xl") as HTMLElement
+        const labels = within(milestoneRow).getByText("New Unread, Contacted")
+        expect(labels).toHaveClass("truncate")
+        expect(labels.parentElement).toHaveClass("max-w-full")
+        expect(labels.parentElement?.parentElement).toHaveClass("min-w-0")
+        expect(labels.nextElementSibling).toHaveTextContent("+2")
+    })
+
     it("keeps journey milestone details expanded across equivalent pipeline refreshes", () => {
         const view = render(<PipelinesSettingsPage />)
 

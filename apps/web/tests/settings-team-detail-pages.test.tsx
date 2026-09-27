@@ -121,6 +121,30 @@ describe("Role Permissions list", () => {
         expect(screen.getByText("Case Manager")).toBeInTheDocument()
     })
 
+    it("stacks role rows on mobile and styles the developer card with warning tokens", () => {
+        mocks.useRoles.mockReturnValue({
+            data: [
+                { role: "case_manager", label: "Case Manager", permission_count: 12, is_developer: false },
+                { role: "developer", label: "Developer", permission_count: 56, is_developer: true },
+            ],
+            isLoading: false,
+        })
+
+        render(<RolePermissionsPage />)
+
+        const developerCard = screen.getByText("Developer").closest("[data-slot='card']")
+        expect(developerCard).toHaveClass("border-warning/40", "bg-warning/5")
+        expect(developerCard?.className).not.toMatch(/orange/)
+        const immutableBadge = screen.getByText("Immutable")
+        expect(immutableBadge.className).not.toMatch(/orange/)
+        // --warning is an icon/dot color; badge text keeps the foreground color for contrast.
+        expect(immutableBadge).not.toHaveClass("text-warning")
+        expect(immutableBadge.querySelector("svg")).toHaveClass("text-warning")
+
+        const headerRow = screen.getByText("56 permissions").parentElement?.parentElement
+        expect(headerRow).toHaveClass("flex-col", "sm:flex-row")
+    })
+
     it("shows the denied state and loads no roles without view_roles", () => {
         mocks.can.mockReturnValue(false)
 

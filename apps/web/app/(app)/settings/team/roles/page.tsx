@@ -74,17 +74,17 @@ function RoleCards({ roles, isDeveloper }: { roles: RoleSummary[]; isDeveloper: 
     return (
             <div className="grid gap-4">
                 {roles.map((role) => (
-                    <Card key={role.role} className={role.is_developer ? "border-orange-200 bg-orange-50/30" : ""}>
+                    <Card key={role.role} className={role.is_developer ? "border-warning/40 bg-warning/5" : ""}>
                         <CardHeader className="pb-2">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex min-w-0 items-center gap-3">
                                     <span className="text-2xl">{ROLE_ICONS[role.role] || "👤"}</span>
-                                    <div>
-                                        <CardTitle className="flex items-center gap-2">
+                                    <div className="min-w-0">
+                                        <CardTitle className="flex flex-wrap items-center gap-2">
                                             {role.label}
                                             {role.is_developer && (
-                                                <Badge variant="outline" className="text-orange-600 border-orange-300">
-                                <Lock className="size-3 mr-1" aria-hidden="true" />
+                                                <Badge variant="outline" className="border-warning/40">
+                                                    <Lock className="size-3 mr-1 text-warning" aria-hidden="true" />
                                                     Immutable
                                                 </Badge>
                                             )}
@@ -94,7 +94,7 @@ function RoleCards({ roles, isDeveloper }: { roles: RoleSummary[]; isDeveloper: 
                                         </CardDescription>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-3">
+                                <div className="flex shrink-0 flex-wrap items-center gap-3">
                                     <Badge variant="secondary">
                                         {role.permission_count} permissions
                                     </Badge>

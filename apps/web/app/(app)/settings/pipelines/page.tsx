@@ -1899,15 +1899,15 @@ function JourneyMilestonesEditor({
                             <p className="text-sm text-muted-foreground">{milestone.description}</p>
                         </div>
                         <div className="mt-3 flex items-center justify-between gap-3">
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex min-w-0 flex-wrap gap-2">
                                 <Badge variant="outline">
                                     {milestone.mapped_stage_keys.length} mapped stage
                                     {milestone.mapped_stage_keys.length === 1 ? "" : "s"}
                                 </Badge>
                                 {mappedLabels.length > 0 ? (
-                                    <Badge variant="outline">
-                                        {mappedLabels.slice(0, 2).join(", ")}
-                                        {mappedLabels.length > 2 ? ` +${mappedLabels.length - 2}` : ""}
+                                    <Badge variant="outline" className="max-w-full">
+                                        <span className="truncate">{mappedLabels.slice(0, 2).join(", ")}</span>
+                                        {mappedLabels.length > 2 ? <span>+{mappedLabels.length - 2}</span> : null}
                                     </Badge>
                                 ) : (
                                     <Badge variant="outline">No stages selected</Badge>

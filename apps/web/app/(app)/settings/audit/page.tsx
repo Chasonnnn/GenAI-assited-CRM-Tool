@@ -640,13 +640,13 @@ function AuditLogEntryCard({ entry }: { entry: AuditLogEntry }) {
                     ) : (
                         <span className="italic">System</span>
                     )}
-                    {detailsJson && (
-                        <span className="ml-2">
-                            {detailsJson.slice(0, 100)}
-                            {detailsJson.length > 100 ? "…" : ""}
-                        </span>
-                    )}
                 </p>
+                {detailsJson && (
+                    <p className="mt-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                        {detailsJson.slice(0, 100)}
+                        {detailsJson.length > 100 ? "…" : ""}
+                    </p>
+                )}
                 <p className="mt-1 text-xs text-muted-foreground">
                     {formatDateTime(entry.created_at, "Unknown")}
                     {entry.ip_address && <span className="ml-2">from {entry.ip_address}</span>}

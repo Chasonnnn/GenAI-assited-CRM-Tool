@@ -107,6 +107,37 @@ describe('AuditLogPage', () => {
         expect(screen.queryByText(/No audit log entries/i)).not.toBeInTheDocument()
     })
 
+    it('renders entry details as a wrapping block below the actor', () => {
+        mockUseAuditLogs.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: 'e2',
+                        event_type: 'user_login',
+                        actor_user_id: 'u1',
+                        actor_name: 'Alice',
+                        target_type: null,
+                        target_id: null,
+                        details: { page: 1, count: 30, q_type: null },
+                        ip_address: null,
+                        created_at: new Date().toISOString(),
+                    },
+                ],
+                total: 1,
+                page: 1,
+                per_page: 20,
+            },
+            isLoading: false,
+        })
+
+        render(<AuditLogPage />)
+
+        const details = screen.getByText('{"page":1,"count":30,"q_type":null}')
+        expect(details.tagName).toBe('P')
+        expect(details).toHaveClass('[overflow-wrap:anywhere]')
+        expect(details).not.toContainElement(screen.getByText('Alice'))
+    })
+
     it('renders audit entries and supports pagination', () => {
         render(<AuditLogPage />)
 
