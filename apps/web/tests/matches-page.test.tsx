@@ -91,37 +91,32 @@ describe('MatchesPage', () => {
         expect(screen.getAllByText('Under Review')).toHaveLength(1)
     })
 
-    it('renders page header and title', () => {
+    it('renders the default match list, summary, and filters', () => {
         render(<MatchesPage />)
         expect(screen.getByText('Matches')).toBeInTheDocument()
-    })
-
-    it('renders stats cards', () => {
-        render(<MatchesPage />)
         expect(screen.getByText('Total')).toBeInTheDocument()
-        // Use getAllByText to handle multiple instances
         expect(screen.getAllByText('Proposed').length).toBeGreaterThan(0)
         expect(screen.getAllByText('Accepted').length).toBeGreaterThan(0)
-    })
-
-    it('renders match table with data', () => {
-        render(<MatchesPage />)
-        // Table headers
         expect(screen.getByText('Participant')).toBeInTheDocument()
         expect(screen.getByText('Participant #')).toBeInTheDocument()
         expect(screen.getByText('Intended Parents')).toBeInTheDocument()
         expect(screen.queryByText('Compatibility')).not.toBeInTheDocument()
         expect(screen.getByText('Match Stage')).toBeInTheDocument()
         expect(screen.getByText('Participant Stage')).toBeInTheDocument()
-
-        // Match data
         expect(screen.getByText('Jane Doe')).toBeInTheDocument()
         expect(screen.getByText('S10001')).toBeInTheDocument()
         expect(screen.getByText('John Smith')).toBeInTheDocument()
-
         expect(screen.getByText('Mary Johnson')).toBeInTheDocument()
         expect(screen.getByText('S10002')).toBeInTheDocument()
         expect(screen.getByText('Bob Williams')).toBeInTheDocument()
+        expect(mockUseMatches).toHaveBeenCalledWith({
+            status: undefined,
+            page: 1,
+            per_page: 20,
+            sort_by: 'match_number',
+            sort_order: 'desc',
+        })
+        expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
     })
 
     it('shows loading state', () => {
@@ -166,17 +161,6 @@ describe('MatchesPage', () => {
 
         const maryLink = screen.getByText('Mary Johnson').closest('a')
         expect(maryLink).toHaveAttribute('href', '/intended-parents/matches/match2')
-    })
-
-    it('calls useMatches with correct filter params', () => {
-        render(<MatchesPage />)
-        expect(mockUseMatches).toHaveBeenCalledWith({
-            status: undefined,
-            page: 1,
-            per_page: 20,
-            sort_by: 'match_number',
-            sort_order: 'desc',
-        })
     })
 
     it('uses page from URL params', () => {
@@ -249,10 +233,6 @@ describe('MatchesPage', () => {
         expect(screen.getByText('Showing 1 to 20 of 50')).toBeInTheDocument()
     })
 
-    it('hides pagination when not needed', () => {
-        render(<MatchesPage />)
-        expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
-    })
     it('renders donor cases without surrogate fields and restores the kind filter from URL', () => {
         mockSearchParams.set('match_kind', 'donor')
         mockUseMatches.mockReturnValue({ data: { ...mockMatchData, items: [{ ...mockMatchData.items[0], match_kind: 'donor', donor_id: 'donor1', donor_name: 'Taylor Donor', donor_number: 'D10001', donor_stage_label: 'Ready', surrogate_id: null, surrogate_name: null, surrogate_number: null, status: 'completed' }] }, isLoading: false })

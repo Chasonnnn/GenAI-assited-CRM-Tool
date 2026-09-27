@@ -96,7 +96,7 @@ describe("RichTextEditor", () => {
         expect(screen.getByLabelText("Insert Emoji")).toBeInTheDocument()
     })
 
-    it("does not show emoji control by default", async () => {
+    it("labels undo and redo and hides the default emoji control", async () => {
         render(<RichTextEditor content="<p>hello</p>" />)
 
         await waitFor(() => {
@@ -104,15 +104,6 @@ describe("RichTextEditor", () => {
         })
 
         expect(screen.queryByLabelText("Insert Emoji")).not.toBeInTheDocument()
-    })
-
-    it("labels undo and redo toolbar buttons", async () => {
-        render(<RichTextEditor content="<p>hello</p>" />)
-
-        await waitFor(() => {
-            expect(screen.getByLabelText("Bold")).toBeInTheDocument()
-        })
-
         expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Redo" })).toBeInTheDocument()
     })
