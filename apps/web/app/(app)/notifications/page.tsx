@@ -14,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Skeleton } from "@/components/ui/skeleton"
 import { PageHeader } from "@/components/page-header"
 import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import {
     BellIcon,
     CheckSquareIcon,
@@ -81,7 +82,14 @@ export default function NotificationsPage() {
     // Get notification types for filter
     const notificationTypes = typeFilter !== "all" ? TYPE_GROUPS[typeFilter] : undefined
 
-    const { data: notificationsData, isLoading, isError: notificationsError } = useNotifications({
+    const {
+        data: notificationsData,
+        isLoading,
+        isError: notificationsError,
+        error: notificationsQueryError,
+        refetch: refetchNotifications,
+        isFetching: notificationsFetching,
+    } = useNotifications({
         limit: 50,
         refetch_interval_ms: isConnected ? false : 30_000,
         ...(notificationTypes ? { notification_types: notificationTypes } : {}),
@@ -97,7 +105,13 @@ export default function NotificationsPage() {
     const yesterdayStr = formatLocalDate(yesterday, userTimeZone)
 
     // Fetch overdue tasks (incomplete with due_date before today in user timezone)
-    const { data: overdueTasksData, isError: overdueTasksError } = useTasks({
+    const {
+        data: overdueTasksData,
+        isError: overdueTasksError,
+        error: overdueTasksQueryError,
+        refetch: refetchOverdueTasks,
+        isFetching: overdueTasksFetching,
+    } = useTasks({
         is_completed: false,
         my_tasks: true,
         per_page: 100,
@@ -142,14 +156,13 @@ export default function NotificationsPage() {
         return (
             <div className="flex min-h-screen flex-col">
                 <PageHeader title="Notifications" />
-                <div className="flex-1 p-6">
-                    <Card className="border-destructive/40 bg-destructive/5">
-                        <CardHeader>
-                            <CardTitle className="text-destructive">Unable to load notifications</CardTitle>
-                            <CardDescription>Please try again in a moment.</CardDescription>
-                        </CardHeader>
-                    </Card>
-                </div>
+                <QueryErrorState
+                    error={notificationsQueryError}
+                    onRetry={() => void refetchNotifications()}
+                    isRetrying={notificationsFetching}
+                    title="Couldn't load notifications"
+                    headingLevel={2}
+                />
             </div>
         )
     }
@@ -271,11 +284,15 @@ export default function NotificationsPage() {
                 )}
 
                 {overdueTasksError && (
-                    <Card className="border-destructive/40 bg-destructive/5">
-                        <CardHeader>
-                            <CardTitle className="text-destructive">Unable to load overdue tasks</CardTitle>
-                            <CardDescription>Please try again in a moment.</CardDescription>
-                        </CardHeader>
+                    <Card>
+                        <QueryErrorState
+                            error={overdueTasksQueryError}
+                            onRetry={() => void refetchOverdueTasks()}
+                            isRetrying={overdueTasksFetching}
+                            title="Couldn't load overdue tasks"
+                            headingLevel={2}
+                            className="min-h-0 py-6"
+                        />
                     </Card>
                 )}
 

@@ -35,6 +35,13 @@ export type UnifiedCalendarData = {
     googleEvents: GoogleCalendarEvent[]
     calendarConnected: boolean
     calendarError: string | null
+    /** The failed appointment query's error, or null. Google events report through calendarError. */
+    appointmentsError: unknown
+    /** The failed task query's error, or null. */
+    tasksError: unknown
+    /** Refetches whichever of the appointment and task queries failed. */
+    retryFailed: () => void
+    isRetryingFailed: boolean
     userTimezone: string
 }
 
@@ -57,7 +64,14 @@ export function useUnifiedCalendarData({
     taskFilter?: UnifiedCalendarTaskFilter
     appointmentFilters?: Omit<AppointmentFilterParams, "date_start" | "date_end">
 }): UnifiedCalendarData {
-    const { data, isLoading: appointmentsLoadingRaw } = useAppointments(
+    const {
+        data,
+        isLoading: appointmentsLoadingRaw,
+        isError: appointmentsFailed,
+        error: appointmentsErrorRaw,
+        refetch: refetchAppointments,
+        isFetching: appointmentsFetching,
+    } = useAppointments(
         {
             ...appointmentFilters,
             ...dateRange,
@@ -68,6 +82,7 @@ export function useUnifiedCalendarData({
 
     const appointments = includeAppointments ? data?.items || [] : []
     const appointmentsLoading = includeAppointments ? appointmentsLoadingRaw : false
+    const appointmentsError = includeAppointments && appointmentsFailed ? appointmentsErrorRaw : null
 
     const userTimezone = getBrowserTimezone()
 
@@ -98,9 +113,24 @@ export function useUnifiedCalendarData({
         ...(taskFilter?.owner_id ? { owner_id: taskFilter.owner_id } : {}),
         ...(taskFilter?.linked_type ? { linked_type: taskFilter.linked_type } : {}),
     }
-    const { data: tasksData, isLoading: tasksLoadingRaw } = useTasks(taskParams, { enabled: includeTasks })
+    const {
+        data: tasksData,
+        isLoading: tasksLoadingRaw,
+        isError: tasksFailed,
+        error: tasksErrorRaw,
+        refetch: refetchTasks,
+        isFetching: tasksFetching,
+    } = useTasks(taskParams, { enabled: includeTasks })
     const tasks = includeTasks ? tasksData?.items || [] : []
     const tasksLoading = includeTasks ? tasksLoadingRaw : false
+    const tasksError = includeTasks && tasksFailed ? tasksErrorRaw : null
+
+    const retryFailed = () => {
+        if (appointmentsError) void refetchAppointments()
+        if (tasksError) void refetchTasks()
+    }
+    const isRetryingFailed =
+        (Boolean(appointmentsError) && appointmentsFetching) || (Boolean(tasksError) && tasksFetching)
 
     return {
         appointments,
@@ -110,6 +140,10 @@ export function useUnifiedCalendarData({
         googleEvents,
         calendarConnected,
         calendarError,
+        appointmentsError,
+        tasksError,
+        retryFailed,
+        isRetryingFailed,
         userTimezone,
     }
 }

@@ -1323,12 +1323,14 @@ describe("Appointments Google Meet UI", () => {
             isError: true,
             error: new Error("Network error"),
             refetch,
+            isFetching: false,
         })
 
         render(<AppointmentsList />)
 
-        expect(screen.getAllByText(/Unable to load appointments/i).length).toBeGreaterThan(0)
-        fireEvent.click(screen.getAllByRole("button", { name: /retry/i })[0])
+        expect(screen.getAllByRole("heading", { name: "Couldn't load appointments" }).length).toBeGreaterThan(0)
+        expect(screen.queryByText(/Network error|Please try again/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getAllByRole("button", { name: "Try again" })[0]!)
         expect(refetch).toHaveBeenCalled()
     })
 

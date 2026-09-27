@@ -44,6 +44,7 @@ import {
 import type { UnifiedCalendarTaskFilter } from "@/lib/hooks/use-unified-calendar-data"
 import { useUnifiedCalendarData } from "@/lib/hooks/use-unified-calendar-data"
 import { AppointmentDetailDialog } from "@/components/appointments/AppointmentDetailDialog"
+import { QueryErrorState } from "@/components/error-state"
 import type { AppointmentFilterParams, AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
 import { compareTasksByDueTime } from "@/lib/utils/task-due"
@@ -965,6 +966,11 @@ function UnifiedCalendarHeader({
     )
 }
 
+function getCalendarLoadErrorTitle(appointmentsFailed: boolean, tasksFailed: boolean): string {
+    if (appointmentsFailed && tasksFailed) return "Couldn't load calendar"
+    return tasksFailed ? "Couldn't load tasks" : "Couldn't load appointments"
+}
+
 function UnifiedCalendarLoadingState() {
     return (
         <div className="py-12 flex items-center justify-center">
@@ -1237,6 +1243,10 @@ export function UnifiedCalendar({
         googleEvents,
         calendarConnected,
         calendarError,
+        appointmentsError,
+        tasksError,
+        retryFailed,
+        isRetryingFailed,
     } = useUnifiedCalendarData({
         dateRange,
         includeTasks,
@@ -1335,6 +1345,16 @@ export function UnifiedCalendar({
                     <UnifiedCalendarLoadingState />
                 ) : (
                     <>
+                        {/* The grid stays below so the other source and date navigation still work. */}
+                        {appointmentsError || tasksError ? (
+                            <QueryErrorState
+                                error={tasksError ?? appointmentsError}
+                                onRetry={retryFailed}
+                                isRetrying={isRetryingFailed}
+                                title={getCalendarLoadErrorTitle(Boolean(appointmentsError), Boolean(tasksError))}
+                                className="mb-4 min-h-0 rounded-lg border border-border p-0"
+                            />
+                        ) : null}
                         {includeGoogleEvents && !calendarConnected && (
                             <GoogleCalendarDisconnectedAlert calendarError={calendarError} />
                         )}

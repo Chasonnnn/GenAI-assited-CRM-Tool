@@ -30,7 +30,6 @@ import {
     ListIcon,
     VideoIcon,
     Loader2Icon,
-    AlertCircleIcon,
     ChevronRightIcon,
 } from "lucide-react"
 import {
@@ -130,21 +129,6 @@ function AppointmentCard({
     )
 }
 
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-    return (
-        <div className="text-center py-12 space-y-4">
-            <AlertCircleIcon className="size-12 mx-auto text-muted-foreground/50" />
-            <div className="space-y-1">
-                <p className="font-medium">{message}</p>
-                <p className="text-sm text-muted-foreground">Please try again.</p>
-            </div>
-            <Button variant="outline" onClick={onRetry}>
-                Retry
-            </Button>
-        </div>
-    )
-}
-
 // =============================================================================
 // Appointments List Tab Content
 // =============================================================================
@@ -161,7 +145,7 @@ function AppointmentsTabContent({
     /** Set while any filter is active: the empty state offers Clear filters instead. */
     onClearFilters: (() => void) | null
 }) {
-    const { data, isLoading, isError, refetch } = useAppointments({ status, per_page: 50, ...filters })
+    const { data, isLoading, isError, error, refetch, isFetching } = useAppointments({ status, per_page: 50, ...filters })
     const approveMutation = useApproveAppointment()
     const cancelMutation = useCancelAppointment()
     const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -176,7 +160,16 @@ function AppointmentsTabContent({
     }
 
     if (isError) {
-        return <ErrorState message="Unable to load appointments" onRetry={() => refetch()} />
+        return (
+            <QueryErrorState
+                error={error}
+                onRetry={() => void refetch()}
+                isRetrying={isFetching}
+                title="Couldn't load appointments"
+                headingLevel={2}
+                className="min-h-0 py-12"
+            />
+        )
     }
 
     if (!data?.items.length) {

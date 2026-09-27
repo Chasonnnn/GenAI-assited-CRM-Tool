@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog"
 import { ValidatedField } from "@/components/ui/field"
 import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import {
     Select,
     SelectContent,
@@ -271,12 +272,39 @@ function validateAppointmentTypeForm(values: AppointmentTypeFormState) {
 
 type AppointmentTypeValidation = ReturnType<typeof useFormValidation<AppointmentTypeFormState>>
 
+function SettingsCardError({
+    error,
+    onRetry,
+    isRetrying,
+    title,
+}: {
+    error: unknown
+    onRetry: () => void
+    isRetrying: boolean
+    title: string
+}) {
+    return (
+        <Card>
+            <CardContent>
+                <QueryErrorState
+                    error={error}
+                    onRetry={onRetry}
+                    isRetrying={isRetrying}
+                    title={title}
+                    headingLevel={2}
+                    className="min-h-0 py-10"
+                />
+            </CardContent>
+        </Card>
+    )
+}
+
 // =============================================================================
 // Booking Link Card
 // =============================================================================
 
 function BookingLinkCard() {
-    const { data: link, isLoading } = useBookingLink()
+    const { data: link, isLoading, isError, error, refetch, isFetching } = useBookingLink()
 
     if (isLoading) {
         return (
@@ -285,6 +313,18 @@ function BookingLinkCard() {
                     <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                 </CardContent>
             </Card>
+        )
+    }
+
+    // Without the link the fallback URL below would point at /book/ with no slug.
+    if (isError) {
+        return (
+            <SettingsCardError
+                error={error}
+                onRetry={() => void refetch()}
+                isRetrying={isFetching}
+                title="Couldn't load booking link"
+            />
         )
     }
 
@@ -320,7 +360,7 @@ function BookingLinkCard() {
 
 function AvailabilityRulesCard() {
     const { user } = useAuth()
-    const { data: rules, isLoading } = useAvailabilityRules()
+    const { data: rules, isLoading, isError, error, refetch, isFetching } = useAvailabilityRules()
     const setRulesMutation = useSetAvailabilityRules()
     const [availabilityState, setAvailabilityState] = useState<AvailabilityRulesState>(() => ({
         draft: null,
@@ -397,6 +437,19 @@ function AvailabilityRulesCard() {
                     <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                 </CardContent>
             </Card>
+        )
+    }
+
+    // A failed load must not show the editor: its defaults read as "unavailable every day", and
+    // saving them would overwrite the real schedule.
+    if (isError) {
+        return (
+            <SettingsCardError
+                error={error}
+                onRetry={() => void refetch()}
+                isRetrying={isFetching}
+                title="Couldn't load availability"
+            />
         )
     }
 
@@ -904,7 +957,14 @@ function AppointmentTypeListItem({
 }
 
 function AppointmentTypesCard() {
-    const { data: types, isLoading } = useAppointmentTypes()
+    const {
+        data: types,
+        isLoading,
+        isError,
+        error: typesError,
+        refetch: refetchTypes,
+        isFetching: typesFetching,
+    } = useAppointmentTypes()
     const createMutation = useCreateAppointmentType()
     const updateMutation = useUpdateAppointmentType()
     const deleteMutation = useDeleteAppointmentType()
@@ -1043,7 +1103,16 @@ function AppointmentTypesCard() {
                 }}
             />
             <CardContent>
-                {types?.length === 0 ? (
+                {isError ? (
+                    <QueryErrorState
+                        error={typesError}
+                        onRetry={() => void refetchTypes()}
+                        isRetrying={typesFetching}
+                        title="Couldn't load appointment types"
+                        headingLevel={2}
+                        className="min-h-0 py-10"
+                    />
+                ) : types?.length === 0 ? (
                     <AppointmentTypesEmptyState onCreate={openCreate} />
                 ) : (
                     <AppointmentTypesList

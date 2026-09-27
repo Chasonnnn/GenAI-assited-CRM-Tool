@@ -339,6 +339,21 @@ describe('TasksPage', () => {
         expect(screen.getByText('No open tasks')).toBeInTheDocument()
     })
 
+    it('shows a retryable load error for the task list without raw server text', () => {
+        const refetch = vi.fn()
+        mockUseTasks.mockImplementation((params: { is_completed?: boolean; task_type?: string }) => (
+            params?.is_completed === false && params?.task_type === undefined
+                ? { data: undefined, isLoading: false, isError: true, error: new Error('boom'), refetch, isFetching: false }
+                : { data: { items: [], total: 0 }, isLoading: false }
+        ))
+        render(<TasksPage />)
+
+        expect(screen.getByRole('heading', { level: 2, name: "Couldn't load tasks" })).toBeInTheDocument()
+        expect(screen.queryByText(/boom|Please try again/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
     it('hides the approvals section when nothing awaits review', () => {
         mockUseTasks.mockImplementation((params: { task_type?: string }) => (
             params?.task_type === 'workflow_approval'

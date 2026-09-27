@@ -257,4 +257,57 @@ describe('NotificationsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
         expect(screen.getByRole('heading', { level: 3, name: 'No notifications' })).toBeInTheDocument()
     })
+
+    it('shows a retryable load error without the raw server message', () => {
+        const refetch = vi.fn()
+        mockUseNotifications.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new Error('boom'),
+            refetch,
+            isFetching: false,
+        })
+
+        render(<NotificationsPage />)
+
+        expect(screen.getByRole('heading', { level: 2, name: "Couldn't load notifications" })).toBeInTheDocument()
+        expect(screen.queryByText(/boom|Please try again/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('disables Try again while the notifications retry runs', () => {
+        mockUseNotifications.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new Error('boom'),
+            refetch: vi.fn(),
+            isFetching: true,
+        })
+
+        render(<NotificationsPage />)
+
+        expect(screen.getByRole('button', { name: 'Try again' })).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('shows a retryable error for overdue tasks and keeps the notifications list', () => {
+        const refetch = vi.fn()
+        mockUseTasks.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new Error('boom'),
+            refetch,
+            isFetching: false,
+        })
+
+        render(<NotificationsPage />)
+
+        expect(screen.getByRole('heading', { level: 2, name: "Couldn't load overdue tasks" })).toBeInTheDocument()
+        expect(screen.getByText('Surrogate assigned')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
 })

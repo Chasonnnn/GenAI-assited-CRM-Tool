@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PlusIcon, Loader2Icon, ListIcon, CalendarDaysIcon } from "lucide-react"
 import { ListToolbar, ListToolbarSearch } from "@/components/list-toolbar"
 import { PageHeader } from "@/components/page-header"
+import { QueryErrorState } from "@/components/error-state"
 import { SegmentedToggle } from "@/components/appointments/SegmentedToggle"
 import { TasksCalendarView } from "@/components/tasks/TasksCalendarView"
 import { TasksListView } from "@/components/tasks/TasksListView"
@@ -233,7 +234,9 @@ function useTasksPageController() {
         data: incompleteTasks,
         isLoading: loadingIncomplete,
         isError: incompleteError,
+        error: incompleteQueryError,
         refetch: refetchIncomplete,
+        isFetching: fetchingIncomplete,
     } = useTasks(
         { ...listParams, is_completed: false, per_page: 100 },
         { enabled: isListView && status !== "completed" },
@@ -243,7 +246,9 @@ function useTasksPageController() {
         data: completedTasks,
         isLoading: loadingCompleted,
         isError: completedError,
+        error: completedQueryError,
         refetch: refetchCompleted,
+        isFetching: fetchingCompleted,
     } = useTasks(
         { ...listParams, is_completed: true, per_page: 50 },
         { enabled: isListView && status !== "open" },
@@ -401,6 +406,8 @@ function useTasksPageController() {
     // With Status "All" the open list gates the view and the completed section loads on its own.
     const isLoading = isListView && (status === "completed" ? loadingCompleted : loadingIncomplete)
     const hasError = isListView && (status === "completed" ? completedError : incompleteError)
+    const listError = status === "completed" ? completedQueryError : incompleteQueryError
+    const isRetryingList = status === "completed" ? fetchingCompleted : fetchingIncomplete
     const handleRetry = () => {
         if (status !== "completed") void refetchIncomplete()
         if (status !== "open") void refetchCompleted()
@@ -446,7 +453,9 @@ function useTasksPageController() {
         hasFilters,
         incompleteTasks: incompleteTasks?.items ?? [],
         isLoading,
+        isRetryingList,
         linkedType,
+        listError,
         loadingApprovals,
         loadingCompleted,
         loadingImportApprovals,
@@ -644,12 +653,13 @@ function TasksPageContent({ controller }: { controller: TasksPageController }) {
             )}
 
             {!controller.isLoading && controller.hasError && (
-                <Card className="flex flex-col items-center justify-center gap-3 p-12 border-destructive/40 bg-destructive/5">
-                    <span className="text-destructive">Unable to load tasks. Please try again.</span>
-                    <Button variant="outline" size="sm" onClick={controller.handleRetry}>
-                        Retry
-                    </Button>
-                </Card>
+                <QueryErrorState
+                    error={controller.listError}
+                    onRetry={controller.handleRetry}
+                    isRetrying={controller.isRetryingList}
+                    title="Couldn't load tasks"
+                    headingLevel={2}
+                />
             )}
 
             {canShowTaskViews && controller.view === "calendar" && (

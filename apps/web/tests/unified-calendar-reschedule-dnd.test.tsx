@@ -547,3 +547,66 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
         expect(within(lateRow).getByText(/Late Client/)).toBeInTheDocument()
     })
 })
+
+describe("UnifiedCalendar load errors", () => {
+    const baseData = {
+        appointments: [],
+        appointmentsLoading: false,
+        tasks: [],
+        tasksLoading: false,
+        googleEvents: [],
+        calendarConnected: true,
+        calendarError: null,
+        appointmentsError: null,
+        tasksError: null,
+        retryFailed: vi.fn(),
+        isRetryingFailed: false,
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: [] }, isLoading: false })
+        mockUseAppointment.mockReturnValue({ data: null, isLoading: false })
+        mockUseRescheduleSlots.mockReturnValue({ data: { slots: [] }, isLoading: false })
+    })
+
+    it("shows a retryable task error above the calendar instead of an empty month", () => {
+        const retryFailed = vi.fn()
+        mockUseUnifiedCalendarData.mockReturnValue({
+            ...baseData,
+            tasksError: new Error("boom"),
+            retryFailed,
+        })
+
+        render(<UnifiedCalendar includeGoogleEvents={false} />)
+
+        expect(screen.getByText("Couldn't load tasks")).toBeInTheDocument()
+        expect(screen.queryByText(/boom/)).not.toBeInTheDocument()
+        // Date navigation stays usable below the error.
+        expect(screen.getByRole("button", { name: "Today" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(retryFailed).toHaveBeenCalledTimes(1)
+    })
+
+    it("names the calendar when both appointments and tasks fail", () => {
+        mockUseUnifiedCalendarData.mockReturnValue({
+            ...baseData,
+            appointmentsError: new Error("a"),
+            tasksError: new Error("t"),
+            isRetryingFailed: true,
+        })
+
+        render(<UnifiedCalendar includeGoogleEvents={false} />)
+
+        expect(screen.getByText("Couldn't load calendar")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Try again" })).toHaveAttribute("aria-disabled", "true")
+    })
+
+    it("shows no error block when both sources load", () => {
+        mockUseUnifiedCalendarData.mockReturnValue(baseData)
+
+        render(<UnifiedCalendar includeGoogleEvents={false} />)
+
+        expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument()
+    })
+})
