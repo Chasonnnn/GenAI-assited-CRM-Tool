@@ -57,6 +57,24 @@ describe("AgencyUsersTab", () => {
         is_active: false,
     }
 
+    it("shows role labels instead of raw role keys", () => {
+        render(
+            <AgencyUsersTab
+                members={[activeMember, { ...activeMember, id: "member_ops", user_id: "user_ops", email: "ops@example.com", role: "operations" }]}
+                orgName="EWI"
+                mfaResetting={null}
+                onResetMfa={vi.fn()}
+                onDeactivateMember={vi.fn()}
+                onReactivateMember={vi.fn()}
+                reactivating={null}
+            />
+        )
+
+        expect(screen.getByText("Intake Specialist")).toBeInTheDocument()
+        expect(screen.getByText("Operations")).toBeInTheDocument()
+        expect(screen.queryByText("intake_specialist")).not.toBeInTheDocument()
+    })
+
     it("confirms deactivation with a destructive action and a reversible consequence", async () => {
         const onDeactivateMember = vi.fn()
         render(

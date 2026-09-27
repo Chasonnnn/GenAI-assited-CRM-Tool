@@ -26,6 +26,7 @@ import {
 import { Loader2, ShieldOff, UserCheck, UserMinus } from "lucide-react"
 import { RelativeTime } from "@/components/ui/time-display"
 import type { OrgMember } from "@/lib/api/platform"
+import { getAgencyRoleLabel } from "@/components/ops/agencies/agency-constants"
 
 type AgencyUsersTabProps = {
     members: OrgMember[]
@@ -77,7 +78,7 @@ export function AgencyUsersTab({
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant="outline">{member.role}</Badge>
+                                        <Badge variant="outline">{getAgencyRoleLabel(member.role)}</Badge>
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant={member.is_active ? "default" : "secondary"}>

@@ -44,6 +44,11 @@ export const INVITE_STATUS_VARIANTS: Record<string, string> = {
     revoked: "bg-red-500/10 text-red-600 border-red-500/20",
 }
 
+export const getInviteStatusLabel = createSelectLabelGetter(
+    { pending: "Pending", accepted: "Accepted", expired: "Expired", revoked: "Revoked" },
+    { emptyLabel: "Unknown status", unknownLabel: "Unknown status" },
+)
+
 export const INVITE_ROLE_OPTIONS = [
     "intake_specialist",
     "case_manager",
@@ -58,6 +63,12 @@ export const INVITE_ROLE_LABELS: Record<InviteRole, string> = {
     admin: "Admin",
     developer: "Developer",
 }
+
+// Keys match Role in apps/api/app/db/enums/auth.py. Members can hold operations; invites cannot.
+export const getAgencyRoleLabel = createSelectLabelGetter(
+    { ...INVITE_ROLE_LABELS, operations: "Operations" },
+    { emptyLabel: "No role", unknownLabel: "Unknown role" },
+)
 
 // Keys match AlertStatus and AlertSeverity in apps/api/app/db/enums/integration_health.py.
 export const ALERT_STATUS_LABELS = {

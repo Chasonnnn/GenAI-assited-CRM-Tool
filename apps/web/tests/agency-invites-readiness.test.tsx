@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { AgencyInvitesTab } from "@/components/ops/agencies/AgencyInvitesTab"
+import type { OrgInvite } from "@/lib/api/platform"
 import type { ResendReadinessEnvelope } from "@/lib/types/resend-readiness"
 
 vi.mock("@/components/app-link", () => ({
@@ -67,12 +68,13 @@ function renderInvites(
         onCheck?: () => void
         senderConfigured?: boolean
         senderLoading?: boolean
+        invites?: OrgInvite[]
     } = {},
 ) {
     return render(
         <AgencyInvitesTab
             orgName="Northstar Agency"
-            invites={[]}
+            invites={options.invites ?? []}
             inviteOpen={false}
             inviteSubmitting={false}
             inviteResending={null}
@@ -190,5 +192,23 @@ describe("AgencyInvitesTab shared sender readiness", () => {
         expect(screen.getByText("Couldn’t start the sender check")).toBeInTheDocument()
         expect(screen.queryByText(/raw provider/i)).not.toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Invite User" })).toBeEnabled()
+    })
+
+    it("shows invite role and status labels instead of raw keys", () => {
+        renderInvites(readinessEnvelope(), {
+            invites: [{
+                id: "invite-1",
+                email: "intake@example.com",
+                role: "intake_specialist",
+                status: "pending",
+                created_at: "2026-07-23T16:00:00Z",
+            }],
+        })
+
+        const row = screen.getByText("intake@example.com").closest("tr")
+        expect(row).not.toBeNull()
+        expect(within(row as HTMLElement).getByText("Intake Specialist")).toBeInTheDocument()
+        expect(within(row as HTMLElement).getByText("Pending")).toBeInTheDocument()
+        expect(within(row as HTMLElement).queryByText("intake_specialist")).not.toBeInTheDocument()
     })
 })

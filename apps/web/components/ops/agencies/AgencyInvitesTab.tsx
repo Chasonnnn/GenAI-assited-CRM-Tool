@@ -47,6 +47,8 @@ import Link from "@/components/app-link"
 import { RelativeTime } from "@/components/ui/time-display"
 import { ResendCompactReadinessSummary } from "@/components/email-operations/ResendLiveReadinessCard"
 import {
+    getAgencyRoleLabel,
+    getInviteStatusLabel,
     INVITE_ROLE_LABELS,
     INVITE_ROLE_OPTIONS,
     INVITE_STATUS_VARIANTS,
@@ -235,14 +237,14 @@ export function AgencyInvitesTab({
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant="outline">{invite.role}</Badge>
+                                        <Badge variant="outline">{getAgencyRoleLabel(invite.role)}</Badge>
                                     </TableCell>
                                     <TableCell>
                                         <Badge
                                             variant="outline"
                                             className={INVITE_STATUS_VARIANTS[invite.status]}
                                         >
-                                            {invite.status}
+                                            {getInviteStatusLabel(invite.status)}
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">
