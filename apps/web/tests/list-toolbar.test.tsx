@@ -152,6 +152,25 @@ describe("MoreFiltersPopover", () => {
         expect(await screen.findByLabelText("Kind")).toBeVisible()
         expect(screen.getByRole("button", { name: "More Filters" })).toHaveAttribute("data-active")
     })
+
+    it("uses the shared shadow tokens instead of hard-coded shadow colors", async () => {
+        render(
+            <MoreFiltersPopover open onOpenChange={vi.fn()} active>
+                <label htmlFor="kind">Kind</label>
+                <select id="kind" />
+            </MoreFiltersPopover>
+        )
+
+        const trigger = screen.getByRole("button", { name: "More Filters" })
+        const content = (await screen.findByLabelText("Kind")).closest('[data-slot="popover-content"]')
+        expect(content).not.toBeNull()
+        expect(trigger).toHaveClass("shadow-sm")
+        expect(content).toHaveClass("shadow-2xl", "ring-1", "ring-foreground/5")
+        for (const element of [trigger, content as HTMLElement]) {
+            expect(element.className).not.toMatch(/rgba?\(/)
+            expect(element.className).not.toMatch(/shadow-\[/)
+        }
+    })
 })
 
 describe("FilterChips", () => {

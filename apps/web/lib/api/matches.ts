@@ -117,6 +117,8 @@ export interface ListMatchesParams {
     match_kind?: MatchKind
     intended_parent_id?: string
     q?: string  // Search match/surrogate/IP names or numbers
+    proposed_from?: string  // YYYY-MM-DD, inclusive
+    proposed_to?: string  // YYYY-MM-DD, inclusive
     page?: number
     per_page?: number
     sort_by?: string
@@ -134,6 +136,8 @@ export async function listMatches(params: ListMatchesParams = {}): Promise<Match
     if (params.surrogate_id) searchParams.set('surrogate_id', params.surrogate_id)
     if (params.intended_parent_id) searchParams.set('intended_parent_id', params.intended_parent_id)
     if (params.q) searchParams.set('q', params.q)
+    if (params.proposed_from) searchParams.set('proposed_from', params.proposed_from)
+    if (params.proposed_to) searchParams.set('proposed_to', params.proposed_to)
     if (params.page) searchParams.set('page', params.page.toString())
     if (params.per_page) searchParams.set('per_page', params.per_page.toString())
     if (params.sort_by) searchParams.set('sort_by', params.sort_by)

@@ -1,17 +1,25 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type FormEvent } from "react"
 import type { Route } from "next"
 import { useRouter, useSearchParams } from "next/navigation"
-import { AlertCircleIcon, Loader2Icon, PlusIcon, SearchIcon, UsersIcon, XIcon } from "lucide-react"
+import { AlertCircleIcon, Loader2Icon, PlusIcon, UsersIcon } from "lucide-react"
 
 import Link from "@/components/app-link"
-import { DonorFormFields } from "@/components/donors/DonorFormFields"
+import { DonorFormFields, type DonorFieldValidation } from "@/components/donors/DonorFormFields"
 import {
     EMPTY_DONOR_FORM_VALUES,
     type DonorFormValues,
 } from "@/components/donors/donor-form-values"
 import { PermissionDeniedState } from "@/components/error-state"
+import {
+    ListToolbar,
+    ListToolbarSearch,
+    MoreFiltersPopover,
+    type FilterChip,
+} from "@/components/list-toolbar"
+import { PageHeader } from "@/components/page-header"
+import { StageSelect } from "@/components/stage-select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -22,7 +30,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { PaginationJump } from "@/components/ui/pagination-jump"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -40,6 +48,10 @@ import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { formatDate } from "@/lib/formatters"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
+import { getDateRangeFilterLabel } from "@/lib/date-range-filter"
+import { useFormValidation } from "@/lib/forms/use-form-validation"
+import { EMAIL_INVALID_MESSAGE, validateEmail, validateRequired } from "@/lib/forms/validators"
+import { getStageOptionLabel, pipelineStageOptions, type StageOption } from "@/lib/stage-options"
 import { toast } from "@/components/ui/toast"
 import {
     getDonorPipelineEntityType,
@@ -58,17 +70,6 @@ const DONOR_SORT_FIELDS: DonorSortBy[] = [
     "created_at",
 ]
 const DATE_RANGE_PRESETS: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
-const DATE_RANGE_LABELS: Record<Exclude<DateRangePreset, "custom">, string> = {
-    all: "All Time",
-    today: "Today",
-    week: "This Week",
-    month: "This Month",
-}
-const filterDateFormatter = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-})
 
 function parseDonorType(value: string | null): DonorType {
     return value === "sperm" ? "sperm" : "egg"
@@ -125,19 +126,6 @@ function getCreatedDateParams(
         created_from: formatLocalDate(from),
         created_to: formatLocalDate(now),
     }
-}
-
-function getDateRangeLabel(
-    range: DateRangePreset,
-    customRange: { from: Date | undefined; to: Date | undefined },
-): string {
-    if (range !== "custom") return DATE_RANGE_LABELS[range]
-    if (customRange.from && customRange.to) {
-        return `${filterDateFormatter.format(customRange.from)} - ${filterDateFormatter.format(customRange.to)}`
-    }
-    if (customRange.from) return `From ${filterDateFormatter.format(customRange.from)}`
-    if (customRange.to) return `Until ${filterDateFormatter.format(customRange.to)}`
-    return "Custom Range"
 }
 
 function formatCreatedAt(value: string): string {
@@ -361,6 +349,7 @@ function CreateDonorDialog({
     onClose,
     onSubmit,
     onFieldChange,
+    validation,
 }: {
     donorType: DonorType
     formValues: DonorFormValues
@@ -368,13 +357,14 @@ function CreateDonorDialog({
     pending: boolean
     onOpenChange: (open: boolean) => void
     onClose: () => void
-    onSubmit: () => Promise<void>
+    onSubmit: (event: FormEvent<HTMLFormElement>) => void
     onFieldChange: (field: keyof DonorFormValues, value: string) => void
+    validation: DonorFieldValidation
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-lg">
-                <form action={onSubmit}>
+            <DialogContent size="lg">
+                <form noValidate onSubmit={onSubmit}>
                     <DialogHeader>
                         <DialogTitle>New {getDonorTypeLabel(donorType)}</DialogTitle>
                     </DialogHeader>
@@ -384,15 +374,13 @@ function CreateDonorDialog({
                             idPrefix="create_donor_"
                             showDonorType={false}
                             onChange={onFieldChange}
+                            validation={validation}
                         />
                     </div>
                     <DialogFooter>
                         <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-                        <Button
-                            type="submit"
-                            disabled={pending || !formValues.full_name.trim() || !formValues.email.trim()}
-                        >
-                            {pending ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
+                        <Button type="submit" disabled={pending}>
+                            {pending ? <Loader2Icon className="mr-2 size-4 animate-spin" aria-hidden="true" /> : null}
                             Create
                         </Button>
                     </DialogFooter>
@@ -402,7 +390,12 @@ function CreateDonorDialog({
     )
 }
 
-function DonorFiltersPanel({
+/** The one label helper for the record status filter: trigger and chip. */
+function getRecordStatusFilterLabel(value: string | null | undefined): string {
+    return value === "archived" ? "Archived Donors" : "Active Donors"
+}
+
+function DonorsToolbar({
     view,
     onArchivedChange,
     onDatePresetChange,
@@ -416,10 +409,9 @@ function DonorFiltersPanel({
         dateRange: DateRangePreset
         customRange: { from: Date | undefined; to: Date | undefined }
         stageFilter: string
-        stages: PipelineStage[]
+        stageOptions: StageOption[]
         search: string
-        isFiltered: boolean
-        chips: Array<{ key: string; label: string; clear: () => void }>
+        chips: FilterChip[]
     }
     onArchivedChange: (archived: boolean) => void
     onDatePresetChange: (range: DateRangePreset) => void
@@ -428,83 +420,64 @@ function DonorFiltersPanel({
     onSearchChange: (value: string) => void
     onClearAll: () => void
 }) {
-    const { showArchived, dateRange, customRange, stageFilter, stages, search, isFiltered, chips } = view
+    const { showArchived, dateRange, customRange, stageFilter, stageOptions, search, chips } = view
+    const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false)
     return (
-        <>
-            <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                <Select
-                    value={showArchived ? "archived" : "active"}
-                    onValueChange={(value) => onArchivedChange(value === "archived")}
-                >
-                    <SelectTrigger aria-label="Record status" className="w-full md:w-[180px]">
-                        <SelectValue>
-                            {(value: string | null) => value === "archived" ? "Archived Donors" : "Active Donors"}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="active">Active Donors</SelectItem>
-                        <SelectItem value="archived">Archived Donors</SelectItem>
-                    </SelectContent>
-                </Select>
-                <DateRangePicker
-                    preset={dateRange}
-                    customRange={customRange}
-                    ariaLabel="Created date range"
-                    onPresetChange={onDatePresetChange}
-                    onCustomRangeChange={onCustomDateChange}
-                    className="w-full md:w-auto"
-                />
-                <Select value={stageFilter} onValueChange={(value) => value && onStageChange(value)}>
-                    <SelectTrigger aria-label="Stage" className="w-full md:w-[180px]">
-                        <SelectValue placeholder="All Stages">
-                            {(value: string | null) =>
-                                value === "all" || !value
-                                    ? "All Stages"
-                                    : stages.find((stage) => stage.id === value)?.label ?? "Stage unavailable"}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Stages</SelectItem>
-                        {stages.map((stage) => (
-                            <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <div className="flex-1" />
-                <div className="relative w-full max-w-sm">
-                    <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                        type="search"
-                        aria-label="Search donors"
-                        placeholder="Search name, number, email, phone…"
-                        className="pl-9"
-                        value={search}
-                        onChange={(event) => onSearchChange(event.target.value)}
+        <ListToolbar
+            filters={
+                <>
+                    <StageSelect
+                        value={stageFilter}
+                        onValueChange={onStageChange}
+                        options={stageOptions}
+                        allLabel="All Stages"
+                        className="w-[180px]"
+                        aria-label="Filter by stage"
                     />
-                </div>
-            </div>
-
-            {isFiltered ? (
-                <div className="flex flex-wrap items-center gap-2">
-                    {chips.map((chip) => (
-                        <Button
-                            key={chip.key}
-                            variant="outline"
-                            size="sm"
-                            className="gap-2"
-                            aria-label={`Remove filter: ${chip.label}`}
-                            onClick={chip.clear}
-                        >
-                            {chip.label}
-                            <XIcon className="size-3" aria-hidden="true" />
-                        </Button>
-                    ))}
-                    <Button variant="ghost" size="sm" onClick={onClearAll} aria-label="Reset filters">
-                        Reset
-                    </Button>
-                </div>
-            ) : null}
-        </>
+                    <DateRangePicker
+                        preset={dateRange}
+                        customRange={customRange}
+                        ariaLabel="Created date range"
+                        onPresetChange={onDatePresetChange}
+                        onCustomRangeChange={onCustomDateChange}
+                    />
+                    <MoreFiltersPopover
+                        open={isMoreFiltersOpen}
+                        onOpenChange={setIsMoreFiltersOpen}
+                        active={showArchived}
+                    >
+                        <div className="grid gap-2">
+                            <Label>Record status</Label>
+                            <Select
+                                value={showArchived ? "archived" : "active"}
+                                onValueChange={(value) => onArchivedChange(value === "archived")}
+                            >
+                                <SelectTrigger aria-label="Filter by record status">
+                                    <SelectValue>
+                                        {(value: string | null) => getRecordStatusFilterLabel(value)}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="active">{getRecordStatusFilterLabel("active")}</SelectItem>
+                                    <SelectItem value="archived">{getRecordStatusFilterLabel("archived")}</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </MoreFiltersPopover>
+                </>
+            }
+            search={
+                <ListToolbarSearch
+                    type="search"
+                    placeholder="Search donors"
+                    value={search}
+                    onValueChange={onSearchChange}
+                    aria-label="Search donors"
+                />
+            }
+            chips={chips}
+            onReset={onClearAll}
+        />
     )
 }
 
@@ -557,12 +530,22 @@ export default function DonorsPageClient() {
         ...(sortBy ? { sort_by: sortBy, sort_order: sortOrder } : {}),
     })
     const createDonor = useCreateDonor()
+    const createValidation = useFormValidation({
+        values: formValues,
+        validate: (values) => ({
+            full_name: validateRequired(values.full_name, "Enter a name."),
+            email: validateEmail(values.email, { requiredMessage: "Enter an email address." }),
+        }),
+    })
     const data = donorsQuery.data
     const totalPages = data?.pages ?? 1
     const isFiltered = Boolean(
         committedSearch || stageFilter !== "all" || showArchived || dynamicFilter || ownerId ||
         dateRange !== "all",
     )
+    // Unfiltered total for the header badge ("8 of 42"); only fetched while a filter is active.
+    const unfilteredQuery = useDonors({ donor_type: donorType, page: 1, per_page: 1 }, { enabled: isFiltered })
+    const stageOptions = pipelineStageOptions(stages)
     const currentListHref = buildDonorsHref(query, { new: false })
 
     const setUrl = (update: Parameters<typeof buildDonorsHref>[1]) => {
@@ -604,6 +587,7 @@ export default function DonorsPageClient() {
 
     const resetCreateForm = () => {
         setFormValues({ ...EMPTY_DONOR_FORM_VALUES, donor_type: donorType })
+        createValidation.reset()
     }
 
     const closeCreateDialog = () => {
@@ -612,53 +596,58 @@ export default function DonorsPageClient() {
         resetCreateForm()
     }
 
-    const handleCreate = async () => {
+    const handleCreate = createValidation.handleSubmit(async (values) => {
         try {
             await createDonor.mutateAsync({
                 donor_type: donorType,
-                full_name: formValues.full_name.trim(),
-                email: formValues.email.trim(),
-                ...(formValues.phone.trim() ? { phone: formValues.phone.trim() } : {}),
-                ...(formValues.state.trim() ? { state: formValues.state.trim() } : {}),
-                ...(formValues.education.trim() ? { education: formValues.education.trim() } : {}),
+                full_name: values.full_name.trim(),
+                email: values.email.trim(),
+                ...(values.phone.trim() ? { phone: values.phone.trim() } : {}),
+                ...(values.state.trim() ? { state: values.state.trim() } : {}),
+                ...(values.education.trim() ? { education: values.education.trim() } : {}),
             })
             closeCreateDialog()
-            toast.success("Donor created successfully")
+            toast.success("Donor created")
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to create donor")
+            const formError = createValidation.applyApiError(error, {
+                fields: ["full_name", "email"],
+                messages: { email: EMAIL_INVALID_MESSAGE },
+                fallback: "Couldn't create donor. Try again.",
+            })
+            if (formError) toast.error(formError)
         }
-    }
+    })
 
-    const filterChips = [
+    const filterChips: FilterChip[] = [
         ...(stageFilter !== "all" ? [{
             key: "stage",
-            label: `Stage: ${stages.find((stage) => stage.id === stageFilter)?.label ?? "Stage unavailable"}`,
-            clear: () => setUrl({ stage: "all", page: 1 }),
+            label: `Stage: ${getStageOptionLabel(stageFilter, stageOptions)}`,
+            onRemove: () => setUrl({ stage: "all", page: 1 }),
         }] : []),
         ...(dateRange !== "all" ? [{
             key: "date",
-            label: `Date: ${getDateRangeLabel(dateRange, customRange)}`,
-            clear: () => setUrl({ range: "all", page: 1 }),
+            label: `Date: ${getDateRangeFilterLabel(dateRange, customRange)}`,
+            onRemove: () => setUrl({ range: "all", page: 1 }),
         }] : []),
         ...(showArchived ? [{
             key: "archive",
-            label: "Archived Donors",
-            clear: () => setUrl({ archived: false, page: 1 }),
+            label: getRecordStatusFilterLabel("archived"),
+            onRemove: () => setUrl({ archived: false, page: 1 }),
         }] : []),
         ...(dynamicFilter ? [{
             key: "dynamic",
             label: "Attention Needed: Stuck Donors",
-            clear: () => setUrl({ dynamicFilter: null, page: 1 }),
+            onRemove: () => setUrl({ dynamicFilter: null, page: 1 }),
         }] : []),
         ...(ownerId ? [{
             key: "owner",
             label: `Assignee: ${ownerId === user?.user_id && user.display_name ? user.display_name : "Assigned user"}`,
-            clear: () => setUrl({ ownerId: null, page: 1 }),
+            onRemove: () => setUrl({ ownerId: null, page: 1 }),
         }] : []),
         ...(committedSearch ? [{
             key: "search",
             label: `Search: ${committedSearch}`,
-            clear: () => {
+            onRemove: () => {
                 setSearchDraft({ query, value: "" })
                 cancel()
                 setUrl({ q: "", page: 1 })
@@ -668,44 +657,47 @@ export default function DonorsPageClient() {
 
     return (
         <div className="flex h-full flex-col overflow-hidden">
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Donors</h1>
-                    {canEditDonors ? (
+            <PageHeader
+                title="Donors"
+                count={data?.total}
+                countTotal={isFiltered ? unfilteredQuery.data?.total : undefined}
+                countLabel={getDonorTypePluralLabel(donorType).toLowerCase()}
+                actions={
+                    canEditDonors ? (
                         <Button
                             onClick={() => {
                                 resetCreateForm()
                                 setIsCreateOpen(true)
                             }}
                         >
-                            <PlusIcon className="mr-2 size-4" />
+                            <PlusIcon className="mr-2 size-4" aria-hidden="true" />
                             New Donor
                         </Button>
-                    ) : null}
-                </div>
-            </div>
+                    ) : null
+                }
+            />
 
-            <div className="flex-1 space-y-6 overflow-auto p-6">
-                <Tabs
-                    value={donorType}
-                    onValueChange={(value) => {
-                        if (value === "egg" || value === "sperm") setUrl({ type: value })
-                    }}
-                >
+            <Tabs
+                value={donorType}
+                onValueChange={(value) => {
+                    if (value === "egg" || value === "sperm") setUrl({ type: value })
+                }}
+                className="min-h-0 flex-1 gap-0"
+            >
+                <div className="shrink-0 px-6 pt-4">
                     <TabsList aria-label="Donor type">
                         <TabsTrigger value="egg">Egg Donors</TabsTrigger>
                         <TabsTrigger value="sperm">Sperm Donors</TabsTrigger>
                     </TabsList>
-                    <TabsContent value={donorType} className="space-y-6">
-                <DonorFiltersPanel
+                </div>
+                <DonorsToolbar
                     view={{
                         showArchived,
                         dateRange,
                         customRange,
                         stageFilter,
-                        stages,
+                        stageOptions,
                         search,
-                        isFiltered,
                         chips: filterChips,
                     }}
                     onArchivedChange={(archived) => setUrl({ archived, page: 1 })}
@@ -719,11 +711,11 @@ export default function DonorsPageClient() {
                         rangeDates,
                         page: 1,
                     })}
-                    onStageChange={(stage) => setUrl({ stage, page: 1 })}
+                    onStageChange={(stage) => setUrl({ stage: stage || "all", page: 1 })}
                     onSearchChange={handleSearchChange}
                     onClearAll={clearAllFilters}
                 />
-
+                <TabsContent value={donorType} className="flex-1 space-y-6 overflow-auto p-6">
                 <DonorListCard
                     view={{
                         donorType,
@@ -754,10 +746,9 @@ export default function DonorsPageClient() {
                         />
                     </div>
                 ) : null}
-                    </TabsContent>
-                    <TabsContent value={donorType === "egg" ? "sperm" : "egg"} />
-                </Tabs>
-            </div>
+                </TabsContent>
+                <TabsContent value={donorType === "egg" ? "sperm" : "egg"} />
+            </Tabs>
 
             <CreateDonorDialog
                 donorType={donorType}
@@ -769,10 +760,11 @@ export default function DonorsPageClient() {
                     else closeCreateDialog()
                 }}
                 onClose={closeCreateDialog}
-                onSubmit={handleCreate}
+                onSubmit={(event) => { void handleCreate(event) }}
                 onFieldChange={(field, value) => {
                     setFormValues((current) => ({ ...current, [field]: value }))
                 }}
+                validation={createValidation}
             />
         </div>
     )

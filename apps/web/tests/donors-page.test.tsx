@@ -242,17 +242,81 @@ describe("DonorsPage", () => {
         expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Sperm Donors")
     })
 
-    it("loads archived donors from a URL-backed record-status filter", () => {
+    it("loads archived donors from a URL-backed record-status filter in More Filters", async () => {
         mockSearchParams.set("archive", "archived")
 
         render(<DonorsPage />)
 
-        expect(screen.getByRole("combobox", { name: "Record status" })).toHaveTextContent(
+        expect(screen.getByRole("button", { name: "Remove filter: Archived Donors" })).toBeInTheDocument()
+        expect(screen.queryByRole("combobox", { name: "Filter by record status" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "More Filters" }))
+        expect(await screen.findByRole("combobox", { name: "Filter by record status" })).toHaveTextContent(
             "Archived Donors",
         )
         expect(mockUseDonors).toHaveBeenCalledWith(
             expect.objectContaining({ include_archived: true, archived_only: true }),
         )
+    })
+
+    it("keeps the type tabs above a Stage, Date, More Filters, search toolbar", () => {
+        render(<DonorsPage />)
+
+        const tabs = screen.getByRole("tablist", { name: "Donor type" })
+        const stage = screen.getByRole("combobox", { name: "Filter by stage" })
+        const date = screen.getByRole("button", { name: "Created date range" })
+        const more = screen.getByRole("button", { name: "More Filters" })
+        const search = screen.getByRole("searchbox", { name: "Search donors" })
+        expect(screen.getByRole("heading", { level: 1, name: "Donors" })).toBeInTheDocument()
+        expect(stage).toHaveTextContent("All Stages")
+        expect(tabs.compareDocumentPosition(stage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(stage.compareDocumentPosition(date) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(date.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(more.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(search).toHaveAttribute("placeholder", "Search donors")
+    })
+
+    it("shows the filtered count against the unfiltered total", () => {
+        mockSearchParams.set("q", "maya")
+        mockUseDonors.mockImplementation((filters: { per_page?: number }) =>
+            filters.per_page === 1
+                ? { data: { items: [], total: 42, page: 1, per_page: 1, pages: 42 }, isLoading: false }
+                : { data: { items: [], total: 3, page: 1, per_page: 20, pages: 1 }, isLoading: false },
+        )
+
+        render(<DonorsPage />)
+
+        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent("3 of 42")
+    })
+
+    it("validates donor email inline before calling the API", async () => {
+        render(<DonorsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "New Donor" }))
+        fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Maya Thompson" } })
+        const email = screen.getByLabelText("Email")
+        fireEvent.change(email, { target: { value: "maya-at-example" } })
+        fireEvent.click(screen.getByRole("button", { name: "Create" }))
+
+        expect(await screen.findByText("Enter a valid email address.")).toBeInTheDocument()
+        expect(email).toHaveAttribute("aria-invalid", "true")
+        expect(mockCreateDonor).not.toHaveBeenCalled()
+    })
+
+    it("maps a 422 donor email error to the field", async () => {
+        mockCreateDonor.mockRejectedValue(
+            new ApiError(422, "Unprocessable Entity", "email: value is not a valid email address", [
+                { path: "email", message: "value is not a valid email address: An email address must have an @-sign." },
+            ]),
+        )
+        render(<DonorsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "New Donor" }))
+        fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Maya Thompson" } })
+        fireEvent.change(screen.getByLabelText("Email"), { target: { value: "maya@example.test" } })
+        fireEvent.click(screen.getByRole("button", { name: "Create" }))
+
+        expect(await screen.findByText("Enter a valid email address.")).toBeInTheDocument()
+        expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true")
     })
 
     it("loads the dashboard stuck-donor filter and owner from the URL", () => {
@@ -273,7 +337,7 @@ describe("DonorsPage", () => {
             .toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Remove filter: Assignee: Assigned user" }))
             .toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Reset filters" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Remove filter: Assignee: Assigned user" }))
         expect(mockRouterReplace).toHaveBeenLastCalledWith(

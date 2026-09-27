@@ -101,8 +101,7 @@ function MoreFiltersPopover({
                     variant: "outline",
                     className: cn(
                         "justify-between border-border/70 bg-background/85 shadow-xs backdrop-blur-sm",
-                        active &&
-                            "border-foreground/15 bg-accent/40 text-foreground shadow-[0_14px_30px_-24px_rgba(15,23,42,0.9)]"
+                        active && "border-foreground/15 bg-accent/40 text-foreground shadow-sm"
                     ),
                 })}
             >
@@ -111,7 +110,7 @@ function MoreFiltersPopover({
             </PopoverTrigger>
             <PopoverContent
                 align="end"
-                className="w-[min(24rem,calc(100vw-2rem))] gap-4 border border-border/70 bg-background/95 p-4 shadow-[0_24px_64px_-28px_rgba(15,23,42,0.9)] backdrop-blur-xl"
+                className="w-[min(24rem,calc(100vw-2rem))] gap-4 border border-border/70 bg-background/95 p-4 backdrop-blur-xl"
             >
                 <div className="grid gap-4">{children}</div>
             </PopoverContent>

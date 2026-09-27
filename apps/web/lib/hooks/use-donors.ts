@@ -44,10 +44,11 @@ export function useDonor(id: string | null) {
     })
 }
 
-export function useDonors(filters: DonorFilters) {
+export function useDonors(filters: DonorFilters, options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: donorKeys.list(filters),
         queryFn: () => listDonors(filters),
+        enabled: options.enabled ?? true,
     })
 }
 

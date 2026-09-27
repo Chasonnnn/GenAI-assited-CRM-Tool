@@ -11,6 +11,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
     CheckSquareIcon,
     DownloadIcon,
@@ -29,6 +30,7 @@ import {
 } from "../hooks/useMatchDetailTabData"
 import {
     isSourceFilter,
+    isTabType,
     SOURCE_OPTIONS,
     sourceLabel,
     type SourceFilter,
@@ -109,8 +111,8 @@ function SourceFilterBar({
                     }
                 }}
             >
-                <SelectTrigger className="w-[160px] h-9 text-sm">
-                    <SelectValue placeholder="All Source">
+                <SelectTrigger className="w-[160px] h-9 text-sm" aria-label="Filter by source">
+                    <SelectValue placeholder="All Sources">
                         {(value: string | null) => sourceLabel(isSourceFilter(value) ? value : null)}
                     </SelectValue>
                 </SelectTrigger>
@@ -126,31 +128,25 @@ function SourceFilterBar({
     )
 }
 
-function OverviewTabButtons({
-    activeTab,
-    onTabChange,
-}: Pick<MatchDetailOverviewTabsProps, "activeTab" | "onTabChange">) {
-    const tabs: Array<{ value: TabType; label: string; icon: typeof StickyNoteIcon }> = [
-        { value: "notes", label: "Notes", icon: StickyNoteIcon },
-        { value: "files", label: "Files", icon: FolderIcon },
-        { value: "tasks", label: "Tasks", icon: CheckSquareIcon },
-        { value: "activity", label: "Activity", icon: HistoryIcon },
-    ]
+const OVERVIEW_TABS: Array<{ value: TabType; label: string; icon: typeof StickyNoteIcon }> = [
+    { value: "notes", label: "Notes", icon: StickyNoteIcon },
+    { value: "files", label: "Files", icon: FolderIcon },
+    { value: "tasks", label: "Tasks", icon: CheckSquareIcon },
+    { value: "activity", label: "Activity", icon: HistoryIcon },
+]
 
+// Icons show from xl only: the right column is too narrow for four icon + label tabs below it.
+function OverviewTabList() {
     return (
-        <div className="flex border-b p-1.5 gap-0.5 flex-shrink-0">
-            {tabs.map(({ value, label, icon: Icon }) => (
-                <Button
-                    key={value}
-                    variant={activeTab === value ? "secondary" : "ghost"}
-                    size="sm"
-                    className="h-7 text-sm px-2"
-                    onClick={() => onTabChange(value)}
-                >
-                    <Icon className="size-3.5 mr-1" />
-                    {label}
-                </Button>
-            ))}
+        <div className="shrink-0 border-b px-1.5 pt-1">
+            <TabsList variant="line" className="w-full overflow-x-auto" aria-label="Case work">
+                {OVERVIEW_TABS.map(({ value, label, icon: Icon }) => (
+                    <TabsTrigger key={value} value={value}>
+                        <Icon className="hidden size-3.5 xl:inline" aria-hidden="true" />
+                        {label}
+                    </TabsTrigger>
+                ))}
+            </TabsList>
         </div>
     )
 }
@@ -370,9 +366,9 @@ function ActivityTab({
     )
 }
 
-function ActiveTabContent(props: MatchDetailOverviewTabsProps) {
-    if ((props.activeTab === "notes" && props.canViewNotes === false) || (props.activeTab === "tasks" && props.canViewTasks === false)) return <p className="text-sm text-muted-foreground" role="status">You do not have permission to view these {props.activeTab}.</p>
-    if (props.activeTab === "notes") {
+function TabPanelContent({ tab, ...props }: MatchDetailOverviewTabsProps & { tab: TabType }) {
+    if ((tab === "notes" && props.canViewNotes === false) || (tab === "tasks" && props.canViewTasks === false)) return <p className="text-sm text-muted-foreground" role="status">You do not have permission to view these {tab}.</p>
+    if (tab === "notes") {
         return (
             <NotesTab
                 filteredNotes={props.filteredNotes}
@@ -381,7 +377,7 @@ function ActiveTabContent(props: MatchDetailOverviewTabsProps) {
             />
         )
     }
-    if (props.activeTab === "files") {
+    if (tab === "files") {
         return (
             <FilesTab
                 filteredFiles={props.filteredFiles}
@@ -394,7 +390,7 @@ function ActiveTabContent(props: MatchDetailOverviewTabsProps) {
             />
         )
     }
-    if (props.activeTab === "tasks") {
+    if (tab === "tasks") {
         return (
             <TasksTab
                 filteredTasks={props.filteredTasks}
@@ -413,26 +409,35 @@ function ActiveTabContent(props: MatchDetailOverviewTabsProps) {
 
 export function MatchDetailOverviewTabs(props: MatchDetailOverviewTabsProps) {
     return (
-        <div className="min-w-0 border rounded-lg flex flex-col overflow-hidden">
+        <Tabs
+            value={props.activeTab}
+            onValueChange={(value) => {
+                if (typeof value === "string" && isTabType(value)) props.onTabChange(value)
+            }}
+            className="min-w-0 gap-0 overflow-hidden rounded-lg border"
+        >
             <SourceFilterBar
                 participantKind={props.participantKind ?? "surrogate"}
                 sourceFilter={props.sourceFilter}
                 onSourceFilterChange={props.onSourceFilterChange}
             />
-            <OverviewTabButtons activeTab={props.activeTab} onTabChange={props.onTabChange} />
-            <div className="flex-1 p-3 overflow-y-auto">
-                {props.isLoading ? <p role="status" className="text-sm text-muted-foreground">Loading case work…</p> : props.error ? (
-                    <div role="alert" className="space-y-2 text-sm">
-                        <p>{props.error}</p>
-                        <Button variant="outline" size="sm" onClick={props.onRetry}>Retry</Button>
-                    </div>
-                ) : <ActiveTabContent {...props} />}
-            </div>
+            <OverviewTabList />
+            {/* Each panel renders its own tab: Base UI keeps the previous panel mounted during its exit transition. */}
+            {OVERVIEW_TABS.map(({ value }) => (
+                <TabsContent key={value} value={value} className="overflow-y-auto p-3">
+                    {props.isLoading ? <p role="status" className="text-sm text-muted-foreground">Loading case work…</p> : props.error ? (
+                        <div role="alert" className="space-y-2 text-sm">
+                            <p>{props.error}</p>
+                            <Button variant="outline" size="sm" onClick={props.onRetry}>Retry</Button>
+                        </div>
+                    ) : <TabPanelContent {...props} tab={value} />}
+                </TabsContent>
+            ))}
             {((props.page ?? 1) > 1 || props.hasMore) && <div className="border-t px-3 py-2 flex items-center justify-between gap-2">
                 <Button size="sm" variant="outline" disabled={(props.page ?? 1) <= 1 || props.isLoading} onClick={() => props.onPageChange?.((props.page ?? 1) - 1)}>Previous</Button>
                 <span className="text-xs text-muted-foreground">Page {props.page ?? 1}</span>
                 <Button size="sm" variant="outline" disabled={!props.hasMore || props.isLoading} onClick={() => props.onPageChange?.((props.page ?? 1) + 1)}>Next</Button>
             </div>}
-        </div>
+        </Tabs>
     )
 }
