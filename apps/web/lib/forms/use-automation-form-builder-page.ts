@@ -37,6 +37,7 @@ import {
     schemaToPages,
     type BuilderFormPage,
 } from "@/lib/forms/form-builder-document"
+import { getFormPublicationStatus, hasSameContent } from "@/lib/forms/form-publication-status"
 import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 import { useAutomationFormBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import type { AutomationBuilderState } from "@/lib/forms/use-automation-form-builder-state"
@@ -214,11 +215,16 @@ async function persistAutomationFormPayload({
     return savedForm
 }
 
-function buildSavedState(fingerprint: string, savedForm?: FormRead): Partial<AutomationBuilderState> {
+function buildSavedState(
+    fingerprint: string,
+    schemaFingerprint: string,
+    savedForm?: FormRead,
+): Partial<AutomationBuilderState> {
     return {
         autoSaveStatus: "saved",
         lastSavedAt: savedForm?.updated_at ? new Date(savedForm.updated_at) : new Date(),
         lastSavedFingerprint: fingerprint,
+        lastSavedSchemaFingerprint: schemaFingerprint,
     }
 }
 
@@ -431,7 +437,14 @@ export function useAutomationFormBuilderPage() {
 
     const draftPayload = buildAutomationDraftPayload(pages, state)
     const draftFingerprint = JSON.stringify(draftPayload)
+    const draftSchemaFingerprint = JSON.stringify(draftPayload.form_schema)
     const isDirty = draftFingerprint !== state.lastSavedFingerprint
+    // Publishing copies only form_schema to published_schema; the name, description, and
+    // upload limits are served live from the form row, so they never need a publish.
+    const hasUnpublishedChanges =
+        draftSchemaFingerprint !== state.lastSavedSchemaFingerprint ||
+        !hasSameContent(formData?.form_schema, formData?.published_schema)
+    const publicationStatus = getFormPublicationStatus(state.isPublished, hasUnpublishedChanges)
 
     if (state.hasHydrated && state.baselineFormKey !== formKey) {
         if (!isNewForm && formData?.updated_at) {
@@ -440,6 +453,7 @@ export function useAutomationFormBuilderPage() {
                 baselineFormKey: formKey,
                 lastSavedAt: new Date(formData.updated_at),
                 lastSavedFingerprint: draftFingerprint,
+                lastSavedSchemaFingerprint: draftSchemaFingerprint,
             })
         } else {
             patchState({
@@ -447,6 +461,7 @@ export function useAutomationFormBuilderPage() {
                 baselineFormKey: formKey,
                 lastSavedAt: null,
                 lastSavedFingerprint: draftFingerprint,
+                lastSavedSchemaFingerprint: draftSchemaFingerprint,
             })
         }
     }
@@ -489,7 +504,7 @@ export function useAutomationFormBuilderPage() {
                 router,
                 patchState,
             })
-            patchState(buildSavedState(draftFingerprint, savedForm))
+            patchState(buildSavedState(draftFingerprint, draftSchemaFingerprint, savedForm))
             toast.success("Form saved")
             finishSaving()
         } catch {
@@ -539,7 +554,7 @@ export function useAutomationFormBuilderPage() {
             })
         },
         onSaving: () => patchState({ autoSaveStatus: "saving" }),
-        onSaved: (savedForm) => patchState(buildSavedState(draftFingerprint, savedForm)),
+        onSaved: (savedForm) => patchState(buildSavedState(draftFingerprint, draftSchemaFingerprint, savedForm)),
         onError: () => patchState({ autoSaveStatus: "error" }),
     })
 
@@ -715,7 +730,7 @@ export function useAutomationFormBuilderPage() {
                 router,
                 patchState,
             })
-            patchState(buildSavedState(draftFingerprint, savedForm))
+            patchState(buildSavedState(draftFingerprint, draftSchemaFingerprint, savedForm))
             await publishFormMutation.mutateAsync(savedForm.id)
             patchState({ isPublished: true })
             const intakeLinkResult = await refetchIntakeLinks()
@@ -1026,6 +1041,8 @@ export function useAutomationFormBuilderPage() {
         state,
         patchState,
         autoSaveLabel,
+        publicationStatus,
+        publishDisabled: publicationStatus === "published",
         workspaceProps: {
             leadKind: state.formLeadKind,
             desktopCanvasWidthClass: "max-w-[min(100%,72rem)]",

@@ -180,7 +180,10 @@ export function useUpdatePlatformFormTemplate() {
     return useMutation({
         mutationFn: ({ id, payload }: { id: string; payload: PlatformFormTemplateUpdate }) =>
             updatePlatformFormTemplate(id, payload),
-        onSuccess: (_data, { id }) => {
+        onSuccess: (data, { id }) => {
+            // The response is the full template read. Store it so the builder's draft and
+            // published comparison is current before the refetch lands.
+            queryClient.setQueryData(platformTemplateKeys.formDetail(id), data)
             void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
             void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.formDetail(id) })
         },
@@ -192,7 +195,8 @@ export function usePublishPlatformFormTemplate() {
     return useMutation({
         mutationFn: ({ id, payload }: { id: string; payload: TemplatePublishRequest }) =>
             publishPlatformFormTemplate(id, payload),
-        onSuccess: (_data, { id }) => {
+        onSuccess: (data, { id }) => {
+            queryClient.setQueryData(platformTemplateKeys.formDetail(id), data)
             void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
             void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.formDetail(id) })
         },

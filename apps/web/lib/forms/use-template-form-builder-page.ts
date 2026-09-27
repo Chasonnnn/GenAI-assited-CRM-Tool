@@ -14,6 +14,7 @@ import {
     schemaToPages,
 } from "@/lib/forms/form-builder-document"
 import { normalizePagesForLeadKind, getDonorPublishValidationMessage } from "@/lib/forms/form-lead-kind"
+import { getFormPublicationStatus, hasSameContent } from "@/lib/forms/form-publication-status"
 import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
 import { useTemplateFormBuilderState } from "@/lib/forms/use-template-form-builder-state"
@@ -314,6 +315,12 @@ export function useTemplateFormBuilderPage() {
     const draftPayload = buildTemplateDraftPayload(pages, state)
     const draftFingerprint = JSON.stringify(draftPayload)
     const isDirty = draftFingerprint !== state.lastSavedFingerprint
+    // Template publish copies the whole draft (name, description, schema, settings), so any
+    // unsaved or saved draft difference is unpublished.
+    const publicationStatus = getFormPublicationStatus(
+        state.isPublished,
+        isDirty || !hasSameContent(templateData?.draft, templateData?.published),
+    )
 
     if (state.hasHydrated && state.baselineTemplateKey !== templateKey) {
         if (!isNewForm && templateData?.updated_at) {
@@ -566,6 +573,7 @@ export function useTemplateFormBuilderPage() {
         templateData,
         state,
         patchState,
+        publicationStatus,
         resolvedLogoUrl,
         surrogateFieldMappings,
         workspaceDocument,

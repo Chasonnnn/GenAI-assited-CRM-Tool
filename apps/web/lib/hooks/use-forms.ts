@@ -44,6 +44,7 @@ import {
     type FormTemplateLibraryDetail,
     type FormTemplateUseRequest,
     type FormCreatePayload,
+    type FormRead,
     type FormUpdatePayload,
     type FormFieldMappingItem,
     type FormIntakeLinkCreatePayload,
@@ -157,7 +158,12 @@ export function usePublishForm() {
 
     return useMutation({
         mutationFn: (formId: string) => publishForm(formId),
-        onSuccess: (_result, formId) => {
+        onSuccess: (result, formId) => {
+            // Publish copies the saved draft schema to the live copy. Mirror that before the
+            // refetch lands so the builder does not briefly report unpublished changes.
+            queryClient.setQueryData<FormRead>(formKeys.detail(formId), (form) =>
+                form ? { ...form, status: result.status, published_schema: form.form_schema ?? null } : form,
+            )
             void queryClient.invalidateQueries({ queryKey: formKeys.detail(formId) })
             void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })

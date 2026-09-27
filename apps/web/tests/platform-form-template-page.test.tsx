@@ -412,4 +412,52 @@ describe("PlatformFormTemplatePage", () => {
         }))
     })
 
+    describe("publish state", () => {
+        const liveSchema = {
+            pages: [{ title: "Application", fields: [
+                { key: "full_name", label: "Full Name", type: "text", required: true },
+            ] }],
+            public_title: "Apply today",
+        }
+        // Same content as liveSchema, with every object's keys in a different order.
+        const reorderedLiveSchema = {
+            public_title: "Apply today",
+            pages: [{ fields: [
+                { required: true, type: "text", label: "Full Name", key: "full_name" },
+            ], title: "Application" }],
+        }
+        const buildPublishedTemplate = (draftSchema: Record<string, unknown>) => ({
+            ...buildTemplateData(),
+            status: "published",
+            published_version: 1,
+            draft: { name: "Surrogate Application Form", description: null, schema_json: draftSchema, settings_json: {} },
+            published: { name: "Surrogate Application Form", description: null, schema_json: liveSchema, settings_json: {} },
+        })
+        const header = () => within(screen.getByLabelText("Form name").parentElement as HTMLElement)
+
+        it("shows Published when the saved draft matches the published template", () => {
+            mockTemplateData = buildPublishedTemplate(reorderedLiveSchema)
+            render(<PlatformFormTemplatePage />)
+
+            expect(header().getByText("Published")).toBeInTheDocument()
+        })
+
+        it("shows Unpublished changes when the saved draft differs from the published template", () => {
+            mockTemplateData = buildPublishedTemplate({ ...liveSchema, public_title: "Apply now" })
+            render(<PlatformFormTemplatePage />)
+
+            expect(header().getByText("Unpublished changes")).toBeInTheDocument()
+            expect(header().queryByText("Published")).not.toBeInTheDocument()
+            expect(screen.getByRole("button", { name: /^publish$/i })).toBeEnabled()
+        })
+
+        it("shows Unpublished changes for an unsaved rename of a published template", () => {
+            mockTemplateData = buildPublishedTemplate(liveSchema)
+            render(<PlatformFormTemplatePage />)
+
+            fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed template" } })
+
+            expect(header().getByText("Unpublished changes")).toBeInTheDocument()
+        })
+    })
 })

@@ -48,6 +48,7 @@ type AutomationBuilderState = {
     autoSaveStatus: AutoSaveStatus
     lastSavedAt: Date | null
     lastSavedFingerprint: string
+    lastSavedSchemaFingerprint: string
 }
 
 type AutomationBuilderAction =
@@ -99,6 +100,7 @@ const buildInitialState = (formKey: string, isNewForm: boolean): AutomationBuild
     autoSaveStatus: "idle",
     lastSavedAt: null,
     lastSavedFingerprint: "",
+    lastSavedSchemaFingerprint: "",
 })
 
 function reducer(state: AutomationBuilderState, action: AutomationBuilderAction): AutomationBuilderState {

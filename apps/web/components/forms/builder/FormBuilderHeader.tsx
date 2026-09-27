@@ -5,6 +5,10 @@ import { ArrowLeftIcon, Loader2Icon, Trash2Icon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+    FORM_PUBLICATION_STATUS_LABELS,
+    type FormPublicationStatus,
+} from "@/lib/forms/form-publication-status"
 
 type DeleteAction = {
     disabled?: boolean
@@ -16,7 +20,7 @@ type DeleteAction = {
 type FormBuilderHeaderProps = {
     backAriaLabel: string
     formName: string
-    isPublished: boolean
+    publicationStatus: FormPublicationStatus
     isPublishing: boolean
     isSaving: boolean
     autoSaveLabel: string | null
@@ -33,7 +37,7 @@ type FormBuilderHeaderProps = {
 export function FormBuilderHeader({
     backAriaLabel,
     formName,
-    isPublished,
+    publicationStatus,
     isPublishing,
     isSaving,
     autoSaveLabel,
@@ -64,8 +68,11 @@ export function FormBuilderHeader({
                     placeholder="Form name..."
                     className="h-8 min-w-0 flex-1 border-none bg-transparent px-0 text-base font-medium focus-visible:ring-0 sm:max-w-xs lg:w-72 lg:flex-none"
                 />
-                <Badge variant={isPublished ? "default" : "secondary"} className="h-5 rounded-full px-2 text-[11px]">
-                    {isPublished ? "Published" : "Draft"}
+                <Badge
+                    variant={publicationStatus === "published" ? "default" : "secondary"}
+                    className="h-5 rounded-full px-2 text-[11px]"
+                >
+                    {FORM_PUBLICATION_STATUS_LABELS[publicationStatus]}
                 </Badge>
                 {contextBadgeLabel ? (
                     <Badge variant="outline" className="h-5 rounded-full px-2 text-[11px]">

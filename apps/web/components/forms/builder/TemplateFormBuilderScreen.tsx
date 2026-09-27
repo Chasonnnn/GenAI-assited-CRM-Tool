@@ -78,7 +78,7 @@ export function TemplateFormBuilderScreen({
             <FormBuilderHeader
                 backAriaLabel="Back to form templates"
                 formName={controller.state.formName}
-                isPublished={controller.state.isPublished}
+                publicationStatus={controller.publicationStatus}
                 isPublishing={controller.state.isPublishing}
                 isSaving={controller.state.isSaving}
                 autoSaveLabel={controller.autoSaveLabel}

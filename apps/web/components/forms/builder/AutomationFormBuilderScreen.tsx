@@ -49,7 +49,7 @@ export function AutomationFormBuilderScreen({
             <FormBuilderHeader
                 backAriaLabel="Back to forms"
                 formName={controller.state.formName}
-                isPublished={controller.state.isPublished}
+                publicationStatus={controller.publicationStatus}
                 isPublishing={controller.state.isPublishing}
                 isSaving={controller.state.isSaving}
                 autoSaveLabel={controller.autoSaveLabel}
@@ -59,7 +59,7 @@ export function AutomationFormBuilderScreen({
                 onFormNameChange={controller.onFormNameChange}
                 onSave={controller.handleSave}
                 onPublish={controller.handlePublish}
-                publishDisabled={controller.state.isPublished}
+                publishDisabled={controller.publishDisabled}
             />
 
             <FormBuilderWorkspaceTabs
