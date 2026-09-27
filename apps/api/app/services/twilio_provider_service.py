@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
+
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
 
 from app.db.models import TwilioSettings
 from app.schemas.twilio import TwilioSettingsTestRequest, TwilioSettingsTestResponse
-from app.services import twilio_settings_service
+from app.services import twilio_settings_service, twilio_transport
+
+_TOLL_FREE_PATTERN = re.compile(r"^\+1(800|833|844|855|866|877|888)\d{7}$")
 
 
 def _sanitized_error_code(exc: TwilioRestException) -> str:
@@ -57,6 +61,7 @@ def test_configuration(
 
     client = Client(api_key_sid, api_secret, account_sid)
     route_statuses: dict[str, str] = {}
+    error = None
     try:
         account = client.api.accounts(account_sid).fetch()
         account_status = str(account.status)
@@ -81,7 +86,13 @@ def test_configuration(
             else:
                 sender = None
             if not service_sid or not sender:
-                route_statuses[route.purpose] = "not_configured"
+                if not (
+                    route.purpose == "promotional"
+                    and not route.enabled
+                    and not service_sid
+                    and not sender
+                ):
+                    route_statuses[route.purpose] = "not_configured"
                 route_capabilities[route.purpose] = {
                     "service_verified": False,
                     "sender_in_pool": False,
@@ -106,16 +117,38 @@ def test_configuration(
             sender_capabilities = {
                 str(item).upper() for item in (getattr(sender_resource, "capabilities", None) or [])
             }
-            campaign_statuses = {
-                str(item.campaign_status).upper()
-                for item in service_context.us_app_to_person.list(limit=20)
-                if getattr(item, "campaign_status", None)
-            }
-            a2p_status = (
-                "VERIFIED"
-                if "VERIFIED" in campaign_statuses
-                else (sorted(campaign_statuses)[0] if campaign_statuses else "UNCONFIGURED")
-            )
+            toll_free = bool(_TOLL_FREE_PATTERN.fullmatch(sender))
+            toll_free_status = None
+            a2p_status = None
+            if toll_free:
+                if sender_resource is not None:
+                    verification = twilio_transport.fetch_toll_free_verification(
+                        credentials=twilio_transport.TwilioCredentials(
+                            account_sid=account_sid,
+                            api_key_sid=api_key_sid,
+                            api_secret=api_secret,
+                        ),
+                        phone_number_sid=getattr(sender_resource, "sid", None),
+                    )
+                    toll_free_status = verification.status
+                    error = error or verification.error
+                registration_verified = toll_free_status == "TWILIO_APPROVED"
+                sender_type = "toll_free"
+            else:
+                campaign_statuses = {
+                    str(item.campaign_status).upper()
+                    for item in service_context.us_app_to_person.list(limit=20)
+                    if getattr(item, "campaign_status", None)
+                }
+                a2p_status = (
+                    "VERIFIED"
+                    if "VERIFIED" in campaign_statuses
+                    else (sorted(campaign_statuses)[0] if campaign_statuses else "UNCONFIGURED")
+                )
+                registration_verified = a2p_status == "VERIFIED"
+                sender_type = (
+                    "10dlc" if sender.startswith("+1") and registration_verified else "unknown"
+                )
             inbound_url = twilio_settings_service.route_webhook_url(route.webhook_id, "inbound")
             status_url = twilio_settings_service.route_webhook_url(route.webhook_id, "status")
             route_capabilities[route.purpose] = {
@@ -123,10 +156,9 @@ def test_configuration(
                 "sender_in_pool": sender_resource is not None,
                 "sms": "SMS" in sender_capabilities,
                 "mms": "MMS" in sender_capabilities,
-                "sender_type": (
-                    "10dlc" if sender.startswith("+1") and a2p_status == "VERIFIED" else "unknown"
-                ),
+                "sender_type": sender_type,
                 "a2p_status": a2p_status,
+                **({"toll_free_verification_status": toll_free_status} if toll_free else {}),
                 "inbound_webhook_matches": (
                     fetched.inbound_request_url == inbound_url
                     and str(fetched.inbound_method).upper() == "POST"
@@ -141,7 +173,7 @@ def test_configuration(
                         service_verified,
                         sender_resource is not None,
                         "SMS" in sender_capabilities,
-                        a2p_status == "VERIFIED",
+                        registration_verified,
                     )
                 )
                 else "mismatch"
@@ -166,7 +198,7 @@ def test_configuration(
         twilio_edition=settings.twilio_edition,
         capabilities=capabilities,
         route_capabilities=route_capabilities,
-        error=None,
+        error=error,
         warning=(
             None
             if auth_token

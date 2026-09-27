@@ -167,6 +167,10 @@ class TwilioRouteReadiness(BaseModel):
     can_send_sms: bool
     can_send_mms: bool
     can_receive: bool
+    sender_type: Literal["10dlc", "toll_free", "unknown"] | None = None
+    toll_free_verification_status: (
+        Literal["PENDING_REVIEW", "IN_REVIEW", "TWILIO_APPROVED", "TWILIO_REJECTED"] | None
+    ) = None
     issues: list[str] = Field(default_factory=list)
 
 

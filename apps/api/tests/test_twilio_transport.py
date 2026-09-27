@@ -129,6 +129,91 @@ def _assert_restricted_client_call(factory: _ClientFactory) -> None:
     assert http_client.session.adapters["https://"].max_retries.total == 0
 
 
+@pytest.mark.parametrize(
+    "status", ["TWILIO_APPROVED", "PENDING_REVIEW", "IN_REVIEW", "TWILIO_REJECTED", None]
+)
+def test_toll_free_lookup_uses_bounded_authenticated_get(monkeypatch, status):
+    import json
+
+    from twilio.http.response import Response
+
+    from app.services import twilio_transport
+
+    phone_sid = "PN" + "7" * 32
+    client = twilio_transport._client(_credentials())
+    calls = []
+
+    def request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        return Response(
+            200,
+            json.dumps(
+                {
+                    "verifications": [
+                        {
+                            "tollfree_phone_number_sid": phone_sid,
+                            "status": status,
+                            "rejection_reason": BODY + API_SECRET,
+                            "error_code": 30500,
+                            "edit_allowed": True,
+                        }
+                    ]
+                    if status
+                    else [],
+                    "meta": {"key": "verifications", "next_page_url": None},
+                }
+            ),
+        )
+
+    monkeypatch.setattr(client.http_client, "request", request)
+    factory = _ClientFactory(client)
+    monkeypatch.setattr(twilio_transport, "Client", factory)
+    result = twilio_transport.fetch_toll_free_verification(
+        credentials=_credentials(), phone_number_sid=phone_sid
+    )
+    _assert_restricted_client_call(factory)
+    assert len(calls) == 1
+    method, url, kwargs = calls[0]
+    assert method == "GET"
+    assert url == "https://messaging.twilio.com/v1/Tollfree/Verifications"
+    assert kwargs["params"] == {"TollfreePhoneNumberSid": phone_sid, "PageSize": 2}
+    assert kwargs["auth"] == (API_KEY_SID, API_SECRET)
+    assert result.status == status
+    assert result.error is None
+    assert all(sensitive not in repr(result) for sensitive in (BODY, API_SECRET, phone_sid))
+
+
+@pytest.mark.parametrize("invalid", ["wrong_number", "unknown_status", "duplicate", "invalid_sid"])
+def test_toll_free_lookup_rejects_unbound_or_invalid_verification(monkeypatch, invalid):
+    from app.services import twilio_transport
+
+    phone_sid = "PN" + "7" * 32
+    record = SimpleNamespace(tollfree_phone_number_sid=phone_sid, status="TWILIO_APPROVED")
+    if invalid == "wrong_number":
+        record.tollfree_phone_number_sid = "PN" + "8" * 32
+    elif invalid == "unknown_status":
+        record.status = BODY + API_SECRET
+    records = [record, record] if invalid == "duplicate" else [record]
+    client = SimpleNamespace(
+        messaging=SimpleNamespace(
+            v1=SimpleNamespace(
+                tollfree_verifications=SimpleNamespace(list=lambda **_kwargs: records)
+            )
+        )
+    )
+    factory = _ClientFactory(client)
+    monkeypatch.setattr(twilio_transport, "Client", factory)
+    result = twilio_transport.fetch_toll_free_verification(
+        credentials=_credentials(),
+        phone_number_sid="invalid" if invalid == "invalid_sid" else phone_sid,
+    )
+    assert result.status is None
+    assert result.error == "twilio_invalid_provider_response"
+    assert BODY not in repr(result) and API_SECRET not in repr(result)
+    if invalid == "invalid_sid":
+        assert factory.calls == []
+
+
 def test_send_sms_uses_restricted_key_and_exact_sender_with_messaging_service(monkeypatch):
     from app.services import twilio_transport
 

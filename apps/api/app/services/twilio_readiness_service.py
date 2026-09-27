@@ -120,14 +120,18 @@ def route_send_blockers(
             f"{route.purpose}_advanced_opt_out_unverified",
             "Advanced Opt-Out has not been proven by a signed Twilio OptOutType webhook.",
         )
-    if route.consent_management_status != "available":
+    evidence = route.capability_evidence or {}
+    provider = evidence.get("provider") if isinstance(evidence.get("provider"), dict) else {}
+    toll_free = provider.get("sender_type") == "toll_free"
+    # Carriers enforce toll-free STOP; SMS START/UNSTOP re-opt is handled locally.
+    # Remove this exemption when the platform adopts Consent API toll-free re-opt
+    # (supported by Twilio since 2026-08-12).
+    if not toll_free and route.consent_management_status != "available":
         block(
             f"{route.purpose}_consent_api_unavailable",
             "Consent Management API access has not been proven by a successful synchronized upsert.",
         )
 
-    evidence = route.capability_evidence or {}
-    provider = evidence.get("provider") if isinstance(evidence.get("provider"), dict) else {}
     checked_at = provider.get("checked_at")
     try:
         checked = datetime.fromisoformat(str(checked_at)) if checked_at else None
@@ -156,7 +160,13 @@ def route_send_blockers(
         for fact, message in required_provider_facts.items():
             if provider.get(fact) is not True:
                 block(f"{route.purpose}_{fact}_unverified", message)
-        if str(provider.get("a2p_status") or "").upper() != "VERIFIED":
+        if toll_free:
+            if provider.get("toll_free_verification_status") != "TWILIO_APPROVED":
+                block(
+                    f"{route.purpose}_toll_free_unverified",
+                    "The Twilio Toll-Free Verification is not TWILIO_APPROVED.",
+                )
+        elif str(provider.get("a2p_status") or "").upper() != "VERIFIED":
             block(
                 f"{route.purpose}_a2p_unverified",
                 "The Twilio A2P campaign is not VERIFIED.",
@@ -235,12 +245,16 @@ def refresh_readiness(
                 "checked_at": checked_at,
                 "settings_version": expected_settings_version,
             }
-            provider_a2p_status = str(provider_evidence.get("a2p_status") or "").upper()
-            route.a2p_status = (
-                "approved"
-                if provider_a2p_status == "VERIFIED"
-                else ("rejected" if provider_a2p_status == "FAILED" else "pending")
-            )
+            # Toll-free senders and unconfigured routes have no A2P campaign status.
+            if provider_evidence.get("a2p_status") is None:
+                route.a2p_status = "unconfigured"
+            else:
+                provider_a2p_status = str(provider_evidence.get("a2p_status") or "").upper()
+                route.a2p_status = (
+                    "approved"
+                    if provider_a2p_status == "VERIFIED"
+                    else ("rejected" if provider_a2p_status == "FAILED" else "pending")
+                )
         route.capability_evidence = evidence
         route.updated_at = datetime.now(UTC)
     db.commit()
@@ -348,6 +362,7 @@ def get_readiness(db: Session, organization_id: uuid.UUID) -> TwilioReadinessRes
         provider_capability_evidence = {}
 
     route_readiness: dict = {}
+    skipped_purposes: set[str] = set()
     for route in settings.routes:
         configured = bool(route.messaging_service_sid_encrypted and route.sender_phone_encrypted)
         if not configured:
@@ -358,6 +373,14 @@ def get_readiness(db: Session, organization_id: uuid.UUID) -> TwilioReadinessRes
                 can_receive=False,
                 issues=["Messaging Service and sender are not configured."],
             )
+            if (
+                route.purpose == "promotional"
+                and not route.enabled
+                and not route.messaging_service_sid_encrypted
+                and not route.sender_phone_encrypted
+            ):
+                skipped_purposes.add(route.purpose)
+                continue
             code = f"{route.purpose}_route_missing"
             if code not in {issue.code for issue in issues}:
                 _append_issue(
@@ -388,6 +411,8 @@ def get_readiness(db: Session, organization_id: uuid.UUID) -> TwilioReadinessRes
                 and provider.get("sender_in_pool") is True
                 and provider.get("inbound_webhook_matches") is True
             ),
+            sender_type=provider.get("sender_type"),
+            toll_free_verification_status=provider.get("toll_free_verification_status"),
             issues=route_issues,
         )
 
@@ -414,9 +439,11 @@ def get_readiness(db: Session, organization_id: uuid.UUID) -> TwilioReadinessRes
         overall_status = "not_configured"
     elif provider_status != "ready":
         overall_status = provider_status
-    elif any(route.status != "ready" for route in route_readiness.values()) or any(
-        issue.severity == "error" for issue in issues
-    ):
+    elif any(
+        route.status != "ready"
+        for purpose, route in route_readiness.items()
+        if purpose not in skipped_purposes
+    ) or any(issue.severity == "error" for issue in issues):
         overall_status = "blocked"
     elif queue.status != "ready" or reconciliation.status != "ready":
         overall_status = "action_required"

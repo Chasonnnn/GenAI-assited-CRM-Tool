@@ -1,13 +1,431 @@
 """Cache-only readiness contracts for organization Twilio messaging."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from threading import Barrier, Lock, Thread
 from time import sleep
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
+
 from app.db.enums import JobType
 from app.db.models import Job, Organization, TwilioRoute, TwilioSettings
+
+
+def _route_by_purpose(settings: TwilioSettings, purpose: str) -> TwilioRoute:
+    return next(route for route in settings.routes if route.purpose == purpose)
+
+
+def _configured_toll_free_settings(organization_id):
+    from app.services import twilio_settings_service
+
+    encrypt = twilio_settings_service.encrypt_credential
+    settings = TwilioSettings(
+        organization_id=organization_id,
+        enabled=True,
+        current_version=1,
+        account_sid_encrypted=encrypt("AC" + "1" * 32),
+        api_key_sid_encrypted=encrypt("SK" + "2" * 32),
+        api_secret_encrypted=encrypt("private-api-secret"),
+        auth_token_encrypted=encrypt("private-auth-token"),
+        legal_messaging_brand="Example Agency",
+        operational_disclosure="Operational disclosure",
+        sms_terms_url="https://example.org/terms",
+        privacy_policy_url="https://example.org/privacy",
+        support_contact="help@example.org",
+        expected_frequency="Message frequency varies",
+        counsel_approved_at=datetime.now(UTC),
+        phi_enabled=False,
+    )
+    settings.routes = [
+        TwilioRoute(
+            organization_id=settings.organization_id,
+            purpose=purpose,
+            webhook_id=uuid4().hex,
+            enabled=purpose == "operational",
+            a2p_status="unconfigured",
+            advanced_opt_out_status="verified",
+            consent_management_status="unknown",
+        )
+        for purpose in ("promotional", "operational")
+    ]
+    route = _route_by_purpose(settings, "operational")
+    route.messaging_service_sid_encrypted = encrypt("MG" + "3" * 32)
+    route.sender_phone_encrypted = encrypt("+18005550199")
+    route.capability_evidence = {
+        "provider": {
+            "account_active": True,
+            "service_verified": True,
+            "sender_in_pool": True,
+            "sms": True,
+            "mms": True,
+            "sender_type": "toll_free",
+            "a2p_status": None,
+            "toll_free_verification_status": "TWILIO_APPROVED",
+            "inbound_webhook_matches": True,
+            "status_callback_matches": True,
+            "checked_at": datetime.now(UTC).isoformat(),
+            "settings_version": settings.current_version,
+        },
+    }
+    return settings
+
+
+@pytest.fixture
+def toll_free_settings(monkeypatch):
+    monkeypatch.setenv("MESSAGING_DELIVERY_DISPATCH_ENABLED", "true")
+    return _configured_toll_free_settings(uuid4())
+
+
+@pytest.mark.parametrize("consent_status", ["unknown", "unavailable", "available"])
+def test_approved_toll_free_does_not_require_a2p_or_consent_api(toll_free_settings, consent_status):
+    from app.services.twilio_readiness_service import route_send_blockers
+
+    route = _route_by_purpose(toll_free_settings, "operational")
+    route.consent_management_status = consent_status
+    assert route_send_blockers(toll_free_settings, route) == []
+
+
+@pytest.mark.parametrize("status", ["PENDING_REVIEW", "IN_REVIEW", "TWILIO_REJECTED", None])
+def test_toll_free_requires_approved_verification(toll_free_settings, status):
+    from app.services.twilio_readiness_service import route_send_blockers
+
+    route = _route_by_purpose(toll_free_settings, "operational")
+    route.capability_evidence["provider"]["toll_free_verification_status"] = status
+    # An approved 10DLC campaign must not authorize a toll-free sender.
+    route.capability_evidence["provider"]["a2p_status"] = "VERIFIED"
+    assert [code for code, _ in route_send_blockers(toll_free_settings, route)] == [
+        "operational_toll_free_unverified"
+    ]
+
+
+@pytest.mark.parametrize("fence", ["age", "version"])
+def test_toll_free_approval_requires_fresh_version_matched_evidence(toll_free_settings, fence):
+    from app.services.twilio_readiness_service import route_send_blockers
+
+    route = _route_by_purpose(toll_free_settings, "operational")
+    if fence == "age":
+        route.capability_evidence["provider"]["checked_at"] = (
+            datetime.now(UTC) - timedelta(hours=25)
+        ).isoformat()
+    else:
+        route.capability_evidence["provider"]["settings_version"] = 0
+    assert "operational_provider_evidence_stale" in dict(
+        route_send_blockers(toll_free_settings, route)
+    )
+
+
+@pytest.mark.parametrize(
+    "target,field,value,code",
+    [
+        ("route", "advanced_opt_out_status", "enabled", "operational_advanced_opt_out_unverified"),
+        ("settings", "counsel_approved_at", None, "counsel_approval_missing"),
+        ("settings", "sms_terms_url", None, "public_legal_urls_missing"),
+        (
+            "env",
+            "MESSAGING_DELIVERY_DISPATCH_ENABLED",
+            "false",
+            "messaging_dispatch_worker_disabled",
+        ),
+    ],
+)
+def test_toll_free_keeps_other_send_gates(
+    toll_free_settings, monkeypatch, target, field, value, code
+):
+    from app.services.twilio_readiness_service import route_send_blockers
+
+    route = _route_by_purpose(toll_free_settings, "operational")
+    if target == "env":
+        monkeypatch.setenv(field, value)
+    else:
+        setattr(route if target == "route" else toll_free_settings, field, value)
+    assert code in dict(route_send_blockers(toll_free_settings, route))
+
+
+def test_10dlc_still_requires_a2p_and_consent_api(toll_free_settings):
+    from app.services.twilio_readiness_service import route_send_blockers
+
+    route = _route_by_purpose(toll_free_settings, "operational")
+    route.capability_evidence["provider"]["sender_type"] = "10dlc"
+    assert set(dict(route_send_blockers(toll_free_settings, route))) == {
+        "operational_a2p_unverified",
+        "operational_consent_api_unavailable",
+    }
+
+
+def _mock_toll_free_provider(monkeypatch, settings, *, status="TWILIO_APPROVED", error=None):
+    from app.services import twilio_provider_service, twilio_settings_service, twilio_transport
+
+    route = _route_by_purpose(settings, "operational")
+    calls = []
+    service_sid = twilio_settings_service.decrypt_credential(route.messaging_service_sid_encrypted)
+
+    def list_verifications(**kwargs):
+        calls.append(kwargs)
+        if error:
+            raise error
+        return (
+            [SimpleNamespace(tollfree_phone_number_sid="PN" + "4" * 32, status=status)]
+            if status is not None
+            else []
+        )
+
+    def no_campaign_query(**_kwargs):
+        raise AssertionError("Toll-free verification must not query 10DLC campaigns")
+
+    service = SimpleNamespace(
+        fetch=lambda: SimpleNamespace(
+            sid=service_sid,
+            inbound_request_url=twilio_settings_service.route_webhook_url(
+                route.webhook_id, "inbound"
+            ),
+            inbound_method="POST",
+            use_inbound_webhook_on_number=False,
+            status_callback=twilio_settings_service.route_webhook_url(route.webhook_id, "status"),
+        ),
+        phone_numbers=SimpleNamespace(
+            list=lambda **_kwargs: [
+                SimpleNamespace(
+                    sid="PN" + "4" * 32, phone_number="+18005550199", capabilities=["SMS"]
+                )
+            ]
+        ),
+        us_app_to_person=SimpleNamespace(list=no_campaign_query),
+    )
+    client = SimpleNamespace(
+        api=SimpleNamespace(
+            accounts=lambda _sid: SimpleNamespace(fetch=lambda: SimpleNamespace(status="active"))
+        ),
+        messaging=SimpleNamespace(
+            v1=SimpleNamespace(
+                services=lambda _sid: service,
+                tollfree_verifications=SimpleNamespace(list=list_verifications),
+            )
+        ),
+    )
+    monkeypatch.setattr(twilio_provider_service, "Client", lambda *_args, **_kwargs: client)
+    monkeypatch.setattr(twilio_transport, "Client", lambda *_args, **_kwargs: client)
+    return calls
+
+
+@pytest.mark.parametrize(
+    "status", ["TWILIO_APPROVED", "PENDING_REVIEW", "IN_REVIEW", "TWILIO_REJECTED", None]
+)
+def test_provider_checks_exact_toll_free_number_without_promotional_route(
+    toll_free_settings, monkeypatch, status
+):
+    from app.services import twilio_provider_service
+
+    calls = _mock_toll_free_provider(monkeypatch, toll_free_settings, status=status)
+    result = twilio_provider_service.test_configuration(toll_free_settings)
+    assert result.valid is (status == "TWILIO_APPROVED")
+    assert result.error is None
+    assert calls == [{"tollfree_phone_number_sid": "PN" + "4" * 32, "limit": 2}]
+    provider = result.route_capabilities["operational"]
+    assert provider["sender_type"] == "toll_free"
+    assert provider["toll_free_verification_status"] == status
+    assert provider["a2p_status"] is None
+
+
+@pytest.mark.parametrize("failure", ["rest", "timeout"])
+def test_toll_free_api_failure_revokes_approval_without_sensitive_output(
+    db, test_org, toll_free_settings, monkeypatch, caplog, failure
+):
+    from requests.exceptions import ReadTimeout
+    from twilio.base.exceptions import TwilioRestException
+
+    from app.services import twilio_readiness_service
+
+    settings = toll_free_settings
+    settings.organization_id = test_org.id
+    for route in settings.routes:
+        route.organization_id = test_org.id
+    db.add(settings)
+    db.commit()
+    private = "private-api-secret private-auth-token +18005550199"
+    error = (
+        TwilioRestException(status=403, uri=private, msg=private, code=20003)
+        if failure == "rest"
+        else ReadTimeout(private)
+    )
+    _mock_toll_free_provider(monkeypatch, settings, error=error)
+    assert twilio_readiness_service.refresh_readiness(
+        db, organization_id=test_org.id, expected_settings_version=settings.current_version
+    )
+    snapshot = _route_by_purpose(settings, "operational").capability_evidence["readiness"]
+    assert snapshot["error_code"] == (
+        "twilio_20003" if failure == "rest" else "twilio_request_failed"
+    )
+    assert "operational_toll_free_unverified" in dict(
+        twilio_readiness_service.route_send_blockers(
+            settings, _route_by_purpose(settings, "operational")
+        )
+    )
+    assert (
+        not twilio_readiness_service.get_readiness(db, test_org.id)
+        .provider.routes["operational"]
+        .can_send_sms
+    )
+    for sensitive in private.split():
+        assert (
+            sensitive
+            not in str(_route_by_purpose(settings, "operational").capability_evidence) + caplog.text
+        )
+
+
+async def test_operational_only_toll_free_readiness_is_scoped_to_authenticated_org(
+    db, test_org, authed_client, toll_free_settings, monkeypatch
+):
+    from app.services import twilio_readiness_service
+
+    settings = toll_free_settings
+    settings.organization_id = test_org.id
+    for route in settings.routes:
+        route.organization_id = test_org.id
+    db.add(settings)
+    db.commit()
+    _mock_toll_free_provider(monkeypatch, settings)
+    assert twilio_readiness_service.refresh_readiness(
+        db, organization_id=test_org.id, expected_settings_version=settings.current_version
+    )
+    assert _route_by_purpose(settings, "operational").a2p_status == "unconfigured"
+    assert _route_by_purpose(settings, "promotional").a2p_status == "unconfigured"
+    response = await authed_client.get("/twilio/readiness")
+    assert response.status_code == 200
+    ready = response.json()
+    assert ready["overall_status"] == "ready"
+    assert ready["issues"] == []
+    operational = ready["provider"]["routes"]["operational"]
+    assert operational["can_send_sms"] is operational["can_receive"] is True
+    assert operational["sender_type"] == "toll_free"
+    assert operational["toll_free_verification_status"] == "TWILIO_APPROVED"
+    assert ready["provider"]["routes"]["promotional"]["status"] == "not_configured"
+
+    other = Organization(id=uuid4(), name="Other Agency", slug=f"other-{uuid4().hex}")
+    db.add(other)
+    db.flush()
+    other_settings = _configured_toll_free_settings(other.id)
+    db.add(other_settings)
+    db.commit()
+    _mock_toll_free_provider(monkeypatch, other_settings, status="TWILIO_REJECTED")
+    assert twilio_readiness_service.refresh_readiness(
+        db, organization_id=other.id, expected_settings_version=other_settings.current_version
+    )
+    # Org B's rejection cannot block org A's approved route.
+    assert (await authed_client.get("/twilio/readiness")).json() == ready
+    blocked = twilio_readiness_service.get_readiness(db, other.id)
+    assert blocked.overall_status == "blocked"
+    assert blocked.provider.routes["operational"].can_send_sms is False
+    assert blocked.provider.routes["operational"].toll_free_verification_status == "TWILIO_REJECTED"
+    assert "operational_toll_free_unverified" in {issue.code for issue in blocked.issues}
+
+    # Refreshing org A's approval cannot authorize org B's rejected route.
+    _mock_toll_free_provider(monkeypatch, settings)
+    assert twilio_readiness_service.refresh_readiness(
+        db, organization_id=test_org.id, expected_settings_version=settings.current_version
+    )
+    assert twilio_readiness_service.get_readiness(db, other.id) == blocked
+    current = (await authed_client.get("/twilio/readiness")).json()
+    assert current["overall_status"] == "ready"
+    assert current["provider"]["routes"]["operational"] == operational
+
+
+@pytest.mark.parametrize("status", ["TWILIO_APPROVED", "PENDING_REVIEW", "TWILIO_REJECTED"])
+def test_toll_free_refresh_clears_previous_10dlc_status(
+    db, test_org, toll_free_settings, monkeypatch, status
+):
+    from app.services import twilio_readiness_service, twilio_settings_service
+
+    settings = toll_free_settings
+    settings.organization_id = test_org.id
+    for route in settings.routes:
+        route.organization_id = test_org.id
+    route = _route_by_purpose(settings, "operational")
+    route.a2p_status = "approved"
+    db.add(settings)
+    db.commit()
+    _mock_toll_free_provider(monkeypatch, settings, status=status)
+
+    assert twilio_readiness_service.refresh_readiness(
+        db, organization_id=test_org.id, expected_settings_version=settings.current_version
+    )
+
+    db.refresh(route)
+    assert route.a2p_status == "unconfigured"
+    assert route.capability_evidence["provider"]["toll_free_verification_status"] == status
+    projected = twilio_settings_service.project_settings(settings)
+    assert projected.routes["operational"].a2p_status == "unconfigured"
+
+
+@pytest.mark.parametrize("purpose", ["operational", "promotional"])
+def test_overall_readiness_includes_configured_route_status(
+    db, test_org, toll_free_settings, monkeypatch, purpose
+):
+    from copy import deepcopy
+
+    from app.services import twilio_readiness_service
+
+    settings = toll_free_settings
+    settings.organization_id = test_org.id
+    for route in settings.routes:
+        route.organization_id = test_org.id
+    db.add(settings)
+    db.commit()
+    _mock_toll_free_provider(monkeypatch, settings)
+    assert twilio_readiness_service.refresh_readiness(
+        db, organization_id=test_org.id, expected_settings_version=settings.current_version
+    )
+    operational = _route_by_purpose(settings, "operational")
+    route = _route_by_purpose(settings, purpose)
+    route.enabled = True
+    route.messaging_service_sid_encrypted = operational.messaging_service_sid_encrypted
+    route.sender_phone_encrypted = operational.sender_phone_encrypted
+    route.capability_evidence = deepcopy(operational.capability_evidence)
+    settings.promotional_disclosure = "Promotional disclosure"
+    route.advanced_opt_out_status = "enabled"
+    db.commit()
+    # A blocked route must still block overall readiness if summary issues are omitted.
+    monkeypatch.setattr(twilio_readiness_service, "_append_issue", lambda *_args, **_kwargs: None)
+
+    readiness = twilio_readiness_service.get_readiness(db, test_org.id)
+
+    assert readiness.issues == []
+    assert readiness.provider.status == "ready"
+    assert readiness.provider.routes[purpose].status == "blocked"
+    assert readiness.overall_status == "blocked"
+
+
+@pytest.mark.parametrize("partial", ["enabled", "service", "sender"])
+def test_incomplete_promotional_route_still_blocks_readiness(
+    db, test_org, toll_free_settings, monkeypatch, partial
+):
+    from app.services import twilio_provider_service, twilio_readiness_service
+
+    settings = toll_free_settings
+    settings.organization_id = test_org.id
+    for route in settings.routes:
+        route.organization_id = test_org.id
+    promotional = _route_by_purpose(settings, "promotional")
+    if partial == "enabled":
+        promotional.enabled = True
+    elif partial == "service":
+        promotional.messaging_service_sid_encrypted = _route_by_purpose(
+            settings, "operational"
+        ).messaging_service_sid_encrypted
+    else:
+        promotional.sender_phone_encrypted = _route_by_purpose(
+            settings, "operational"
+        ).sender_phone_encrypted
+    db.add(settings)
+    db.commit()
+    _mock_toll_free_provider(monkeypatch, settings)
+    assert twilio_provider_service.test_configuration(settings).valid is False
+    twilio_readiness_service.refresh_readiness(
+        db, organization_id=test_org.id, expected_settings_version=settings.current_version
+    )
+    readiness = twilio_readiness_service.get_readiness(db, test_org.id)
+    assert readiness.overall_status == "blocked"
+    assert "promotional_route_missing" in {issue.code for issue in readiness.issues}
 
 
 async def test_get_twilio_readiness_is_local_only_and_not_configured_by_default(
@@ -49,6 +467,8 @@ async def test_get_twilio_readiness_is_local_only_and_not_configured_by_default(
                 "can_send_sms": False,
                 "can_send_mms": False,
                 "can_receive": False,
+                "sender_type": None,
+                "toll_free_verification_status": None,
                 "issues": ["Messaging Service and sender are not configured."],
             },
             "promotional": {
@@ -56,6 +476,8 @@ async def test_get_twilio_readiness_is_local_only_and_not_configured_by_default(
                 "can_send_sms": False,
                 "can_send_mms": False,
                 "can_receive": False,
+                "sender_type": None,
+                "toll_free_verification_status": None,
                 "issues": ["Messaging Service and sender are not configured."],
             },
         },
@@ -79,7 +501,6 @@ async def test_get_twilio_readiness_is_local_only_and_not_configured_by_default(
         "twilio_disabled",
         "twilio_credentials_missing",
         "operational_route_missing",
-        "promotional_route_missing",
     }
 
 

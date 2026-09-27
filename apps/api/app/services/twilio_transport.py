@@ -34,6 +34,13 @@ _E164_PATTERN = re.compile(r"^\+[1-9][0-9]{1,14}$")
 _MESSAGE_SID_PATTERN = re.compile(r"^(?:SM|MM)[0-9A-Za-z]{32}$")
 _MEDIA_SID_PATTERN = re.compile(r"^ME[0-9A-Za-z]{32}$")
 _MESSAGING_SERVICE_SID_PATTERN = re.compile(r"^MG[0-9A-Za-z]{32}$")
+_PHONE_NUMBER_SID_PATTERN = re.compile(r"^PN[0-9a-fA-F]{32}$")
+_TOLL_FREE_VERIFICATION_STATUSES = {
+    "PENDING_REVIEW",
+    "IN_REVIEW",
+    "TWILIO_APPROVED",
+    "TWILIO_REJECTED",
+}
 _CONTENT_TYPE_PATTERN = re.compile(r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$")
 _SAFE_INITIAL_STATUSES = {"accepted", "queued", "scheduled"}
 _CONSENT_STATUSES = {"opt-in", "opt-out"}
@@ -67,6 +74,14 @@ class TwilioCredentials:
     account_sid: str = field(repr=False)
     api_key_sid: str = field(repr=False)
     api_secret: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class TwilioTollFreeVerificationResult:
+    """Only allowlisted status and sanitized failures leave the TFV boundary."""
+
+    status: str | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,6 +189,49 @@ def _require_sid(value: str, pattern: re.Pattern[str], *, label: str) -> None:
 
 def _safe_int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def fetch_toll_free_verification(
+    *,
+    credentials: TwilioCredentials,
+    phone_number_sid: str | None,
+) -> TwilioTollFreeVerificationResult:
+    """Read the exact sender's TFV without retaining application details or rejection prose."""
+    invalid = TwilioTollFreeVerificationResult(error="twilio_invalid_provider_response")
+    if not isinstance(phone_number_sid, str) or not _PHONE_NUMBER_SID_PATTERN.fullmatch(
+        phone_number_sid
+    ):
+        return invalid
+    try:
+        records = _client(credentials).messaging.v1.tollfree_verifications.list(
+            tollfree_phone_number_sid=phone_number_sid,
+            limit=2,
+        )
+    except TwilioRestException as exc:
+        code = _safe_int(exc.code)
+        status = _safe_int(exc.status)
+        return TwilioTollFreeVerificationResult(
+            error=(
+                f"twilio_{code}"
+                if code is not None
+                else (f"twilio_http_{status}" if status is not None else "twilio_request_failed")
+            )
+        )
+    except Exception:
+        return TwilioTollFreeVerificationResult(error="twilio_request_failed")
+    if not records:
+        return TwilioTollFreeVerificationResult()
+    if len(records) != 1:
+        return invalid
+    record = records[0]
+    status = getattr(record, "status", None)
+    if (
+        getattr(record, "tollfree_phone_number_sid", None) != phone_number_sid
+        or not isinstance(status, str)
+        or status not in _TOLL_FREE_VERIFICATION_STATUSES
+    ):
+        return invalid
+    return TwilioTollFreeVerificationResult(status=status)
 
 
 def _failure_from_rest_exception(exc: TwilioRestException) -> _Failure:
