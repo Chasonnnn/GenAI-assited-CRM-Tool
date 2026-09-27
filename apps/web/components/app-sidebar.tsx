@@ -209,6 +209,8 @@ function appSidebarReducer(state: AppSidebarState, action: AppSidebarAction): Ap
             return {
                 ...state,
                 pathname: action.pathname,
+                // The mobile sidebar is an overlay; close it once navigation lands.
+                mobileOpen: false,
                 automationOpen: state.automationOpen || sections.automationOpen,
                 settingsOpen: state.settingsOpen || sections.settingsOpen,
                 tasksOpen: state.tasksOpen || sections.tasksOpen,
@@ -667,6 +669,16 @@ export function AppSidebar({ children }: AppSidebarProps) {
         setExpanded(!isExpanded)
     }
 
+    // syncPathname closes the overlay after navigation, but a link that keeps the pathname
+    // (the current page, or General from /settings?tab=...) never changes it. React clicks
+    // bubble through portals, so this also covers the user menu links.
+    const closeMobileOnLinkClick = (event: React.MouseEvent<HTMLElement>) => {
+        if (!isMobile || !mobileOpen) return
+        if (event.target instanceof Element && event.target.closest("a[href]")) {
+            dispatch({ type: "setMobileOpen", mobileOpen: false })
+        }
+    }
+
     const settingsItems: Array<{ title: string; url: string; tab?: string | null }> = [
         { title: "General", url: "/settings", tab: null },
         { title: "Notification", url: "/settings/notifications" },
@@ -793,6 +805,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                     isMobile && "fixed inset-y-0 left-0",
                     isMobile && (mobileOpen ? "translate-x-0" : "-translate-x-full")
                 )}
+                onClick={closeMobileOnLinkClick}
             >
                 {sidebarContent}
             </aside>

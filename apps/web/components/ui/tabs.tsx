@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
 import { cva, type VariantProps } from "class-variance-authority"
 
@@ -8,8 +9,19 @@ import { cn } from '@/lib/utils'
 function Tabs({
   className,
   orientation = "horizontal",
+  resetScrollRef,
+  onValueChange,
   ...props
-}: TabsPrimitive.Root.Props) {
+}: TabsPrimitive.Root.Props & {
+  /** Scroll container shared by the panels; it returns to the top when the tab changes. */
+  resetScrollRef?: React.RefObject<HTMLElement | null> | undefined
+}) {
+  const handleValueChange: TabsPrimitive.Root.Props["onValueChange"] = (value, eventDetails) => {
+    onValueChange?.(value, eventDetails)
+    if (eventDetails.isCanceled) return
+    if (resetScrollRef?.current) resetScrollRef.current.scrollTop = 0
+  }
+
   return (
     <TabsPrimitive.Root
       data-slot="tabs"
@@ -18,6 +30,7 @@ function Tabs({
         "gap-2 group/tabs flex data-[orientation=horizontal]:flex-col",
         className
       )}
+      onValueChange={handleValueChange}
       {...props}
     />
   )
@@ -55,18 +68,56 @@ const tabsIndicatorVariants = cva(
   }
 )
 
+/**
+ * Counts TabsTrigger children through fragments and arrays. Returns null when any other
+ * element is present, because a wrapper component may render several tabs.
+ */
+function countTabTriggers(children: React.ReactNode): number | null {
+  let count = 0
+  let hasOtherElement = false
+
+  const visit = (nodes: React.ReactNode) => {
+    React.Children.forEach(nodes, (child) => {
+      if (!React.isValidElement(child)) return
+      if (child.type === React.Fragment) {
+        visit((child.props as { children?: React.ReactNode }).children)
+        return
+      }
+      if (child.type === TabsTrigger) {
+        count += 1
+        return
+      }
+      hasOtherElement = true
+    })
+  }
+
+  visit(children)
+  return hasOtherElement ? null : count
+}
+
 function TabsList({
   className,
   variant = "default",
+  hideSingleTab = true,
   children,
   ...props
-}: TabsPrimitive.List.Props & VariantProps<typeof tabsListVariants>) {
+}: TabsPrimitive.List.Props &
+  VariantProps<typeof tabsListVariants> & {
+    /** A tab bar with one tab is hidden; its panel still renders. */
+    hideSingleTab?: boolean | undefined
+  }) {
+  const tabCount = hideSingleTab ? countTabTriggers(children) : null
+  // Hide instead of unmounting: the tabs stay registered, so uncontrolled roots keep their
+  // selection and each panel keeps its aria-labelledby target.
+  const isHidden = tabCount !== null && tabCount < 2
+
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
       data-variant={variant}
-      className={cn(tabsListVariants({ variant }), className)}
+      className={cn(tabsListVariants({ variant }), className, isHidden && "hidden")}
       {...props}
+      {...(isHidden ? { hidden: true } : {})}
     >
       {children}
       {/* After the tabs so its prehydration script finds the active tab while server HTML is parsed. */}
