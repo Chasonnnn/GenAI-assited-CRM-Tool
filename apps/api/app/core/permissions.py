@@ -68,6 +68,8 @@ class PermissionKey(str, Enum):
     DONORS_ARCHIVE = "archive_donors"
     DONORS_CHANGE_STATUS = "change_donor_status"
     MATCHES_PROPOSE = "propose_matches"
+    MATCHES_DECIDE = "decide_matches"
+    MATCHES_CLOSE = "close_matches"
     MATCHES_VIEW = "view_matches"
 
     TASKS_VIEW = "view_tasks"
@@ -211,6 +213,18 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "propose_matches",
         "Propose Matches",
         "Create match proposals between surrogates and IPs",
+        PermissionCategory.INTENDED_PARENTS,
+    ),
+    "decide_matches": PermissionDef(
+        "decide_matches",
+        "Decide Matches",
+        "Accept or decline matches",
+        PermissionCategory.INTENDED_PARENTS,
+    ),
+    "close_matches": PermissionDef(
+        "close_matches",
+        "Close Matches",
+        "Request cancellation or complete matches",
         PermissionCategory.INTENDED_PARENTS,
     ),
     # Donors
@@ -718,6 +732,8 @@ V2_ROLE_DEFAULTS: dict[str, set[str]] = {
     },
     "case_manager": ROLE_DEFAULTS["case_manager"]
     | {
+        "decide_matches",
+        "close_matches",
         "create_surrogates",
         "create_donors",
         "create_intended_parents",
@@ -900,7 +916,14 @@ PERMISSION_TOPIC_SECTIONS: dict[str, dict[str, dict[str, str]]] = {
             "create_intended_parents": "Create",
             "edit_intended_parents": "Edit",
         },
-        "Matches": {"view_matches": "View", "propose_matches": "Propose"},
+    },
+    "Matches": {
+        "Actions": {
+            "view_matches": "View",
+            "propose_matches": "Propose",
+            "decide_matches": "Decide",
+            "close_matches": "Close",
+        },
     },
     "Operations": {
         "Workflows": {

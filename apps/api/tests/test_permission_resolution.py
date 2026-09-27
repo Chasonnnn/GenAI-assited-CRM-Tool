@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.core.permission_resolution import resolve_effective_permissions
+from app.core.permission_resolution import MATCH_ACTION_PERMISSIONS, resolve_effective_permissions
 from app.core.permissions import PERMISSION_REGISTRY, ROLE_DEFAULTS
 
 
@@ -40,12 +40,15 @@ def test_user_override_takes_precedence_over_org_override_and_role_default(
     )
 
     assert (permission in result) is expected
-    assert result - {permission} == ROLE_DEFAULTS[role] - {permission}
+    assert result - {permission} - MATCH_ACTION_PERMISSIONS == ROLE_DEFAULTS[role] - {permission}
 
 
 @pytest.mark.parametrize("role", ["intake_specialist", "case_manager", "admin"])
 def test_no_overrides_preserves_all_role_defaults(role):
-    assert resolve_effective_permissions(role) == ROLE_DEFAULTS[role]
+    expected = ROLE_DEFAULTS[role] | (
+        MATCH_ACTION_PERMISSIONS if "propose_matches" in ROLE_DEFAULTS[role] else set()
+    )
+    assert resolve_effective_permissions(role) == expected
 
 
 def test_developer_ignores_overrides_without_consuming_them():
@@ -196,3 +199,51 @@ def test_v2_individual_grants_are_additive_and_unregistered_keys_are_denied():
     assert {"view_reports", "view_donors", "send_campaigns"} <= effective
     assert "unregistered" not in effective
     assert "unregistered_user" not in effective
+
+
+@pytest.mark.parametrize("role", ["intake_specialist", "case_manager", "admin"])
+@pytest.mark.parametrize("granted", [False, True])
+def test_v1_match_actions_follow_only_the_resolved_legacy_permission(role, granted):
+    effective = resolve_effective_permissions(
+        role,
+        role_overrides=[("propose_matches", granted), ("decide_matches", not granted)],
+        user_overrides=[("close_matches", "revoke" if granted else "grant")],
+        policy_version=1,
+    )
+    assert ("propose_matches" in effective) is granted
+    assert ("decide_matches" in effective) is granted
+    assert ("close_matches" in effective) is granted
+
+
+def test_v1_match_actions_honor_legacy_individual_revoke_and_grant():
+    for override, expected in [("revoke", False), ("grant", True)]:
+        permissions = resolve_effective_permissions(
+            "case_manager", user_overrides=[("propose_matches", override)], policy_version=1
+        )
+        assert ("decide_matches" in permissions) is expected
+        assert ("close_matches" in permissions) is expected
+
+
+def test_v2_match_actions_are_independent_of_legacy_propose_permission():
+    permissions = resolve_effective_permissions(
+        "case_manager",
+        role_overrides=[("propose_matches", False), ("decide_matches", False)],
+        policy_version=2,
+    )
+    assert "decide_matches" not in permissions
+    assert "close_matches" in permissions
+    assert "propose_matches" not in permissions
+
+
+@pytest.mark.parametrize(
+    "permission,label", [("decide_matches", "Decide"), ("close_matches", "Close")]
+)
+def test_match_action_catalog_metadata_and_v2_defaults(permission, label):
+    from app.core.permissions import PERMISSION_PRESENTATION
+
+    assert PERMISSION_PRESENTATION[permission]["topic"] == "Matches"
+    assert PERMISSION_PRESENTATION[permission]["short_label"] == label
+    for role in ("intake_specialist", "case_manager", "operations", "admin", "developer"):
+        assert (permission in resolve_effective_permissions(role, policy_version=2)) is (
+            role in {"case_manager", "admin", "developer"}
+        )
