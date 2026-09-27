@@ -211,9 +211,11 @@ describe("FormBuilderPage", () => {
             expect(
                 screen.getByRole("heading", { level: 2, name: "No access to Form Builder" }),
             ).toBeInTheDocument()
-            expect(screen.getByRole("link", { name: "Back to forms" })).toHaveAttribute(
+            // The forms list requires the same permission, so the way out is the dashboard.
+            expect(screen.queryByRole("link", { name: "Back to forms" })).not.toBeInTheDocument()
+            expect(screen.getByRole("link", { name: "Go to Dashboard" })).toHaveAttribute(
                 "href",
-                "/automation/forms",
+                "/dashboard",
             )
             expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument()
             expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument()

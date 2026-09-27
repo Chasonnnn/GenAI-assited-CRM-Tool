@@ -12,7 +12,7 @@ export const FORM_BUILDER_DENIED = {
     description: "Ask an admin to update your role.",
 } as const
 
-/** Editor denied copy: the list's copy plus a way back to the list. */
+/** Editor denied copy after a 403 on the form itself: the viewer can still open the list. */
 export const FORM_BUILDER_EDITOR_DENIED = {
     ...FORM_BUILDER_DENIED,
     secondaryHref: "/automation/forms",
@@ -40,10 +40,11 @@ export function FormBuilderLoadingState({ label }: { label: string }) {
     )
 }
 
+/** Denied for lack of manage_forms, which the list requires too, so the way out is the dashboard. */
 export function FormBuilderDeniedScreen() {
     return (
         <FormBuilderBlockedScreen>
-            <PermissionDeniedState {...FORM_BUILDER_EDITOR_DENIED} headingLevel={2} />
+            <PermissionDeniedState {...FORM_BUILDER_DENIED} secondaryHref="/dashboard" headingLevel={2} />
         </FormBuilderBlockedScreen>
     )
 }
