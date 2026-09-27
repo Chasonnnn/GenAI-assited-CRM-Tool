@@ -6,6 +6,7 @@ import DOMPurify from "dompurify"
 import { toast } from "@/components/ui/toast"
 import { EyeIcon, Loader2Icon, PlusIcon } from "lucide-react"
 import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
+import { EmptyState } from "@/components/empty-state"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -401,7 +402,7 @@ export default function PlatformSystemEmailTemplateNewPage() {
                     />
                 </div>
 
-                <TemplatePreviewCard previewHtml={previewHtml} />
+                <TemplatePreviewCard hasContent={Boolean(body.trim())} previewHtml={previewHtml} />
             </div>
         </div>
     )
@@ -726,7 +727,7 @@ function TemplateVariableWarnings({
     )
 }
 
-function TemplatePreviewCard({ previewHtml }: { previewHtml: string }) {
+function TemplatePreviewCard({ hasContent, previewHtml }: { hasContent: boolean; previewHtml: string }) {
     return (
         <Card className="h-fit">
             <CardHeader>
@@ -737,13 +738,22 @@ function TemplatePreviewCard({ previewHtml }: { previewHtml: string }) {
                 <CardDescription>Rendered using sample values.</CardDescription>
             </CardHeader>
             <CardContent>
-                {/* Email preview surface: stays white in dark mode; fixed-width tables scroll inside it. */}
-                <div className="overflow-x-auto rounded-md border border-stone-200 bg-white shadow-sm">
-                    <TrustedSanitizedHtmlContent
-                        html={previewHtml}
-                        className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
+                {hasContent ? (
+                    // Email preview surface: stays white in dark mode; fixed-width tables scroll inside it.
+                    <div className="overflow-x-auto rounded-md border border-stone-200 bg-white shadow-sm">
+                        <TrustedSanitizedHtmlContent
+                            html={previewHtml}
+                            className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
+                        />
+                    </div>
+                ) : (
+                    <EmptyState
+                        icon={EyeIcon}
+                        title="No content yet"
+                        headingLevel={3}
+                        className="rounded-md border border-dashed"
                     />
-                </div>
+                )}
             </CardContent>
         </Card>
     )

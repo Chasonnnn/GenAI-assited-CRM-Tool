@@ -170,6 +170,24 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
         expect(toast.error).toHaveBeenCalledWith("Couldn't create system email.")
     })
 
+    it("shows a preview placeholder until the body has content", async () => {
+        render(<PlatformSystemEmailTemplateNewPage />)
+
+        expect(screen.getByRole("heading", { name: "No content yet" })).toBeInTheDocument()
+
+        const latestEditorProps = richTextEditorSpy.mock.calls.at(-1)?.[0] as {
+            onChange?: (html: string) => void
+        }
+        act(() => {
+            latestEditorProps.onChange?.("<p>Hello preview</p>")
+        })
+
+        await waitFor(() =>
+            expect(screen.queryByRole("heading", { name: "No content yet" })).not.toBeInTheDocument(),
+        )
+        expect(screen.getByText("Hello preview")).toBeInTheDocument()
+    })
+
     it("hides required errors on an untouched form and keeps Create enabled", () => {
         render(<PlatformSystemEmailTemplateNewPage />)
 

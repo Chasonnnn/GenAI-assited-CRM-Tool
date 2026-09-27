@@ -7,8 +7,17 @@ import OpsLoginPageClient from "@/app/ops/login/page.client"
 
 vi.mock("@/components/app-link", () => ({
     __esModule: true,
-    default: ({ href, children, ...props }: { href: string; children: ReactNode }) => (
-        <a href={href} {...props}>
+    default: ({
+        href,
+        children,
+        fallbackMode,
+        ...props
+    }: {
+        href: string
+        children: ReactNode
+        fallbackMode?: string
+    }) => (
+        <a href={href} data-fallback-mode={fallbackMode} {...props}>
             {children}
         </a>
     ),
@@ -26,7 +35,10 @@ describe("OpsLoginPageClient", () => {
         render(<OpsLoginPageClient errorCode="not_platform_admin" />)
 
         expect(screen.getByRole("alert")).toHaveTextContent("This account does not have platform access.")
-        expect(screen.getByRole("link", { name: "Back to app" })).toHaveAttribute("href", "/dashboard")
+        const backLink = screen.getByRole("link", { name: "Back to app" })
+        expect(backLink).toHaveAttribute("href", "/dashboard")
+        // A client-side navigation keeps the ops AuthProvider state (no user) and redirects to /login.
+        expect(backLink).toHaveAttribute("data-fallback-mode", "reload")
         expect(screen.getByRole("button", { name: /sign in with google/i })).toBeEnabled()
     })
 

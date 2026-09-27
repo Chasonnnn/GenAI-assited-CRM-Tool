@@ -404,6 +404,8 @@ describe("PlatformFormTemplatePage", () => {
         expect(screen.getByText(/every organization library/i)).toBeInTheDocument()
         expect(screen.queryByText("Publish to all organizations")).not.toBeInTheDocument()
         expect(screen.queryByText("Publish to selected organizations")).not.toBeInTheDocument()
+        // The description already says it goes to every library; no second box restates it.
+        expect(screen.queryByText(/does not need org targeting/i)).not.toBeInTheDocument()
     })
 
     it("can republish saved edits to an already published template", async () => {

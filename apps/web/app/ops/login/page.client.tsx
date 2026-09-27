@@ -64,8 +64,11 @@ export default function OpsLoginPageClient({ errorCode = null }: { errorCode?: s
                     )}
 
                     {isSignedInWithoutAccess && (
+                        // AuthProvider skips /auth/me on ops routes, so a client-side navigation would
+                        // reach the app with no user and bounce to /login. A full load fetches the session.
                         <Link
                             href="/dashboard"
+                            fallbackMode="reload"
                             className={buttonVariants({ className: 'w-full py-6 text-base font-semibold' })}
                         >
                             Back to app

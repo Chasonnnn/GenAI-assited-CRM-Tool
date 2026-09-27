@@ -35,10 +35,6 @@ export function TemplateFormPublishDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900/40 dark:text-stone-300">
-                    Form templates are shared platform-wide, so publishing here does not need org targeting.
-                </div>
-
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancel

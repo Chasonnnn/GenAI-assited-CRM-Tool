@@ -464,6 +464,22 @@ describe("platform workflow template draft ownership", () => {
         expect(screen.queryByText("Enter a template name.")).not.toBeInTheDocument()
     })
 
+    it("sizes the header name field for full template names at the header font size", () => {
+        render(<PlatformWorkflowTemplatePage />)
+        const nameInput = screen.getByRole("textbox", { name: "Workflow template name" })
+
+        // At text-lg, w-72 cut seeded names such as "New Surrogate Intake Follow-up". The field grows
+        // with its content where field-sizing is supported and falls back to a fixed wide field.
+        expect(nameInput).toHaveClass(
+            "md:text-lg",
+            "field-sizing-content",
+            "supports-[field-sizing:content]:w-auto",
+            "w-[36rem]",
+            "max-w-full",
+        )
+        expect(nameInput).not.toHaveClass("w-72")
+    })
+
     it("shows the save state and a safe message when saving fails", async () => {
         templateState.data = {
             ...templateState.data,

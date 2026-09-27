@@ -871,7 +871,7 @@ function WorkflowTemplateHeader({
                         onChange={(event) => setName(event.target.value)}
                         onBlur={onNameBlur}
                         placeholder="Workflow template name"
-                        className="h-9 w-72 max-w-full border-transparent bg-transparent px-2 text-lg font-semibold shadow-none hover:border-input md:text-lg dark:bg-transparent"
+                        className="h-9 w-[36rem] max-w-full min-w-48 field-sizing-content supports-[field-sizing:content]:w-auto border-transparent bg-transparent px-2 text-lg font-semibold shadow-none hover:border-input md:text-lg dark:bg-transparent"
                     />
                 </span>
             }
