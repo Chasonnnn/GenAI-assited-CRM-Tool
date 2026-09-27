@@ -143,6 +143,15 @@ describe("App shell at 390px", () => {
         expect(sidebar).toHaveAttribute("inert")
     })
 
+    it("scrolls the navigation inside the full-height sidebar so the user menu stays reachable", () => {
+        mockNavigationState.pathname = "/dashboard"
+        renderShell()
+        const nav = screen.getByRole("navigation", { name: "Navigation" })
+
+        // The off-canvas sidebar is fixed at the viewport height, so the page cannot scroll it.
+        expect(nav).toHaveClass("min-h-0", "flex-1", "overflow-y-auto")
+    })
+
     it("keeps the section for the new route expanded after closing", () => {
         mockNavigationState.pathname = "/dashboard"
         const view = renderShell()

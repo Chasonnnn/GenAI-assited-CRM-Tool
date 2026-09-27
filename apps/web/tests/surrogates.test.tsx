@@ -248,10 +248,10 @@ describe('SurrogatesPage', () => {
         mockUseSurrogates.mockReturnValue({ data: { items: [], total: 0, page: 1, per_page: 30 }, isLoading: false })
         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_surrogates", "edit_surrogates"] } })
         const { rerender } = render(<SurrogatesPage />)
-        expect(screen.queryByRole("button", { name: "New Surrogates" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "New surrogate" })).not.toBeInTheDocument()
         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_surrogates", "create_surrogates"] } })
         rerender(<SurrogatesPage />)
-        fireEvent.click(screen.getByRole("button", { name: "New Surrogates" }))
+        fireEvent.click(screen.getByRole("button", { name: "New surrogate" }))
         expect(screen.getByRole("dialog")).toBeInTheDocument()
         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_surrogates"] } })
         rerender(<SurrogatesPage />)
@@ -262,7 +262,7 @@ describe('SurrogatesPage', () => {
         mockUseSurrogates.mockReturnValue({ data: { items: [], total: 0, page: 1, per_page: 30 }, isLoading: false })
         mockUseEffectivePermissions.mockReturnValue(result)
         render(<SurrogatesPage />)
-        expect(screen.queryByRole("button", { name: "New Surrogates" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "New surrogate" })).not.toBeInTheDocument()
     })
 
     it('renders loading state', () => {
@@ -392,7 +392,8 @@ describe('SurrogatesPage', () => {
     })
 
     it('hides row and bulk Archive without the archive_surrogates permission', async () => {
-        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'is-1' } })
+        // Case managers can still bulk assign, so rows stay selectable.
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'cm-1' } })
         mockGrantedPermissions.value = []
         mockUseSurrogates.mockReturnValue({
             data: {
@@ -675,6 +676,51 @@ describe('SurrogatesPage', () => {
         expect(screen.queryByRole('button', { name: 'Change stage' })).not.toBeInTheDocument()
     })
 
+    it('keeps the floating selection bar inside a 16px side gutter on narrow screens', () => {
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [buildSurrogateListItem()], total: 1, pages: 1 },
+            isLoading: false,
+            error: null,
+        })
+
+        render(<SurrogatesPage />)
+        fireEvent.click(screen.getByLabelText('Select John Doe'))
+
+        const bar = screen.getByText('1 surrogate selected').parentElement as HTMLElement
+        const container = bar.parentElement as HTMLElement
+        // A left-1/2 anchor limits the bar to half the viewport, so it overflowed at 390px.
+        expect(container).toHaveClass('fixed', 'inset-x-4', 'flex', 'justify-center', 'pointer-events-none')
+        expect(container).not.toHaveClass('left-1/2')
+        expect(bar).toHaveClass('flex-wrap', 'pointer-events-auto')
+    })
+
+    it('keeps the stage and date filters visible at phone width', () => {
+        mockUseSurrogates.mockReturnValue({ data: { items: [], total: 0, pages: 0 }, isLoading: false, error: null })
+        render(<SurrogatesPage />)
+
+        const stageFilter = screen.getByRole('combobox', { name: 'Filter by stage' })
+        const dateFilter = screen.getByTestId('date-picker')
+        for (const control of [stageFilter, dateFilter]) {
+            expect(control.closest('.hidden')).toBeNull()
+        }
+    })
+
+    it('does not offer row selection when the viewer has no bulk action', () => {
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [buildSurrogateListItem()], total: 1, pages: 1 },
+            isLoading: false,
+            error: null,
+        })
+        mockUseAuth.mockReturnValue({ user: { role: 'intake_specialist', user_id: 'is-1' } })
+        mockGrantedPermissions.value = []
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByText('John Doe')).toBeInTheDocument()
+        expect(screen.queryByLabelText('Select all surrogates')).not.toBeInTheDocument()
+        expect(screen.queryByLabelText('Select John Doe')).not.toBeInTheDocument()
+    })
+
     it('submits selected surrogate ids through the bulk change stage flow', async () => {
         const mutateAsync = vi.fn().mockResolvedValue({
             requested: 2,
@@ -890,10 +936,23 @@ describe('SurrogatesPage', () => {
         expect(screen.queryByText('All Assignees')).not.toBeInTheDocument()
     })
 
+    it('reads a stage outside the pipeline as All Stages instead of sending it to the API', () => {
+        mockSearchParams.set('stage', 'not-a-stage')
+        mockUseSurrogates.mockReturnValue({ data: { items: [], total: 0, pages: 0 }, isLoading: false, error: null })
+
+        render(<SurrogatesPage />)
+
+        for (const call of mockUseSurrogates.mock.calls) {
+            expect(call[0]).not.toHaveProperty('stage_id')
+        }
+        expect(mockUseSurrogateCreatedDates.mock.calls.at(-1)?.[0]).not.toHaveProperty('stage_id')
+        expect(screen.getByRole('combobox', { name: 'Filter by stage' })).toHaveTextContent('All Stages')
+    })
+
     it('combines assignee and dynamic filters with other filters using AND semantics', () => {
         mockSearchParams.set('owner_id', 'user-123')
         mockSearchParams.set('dynamic_filter', 'attention_unreached')
-        mockSearchParams.set('stage', 'stage-1')
+        mockSearchParams.set('stage', 's1')
         mockSearchParams.set('source', 'manual')
         mockSearchParams.set('queue', 'queue-1')
         mockSearchParams.set('q', 'alpha')
@@ -912,7 +971,7 @@ describe('SurrogatesPage', () => {
             expect.objectContaining({
                 owner_id: 'user-123',
                 dynamic_filter: 'attention_unreached',
-                stage_id: 'stage-1',
+                stage_id: 's1',
                 source: 'manual',
                 queue_id: 'queue-1',
                 q: 'alpha',
@@ -924,11 +983,12 @@ describe('SurrogatesPage', () => {
             expect.objectContaining({
                 owner_id: 'user-123',
                 dynamic_filter: 'attention_unreached',
-                stage_id: 'stage-1',
+                stage_id: 's1',
                 source: 'manual',
                 queue_id: 'queue-1',
                 q: 'alpha',
             }),
+            { enabled: true },
         )
     })
 
@@ -1139,6 +1199,7 @@ describe('SurrogatesPage', () => {
             expect.objectContaining({
                 is_priority: true,
             }),
+            { enabled: true },
         )
     })
 

@@ -171,6 +171,36 @@ describe('Shared Intake Public Page', () => {
         expect(screen.getByLabelText(/full name/i)).toHaveValue('Saved Applicant')
     })
 
+    it('shows a date answer as a readable date on the review step', async () => {
+        window.localStorage.setItem('intake-draft-session:event-abc', 'saved-session-1')
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Application',
+                        fields: [
+                            { key: 'date_of_birth', label: 'Date of Birth', type: 'date', required: false },
+                        ],
+                    },
+                ],
+            },
+        })
+        getSharedPublicFormDraft.mockResolvedValue({
+            answers: { date_of_birth: '1995-09-15' },
+            started_at: null,
+            updated_at: '2026-07-08T12:00:00.000Z',
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        fireEvent.click(await screen.findByRole('button', { name: /continue/i }))
+
+        expect(await screen.findByText('Sep 15, 1995')).toBeInTheDocument()
+        expect(screen.queryByText('1995-09-15')).not.toBeInTheDocument()
+    })
+
     it('replaces a stale saved draft session before autosaving new answers', async () => {
         window.localStorage.setItem('intake-draft-session:event-abc', 'stale-session-1')
         getSharedPublicForm.mockResolvedValue({
