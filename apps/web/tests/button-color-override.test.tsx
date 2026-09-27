@@ -25,6 +25,15 @@ import {
 const PRIMARY_GRADIENT = /bg-\[linear-gradient/
 
 describe("Button semantic variants", () => {
+    it("dims a disabled button that stays focusable for its tooltip", () => {
+        render(<Button disabled focusableWhenDisabled>Accept match</Button>)
+
+        const button = screen.getByRole("button", { name: "Accept match" })
+        expect(button).not.toHaveAttribute("disabled")
+        expect(button).toHaveAttribute("data-disabled")
+        expect(button).toHaveClass("data-disabled:opacity-50")
+    })
+
     it("renders success as a solid token color without the primary gradient", () => {
         render(<Button variant="success">Accept match</Button>)
 
