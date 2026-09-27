@@ -355,6 +355,7 @@ class MessagingConsentOptionRead(BaseModel):
 
 
 class MessagingConsentOptionsRead(BaseModel):
+    phone_field_key: str | None
     operational: MessagingConsentOptionRead | None = None
     promotional: MessagingConsentOptionRead | None = None
 
@@ -438,6 +439,7 @@ class FormEmbedSubmitRequest(BaseModel):
     consent: FormEmbedConsentSubmit | None = None
     sms_operational: bool = False
     sms_promotional: bool = False
+    sms_phone_field_key: str | None = None
     attribution: dict[str, object] = Field(default_factory=dict)
 
 

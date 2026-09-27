@@ -788,6 +788,7 @@ def test_manual_rematching_never_links_an_inaccessible_record(db, context, monke
         organization_id=context.org.id,
         form_id=form.id,
         answers_json={"full_name": "Applicant"},
+        schema_snapshot={"pages": []},
         source_mode="shared",
         match_status="ambiguous_review",
     )

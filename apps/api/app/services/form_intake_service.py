@@ -6,7 +6,7 @@ import json
 import logging
 import re
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
 from typing import Any
@@ -55,6 +55,7 @@ from app.db.models import (
     WorkflowExecution,
 )
 from app.schemas.donor import DonorCreate
+from app.schemas.forms import FormSchema, MessagingConsentOptionRead, MessagingConsentOptionsRead
 from app.services import (
     embed_policy_service,
     form_service,
@@ -112,9 +113,19 @@ FORM_SUBMISSION_WORKFLOW_MANUAL_REVIEW_ERROR = (
 def get_messaging_consent_options(
     db: Session,
     organization_id: uuid.UUID,
-) -> dict[str, dict[str, str] | None]:
+    *,
+    schema: FormSchema,
+    mapping_snapshot: list[dict[str, Any]],
+) -> MessagingConsentOptionsRead:
     """Return only counsel-approved disclosures suitable for public checkboxes."""
     from app.db.models.messaging import TwilioSettings
+
+    phone_field_key = resolve_phone_field_key(
+        field_keys=form_submission_service.flatten_fields(schema),
+        mapping_lookup=_mapping_lookup_from_snapshot(mapping_snapshot),
+    )
+    if phone_field_key is None:
+        return MessagingConsentOptionsRead(phone_field_key=None)
 
     messaging_settings = (
         db.query(TwilioSettings).filter(TwilioSettings.organization_id == organization_id).first()
@@ -129,22 +140,23 @@ def get_messaging_consent_options(
         and (messaging_settings.expected_frequency or "").strip()
     )
     if not common_values:
-        return {"operational": None, "promotional": None}
+        return MessagingConsentOptionsRead(phone_field_key=phone_field_key)
 
-    def option(disclosure: str | None) -> dict[str, str] | None:
+    def option(disclosure: str | None) -> MessagingConsentOptionRead | None:
         normalized_disclosure = (disclosure or "").strip()
         if not normalized_disclosure:
             return None
-        return {
-            "disclosure": normalized_disclosure,
-            "sms_terms_url": str(messaging_settings.sms_terms_url),
-            "privacy_policy_url": str(messaging_settings.privacy_policy_url),
-        }
+        return MessagingConsentOptionRead(
+            disclosure=normalized_disclosure,
+            sms_terms_url=str(messaging_settings.sms_terms_url),
+            privacy_policy_url=str(messaging_settings.privacy_policy_url),
+        )
 
-    return {
-        "operational": option(messaging_settings.operational_disclosure),
-        "promotional": option(messaging_settings.promotional_disclosure),
-    }
+    return MessagingConsentOptionsRead(
+        phone_field_key=phone_field_key,
+        operational=option(messaging_settings.operational_disclosure),
+        promotional=option(messaging_settings.promotional_disclosure),
+    )
 
 
 PRIVACY_SAFE_FIELD_POLICY_MODES = {
@@ -975,19 +987,34 @@ def _parse_date_safe(value: Any) -> date | None:
         return None
 
 
-def _build_form_mapping_lookup(db: Session, form_id: uuid.UUID) -> dict[str, str]:
-    return {
-        m.surrogate_field: m.field_key
-        for m in form_submission_service.list_field_mappings(db, form_id)
-    }
-
-
 def _mapping_lookup_from_snapshot(mappings: list[dict[str, Any]]) -> dict[str, str]:
     return {
         str(mapping["surrogate_field"]): str(mapping["field_key"])
         for mapping in mappings
         if mapping.get("surrogate_field") and mapping.get("field_key")
     }
+
+
+def get_intake_mapping_snapshot(
+    db: Session,
+    *,
+    form: Form,
+    published_version: PublishedIntakeVersion | None,
+) -> list[dict[str, Any]]:
+    if published_version and published_version.lead_kind_snapshot in DONOR_LEAD_KINDS:
+        return published_version.mapping_snapshot_json or []
+    return form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
+
+
+def resolve_phone_field_key(
+    *,
+    field_keys: Collection[str],
+    mapping_lookup: dict[str, str],
+) -> str | None:
+    mapped_key = mapping_lookup.get("phone")
+    if mapped_key and mapped_key in field_keys:
+        return mapped_key
+    return "phone" if "phone" in field_keys else None
 
 
 def _published_version_for_link(
@@ -1012,6 +1039,7 @@ def _extract_identity(
     *,
     answers: dict[str, Any],
     mapping_lookup: dict[str, str],
+    field_keys: Collection[str],
 ) -> dict[str, Any]:
     def _from_answer(surrogate_field: str) -> Any:
         mapped_key = mapping_lookup.get(surrogate_field)
@@ -1019,7 +1047,9 @@ def _extract_identity(
             return answers.get(mapped_key)
         return answers.get(surrogate_field)
 
-    partial = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
+    partial = _extract_identity_partial(
+        answers=answers, mapping_lookup=mapping_lookup, field_keys=field_keys
+    )
 
     full_name = partial["full_name"]
     dob = partial["date_of_birth"]
@@ -1050,6 +1080,7 @@ def _extract_identity_partial(
     *,
     answers: dict[str, Any],
     mapping_lookup: dict[str, str],
+    field_keys: Collection[str],
 ) -> dict[str, Any]:
     def _from_answer(surrogate_field: str) -> Any:
         mapped_key = mapping_lookup.get(surrogate_field)
@@ -1059,7 +1090,11 @@ def _extract_identity_partial(
 
     full_name_raw = _from_answer("full_name")
     dob_raw = _from_answer("date_of_birth")
-    phone_raw = _from_answer("phone")
+    phone_field_key = resolve_phone_field_key(
+        field_keys=field_keys,
+        mapping_lookup=mapping_lookup,
+    )
+    phone_raw = answers.get(phone_field_key) if phone_field_key is not None else None
     email_raw = _from_answer("email")
 
     full_name = normalize_name(str(full_name_raw)) if full_name_raw not in (None, "") else None
@@ -1094,13 +1129,39 @@ def _extract_donor_identity(
     *,
     answers: dict[str, Any],
     mapping_lookup: dict[str, str],
+    field_keys: Collection[str],
 ) -> dict[str, Any]:
-    identity = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
+    identity = _extract_identity_partial(
+        answers=answers, mapping_lookup=mapping_lookup, field_keys=field_keys
+    )
     if not identity.get("full_name"):
         raise ValueError("Missing required field: full_name")
     if not identity.get("email"):
         raise ValueError("Missing required field: email")
     return identity
+
+
+def extract_submission_identity(
+    submission: FormSubmission, *, form_purpose: str | None = None
+) -> dict[str, Any]:
+    """Keep matching and lead creation bound to the applicant's saved schema and mappings."""
+    if not submission.schema_snapshot:
+        raise ValueError("Submission has no schema snapshot")
+    try:
+        schema = form_submission_service.parse_schema(submission.schema_snapshot)
+    except ValueError as exc:
+        raise ValueError("Submission schema snapshot is invalid") from exc
+    if submission.lead_kind in DONOR_LEAD_KINDS:
+        extract = _extract_donor_identity
+    elif form_purpose == FormPurpose.LEAD_CAPTURE.value:
+        extract = _lead_capture_identity
+    else:
+        extract = _extract_identity
+    return extract(
+        answers=submission.answers_json or {},
+        mapping_lookup=_mapping_lookup_from_snapshot(submission.mapping_snapshot or []),
+        field_keys=form_submission_service.flatten_fields(schema),
+    )
 
 
 def _match_rule_phone(
@@ -1171,7 +1232,6 @@ def _detect_duplicate_recent_submission(
     *,
     link: FormIntakeLink,
     identity: dict[str, Any],
-    mapping_lookup: dict[str, str],
 ) -> bool:
     window_seconds = max(0, int(settings.FORMS_SHARED_DUPLICATE_WINDOW_SECONDS or 0))
     if window_seconds <= 0:
@@ -1181,6 +1241,7 @@ def _detect_duplicate_recent_submission(
     recent = (
         db.query(FormSubmission)
         .filter(
+            FormSubmission.organization_id == link.organization_id,
             FormSubmission.intake_link_id == link.id,
             FormSubmission.submitted_at >= cutoff,
         )
@@ -1189,11 +1250,8 @@ def _detect_duplicate_recent_submission(
         .all()
     )
     for submission in recent:
-        answers = submission.answers_json if isinstance(submission.answers_json, dict) else {}
-        if not isinstance(answers, dict):
-            continue
         try:
-            existing_identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
+            existing_identity = extract_submission_identity(submission)
         except Exception:
             continue
         if (
@@ -1593,10 +1651,15 @@ def _create_shared_submission(
             raise ValueError("Donor profile photo must be a PNG or JPEG image")
     if identity is None:
         mapping_lookup = _mapping_lookup_from_snapshot(selected_mapping_snapshot)
+        field_keys = form_submission_service.flatten_fields(schema)
         identity = (
-            _extract_donor_identity(answers=answers, mapping_lookup=mapping_lookup)
+            _extract_donor_identity(
+                answers=answers, mapping_lookup=mapping_lookup, field_keys=field_keys
+            )
             if selected_lead_kind in DONOR_LEAD_KINDS
-            else _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
+            else _extract_identity_partial(
+                answers=answers, mapping_lookup=mapping_lookup, field_keys=field_keys
+            )
         )
     now = datetime.now(UTC)
 
@@ -1661,6 +1724,7 @@ def create_shared_submission(
     idempotency_key: str | None = None,
     sms_operational: bool = False,
     sms_promotional: bool = False,
+    sms_phone_field_key: str | None = None,
 ) -> tuple[FormSubmission, str]:
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form is not published")
@@ -1683,13 +1747,6 @@ def create_shared_submission(
         if existing:
             return existing, _normalize_shared_outcome(existing.match_status)
 
-    messaging_consent_options = get_messaging_consent_options(db, link.organization_id)
-    _validate_messaging_consent_choices(
-        options=messaging_consent_options,
-        sms_operational=sms_operational,
-        sms_promotional=sms_promotional,
-    )
-
     published_version = _published_version_for_link(db, link=link)
     selected_schema_snapshot = (
         published_version.form_schema_snapshot_json
@@ -1705,15 +1762,25 @@ def create_shared_submission(
         published_version is None or published_version.id != published_version_id
     ):
         raise LookupError("Published version is no longer current")
-    selected_mapping_snapshot = (
-        published_version.mapping_snapshot_json
-        if published_version and selected_lead_kind in DONOR_LEAD_KINDS
-        else form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
+    selected_mapping_snapshot = get_intake_mapping_snapshot(
+        db, form=form, published_version=published_version
     )
     schema = form_submission_service.parse_schema(selected_schema_snapshot)
+    messaging_consent_options = get_messaging_consent_options(
+        db, link.organization_id, schema=schema, mapping_snapshot=selected_mapping_snapshot
+    )
+    _validate_messaging_consent_choices(
+        options=messaging_consent_options,
+        schema=schema,
+        answers=answers,
+        sms_operational=sms_operational,
+        sms_promotional=sms_promotional,
+        sms_phone_field_key=sms_phone_field_key,
+    )
     form_submission_service._validate_answers(schema, answers)  # type: ignore[attr-defined]
 
     mapping_lookup = _mapping_lookup_from_snapshot(selected_mapping_snapshot)
+    field_keys = form_submission_service.flatten_fields(schema)
     donor_type_key = mapping_lookup.get("donor_type")
     if selected_lead_kind in DONOR_LEAD_KINDS and donor_type_key:
         donor_type = answers.get(donor_type_key)
@@ -1724,9 +1791,13 @@ def create_shared_submission(
             raise ValueError("Please choose Egg donor or Sperm donor")
         selected_lead_kind = form_service.DONOR_TYPE_ANSWER_LEAD_KINDS[donor_type]
     identity = (
-        _extract_donor_identity(answers=answers, mapping_lookup=mapping_lookup)
+        _extract_donor_identity(
+            answers=answers, mapping_lookup=mapping_lookup, field_keys=field_keys
+        )
         if selected_lead_kind in DONOR_LEAD_KINDS
-        else _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
+        else _extract_identity(
+            answers=answers, mapping_lookup=mapping_lookup, field_keys=field_keys
+        )
     )
     _raise_if_duplicate_applicant_submission(db, link=link, identity=identity)
     try:
@@ -1838,8 +1909,11 @@ def _lead_capture_identity(
     *,
     answers: dict[str, Any],
     mapping_lookup: dict[str, str],
+    field_keys: Collection[str],
 ) -> dict[str, Any]:
-    identity = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
+    identity = _extract_identity_partial(
+        answers=answers, mapping_lookup=mapping_lookup, field_keys=field_keys
+    )
     if not identity.get("full_name"):
         raise ValueError("Missing required field: full_name")
     if not identity.get("email") and not identity.get("phone"):
@@ -1961,13 +2035,34 @@ def _create_consent_record(
 
 def _validate_messaging_consent_choices(
     *,
-    options: dict[str, dict[str, str] | None],
+    options: MessagingConsentOptionsRead,
+    schema: FormSchema,
+    answers: dict[str, Any],
     sms_operational: bool,
     sms_promotional: bool,
+    sms_phone_field_key: str | None,
 ) -> None:
-    if sms_operational and options.get("operational") is None:
+    if sms_operational or sms_promotional:
+        if sms_phone_field_key is None or sms_phone_field_key != options.phone_field_key:
+            raise LookupError("This form changed. Reload the page and try again.")
+        fields = form_submission_service.flatten_fields(schema)
+        phone_field = fields.get(sms_phone_field_key)
+        value = (
+            answers.get(sms_phone_field_key)
+            if isinstance(answers, dict)
+            and phone_field is not None
+            and form_submission_service._is_field_visible(phone_field, answers, fields)
+            else None
+        )
+        try:
+            phone = normalize_phone(value) if isinstance(value, str) else None
+        except ValueError:
+            phone = None
+        if not phone:
+            raise ValueError("A valid phone number is required to enroll in SMS")
+    if sms_operational and options.operational is None:
         raise ValueError("Operational SMS consent disclosure is unavailable")
-    if sms_promotional and options.get("promotional") is None:
+    if sms_promotional and options.promotional is None:
         raise ValueError("Promotional SMS consent disclosure is unavailable")
 
 
@@ -1976,7 +2071,7 @@ def _create_messaging_consent_records(
     *,
     link: FormIntakeLink,
     submission: FormSubmission,
-    options: dict[str, dict[str, str] | None],
+    options: MessagingConsentOptionsRead,
     sms_operational: bool,
     sms_promotional: bool,
     ip_hash: str | None,
@@ -1989,10 +2084,10 @@ def _create_messaging_consent_records(
         "promotional": sms_promotional,
     }
     for purpose, accepted in selected.items():
-        option = options.get(purpose)
+        option = getattr(options, purpose)
         if option is None:
             continue
-        disclosure = option["disclosure"]
+        disclosure = option.disclosure
         record = ConsentRecord(
             organization_id=link.organization_id,
             intake_link_id=link.id,
@@ -2004,7 +2099,7 @@ def _create_messaging_consent_records(
             ip_hash=ip_hash,
             user_agent_hash=user_agent_hash,
             parent_origin=parent_origin,
-            privacy_policy_url_snapshot=option["privacy_policy_url"],
+            privacy_policy_url_snapshot=option.privacy_policy_url,
         )
         db.add(record)
     db.flush()
@@ -2016,7 +2111,7 @@ def _project_messaging_consent_opt_ins(
     link: FormIntakeLink,
     submission: FormSubmission,
     identity: dict[str, Any],
-    options: dict[str, dict[str, str] | None],
+    options: MessagingConsentOptionsRead,
     sms_operational: bool,
     sms_promotional: bool,
     source: str,
@@ -2039,10 +2134,10 @@ def _project_messaging_consent_opt_ins(
         for purpose, accepted in selected.items():
             if not accepted:
                 continue
-            option = options.get(purpose)
+            option = getattr(options, purpose)
             if option is None:
                 raise ValueError(f"{purpose.title()} SMS consent disclosure is unavailable")
-            disclosure = option["disclosure"]
+            disclosure = option.disclosure
             messaging_consent_service.record_opt_in(
                 db,
                 organization_id=link.organization_id,
@@ -2059,8 +2154,8 @@ def _project_messaging_consent_opt_ins(
                     "form_id": str(submission.form_id),
                     "form_submission_id": str(submission.id),
                     "intake_link_id": str(link.id),
-                    "privacy_policy_url": option["privacy_policy_url"],
-                    "sms_terms_url": option["sms_terms_url"],
+                    "privacy_policy_url": option.privacy_policy_url,
+                    "sms_terms_url": option.sms_terms_url,
                     "disclosure_hash": embed_policy_service.stable_hash(disclosure),
                 },
                 commit=False,
@@ -2180,6 +2275,7 @@ def submit_lead_capture_embed(
     sms_operational: bool,
     sms_promotional: bool,
     attribution: dict[str, Any] | None,
+    sms_phone_field_key: str | None = None,
 ) -> tuple[FormSubmission, str]:
     if not link.embed_enabled:
         raise PermissionError("Embed is not enabled")
@@ -2197,13 +2293,6 @@ def submit_lead_capture_embed(
     )
     if existing:
         return existing, _normalize_shared_outcome(existing.match_status)
-
-    messaging_consent_options = get_messaging_consent_options(db, link.organization_id)
-    _validate_messaging_consent_choices(
-        options=messaging_consent_options,
-        sms_operational=sms_operational,
-        sms_promotional=sms_promotional,
-    )
 
     session = embed_policy_service.validate_embed_session(
         db,
@@ -2229,8 +2318,25 @@ def submit_lead_capture_embed(
     else:
         form_service.validate_lead_capture_schema(db, form)
 
-    mapping_lookup = _build_form_mapping_lookup(db, form.id)
-    identity = _lead_capture_identity(answers=answers, mapping_lookup=mapping_lookup)
+    mapping_snapshot = get_intake_mapping_snapshot(db, form=form, published_version=version)
+    mapping_lookup = _mapping_lookup_from_snapshot(mapping_snapshot)
+    schema = form_submission_service.parse_schema(version.form_schema_snapshot_json)
+    messaging_consent_options = get_messaging_consent_options(
+        db, link.organization_id, schema=schema, mapping_snapshot=mapping_snapshot
+    )
+    _validate_messaging_consent_choices(
+        options=messaging_consent_options,
+        schema=schema,
+        answers=answers,
+        sms_operational=sms_operational,
+        sms_promotional=sms_promotional,
+        sms_phone_field_key=sms_phone_field_key,
+    )
+    identity = _lead_capture_identity(
+        answers=answers,
+        mapping_lookup=mapping_lookup,
+        field_keys=form_submission_service.flatten_fields(schema),
+    )
     _raise_if_duplicate_applicant_submission(db, link=link, identity=identity)
     sanitized_attribution = sanitize_embed_attribution(
         {**(session.attribution_snapshot_json or {}), **(attribution or {})}
@@ -2256,6 +2362,8 @@ def submit_lead_capture_embed(
                 form_schema_hash=version.form_version_hash,
                 consent_text_hash=version.consent_text_hash,
                 tracking_policy_hash=version.tracking_policy_hash,
+                schema_snapshot=version.form_schema_snapshot_json,
+                mapping_snapshot=mapping_snapshot,
             )
     except IntegrityError:
         existing = _get_idempotent_submission(
@@ -2402,12 +2510,7 @@ def auto_match_submission(
     if not form:
         raise ValueError("Form not found")
 
-    answers = submission.answers_json if isinstance(submission.answers_json, dict) else {}
-    mapping_lookup = _build_form_mapping_lookup(db, submission.form_id)
-    if form.purpose == FormPurpose.LEAD_CAPTURE.value:
-        identity = _lead_capture_identity(answers=answers, mapping_lookup=mapping_lookup)
-    else:
-        identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
+    identity = extract_submission_identity(submission, form_purpose=form.purpose)
 
     phone_matches = _match_rule_phone(db, org_id=submission.organization_id, identity=identity)
     email_matches: list[Surrogate] = []
@@ -2609,16 +2712,7 @@ def create_intake_lead_for_submission(
             .first()
         )
 
-    answers = submission.answers_json if isinstance(submission.answers_json, dict) else {}
-    mapping_lookup = _mapping_lookup_from_snapshot(submission.mapping_snapshot or [])
-    if not mapping_lookup:
-        mapping_lookup = _build_form_mapping_lookup(db, submission.form_id)
-    if submission.lead_kind in DONOR_LEAD_KINDS:
-        identity = _extract_donor_identity(answers=answers, mapping_lookup=mapping_lookup)
-    elif form.purpose == FormPurpose.LEAD_CAPTURE.value:
-        identity = _lead_capture_identity(answers=answers, mapping_lookup=mapping_lookup)
-    else:
-        identity = _extract_identity(answers=answers, mapping_lookup=mapping_lookup)
+    identity = extract_submission_identity(submission, form_purpose=form.purpose)
     metadata: dict[str, Any] = {"submission_id": str(submission.id)}
     if auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
         metadata["auto_create_donor"] = True
@@ -2763,8 +2857,17 @@ def lookup_shared_resume_draft(
     answers: dict[str, Any],
     current_draft_session_id: str | None = None,
 ) -> dict[str, Any]:
-    mapping_lookup = _build_form_mapping_lookup(db, form.id)
-    identity = _extract_identity_partial(answers=answers, mapping_lookup=mapping_lookup)
+    version = _published_version_for_link(db, link=link)
+    schema_json = version.form_schema_snapshot_json if version else form.published_schema_json
+    if not schema_json:
+        return {"status": "insufficient_identity"}
+    schema = form_submission_service.parse_schema(schema_json)
+    mappings = get_intake_mapping_snapshot(db, form=form, published_version=version)
+    identity = _extract_identity_partial(
+        answers=answers,
+        mapping_lookup=_mapping_lookup_from_snapshot(mappings),
+        field_keys=form_submission_service.flatten_fields(schema),
+    )
     full_name_normalized = identity.get("full_name_normalized")
     date_of_birth = identity.get("date_of_birth")
     email_hash = identity.get("email_hash")
@@ -2913,7 +3016,10 @@ def upsert_shared_draft(
     if not form.published_schema_json:
         raise ValueError("Published form schema missing")
 
-    schema = form_submission_service.parse_schema(form.published_schema_json)
+    version = _published_version_for_link(db, link=link)
+    schema = form_submission_service.parse_schema(
+        version.form_schema_snapshot_json if version else form.published_schema_json
+    )
     fields = form_submission_service.flatten_fields(schema)
     for key in answers:
         if key not in fields:
@@ -2940,8 +3046,12 @@ def upsert_shared_draft(
     merged = dict(draft.answers_json or {})
     merged.update(answers)
     draft.answers_json = merged
-    mapping_lookup = _build_form_mapping_lookup(db, form.id)
-    partial_identity = _extract_identity_partial(answers=merged, mapping_lookup=mapping_lookup)
+    mappings = get_intake_mapping_snapshot(db, form=form, published_version=version)
+    partial_identity = _extract_identity_partial(
+        answers=merged,
+        mapping_lookup=_mapping_lookup_from_snapshot(mappings),
+        field_keys=fields,
+    )
     _apply_draft_identity(draft=draft, identity=partial_identity)
     draft.updated_at = now
     if draft.started_at is None and any(v not in (None, "", [], {}) for v in merged.values()):
