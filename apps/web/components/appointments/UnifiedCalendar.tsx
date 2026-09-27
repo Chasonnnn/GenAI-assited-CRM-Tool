@@ -1,6 +1,7 @@
 "use client"
 
 import { getAppointmentStatusLabel } from "@/lib/appointment-status-labels"
+import { APPOINTMENT_STATUSES, getAppointmentStatusTone } from "@/lib/appointment-status-tones"
 
 /**
  * Unified Calendar View - Combined view of appointments and tasks
@@ -62,16 +63,6 @@ import {
     isToday,
 } from "date-fns"
 import { cn } from "@/lib/utils"
-
-// Status colors for appointments
-const STATUS_COLORS = {
-    pending: "bg-yellow-500",
-    confirmed: "bg-green-500",
-    completed: "bg-blue-500",
-    cancelled: "bg-red-500",
-    no_show: "bg-gray-500",
-    expired: "bg-gray-500",
-}
 
 // Task color
 const TASK_COLOR = "bg-purple-500"
@@ -248,7 +239,7 @@ function EventItem({
     draggable?: boolean
     onDragStart?: (e: React.DragEvent, appointment: AppointmentListItem) => void
 }) {
-    const statusColor = STATUS_COLORS[appointment.status as keyof typeof STATUS_COLORS] || "bg-gray-500"
+    const statusTone = getAppointmentStatusTone(appointment.status)
     const time = format(parseISO(appointment.scheduled_start), "h:mm a")
     const canDrag = draggable && (appointment.status === "pending" || appointment.status === "confirmed")
     const handleAppointmentClick = () => onClick?.(appointment)
@@ -260,7 +251,7 @@ function EventItem({
     }
 
     if (compact) {
-        const compactClassName = `w-full text-left px-2 py-1 rounded text-xs truncate ${statusColor} text-white hover:opacity-90 transition-opacity ${canDrag ? "cursor-grab active:cursor-grabbing" : onClick ? "cursor-pointer" : ""}`
+        const compactClassName = `w-full text-left px-2 py-1 rounded border text-xs font-medium truncate ${statusTone.tint} hover:opacity-90 transition-opacity ${canDrag ? "cursor-grab active:cursor-grabbing" : onClick ? "cursor-pointer" : ""}`
 
         if (onClick) {
             return (
@@ -287,7 +278,7 @@ function EventItem({
         )
     }
 
-    const fullClassName = `w-full text-left p-2 rounded-lg border-l-4 ${statusColor.replace('bg-', 'border-')} bg-muted/50 hover:bg-muted transition-colors ${canDrag ? "cursor-grab active:cursor-grabbing" : onClick ? "cursor-pointer" : ""}`
+    const fullClassName = `w-full text-left p-2 rounded-lg border-l-4 ${statusTone.accent} bg-muted/50 hover:bg-muted transition-colors ${canDrag ? "cursor-grab active:cursor-grabbing" : onClick ? "cursor-pointer" : ""}`
     const fullContent = (
         <>
             <p className="font-medium text-sm truncate">{appointment.client_name}</p>
@@ -432,9 +423,7 @@ function MonthView({
                     const canOpenDayAgenda = totalEvents > 0 && typeof onOpenDayAgenda === "function"
                     // Below sm a cell is too narrow for item labels, so it shows one dot per item.
                     const dotColors = [
-                        ...dayAppointments.map(
-                            (appt) => STATUS_COLORS[appt.status as keyof typeof STATUS_COLORS] || "bg-gray-500"
-                        ),
+                        ...dayAppointments.map((appt) => getAppointmentStatusTone(appt.status).dot),
                         ...dayTasks.map(() => TASK_COLOR),
                         ...dayGoogleEvents.map(() => GOOGLE_EVENT_COLOR),
                     ]
@@ -1098,9 +1087,9 @@ function UnifiedCalendarLegend({
             <span className="mr-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Legend
             </span>
-            {includeAppointments && Object.entries(STATUS_COLORS).map(([status, color]) => (
+            {includeAppointments && APPOINTMENT_STATUSES.map((status) => (
                 <Badge key={status} variant="outline" className="gap-1.5 rounded-full font-normal">
-                    <span className={`size-2 rounded-full ${color}`} />
+                    <span className={`size-2 rounded-full ${getAppointmentStatusTone(status).dot}`} />
                     <span className="capitalize">{getAppointmentStatusLabel(status)}</span>
                 </Badge>
             ))}

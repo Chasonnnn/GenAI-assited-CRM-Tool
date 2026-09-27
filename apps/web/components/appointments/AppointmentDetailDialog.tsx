@@ -30,6 +30,7 @@ import type { Appointment, TimeSlot } from "@/lib/api/appointments"
 import { createSchedulingRequestId } from "@/lib/api/appointments"
 import { getMeetingModeLabel } from "@/lib/appointment-meeting-mode-labels"
 import { getAppointmentStatusLabel } from "@/lib/appointment-status-labels"
+import { getAppointmentStatusTone } from "@/lib/appointment-status-tones"
 import {
     useAppointment,
     useApproveAppointment,
@@ -38,16 +39,6 @@ import {
     useRescheduleSlots,
 } from "@/lib/hooks/use-appointments"
 import { formatSchedulingDate, formatSchedulingTime, localDateTimeToIso, schedulingDateKey, schedulingTimezoneLabel } from "@/lib/scheduling-time"
-
-// Status badge colors
-export const APPOINTMENT_STATUS_STYLES = {
-    pending: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
-    confirmed: "bg-green-500/10 text-green-600 border-green-500/20",
-    completed: "bg-blue-500/10 text-blue-600 border-blue-500/20",
-    cancelled: "bg-red-500/10 text-red-600 border-red-500/20",
-    no_show: "bg-gray-500/10 text-gray-600 border-gray-500/20",
-    expired: "bg-gray-500/10 text-gray-600 border-gray-500/20",
-}
 
 const RESCHEDULABLE_STATUSES = new Set(["pending", "confirmed"])
 
@@ -394,7 +385,7 @@ function AppointmentStatusSummary({ appointment }: { appointment: Appointment })
     const syncState = appointment.scheduling?.google_sync.state
     return (
         <div role="status" className="flex flex-wrap items-center gap-2">
-            <Badge className={APPOINTMENT_STATUS_STYLES[appointment.status]}>
+            <Badge className={getAppointmentStatusTone(appointment.status).tint}>
                 {getAppointmentStatusLabel(appointment.status)}
             </Badge>
             {(syncState === "pending" || syncState === "completed") && (

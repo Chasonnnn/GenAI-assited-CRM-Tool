@@ -14,8 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { ListToolbar, ListToolbarSearch } from "@/components/list-toolbar"
 import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import {
-    APPOINTMENT_STATUS_STYLES,
     AppointmentDetailDialog,
     MEETING_MODE_ICONS,
 } from "@/components/appointments/AppointmentDetailDialog"
@@ -44,6 +44,7 @@ import type { AppointmentFilterParams, AppointmentListItem, MeetingMode } from "
 import { createSchedulingRequestId } from "@/lib/api/appointments"
 import { MEETING_MODE_OPTIONS, getMeetingModeLabel, isMeetingMode } from "@/lib/appointment-meeting-mode-labels"
 import { getAppointmentStatusLabel } from "@/lib/appointment-status-labels"
+import { getAppointmentStatusTone } from "@/lib/appointment-status-tones"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import { formatLocalDate } from "@/lib/utils/date"
 import { cn } from "@/lib/utils"
@@ -89,7 +90,7 @@ function AppointmentCard({
                     <span className="min-w-0">
                         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
                             <span className="mr-0.5 font-medium">{appointment.client_name}</span>
-                            <Badge className={APPOINTMENT_STATUS_STYLES[appointment.status]}>
+                            <Badge className={getAppointmentStatusTone(appointment.status).tint}>
                                 {getAppointmentStatusLabel(appointment.status)}
                             </Badge>
                             <SchedulingSyncBadge scheduling={appointment.scheduling} />

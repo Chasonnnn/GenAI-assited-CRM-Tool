@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, within } from "@testing-library/react"
 import "@testing-library/jest-dom"
 import { UnifiedCalendar } from "@/components/appointments/UnifiedCalendar"
+import { getAppointmentStatusTone } from "@/lib/appointment-status-tones"
 import { format } from "date-fns"
 
 const mockMutate = vi.fn()
@@ -227,6 +228,15 @@ describe("UnifiedCalendar drag-to-reschedule", () => {
         expect(appointmentButton.tagName).toBe("BUTTON")
         expect(appointmentButton).toHaveAttribute("type", "button")
         expect(appointmentButton).toHaveAttribute("draggable", "true")
+    })
+
+    it("renders appointment chips with the status tint instead of white text on a solid fill", () => {
+        render(<UnifiedCalendar />)
+
+        const appointmentButton = screen.getByRole("button", { name: /Test Zhang/i })
+        expect(appointmentButton).toHaveClass(...getAppointmentStatusTone("confirmed").tint.split(" "))
+        expect(appointmentButton).not.toHaveClass("text-white", "bg-green-500")
+        expect(screen.getByText("Confirmed").previousElementSibling).toHaveClass(getAppointmentStatusTone("confirmed").dot)
     })
 
     it("renders Google Calendar events as native links", () => {
