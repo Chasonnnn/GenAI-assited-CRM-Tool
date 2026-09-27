@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -10,19 +10,36 @@ import { listSubmissionReviewForms } from "@/lib/api/forms"
 import { useFormSubmissions, usePromoteIntakeLead, useResolveSubmissionMatch, useRetrySubmissionMatch, useSubmissionMatchCandidates } from "@/lib/hooks/use-forms"
 import { AutomationFormSubmissionsPanel } from "@/components/forms/builder/AutomationFormSubmissionsPanel"
 import * as presentation from "@/lib/forms/submission-presentation"
+import { FileTextIcon } from "lucide-react"
+import { EmptyState } from "@/components/empty-state"
+import { LoadErrorState, PermissionDeniedState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/toast"
 
+const FORM_SUBMISSIONS_DENIED = {
+    title: "No access to Form Submissions",
+    description: "Ask an admin to update your role.",
+    secondaryHref: "/dashboard",
+} as const
+
+function FormSubmissionsShell({actions, children}: {actions?: ReactNode; children: ReactNode}) {
+    return <div className="flex min-h-screen flex-col">
+        <PageHeader title="Form Submissions" actions={actions} />
+        {children}
+    </div>
+}
+
 export default function FormSubmissionsPage() {
     const {user} = useAuth()
     const access = useEffectivePermissions(user?.user_id ?? null)
-    if (access.isLoading) return <div className="p-6"><Skeleton className="h-48" /></div>
-    if (access.isError) return <div role="alert" className="space-y-3 p-6"><p>Unable to load permissions.</p><Button variant="outline" onClick={() => {void access.refetch()}}>Retry</Button></div>
+    if (access.isLoading) return <FormSubmissionsShell><div className="p-6"><Skeleton className="h-48" /></div></FormSubmissionsShell>
+    if (access.isError) return <FormSubmissionsShell><LoadErrorState title="Couldn't load permissions" onRetry={() => {void access.refetch()}} isRetrying={access.isFetching} /></FormSubmissionsShell>
     const permissions = access.data?.permissions ?? []
     const v2 = (access.data?.policy_version ?? 1) >= 2
-    if (!permissions.includes(v2 ? "view_form_submissions" : "manage_forms")) return <div className="p-6"><h1 className="text-xl font-semibold">Form submissions unavailable</h1></div>
+    if (!permissions.includes(v2 ? "view_form_submissions" : "manage_forms")) return <FormSubmissionsShell><PermissionDeniedState {...FORM_SUBMISSIONS_DENIED} /></FormSubmissionsShell>
     return <SubmissionWorkspace canPromoteLead={submission => canCreateIntakeRecord(access.data, submission.lead_kind)} canReview={permissions.includes(v2 ? "review_form_submissions" : "manage_forms")} />
 }
 
@@ -32,15 +49,17 @@ function SubmissionWorkspace({canReview, canPromoteLead}: SubmissionAccess) {
     const [chosenForm, setChosenForm] = useState<string | null>(null)
     const forms = useQuery({queryKey: ["forms", "submission-review"], queryFn: listSubmissionReviewForms})
     const formId = forms.data?.find(form => form.id === chosenForm)?.id ?? forms.data?.[0]?.id ?? null
-    return <div className="space-y-6 p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4"><h1 className="text-2xl font-semibold">Form Submissions</h1>
-            <Select value={formId} onValueChange={setChosenForm} disabled={forms.isLoading || !forms.data?.length}>
-                <SelectTrigger className="w-72" aria-label="Form"><SelectValue>{() => forms.data?.find(form => form.id === formId)?.name ?? "Select form"}</SelectValue></SelectTrigger>
-                <SelectContent>{forms.data?.map(form => <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>)}</SelectContent>
-            </Select>
+    const formSelect = <Select value={formId} onValueChange={setChosenForm} disabled={forms.isLoading || !forms.data?.length}>
+        <SelectTrigger className="w-full sm:w-72" aria-label="Form"><SelectValue>{() => forms.data?.find(form => form.id === formId)?.name ?? "Select form"}</SelectValue></SelectTrigger>
+        <SelectContent>{forms.data?.map(form => <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>)}</SelectContent>
+    </Select>
+    if (forms.isError) return <FormSubmissionsShell actions={formSelect}><LoadErrorState title="Couldn't load submission forms" onRetry={() => {void forms.refetch()}} isRetrying={forms.isFetching} /></FormSubmissionsShell>
+    if (!forms.isLoading && !formId) return <FormSubmissionsShell actions={formSelect}><EmptyState icon={FileTextIcon} title="No submissions available" /></FormSubmissionsShell>
+    return <FormSubmissionsShell actions={formSelect}>
+        <div className="flex-1 space-y-6 p-6">
+            {forms.isLoading || !formId ? <Skeleton className="h-48" /> : <SubmissionQueue key={formId} formId={formId} canReview={canReview} canPromoteLead={canPromoteLead} />}
         </div>
-        {forms.isLoading ? <Skeleton className="h-48" /> : forms.isError ? <div role="alert" className="space-y-2"><p>Unable to load submission forms.</p><Button variant="outline" onClick={() => {void forms.refetch()}}>Retry</Button></div> : formId ? <SubmissionQueue key={formId} formId={formId} canReview={canReview} canPromoteLead={canPromoteLead} /> : <p className="text-muted-foreground">No submissions available</p>}
-    </div>
+    </FormSubmissionsShell>
 }
 
 function SubmissionQueue({formId, canReview, canPromoteLead}: SubmissionAccess & {formId: string}) {
@@ -65,7 +84,7 @@ function SubmissionQueue({formId, canReview, canPromoteLead}: SubmissionAccess &
         } catch (error) {toast.error(error instanceof Error ? error.message : "Unable to update submission")}
     }
     const link = (submissionId: string, surrogateId: string) => perform(() => resolve.mutateAsync({submissionId, payload: {surrogate_id: surrogateId, create_intake_lead: false, review_notes: notes.trim() || null}}), "Submission linked")
-    if (submissions.isError) return <div role="alert" className="space-y-2"><p>Unable to load submissions.</p><Button variant="outline" onClick={() => {void submissions.refetch()}}>Retry</Button></div>
+    if (submissions.isError) return <LoadErrorState title="Couldn't load submissions" onRetry={() => {void submissions.refetch()}} isRetrying={submissions.isFetching} />
     return <>
         {candidates.isError && <div role="alert" className="flex items-center gap-3"><p>Unable to load matching records.</p><Button variant="outline" onClick={() => {void candidates.refetch()}}>Retry matches</Button></div>}
         <AutomationFormSubmissionsPanel {...presentation}
