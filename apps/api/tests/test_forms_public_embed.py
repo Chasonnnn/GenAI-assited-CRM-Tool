@@ -167,6 +167,9 @@ async def test_embed_public_form_uses_latest_logo_branding_without_republish(
     public_schema = public_res.json()["form_schema"]
     assert public_schema["logo_url"] == logo_url
     assert public_schema["public_title"] == "Become a Surrogate"
+    # Agency branding is a hosted-intake field; the embed payload stays unchanged.
+    assert "agency_name" not in public_res.json()
+    assert "agency_logo_url" not in public_res.json()
 
 
 @pytest.fixture
@@ -264,9 +267,7 @@ async def test_embed_sms_choices_are_optional_separate_and_snapshotted(
         "https://agency.example/privacy"
     )
     messaging_contact = (
-        db.query(MessagingContact)
-        .filter(MessagingContact.organization_id == test_org.id)
-        .one()
+        db.query(MessagingContact).filter(MessagingContact.organization_id == test_org.id).one()
     )
     state_by_purpose = {
         state.purpose: state.status

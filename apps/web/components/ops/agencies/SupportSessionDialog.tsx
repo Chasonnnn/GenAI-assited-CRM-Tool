@@ -258,7 +258,7 @@ export function SupportSessionDialog({
                 <Eye className="mr-2 size-4" />
                 View as role
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent size="lg">
                 <DialogHeader>
                     <DialogTitle>View as role</DialogTitle>
                     <DialogDescription>
@@ -268,9 +268,9 @@ export function SupportSessionDialog({
                 </DialogHeader>
 
                 <div className="space-y-4">
-                    <div className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-200">
+                    <div className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-foreground">
                         <div className="flex items-center justify-between gap-3">
-                            <span className="text-xs text-stone-500 dark:text-stone-400">Portal</span>
+                            <span className="text-xs text-muted-foreground">Portal</span>
                             <span className="font-mono text-xs">{portalHost ?? "Unavailable"}</span>
                         </div>
                     </div>

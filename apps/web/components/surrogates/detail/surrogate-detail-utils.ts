@@ -1,5 +1,6 @@
 import { parseDateInput } from "@/lib/utils/date"
 import { heightFtToTotalInches } from "@/lib/height"
+import { EMPTY_VALUE_TEXT } from "@/components/ui/empty-value"
 
 export function formatDateTime(dateString: string): string {
     const parsed = parseDateInput(dateString)
@@ -25,8 +26,7 @@ export function formatDate(dateString: string): string {
 
 export function formatHeight(heightFt: number | string | null | undefined): string {
     const totalInches = heightFtToTotalInches(heightFt)
-    if (totalInches === null) return "-"
-    if (totalInches <= 0) return "-"
+    if (totalInches === null || totalInches <= 0) return EMPTY_VALUE_TEXT
     const feet = Math.floor(totalInches / 12)
     const inches = totalInches % 12
     return `${feet} ft ${inches} in`

@@ -25,6 +25,7 @@ from app.db.models import (
     UserPermissionOverride,
 )
 from app.services import intended_parent_status_service, notification_service
+from tests.match_fixtures import seed_surrogate_match
 from tests.test_match_cancel_request import _create_intended_parent, _create_surrogate
 from tests.test_match_cases import _accept, _case, _donor
 from tests.test_match_lifecycle_characterization import (
@@ -47,13 +48,19 @@ from tests.test_match_lifecycle_characterization import (
 async def _pending_cancellation(
     authed_client, db, *, requester=None, donor=False, reason="Family withdrew"
 ):
-    """Accept a new match and file a cancellation request; returns (match, request)."""
-    ip = await _create_intended_parent(authed_client)
-    party = await _donor(authed_client) if donor else await _create_surrogate(authed_client)
-    match = await _accept(
-        authed_client,
-        await _case(authed_client, ip, **({"donor": party} if donor else {"surrogate": party})),
-    )
+    """Seed an accepted match, then exercise the real cancellation request command."""
+    if donor:
+        ip = await _create_intended_parent(authed_client)
+        party = await _donor(authed_client)
+        match = await _accept(authed_client, await _case(authed_client, ip, donor=party))
+    else:
+        row = seed_surrogate_match(db, authed_client, status="accepted")
+        match = {
+            "id": str(row.id),
+            "surrogate_id": str(row.surrogate_id),
+            "intended_parent_id": str(row.intended_parent_id),
+            "donor_id": None,
+        }
     body = {} if reason is None else {"reason": reason}
     response = await (requester or authed_client).post(
         f"/matches/{match['id']}/cancel-request", json=body

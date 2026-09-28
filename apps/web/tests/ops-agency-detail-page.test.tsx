@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import AgencyDetailPage from "../app/ops/agencies/[orgId]/page.client"
+import { ApiError } from "@/lib/api"
 
 const mockGetOrganization = vi.fn()
 const mockGetSubscription = vi.fn()
@@ -134,10 +135,14 @@ vi.mock("@/components/ops/agencies/AgencyInvitesTab", () => ({
     ),
 }))
 vi.mock("@/components/ops/agencies/AgencySubscriptionTab", () => ({
-    AgencySubscriptionTab: () => <div>Agency subscription</div>,
+    AgencySubscriptionTab: ({ subscriptionStatus }: { subscriptionStatus: string }) => (
+        <div>Agency subscription: {subscriptionStatus}</div>
+    ),
 }))
 vi.mock("@/components/ops/agencies/AgencyAlertsTab", () => ({
-    AgencyAlertsTab: () => <div>Agency alerts</div>,
+    AgencyAlertsTab: ({ alertsError }: { alertsError?: boolean }) => (
+        <div>Agency alerts{alertsError ? ": error" : ""}</div>
+    ),
 }))
 vi.mock("@/components/ops/agencies/AgencyAuditTab", () => ({
     AgencyAuditTab: () => <div>Agency audit</div>,
@@ -228,6 +233,62 @@ describe("AgencyDetailPage", () => {
                 last_success_at: "2026-07-23T16:00:00Z",
             },
         })
+    })
+
+    it("shows Agency not found only for a 404", async () => {
+        mockGetOrganization.mockRejectedValue(new ApiError(404, "Not Found", "Organization not found"))
+
+        renderAgencyDetailPage()
+
+        expect(await screen.findByRole("heading", { level: 1, name: "Agency not found" })).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to Agencies" })).toHaveAttribute("href", "/ops/agencies")
+    })
+
+    it("shows a permission state for a 403 without the server message", async () => {
+        mockGetOrganization.mockRejectedValue(new ApiError(403, "Forbidden", "platform_admin required"))
+
+        renderAgencyDetailPage()
+
+        expect(await screen.findByText("This account cannot view this agency.")).toBeInTheDocument()
+        expect(screen.queryByText("Agency not found")).not.toBeInTheDocument()
+        expect(screen.queryByText(/platform_admin required/)).not.toBeInTheDocument()
+    })
+
+    it("shows a retryable load error for a server failure", async () => {
+        mockGetOrganization.mockRejectedValueOnce(new ApiError(500, "Server Error", "boom"))
+
+        renderAgencyDetailPage()
+
+        expect(await screen.findByRole("heading", { level: 1, name: "Couldn't load agency" })).toBeInTheDocument()
+        expect(screen.queryByText("Agency not found")).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(await screen.findByRole("heading", { name: "Test Agency" })).toBeInTheDocument()
+    })
+
+    it("tells the subscription tab whether the record is missing or failed to load", async () => {
+        mockGetSubscription.mockRejectedValue(new ApiError(404, "Not Found", "No subscription"))
+        const first = renderAgencyDetailPage()
+        expect(await screen.findByRole("heading", { name: "Test Agency" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Subscription" }))
+        expect(await screen.findByText("Agency subscription: missing")).toBeInTheDocument()
+        first.unmount()
+
+        mockGetSubscription.mockRejectedValue(new ApiError(500, "Server Error", "boom"))
+        renderAgencyDetailPage()
+        expect(await screen.findByRole("heading", { name: "Test Agency" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Subscription" }))
+        expect(await screen.findByText("Agency subscription: error")).toBeInTheDocument()
+    })
+
+    it("passes an alerts load failure to the alerts tab", async () => {
+        mockListAlerts.mockRejectedValue(new ApiError(500, "Server Error", "boom"))
+
+        renderAgencyDetailPage()
+        expect(await screen.findByRole("heading", { name: "Test Agency" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /Alerts/ }))
+
+        expect(await screen.findByText("Agency alerts: error")).toBeInTheDocument()
     })
 
     it("reuses fresh platform email readiness when the Invites tab is reopened", async () => {

@@ -70,7 +70,6 @@ export function Dialogs() {
                 open={activeDialog.type === "log_contact" && canEditSurrogate}
                 onOpenChange={(open) => !open && closeDialog()}
                 surrogateId={surrogate.id}
-                surrogateName={surrogate.full_name}
             />
 
             <ChangeStageModal

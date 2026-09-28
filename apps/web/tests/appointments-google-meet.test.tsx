@@ -26,6 +26,7 @@ const mockUseAvailableSlots = vi.fn()
 const mockUseCreateBooking = vi.fn()
 const mockUseBookingPreviewPage = vi.fn()
 const mockUseBookingPreviewSlots = vi.fn()
+const mockUseAppointmentStatusCounts = vi.fn()
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => ({
@@ -78,18 +79,49 @@ vi.mock("@/components/ui/select", () => ({
 
 vi.mock("@/components/ui/dialog", () => ({
     Dialog: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    DialogContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    DialogContent: ({ children, size, layout }: PropsWithChildren<{ size?: string; layout?: string }>) => (
+        <div data-testid="dialog-content" data-size={size} data-layout={layout}>{children}</div>
+    ),
+    DialogBody: ({ children }: PropsWithChildren) => <div data-testid="dialog-body">{children}</div>,
+    DialogClose: ({ render }: { render: React.ReactElement }) => render,
     DialogDescription: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    DialogFooter: ({ children, start }: PropsWithChildren<{ start?: React.ReactNode }>) => (
+        <div data-testid="dialog-footer">
+            {start ? <div data-slot="dialog-footer-start">{start}</div> : null}
+            {children}
+        </div>
+    ),
     DialogHeader: ({ children }: PropsWithChildren) => <div data-testid="dialog-header">{children}</div>,
     DialogTitle: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
+}))
+
+const mockNavigation = vi.hoisted(() => ({ search: "" }))
+vi.mock("next/navigation", () => ({
+    useSearchParams: () => new URLSearchParams(mockNavigation.search),
+    usePathname: () => "/settings/appointments",
+}))
+
+vi.mock("@/lib/hooks/use-permissions", () => ({
+    useEffectivePermissions: () => ({ data: { permissions: ["view_intended_parents"] }, isLoading: false }),
+}))
+vi.mock("@/lib/hooks/use-surrogates", () => ({
+    useSurrogates: () => ({ data: { items: [] }, isLoading: false }),
+}))
+vi.mock("@/lib/hooks/use-intended-parents", () => ({
+    useIntendedParents: () => ({ data: { items: [] }, isLoading: false }),
+}))
+vi.mock("@/components/appointments/UnifiedCalendar", () => ({
+    UnifiedCalendar: (props: { appointmentFilters?: unknown; includeTasks?: boolean; includeGoogleEvents?: boolean }) => (
+        <div data-testid="unified-calendar" data-props={JSON.stringify(props)} />
+    ),
 }))
 
 vi.mock("@/components/ui/tabs", () => ({
     Tabs: ({
         children,
-        defaultValue,
-    }: PropsWithChildren<{ defaultValue?: string }>) => (
-        <div data-testid="tabs-root" data-default-value={defaultValue}>
+        value,
+    }: PropsWithChildren<{ value?: string; onValueChange?: (value: string) => void }>) => (
+        <div data-testid="tabs-root" data-value={value}>
             {children}
         </div>
     ),
@@ -111,7 +143,9 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
         mutate: mockUseRegenerateBookingLink,
         isPending: false,
     }),
-    useAppointmentTypes: () => mockUseAppointmentTypes(),
+    useAppointmentTypes: (activeOnly?: boolean) => mockUseAppointmentTypes(activeOnly),
+    useAppointmentStatusCounts: (params: unknown, options: unknown) => mockUseAppointmentStatusCounts(params, options),
+    useUpdateAppointmentLink: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useCreateAppointmentType: () => ({
         mutateAsync: mockUseCreateAppointmentType,
         isPending: false,
@@ -122,6 +156,7 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
     }),
     useDeleteAppointmentType: () => ({
         mutate: mockUseDeleteAppointmentType,
+        mutateAsync: mockUseDeleteAppointmentType,
         isPending: false,
     }),
     useAvailabilityRules: () => mockUseAvailabilityRules(),
@@ -169,6 +204,11 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
 describe("Appointments Google Meet UI", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mockNavigation.search = ""
+        mockUseAppointmentStatusCounts.mockReturnValue({
+            data: { pending: 0, confirmed: 0, completed: 0, cancelled: 0, expired: 0, no_show: 0 },
+            isError: false,
+        })
         mockUseAppointmentTypes.mockReturnValue({ data: [], isLoading: false })
         mockUseAvailabilityRules.mockReturnValue({ data: [], isLoading: false })
         mockUseBookingLink.mockReturnValue({
@@ -208,15 +248,7 @@ describe("Appointments Google Meet UI", () => {
     it("shows Google Meet as an appointment format option", () => {
         render(<AppointmentSettings />)
         expect(screen.getByText(/Google Meet/i)).toBeInTheDocument()
-    })
-
-    it("labels the booking link copy button", () => {
-        render(<AppointmentSettings />)
         expect(screen.getByRole("button", { name: "Copy booking link" })).toBeInTheDocument()
-    })
-
-    it("labels the readonly booking link field", () => {
-        render(<AppointmentSettings />)
         expect(screen.getByRole("textbox", { name: "Your booking link" })).toHaveAttribute("readonly")
         expect(screen.getByRole("textbox", { name: "Your booking link" })).toHaveValue("https://example.com/book/abc")
     })
@@ -245,8 +277,8 @@ describe("Appointments Google Meet UI", () => {
         ]
         view.rerender(<AppointmentSettings />)
 
-        fireEvent.click(screen.getAllByRole("switch")[1])
-        fireEvent.click(screen.getByRole("button", { name: "Save Availability" }))
+        fireEvent.click(screen.getByRole("switch", { name: "Available on Tuesday" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save availability" }))
 
         expect(mockUseSetAvailabilityRules).toHaveBeenCalledWith(
             {
@@ -263,7 +295,9 @@ describe("Appointments Google Meet UI", () => {
         )
     })
 
-    it("uses an accessible icon button for deleting appointment types", () => {
+    it("uses an accessible icon button and a confirm dialog to deactivate appointment types", async () => {
+        const confirmSpy = vi.spyOn(window, "confirm")
+        mockUseDeleteAppointmentType.mockResolvedValue(undefined)
         mockUseAppointmentTypes.mockReturnValue({
             data: [
                 {
@@ -291,10 +325,19 @@ describe("Appointments Google Meet UI", () => {
 
         render(<AppointmentSettings />)
 
-        const deleteButton = screen.getByRole("button", {
-            name: "Delete Screening Call appointment type",
+        const deactivateButton = screen.getByRole("button", {
+            name: "Deactivate Screening Call",
         })
-        expect(deleteButton).toHaveClass("size-8")
+        expect(deactivateButton).toHaveClass("size-8")
+
+        fireEvent.click(deactivateButton)
+        const dialog = await screen.findByRole("alertdialog", { name: "Deactivate Screening Call?" })
+        expect(mockUseDeleteAppointmentType).not.toHaveBeenCalled()
+        fireEvent.click(within(dialog).getByRole("button", { name: "Deactivate" }))
+
+        await vi.waitFor(() => expect(mockUseDeleteAppointmentType).toHaveBeenCalledWith("type-delete"))
+        expect(confirmSpy).not.toHaveBeenCalled()
+        confirmSpy.mockRestore()
     })
 
     it("labels Google Meet appointment types on the public booking page", () => {
@@ -737,9 +780,22 @@ describe("Appointments Google Meet UI", () => {
         })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Test Zhang")[0])
+        fireEvent.click(screen.getAllByText("Test Zhang")[0]!)
 
         expect(screen.getByRole("button", { name: /reschedule appointment/i })).toBeInTheDocument()
+
+        // One sectioned detail dialog: the link editor is a body section and the destructive action
+        // sits apart from Reschedule in the footer.
+        const content = screen.getAllByTestId("dialog-content").at(-1)!
+        expect(content).toHaveAttribute("data-layout", "sectioned")
+        expect(content).toHaveAttribute("data-size", "lg")
+        const body = within(content).getByTestId("dialog-body")
+        expect(within(body).getByRole("heading", { name: "Linked to" })).toBeInTheDocument()
+        expect(within(body).getByText("Not linked")).toBeInTheDocument()
+        const footer = within(content).getByTestId("dialog-footer")
+        const startGroup = footer.querySelector('[data-slot="dialog-footer-start"]') as HTMLElement
+        expect(within(startGroup).getByRole("button", { name: "Cancel appointment" })).toBeInTheDocument()
+        expect(within(startGroup).queryByRole("button", { name: /reschedule/i })).not.toBeInTheDocument()
     })
 
     it("retries staff reschedule availability for the current date", () => {
@@ -1049,18 +1105,22 @@ describe("Appointments Google Meet UI", () => {
     })
 
     it("defaults appointments to upcoming tab and shows upcoming first", () => {
+        mockUseAppointmentStatusCounts.mockReturnValue({
+            data: { pending: 2, confirmed: 5, completed: 12, cancelled: 1, expired: 0, no_show: 0 },
+            isError: false,
+        })
         render(<AppointmentsList />)
 
         const tabsRoot = screen.getByTestId("tabs-root")
-        expect(tabsRoot).toHaveAttribute("data-default-value", "confirmed")
+        expect(tabsRoot).toHaveAttribute("data-value", "confirmed")
 
-        const triggers = screen.getAllByRole("button").slice(0, 5)
+        const triggers = Array.from(tabsRoot.querySelectorAll<HTMLButtonElement>("button[data-value]"))
         expect(triggers.map((trigger) => trigger.textContent?.trim())).toEqual([
-            "Upcoming",
-            "Pending",
-            "Past",
-            "Cancelled",
-            "Expired",
+            "Upcoming5",
+            "Pending2",
+            "Past12",
+            "Cancelled1",
+            "Expired0",
         ])
         expect(triggers.map((trigger) => trigger.getAttribute("data-value"))).toEqual([
             "confirmed",
@@ -1069,6 +1129,94 @@ describe("Appointments Google Meet UI", () => {
             "cancelled",
             "expired",
         ])
+    })
+
+    it("hides tab counts when the count request fails", () => {
+        mockUseAppointmentStatusCounts.mockReturnValue({ data: undefined, isError: true })
+        render(<AppointmentsList />)
+
+        const triggers = Array.from(screen.getByTestId("tabs-root").querySelectorAll("button[data-value]"))
+        expect(triggers.map((trigger) => trigger.textContent?.trim())).toEqual([
+            "Upcoming",
+            "Pending",
+            "Past",
+            "Cancelled",
+            "Expired",
+        ])
+    })
+
+    it("filters the list by client search, type and format, with matching chips", async () => {
+        mockUseAppointmentTypes.mockReturnValue({
+            data: [{ id: "type-1", name: "Consultation", is_active: false }],
+            isLoading: false,
+        })
+        render(<AppointmentsList />)
+
+        // Inactive types stay filterable so retired types still find past appointments.
+        expect(mockUseAppointmentTypes).toHaveBeenCalledWith(false)
+        fireEvent.change(screen.getByRole("textbox", { name: "Search appointments by client" }), {
+            target: { value: "casey" },
+        })
+        // The mocked Select renders a native select with no item options, so add the chosen one.
+        const choose = (select: HTMLElement, value: string) => {
+            select.appendChild(Object.assign(document.createElement("option"), { value }))
+            fireEvent.change(select, { target: { value } })
+        }
+        const [typeSelect, formatSelect] = screen.getAllByTestId("select")
+        choose(typeSelect!, "type-1")
+        choose(formatSelect!, "google_meet")
+
+        await vi.waitFor(() => expect(mockUseAppointments).toHaveBeenCalledWith(expect.objectContaining({
+            status: "confirmed",
+            q: "casey",
+            appointment_type_id: "type-1",
+            meeting_mode: "google_meet",
+        })))
+        expect(mockUseAppointmentStatusCounts).toHaveBeenLastCalledWith(
+            { q: "casey", appointment_type_id: "type-1", meeting_mode: "google_meet" },
+            { enabled: true },
+        )
+        expect(screen.getByRole("button", { name: "Remove filter: Type: Consultation" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Remove filter: Format: Google Meet" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Remove filter: Search: casey" })).toBeInTheDocument()
+    })
+
+    it("sizes the date filter like the other filters so it shares a row below sm", () => {
+        render(<AppointmentsList />)
+
+        const dateFilter = screen.getByRole("button", { name: "Filter by date" })
+        expect(dateFilter).toHaveClass("min-w-[calc(50%-0.375rem)]", "flex-1", "sm:min-w-[13rem]", "sm:flex-none")
+        expect(dateFilter).not.toHaveClass("min-w-[13rem]")
+    })
+
+    it("shows a neutral empty state per tab and Clear filters when filters are active", async () => {
+        render(<AppointmentsList />)
+
+        expect(screen.getByText("No upcoming appointments")).toBeInTheDocument()
+        expect(screen.getByText("No past appointments")).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument()
+
+        fireEvent.change(screen.getByRole("textbox", { name: "Search appointments by client" }), {
+            target: { value: "nobody" },
+        })
+        expect((await screen.findAllByText("No matching appointments")).length).toBeGreaterThan(0)
+        fireEvent.click(screen.getAllByRole("button", { name: "Clear filters" })[0]!)
+        expect(screen.getByRole("textbox", { name: "Search appointments by client" })).toHaveValue("")
+    })
+
+    it("opens the unified calendar limited to appointments from the view toggle", () => {
+        render(<AppointmentsList />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Calendar" }))
+
+        const calendar = screen.getByTestId("unified-calendar")
+        expect(JSON.parse(calendar.getAttribute("data-props") ?? "{}")).toMatchObject({
+            includeTasks: false,
+            includeGoogleEvents: false,
+            appointmentFilters: {},
+        })
+        expect(screen.queryByTestId("tabs-root")).not.toBeInTheDocument()
+        expect(mockUseAppointmentStatusCounts).toHaveBeenLastCalledWith({}, { enabled: false })
     })
 
     it("keeps public booking idempotency keys within 64 characters", async () => {
@@ -1167,12 +1315,14 @@ describe("Appointments Google Meet UI", () => {
             isError: true,
             error: new Error("Network error"),
             refetch,
+            isFetching: false,
         })
 
         render(<AppointmentsList />)
 
-        expect(screen.getAllByText(/Unable to load appointments/i).length).toBeGreaterThan(0)
-        fireEvent.click(screen.getAllByRole("button", { name: /retry/i })[0])
+        expect(screen.getAllByRole("heading", { name: "Couldn't load appointments" }).length).toBeGreaterThan(0)
+        expect(screen.queryByText(/Network error|Please try again/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getAllByRole("button", { name: "Try again" })[0]!)
         expect(refetch).toHaveBeenCalled()
     })
 

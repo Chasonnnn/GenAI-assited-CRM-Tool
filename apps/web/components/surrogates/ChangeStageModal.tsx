@@ -36,7 +36,11 @@ import {
     stageUsesPauseBehavior,
 } from "@/lib/surrogate-stage-context"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/error-utils"
+import { toast } from "@/components/ui/toast"
 import type { PipelineStage } from "@/lib/api/pipelines"
+import { StageOptionLabel, groupStageOptions } from "@/components/stage-select"
+import { pipelineStageOptions } from "@/lib/stage-options"
 
 type FollowUpMonths = "none" | "1" | "3" | "6"
 
@@ -109,39 +113,52 @@ function StageSelectionList({
     selectedStageId: string | null
     onStageSelect: (stage: PipelineStage) => void
 }) {
+    const stageById = new Map(stages.map((stage) => [stage.id, stage]))
+    const stageGroups = groupStageOptions(pipelineStageOptions(stages))
+
     return (
         <div className="space-y-2">
             <Label>New {label}</Label>
             <div className="grid max-h-64 gap-1.5 overflow-y-auto pr-1">
-                {stages.map((stage) => {
-                    const isCurrent = stage.id === currentStageId
-                    const isSelected = stage.id === selectedStageId
+                {stageGroups.map((group) => (
+                    <div
+                        key={group.label ?? "stages"}
+                        role={group.label ? "group" : undefined}
+                        aria-label={group.label}
+                        className="grid gap-1.5"
+                    >
+                        {group.label ? (
+                            <div className="px-3 pt-2 text-xs font-medium text-muted-foreground">{group.label}</div>
+                        ) : null}
+                        {group.options.map((option) => {
+                            const stage = stageById.get(option.value)
+                            if (!stage) return null
+                            const isCurrent = stage.id === currentStageId
+                            const isSelected = stage.id === selectedStageId
 
-                    return (
-                        <Button unstyled
-                            key={stage.id}
-                            type="button"
-                            disabled={isCurrent}
-                            onClick={() => onStageSelect(stage)}
-                            className={cn(
-                                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
-                                "hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                isSelected && "bg-primary/10 ring-1 ring-primary/30",
-                                isCurrent && "cursor-not-allowed bg-muted/30 opacity-50",
-                            )}
-                        >
-                            <div
-                                className="size-3 shrink-0 rounded-full ring-1 ring-black/10"
-                                style={{ backgroundColor: stage.color }}
-                            />
-                            <span className="flex-1 font-medium">{stage.label}</span>
-                            {isCurrent ? (
-                                <span className="text-xs text-muted-foreground">Current</span>
-                            ) : null}
-                            {isSelected ? <CheckIcon className="size-4 text-primary" /> : null}
-                        </Button>
-                    )
-                })}
+                            return (
+                                <Button unstyled
+                                    key={stage.id}
+                                    type="button"
+                                    disabled={isCurrent}
+                                    onClick={() => onStageSelect(stage)}
+                                    className={cn(
+                                        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+                                        "hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                        isSelected && "bg-primary/10 ring-1 ring-primary/30",
+                                        isCurrent && "cursor-not-allowed bg-muted/30 opacity-50",
+                                    )}
+                                >
+                                    <StageOptionLabel option={option} className="flex-1 font-medium" />
+                                    {isCurrent ? (
+                                        <span className="text-xs text-muted-foreground">Current</span>
+                                    ) : null}
+                                    {isSelected ? <CheckIcon className="size-4 text-primary" /> : null}
+                                </Button>
+                            )
+                        })}
+                    </div>
+                ))}
             </div>
         </div>
     )
@@ -594,7 +611,12 @@ function ChangeStageModalContent({
             if (trimmedWeight) payload.delivery_baby_weight = trimmedWeight
         }
 
-        await onSubmit(payload)
+        try {
+            await onSubmit(payload)
+        } catch (error) {
+            // The dialog stays open so the user can pick another stage.
+            toast.error(getErrorMessage(error, "Couldn't change the stage"))
+        }
     }
 
     const handleClose = () => {
@@ -632,9 +654,10 @@ function ChangeStageModalContent({
         <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent
                 data-testid="change-stage-dialog"
+                size={isInterviewScheduledStage ? "2xl" : "lg"}
                 className={cn(
                     "flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0",
-                    isInterviewScheduledStage ? "sm:max-w-2xl" : "sm:max-w-lg md:max-w-xl",
+                    !isInterviewScheduledStage && "md:max-w-xl",
                 )}
             >
                 <DialogHeader className="shrink-0 border-b p-5 pr-14">
@@ -655,7 +678,6 @@ function ChangeStageModalContent({
                         selectedStageId={selectedStageId}
                         onStageSelect={handleStageSelect}
                     />
-                    {appointmentManager}
                     <EffectiveScheduleSection
                         effectiveNow={effectiveNow}
                         selectedDate={selectedDate}
@@ -668,6 +690,7 @@ function ChangeStageModalContent({
                         onSelectedDateChange={setSelectedDate}
                         onSelectedTimeChange={setSelectedTime}
                     />
+                    {appointmentManager}
                     {isOnHoldStage ? (
                         <OnHoldFollowUpSection
                             selectedMonths={onHoldFollowUpMonths}

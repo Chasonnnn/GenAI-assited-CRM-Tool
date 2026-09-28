@@ -11,7 +11,9 @@ from tests.test_match_cases import _accept, _case, _donor
 
 
 @pytest.mark.asyncio
-async def test_disabled_expansion_preserves_legacy_match_operations(authed_client, db, monkeypatch):
+async def test_disabled_expansion_preserves_legacy_match_operations(
+    authed_client, db, test_auth, monkeypatch
+):
     monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", False)
     ip = await _create_intended_parent(authed_client)
     surrogate = await _create_surrogate(authed_client)
@@ -19,18 +21,18 @@ async def test_disabled_expansion_preserves_legacy_match_operations(authed_clien
     accepted = await _accept(authed_client, case)
     assert accepted["status"] == "accepted"
     assert (await authed_client.get(f"/matches/{case['id']}")).status_code == 200
-    before = db.query(Match).count()
+    before = db.query(Match).filter_by(organization_id=test_auth.org.id).count()
     donor = await _donor(authed_client)
     response = await authed_client.post(
         "/matches/", json={"donor_id": donor["id"], "intended_parent_id": ip["id"]}
     )
     assert response.status_code == 503
-    assert db.query(Match).count() == before
+    assert db.query(Match).filter_by(organization_id=test_auth.org.id).count() == before
     response = await authed_client.post(
         f"/matches/{case['id']}/attempts", json={"attempt_type": "embryo_transfer"}
     )
     assert response.status_code == 503
-    assert db.query(MatchAttempt).count() == 0
+    assert db.query(MatchAttempt).filter_by(organization_id=test_auth.org.id).count() == 0
     response = await authed_client.put(
         f"/matches/{case['id']}/complete", json={"outcome": "Completed"}
     )
@@ -81,7 +83,7 @@ def test_expansion_requires_explicit_activation(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_disabling_expansion_keeps_history_readable_and_blocks_new_work(
-    authed_client, db, monkeypatch
+    authed_client, db, test_auth, monkeypatch
 ):
     import io
 
@@ -102,7 +104,10 @@ async def test_disabling_expansion_keeps_history_readable_and_blocks_new_work(
         f"/matches/{case['id']}/attempts/{attempt.json()['id']}", json={"status": "completed"}
     )
     assert updated.status_code == 503
-    before = [db.query(model).count() for model in (Task, EntityNote, Attachment)]
+    before = [
+        db.query(model).filter_by(organization_id=test_auth.org.id).count()
+        for model in (Task, EntityNote, Attachment)
+    ]
     note = await authed_client.post(f"/matches/{case['id']}/notes", json={"content": "Blocked"})
     assert note.status_code == 503
     task = await authed_client.post("/tasks", json={"title": "Blocked", "match_id": case["id"]})
@@ -114,4 +119,7 @@ async def test_disabling_expansion_keeps_history_readable_and_blocks_new_work(
         files={"file": ("blocked.png", content.getvalue(), "image/png")},
     )
     assert file.status_code == 503
-    assert [db.query(model).count() for model in (Task, EntityNote, Attachment)] == before
+    assert [
+        db.query(model).filter_by(organization_id=test_auth.org.id).count()
+        for model in (Task, EntityNote, Attachment)
+    ] == before

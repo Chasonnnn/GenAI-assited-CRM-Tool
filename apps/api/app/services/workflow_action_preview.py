@@ -60,7 +60,18 @@ def build_action_preview(
     if action_type == WorkflowActionType.ADD_NOTE.value:
         return _preview_add_note(db, action, entity)
 
-    return f"Execute action: {action_type}"
+    if action_type in _STATIC_PREVIEWS:
+        return _STATIC_PREVIEWS[action_type]
+
+    # Approval cards show this text; never show the raw action key.
+    return str(action_type or "action").replace("_", " ").capitalize()
+
+
+_STATIC_PREVIEWS = {
+    WorkflowActionType.AUTO_MATCH_SUBMISSION.value: "Match the form submission to an existing record",
+    WorkflowActionType.CREATE_INTAKE_LEAD.value: "Create an intake lead from the form submission",
+    "promote_intake_lead": "Promote the intake lead to a case",
+}
 
 
 def render_action_payload(action: dict, entity: Any) -> dict:

@@ -510,16 +510,12 @@ export function useTemplateFormBuilderPage() {
         )
     }
 
+    // Rejections reach ConfirmDialog, which keeps the dialog open and shows a safe message inline.
     const handleDeleteTemplate = async () => {
         if (isNewForm || deleteTemplateMutation.isPending) return
-        try {
-            await deleteTemplateMutation.mutateAsync({ id })
-            toast.success("Template deleted")
-            patchState({ showDeleteTemplateDialog: false })
-            router.push("/ops/templates?tab=forms")
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to delete template")
-        }
+        await deleteTemplateMutation.mutateAsync({ id })
+        toast.success("Template deleted")
+        router.push("/ops/templates?tab=forms")
     }
 
     const autoSaveLabel = getAutoSaveLabel(state, isDirty)

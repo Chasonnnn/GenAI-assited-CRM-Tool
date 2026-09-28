@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { PermissionDeniedState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -237,24 +239,21 @@ export default function AdminDataPage() {
 
     if (!isDeveloper) {
         return (
-            <div className="flex min-h-screen flex-col p-6">
-                <Alert variant="destructive">
-                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
-                    <AlertDescription>
-                        This page is only accessible to developers.
-                    </AlertDescription>
-                </Alert>
+            <div className="flex min-h-screen flex-col">
+                <PageHeader title="Data Management" />
+                <PermissionDeniedState
+                    description="Data Management is only accessible to developers."
+                    secondaryHref="/settings"
+                    secondaryLabel="Back to Settings"
+                    headingLevel={2}
+                />
             </div>
         )
     }
 
     return (
         <div className="flex min-h-screen flex-col">
-            <div className="border-b border-border bg-background/95 backdrop-blur">
-                <div className="flex h-16 items-center px-6">
-                    <h1 className="text-2xl font-semibold">Data Management</h1>
-                </div>
-            </div>
+            <PageHeader title="Data Management" />
 
             <div className="flex-1 space-y-6 p-6">
                 <Alert>

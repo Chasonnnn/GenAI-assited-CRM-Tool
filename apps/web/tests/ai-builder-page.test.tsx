@@ -68,7 +68,20 @@ describe("AIBuilderPage", () => {
     it("shows disabled state when AI permission is missing", () => {
         mockUseEffectivePermissions.mockReturnValue({ data: { permissions: [] } })
         render(<AIBuilderPage />)
-        expect(screen.getByText(/ai builder is disabled/i)).toBeInTheDocument()
+        expect(screen.getByRole("status")).toHaveTextContent("Your role does not include AI access.")
+        expect(screen.getByRole("textbox", { name: "Describe Your Workflow" })).toBeDisabled()
+        expect(screen.getByRole("tab", { name: "Personal" })).toHaveAttribute("aria-disabled", "true")
+    })
+
+    it("uses the shared org-disabled notice with a settings link for integration managers", () => {
+        mockUseAuth.mockReturnValue({ user: { ai_enabled: false, user_id: "user-1", role: "admin" } })
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["use_ai_assistant", "manage_integrations"] },
+        })
+        render(<AIBuilderPage />)
+        expect(screen.getByRole("status")).toHaveTextContent("AI is turned off for this organization.")
+        expect(screen.getByRole("link", { name: "AI settings" })).toHaveAttribute("href", "/settings/integrations")
+        expect(screen.getByRole("textbox", { name: "Describe Your Workflow" })).toBeDisabled()
     })
 
     it("renders variable suggestions for generated email template", async () => {

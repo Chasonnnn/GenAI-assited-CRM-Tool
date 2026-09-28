@@ -14,8 +14,18 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { RelativeTime } from '@/components/ui/time-display';
-import { AlertTriangle, CheckCircle, XCircle, AlertCircle, RefreshCw, Loader2, Building2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, AlertCircle, RefreshCw, Loader2, Building2, BellIcon } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
+import { PageHeader } from '@/components/page-header';
+import { EmptyState } from '@/components/empty-state';
+import { QueryErrorState } from '@/components/error-state';
+import { toSelectOptions } from '@/lib/select-labels';
+import {
+    ALERT_SEVERITY_LABELS,
+    ALERT_STATUS_LABELS,
+    getAlertSeverityLabel,
+    getAlertStatusLabel,
+} from '@/components/ops/agencies/agency-constants';
 
 type SeverityConfig = { icon: ElementType; color: string; badge: string };
 
@@ -60,6 +70,7 @@ type AlertsAction =
     | { type: "set-status-filter"; statusFilter: string }
     | { type: "set-severity-filter"; severityFilter: string }
     | { type: "set-action-loading"; alertId: string | null }
+    | { type: "clear-filters" }
 
 const INITIAL_ALERTS_STATE: AlertsState = {
     statusFilter: "",
@@ -75,6 +86,8 @@ function alertsReducer(state: AlertsState, action: AlertsAction): AlertsState {
             return { ...state, severityFilter: action.severityFilter }
         case "set-action-loading":
             return { ...state, actionLoading: action.alertId }
+        case "clear-filters":
+            return { ...state, statusFilter: "", severityFilter: "" }
     }
 }
 
@@ -91,24 +104,17 @@ export default function GlobalAlertsPage() {
     ] as const;
     const alertsQuery = useQuery({
         queryKey: alertsQueryKey,
-        queryFn: async () => {
-            try {
-                return await listAlerts({
-                    ...(statusFilter ? { status: statusFilter } : {}),
-                    ...(severityFilter ? { severity: severityFilter } : {}),
-                });
-            } catch (error) {
-                console.error('Failed to fetch alerts:', error);
-                toast.error('Failed to load alerts');
-                throw error;
-            }
-        },
+        queryFn: () =>
+            listAlerts({
+                ...(statusFilter ? { status: statusFilter } : {}),
+                ...(severityFilter ? { severity: severityFilter } : {}),
+            }),
         retry: false,
         staleTime: 30_000,
     });
     const alerts = alertsQuery.data?.items ?? [];
-    const total = alertsQuery.data?.total ?? 0;
     const isLoading = alertsQuery.isFetching;
+    const hasActiveFilters = statusFilter !== '' || severityFilter !== '';
 
     const fetchAlerts = () => {
         void alertsQuery.refetch();
@@ -168,38 +174,36 @@ export default function GlobalAlertsPage() {
     };
 
     return (
-        <div className="p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
-                        Global Alerts
-                    </h1>
-                    <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-                        {total} total alerts across all agencies
-                    </p>
-                </div>
-                <Button variant="outline" onClick={fetchAlerts} disabled={isLoading}>
-                    <RefreshCw className={`mr-2 size-4 ${isLoading ? 'animate-spin' : ''}`} />
-                    Refresh
-                </Button>
-            </div>
+        <div>
+            <PageHeader
+                title="Alerts"
+                count={alertsQuery.isSuccess ? alertsQuery.data.total : null}
+                countLabel="alerts"
+                actions={
+                    <Button variant="outline" onClick={fetchAlerts} disabled={isLoading}>
+                        <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
+                        Refresh
+                    </Button>
+                }
+            />
 
+            <div className="p-6 space-y-6">
             {/* Filters */}
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
                 <Select
                     value={statusFilter}
                     onValueChange={(v) => dispatch({ type: "set-status-filter", statusFilter: v || "" })}
                 >
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="All statuses" />
+                    <SelectTrigger className="w-full sm:w-[180px]" aria-label="Filter by status">
+                        <SelectValue placeholder="All statuses">{getAlertStatusLabel}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="">All statuses</SelectItem>
-                        <SelectItem value="open">Open</SelectItem>
-                        <SelectItem value="acknowledged">Acknowledged</SelectItem>
-                        <SelectItem value="resolved">Resolved</SelectItem>
-                        <SelectItem value="snoozed">Snoozed</SelectItem>
+                        {toSelectOptions(ALERT_STATUS_LABELS).map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
                     </SelectContent>
                 </Select>
 
@@ -207,28 +211,48 @@ export default function GlobalAlertsPage() {
                     value={severityFilter}
                     onValueChange={(v) => dispatch({ type: "set-severity-filter", severityFilter: v || "" })}
                 >
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="All severities" />
+                    <SelectTrigger className="w-full sm:w-[180px]" aria-label="Filter by severity">
+                        <SelectValue placeholder="All severities">{getAlertSeverityLabel}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="">All severities</SelectItem>
-                        <SelectItem value="critical">Critical</SelectItem>
-                        <SelectItem value="error">Error</SelectItem>
-                        <SelectItem value="warn">Warning</SelectItem>
+                        {toSelectOptions(ALERT_SEVERITY_LABELS).map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
                     </SelectContent>
                 </Select>
             </div>
 
             {/* Alerts List */}
-            {isLoading ? (
+            {alertsQuery.isError ? (
+                <div className="border rounded-lg bg-card">
+                    <QueryErrorState
+                        error={alertsQuery.error}
+                        onRetry={fetchAlerts}
+                        isRetrying={alertsQuery.isFetching}
+                        title="Couldn't load alerts"
+                        headingLevel={2}
+                        className="min-h-0 py-12"
+                    />
+                </div>
+            ) : isLoading ? (
                 <div className="flex items-center justify-center py-16">
                     <Loader2 className="size-8 animate-spin text-muted-foreground" />
                 </div>
             ) : alerts.length === 0 ? (
-                <div className="text-center py-16 border rounded-lg bg-white dark:bg-stone-900">
-                    <CheckCircle className="mx-auto size-12 text-green-500/50 mb-4" />
-                    <h3 className="text-lg font-medium text-foreground">No alerts</h3>
-                    <p className="text-muted-foreground mt-1">All systems are operating normally</p>
+                <div className="border rounded-lg bg-card">
+                    {hasActiveFilters ? (
+                        <EmptyState
+                            icon={BellIcon}
+                            title="No matching alerts"
+                            headingLevel={2}
+                            onClearFilters={() => dispatch({ type: "clear-filters" })}
+                        />
+                    ) : (
+                        <EmptyState icon={CheckCircle} title="No alerts" headingLevel={2} />
+                    )}
                 </div>
             ) : (
                 <div className="space-y-4">
@@ -241,11 +265,11 @@ export default function GlobalAlertsPage() {
                                 key={alert.id}
                                 className={`flex items-start gap-4 rounded-lg border p-4 ${config.color}`}
                             >
-                                <Icon className="mt-0.5 size-5 flex-shrink-0" />
-                                <div className="flex-1 space-y-2">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div>
-                                            <p className="font-medium text-stone-900 dark:text-stone-100">
+                                <Icon className="mt-0.5 size-5 flex-shrink-0" aria-hidden="true" />
+                                <div className="min-w-0 flex-1 space-y-2">
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                        <div className="min-w-0">
+                                            <p className="font-medium text-foreground">
                                                 {alert.title}
                                             </p>
                                             <Link
@@ -258,10 +282,10 @@ export default function GlobalAlertsPage() {
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <Badge variant="outline" className={config.badge}>
-                                                {alert.severity}
+                                                {getAlertSeverityLabel(alert.severity)}
                                             </Badge>
                                             <Badge variant="outline" className={STATUS_BADGE[alert.status]}>
-                                                {alert.status}
+                                                {getAlertStatusLabel(alert.status)}
                                             </Badge>
                                         </div>
                                     </div>
@@ -270,7 +294,7 @@ export default function GlobalAlertsPage() {
                                         <p className="text-sm text-muted-foreground">{alert.message}</p>
                                     )}
 
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                             <span>
                                                 Last seen:{' '}
@@ -318,6 +342,7 @@ export default function GlobalAlertsPage() {
                     })}
                 </div>
             )}
+            </div>
         </div>
     );
 }

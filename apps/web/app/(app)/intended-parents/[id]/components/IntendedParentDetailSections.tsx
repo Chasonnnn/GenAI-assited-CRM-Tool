@@ -67,18 +67,6 @@ export function IntendedParentLoadingState() {
     )
 }
 
-export function IntendedParentNotFoundState() {
-    return (
-        <div className="flex min-h-screen flex-col items-center justify-center">
-            <h1 className="text-2xl font-semibold">Not Found</h1>
-            <p className="text-muted-foreground">This intended parent doesn&apos;t exist.</p>
-            <Link href="/intended-parents" className="mt-4 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90">
-                Back to List
-            </Link>
-        </div>
-    )
-}
-
 export function IntendedParentHeader({
     intendedParent,
     statusLabel,
@@ -314,7 +302,7 @@ export function EditIntendedParentDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-lg">
+            <DialogContent size="lg">
                 <DialogHeader>
                     <DialogTitle>Edit Intended Parent</DialogTitle>
                     <DialogDescription>Update the intended parent details</DialogDescription>

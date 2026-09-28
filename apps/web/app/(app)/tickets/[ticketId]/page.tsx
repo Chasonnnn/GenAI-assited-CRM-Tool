@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { toast } from '@/components/ui/toast'
-import { ShieldAlertIcon } from 'lucide-react'
+import { Loader2Icon } from 'lucide-react'
 
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { NotFoundState, PermissionDeniedState, QueryErrorState } from '@/components/error-state'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -44,6 +44,8 @@ function getTicketPriorityLabel(value: TicketPriority | null | undefined): strin
     return value ? TICKET_PRIORITY_LABELS[value] ?? 'Unknown priority' : 'Priority'
 }
 
+const TICKET_NOT_FOUND = { title: 'Ticket not found', backHref: '/tickets', backLabel: 'Back to Tickets' }
+
 type TicketDetailData = NonNullable<ReturnType<typeof useTicket>['data']>
 type TicketDetailTicket = TicketDetailData['ticket']
 type TicketDetailNote = TicketDetailData['notes'][number]
@@ -55,27 +57,42 @@ export default function TicketDetailPage() {
     const { user } = useAuth()
     const isDeveloper = user?.role === 'developer'
 
-    const { data, isLoading } = useTicket(ticketId, { enabled: isDeveloper })
+    const ticketQuery = useTicket(ticketId, { enabled: isDeveloper })
+    const { data, isLoading } = ticketQuery
 
     if (!isDeveloper) {
         return (
-            <div className="p-4 md:p-6">
-                <Alert variant="destructive">
-                    <ShieldAlertIcon className="size-4" aria-hidden="true" />
-                    <AlertDescription>
-                        Tickets are available only to developers.
-                    </AlertDescription>
-                </Alert>
-            </div>
+            <PermissionDeniedState
+                description="Tickets are available only to developers."
+                secondaryHref="/dashboard"
+                headingLevel={1}
+            />
         )
     }
 
     if (isLoading) {
-        return <div className="p-4 text-sm text-muted-foreground md:p-6">Loading ticket…</div>
+        return (
+            <div className="flex min-h-96 items-center justify-center" aria-label="Loading ticket">
+                <Loader2Icon className="size-7 animate-spin text-muted-foreground" aria-hidden="true" />
+            </div>
+        )
+    }
+
+    if (ticketQuery.isError) {
+        return (
+            <QueryErrorState
+                error={ticketQuery.error}
+                onRetry={() => void ticketQuery.refetch()}
+                isRetrying={ticketQuery.isFetching}
+                title="Couldn't load ticket"
+                notFound={TICKET_NOT_FOUND}
+                headingLevel={1}
+            />
+        )
     }
 
     if (!data?.ticket) {
-        return <div className="p-4 text-sm text-muted-foreground md:p-6">Ticket not found.</div>
+        return <NotFoundState {...TICKET_NOT_FOUND} headingLevel={1} />
     }
 
     return <LoadedTicketDetailPage key={data.ticket.id} ticketId={ticketId} data={data} />

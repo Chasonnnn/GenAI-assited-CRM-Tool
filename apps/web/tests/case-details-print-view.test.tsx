@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 import { CaseDetailsPrintView } from "@/components/surrogates/detail/print/CaseDetailsPrintView"
 
 describe("CaseDetailsPrintView", () => {
-    it("renders a deterministic generated header", () => {
+    it("renders the header without helper copy and maps empty values and the source", () => {
         render(
             <CaseDetailsPrintView
                 data={
@@ -32,7 +32,12 @@ describe("CaseDetailsPrintView", () => {
             />,
         )
 
-        expect(screen.getByText("Generated from current case data")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 1, name: "Case Details" })).toBeInTheDocument()
+        expect(screen.queryByText("Generated from current case data")).not.toBeInTheDocument()
+        expect(screen.getByText("Manual")).toBeInTheDocument()
+        expect(screen.queryByText("manual")).not.toBeInTheDocument()
+        expect(screen.queryByText("-")).not.toBeInTheDocument()
+        expect(screen.getAllByText("—").length).toBeGreaterThan(0)
     })
 
     it("shows medical information even when the old stage gate flag is absent", () => {

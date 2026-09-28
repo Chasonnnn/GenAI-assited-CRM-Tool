@@ -35,6 +35,10 @@ export function DashboardFilterBar({
     const { data: assignees } = useAssignees()
     const isAdmin = user?.role === "admin" || user?.role === "developer"
     const showReset = filters.dateRange !== "all" || (isAdmin && !!filters.assigneeId)
+    // Non-admins are always scoped to their own records, so the select would only offer "Mine".
+    const showAssigneeFilter = isAdmin
+    // The current user is already listed as "Mine".
+    const otherAssignees = (assignees ?? []).filter((assignee) => assignee.id !== user?.user_id)
 
     // The unmount cleanup intentionally clears the latest refresh hold timeout,
     // not the timeout value that existed when this effect was registered.
@@ -66,84 +70,77 @@ export function DashboardFilterBar({
         }, 1000)
     }
 
+    // Rendered inside the PageHeader actions row, which wraps below the title on narrow screens.
+    // Both triggers share one height (h-9) and the outline surface so they read as one control group.
     return (
-        <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-                <DateRangePicker
-                    preset={filters.dateRange}
-                    onPresetChange={setDateRange}
-                    customRange={filters.customRange}
-                    onCustomRangeChange={setCustomRange}
-                    ariaLabel="Filter by date range"
-                />
+        <>
+            <DateRangePicker
+                preset={filters.dateRange}
+                onPresetChange={setDateRange}
+                customRange={filters.customRange}
+                onCustomRangeChange={setCustomRange}
+                ariaLabel="Filter by date range"
+                className="h-9 flex-1 sm:flex-none"
+            />
 
+            {showAssigneeFilter && (
                 <Select
                     name="dashboard_assignee_filter"
-                    value={filters.assigneeId ?? (isAdmin ? "all" : user?.user_id ?? "all")}
+                    value={filters.assigneeId ?? "all"}
                     onValueChange={(value) => setAssigneeId(value && value !== "all" ? value : undefined)}
-                    disabled={!isAdmin && !user?.user_id}
                 >
                     <SelectTrigger
                         id="dashboard-assignee-filter"
                         aria-label="Filter by assignee"
-                        className="w-full sm:w-[180px]"
-                        size="sm"
+                        className="min-w-36 flex-1 bg-background sm:w-[180px] sm:flex-none"
                     >
-                    <SelectValue placeholder="All assignees">
-                        {(value: string | null) => {
-                                if (!value || value === "all") return isAdmin ? "All Assignees" : "Mine"
-                            if (value === user?.user_id) return "Mine"
-                            const assignee = assignees?.find((item) => item.id === value)
-                            return assignee?.name ?? "Unknown assignee"
-                        }}
+                        <SelectValue placeholder="All Assignees">
+                            {(value: string | null) => {
+                                if (!value || value === "all") return "All Assignees"
+                                if (value === user?.user_id) return "Mine"
+                                const assignee = assignees?.find((item) => item.id === value)
+                                return assignee?.name ?? "Unknown assignee"
+                            }}
                         </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                        {isAdmin && <SelectItem value="all">All Assignees</SelectItem>}
+                        <SelectItem value="all">All Assignees</SelectItem>
                         {user?.user_id && <SelectItem value={user.user_id}>Mine</SelectItem>}
-                        {isAdmin && assignees?.map((assignee) => (
+                        {otherAssignees.map((assignee) => (
                             <SelectItem key={assignee.id} value={assignee.id}>
                                 {assignee.name}
                             </SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
+            )}
 
-                {showReset && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={resetFilters}
-                        className="h-9 px-3 text-muted-foreground hover:text-foreground"
-                    >
-                        <XIcon className="mr-1 size-3.5" aria-hidden="true" />
-                        Reset
-                    </Button>
-                )}
-            </div>
+            {showReset && (
+                <Button
+                    variant="ghost"
+                    onClick={resetFilters}
+                    className="text-muted-foreground hover:text-foreground"
+                >
+                    <XIcon aria-hidden="true" />
+                    Reset
+                </Button>
+            )}
 
-            <div className="flex items-center gap-3">
-                {lastUpdatedText && (
-                    <span className="text-xs text-muted-foreground">
-                        {lastUpdatedText}
-                    </span>
-                )}
-                {onRefresh && (
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={handleRefresh}
-                        disabled={showRefreshing}
-                        className="size-9"
-                        aria-label={showRefreshing ? "Refreshing dashboard" : "Refresh dashboard"}
-                    >
-                        <RefreshCwIcon
-                            className={`size-4 ${showRefreshing ? 'animate-spin motion-reduce:animate-none' : ''}`}
-                            aria-hidden="true"
-                        />
-                    </Button>
-                )}
-            </div>
-        </div>
+            {onRefresh && (
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleRefresh}
+                    disabled={showRefreshing}
+                    title={lastUpdatedText ?? undefined}
+                    aria-label={showRefreshing ? "Refreshing dashboard" : "Refresh dashboard"}
+                >
+                    <RefreshCwIcon
+                        className={showRefreshing ? "animate-spin motion-reduce:animate-none" : undefined}
+                        aria-hidden="true"
+                    />
+                </Button>
+            )}
+        </>
     )
 }

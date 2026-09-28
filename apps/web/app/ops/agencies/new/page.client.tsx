@@ -2,12 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from "@/components/app-link";
 import { createOrganization } from '@/lib/api/platform';
+import { ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
+import { ValidatedField } from '@/components/ui/field';
+import { PageHeader } from '@/components/page-header';
 import {
     Select,
     SelectContent,
@@ -15,8 +17,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/toast';
+import { useFormValidation, type FormFieldErrors } from '@/lib/forms/use-form-validation';
+import { validateEmail, validateRequired } from '@/lib/forms/validators';
+import { createSelectLabelGetter } from '@/lib/select-labels';
 
 const TIMEZONES = [
     { value: 'America/Los_Angeles', label: 'Pacific Time (US)' },
@@ -28,6 +33,41 @@ const TIMEZONES = [
     { value: 'Pacific/Honolulu', label: 'Hawaii Time (US)' },
     { value: 'UTC', label: 'UTC' },
 ];
+
+const getTimezoneLabel = createSelectLabelGetter(TIMEZONES, {
+    emptyLabel: 'Select timezone',
+    unknownLabel: 'Unknown timezone',
+});
+
+const SLUG_PATTERN = /^[a-z0-9-]+$/;
+
+type NewAgencyForm = {
+    name: string;
+    slug: string;
+    timezone: string;
+    admin_email: string;
+};
+
+function validateNewAgency(values: NewAgencyForm): FormFieldErrors<NewAgencyForm> {
+    const slug = values.slug.trim();
+    return {
+        name: validateRequired(values.name, 'Enter an agency name.'),
+        slug: !slug
+            ? 'Enter a slug.'
+            : !SLUG_PATTERN.test(slug)
+                ? 'Use only lowercase letters, numbers, and hyphens.'
+                : slug.length < 3
+                    ? 'Use at least 3 characters.'
+                    : undefined,
+        admin_email: validateEmail(values.admin_email, { requiredMessage: 'Enter the first admin email.' }),
+    };
+}
+
+function getBadRequestField(message: string): 'slug' | 'admin_email' | null {
+    if (/slug/i.test(message)) return 'slug';
+    if (/admin email/i.test(message)) return 'admin_email';
+    return null;
+}
 
 function generateSlug(name: string) {
     return name
@@ -41,13 +81,13 @@ function generateSlug(name: string) {
 export default function NewAgencyPage() {
     const { push } = useRouter();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [form, setForm] = useState({
+    const [form, setForm] = useState<NewAgencyForm>({
         name: '',
         slug: '',
         timezone: 'America/Los_Angeles',
         admin_email: '',
     });
-    const [errors, setErrors] = useState<Record<string, string>>({});
+    const validation = useFormValidation({ values: form, validate: validateNewAgency });
 
     const handleNameChange = (value: string) => {
         setForm((prev) => ({
@@ -57,42 +97,13 @@ export default function NewAgencyPage() {
         }));
     };
 
-    const validate = () => {
-        const newErrors: Record<string, string> = {};
-
-        if (!form.name.trim()) {
-            newErrors.name = 'Name is required';
-        }
-
-        if (!form.slug.trim()) {
-            newErrors.slug = 'Slug is required';
-        } else if (!/^[a-z0-9-]+$/.test(form.slug)) {
-            newErrors.slug = 'Slug must contain only lowercase letters, numbers, and hyphens';
-        } else if (form.slug.length < 3) {
-            newErrors.slug = 'Slug must be at least 3 characters';
-        }
-
-        if (!form.admin_email.trim()) {
-            newErrors.admin_email = 'Admin email is required';
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.admin_email)) {
-            newErrors.admin_email = 'Invalid email address';
-        }
-
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!validate()) return;
-
+    const createAgency = async (values: NewAgencyForm) => {
         setIsSubmitting(true);
         const result = await createOrganization({
-            name: form.name.trim(),
-            slug: form.slug.trim(),
-            timezone: form.timezone,
-            admin_email: form.admin_email.trim().toLowerCase(),
+            name: values.name.trim(),
+            slug: values.slug.trim(),
+            timezone: values.timezone,
+            admin_email: values.admin_email.trim().toLowerCase(),
         }).then((org) => ({
             status: 'success' as const,
             org,
@@ -101,75 +112,75 @@ export default function NewAgencyPage() {
             error,
         }));
 
+        setIsSubmitting(false);
         if (result.status === 'success') {
             toast.success('Agency created successfully');
             push(`/ops/agencies/${result.org.id}`);
-        } else {
-            const message = result.error instanceof Error ? result.error.message : 'Failed to create agency';
-            toast.error(message);
+            return;
         }
-        setIsSubmitting(false);
+        // platform_service.create_organization raises its own slug and admin email messages as 400s.
+        const badRequestField =
+            result.error instanceof ApiError && result.error.status === 400
+                ? getBadRequestField(result.error.message)
+                : null;
+        if (badRequestField && result.error instanceof Error) {
+            validation.setServerErrors({ [badRequestField]: result.error.message });
+            return;
+        }
+        const message = validation.applyApiError(result.error, {
+            fields: ['name', 'slug', 'timezone', 'admin_email'],
+            fallback: "Couldn't create agency.",
+        });
+        if (message) toast.error(message);
     };
 
     return (
-        <div className="p-6 max-w-2xl mx-auto">
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm text-stone-500 dark:text-stone-400 mb-6">
-                <Link
-                    href="/ops/agencies"
-                    className="hover:text-stone-900 dark:hover:text-stone-100"
-                >
-                    Agencies
-                </Link>
-                <ChevronRight className="size-4" />
-                <span className="text-stone-900 dark:text-stone-100">Create New Agency</span>
-            </div>
-
+        <div>
+            <PageHeader
+                title="Create Agency"
+                back={{ href: '/ops/agencies', label: 'Back to Agencies' }}
+            />
+            <div className="p-6 max-w-2xl mx-auto">
             <Card>
                 <CardHeader>
-                    <CardTitle>Create New Agency</CardTitle>
                     <CardDescription>
                         Create a new agency and send an invitation to their first administrator.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* Name */}
-                        <div className="space-y-2">
-                            <Label htmlFor="name">Agency Name</Label>
-                            <Input
-                                id="name"
-                                value={form.name}
-                                onChange={(e) => handleNameChange(e.target.value)}
-                                placeholder="Acme Surrogacy Agency"
-                                className={errors.name ? 'border-red-500' : ''}
-                            />
-                            {errors.name && (
-                                <p className="text-sm text-red-500">{errors.name}</p>
+                    <form noValidate onSubmit={validation.handleSubmit(createAgency)} className="space-y-6">
+                        <ValidatedField id="name" label="Agency Name" error={validation.errorFor('name')}>
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    value={form.name}
+                                    onChange={(e) => handleNameChange(e.target.value)}
+                                    onBlur={() => validation.touch('name')}
+                                    placeholder="Acme Surrogacy Agency"
+                                />
                             )}
-                        </div>
+                        </ValidatedField>
 
-                        {/* Slug */}
-                        <div className="space-y-2">
-                            <Label htmlFor="slug">Slug</Label>
-                            <Input
-                                id="slug"
-                                value={form.slug}
-                                onChange={(e) =>
-                                    setForm((prev) => ({ ...prev, slug: e.target.value }))
-                                }
-                                placeholder="acme-surrogacy"
-                                className={`font-mono ${errors.slug ? 'border-red-500' : ''}`}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                Used in URLs. Lowercase letters, numbers, and hyphens only.
-                            </p>
-                            {errors.slug && (
-                                <p className="text-sm text-red-500">{errors.slug}</p>
+                        <ValidatedField
+                            id="slug"
+                            label="Slug"
+                            description="Lowercase letters, numbers, and hyphens."
+                            error={validation.errorFor('slug')}
+                        >
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    value={form.slug}
+                                    onChange={(e) =>
+                                        setForm((prev) => ({ ...prev, slug: e.target.value }))
+                                    }
+                                    onBlur={() => validation.touch('slug')}
+                                    placeholder="acme-surrogacy"
+                                    className="font-mono"
+                                />
                             )}
-                        </div>
+                        </ValidatedField>
 
-                        {/* Timezone */}
                         <div className="space-y-2">
                             <Label htmlFor="timezone">Timezone</Label>
                             <Select
@@ -178,8 +189,8 @@ export default function NewAgencyPage() {
                                     if (value) setForm((prev) => ({ ...prev, timezone: value }));
                                 }}
                             >
-                                <SelectTrigger id="timezone">
-                                    <SelectValue />
+                                <SelectTrigger id="timezone" className="w-full">
+                                    <SelectValue>{getTimezoneLabel}</SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
                                     {TIMEZONES.map((tz) => (
@@ -191,28 +202,26 @@ export default function NewAgencyPage() {
                             </Select>
                         </div>
 
-                        {/* Admin Email */}
-                        <div className="space-y-2">
-                            <Label htmlFor="admin_email">First Admin Email</Label>
-                            <Input
-                                id="admin_email"
-                                type="email"
-                                value={form.admin_email}
-                                onChange={(e) =>
-                                    setForm((prev) => ({ ...prev, admin_email: e.target.value }))
-                                }
-                                placeholder="admin@agency.com"
-                                className={errors.admin_email ? 'border-red-500' : ''}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                                An invitation will be sent to this email address.
-                            </p>
-                            {errors.admin_email && (
-                                <p className="text-sm text-red-500">{errors.admin_email}</p>
+                        <ValidatedField
+                            id="admin_email"
+                            label="First Admin Email"
+                            description="An invitation is sent to this address."
+                            error={validation.errorFor('admin_email')}
+                        >
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    type="email"
+                                    value={form.admin_email}
+                                    onChange={(e) =>
+                                        setForm((prev) => ({ ...prev, admin_email: e.target.value }))
+                                    }
+                                    onBlur={() => validation.touch('admin_email')}
+                                    placeholder="admin@agency.com"
+                                />
                             )}
-                        </div>
+                        </ValidatedField>
 
-                        {/* Actions */}
                         <div className="flex gap-3 pt-4">
                             <Button type="submit" disabled={isSubmitting}>
                                 {isSubmitting && (
@@ -231,6 +240,7 @@ export default function NewAgencyPage() {
                     </form>
                 </CardContent>
             </Card>
+            </div>
         </div>
     );
 }

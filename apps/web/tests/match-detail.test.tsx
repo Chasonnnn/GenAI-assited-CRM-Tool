@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import MatchDetailPage from '../app/(app)/intended-parents/matches/[id]/page.client'
 import { ApiError } from '@/lib/api'
@@ -26,12 +26,31 @@ vi.mock('next/navigation', () => ({
 }))
 
 // Mock auth context
+const DEFAULT_PERMISSIONS = ['view_matches', 'propose_matches']
+let mockUserRole = 'admin'
+let mockPermissions: string[] = DEFAULT_PERMISSIONS
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({
-        user: { role: 'admin', id: 'user1', display_name: 'Test Admin' },
+        user: { role: mockUserRole, id: 'user1', user_id: 'user1', display_name: 'Test Admin' },
         isLoading: false,
     }),
 }))
+
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useEffectivePermissions: () => ({
+        data: { permissions: mockPermissions },
+        isLoading: false,
+        isError: false,
+        isFetching: false,
+        error: null,
+        refetch: vi.fn(),
+    }),
+}))
+
+beforeEach(() => {
+    mockUserRole = 'admin'
+    mockPermissions = DEFAULT_PERMISSIONS
+})
 
 // Mock react-query
 vi.mock('@tanstack/react-query', async () => {
@@ -140,15 +159,24 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
 
 // Mock pipelines hook
 vi.mock('@/lib/hooks/use-pipelines', () => ({
-    useDefaultPipeline: () => ({
-        data: {
-            id: 'pipeline1',
-            stages: [
-                { id: 'stage1', slug: 'ready_to_match', label: 'Ready to Match', color: '#888', stage_type: 'post_approval' },
-                { id: 'stage2', slug: 'matched', label: 'Matched', color: '#22c55e', stage_type: 'post_approval' },
-                { id: 'stage3', slug: 'medical_clearance_passed', label: 'Medical Clearance Passed', color: '#3b82f6', stage_type: 'post_approval' },
-            ],
-        },
+    useDefaultPipeline: (entityType: string = 'surrogate') => ({
+        data: entityType === 'intended_parent'
+            ? {
+                id: 'ip-pipeline',
+                stages: [
+                    { id: 'ipstage1', stage_key: 'new', label: 'New', order: 1, system_role: null },
+                    { id: 'ipstage2', stage_key: 'ready_to_match', label: 'Ready to Match', order: 2, system_role: null },
+                    { id: 'ipstage3', stage_key: 'matched', label: 'Matched', order: 3, system_role: 'matched' },
+                ],
+            }
+            : {
+                id: 'pipeline1',
+                stages: [
+                    { id: 'stage1', slug: 'ready_to_match', label: 'Ready to Match', color: '#888', stage_type: 'post_approval', order: 1, system_role: null },
+                    { id: 'stage2', slug: 'matched', label: 'Matched', color: '#22c55e', stage_type: 'post_approval', order: 2, system_role: 'matched' },
+                    { id: 'stage3', slug: 'medical_clearance_passed', label: 'Medical Clearance Passed', color: '#3b82f6', stage_type: 'post_approval', order: 3, system_role: null },
+                ],
+            },
         isLoading: false,
     }),
 }))
@@ -186,9 +214,9 @@ describe('MatchDetailPage', () => {
         render(<MatchDetailPage />)
         expect(screen.getByText('Existing case note')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Add Note' })).not.toBeInTheDocument()
-        fireEvent.click(screen.getByRole('button', { name: 'Files' }))
+        fireEvent.click(screen.getByRole('tab', { name: 'Files' }))
         expect(screen.queryByRole('button', { name: 'Upload File' })).not.toBeInTheDocument()
-        fireEvent.click(screen.getByRole('button', { name: 'Tasks' }))
+        fireEvent.click(screen.getByRole('tab', { name: 'Tasks' }))
         expect(screen.queryByRole('button', { name: 'Add Task' })).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole('tab', { name: 'Calendar' }))
         expect(screen.queryByRole('button', { name: 'Add Task' })).not.toBeInTheDocument()
@@ -274,10 +302,13 @@ describe('MatchDetailPage', () => {
         mockCreateTaskMutateAsync.mockResolvedValue({})
     })
 
-    it('renders match page tabs', () => {
+    it('renders match tabs, participants, and status', () => {
         render(<MatchDetailPage />)
         expect(screen.getByRole('tab', { name: /overview/i })).toBeInTheDocument()
         expect(screen.getByRole('tab', { name: /calendar/i })).toBeInTheDocument()
+        expect(screen.getAllByText(/Jane Doe/).length).toBeGreaterThan(0)
+        expect(screen.getByText('John Smith')).toBeInTheDocument()
+        expect(screen.getByText('Under Review')).toBeInTheDocument()
     })
 
     it('shows loading state when match is loading', () => {
@@ -315,23 +346,43 @@ describe('MatchDetailPage', () => {
 
         expect(screen.getByText('Permission required')).toBeInTheDocument()
         expect(screen.getByText(/account does not have permission to view this match/i)).toBeInTheDocument()
+        // query-retry never retries a 403, so the denied state offers only the back link.
+        expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
     })
 
     it('shows upload button in files tab', () => {
         render(<MatchDetailPage />)
-        fireEvent.click(screen.getByRole('button', { name: /files/i }))
+        fireEvent.click(screen.getByRole('tab', { name: /files/i }))
         expect(screen.getByRole('button', { name: /upload file/i })).toBeInTheDocument()
     })
 
-    it('shows add task button in overview tasks tab', () => {
+    it('confirms file deletion in an app dialog that names the file', async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm')
+        mockUseMatchWork.mockReturnValue({
+            data: {
+                notes: [],
+                files: [{ id: 'file-1', filename: 'contract.pdf', file_size: 2048, created_at: '2026-09-05T12:00:00Z', source: 'match', scope: 'case' }],
+                tasks: [],
+                activity: [],
+            },
+            isLoading: false,
+        })
         render(<MatchDetailPage />)
-        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
-        expect(screen.getByRole('button', { name: /add task/i })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('tab', { name: /files/i }))
+        fireEvent.click(screen.getByRole('button', { name: 'Delete contract.pdf' }))
+
+        const dialog = await screen.findByRole('alertdialog', { name: 'Delete contract.pdf?' })
+        expect(within(dialog).getByRole('button', { name: 'Delete file' })).toBeInTheDocument()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }))
+        await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+        expect(confirmSpy).not.toHaveBeenCalled()
+        confirmSpy.mockRestore()
     })
 
     it('defaults the add task dialog to match target', () => {
         render(<MatchDetailPage />)
-        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
+        fireEvent.click(screen.getByRole('tab', { name: /^tasks$/i }))
         fireEvent.click(screen.getByRole('button', { name: /add task/i }))
 
         expect(screen.getByRole('radio', { name: /match \(both sides\)/i })).toBeChecked()
@@ -339,7 +390,7 @@ describe('MatchDetailPage', () => {
 
     it('creates a match-scoped task from the overview tasks tab', async () => {
         render(<MatchDetailPage />)
-        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
+        fireEvent.click(screen.getByRole('tab', { name: /^tasks$/i }))
         fireEvent.click(screen.getByRole('button', { name: /add task/i }))
         fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Coordinate next steps' } })
         fireEvent.click(screen.getByRole('button', { name: /create task/i }))
@@ -366,7 +417,7 @@ describe('MatchDetailPage', () => {
         mockUseMatchWork.mockReturnValue({ data: { notes: [], files: [], activity: [], tasks: [{ ...dualLinkedTask, source: 'match' }] }, isLoading: false })
 
         render(<MatchDetailPage />)
-        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
+        fireEvent.click(screen.getByRole('tab', { name: /^tasks$/i }))
 
         expect(screen.getAllByText('Coordinate next steps')).toHaveLength(1)
         expect(screen.getByText('Match')).toBeInTheDocument()
@@ -424,18 +475,106 @@ describe('MatchDetailPage', () => {
         fireEvent.mouseMove(screen.getByRole('option', { name: 'Attempt 2 · Embryo Transfer · Planned' }))
         fireEvent.click(screen.getByRole('option', { name: 'Attempt 2 · Embryo Transfer · Planned' }))
         expect(mockUseMatchWork).toHaveBeenLastCalledWith('match1', 'attempt2', 1)
-        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
+        fireEvent.click(screen.getByRole('tab', { name: /^tasks$/i }))
         fireEvent.click(screen.getByRole('button', { name: /add task/i }))
         fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Attempt follow-up' } })
         fireEvent.click(screen.getByRole('button', { name: /create task/i }))
         await waitFor(() => expect(mockCreateTaskMutateAsync).toHaveBeenCalledWith({ title: 'Attempt follow-up', task_type: 'other', match_id: 'match1', work_source: 'match', attempt_id: 'attempt2' }))
     })
 
-    it('keeps a rejected concurrent acceptance visible without an unhandled promise', async () => {
-        mockAcceptMatchMutateAsync.mockRejectedValue(new Error('Surrogate already has an active match'))
+    it('keeps a refused concurrent acceptance visible in the confirm dialog', async () => {
+        mockAcceptMatchMutateAsync.mockRejectedValue(new ApiError(409, 'Conflict', 'Surrogate has an accepted match'))
         render(<MatchDetailPage />)
         fireEvent.click(screen.getByRole('button', { name: 'Accept Match' }))
-        await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Surrogate already has an active match'))
+        const dialog = await screen.findByRole('alertdialog')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Accept Match' }))
+        await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent('Surrogate has an accepted match'))
+        expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    })
+
+    it('confirms acceptance with the stage changes the API applies', async () => {
+        mockUseMatch.mockReturnValue({
+            data: { ...mockMatch, surrogate_stage_id: 'stage1', surrogate_stage_label: 'Ready to Match' },
+            isLoading: false,
+        })
+        mockUseIntendedParent.mockReturnValue({ data: { ...mockIP, stage_id: 'ipstage1' }, isLoading: false })
+        render(<MatchDetailPage />)
+
+        fireEvent.click(screen.getByRole('button', { name: 'Accept Match' }))
+
+        const dialog = await screen.findByRole('alertdialog', { name: 'Accept match M10001?' })
+        const changes = within(dialog).getAllByRole('listitem').map((item) => item.textContent)
+        expect(changes).toEqual([
+            'Surrogate stage: Ready to Match → Matched',
+            'Intended parent stage: New → Matched',
+            "Other matches under review for this surrogate stay open but can't be accepted.",
+        ])
+        expect(mockAcceptMatchMutateAsync).not.toHaveBeenCalled()
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+        await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+        expect(mockAcceptMatchMutateAsync).not.toHaveBeenCalled()
+    })
+
+    it('uses the default variant for Accept and destructive-outline for Decline', () => {
+        render(<MatchDetailPage />)
+        const accept = screen.getByRole('button', { name: 'Accept Match' })
+        const decline = screen.getByRole('button', { name: 'Decline' })
+        expect(accept.className).toMatch(/bg-\[linear-gradient/)
+        expect(accept).toHaveClass('h-8')
+        expect(accept.className).not.toMatch(/bg-green|h-7|text-xs/)
+        expect(decline).toHaveClass('border-destructive/40', 'text-destructive', 'h-8')
+    })
+
+    it('shows the decline reason on a declined match', () => {
+        mockUseMatch.mockReturnValue({
+            data: { ...mockMatch, status: 'declined', allowed_actions: [], decline_reason: 'Budget does not align', reviewed_at: '2026-09-05T12:00:00Z' },
+            isLoading: false,
+        })
+        const { container } = render(<MatchDetailPage />)
+        const row = container.querySelector('[data-slot="match-decline-reason"]')
+        expect(row).not.toBeNull()
+        expect(row).toHaveTextContent('Decline reason: Budget does not align')
+    })
+
+    it('shows attempt editing to a custom role that holds propose_matches', () => {
+        mockUserRole = 'match_coordinator'
+        mockPermissions = ['view_matches', 'propose_matches']
+        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted', allowed_actions: [] }, isLoading: false })
+        render(<MatchDetailPage />)
+        expect(screen.getByRole('button', { name: 'Add Attempt' })).toBeInTheDocument()
+    })
+
+    it('hides attempt editing from a listed role without propose_matches', () => {
+        mockUserRole = 'admin'
+        mockPermissions = ['view_matches']
+        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted', allowed_actions: [] }, isLoading: false })
+        render(<MatchDetailPage />)
+        expect(screen.queryByRole('button', { name: 'Add Attempt' })).not.toBeInTheDocument()
+    })
+
+    it('links a denied viewer without view_matches to the dashboard', () => {
+        mockPermissions = []
+        mockUseMatch.mockReturnValue({
+            data: null,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(403, 'Forbidden', 'Forbidden'),
+            refetch: vi.fn(),
+        })
+        render(<MatchDetailPage />)
+        expect(screen.getByRole('link', { name: 'Go to Dashboard' })).toHaveAttribute('href', '/dashboard')
+        expect(screen.queryByRole('link', { name: 'Back to matches' })).not.toBeInTheDocument()
+    })
+
+    it('spans case work below the participant cards until xl', () => {
+        render(<MatchDetailPage />)
+        const caseWork = screen.getByRole('tab', { name: /Activity/ }).closest('[data-slot="tabs"]') as HTMLElement
+        const grid = caseWork.parentElement as HTMLElement
+        expect(grid).toHaveClass('lg:grid-cols-2')
+        expect(grid.className).toContain('xl:grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]')
+        expect(grid.className).not.toMatch(/(^|\s)lg:grid-cols-\[/)
+        expect(caseWork).toHaveClass('lg:col-span-2', 'xl:col-span-1')
     })
 
     describe('match action controls', () => {
@@ -526,29 +665,6 @@ describe('MatchDetailPage', () => {
         })
     })
 
-    it('displays surrogate name when loaded', () => {
-        render(<MatchDetailPage />)
-        // Should show surrogate name (full name from match data) - in the header which combines both names
-        expect(screen.getAllByText(/Jane Doe/).length).toBeGreaterThan(0)
-    })
-
-    it('displays IP name when loaded', () => {
-        render(<MatchDetailPage />)
-        // Should show IP's name from match data
-        expect(screen.getByText('John Smith')).toBeInTheDocument()
-    })
-
-    it('displays match status badge', () => {
-        render(<MatchDetailPage />)
-        expect(screen.getByText('Under Review')).toBeInTheDocument()
-    })
-
-    it('renders tabs for Overview and Calendar', () => {
-        render(<MatchDetailPage />)
-        const tabs = screen.getAllByRole('tab')
-        expect(tabs.length).toBeGreaterThanOrEqual(2)
-    })
-
     it('renders the intended parent status label instead of the raw status slug', () => {
         mockUseIntendedParent.mockReturnValue({
             data: {
@@ -569,6 +685,8 @@ describe('MatchDetailPage', () => {
         render(<MatchDetailPage />)
 
         fireEvent.click(screen.getByRole('button', { name: /accept match/i }))
+        const dialog = await screen.findByRole('alertdialog')
+        fireEvent.click(within(dialog).getByRole('button', { name: /accept match/i }))
 
         await waitFor(() =>
             expect(mockAcceptMatchMutateAsync).toHaveBeenCalledWith({ matchId: 'match1' })

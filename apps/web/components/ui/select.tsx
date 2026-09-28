@@ -6,9 +6,34 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from '@/lib/utils'
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const SelectItemLabelsContext = React.createContext<ReadonlyMap<string, React.ReactNode> | null>(null)
+type SelectLabelsContextValue = {
+  labels: ReadonlyMap<string, React.ReactNode>
+  /** The root's itemToStringLabel resolves every value, so Base UI's own rendering is safe. */
+  hasItemToStringLabel: boolean
+}
 
-function collectSelectItemLabels(children: React.ReactNode) {
+const SelectItemLabelsContext = React.createContext<SelectLabelsContextValue | null>(null)
+
+function addItemsPropLabels(labels: Map<string, React.ReactNode>, items: unknown) {
+  if (items == null) return
+  if (!Array.isArray(items)) {
+    for (const [value, label] of Object.entries(items as Record<string, React.ReactNode>)) {
+      if (!labels.has(value)) labels.set(value, label)
+    }
+    return
+  }
+  for (const entry of items as unknown[]) {
+    if (!entry || typeof entry !== "object") continue
+    if ("items" in entry && Array.isArray(entry.items)) {
+      addItemsPropLabels(labels, entry.items)
+      continue
+    }
+    const { value, label } = entry as { value?: unknown; label?: React.ReactNode }
+    if (typeof value === "string" && label != null && !labels.has(value)) labels.set(value, label)
+  }
+}
+
+function collectSelectItemLabels(children: React.ReactNode, items?: unknown) {
   const labels = new Map<string, React.ReactNode>()
 
   const visit = (nodes: React.ReactNode) => {
@@ -29,16 +54,18 @@ function collectSelectItemLabels(children: React.ReactNode) {
   }
 
   visit(children)
+  addItemsPropLabels(labels, items)
   return labels
 }
 
 function Select<Value = string, Multiple extends boolean | undefined = false>(
   props: SelectPrimitive.Root.Props<Value, Multiple>
 ) {
-  const labels = collectSelectItemLabels(props.children)
+  const labels = collectSelectItemLabels(props.children, props.items)
+  const context = { labels, hasItemToStringLabel: props.itemToStringLabel != null }
 
   return (
-    <SelectItemLabelsContext.Provider value={labels}>
+    <SelectItemLabelsContext.Provider value={context}>
       <SelectPrimitive.Root {...props} />
     </SelectItemLabelsContext.Provider>
   )
@@ -54,6 +81,14 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   )
 }
 
+function isUnselectedValue(value: unknown) {
+  return value == null || value === ""
+}
+
+function isBlankSelectLabel(label: React.ReactNode) {
+  return label == null || label === false || label === ""
+}
+
 function SelectValue({
   className,
   placeholder,
@@ -63,8 +98,10 @@ function SelectValue({
   placeholder?: string
   children?: (value: string | null) => React.ReactNode
 }) {
-  const itemLabels = React.useContext(SelectItemLabelsContext)
+  const labelsContext = React.useContext(SelectItemLabelsContext)
 
+  // Base UI ignores `placeholder` when children is a render function, so both render paths
+  // fall back to it here. "" counts as no selection, matching Base UI's data-placeholder state.
   if (typeof children === "function") {
     return (
       <SelectPrimitive.Value
@@ -73,12 +110,17 @@ function SelectValue({
         placeholder={placeholder}
         {...props}
       >
-        {(value) => children(value as string | null)}
+        {(value) => {
+          const label = children(value as string | null)
+          if (isBlankSelectLabel(label) && isUnselectedValue(value)) return placeholder ?? null
+          return label
+        }}
       </SelectPrimitive.Value>
     )
   }
 
-  if (itemLabels?.size) {
+  // Caller-provided children, or a root itemToStringLabel, already resolve the label.
+  if (children != null || labelsContext?.hasItemToStringLabel) {
     return (
       <SelectPrimitive.Value
         data-slot="select-value"
@@ -86,14 +128,15 @@ function SelectValue({
         placeholder={placeholder}
         {...props}
       >
-        {(value) => {
-          if (typeof value !== "string") return null
-          return itemLabels.get(value) ?? "Unknown selection"
-        }}
+        {children}
       </SelectPrimitive.Value>
     )
   }
 
+  const itemLabels = labelsContext?.labels ?? new Map<string, React.ReactNode>()
+
+  // Base UI falls back to the raw value when it cannot resolve a label, so a stored id, enum
+  // or slug would leak. Labels come from the SelectItems and the root's `items` prop instead.
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
@@ -101,7 +144,25 @@ function SelectValue({
       placeholder={placeholder}
       {...props}
     >
-      {children}
+      {(value) => {
+        // An explicit <SelectItem value=""> ("Any stage") is a real choice and keeps its label.
+        if (value === "" && itemLabels.has("")) return itemLabels.get("")
+        if (isUnselectedValue(value)) return placeholder ?? itemLabels.get("") ?? null
+        if (typeof value === "string" && itemLabels.has(value)) return itemLabels.get(value)
+        if (value && typeof value === "object" && "label" in value && value.label != null) {
+          return value.label as React.ReactNode
+        }
+        // No item label is available yet (options still loading, or SelectItems rendered inside
+        // a custom child component): show the muted placeholder or nothing, never the raw value.
+        if (itemLabels.size === 0 || typeof value !== "string") {
+          return placeholder ? (
+            <span data-slot="select-value-unresolved" className="text-muted-foreground">
+              {placeholder}
+            </span>
+          ) : null
+        }
+        return "Unknown selection"
+      }}
     </SelectPrimitive.Value>
   )
 }
@@ -194,6 +255,32 @@ function SelectItem({
   )
 }
 
+function SelectLabel({
+  className,
+  ...props
+}: SelectPrimitive.GroupLabel.Props) {
+  return (
+    <SelectPrimitive.GroupLabel
+      data-slot="select-label"
+      className={cn("text-muted-foreground px-3 pt-2 pb-1 text-xs", className)}
+      {...props}
+    />
+  )
+}
+
+function SelectSeparator({
+  className,
+  ...props
+}: SelectPrimitive.Separator.Props) {
+  return (
+    <SelectPrimitive.Separator
+      data-slot="select-separator"
+      className={cn("bg-border/50 pointer-events-none my-1 h-px", className)}
+      {...props}
+    />
+  )
+}
+
 function SelectScrollUpButton({
   className,
   ...props
@@ -231,6 +318,8 @@ export {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 }

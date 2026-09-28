@@ -4,41 +4,58 @@ import { useState, useTransition } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { ValidatedField } from "@/components/ui/field"
 import { PaginationJump } from "@/components/ui/pagination-jump"
-import { MoreVerticalIcon, SearchIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UploadIcon, PlusIcon, SlidersHorizontalIcon } from "lucide-react"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { showUndoToast } from "@/components/ui/undo-toast"
+import { ListToolbar, ListToolbarSearch, MoreFiltersPopover } from "@/components/list-toolbar"
+import { PageHeader } from "@/components/page-header"
+import { QueryErrorState } from "@/components/error-state"
+import { StageSelect } from "@/components/stage-select"
+import { MoreVerticalIcon, XIcon, Loader2Icon, ArchiveIcon, UserPlusIcon, UploadIcon, PlusIcon } from "lucide-react"
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
 import { useSurrogates, useArchiveSurrogate, useRestoreSurrogate, useUpdateSurrogate, useAssignees, useBulkAssign, useBulkArchive, useBulkChangeStage, useCreateSurrogate, useIntelligentSuggestionSummary, useSurrogateCreatedDates } from "@/lib/hooks/use-surrogates"
 import { useQueues } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useAuth } from "@/lib/auth-context"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
-import type { SurrogateSource } from "@/lib/types/surrogate"
+import type { SurrogateListItem, SurrogateSource } from "@/lib/types/surrogate"
 import { isDynamicSurrogateFilter, type DynamicSurrogateFilter, type SurrogateMassEditStageFilters } from "@/lib/api/surrogates"
 import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { cn } from "@/lib/utils"
 import { formatRace } from "@/lib/formatters"
 import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { toast } from "@/components/ui/toast"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { MassEditStageModal } from "@/components/surrogates/MassEditStageModal"
-import { BulkChangeStageModal } from "@/components/surrogates/BulkChangeStageModal"
+import {
+    BulkChangeStageModal,
+    type BulkStageChangeInput,
+    type BulkStageSurrogate,
+} from "@/components/surrogates/BulkChangeStageModal"
 import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
 import { readableForeground } from "@/lib/stage-colors"
+import { getStageOptionLabel, pipelineStageOptions } from "@/lib/stage-options"
+import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
+import { SURROGATE_SOURCE_LABELS, isSurrogateSource } from "@/lib/surrogate-source-labels"
+import { useFormValidation } from "@/lib/forms/use-form-validation"
+import { EMAIL_INVALID_MESSAGE, validateEmail, validateRequired } from "@/lib/forms/validators"
 
 const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -71,32 +88,60 @@ function getInitials(name: string | null): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
+function formatSurrogateCount(count: number): string {
+    return `${count} surrogate${count === 1 ? "" : "s"}`
+}
+
+/** Bulk actions the viewer can run. Rows are selectable only when at least one exists. */
+function useSurrogateBulkActions() {
+    const { user } = useAuth()
+    const { data: permissions } = useEffectivePermissions(user?.user_id ?? null)
+    const canAssign = permissions?.policy_version === 2
+        ? permissions.permissions.includes('assign_surrogates')
+        : Boolean(user?.role && ['case_manager', 'admin', 'developer'].includes(user.role))
+    const canBulkChangeStage = Boolean(user?.role && ['admin', 'developer'].includes(user.role))
+    // Archive requires the same permission the API enforces.
+    const canArchive = usePermissionCheck().can("archive_surrogates")
+    return {
+        canAssign,
+        canBulkChangeStage,
+        canArchive,
+        canSelect: canAssign || canBulkChangeStage || canArchive,
+    }
+}
+
+const BULK_STAGE_FAILURES_SHOWN = 5
+
+function toBulkStageSurrogate(surrogate: SurrogateListItem): BulkStageSurrogate {
+    return {
+        id: surrogate.id,
+        full_name: surrogate.full_name,
+        stage_id: surrogate.stage_id,
+        paused_from_stage_id: surrogate.paused_from_stage_id ?? null,
+    }
+}
+
 // Floating Action Bar for bulk operations
 function FloatingActionBar({
-    selectedCount,
-    selectedSurrogateIds,
+    selectedSurrogates,
     stages,
     onClear,
     onSelectionChange,
 }: {
-    selectedCount: number
-    selectedSurrogateIds: string[]
+    selectedSurrogates: BulkStageSurrogate[]
     stages: PipelineStage[]
     onClear: () => void
     onSelectionChange: (surrogateIds: string[]) => void
 }) {
-    const { user } = useAuth()
+    const selectedCount = selectedSurrogates.length
+    const selectedSurrogateIds = selectedSurrogates.map((surrogate) => surrogate.id)
     const { data: assignees } = useAssignees()
     const bulkAssignMutation = useBulkAssign()
     const bulkArchiveMutation = useBulkArchive()
+    const restoreMutation = useRestoreSurrogate()
     const bulkChangeStageMutation = useBulkChangeStage()
     const [isChangeStageOpen, setIsChangeStageOpen] = useState(false)
-
-    const { data: permissions } = useEffectivePermissions(user?.user_id ?? null)
-    const canAssign = permissions?.policy_version === 2
-        ? permissions.permissions.includes('assign_surrogates')
-        : user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
-    const canBulkChangeStage = user?.role && ['admin', 'developer'].includes(user.role)
+    const { canAssign, canBulkChangeStage, canArchive } = useSurrogateBulkActions()
 
     const handleAssign = async (userId: string) => {
         await bulkAssignMutation.mutateAsync({
@@ -108,38 +153,71 @@ function FloatingActionBar({
     }
 
     const handleArchive = async () => {
-        await bulkArchiveMutation.mutateAsync(selectedSurrogateIds)
-        onClear()
+        const result = await bulkArchiveMutation.mutateAsync(selectedSurrogateIds)
+        if (result.archived === 0) {
+            throw new Error("Bulk archive failed")
+        }
+        const failedIds = new Set(result.failed)
+        const archivedIds = selectedSurrogateIds.filter((id) => !failedIds.has(id))
+        if (result.failed.length > 0) {
+            onSelectionChange(result.failed)
+        } else {
+            onClear()
+        }
+        showUndoToast(
+            result.failed.length > 0
+                ? `Archived ${result.archived} of ${selectedSurrogateIds.length} surrogates`
+                : `Archived ${formatSurrogateCount(result.archived)}`,
+            () => Promise.all(archivedIds.map((id) => restoreMutation.mutateAsync(id))),
+        )
     }
 
-    const handleBulkStageChange = async (stageId: string) => {
+    const handleBulkStageChange = async (input: BulkStageChangeInput) => {
         try {
             const result = await bulkChangeStageMutation.mutateAsync({
                 surrogate_ids: selectedSurrogateIds,
-                stage_id: stageId,
+                ...input,
             })
             setIsChangeStageOpen(false)
 
+            const pendingText = result.pending_approval > 0
+                ? ` ${result.pending_approval} pending approval.`
+                : ''
+
             if (result.failed.length === 0) {
                 onClear()
-                toast.success(
-                    `Changed stage for ${result.applied} surrogate${result.applied === 1 ? '' : 's'}.`
-                )
+                toast.success(`Changed stage for ${formatSurrogateCount(result.applied)}.${pendingText}`)
                 return
             }
 
             const failedIds = result.failed.map((entry) => entry.surrogate_id)
             onSelectionChange(failedIds)
 
-            if (result.applied > 0) {
+            const nameById = new Map(selectedSurrogates.map((surrogate) => [surrogate.id, surrogate.full_name]))
+            const hiddenFailures = result.failed.length - BULK_STAGE_FAILURES_SHOWN
+            // The toast renders its description inside a <p>, so each failure is a block span.
+            const failureList = (
+                <>
+                    {result.failed.slice(0, BULK_STAGE_FAILURES_SHOWN).map((entry) => (
+                        <span key={entry.surrogate_id} className="block">
+                            {nameById.get(entry.surrogate_id) ?? entry.surrogate_id}: {entry.reason}
+                        </span>
+                    ))}
+                    {hiddenFailures > 0 ? <span className="block">{hiddenFailures} more</span> : null}
+                </>
+            )
+            // Failure reasons are shown only in this toast, so it stays until dismissed.
+            const failureToast = { description: failureList, duration: 0 }
+
+            if (result.applied > 0 || result.pending_approval > 0) {
                 toast.warning(
-                    `Changed stage for ${result.applied} surrogate${result.applied === 1 ? '' : 's'}; ${result.failed.length} failed.`
+                    `Changed stage for ${result.applied} of ${formatSurrogateCount(result.requested)}; ${result.failed.length} failed.${pendingText}`,
+                    failureToast,
                 )
                 return
             }
 
-            const firstReason = result.failed[0]?.reason ?? "Bulk stage change failed"
-            toast.error(`${firstReason} (${result.failed.length} failed).`)
+            toast.error(`Stage change failed for ${formatSurrogateCount(result.failed.length)}.`, failureToast)
         } catch (error) {
             const message = error instanceof Error ? error.message : "Failed to change stage"
             toast.error(message)
@@ -153,10 +231,11 @@ function FloatingActionBar({
 
     return (
         <>
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-                <div className="bg-primary text-primary-foreground shadow-lg rounded-lg px-6 py-3 flex items-center gap-4">
+            {/* The full-width wrapper keeps a 16px gutter; only the bar itself takes clicks. */}
+            <div ref={toastClearanceRef} className="pointer-events-none fixed inset-x-4 bottom-6 z-50 flex justify-center">
+                <div className="pointer-events-auto bg-primary text-primary-foreground shadow-lg rounded-lg px-4 py-3 sm:px-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                     <span className="font-medium">{selectedCount} surrogate{selectedCount > 1 ? 's' : ''} selected</span>
-                    <div className="h-4 w-px bg-primary-foreground/30" />
+                    <div className="hidden h-4 w-px bg-primary-foreground/30 sm:block" />
 
                     {canAssign && (
                         <DropdownMenu>
@@ -189,10 +268,20 @@ function FloatingActionBar({
                         </Button>
                     )}
 
-                    <Button variant="secondary" size="sm" onClick={handleArchive} disabled={isLoading}>
-                        <ArchiveIcon className="size-4 mr-1" />
-                        Archive
-                    </Button>
+                    {canArchive && (
+                        <ConfirmDialog
+                            trigger={
+                                <Button variant="secondary" size="sm" disabled={isLoading}>
+                                    <ArchiveIcon className="size-4 mr-1" aria-hidden="true" />
+                                    Archive
+                                </Button>
+                            }
+                            title={`Archive ${formatSurrogateCount(selectedCount)}?`}
+                            confirmLabel="Archive"
+                            errorFallback="Couldn't archive surrogates. Try again."
+                            onConfirm={handleArchive}
+                        />
+                    )}
 
                     <Button variant="ghost" size="sm" onClick={onClear} disabled={isLoading}>
                         <XIcon className="size-4 mr-1" />
@@ -204,7 +293,7 @@ function FloatingActionBar({
             <BulkChangeStageModal
                 open={isChangeStageOpen}
                 onOpenChange={setIsChangeStageOpen}
-                selectedCount={selectedCount}
+                surrogates={selectedSurrogates}
                 stages={stages}
                 isPending={bulkChangeStageMutation.isPending}
                 onSubmit={handleBulkStageChange}
@@ -213,29 +302,31 @@ function FloatingActionBar({
     )
 }
 
-const VALID_SOURCES = [
-    "all",
-    "manual",
-    "meta",
-    "tiktok",
-    "google",
-    "website",
-    "referral",
-    "other",
-] as const
-type SourceFilter = (typeof VALID_SOURCES)[number]
+const SOURCE_LABELS = SURROGATE_SOURCE_LABELS
+const SOURCE_OPTIONS = toSelectOptions(SOURCE_LABELS)
+type SourceFilter = "all" | SurrogateSource
 const isSourceFilter = (value: string | null): value is SourceFilter =>
-    value !== null && VALID_SOURCES.includes(value as SourceFilter)
+    value === "all" || isSurrogateSource(value)
 
-const CREATE_SOURCE_OPTIONS: { value: SurrogateSource; label: string }[] = [
-    { value: "manual", label: "Manual" },
-    { value: "website", label: "Website" },
-    { value: "referral", label: "Referral" },
-    { value: "meta", label: "Meta" },
-    { value: "tiktok", label: "TikTok" },
-    { value: "google", label: "Google" },
-    { value: "other", label: "Others" },
-]
+// The create dialog keeps its existing source list; Import and Agency are filter-only here.
+const CREATE_SOURCE_OPTIONS = (
+    ["manual", "website", "referral", "meta", "tiktok", "google", "other"] as const
+).map((value) => ({ value, label: SOURCE_LABELS[value] }))
+const getCreateSourceLabel = createSelectLabelGetter(SOURCE_LABELS, {
+    emptyLabel: "Select a source",
+    unknownLabel: "Unknown source",
+})
+
+type CreateSurrogateForm = {
+    full_name: string
+    email: string
+    source: SurrogateSource
+}
+
+const validateCreateSurrogateForm = (values: CreateSurrogateForm) => ({
+    full_name: validateRequired(values.full_name, "Enter a name."),
+    email: validateEmail(values.email, { requiredMessage: "Enter an email address." }),
+})
 
 const VALID_DATE_RANGES: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
 const isDateRangePreset = (value: string | null): value is DateRangePreset =>
@@ -256,30 +347,11 @@ const DYNAMIC_FILTER_LABELS: Record<DynamicSurrogateFilter, string> = {
     attention_stuck: "Attention Needed: Stuck Surrogates",
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-    manual: "Manual",
-    meta: "Meta",
-    tiktok: "TikTok",
-    google: "Google",
-    website: "Website",
-    referral: "Referral",
-    other: "Others",
-    agency: "Agency",
-    import: "Import",
-}
-
-const getStageFilterLabel = (
-    value: string | null | undefined,
-    stages: Array<{ id: string; label: string }>
-) => {
-    if (!value || value === "all") return "All Stages"
-    return stages.find((stage) => stage.id === value)?.label ?? "Unknown stage"
-}
-
-const getSourceFilterLabel = (value: string | null | undefined) => {
-    if (!value || value === "all") return "All Sources"
-    return SOURCE_LABELS[value] ?? "Unknown source"
-}
+const getSourceFilterLabel = createSelectLabelGetter(SOURCE_LABELS, {
+    emptyLabel: "All Sources",
+    allValue: "all",
+    unknownLabel: "Unknown source",
+})
 
 const getQueueFilterLabel = (
     value: string | null | undefined,
@@ -567,9 +639,15 @@ export function SurrogatesPageClient() {
     const canFilterByAssignee = canUseOrgAssigneeFilter
     const assigneeFilterOptions = assignees ?? []
     const canManagePriority = user?.role === "admin" || user?.role === "developer"
+    const canArchive = usePermissionCheck().can("archive_surrogates")
+    const { canSelect: canSelectRows } = useSurrogateBulkActions()
     const listUrlState = readSurrogateListUrlState(normalizedSearchParams, canFilterByAssignee)
+    const { data: defaultPipeline, isLoading: isPipelineLoading } = useDefaultPipeline()
+    const stageOptions = defaultPipeline?.stages || []
+    const stageSelectOptions = pipelineStageOptions(stageOptions)
+    const stageById = new Map(stageOptions.map(stage => [stage.id, stage]))
     const {
-        stageFilter,
+        stageFilter: urlStageFilter,
         sourceFilter,
         queueFilter,
         ownerFilter,
@@ -582,19 +660,32 @@ export function SurrogatesPageClient() {
         sortBy,
         sortOrder,
     } = listUrlState
+    // The list API answers 422 for a stage id outside the pipeline, so an unknown URL stage reads
+    // as All Stages. The stage-filtered queries wait while the pipeline loads.
+    const stageFilter = urlStageFilter !== "all" && defaultPipeline && !stageById.has(urlStageFilter)
+        ? "all"
+        : urlStageFilter
+    const isCheckingStageFilter = urlStageFilter !== "all" && !defaultPipeline && isPipelineLoading
     const [searchDraft, setSearchDraft] = useState(() => ({
         query: currentQuery,
         value: debouncedSearch,
     }))
     const searchQuery = searchDraft.query === currentQuery ? searchDraft.value : debouncedSearch
-    const [selectedSurrogates, setSelectedSurrogates] = useState<Set<string>>(new Set())
+    const [selectedSurrogates, setSelectedSurrogates] = useState<Map<string, BulkStageSurrogate>>(new Map())
     const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false)
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [isMassEditOpen, setIsMassEditOpen] = useState(false)
-    const [createForm, setCreateForm] = useState({
+    // Row menu items unmount on click, so the confirm lives outside the menu.
+    const [archiveTarget, setArchiveTarget] = useState<{ id: string; number: string } | null>(null)
+    const [isArchiveConfirmOpen, setIsArchiveConfirmOpen] = useState(false)
+    const [createForm, setCreateForm] = useState<CreateSurrogateForm>({
         full_name: "",
         email: "",
-        source: "manual" as SurrogateSource,
+        source: "manual",
+    })
+    const createValidation = useFormValidation({
+        values: createForm,
+        validate: validateCreateSurrogateForm,
     })
     const perPage = 30
     const createMutation = useCreateSurrogate()
@@ -872,9 +963,6 @@ export function SurrogatesPageClient() {
     const canSeeQueues = user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
     const isDeveloper = user?.role === "developer"
     const { data: queues } = useQueues(false, { enabled: !!canSeeQueues })
-    const { data: defaultPipeline } = useDefaultPipeline()
-    const stageOptions = defaultPipeline?.stages || []
-    const stageById = new Map(stageOptions.map(stage => [stage.id, stage]))
 
     // Convert date range to ISO strings
     const getDateRangeParams = () => {
@@ -925,11 +1013,11 @@ export function SurrogatesPageClient() {
         ...(ownerFilter === "all" ? {} : { owner_id: ownerFilter }),
     } as const
 
-    const { data: availableCreatedDateKeys } = useSurrogateCreatedDates(createdDateFilters)
+    const { data: availableCreatedDateKeys } = useSurrogateCreatedDates(createdDateFilters, {
+        enabled: !isCheckingStageFilter,
+    })
 
-    const { data, isLoading, isError, error, refetch } = useSurrogates({
-        page,
-        per_page: perPage,
+    const listFilters = {
         ...getDateRangeParams(),
         ...(stageFilter === "all" ? {} : { stage_id: stageFilter }),
         ...(sourceFilter === "all" ? {} : { source: sourceFilter }),
@@ -938,10 +1026,27 @@ export function SurrogatesPageClient() {
         ...(queueFilter === "all" ? {} : { queue_id: queueFilter }),
         ...(ownerFilter === "all" ? {} : { owner_id: ownerFilter }),
         ...(dynamicFilter ? { dynamic_filter: dynamicFilter } : {}),
+    }
+    const isListFiltered = Object.keys(listFilters).length > 0
+
+    // Unfiltered first page, for the "8 of 151" header count. It shares the cache entry of the
+    // unfiltered list, so it usually costs no request.
+    const { data: unfilteredData } = useSurrogates(
+        { page: 1, per_page: perPage },
+        { enabled: isListFiltered },
+    )
+
+    const listQuery = useSurrogates({
+        page,
+        per_page: perPage,
+        ...listFilters,
         ...(sortBy ? { sort_by: sortBy, sort_order: sortOrder } : {}),
-    })
+    }, { enabled: !isCheckingStageFilter })
+    const { data, isError, error, refetch, isFetching } = listQuery
+    const isLoading = listQuery.isLoading || isCheckingStageFilter
 
     const totalCount = data?.total ?? null
+    const unfilteredTotal = isListFiltered ? (unfilteredData?.total ?? null) : totalCount
     const totalPages = data?.pages ?? null
     const hasTotal = totalCount !== null
     const totalCountValue = totalCount ?? 0
@@ -996,7 +1101,7 @@ export function SurrogatesPageClient() {
         clearPendingSearchCommit()
         setSearchDraft({ query: "", value: "" })
         setIsMoreFiltersOpen(false)
-        setSelectedSurrogates(new Set())
+        setSelectedSurrogates(new Map())
         // Clear URL params
         replace('/surrogates', { scroll: false })
     }
@@ -1046,7 +1151,7 @@ export function SurrogatesPageClient() {
         ...(stageFilter !== "all"
             ? [{
                 key: "stage" as const,
-                label: `Stage: ${getStageFilterLabel(stageFilter, stageOptions)}`,
+                label: `Stage: ${getStageOptionLabel(stageFilter, stageSelectOptions)}`,
             }]
             : []),
         ...(dateRange !== "all"
@@ -1096,28 +1201,36 @@ export function SurrogatesPageClient() {
     // Multi-select handlers
     const handleSelectAll = (checked: boolean) => {
         if (checked && data?.items) {
-            setSelectedSurrogates(new Set(data.items.map(s => s.id)))
+            setSelectedSurrogates(new Map(data.items.map(s => [s.id, toBulkStageSurrogate(s)])))
         } else {
-            setSelectedSurrogates(new Set())
+            setSelectedSurrogates(new Map())
         }
     }
 
-    const handleSelectSurrogate = (surrogateId: string, checked: boolean) => {
-        const newSelected = new Set(selectedSurrogates)
+    const handleSelectSurrogate = (surrogate: SurrogateListItem, checked: boolean) => {
+        const newSelected = new Map(selectedSurrogates)
         if (checked) {
-            newSelected.add(surrogateId)
+            newSelected.set(surrogate.id, toBulkStageSurrogate(surrogate))
         } else {
-            newSelected.delete(surrogateId)
+            newSelected.delete(surrogate.id)
         }
         setSelectedSurrogates(newSelected)
     }
 
     const clearSelection = () => {
-        setSelectedSurrogates(new Set())
+        setSelectedSurrogates(new Map())
     }
 
-    const handleArchive = async (surrogateId: string) => {
-        await archiveMutation.mutateAsync(surrogateId)
+    // Selection can span pages; rows on the current page use fresh list data.
+    const visibleItemsById = new Map((data?.items ?? []).map(item => [item.id, item]))
+    const selectedRows = Array.from(selectedSurrogates.values(), (snapshot) => {
+        const visible = visibleItemsById.get(snapshot.id)
+        return visible ? toBulkStageSurrogate(visible) : snapshot
+    })
+
+    const handleArchive = async (target: { id: string; number: string }) => {
+        await archiveMutation.mutateAsync(target.id)
+        showUndoToast(`${target.number} archived`, () => restoreMutation.mutateAsync(target.id))
     }
 
     const handleRestore = async (surrogateId: string) => {
@@ -1134,45 +1247,41 @@ export function SurrogatesPageClient() {
             email: "",
             source: "manual",
         })
+        createValidation.reset()
     }
 
-    const handleCreate = async () => {
+    const handleCreate = createValidation.handleSubmit(async (values) => {
         if (!canCreateSurrogates) return
         try {
-            const fullName = createForm.full_name.trim()
-            const email = createForm.email.trim()
-            if (!fullName || !email) {
-                toast.error("Name and email are required")
-                return
-            }
             const created = await createMutation.mutateAsync({
-                full_name: fullName,
-                email,
-                source: createForm.source,
+                full_name: values.full_name.trim(),
+                email: values.email.trim(),
+                source: values.source,
                 assign_to_user: user?.role === "intake_specialist",
             })
             setIsCreateOpen(false)
             resetCreateForm()
-            toast.success("Surrogate created successfully")
+            toast.success("Surrogate created")
             push(buildSurrogateDetailHref(created.id, currentListHref) as Route)
         } catch (error) {
-            const message = error instanceof Error ? error.message : "Failed to create surrogate"
-            toast.error(message)
+            const formError = createValidation.applyApiError(error, {
+                fields: ["full_name", "email", "source"],
+                messages: { email: EMAIL_INVALID_MESSAGE },
+                fallback: "Couldn't create surrogate. Try again.",
+            })
+            if (formError) toast.error(formError)
         }
-    }
+    })
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            {/* Page Header - Fixed Height */}
-            <div className="flex-shrink-0 border-b border-border bg-background/95 backdrop-blur">
-                <div className="flex h-14 items-center justify-between px-6">
-                    <div>
-                        <h1 className="text-xl font-semibold">Surrogates</h1>
-                        <p className="text-sm text-muted-foreground">
-                            {hasTotal ? totalCount.toLocaleString() : "—"} total surrogates
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
+            <PageHeader
+                title="Surrogates"
+                count={totalCount}
+                countTotal={unfilteredTotal}
+                countLabel="surrogates"
+                actions={
+                    <>
                         {isDeveloper && (
                             <Button
                                 variant="outline"
@@ -1182,13 +1291,15 @@ export function SurrogatesPageClient() {
                                 Mass Edit
                             </Button>
                         )}
-                        {canCreateSurrogates && <Button onClick={() => setIsCreateOpen(true)}>
-                            <PlusIcon className="mr-2 size-4" />
-                            New Surrogates
-                        </Button>}
-                    </div>
-                </div>
-            </div>
+                        {canCreateSurrogates && (
+                            <Button onClick={() => setIsCreateOpen(true)}>
+                                <PlusIcon className="mr-2 size-4" aria-hidden="true" />
+                                New surrogate
+                            </Button>
+                        )}
+                    </>
+                }
+            />
 
             {/* Dev-only Mass Edit Modal */}
             {isDeveloper && (
@@ -1201,341 +1312,288 @@ export function SurrogatesPageClient() {
             )}
 
             {/* Filters Row */}
-            <div className="flex-shrink-0 border-b border-border px-6 py-3">
-                <div className="flex flex-col gap-3">
-                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-                        <div className="flex flex-wrap items-center gap-3">
-                            {hasIntelligentSuggestions && (
-                                <Button
-                                    variant="outline"
-                                    onClick={handleIntelligentSuggestionToggle}
-                                    disabled={isFilterPending}
-                                    className={cn(
-                                        "border-sky-400/30 bg-background/90 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_0_18px_-10px_rgba(56,189,248,0.95)] hover:border-sky-300/45 hover:bg-background hover:shadow-[0_0_0_1px_rgba(125,211,252,0.18),0_0_24px_-10px_rgba(56,189,248,1)]",
-                                        dynamicFilter === "intelligent_any" &&
-                                            "border-sky-300/60 bg-background shadow-[0_0_0_1px_rgba(125,211,252,0.24),0_0_28px_-8px_rgba(56,189,248,1)]"
-                                    )}
-                                >
-                                    Intelligent Suggestions ({intelligentSuggestionCount})
-                                </Button>
-                            )}
+            <ListToolbar
+                filters={
+                    <>
+                        {hasIntelligentSuggestions && (
+                            <Button
+                                variant="outline"
+                                onClick={handleIntelligentSuggestionToggle}
+                                disabled={isFilterPending}
+                                className={cn(
+                                    "border-sky-400/30 bg-background/90 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_0_18px_-10px_rgba(56,189,248,0.95)] hover:border-sky-300/45 hover:bg-background hover:shadow-[0_0_0_1px_rgba(125,211,252,0.18),0_0_24px_-10px_rgba(56,189,248,1)]",
+                                    dynamicFilter === "intelligent_any" &&
+                                        "border-sky-300/60 bg-background shadow-[0_0_0_1px_rgba(125,211,252,0.24),0_0_28px_-8px_rgba(56,189,248,1)]"
+                                )}
+                            >
+                                Intelligent Suggestions ({intelligentSuggestionCount})
+                            </Button>
+                        )}
 
-                            <div className="hidden md:block">
+                        <StageSelect
+                            value={stageFilter}
+                            onValueChange={(value) => handleStageChange(value || "all")}
+                            options={stageSelectOptions}
+                            allLabel="All Stages"
+                            className="w-[180px]"
+                            aria-label="Filter by stage"
+                        />
+
+                        <DateRangePicker
+                            preset={dateRange}
+                            onPresetChange={handlePresetChange}
+                            customRange={customRange}
+                            onCustomRangeChange={handleCustomRangeChange}
+                            availableDateKeys={availableCreatedDateKeys ?? []}
+                        />
+
+                        <MoreFiltersPopover
+                            open={isMoreFiltersOpen}
+                            onOpenChange={setIsMoreFiltersOpen}
+                            active={hasActiveSecondaryFilters}
+                        >
+                            <div className="grid gap-2">
+                                <Label>Source</Label>
                                 <Select
-                                    value={stageFilter}
-                                    onValueChange={(value) => handleStageChange(value || "all")}
+                                    value={sourceFilter}
+                                    onValueChange={(value) =>
+                                        handleSourceChange(isSourceFilter(value) ? value : "all")
+                                    }
                                 >
-                                    <SelectTrigger className="w-[180px]">
-                                        <SelectValue placeholder="All Stages">
-                                            {(value: string | null) => getStageFilterLabel(value, stageOptions)}
+                                    <SelectTrigger aria-label="Filter by source">
+                                        <SelectValue placeholder="All Sources">
+                                            {(value: string | null) => getSourceFilterLabel(value)}
                                         </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="all">All Stages</SelectItem>
-                                        {stageOptions.map((stage) => (
-                                            <SelectItem key={stage.id} value={stage.id}>
-                                                {stage.label}
+                                        <SelectItem value="all">All Sources</SelectItem>
+                                        {SOURCE_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
                             </div>
 
-                            <div className="hidden md:block">
-                                <DateRangePicker
-                                    preset={dateRange}
-                                    onPresetChange={handlePresetChange}
-                                    customRange={customRange}
-                                    onCustomRangeChange={handleCustomRangeChange}
-                                    availableDateKeys={availableCreatedDateKeys ?? []}
-                                />
+                            {canSeeQueues && queues && queues.length > 0 && (
+                                <div className="grid gap-2">
+                                    <Label>Queue</Label>
+                                    <Select
+                                        value={queueFilter}
+                                        onValueChange={(value) => handleQueueChange(value || "all")}
+                                    >
+                                        <SelectTrigger aria-label="Filter by queue">
+                                            <SelectValue placeholder="All Queues">
+                                                {(value: string | null) =>
+                                                    getQueueFilterLabel(value, queues)
+                                                }
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Queues</SelectItem>
+                                            {queues.map((queue) => (
+                                                <SelectItem key={queue.id} value={queue.id}>
+                                                    {queue.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
+
+                            {canFilterByAssignee && (
+                                <div className="grid gap-2">
+                                    <Label>Assignee</Label>
+                                    <Select
+                                        value={ownerFilter}
+                                        onValueChange={(value) => handleOwnerChange(value || "all")}
+                                    >
+                                        <SelectTrigger aria-label="Filter by assignee">
+                                            <SelectValue placeholder="All Assignees">
+                                                {(value: string | null) =>
+                                                    getAssigneeFilterLabel(value, assigneeFilterOptions)
+                                                }
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Assignees</SelectItem>
+                                            {assigneeFilterOptions.map((assignee) => (
+                                                <SelectItem key={assignee.id} value={assignee.id}>
+                                                    {assignee.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
+
+                            <div className="grid gap-2">
+                                <Label>Attention / Smart Filter</Label>
+                                <Select
+                                    value={dynamicFilter ?? "none"}
+                                    onValueChange={(value) =>
+                                        handleDynamicFilterChange(
+                                            value === "none" || !isDynamicSurrogateFilter(value)
+                                                ? null
+                                                : value
+                                        )
+                                    }
+                                >
+                                    <SelectTrigger aria-label="Filter by smart filter">
+                                        <SelectValue placeholder="No smart filter">
+                                            {(value: string | null) =>
+                                                getDynamicFilterLabel(
+                                                    value === "none" || !isDynamicSurrogateFilter(value)
+                                                        ? null
+                                                        : value
+                                                )
+                                            }
+                                        </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">No smart filter</SelectItem>
+                                        {availableSmartFilters.map(([key, label]) => (
+                                            <SelectItem key={key} value={key}>
+                                                {label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
 
-                            <Popover open={isMoreFiltersOpen} onOpenChange={setIsMoreFiltersOpen}>
-                                <PopoverTrigger
-                                    type="button"
-                                    aria-label="More Filters"
-                                    className={buttonVariants({
-                                        variant: "outline",
-                                        className: cn(
-                                            "justify-between border-border/70 bg-background/85 shadow-xs backdrop-blur-sm",
-                                            hasActiveSecondaryFilters &&
-                                                "border-foreground/15 bg-accent/40 text-foreground shadow-[0_14px_30px_-24px_rgba(15,23,42,0.9)]"
-                                        ),
-                                    })}
-                                >
-                                    <SlidersHorizontalIcon className="size-4" />
-                                    More Filters
-                                </PopoverTrigger>
-                                <PopoverContent
-                                    align="end"
-                                    className="w-[min(24rem,calc(100vw-2rem))] gap-4 border border-border/70 bg-background/95 p-4 shadow-[0_24px_64px_-28px_rgba(15,23,42,0.9)] backdrop-blur-xl"
-                                >
-                                    <div className="grid gap-4">
-                                        <div className="grid gap-2">
-                                            <Label>Source</Label>
-                                            <Select
-                                                value={sourceFilter}
-                                                onValueChange={(value) =>
-                                                    handleSourceChange(isSourceFilter(value) ? value : "all")
-                                                }
-                                            >
-                                                <SelectTrigger aria-label="Filter by source">
-                                                    <SelectValue placeholder="All Sources">
-                                                        {(value: string | null) => getSourceFilterLabel(value)}
-                                                    </SelectValue>
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="all">All Sources</SelectItem>
-                                                    <SelectItem value="manual">Manual</SelectItem>
-                                                    <SelectItem value="meta">Meta</SelectItem>
-                                                    <SelectItem value="tiktok">TikTok</SelectItem>
-                                                    <SelectItem value="google">Google</SelectItem>
-                                                    <SelectItem value="website">Website</SelectItem>
-                                                    <SelectItem value="referral">Referral</SelectItem>
-                                                    <SelectItem value="other">Others</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        {canSeeQueues && queues && queues.length > 0 && (
-                                            <div className="grid gap-2">
-                                                <Label>Queue</Label>
-                                                <Select
-                                                    value={queueFilter}
-                                                    onValueChange={(value) => handleQueueChange(value || "all")}
-                                                >
-                                                    <SelectTrigger aria-label="Filter by queue">
-                                                        <SelectValue placeholder="All Queues">
-                                                            {(value: string | null) =>
-                                                                getQueueFilterLabel(value, queues)
-                                                            }
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="all">All Queues</SelectItem>
-                                                        {queues.map((queue) => (
-                                                            <SelectItem key={queue.id} value={queue.id}>
-                                                                {queue.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        )}
-
-                                        {canFilterByAssignee && (
-                                            <div className="grid gap-2">
-                                                <Label>Assignee</Label>
-                                                <Select
-                                                    value={ownerFilter}
-                                                    onValueChange={(value) => handleOwnerChange(value || "all")}
-                                                >
-                                                    <SelectTrigger aria-label="Filter by assignee">
-                                                        <SelectValue placeholder="All Assignees">
-                                                            {(value: string | null) =>
-                                                                getAssigneeFilterLabel(value, assigneeFilterOptions)
-                                                            }
-                                                        </SelectValue>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="all">All Assignees</SelectItem>
-                                                        {assigneeFilterOptions.map((assignee) => (
-                                                            <SelectItem key={assignee.id} value={assignee.id}>
-                                                                {assignee.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        )}
-
-                                        <div className="grid gap-2">
-                                            <Label>Attention / Smart Filter</Label>
-                                            <Select
-                                                value={dynamicFilter ?? "none"}
-                                                onValueChange={(value) =>
-                                                    handleDynamicFilterChange(
-                                                        value === "none" || !isDynamicSurrogateFilter(value)
-                                                            ? null
-                                                            : value
-                                                    )
-                                                }
-                                            >
-                                                <SelectTrigger aria-label="Filter by smart filter">
-                                                    <SelectValue placeholder="No smart filter">
-                                                        {(value: string | null) =>
-                                                            getDynamicFilterLabel(
-                                                                value === "none" || !isDynamicSurrogateFilter(value)
-                                                                    ? null
-                                                                    : value
-                                                            )
-                                                        }
-                                                    </SelectValue>
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="none">No smart filter</SelectItem>
-                                                    {availableSmartFilters.map(([key, label]) => (
-                                                        <SelectItem key={key} value={key}>
-                                                            {label}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        <div className="rounded-xl border border-border/70 bg-muted/30 p-3">
-                                            <div className="flex items-start gap-3">
-                                                <Checkbox
-                                                    id="surrogate-priority-only"
-                                                    checked={priorityOnly}
-                                                    onCheckedChange={(checked) =>
-                                                        handlePriorityOnlyChange(Boolean(checked))
-                                                    }
-                                                />
-                                                <div className="space-y-1">
-                                                    <Label htmlFor="surrogate-priority-only">Priority only</Label>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        Show only surrogates marked as priority.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
-                        </div>
-
-                        <div className="relative w-full xl:ml-auto xl:w-[320px] xl:flex-none">
-                            <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                placeholder="Search surrogates"
-                                value={searchQuery}
-                                onChange={(e) => handleSearchChange(e.target.value)}
-                                className="pl-9"
-                                aria-label="Search surrogates"
-                            />
-                        </div>
-                    </div>
-
-                    {hasActiveFilters && (
-                        <div className="flex flex-wrap items-center gap-2">
-                            {activeFilterChips.map((chip) => (
-                                <Button
-                                    key={chip.key}
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => clearActiveFilter(chip.key)}
-                                    className="gap-2"
-                                    aria-label={`Remove filter: ${chip.label}`}
-                                >
-                                    {chip.label}
-                                    <XIcon className="size-3" />
-                                </Button>
-                            ))}
-                            <Button variant="ghost" size="sm" onClick={resetFilters}>
-                                Reset
-                            </Button>
-                        </div>
-                    )}
-                </div>
-            </div>
+                            <div className="flex items-center gap-3">
+                                <Checkbox
+                                    id="surrogate-priority-only"
+                                    checked={priorityOnly}
+                                    onCheckedChange={(checked) =>
+                                        handlePriorityOnlyChange(Boolean(checked))
+                                    }
+                                />
+                                <Label htmlFor="surrogate-priority-only">Priority only</Label>
+                            </div>
+                        </MoreFiltersPopover>
+                    </>
+                }
+                search={
+                    <ListToolbarSearch
+                        placeholder="Search surrogates"
+                        value={searchQuery}
+                        onValueChange={handleSearchChange}
+                        aria-label="Search surrogates"
+                    />
+                }
+                chips={activeFilterChips.map((chip) => ({
+                    key: chip.key,
+                    label: chip.label,
+                    onRemove: () => clearActiveFilter(chip.key),
+                }))}
+                onReset={resetFilters}
+            />
 
             {/* Create Modal */}
             <Dialog open={isCreateOpen && canCreateSurrogates} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) resetCreateForm() }}>
-                <DialogContent className="max-w-lg">
+                <DialogContent size="lg">
                     <DialogHeader>
-                        <DialogTitle>New Surrogates</DialogTitle>
-                        <DialogDescription>Add a new surrogate to the system</DialogDescription>
+                        <DialogTitle>New surrogate</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="surrogate-full-name">Full Name *</Label>
-                            <Input
-                                id="surrogate-full-name"
-                                value={createForm.full_name}
-                                onChange={(e) => setCreateForm((currentForm) => ({ ...currentForm, full_name: e.target.value }))}
-                                placeholder="Jane Smith"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="surrogate-email">Email *</Label>
-                            <Input
-                                id="surrogate-email"
-                                type="email"
-                                value={createForm.email}
-                                onChange={(e) => setCreateForm((currentForm) => ({ ...currentForm, email: e.target.value }))}
-                                placeholder="jane@example.com"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="surrogate-source">Source *</Label>
-                            <Select
-                                value={createForm.source}
-                                onValueChange={(value) =>
-                                    setCreateForm((currentForm) => ({ ...currentForm, source: value as SurrogateSource }))
-                                }
-                            >
-                                <SelectTrigger id="surrogate-source">
-                                    <SelectValue placeholder="Select a source" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {CREATE_SOURCE_OPTIONS.map((source) => (
-                                        <SelectItem key={source.value} value={source.value}>
-                                            {source.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <Card className="bg-muted/50">
-                            <CardContent className="py-4 flex items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-sm font-medium">Import CSV</p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Bulk upload surrogates from a CSV file.
-                                    </p>
-                                </div>
-                                <Button
-                                    render={<Link href="/surrogates/import" />}
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setIsCreateOpen(false)}
+                    <form id="create-surrogate-form" noValidate onSubmit={handleCreate} className="space-y-4">
+                        <ValidatedField label="Full name" error={createValidation.errorFor("full_name")}>
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    required
+                                    autoComplete="off"
+                                    value={createForm.full_name}
+                                    onChange={(e) => setCreateForm((currentForm) => ({ ...currentForm, full_name: e.target.value }))}
+                                    onBlur={() => createValidation.touch("full_name")}
+                                    placeholder="Jane Smith"
+                                />
+                            )}
+                        </ValidatedField>
+                        <ValidatedField label="Email" error={createValidation.errorFor("email")}>
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    type="email"
+                                    required
+                                    autoComplete="off"
+                                    value={createForm.email}
+                                    onChange={(e) => setCreateForm((currentForm) => ({ ...currentForm, email: e.target.value }))}
+                                    onBlur={() => createValidation.touch("email")}
+                                    placeholder="jane@example.com"
+                                />
+                            )}
+                        </ValidatedField>
+                        <ValidatedField label="Source" error={createValidation.errorFor("source")}>
+                            {(control) => (
+                                <Select
+                                    value={createForm.source}
+                                    onValueChange={(value) => {
+                                        if (isSurrogateSource(value)) {
+                                            setCreateForm((currentForm) => ({ ...currentForm, source: value }))
+                                        }
+                                    }}
                                 >
-                                    <UploadIcon className="mr-2 size-4" />
-                                    Import CSV
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </div>
-                    <DialogFooter>
+                                    <SelectTrigger {...control}>
+                                        <SelectValue placeholder="Select a source">{getCreateSourceLabel}</SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {CREATE_SOURCE_OPTIONS.map((source) => (
+                                            <SelectItem key={source.value} value={source.value}>
+                                                {source.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </ValidatedField>
+                    </form>
+                    <DialogFooter
+                        start={
+                            <Button
+                                render={<Link href="/surrogates/import" />}
+                                variant="outline"
+                                onClick={() => setIsCreateOpen(false)}
+                            >
+                                <UploadIcon className="mr-2 size-4" aria-hidden="true" />
+                                Import CSV
+                            </Button>
+                        }
+                    >
                         <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                             Cancel
                         </Button>
-                        <Button
-                            onClick={handleCreate}
-                            disabled={createMutation.isPending || !createForm.full_name.trim() || !createForm.email.trim()}
-                        >
-                            {createMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                        <Button type="submit" form="create-surrogate-form" disabled={createMutation.isPending}>
+                            {createMutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" aria-hidden="true" />}
                             Create
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
+            <ConfirmDialog
+                open={isArchiveConfirmOpen}
+                onOpenChange={setIsArchiveConfirmOpen}
+                title={`Archive ${archiveTarget?.number ?? "surrogate"}?`}
+                confirmLabel="Archive"
+                errorFallback="Couldn't archive surrogate. Try again."
+                onConfirm={() => (archiveTarget ? handleArchive(archiveTarget) : undefined)}
+            />
+
             {/* Scrollable Content Area */}
             <div className="flex-1 overflow-auto p-6">
 
                 {/* Error State */}
                 {isError && (
-                    <Card className="p-6 text-center border-destructive/40 bg-destructive/5">
-                        <p className="text-destructive">Unable to load surrogates.</p>
-                        {error instanceof Error && (
-                            <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
-                        )}
-                        <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()}>
-                            Retry
-                        </Button>
+                    <Card>
+                        <QueryErrorState
+                            error={error}
+                            onRetry={() => void refetch()}
+                            isRetrying={isFetching}
+                            title="Couldn't load surrogates"
+                            headingLevel={2}
+                        />
                     </Card>
                 )}
 
@@ -1579,13 +1637,15 @@ export function SurrogatesPageClient() {
                             <Table className={cn("min-w-max [&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center transition-opacity", isFilterPending && "opacity-60")}>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className="w-[40px]">
-                                            <Checkbox
-                                                checked={data?.items && data.items.length > 0 && selectedSurrogates.size === data.items.length}
-                                                onCheckedChange={(checked) => handleSelectAll(!!checked)}
-                                                aria-label="Select all surrogates"
-                                            />
-                                        </TableHead>
+                                        {canSelectRows && (
+                                            <TableHead className="w-[40px]">
+                                                <Checkbox
+                                                    checked={data?.items && data.items.length > 0 && selectedSurrogates.size === data.items.length}
+                                                    onCheckedChange={(checked) => handleSelectAll(!!checked)}
+                                                    aria-label="Select all surrogates"
+                                                />
+                                            </TableHead>
+                                        )}
                                         <SortableTableHead column="surrogate_number" label="Surrogate #" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} className="w-[100px]" />
                                         <SortableTableHead column="full_name" label="Name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
                                         <TableHead>Age</TableHead>
@@ -1616,13 +1676,15 @@ export function SurrogatesPageClient() {
                                                 key={surrogateItem.id}
                                                 className={cn(rowClass, "[content-visibility:auto] [contain-intrinsic-size:auto_53px]")}
                                             >
-                                                <TableCell>
-                                                    <Checkbox
-                                                        checked={selectedSurrogates.has(surrogateItem.id)}
-                                                        onCheckedChange={(checked) => handleSelectSurrogate(surrogateItem.id, !!checked)}
-                                                        aria-label={`Select ${surrogateItem.full_name}`}
-                                                    />
-                                                </TableCell>
+                                                {canSelectRows && (
+                                                    <TableCell>
+                                                        <Checkbox
+                                                            checked={selectedSurrogates.has(surrogateItem.id)}
+                                                            onCheckedChange={(checked) => handleSelectSurrogate(surrogateItem, !!checked)}
+                                                            aria-label={`Select ${surrogateItem.full_name}`}
+                                                        />
+                                                    </TableCell>
+                                                )}
                                                 <TableCell>
                                                     <Link href={detailHref} className={`font-medium hover:underline ${surrogateItem.is_priority ? "text-amber-600" : "text-primary"}`}>
                                                         #{surrogateItem.surrogate_number}
@@ -1705,9 +1767,15 @@ export function SurrogatesPageClient() {
                                                                     {surrogateItem.is_priority ? "Remove Priority" : "Mark as Priority"}
                                                                 </DropdownMenuItem>
                                                             )}
-                                                            {!surrogateItem.is_archived ? (
+                                                            {!canArchive ? null : !surrogateItem.is_archived ? (
                                                                 <DropdownMenuItem
-                                                                    onClick={() => handleArchive(surrogateItem.id)}
+                                                                    onClick={() => {
+                                                                        setArchiveTarget({
+                                                                            id: surrogateItem.id,
+                                                                            number: surrogateItem.surrogate_number,
+                                                                        })
+                                                                        setIsArchiveConfirmOpen(true)
+                                                                    }}
                                                                     disabled={archiveMutation.isPending}
                                                                     className="text-destructive"
                                                                 >
@@ -1784,14 +1852,16 @@ export function SurrogatesPageClient() {
                 )}
 
                 {/* Floating Action Bar for Multi-Select */}
-                {selectedSurrogates.size > 0 && (
+                {canSelectRows && selectedSurrogates.size > 0 && (
                     <FloatingActionBar
-                        selectedCount={selectedSurrogates.size}
-                        selectedSurrogateIds={Array.from(selectedSurrogates)}
+                        selectedSurrogates={selectedRows}
                         stages={stageOptions}
                         onClear={clearSelection}
                         onSelectionChange={(surrogateIds) => {
-                            setSelectedSurrogates(new Set(surrogateIds))
+                            const keep = new Set(surrogateIds)
+                            setSelectedSurrogates((current) =>
+                                new Map(Array.from(current).filter(([id]) => keep.has(id)))
+                            )
                         }}
                     />
                 )}

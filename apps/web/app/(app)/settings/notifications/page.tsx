@@ -1,5 +1,6 @@
 "use client"
 
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
@@ -65,7 +66,7 @@ function BrowserNotificationsCard() {
                 )
             case "denied":
                 return (
-                    <div className="flex items-center gap-2 text-red-600">
+                    <div className="flex items-center gap-2 text-destructive">
                         <BellOff className="size-4" aria-hidden="true" />
                         <span className="text-sm font-medium">Blocked</span>
                     </div>
@@ -255,13 +256,12 @@ function NotificationsSettingsCard() {
 
 export default function NotificationSettingsPage() {
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6 max-w-3xl mx-auto">
-            <div>
-                <h1 className="text-2xl font-semibold">Notifications</h1>
+        <div className="flex flex-1 flex-col">
+            <PageHeader title="Notifications" />
+            <div className="flex max-w-3xl flex-col gap-6 p-6">
+                <BrowserNotificationsCard />
+                <NotificationsSettingsCard />
             </div>
-
-            <BrowserNotificationsCard />
-            <NotificationsSettingsCard />
         </div>
     )
 }

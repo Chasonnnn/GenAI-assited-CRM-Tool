@@ -78,6 +78,53 @@ describe("PublishDialog", () => {
         expect(screen.getByText("2 selected")).toBeInTheDocument()
     })
 
+    it("waits for a selection change before showing the empty-selection message", () => {
+        render(
+            <PublishDialog
+                open
+                onOpenChange={vi.fn()}
+                onPublish={vi.fn()}
+                defaultPublishAll={false}
+                initialOrgIds={[]}
+            />
+        )
+
+        const publish = screen.getByRole("button", { name: "Publish" })
+        expect(publish).toBeDisabled()
+        expect(screen.queryByText("Select at least one organization to continue.")).not.toBeInTheDocument()
+
+        const beta = screen.getByRole("checkbox", { name: /Beta Family/i })
+        fireEvent.click(beta)
+        expect(publish).toBeEnabled()
+        fireEvent.click(beta)
+        expect(publish).toBeDisabled()
+        expect(screen.getByRole("status")).toHaveTextContent("Select at least one organization to continue.")
+    })
+
+    it("shows the message once the user switches to selected organizations with none picked", () => {
+        render(<PublishDialog open onOpenChange={vi.fn()} onPublish={vi.fn()} defaultPublishAll initialOrgIds={[]} />)
+
+        expect(screen.queryByText("Select at least one organization to continue.")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("radio", { name: /selected organizations/i }))
+        expect(screen.getByText("Select at least one organization to continue.")).toBeInTheDocument()
+    })
+
+    it("shows plan labels instead of raw plan values", () => {
+        render(
+            <PublishDialog
+                open
+                onOpenChange={vi.fn()}
+                onPublish={vi.fn()}
+                defaultPublishAll={false}
+                initialOrgIds={[]}
+            />
+        )
+
+        expect(screen.getByText("Professional")).toBeInTheDocument()
+        expect(screen.getByText("Starter")).toBeInTheDocument()
+        expect(screen.queryByText("starter")).not.toBeInTheDocument()
+    })
+
     it("resets publish mode, search, and selected orgs each time it opens", () => {
         const onOpenChange = vi.fn()
         const onPublish = vi.fn()

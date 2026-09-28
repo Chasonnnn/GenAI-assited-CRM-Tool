@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { TabsContent } from "@/components/ui/tabs"
 import { SurrogateAiTab } from "@/components/surrogates/detail/SurrogateAiTab"
 import { useSummarizeSurrogate, useDraftEmail, useAIAvailability } from "@/lib/hooks/use-ai"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import type { DraftEmailResponse, EmailType, SummarizeSurrogateResponse } from "@/lib/api/ai"
 
 export default function SurrogateAiPage() {
@@ -15,6 +16,7 @@ export default function SurrogateAiPage() {
     const draftEmailMutation = useDraftEmail()
     const availability = useAIAvailability()
     const aiSettings = availability.data
+    const { can } = usePermissionCheck()
 
     const [aiSummary, setAiSummary] = React.useState<SummarizeSurrogateResponse | null>(null)
     const [aiDraftEmail, setAiDraftEmail] = React.useState<DraftEmailResponse | null>(null)
@@ -45,7 +47,8 @@ export default function SurrogateAiPage() {
     return (
         <TabsContent value="ai" className="space-y-4">
             <SurrogateAiTab
-                aiSettings={aiSettings}
+                aiEnabled={Boolean(aiSettings?.is_enabled)}
+                canManageAI={can("manage_integrations") && can("manage_ai_settings")}
                 aiSummary={aiSummary}
                 aiDraftEmail={aiDraftEmail}
                 selectedEmailType={selectedEmailType}

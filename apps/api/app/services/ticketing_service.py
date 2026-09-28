@@ -461,7 +461,6 @@ def list_tickets(
         db.query(Ticket, sort_ts.label("sort_ts"))
         .filter(Ticket.organization_id == org_id)
         .order_by(sort_ts.desc(), Ticket.id.desc())
-        .limit(page_limit + 1)
     )
 
     if status_filter:
@@ -498,7 +497,8 @@ def list_tickets(
             )
         )
 
-    rows = query.all()
+    # LIMIT goes last: SQLAlchemy rejects filter() on a query that already has a limit.
+    rows = query.limit(page_limit + 1).all()
     has_more = len(rows) > page_limit
     page_rows = rows[:page_limit]
 

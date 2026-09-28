@@ -16,11 +16,11 @@ const noteKeys = {
 /**
  * Fetch notes for a surrogate.
  */
-export function useNotes(surrogateId: string) {
+export function useNotes(surrogateId: string, options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: noteKeys.forSurrogate(surrogateId),
         queryFn: () => notesApi.getNotes(surrogateId),
-        enabled: !!surrogateId,
+        enabled: !!surrogateId && (options.enabled ?? true),
     });
 }
 

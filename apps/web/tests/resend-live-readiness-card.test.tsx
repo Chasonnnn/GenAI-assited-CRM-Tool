@@ -75,6 +75,21 @@ describe("ResendLiveReadinessCard", () => {
         expect(onCheck).toHaveBeenCalledOnce()
     })
 
+    it("lays out capability chips three across at xl and never truncates their labels", () => {
+        render(
+            <ResendLiveReadinessCard
+                envelope={readinessEnvelope()}
+                canCheck={false}
+                onCheck={vi.fn()}
+            />,
+        )
+
+        const engagement = screen.getByTestId("live-readiness-engagement")
+        expect(engagement.parentElement).toHaveClass("xl:grid-cols-3")
+        expect(engagement.parentElement).not.toHaveClass("xl:grid-cols-5")
+        expect(within(engagement).getByText("Open and click events")).not.toHaveClass("truncate")
+    })
+
     it("keeps the live action hidden without integration-management permission", () => {
         render(
             <ResendLiveReadinessCard

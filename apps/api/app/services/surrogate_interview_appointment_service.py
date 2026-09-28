@@ -5,6 +5,7 @@ import logging
 import secrets
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
@@ -27,6 +28,13 @@ class InterviewAppointmentError(ValueError):
 
 
 ACTIVE_STATUSES = (AppointmentStatus.PENDING.value, AppointmentStatus.CONFIRMED.value)
+# Six calendar weeks: the most days a month view shows, including leading and trailing days.
+OPEN_DAYS_MAX_RANGE_DAYS = 42
+# The slot calculator moves a date up to two days between the viewer's and the owner's time
+# zones (UTC-12 to UTC+14) and then steps one day further, so dates closer than three days to
+# the limits of `date` overflow.
+FIRST_PREVIEW_DATE = date.min + timedelta(days=3)
+LAST_PREVIEW_DATE = date.max - timedelta(days=3)
 logger = logging.getLogger(__name__)
 
 
@@ -58,10 +66,13 @@ def preview_slots(
     actor_user_id: UUID,
     date_start: date,
     client_timezone: str | None,
+    date_end: date | None = None,
 ) -> tuple[str, list]:
     """Preview the same owner's initial-interview availability without creating a type."""
     from app.services import appointment_service, surrogate_status_service
 
+    if date_start < FIRST_PREVIEW_DATE or (date_end or date_start) > LAST_PREVIEW_DATE:
+        raise ValueError("Date is out of range")
     appointment = get_latest(db, org_id, surrogate.id)
     active = appointment is not None and appointment.status in ACTIVE_STATUSES
     owner_id = (
@@ -97,7 +108,7 @@ def preview_slots(
         org_id=org_id,
         appointment_type_id=appointment_type.id,
         date_start=date_start,
-        date_end=date_start,
+        date_end=date_end or date_start,
         client_timezone=timezone,
     )
     slots = appointment_service.get_available_slots(
@@ -110,6 +121,37 @@ def preview_slots(
         appointment_type=appointment_type if transient else None,
     )
     return timezone, slots
+
+
+def preview_open_days(
+    db: Session,
+    *,
+    surrogate: Surrogate,
+    org_id: UUID,
+    actor_user_id: UUID,
+    date_start: date,
+    date_end: date,
+    client_timezone: str | None,
+) -> tuple[str, list[date]]:
+    """Return the dates, in the preview timezone, that have at least one open interview time.
+
+    One slot calculation covers the whole range, so calendar busy times are read once.
+    """
+    if date_end < date_start:
+        raise ValueError("date_end must be on or after date_start")
+    if (date_end - date_start).days >= OPEN_DAYS_MAX_RANGE_DAYS:
+        raise ValueError(f"Date range cannot exceed {OPEN_DAYS_MAX_RANGE_DAYS} days")
+    timezone, slots = preview_slots(
+        db,
+        surrogate=surrogate,
+        org_id=org_id,
+        actor_user_id=actor_user_id,
+        date_start=date_start,
+        date_end=date_end,
+        client_timezone=client_timezone,
+    )
+    zone = ZoneInfo(timezone)
+    return timezone, sorted({slot.start.astimezone(zone).date() for slot in slots})
 
 
 def _same_time(left: datetime | None, right: datetime | None) -> bool:

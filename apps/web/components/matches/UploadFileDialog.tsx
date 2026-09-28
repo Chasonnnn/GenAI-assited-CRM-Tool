@@ -81,7 +81,7 @@ export function UploadFileDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle>Upload File</DialogTitle>
                 </DialogHeader>

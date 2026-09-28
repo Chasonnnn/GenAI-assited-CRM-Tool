@@ -1,6 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { ApiError } from '@/lib/api'
 import AuditLogPage from '../app/(app)/settings/audit/page'
+
+const mockCan = vi.fn()
+
+vi.mock('@/lib/hooks/use-permission-check', () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockCan(permission),
+    }),
+}))
+
+vi.mock('@/components/app-link', () => ({
+    default: ({ children, href, ...props }: React.ComponentProps<'a'>) => (
+        <a href={href} {...props}>
+            {children}
+        </a>
+    ),
+}))
 
 const mockUseAuditLogs = vi.fn()
 const mockUseAuditExports = vi.fn()
@@ -54,12 +75,73 @@ describe('AuditLogPage', () => {
             isLoading: false,
         })
         mockUseAuditExports.mockReturnValue({ data: { items: [] }, refetch: mockRefetchExports })
+        mockCan.mockReset()
+        mockCan.mockImplementation((permission: string) => permission === 'view_audit_log')
+    })
+
+    it('shows the denied state without the export form or entries without view_audit_log', () => {
+        mockCan.mockReturnValue(false)
+        mockUseAuditLogs.mockClear()
+
+        render(<AuditLogPage />)
+
+        expect(screen.getByRole('heading', { level: 1, name: 'Audit Log' })).toBeInTheDocument()
+        expect(screen.getByText('Permission required')).toBeInTheDocument()
+        expect(screen.queryByText('Activity Log')).not.toBeInTheDocument()
+        expect(mockUseAuditLogs).not.toHaveBeenCalled()
+    })
+
+    it('shows a load error instead of an empty log when entries fail to load', () => {
+        mockUseAuditLogs.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(500, 'Internal Server Error', 'boom'),
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+
+        render(<AuditLogPage />)
+
+        expect(screen.getByText("Couldn't load audit log")).toBeInTheDocument()
+        expect(screen.queryByText(/No audit log entries/i)).not.toBeInTheDocument()
+    })
+
+    it('renders entry details as a wrapping block below the actor', () => {
+        mockUseAuditLogs.mockReturnValue({
+            data: {
+                items: [
+                    {
+                        id: 'e2',
+                        event_type: 'user_login',
+                        actor_user_id: 'u1',
+                        actor_name: 'Alice',
+                        target_type: null,
+                        target_id: null,
+                        details: { page: 1, count: 30, q_type: null },
+                        ip_address: null,
+                        created_at: new Date().toISOString(),
+                    },
+                ],
+                total: 1,
+                page: 1,
+                per_page: 20,
+            },
+            isLoading: false,
+        })
+
+        render(<AuditLogPage />)
+
+        const details = screen.getByText('{"page":1,"count":30,"q_type":null}')
+        expect(details.tagName).toBe('P')
+        expect(details).toHaveClass('[overflow-wrap:anywhere]')
+        expect(details).not.toContainElement(screen.getByText('Alice'))
     })
 
     it('renders audit entries and supports pagination', () => {
         render(<AuditLogPage />)
 
-        expect(screen.getByText('Audit Log')).toBeInTheDocument()
+        expect(screen.getByRole('heading', { level: 1, name: 'Audit Log' })).toBeInTheDocument()
         expect(screen.getByText('Activity Log')).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: /next/i }))

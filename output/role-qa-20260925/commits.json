@@ -1,0 +1,23 @@
+{
+  "branch": "fix/role-qa-permission-gates",
+  "base": "9bb158ed07cf0c09438dc7eaabab3f47670ea638",
+  "commits": [
+    {
+      "sha": "c315fa88ca2f4c2c2d8ad8407a26e84e3ffa0a78",
+      "title": "fix: guard reports before loading analytics"
+    },
+    {
+      "sha": "72aa18c697ad52984b0ade3eccc9b78728188c9f",
+      "title": "fix: gate team data behind membership permissions"
+    },
+    {
+      "sha": "b1a0463593f65a29e56d032d03f73d7a383ba81e",
+      "title": "fix: enforce appointment permissions across scheduling views"
+    }
+  ],
+  "matches_verified_qa_patch": true,
+  "typecheck": "passed",
+  "lint": "passed",
+  "frontend_tests_passed": 1808,
+  "pushed": false
+}

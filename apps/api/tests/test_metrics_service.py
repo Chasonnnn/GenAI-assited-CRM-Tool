@@ -15,6 +15,8 @@ from sqlalchemy.exc import IntegrityError
 from app.db.models import AIConversation, RequestMetricsRollup
 from app.services import metrics_service
 
+pytestmark = pytest.mark.request_metrics
+
 
 @pytest.fixture
 def metrics_runtime(monkeypatch):
@@ -179,34 +181,26 @@ async def test_metrics_shutdown_does_not_wait_for_blocked_write(metrics_runtime,
         main._metrics_executor.shutdown(wait=True, cancel_futures=True)
 
 
-def test_record_request_dedupes_null_org(db, monkeypatch):
-    """Null org metrics should upsert into a single rollup row."""
+def test_record_request_dedupes_each_org_bucket(db, test_org, monkeypatch):
+    """Global and tenant metrics each upsert without mixing their rollup rows."""
     fixed_bucket = datetime(2024, 1, 1, 12, 0, tzinfo=UTC)
     monkeypatch.setattr(metrics_service, "get_minute_bucket", lambda _=None: fixed_bucket)
-
     route = "/tests/metrics"
 
-    metrics_service.record_request(
-        db=db,
-        route=route,
-        method="get",
-        status_code=200,
-        duration_ms=100,
-        org_id=None,
-    )
-    metrics_service.record_request(
-        db=db,
-        route=route,
-        method="get",
-        status_code=500,
-        duration_ms=50,
-        org_id=None,
-    )
+    for org_id in (None, test_org.id):
+        for status_code, duration_ms in ((200, 100), (500, 50)):
+            metrics_service.record_request(
+                db=db,
+                route=route,
+                method="get",
+                status_code=status_code,
+                duration_ms=duration_ms,
+                org_id=org_id,
+            )
 
     rows = (
         db.query(RequestMetricsRollup)
         .filter(
-            RequestMetricsRollup.organization_id.is_(None),
             RequestMetricsRollup.route == route,
             RequestMetricsRollup.method == "GET",
             RequestMetricsRollup.period_start == fixed_bucket,
@@ -214,12 +208,13 @@ def test_record_request_dedupes_null_org(db, monkeypatch):
         .all()
     )
 
-    assert len(rows) == 1
-    row = rows[0]
-    assert row.request_count == 2
-    assert row.status_2xx == 1
-    assert row.status_5xx == 1
-    assert row.total_duration_ms == 150
+    assert len(rows) == 2
+    assert {row.organization_id for row in rows} == {None, test_org.id}
+    for row in rows:
+        assert row.request_count == 2
+        assert row.status_2xx == 1
+        assert row.status_5xx == 1
+        assert row.total_duration_ms == 150
 
 
 def test_ai_conversation_constraint_behavior(db, test_org, test_user):

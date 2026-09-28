@@ -49,36 +49,31 @@ import {
 } from "@/lib/hooks/use-queues"
 import { useMembers } from "@/lib/hooks/use-permissions"
 import type { Member } from "@/lib/api/permissions"
-import { useAuth } from "@/lib/auth-context"
-import { redirect } from "next/navigation"
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { toast } from "@/components/ui/toast"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import { SettingsPageGate } from "../settings-page-gate"
 
-function resolveErrorMessage(error: unknown, fallback: string) {
-    if (error instanceof Error && error.message) return error.message
-    return fallback
+function showActionError(error: unknown, fallback: string) {
+    const message = getActionErrorMessage(error, fallback)
+    if (message) toast.error(message)
 }
 
 export default function QueuesSettingsPage() {
-    const { user } = useAuth()
-    const isManager = user?.role === "admin" || user?.role === "developer"
-
-    if (user && !isManager) {
-        redirect("/settings")
-    }
-
-    if (!isManager) {
-        return (
-            <div className="flex min-h-screen items-center justify-center">
-                <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
-            </div>
-        )
-    }
-
-    return <QueuesSettingsContent />
+    return (
+        <SettingsPageGate
+            title="Queues"
+            permission="manage_queues"
+            deniedDescription="Queues need the Manage queues permission. Ask an admin to update your role."
+        >
+            <QueuesSettingsContent />
+        </SettingsPageGate>
+    )
 }
 
 function QueuesSettingsContent() {
-    const { data: queues, isLoading, error } = useQueues(true) // Include inactive
+    const { data: queues, isLoading, error, refetch, isFetching } = useQueues(true) // Include inactive
     const createQueueMutation = useCreateQueue()
     const updateQueueMutation = useUpdateQueue()
 
@@ -158,7 +153,7 @@ function QueuesSettingsContent() {
             setSelectedUserId("")
             toast.success("Member added to queue")
         } catch (error: unknown) {
-            toast.error(resolveErrorMessage(error, "Failed to add member"))
+            showActionError(error, "Couldn't add this member. Try again.")
         }
     }
 
@@ -168,7 +163,7 @@ function QueuesSettingsContent() {
             await removeMemberMutation.mutateAsync({ queueId: managingQueue.id, userId })
             toast.success("Member removed from queue")
         } catch (error: unknown) {
-            toast.error(resolveErrorMessage(error, "Failed to remove member"))
+            showActionError(error, "Couldn't remove this member. Try again.")
         }
     }
 
@@ -178,10 +173,21 @@ function QueuesSettingsContent() {
     ) || []
 
     return (
-        <div className="p-6 max-w-4xl mx-auto">
-            <QueuesPageHeader onCreate={() => setCreateDialogOpen(true)} />
+        <div className="flex min-h-screen flex-col">
+            <PageHeader
+                title="Queues"
+                actions={
+                    <Button onClick={() => setCreateDialogOpen(true)}>
+                        <PlusIcon className="size-4 mr-2" aria-hidden="true" />
+                        Create Queue
+                    </Button>
+                }
+            />
+            <div className="p-6">
             <QueuesStatusContent
                 error={error}
+                onRetry={() => void refetch()}
+                isRetrying={isFetching}
                 isLoading={isLoading}
                 queues={queues}
                 onCreate={() => setCreateDialogOpen(true)}
@@ -189,6 +195,7 @@ function QueuesSettingsContent() {
                 onManageMembers={openMembersDialog}
                 onToggleActive={handleToggleActive}
             />
+            </div>
             <QueueFormDialog
                 open={createDialogOpen}
                 onOpenChange={setCreateDialogOpen}
@@ -241,25 +248,10 @@ function QueuesSettingsContent() {
     )
 }
 
-function QueuesPageHeader({ onCreate }: { onCreate: () => void }) {
-    return (
-        <div className="flex items-center justify-between mb-6">
-            <div>
-                <h1 className="text-2xl font-semibold flex items-center gap-2">
-                    <UsersIcon className="size-6" aria-hidden="true" />
-                    Queue Management
-                </h1>
-            </div>
-            <Button onClick={onCreate}>
-                <PlusIcon className="size-4 mr-2" aria-hidden="true" />
-                Create Queue
-            </Button>
-        </div>
-    )
-}
-
 function QueuesStatusContent({
     error,
+    onRetry,
+    isRetrying,
     isLoading,
     queues,
     onCreate,
@@ -268,6 +260,8 @@ function QueuesStatusContent({
     onToggleActive,
 }: {
     error: Error | null | undefined
+    onRetry: () => void
+    isRetrying: boolean
     isLoading: boolean
     queues: Queue[] | undefined
     onCreate: () => void
@@ -277,8 +271,14 @@ function QueuesStatusContent({
 }) {
     if (error) {
         return (
-            <Card className="p-6 text-center text-destructive mb-6">
-                Error loading queues: {error.message}
+            <Card>
+                <QueryErrorState
+                    error={error}
+                    onRetry={onRetry}
+                    isRetrying={isRetrying}
+                    title="Couldn't load queues"
+                    className="min-h-0 py-10"
+                />
             </Card>
         )
     }
@@ -528,7 +528,7 @@ function QueueMembersDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <UsersIcon className="size-5" aria-hidden="true" />

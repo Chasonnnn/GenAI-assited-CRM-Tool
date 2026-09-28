@@ -4,6 +4,7 @@ import * as React from "react"
 import { useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { CopyButton } from "@/components/ui/copy-button"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -28,6 +29,7 @@ import { TabsContent } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
+import { EmptyValue } from "@/components/ui/empty-value"
 import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
 import { ActivityTimeline } from "@/components/surrogates/ActivityTimeline"
 import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
@@ -40,9 +42,9 @@ import {
     CalendarDaysIcon,
     ChevronDownIcon,
     ClipboardCheckIcon,
-    CopyIcon,
     InfoIcon,
     CheckIcon,
+    MinusIcon,
     PencilIcon,
     PlusIcon,
     RulerIcon,
@@ -119,7 +121,7 @@ function LeadWarningIndicator({
             <TooltipTrigger
                 type="button"
                 aria-label={`${fieldLabel} lead intake warning`}
-                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-red-300/80 bg-[radial-gradient(circle_at_28%_28%,rgba(255,255,255,0.96),rgba(255,255,255,0.42)_34%,rgba(252,165,165,0.3)_38%,rgba(248,113,113,0.26)_62%,rgba(220,38,38,0.18)_100%)] text-red-600 shadow-[0_6px_16px_-10px_rgba(220,38,38,0.95),inset_0_1px_0_rgba(255,255,255,0.95)] transition-transform duration-150 hover:-tranzinc-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/70 focus-visible:ring-offset-2 dark:border-red-400/90 dark:bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.3),rgba(255,255,255,0.08)_18%,rgba(248,113,113,0.72)_42%,rgba(220,38,38,0.86)_70%,rgba(69,10,10,0.98)_100%)] dark:text-red-50 dark:shadow-[0_10px_24px_-14px_rgba(248,113,113,0.98),inset_0_1px_0_rgba(255,255,255,0.18)] dark:focus-visible:ring-red-400/70"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-red-300/80 bg-[radial-gradient(circle_at_28%_28%,rgba(255,255,255,0.96),rgba(255,255,255,0.42)_34%,rgba(252,165,165,0.3)_38%,rgba(248,113,113,0.26)_62%,rgba(220,38,38,0.18)_100%)] text-red-600 shadow-[0_6px_16px_-10px_rgba(220,38,38,0.95),inset_0_1px_0_rgba(255,255,255,0.95)] transition-transform duration-150 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/70 focus-visible:ring-offset-2 dark:border-red-400/90 dark:bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.3),rgba(255,255,255,0.08)_18%,rgba(248,113,113,0.72)_42%,rgba(220,38,38,0.86)_70%,rgba(69,10,10,0.98)_100%)] dark:text-red-50 dark:shadow-[0_10px_24px_-14px_rgba(248,113,113,0.98),inset_0_1px_0_rgba(255,255,255,0.18)] dark:focus-visible:ring-red-400/70"
             >
                 <AlertTriangleIcon
                     className="size-3.5 drop-shadow-[0_0_1px_rgba(255,255,255,0.16)] dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.52)]"
@@ -190,7 +192,11 @@ function ChecklistStatusButton({
             {value === true && <CheckIcon className="size-4 text-green-500" />}
             {value === false && <XIcon className="size-4 text-red-500" />}
             {(value === null || value === undefined) && (
-                <span className="text-sm leading-none text-muted-foreground">-</span>
+                <MinusIcon
+                    data-slot="checklist-unset"
+                    className="size-4 text-muted-foreground"
+                    aria-hidden="true"
+                />
             )}
         </Button>
     )
@@ -209,7 +215,6 @@ export function SurrogateOverviewTab() {
     const tasksQuery = useTasks({ surrogate_id: id, exclude_approvals: true })
     const updateSurrogateMutation = useUpdateSurrogate()
     const revealSensitiveInfoMutation = useRevealSurrogateSensitiveInfo()
-    const [copiedEmail, setCopiedEmail] = React.useState(false)
     const [revealedSsn, setRevealedSsn] = React.useState<string | null>(null)
     const [revealedPartnerSsn, setRevealedPartnerSsn] = React.useState<string | null>(null)
     const [surrogatePersonalSectionAdded, setSurrogatePersonalSectionAdded] = React.useState(false)
@@ -270,12 +275,6 @@ export function SurrogateOverviewTab() {
         (hasSurrogatePersonalInfo || surrogatePersonalSectionAdded) && !surrogatePersonalSectionHidden
     const showPartnerInfo = (hasPartnerInfo || partnerSectionAdded) && !partnerSectionHidden
     const hasAnyPersonalInfoSection = showSurrogatePersonalInfo || showPartnerInfo
-
-    const copyEmail = () => {
-        void navigator.clipboard.writeText(surrogateData.email)
-        setCopiedEmail(true)
-        setTimeout(() => setCopiedEmail(false), 2000)
-    }
 
     const updateSurrogate = async (data: Partial<SurrogateUpdatePayload>) => {
         await updateSurrogateMutation.mutateAsync({
@@ -387,19 +386,14 @@ export function SurrogateOverviewTab() {
                                     />
                                 )}
                             </div>
-                            <Button
+                            <CopyButton
                                 variant="ghost"
                                 size="icon"
                                 className="size-6"
-                                onClick={copyEmail}
+                                iconClassName="size-3"
+                                value={surrogateData.email}
                                 aria-label="Copy email"
-                            >
-                                {copiedEmail ? (
-                                    <CheckIcon className="size-3" />
-                                ) : (
-                                    <CopyIcon className="size-3" />
-                                )}
-                            </Button>
+                            />
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Phone:</span>
@@ -477,7 +471,6 @@ export function SurrogateOverviewTab() {
                                                 data: { date_of_birth: value },
                                             })
                                         }}
-                                        placeholder="-"
                                         label="Date of Birth"
                                     />
                                 }
@@ -547,7 +540,7 @@ export function SurrogateOverviewTab() {
                             <ProfileMetric
                                 icon={ScaleIcon}
                                 label="BMI"
-                                primary={bmiValue ?? "-"}
+                                primary={bmiValue ?? <EmptyValue />}
                             />
                         </div>
                     </SurrogateOverviewCard>
@@ -564,13 +557,13 @@ export function SurrogateOverviewTab() {
                                                     variant="outline"
                                                     size="sm"
                                                     aria-label="Edit Personal Information"
-                                                    className="group h-8 rounded-full border-border/70 bg-background/90 px-3.5 text-xs font-medium shadow-none transition-colors hover:bg-accent/70 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+                                                    className="group h-8 rounded-full border-border/70 bg-background/90 px-3.5 text-xs font-medium shadow-none transition-colors hover:bg-accent/70 data-popup-open:bg-accent data-popup-open:text-accent-foreground"
                                                 />
                                             }
                                         >
-                                            <PencilIcon className="size-3.5 text-muted-foreground transition-colors group-data-[state=open]:text-current" />
+                                            <PencilIcon className="size-3.5 text-muted-foreground transition-colors group-data-popup-open:text-current" />
                                             Edit Info
-                                            <ChevronDownIcon className="ml-0.5 size-3.5 text-muted-foreground transition-all group-data-[state=open]:tranzinc-y-px group-data-[state=open]:text-current" />
+                                            <ChevronDownIcon className="ml-0.5 size-3.5 text-muted-foreground transition-all group-data-popup-open:translate-y-px group-data-popup-open:text-current" />
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent
                                             align="end"
@@ -737,7 +730,6 @@ export function SurrogateOverviewTab() {
                                                 <InlineDateField
                                                     value={surrogateData.partner_date_of_birth}
                                                     onSave={async (value) => updateSurrogate({ partner_date_of_birth: value })}
-                                                    placeholder="-"
                                                     label="Partner date of birth"
                                                 />
                                             </PersonalInfoRow>
@@ -908,8 +900,8 @@ export function SurrogateOverviewTab() {
                                 if (!isChecklistBooleanFieldKey(item.key)) {
                                     return (
                                         <div key={item.key} className="flex items-center gap-2">
-                                            <span className="flex size-6 shrink-0 items-center justify-center text-sm text-muted-foreground">
-                                                -
+                                            <span className="flex size-6 shrink-0 items-center justify-center text-sm">
+                                                <EmptyValue />
                                             </span>
                                             <span className="text-sm">{item.label}</span>
                                         </div>
@@ -1005,7 +997,7 @@ export function SurrogateOverviewTab() {
                                     <span className="text-sm text-muted-foreground">
                                         {item.label}:
                                     </span>
-                                    <span className="text-sm">{item.display_value}</span>
+                                    <span className="text-sm">{item.display_value || <EmptyValue />}</span>
                                 </div>
                             )
                         })}

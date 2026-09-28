@@ -381,6 +381,50 @@ def _stage_slug_exists_for_org(db: Session, org_id: UUID, stage_slug: str) -> bo
     return _resolve_stage_for_org(db, org_id, stage_slug) is not None
 
 
+class DuplicateRuleError(ValueError):
+    """Another rule in the organization has the same template, stage and threshold."""
+
+
+DUPLICATE_RULE_MESSAGE = "A rule with this template, stage and threshold already exists."
+
+
+def _stage_identity(db: Session, org_id: UUID, stage_ref: str | None) -> str | None:
+    """Compares stage references stored as either a stage key or a slug."""
+    if not stage_ref:
+        return None
+    stage = _resolve_stage_for_org(db, org_id, stage_ref)
+    if stage:
+        return str(stage.id)
+    return pipeline_service.normalize_stage_ref(stage_ref)
+
+
+def _ensure_rule_is_unique(
+    db: Session,
+    *,
+    organization_id: UUID,
+    template_key: str,
+    stage_slug: str | None,
+    business_days: int,
+    exclude_rule_id: UUID | None = None,
+) -> None:
+    # Application-level check; there is no unique constraint, so two concurrent requests can
+    # still both succeed. A partial unique index needs a migration and a stage-ref cleanup first.
+    query = db.query(OrgIntelligentSuggestionRule).filter(
+        OrgIntelligentSuggestionRule.organization_id == organization_id,
+        OrgIntelligentSuggestionRule.template_key == template_key,
+        OrgIntelligentSuggestionRule.business_days == business_days,
+    )
+    if exclude_rule_id is not None:
+        query = query.filter(OrgIntelligentSuggestionRule.id != exclude_rule_id)
+    candidates = query.all()
+    if not candidates:
+        return
+    target_stage = _stage_identity(db, organization_id, stage_slug)
+    for existing in candidates:
+        if _stage_identity(db, organization_id, existing.stage_slug) == target_stage:
+            raise DuplicateRuleError(DUPLICATE_RULE_MESSAGE)
+
+
 def _validate_rule_payload(
     db: Session,
     *,
@@ -512,6 +556,14 @@ def create_rule(db: Session, organization_id: UUID, payload: dict) -> OrgIntelli
     if business_days < 1 or business_days > 60:
         raise ValueError("business_days must be between 1 and 60")
 
+    _ensure_rule_is_unique(
+        db,
+        organization_id=organization_id,
+        template_key=template_key,
+        stage_slug=stage_slug,
+        business_days=business_days,
+    )
+
     max_sort = (
         db.query(func.max(OrgIntelligentSuggestionRule.sort_order))
         .filter(OrgIntelligentSuggestionRule.organization_id == organization_id)
@@ -566,11 +618,29 @@ def update_rule(
         stage_slug=stage_slug,
     )
 
+    business_days = rule.business_days
     if "business_days" in updates:
         business_days = int(updates["business_days"])
         if business_days < 1 or business_days > 60:
             raise ValueError("business_days must be between 1 and 60")
-        rule.business_days = business_days
+
+    # Only a change to the identifying fields is checked, so renaming or toggling a rule that
+    # already duplicates another (created before this check existed) keeps working.
+    if (template_key, stage_slug, business_days) != (
+        rule.template_key,
+        rule.stage_slug,
+        rule.business_days,
+    ):
+        _ensure_rule_is_unique(
+            db,
+            organization_id=organization_id,
+            template_key=template_key,
+            stage_slug=stage_slug,
+            business_days=business_days,
+            exclude_rule_id=rule.id,
+        )
+
+    rule.business_days = business_days
 
     if "enabled" in updates:
         rule.enabled = bool(updates["enabled"])

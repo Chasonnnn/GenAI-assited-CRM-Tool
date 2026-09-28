@@ -20,6 +20,9 @@ export interface DateTimePickerProps {
     triggerId?: string
     timeInputId?: string
     triggerAriaLabelledBy?: string
+    /** Marks the trigger invalid; pair with an error id in aria-describedby (see ValidatedField). */
+    "aria-invalid"?: boolean | "true" | "false" | undefined
+    "aria-describedby"?: string | undefined
 }
 
 type DateTimeDraft = {
@@ -59,6 +62,8 @@ export function DateTimePicker({
     triggerId,
     timeInputId,
     triggerAriaLabelledBy,
+    "aria-invalid": ariaInvalid,
+    "aria-describedby": ariaDescribedBy,
 }: DateTimePickerProps) {
     const [open, setOpen] = React.useState(false)
     const [draft, setDraft] = React.useState<DateTimeDraft>(DEFAULT_DRAFT)
@@ -107,11 +112,13 @@ export function DateTimePicker({
             <PopoverTrigger
                 {...(triggerId ? { id: triggerId } : {})}
                 className={cn(
-                    "inline-flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal hover:bg-accent hover:text-accent-foreground",
+                    "inline-flex w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-normal hover:bg-accent hover:text-accent-foreground aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
                     disabled && "pointer-events-none opacity-50",
                     className
                 )}
                 aria-disabled={disabled}
+                aria-invalid={ariaInvalid}
+                aria-describedby={ariaDescribedBy}
                 {...(triggerAriaLabelledBy ? { "aria-labelledby": triggerAriaLabelledBy } : {})}
             >
                 <span className="inline-flex items-center gap-2">

@@ -313,6 +313,8 @@ def create_intelligent_suggestion_rule(
             session.org_id,
             body.model_dump(exclude_unset=True),
         )
+    except intelligent_suggestions_service.DuplicateRuleError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -351,6 +353,8 @@ def update_intelligent_suggestion_rule(
             rule_id,
             body.model_dump(exclude_unset=True),
         )
+    except intelligent_suggestions_service.DuplicateRuleError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -31,11 +31,11 @@ function DetailRow({
     mono?: boolean
 }) {
     return (
-        <div className="flex justify-between py-2 border-b border-stone-100 dark:border-stone-800 last:border-0">
-            <span className="text-stone-500 dark:text-stone-400">{label}</span>
+        <div className="flex justify-between gap-4 py-2 border-b border-border last:border-0">
+            <span className="text-muted-foreground">{label}</span>
             <span
-                className={`text-stone-900 dark:text-stone-100 ${
-                    mono ? "font-mono text-sm" : ""
+                className={`min-w-0 text-right text-foreground ${
+                    mono ? "font-mono text-sm break-all" : "break-words"
                 }`}
             >
                 {value || "-"}
@@ -46,11 +46,11 @@ function DetailRow({
 
 function StatBlock({ label, value }: { label: string; value: number }) {
     return (
-        <div className="text-center p-4 bg-stone-50 dark:bg-stone-800/50 rounded-lg">
-            <div className="text-2xl font-bold text-stone-900 dark:text-stone-100">
+        <div className="text-center p-4 bg-muted/50 rounded-lg">
+            <div className="text-2xl font-bold text-foreground">
                 {value.toLocaleString()}
             </div>
-            <div className="text-xs text-stone-500 dark:text-stone-400 mt-1">{label}</div>
+            <div className="text-xs text-muted-foreground mt-1">{label}</div>
         </div>
     )
 }
@@ -114,7 +114,7 @@ export function AgencyOverviewTab({
                         Soft delete this organization for 30 days, then permanently remove all data.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-4">
                     {isDeleted ? (
                         <div className="space-y-3">
                             <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-900 dark:border-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-100">
@@ -136,73 +136,77 @@ export function AgencyOverviewTab({
                             </Button>
                         </div>
                     ) : (
-                        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                        <div className="flex flex-wrap gap-2">
+                            <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                                <AlertDialogTrigger
+                                    className={buttonVariants({ variant: "destructive-outline" })}
+                                >
+                                    Delete Organization
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete {org.name}?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            This will disable access immediately. Data will be permanently
+                                            deleted after 30 days.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            variant="destructive"
+                                            onClick={onDeleteOrganization}
+                                            disabled={deleteSubmitting}
+                                        >
+                                            {deleteSubmitting ? (
+                                                <span className="inline-flex items-center gap-2">
+                                                    <Loader2 className="size-4 animate-spin" />
+                                                    Deleting
+                                                </span>
+                                            ) : (
+                                                "Confirm Delete"
+                                            )}
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 border-t pt-4">
+                        <AlertDialog open={purgeOpen} onOpenChange={setPurgeOpen}>
                             <AlertDialogTrigger
                                 className={buttonVariants({ variant: "destructive" })}
                             >
-                                Delete Organization
+                                Permanently delete now
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                                 <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete {org.name}?</AlertDialogTitle>
+                                    <AlertDialogTitle>Permanently delete {org.name} now?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                        This will disable access immediately. Data will be permanently
-                                        deleted after 30 days.
+                                        This is irreversible and removes all organization data right away.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction
-                                        onClick={onDeleteOrganization}
-                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                        disabled={deleteSubmitting}
+                                        variant="destructive"
+                                        onClick={onPurgeOrganization}
+                                        disabled={purgeSubmitting}
                                     >
-                                        {deleteSubmitting ? (
+                                        {purgeSubmitting ? (
                                             <span className="inline-flex items-center gap-2">
                                                 <Loader2 className="size-4 animate-spin" />
                                                 Deleting
                                             </span>
                                         ) : (
-                                            "Confirm Delete"
+                                            "Delete now"
                                         )}
                                     </AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
-                    )}
-
-                    <AlertDialog open={purgeOpen} onOpenChange={setPurgeOpen}>
-                        <AlertDialogTrigger
-                            className={buttonVariants({ variant: "outline" })}
-                        >
-                            Delete Immediately
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Permanently delete {org.name} now?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    This is irreversible and removes all organization data right away.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                    onClick={onPurgeOrganization}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                    disabled={purgeSubmitting}
-                                >
-                                    {purgeSubmitting ? (
-                                        <span className="inline-flex items-center gap-2">
-                                            <Loader2 className="size-4 animate-spin" />
-                                            Deleting
-                                        </span>
-                                    ) : (
-                                        "Delete now"
-                                    )}
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
+                    </div>
                 </CardContent>
             </Card>
         </div>

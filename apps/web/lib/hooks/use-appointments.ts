@@ -17,12 +17,10 @@ export const appointmentKeys = {
     availability: () => [...appointmentKeys.all, 'availability'] as const,
     bookingLink: () => [...appointmentKeys.all, 'bookingLink'] as const,
     lists: () => [...appointmentKeys.all, 'list'] as const,
-    list: (params: {
-        page?: number;
-        status?: string;
-        date_start?: string;
-        date_end?: string;
-    }) => [...appointmentKeys.lists(), params] as const,
+    list: (params: appointmentsApi.AppointmentListParams) => [...appointmentKeys.lists(), params] as const,
+    // Under lists() so every mutation that refreshes the lists also refreshes the tab counts.
+    statusCounts: (params: appointmentsApi.AppointmentFilterParams) =>
+        [...appointmentKeys.lists(), 'status-counts', params] as const,
     details: () => [...appointmentKeys.all, 'detail'] as const,
     detail: (id: string) => [...appointmentKeys.details(), id] as const,
     rescheduleSlots: (
@@ -142,20 +140,20 @@ export function useRegenerateBookingLink() {
 // Appointments
 // =============================================================================
 
+export function useAppointmentStatusCounts(
+    params: appointmentsApi.AppointmentFilterParams,
+    options?: { enabled?: boolean },
+) {
+    return useQuery({
+        queryKey: appointmentKeys.statusCounts(params),
+        queryFn: () => appointmentsApi.getAppointmentStatusCounts(params),
+        enabled: options?.enabled ?? true,
+        retry: false,
+    });
+}
+
 export function useAppointments(
-    params: {
-    page?: number;
-    per_page?: number;
-    status?: string;
-    date_start?: string;
-    date_end?: string;
-    donor_id?: string;
-    match_id?: string;
-    attempt_id?: string;
-    include_record_history?: boolean;
-    surrogate_id?: string;
-    intended_parent_id?: string;
-    },
+    params: appointmentsApi.AppointmentListParams,
     options?: { enabled?: boolean },
 ) {
     return useQuery({

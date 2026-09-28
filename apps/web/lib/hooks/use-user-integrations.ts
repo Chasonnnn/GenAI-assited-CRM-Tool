@@ -4,7 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/toast'
-import { ApiError } from '@/lib/api'
+import { getActionErrorMessage } from '@/lib/forms/api-field-errors'
 import { appointmentKeys } from './use-appointments'
 import { surrogateKeys } from './use-surrogates'
 import { taskKeys } from './use-tasks'
@@ -49,6 +49,13 @@ const integrationKeys = {
 // ============================================================================
 // Hooks
 // ============================================================================
+
+// 5xx and network failures can carry server configuration or provider text, so they show
+// product copy only; rate limits are already reported by the API client.
+function toastIntegrationError(error: unknown, fallback: string) {
+    const message = getActionErrorMessage(error, fallback)
+    if (message) toast.error(message)
+}
 
 /**
  * Get list of user's connected integrations.
@@ -98,15 +105,7 @@ export function useConnectZoom() {
             // Redirect user to Zoom OAuth
             window.location.assign(auth_url)
         },
-        onError: (error) => {
-            const message =
-                error instanceof ApiError
-                    ? error.message || 'Failed to connect Zoom.'
-                    : error instanceof Error
-                        ? error.message
-                        : 'Failed to connect Zoom.'
-            toast.error(message)
-        },
+        onError: (error) => toastIntegrationError(error, "Couldn't start the Zoom connection. Try again."),
     })
 }
 
@@ -123,15 +122,7 @@ export function useConnectGmail() {
             // Redirect user to Gmail OAuth
             window.location.assign(auth_url)
         },
-        onError: (error) => {
-            const message =
-                error instanceof ApiError
-                    ? error.message || 'Failed to connect Gmail.'
-                    : error instanceof Error
-                        ? error.message
-                        : 'Failed to connect Gmail.'
-            toast.error(message)
-        },
+        onError: (error) => toastIntegrationError(error, "Couldn't start the Gmail connection. Try again."),
     })
 }
 
@@ -147,15 +138,7 @@ export function useConnectGoogleCalendar() {
             }
             window.location.assign(auth_url)
         },
-        onError: (error) => {
-            const message =
-                error instanceof ApiError
-                    ? error.message || 'Failed to connect Google Calendar.'
-                    : error instanceof Error
-                        ? error.message
-                        : 'Failed to connect Google Calendar.'
-            toast.error(message)
-        },
+        onError: (error) => toastIntegrationError(error, "Couldn't start the Google Calendar connection. Try again."),
     })
 }
 
@@ -206,6 +189,9 @@ export function useSyncGoogleCalendarBindings() {
         mutationFn: syncGoogleCalendarBindings,
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: integrationKeys.googleCalendarBindings() })
+            // Last sync in the Google Calendar dialog and the integrations list reads these.
+            void queryClient.invalidateQueries({ queryKey: integrationKeys.googleCalendarStatus() })
+            void queryClient.invalidateQueries({ queryKey: integrationKeys.list() })
             void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
         },
     })
@@ -249,15 +235,7 @@ export function useSyncGoogleCalendarNow() {
                     : 'Google sync complete. No changes detected.'
             )
         },
-        onError: (error) => {
-            const message =
-                error instanceof ApiError
-                    ? error.message || 'Failed to sync Google Calendar.'
-                    : error instanceof Error
-                        ? error.message
-                        : 'Failed to sync Google Calendar.'
-            toast.error(message)
-        },
+        onError: (error) => toastIntegrationError(error, "Couldn't sync Google Calendar. Try again."),
     })
 }
 
@@ -273,15 +251,7 @@ export function useConnectGcp() {
             }
             window.location.assign(auth_url)
         },
-        onError: (error) => {
-            const message =
-                error instanceof ApiError
-                    ? error.message || 'Failed to connect Google Cloud.'
-                    : error instanceof Error
-                        ? error.message
-                        : 'Failed to connect Google Cloud.'
-            toast.error(message)
-        },
+        onError: (error) => toastIntegrationError(error, "Couldn't start the Google Cloud connection. Try again."),
     })
 }
 

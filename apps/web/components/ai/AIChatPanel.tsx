@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon } from "@/components/ui/input-group"
 import { Skeleton } from "@/components/ui/skeleton"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { cn } from "@/lib/utils"
 import {
     ArrowUpIcon,
@@ -893,7 +894,7 @@ function AIChatPanelContent({
                 onScroll={handleScroll}
                 onRetry={() => void refetchConversation()}
             />
-            <div className="shrink-0 border-t bg-background/95 px-3 py-2.5 shadow-[0_-12px_24px_rgba(0,0,0,0.08)] backdrop-blur">
+            <div ref={toastClearanceRef} className="shrink-0 border-t bg-background/95 px-3 py-2.5 shadow-[0_-12px_24px_rgba(0,0,0,0.08)] backdrop-blur">
                 <AIChatQuickActions
                     entityType={entityType}
                     entityId={entityId}

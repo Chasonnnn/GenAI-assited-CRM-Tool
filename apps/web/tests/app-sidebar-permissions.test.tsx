@@ -182,6 +182,24 @@ describe("AppSidebar permission visibility", () => {
         })
     })
 
+    it("names settings links after their page titles", async () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_queues"] },
+        })
+
+        render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        await waitFor(() => {
+            expect(screen.getByText("Notifications")).toBeInTheDocument()
+        })
+        expect(screen.getByText("Queues")).toBeInTheDocument()
+        expect(screen.queryByText("Queue Management")).not.toBeInTheDocument()
+    })
+
     it("hides Tickets for non-developers even when view_tickets permission exists", async () => {
         mockUseAuth.mockReturnValue({
             user: {
@@ -425,6 +443,38 @@ describe("AppSidebar permission visibility", () => {
         expect(html).toContain("Team")
     })
 
+    it("shows Form Builder and Executions only with their automation permissions", async () => {
+        mockNavigationState.pathname = "/automation"
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["view_reports"] },
+        })
+
+        const view = render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        expect(await screen.findByRole("link", { name: "Campaigns" })).toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Form Builder" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Executions" })).not.toBeInTheDocument()
+
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ["manage_forms", "manage_automation"] },
+        })
+        view.rerender(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+
+        expect(screen.getByRole("link", { name: "Form Builder" })).toHaveAttribute(
+            "href",
+            "/automation/forms",
+        )
+        expect(screen.getByRole("link", { name: "Executions" })).toBeInTheDocument()
+    })
+
     it("places AI Studio (beta) directly under Operations when AI access is enabled", async () => {
         mockUseAuth.mockReturnValue({
             user: {
@@ -493,6 +543,7 @@ describe("AppSidebar permission visibility", () => {
             )
             const sidebar = view.container.querySelector("aside")
             expect(sidebar).toHaveClass("w-12")
+            expect(sidebar).not.toHaveAttribute("inert")
 
             fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }))
             expect(sidebar).toHaveClass("w-64")
@@ -503,6 +554,7 @@ describe("AppSidebar permission visibility", () => {
                     <div>content</div>
                 </AppSidebar>
             )
+            expect(sidebar).toHaveAttribute("inert")
             mockMobileState.isMobile = false
             view.rerender(
                 <AppSidebar>
@@ -511,6 +563,7 @@ describe("AppSidebar permission visibility", () => {
             )
 
             expect(sidebar).toHaveClass("w-64")
+            expect(sidebar).not.toHaveAttribute("inert")
         } finally {
             if (cookieDescriptor) {
                 Object.defineProperty(document, "cookie", cookieDescriptor)

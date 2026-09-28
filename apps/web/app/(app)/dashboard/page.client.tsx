@@ -12,6 +12,7 @@ import { ATTENTION_STUCK_DAYS } from "@/lib/api/dashboard"
 import { useTasks, taskKeys } from "@/lib/hooks/use-tasks"
 import { useQueryClient } from "@tanstack/react-query"
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageHeader } from "@/components/page-header"
 
 import { DashboardFiltersProvider, useDashboardFilters } from "./context/dashboard-filters"
 import { DashboardFilterBar } from "./components/dashboard-filter-bar"
@@ -28,16 +29,6 @@ const StageChart = dynamic(
     () => import("./components/stage-chart").then((mod) => mod.StageChart),
     { ssr: false, loading: () => <Skeleton className="h-80 w-full rounded-lg" /> }
 )
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-function getFirstName(displayName: string | undefined): string {
-    if (!displayName) return "there"
-    const [firstName] = displayName.split(" ")
-    return firstName || displayName
-}
 
 // =============================================================================
 // Dashboard Content (requires filter context)
@@ -142,36 +133,22 @@ function DashboardContent() {
         void queryClient.invalidateQueries({ queryKey: taskKeys.all })
     }
 
-    // Current date for header
-    const currentDate = new Date().toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-    })
-
     return (
-        <div className="flex flex-1 flex-col gap-6 p-6">
-            {/* Welcome Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold">
-                        Welcome back, {getFirstName(user?.display_name)}
-                    </h1>
-                    <p className="text-sm text-muted-foreground">{currentDate}</p>
-                </div>
-            </div>
-
-            {/* Filter Bar */}
-            <DashboardFilterBar
-                lastUpdated={lastUpdated}
-                onRefresh={handleRefresh}
-                isRefreshing={isRefreshing}
+        <div className="flex flex-1 flex-col">
+            <PageHeader
+                title="Dashboard"
+                actions={
+                    <DashboardFilterBar
+                        lastUpdated={lastUpdated}
+                        onRefresh={handleRefresh}
+                        isRefreshing={isRefreshing}
+                    />
+                }
             />
 
-            <div className="grid gap-6 lg:grid-cols-12">
-                <div className="space-y-6 lg:col-span-8">
-                    {/* KPI Cards */}
+            {/* Grid items get min-w-0 so wide chart content cannot stretch the single column below lg. */}
+            <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-12">
+                <div className="min-w-0 space-y-6 lg:col-span-8">
                     <KPICardsSection
                         statsQuery={statsQuery}
                         tasksQuery={tasksQuery}
@@ -179,15 +156,13 @@ function DashboardContent() {
                         statusQuery={statusQuery}
                     />
 
-                    {/* Charts Row */}
-                    <div className="grid gap-6 lg:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0">
                         <TrendChart />
                         <StageChart />
                     </div>
                 </div>
 
-                <div className="space-y-6 lg:col-span-4">
-                    {/* Action Panels */}
+                <div className="min-w-0 space-y-6 lg:col-span-4">
                     <AttentionNeededPanel />
                 </div>
             </div>

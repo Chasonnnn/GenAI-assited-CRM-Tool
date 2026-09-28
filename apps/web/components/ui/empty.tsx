@@ -58,10 +58,20 @@ function EmptyMedia({
   )
 }
 
-function EmptyTitle({ className, ...props }: React.ComponentProps<"div">) {
+type EmptyTitleHeadingLevel = 1 | 2 | 3 | 4
+
+function EmptyTitle({
+  className,
+  headingLevel,
+  ...props
+}: React.ComponentProps<"div"> & {
+  /** Opt-in heading semantics, for a title that replaces a page or section heading. */
+  headingLevel?: EmptyTitleHeadingLevel | undefined
+}) {
   return (
     <div
       data-slot="empty-title"
+      {...(headingLevel ? { role: "heading", "aria-level": headingLevel } : {})}
       className={cn("text-lg font-medium tracking-tight", className)}
       {...props}
     />
@@ -93,6 +103,8 @@ function EmptyContent({ className, ...props }: React.ComponentProps<"div">) {
     />
   )
 }
+
+export type { EmptyTitleHeadingLevel }
 
 export {
   Empty,

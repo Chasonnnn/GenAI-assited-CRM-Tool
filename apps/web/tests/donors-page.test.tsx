@@ -261,17 +261,81 @@ describe("DonorsPage", () => {
         expect(screen.getByRole("tabpanel")).toHaveAccessibleName("Sperm Donors")
     })
 
-    it("loads archived donors from a URL-backed record-status filter", () => {
+    it("loads archived donors from a URL-backed record-status filter in More Filters", async () => {
         mockSearchParams.set("archive", "archived")
 
         render(<DonorsPage />)
 
-        expect(screen.getByRole("combobox", { name: "Record status" })).toHaveTextContent(
+        expect(screen.getByRole("button", { name: "Remove filter: Archived Donors" })).toBeInTheDocument()
+        expect(screen.queryByRole("combobox", { name: "Filter by record status" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "More Filters" }))
+        expect(await screen.findByRole("combobox", { name: "Filter by record status" })).toHaveTextContent(
             "Archived Donors",
         )
         expect(mockUseDonors).toHaveBeenCalledWith(
             expect.objectContaining({ include_archived: true, archived_only: true }),
         )
+    })
+
+    it("keeps the type tabs above a Stage, Date, More Filters, search toolbar", () => {
+        render(<DonorsPage />)
+
+        const tabs = screen.getByRole("tablist", { name: "Donor type" })
+        const stage = screen.getByRole("combobox", { name: "Filter by stage" })
+        const date = screen.getByRole("button", { name: "Created date range" })
+        const more = screen.getByRole("button", { name: "More Filters" })
+        const search = screen.getByRole("searchbox", { name: "Search donors" })
+        expect(screen.getByRole("heading", { level: 1, name: "Donors" })).toBeInTheDocument()
+        expect(stage).toHaveTextContent("All Stages")
+        expect(tabs.compareDocumentPosition(stage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(stage.compareDocumentPosition(date) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(date.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(more.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(search).toHaveAttribute("placeholder", "Search donors")
+    })
+
+    it("shows the filtered count against the unfiltered total", () => {
+        mockSearchParams.set("q", "maya")
+        mockUseDonors.mockImplementation((filters: { per_page?: number }) =>
+            filters.per_page === 1
+                ? { data: { items: [], total: 42, page: 1, per_page: 1, pages: 42 }, isLoading: false }
+                : { data: { items: [], total: 3, page: 1, per_page: 20, pages: 1 }, isLoading: false },
+        )
+
+        render(<DonorsPage />)
+
+        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent("3 of 42")
+    })
+
+    it("validates donor email inline before calling the API", async () => {
+        render(<DonorsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "New Donor" }))
+        fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Maya Thompson" } })
+        const email = screen.getByLabelText("Email")
+        fireEvent.change(email, { target: { value: "maya-at-example" } })
+        fireEvent.click(screen.getByRole("button", { name: "Create" }))
+
+        expect(await screen.findByText("Enter a valid email address.")).toBeInTheDocument()
+        expect(email).toHaveAttribute("aria-invalid", "true")
+        expect(mockCreateDonor).not.toHaveBeenCalled()
+    })
+
+    it("maps a 422 donor email error to the field", async () => {
+        mockCreateDonor.mockRejectedValue(
+            new ApiError(422, "Unprocessable Entity", "email: value is not a valid email address", [
+                { path: "email", message: "value is not a valid email address: An email address must have an @-sign." },
+            ]),
+        )
+        render(<DonorsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "New Donor" }))
+        fireEvent.change(screen.getByLabelText("Full name"), { target: { value: "Maya Thompson" } })
+        fireEvent.change(screen.getByLabelText("Email"), { target: { value: "maya@example.test" } })
+        fireEvent.click(screen.getByRole("button", { name: "Create" }))
+
+        expect(await screen.findByText("Enter a valid email address.")).toBeInTheDocument()
+        expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true")
     })
 
     it("loads the dashboard stuck-donor filter and owner from the URL", () => {
@@ -292,7 +356,7 @@ describe("DonorsPage", () => {
             .toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Remove filter: Assignee: Assigned user" }))
             .toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Reset filters" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Remove filter: Assignee: Assigned user" }))
         expect(mockRouterReplace).toHaveBeenLastCalledWith(
@@ -430,18 +494,37 @@ describe("DonorsPage", () => {
         expect(mockRouterReplace).toHaveBeenLastCalledWith("/donors", { scroll: false })
     })
 
-    it("shows the donor permission state for a forbidden list", () => {
+    it("shows the donor permission state without a retry for a forbidden list", () => {
+        mockUseDonors.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(403, "Forbidden", "Missing permission: view_donors"),
+            refetch: vi.fn(),
+        })
+
+        render(<DonorsPage />)
+        expect(screen.getByRole("heading", { level: 2, name: "Permission required" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument()
+        expect(screen.queryByText("Missing permission: view_donors")).not.toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Go to Dashboard" })).toHaveAttribute("href", "/dashboard")
+    })
+
+    it("shows the shared load error with a retry for a failed list", () => {
         const refetch = vi.fn()
         mockUseDonors.mockReturnValue({
             data: undefined,
             isLoading: false,
             isError: true,
-            error: new ApiError(403, "Forbidden", "Forbidden"),
+            isFetching: false,
+            error: new ApiError(500, "Internal Server Error", "boom"),
             refetch,
         })
 
         render(<DonorsPage />)
-        expect(screen.getByText("Permission required")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 2, name: "Couldn't load donors" })).toBeInTheDocument()
+        expect(screen.queryByText("boom")).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Try again" }))
         expect(refetch).toHaveBeenCalledTimes(1)
     })

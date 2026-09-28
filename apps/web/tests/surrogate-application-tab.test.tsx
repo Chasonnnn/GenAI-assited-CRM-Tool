@@ -157,6 +157,46 @@ describe("SurrogateApplicationTab", () => {
         await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
     })
 
+    it("tells roles without forms access to ask an admin instead of showing an empty forms list", () => {
+        render(
+            <SurrogateApplicationTab
+                surrogateId="surrogate-1"
+                formId={null}
+                publishedForms={[]}
+                formsAccess="forbidden"
+            />,
+        )
+
+        expect(screen.getByText("Ask an admin to send the application form.")).toBeInTheDocument()
+        expect(screen.queryByText(/no published forms available/i)).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /send form link/i })).not.toBeInTheDocument()
+    })
+
+    it("shows a retryable error when the forms list fails to load", () => {
+        const onRetryForms = vi.fn()
+        render(
+            <SurrogateApplicationTab
+                surrogateId="surrogate-1"
+                formId={null}
+                publishedForms={[]}
+                formsAccess="error"
+                onRetryForms={onRetryForms}
+            />,
+        )
+
+        expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load application forms.")
+        expect(screen.queryByRole("button", { name: /send form link/i })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(onRetryForms).toHaveBeenCalledTimes(1)
+    })
+
+    it("still explains an empty forms list to roles that can publish forms", () => {
+        render(<SurrogateApplicationTab surrogateId="surrogate-1" formId={null} publishedForms={[]} />)
+
+        expect(screen.getByText(/no published forms available/i)).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: /send form link/i })).toBeDisabled()
+    })
+
     it("reuses the intake-link occurrence id when a queued request is retried", async () => {
         mockSendFormIntakeLink
             .mockRejectedValueOnce(new Error("temporary failure"))

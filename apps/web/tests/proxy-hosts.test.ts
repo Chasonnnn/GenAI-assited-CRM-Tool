@@ -203,36 +203,6 @@ describe('proxy hard-fail behavior', () => {
         expect(response.headers.get('Retry-After')).toBe('5')
     })
 
-    it('rewrites missing route resources to /_not-found with a real 404', async () => {
-        vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-            new Response(null, { status: 404 }),
-        )
-
-        const response = await proxy(
-            createRequest('http://localhost:3000/automation/campaigns/00000000-0000-0000-0000-000000000000', {
-                host: 'localhost:3000',
-                cookie: 'crm_session=test-token',
-            }) as never,
-        )
-
-        expect(response.status).toBe(404)
-        expect(response.headers.get('x-middleware-rewrite')).toContain('/_not-found')
-    })
-
-    it('treats invalid UUID route params as a hard 404 without hitting the API', async () => {
-        const fetchSpy = vi.spyOn(globalThis, 'fetch')
-
-        const response = await proxy(
-            createRequest('http://localhost:3000/automation/campaigns/not-a-uuid', {
-                host: 'localhost:3000',
-            }) as never,
-        )
-
-        expect(response.status).toBe(404)
-        expect(response.headers.get('x-middleware-rewrite')).toContain('/_not-found')
-        expect(fetchSpy).not.toHaveBeenCalled()
-    })
-
     it('passes through route-resource permission responses', async () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValue(
             new Response(null, { status: 403 }),
@@ -268,5 +238,148 @@ describe('proxy hard-fail behavior', () => {
             "frame-ancestors 'self' https://www.ewisurrogacy.com",
         )
         expect(response.headers.get('Cache-Control')).toBe('no-store')
+    })
+})
+
+const MISSING_UUID = '00000000-0000-4000-8000-000000000000'
+
+function rewritePath(response: Response): string | null {
+    const rewrite = response.headers.get('x-middleware-rewrite')
+    return rewrite ? new URL(rewrite).pathname : null
+}
+
+function requestedApiUrl(fetchSpy: { mock: { calls: unknown[][] } }): string {
+    return String(fetchSpy.mock.calls[0]?.[0])
+}
+
+function appRequest(path: string) {
+    return createRequest(`http://localhost:3000${path}`, {
+        host: 'localhost:3000',
+        cookie: 'crm_session=test-token',
+    }) as never
+}
+
+describe('proxy record not-found rewrites', () => {
+    afterEach(() => {
+        vi.restoreAllMocks()
+    })
+
+    const appShellMatchers = [
+        {
+            kind: 'campaign',
+            routePath: `/automation/campaigns/${MISSING_UUID}`,
+            apiPath: `/campaigns/${MISSING_UUID}`,
+            invalidPath: '/automation/campaigns/not-a-uuid',
+        },
+        {
+            kind: 'form',
+            routePath: `/automation/forms/${MISSING_UUID}`,
+            apiPath: `/forms/${MISSING_UUID}`,
+            invalidPath: '/automation/forms/not-a-uuid',
+        },
+        {
+            kind: 'match',
+            routePath: `/intended-parents/matches/${MISSING_UUID}`,
+            apiPath: `/matches/${MISSING_UUID}`,
+            invalidPath: '/intended-parents/matches/not-a-uuid',
+        },
+        {
+            kind: 'member',
+            routePath: `/settings/team/members/${MISSING_UUID}`,
+            apiPath: `/settings/permissions/members/${MISSING_UUID}`,
+            invalidPath: '/settings/team/members/not-a-uuid',
+        },
+        {
+            kind: 'role',
+            routePath: '/settings/team/roles/bogus_role',
+            apiPath: '/settings/permissions/roles/bogus_role',
+            invalidPath: null,
+        },
+    ] as const
+
+    describe.each(appShellMatchers)('$kind route', ({ kind, routePath, apiPath, invalidPath }) => {
+        it.each([404, 422])('rewrites an API %i to the in-shell not-found route', async (status) => {
+            const fetchSpy = vi
+                .spyOn(globalThis, 'fetch')
+                .mockResolvedValue(new Response(null, { status }))
+
+            const response = await proxy(appRequest(routePath))
+
+            expect(requestedApiUrl(fetchSpy)).toMatch(new RegExp(`${apiPath}$`))
+            expect(response.status).toBe(404)
+            expect(response.headers.get('Cache-Control')).toBe('no-store')
+            expect(rewritePath(response)).toBe(`/record-not-found/${kind}`)
+        })
+
+        it('passes through a record the API returns', async () => {
+            vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ id: 'record' }))
+
+            const response = await proxy(appRequest(routePath))
+
+            expect(response.status).toBe(200)
+            expect(rewritePath(response)).toBeNull()
+        })
+
+        if (invalidPath) {
+            it('rewrites a non-UUID id without calling the API', async () => {
+                const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+                const response = await proxy(appRequest(invalidPath))
+
+                expect(fetchSpy).not.toHaveBeenCalled()
+                expect(response.status).toBe(404)
+                expect(rewritePath(response)).toBe(`/record-not-found/${kind}`)
+            })
+        }
+    })
+
+    it('does not check the new-form route', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+        const response = await proxy(appRequest('/automation/forms/new'))
+
+        expect(fetchSpy).not.toHaveBeenCalled()
+        expect(response.status).toBe(200)
+        expect(rewritePath(response)).toBeNull()
+    })
+
+    it('keeps the 404 status when the proxy runs for the rewrite target', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch')
+
+        const response = await proxy(appRequest('/record-not-found/campaign'))
+
+        expect(fetchSpy).not.toHaveBeenCalled()
+        expect(response.status).toBe(404)
+        expect(response.headers.get('Cache-Control')).toBe('no-store')
+        expect(rewritePath(response)).toBeNull()
+    })
+
+    it.each([
+        '/ops/templates/email/not-a-uuid',
+        '/ops/templates/forms/not-a-uuid',
+        '/ops/templates/workflows/not-a-uuid',
+    ])('keeps %s on the root not-found page', async (path) => {
+        const response = await proxy(appRequest(path))
+
+        expect(response.status).toBe(404)
+        expect(rewritePath(response)).toBe('/_not-found')
+    })
+
+    it('keeps an API 404 for an ops template on the root not-found page', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }))
+
+        const response = await proxy(appRequest(`/ops/templates/email/${MISSING_UUID}`))
+
+        expect(response.status).toBe(404)
+        expect(rewritePath(response)).toBe('/_not-found')
+    })
+
+    it('keeps a missing embed form on the root not-found page', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 404 }))
+
+        const response = await proxy(appRequest('/embed/forms/missing-form'))
+
+        expect(response.status).toBe(404)
+        expect(rewritePath(response)).toBe('/_not-found')
     })
 })

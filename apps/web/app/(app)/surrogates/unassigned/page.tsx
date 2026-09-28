@@ -25,17 +25,18 @@ function serializeSearchParams(searchParams: Record<string, SearchParamValue>): 
 
 function UnassignedSurrogatesPageSkeleton() {
     return (
-        <div className="space-y-6 p-6">
-            <div className="space-y-2">
-                <div className="h-9 w-64 rounded-md bg-muted" />
-                <div className="h-4 w-80 rounded-md bg-muted/70" />
+        <div className="flex h-full flex-col" aria-busy="true">
+            <div className="flex min-h-16 items-center border-b border-border px-6">
+                <div className="h-7 w-56 rounded-md bg-muted" />
             </div>
+            <div className="p-6">
             <div className="rounded-lg border bg-card p-4">
                 <div className="space-y-3">
                     <div className="h-12 w-full rounded-md bg-muted/70" />
                     <div className="h-12 w-full rounded-md bg-muted/60" />
                     <div className="h-12 w-full rounded-md bg-muted/50" />
                 </div>
+            </div>
             </div>
         </div>
     )

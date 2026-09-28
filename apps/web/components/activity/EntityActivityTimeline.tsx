@@ -746,7 +746,7 @@ function TaskRow({ task, isOverdue = false }: { task: TaskListItem; isOverdue?: 
             <span
                 className={cn(
                     "text-xs",
-                    isOverdue ? "text-red-600/80" : "text-muted-foreground"
+                    isOverdue ? "text-destructive" : "text-muted-foreground"
                 )}
             >
                 {dueLabel}
@@ -825,7 +825,7 @@ function ActivityTimelineStageList({
                             data-testid={`timeline-stage-row-${stage.id}`}
                             className={cn("group hover:bg-muted/50", STAGE_ROW_CLASS)}
                         >
-                            <ChevronRightIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+                            <ChevronRightIcon className="size-4 text-muted-foreground transition-transform group-data-panel-open:rotate-90" />
                             <div
                                 className={cn(
                                     "rounded-full",
@@ -939,7 +939,7 @@ function ActivityTimelineNextSteps({
             <div className="space-y-3">
                 {overdueTasks.length > 0 ? (
                     <div className="space-y-1">
-                        <span className="text-xs font-medium text-red-600">Overdue</span>
+                        <span className="text-xs font-medium text-destructive">Overdue</span>
                         {overdueTasks.map((task) => (
                             <TaskRow key={task.id} task={task} isOverdue />
                         ))}

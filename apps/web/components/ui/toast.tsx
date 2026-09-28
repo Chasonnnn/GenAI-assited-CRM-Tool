@@ -10,6 +10,11 @@ import {
   XIcon,
 } from "lucide-react"
 
+import {
+  getServerToastClearance,
+  getToastClearance,
+  subscribeToastClearance,
+} from "@/components/ui/toast-clearance"
 import { cn } from "@/lib/utils"
 
 type ToastKind = "message" | "success" | "error" | "info" | "warning"
@@ -95,12 +100,19 @@ function ToastIcon({ kind }: { kind: ToastKind }) {
 
 function ToastViewport() {
   const { toasts } = ToastPrimitive.useToastManager()
+  const clearance = React.useSyncExternalStore(
+    subscribeToastClearance,
+    getToastClearance,
+    getServerToastClearance,
+  )
 
   return (
     <ToastPrimitive.Portal>
       <ToastPrimitive.Viewport
         data-slot="toast-viewport"
-        className="fixed top-4 right-4 z-[100] flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2 outline-none sm:w-full"
+        style={{ "--toast-clearance": `${clearance}px` } as React.CSSProperties}
+        // Newest toast first in the DOM, drawn nearest the bottom edge.
+        className="fixed right-4 bottom-[calc(1rem+var(--toast-clearance))] z-[100] flex w-[calc(100%-2rem)] max-w-sm flex-col-reverse gap-2 outline-none transition-[bottom] duration-200 ease-smooth-out sm:w-full"
       >
         {toasts.map((toastObject) => {
           const kind = (toastObject.type ?? "message") as ToastKind
@@ -109,8 +121,10 @@ function ToastViewport() {
               key={toastObject.id}
               toast={toastObject}
               data-slot="toast"
-              swipeDirection="right"
-              className="pointer-events-auto relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 rounded-xl border bg-popover p-4 text-popover-foreground shadow-lg transition-[transform,opacity] duration-200 data-limited:hidden data-starting-style:translate-x-6 data-starting-style:opacity-0 data-ending-style:translate-x-6 data-ending-style:opacity-0"
+              swipeDirection={["down", "right"]}
+              // Base UI drives the drag with an inline transform, then keeps the released offset in
+              // --toast-swipe-movement-x/y; enter/exit offsets use the separate translate property.
+              className="pointer-events-auto relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 rounded-xl border bg-popover p-4 text-popover-foreground shadow-lg transform-[translate(var(--toast-swipe-movement-x),var(--toast-swipe-movement-y))] transition-[opacity,transform,translate,scale,rotate] duration-200 ease-smooth-out data-limited:hidden data-starting-style:translate-x-6 data-starting-style:opacity-0 data-ending-style:translate-x-6 data-ending-style:opacity-0"
             >
               <ToastIcon kind={kind} />
               <ToastPrimitive.Content className="min-w-0">

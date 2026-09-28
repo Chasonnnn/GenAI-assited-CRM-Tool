@@ -1,6 +1,8 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
+import type { Route } from "next"
+import { useRouter } from "next/navigation"
 import { listDonors } from "@/lib/api/donors"
 import type { DonorType } from "@/lib/types/donor"
 import { useState } from "react"
@@ -11,11 +13,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2Icon, HeartHandshakeIcon, AlertCircleIcon } from "lucide-react"
-import { toast } from "@/components/ui/toast"
+import { showMatchProposedToast } from "@/components/matches/match-proposed-toast"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import { useCreateMatch } from "@/lib/hooks/use-matches"
 import { useSurrogates } from "@/lib/hooks/use-surrogates"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import {
+    getEligibleForMatchingStageId,
     getEligibleForMatchingStageLabel,
     isEligibleForMatchingCandidate,
 } from "@/lib/match-pipeline-stage-utils"
@@ -35,6 +39,7 @@ export function ProposeMatchFromIPDialog({
     ipName,
     onSuccess,
 }: ProposeMatchFromIPDialogProps) {
+    const router = useRouter()
     const [kind, setKind] = useState<"surrogate" | "donor">("surrogate")
     const [donorType, setDonorType] = useState<DonorType>("egg")
     const [selectedDonorId, setSelectedDonorId] = useState("")
@@ -43,10 +48,13 @@ export function ProposeMatchFromIPDialog({
     const [notes, setNotes] = useState("")
     const [error, setError] = useState<string | null>(null)
 
-    const { data: surrogatesData, isLoading: surrogatesLoading } = useSurrogates({
-        per_page: 100
-    })
-    const { data: surrogatePipeline } = useDefaultPipeline("surrogate")
+    const { data: surrogatePipeline, isLoading: pipelineLoading } = useDefaultPipeline("surrogate")
+    const eligibleStageId = getEligibleForMatchingStageId(surrogatePipeline?.stages)
+    const { data: surrogatesData, isLoading: surrogatesQueryLoading } = useSurrogates(
+        { per_page: 100, ...(eligibleStageId ? { stage_id: eligibleStageId } : {}) },
+        { enabled: open && Boolean(eligibleStageId) },
+    )
+    const surrogatesLoading = pipelineLoading || surrogatesQueryLoading
     const createMatch = useCreateMatch()
 
     const eligibleStageLabel = getEligibleForMatchingStageLabel(surrogatePipeline?.stages)
@@ -61,20 +69,20 @@ export function ProposeMatchFromIPDialog({
         setError(null)
 
         try {
-            await createMatch.mutateAsync({
+            // useCreateMatch invalidates every match list, including the Related Matches card.
+            const match = await createMatch.mutateAsync({
                 ...(kind === "donor" ? { donor_id: selectedDonorId, match_kind: kind } : { surrogate_id: selectedSurrogateId }),
                 intended_parent_id: intendedParentId,
                 ...(notes.trim() ? { notes: notes.trim() } : {}),
             })
-            toast.success("Match proposed successfully!")
+            showMatchProposedToast(match, (href) => router.push(href as Route))
             onOpenChange(false)
             setSelectedSurrogateId("")
             setSelectedDonorId("")
             setNotes("")
             onSuccess?.()
         } catch (e: unknown) {
-            console.error("Failed to propose match:", e instanceof Error ? e.message : e)
-            setError(e instanceof Error ? e.message : "Failed to propose match. Please try again.")
+            setError(getActionErrorMessage(e, "Couldn't propose match. Try again."))
         }
     }
 
@@ -88,7 +96,7 @@ export function ProposeMatchFromIPDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="max-w-lg">
+            <DialogContent size="lg">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <HeartHandshakeIcon className="size-5" />

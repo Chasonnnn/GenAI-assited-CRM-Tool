@@ -13,7 +13,8 @@ vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }))
 
-vi.mock('@/lib/api', () => ({
+vi.mock('@/lib/api', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/api')>()),
     default: {
         get: (...args: unknown[]) => mockApiGet(...args),
     },
@@ -68,6 +69,49 @@ describe('InvitePage', () => {
         expect(window.location.assign).toHaveBeenCalledWith(
             'https://api.example.com/auth/google/login?return_to=app&invite_id=inv-123'
         )
+    })
+
+    it('shows one safe message for a malformed invite id instead of the validation text', async () => {
+        const { ApiError } = await import('@/lib/api')
+        navigationState.inviteId = 'not-a-uuid'
+        mockApiGet.mockImplementation((path: string) => {
+            if (path === '/auth/me') return Promise.reject(new Error('Unauthenticated'))
+            return Promise.reject(
+                new ApiError(422, 'Unprocessable Entity', 'invite_id: Input should be a valid UUID, invalid character'),
+            )
+        })
+
+        renderInvitePage()
+
+        expect(await screen.findByText('This invitation is invalid or has expired.')).toBeInTheDocument()
+        expect(screen.getByText('Invitation not found')).toBeInTheDocument()
+        expect(screen.queryByText("You're Invited")).not.toBeInTheDocument()
+        expect(screen.queryByText(/valid UUID/)).not.toBeInTheDocument()
+    })
+
+    it('shows the same message for an unknown invite id', async () => {
+        const { ApiError } = await import('@/lib/api')
+        mockApiGet.mockImplementation((path: string) => {
+            if (path === '/auth/me') return Promise.reject(new Error('Unauthenticated'))
+            return Promise.reject(new ApiError(404, 'Not Found', 'Invite not found'))
+        })
+
+        renderInvitePage()
+
+        expect(await screen.findByText('This invitation is invalid or has expired.')).toBeInTheDocument()
+    })
+
+    it('hides server error details for other failures', async () => {
+        const { ApiError } = await import('@/lib/api')
+        mockApiGet.mockImplementation((path: string) => {
+            if (path === '/auth/me') return Promise.reject(new Error('Unauthenticated'))
+            return Promise.reject(new ApiError(500, 'Internal Server Error', 'psycopg OperationalError'))
+        })
+
+        renderInvitePage()
+
+        expect(await screen.findByText("Couldn't load invitation")).toBeInTheDocument()
+        expect(screen.queryByText(/psycopg/)).not.toBeInTheDocument()
     })
 
     it('keeps the newest invitation visible when an older request finishes last', async () => {

@@ -580,6 +580,45 @@ async def test_platform_create_system_email_template_and_list_includes_it(
 
 
 @pytest.mark.asyncio
+async def test_platform_system_email_templates_report_builtin_keys(authed_client, db, test_user):
+    """Built-in keys come back after delete, so the editor offers reset instead of delete."""
+    test_user.is_platform_admin = True
+    db.commit()
+
+    builtin = await authed_client.get("/platform/email/system-templates/org_invite")
+    assert builtin.status_code == 200
+    assert builtin.json()["is_builtin"] is True
+
+    created = await authed_client.post(
+        "/platform/email/system-templates",
+        json={
+            "system_key": "custom_notice",
+            "name": "Custom Notice",
+            "subject": "Notice for {{org_name}}",
+            "body": "<p>Hello {{org_name}}</p>",
+            "is_active": True,
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["is_builtin"] is False
+
+    listed = await authed_client.get("/platform/email/system-templates")
+    assert listed.status_code == 200
+    flags = {row["system_key"]: row["is_builtin"] for row in listed.json()}
+    assert flags["org_invite"] is True
+    assert flags["platform_update"] is True
+    assert flags["custom_notice"] is False
+
+    # Deleting a built-in key resets it: the next read recreates it from defaults.
+    deleted = await authed_client.delete("/platform/email/system-templates/org_invite")
+    assert deleted.status_code == 204
+    recreated = await authed_client.get("/platform/email/system-templates/org_invite")
+    assert recreated.status_code == 200
+    assert recreated.json()["is_builtin"] is True
+    assert recreated.json()["current_version"] == 1
+
+
+@pytest.mark.asyncio
 async def test_platform_create_system_email_template_rejects_reserved_new_key(
     authed_client, db, test_user
 ):

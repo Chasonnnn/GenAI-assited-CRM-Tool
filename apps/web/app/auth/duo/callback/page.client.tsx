@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
 import { redirect, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { CopyButton } from "@/components/ui/copy-button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     Dialog,
@@ -13,7 +13,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckIcon, CopyIcon, KeyIcon, Loader2Icon } from "lucide-react"
+import { KeyIcon, Loader2Icon } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useDuoCallbackVerification } from "@/lib/hooks/use-duo-callback-verification"
 
@@ -47,17 +47,9 @@ function getAuthReturnTo(): "ops" | "app" {
 }
 
 function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
-    const [copied, setCopied] = useState(false)
-
-    const handleCopy = () => {
-        void navigator.clipboard.writeText(codes.join("\n"))
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-    }
-
     return (
         <Dialog open={true} onOpenChange={onClose}>
-            <DialogContent className="max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <KeyIcon className="size-5" />
@@ -84,19 +76,9 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
                 </div>
 
                 <DialogFooter className="gap-2">
-                    <Button variant="outline" onClick={handleCopy}>
-                        {copied ? (
-                            <>
-                                <CheckIcon className="size-4 mr-2" />
-                                Copied
-                            </>
-                        ) : (
-                            <>
-                                <CopyIcon className="size-4 mr-2" />
-                                Copy All
-                            </>
-                        )}
-                    </Button>
+                    <CopyButton variant="outline" value={codes.join("\n")} iconClassName="size-4 mr-2">
+                        Copy All
+                    </CopyButton>
                     <Button onClick={onClose}>I have saved these codes</Button>
                 </DialogFooter>
             </DialogContent>

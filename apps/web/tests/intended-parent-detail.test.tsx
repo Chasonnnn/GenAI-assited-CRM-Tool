@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import IntendedParentDetailPage from '../app/(app)/intended-parents/[id]/page'
+import { ApiError } from '@/lib/api'
 
 const mockPush = vi.fn()
 const mockUpdateIntendedParent = vi.fn()
+const mockArchiveIntendedParent = vi.fn()
+const mockDeleteIntendedParent = vi.fn()
 const mockUseIntendedParentHistory = vi.fn()
 const mockUseIntendedParentNotes = vi.fn()
 const mockUseTasks = vi.fn()
@@ -41,13 +44,13 @@ const mockUseIntendedParent = vi.fn()
 
 vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useIntendedParent: (id: string) => mockUseIntendedParent(id),
-    useIntendedParentHistory: () => mockUseIntendedParentHistory(),
+    useIntendedParentHistory: (id: string | null) => mockUseIntendedParentHistory(id),
     useIntendedParentNotes: () => mockUseIntendedParentNotes(),
     useUpdateIntendedParent: () => ({ mutateAsync: mockUpdateIntendedParent, isPending: false }),
     useUpdateIntendedParentStatus: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useArchiveIntendedParent: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useArchiveIntendedParent: () => ({ mutateAsync: mockArchiveIntendedParent, isPending: false }),
     useRestoreIntendedParent: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useDeleteIntendedParent: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDeleteIntendedParent: () => ({ mutateAsync: mockDeleteIntendedParent, isPending: false }),
     useCreateIntendedParentNote: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useDeleteIntendedParentNote: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
@@ -103,7 +106,7 @@ vi.mock('@/lib/hooks/use-tasks', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-entity-activity', () => ({
-    useEntityActivity: () => mockUseEntityActivity(),
+    useEntityActivity: (...args: unknown[]) => mockUseEntityActivity(...args),
 }))
 
 vi.mock('@/lib/hooks/use-attachments', () => ({
@@ -193,10 +196,29 @@ describe('IntendedParentDetailPage', () => {
         })
     })
 
-    it('renders primary details', () => {
+    it('renders intended-parent identity, controls, and medical details', () => {
         render(<IntendedParentDetailPage />)
         expect(screen.getByText('Bob Parent')).toBeInTheDocument()
         expect(screen.getAllByText('bob@example.com').length).toBeGreaterThan(0)
+        expect(screen.getByRole("link", { name: "Back to intended parents" })).toBeInTheDocument()
+        expect(
+            screen.getByRole("button", { name: "Actions for Bob Parent" })
+        ).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
+        expect(screen.queryByRole("heading", { name: "Status" })).not.toBeInTheDocument()
+        expect(screen.getByText("Activity")).toBeInTheDocument()
+        expect(screen.queryByText("Stage History")).not.toBeInTheDocument()
+        expect(screen.queryByText("Created:")).not.toBeInTheDocument()
+        expect(screen.queryByText("Last Activity:")).not.toBeInTheDocument()
+        expect(screen.getByText("Marital Status")).toBeInTheDocument()
+        expect(screen.getByText("Married")).toBeInTheDocument()
+        expect(screen.getByText("May 15, 1989")).toBeInTheDocument()
+        expect(screen.getByText("Aug 9, 1991")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { name: "Embryo Status" })).toBeInTheDocument()
+        expect(screen.getByText("Intended Mother")).toBeInTheDocument()
+        expect(screen.getByText("Sperm Donor")).toBeInTheDocument()
+        expect(screen.getByText("Yes")).toBeInTheDocument()
+        expect(screen.getByTestId("ip-medical-sections-grid")).toHaveClass("grid", "gap-4", "md:grid-cols-2")
     })
 
     it("sanitizes intended-parent note HTML at the render boundary", () => {
@@ -219,24 +241,40 @@ describe('IntendedParentDetailPage', () => {
         expect(container.querySelector("[onerror]")).toBeNull()
     })
 
-    it("adds accessible labels to the back link and actions menu", () => {
-        render(<IntendedParentDetailPage />)
+    it("confirms archive and permanent delete in app dialogs that name the record", async () => {
+        const confirmSpy = vi.spyOn(window, "confirm")
+        const current = mockUseIntendedParent("ip1").data
+        mockUseIntendedParent.mockReturnValue({
+            data: { ...current, intended_parent_number: "I10001" },
+            isLoading: false,
+            error: null,
+        })
+        mockArchiveIntendedParent.mockResolvedValue({})
+        const view = render(<IntendedParentDetailPage />)
 
-        expect(screen.getByRole("link", { name: "Back to intended parents" })).toBeInTheDocument()
-        expect(
-            screen.getByRole("button", { name: "Actions for Bob Parent" })
-        ).toBeInTheDocument()
-    })
+        fireEvent.click(screen.getByRole("button", { name: "Actions for Bob Parent" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: /archive/i }))
+        const archiveDialog = await screen.findByRole("alertdialog", { name: "Archive intended parent I10001?" })
+        expect(mockArchiveIntendedParent).not.toHaveBeenCalled()
+        fireEvent.click(within(archiveDialog).getByRole("button", { name: "Archive intended parent" }))
+        await waitFor(() => expect(mockArchiveIntendedParent).toHaveBeenCalledWith("ip1"))
 
-    it("moves Change Stage into the header and removes old status terminology from the detail page", () => {
-        render(<IntendedParentDetailPage />)
+        mockUseIntendedParent.mockReturnValue({
+            data: { ...current, intended_parent_number: "I10001", is_archived: true },
+            isLoading: false,
+            error: null,
+        })
+        mockDeleteIntendedParent.mockResolvedValue({})
+        view.rerender(<IntendedParentDetailPage />)
 
-        expect(screen.getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
-        expect(screen.queryByRole("heading", { name: "Status" })).not.toBeInTheDocument()
-        expect(screen.getByText("Activity")).toBeInTheDocument()
-        expect(screen.queryByText("Stage History")).not.toBeInTheDocument()
-        expect(screen.queryByText("Created:")).not.toBeInTheDocument()
-        expect(screen.queryByText("Last Activity:")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Actions for Bob Parent" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: /delete permanently/i }))
+        const deleteDialog = await screen.findByRole("alertdialog", { name: "Delete intended parent I10001?" })
+        fireEvent.click(within(deleteDialog).getByRole("button", { name: "Delete I10001" }))
+        await waitFor(() => expect(mockDeleteIntendedParent).toHaveBeenCalledWith("ip1"))
+        await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/intended-parents"))
+        expect(confirmSpy).not.toHaveBeenCalled()
+        confirmSpy.mockRestore()
     })
 
     it("renders intended-parent activity in the same staged journey format as surrogate details", () => {
@@ -346,15 +384,6 @@ describe('IntendedParentDetailPage', () => {
         expect(activity.getByText("Legal packet.pdf")).toBeInTheDocument()
         expect(activity.getByText("Next Steps")).toBeInTheDocument()
         expect(activity.getByText("Confirm embryo paperwork")).toBeInTheDocument()
-    })
-
-    it("renders marital status and per-person DOB on detail cards", () => {
-        render(<IntendedParentDetailPage />)
-
-        expect(screen.getByText("Marital Status")).toBeInTheDocument()
-        expect(screen.getByText("Married")).toBeInTheDocument()
-        expect(screen.getByText("May 15, 1989")).toBeInTheDocument()
-        expect(screen.getByText("Aug 9, 1991")).toBeInTheDocument()
     })
 
     it("renders partner details above marital status in the detail tab", () => {
@@ -582,11 +611,11 @@ describe('IntendedParentDetailPage', () => {
 
         expect(screen.getByRole("button", { name: "Edit Info" })).toBeInTheDocument()
         expect(screen.getByRole("heading", { name: "IVF Clinic" })).toBeInTheDocument()
-        fireEvent.click(screen.getByRole("button", { name: "Edit Clinic/Hospital name" }))
-        fireEvent.change(screen.getByLabelText("Clinic/Hospital name"), {
+        fireEvent.click(screen.getByRole("button", { name: "Edit IVF Clinic name" }))
+        fireEvent.change(screen.getByLabelText("IVF Clinic name"), {
             target: { value: "CCRM Austin" },
         })
-        fireEvent.click(screen.getByRole("button", { name: "Save Clinic/Hospital name" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save IVF Clinic name" }))
 
         await waitFor(() => {
             expect(mockUpdateIntendedParent).toHaveBeenCalledWith({
@@ -765,19 +794,75 @@ describe('IntendedParentDetailPage', () => {
         })
     })
 
-    it("shows friendly labels for embryo source values", () => {
+    it("shows a permission state, not Not Found, when the intended parent is forbidden", () => {
+        mockUseIntendedParent.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(403, "Forbidden", "Forbidden"),
+            refetch: vi.fn(),
+            isFetching: false,
+        })
+
         render(<IntendedParentDetailPage />)
 
-        expect(screen.getByRole("heading", { name: "Embryo Status" })).toBeInTheDocument()
-        expect(screen.getByText("Intended Mother")).toBeInTheDocument()
-        expect(screen.getByText("Sperm Donor")).toBeInTheDocument()
-        expect(screen.getByText("Yes")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 1, name: "Permission required" })).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Go to Dashboard" })).toHaveAttribute("href", "/dashboard")
+        expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument()
+        expect(screen.queryByText(/not found/i)).not.toBeInTheDocument()
+        // History, activity and tasks wait for the record, so a denied record sends one request.
+        expect(mockUseIntendedParentHistory).toHaveBeenLastCalledWith(null)
+        expect(mockUseEntityActivity).toHaveBeenLastCalledWith("intended_parent", null)
+        expect(mockUseTasks).toHaveBeenLastCalledWith(
+            expect.objectContaining({ intended_parent_id: "ip1" }),
+            { enabled: false },
+        )
     })
 
-    it("lays out medical subsections in the same two-column grid pattern as surrogate details", () => {
+    it("loads history, activity and tasks once the intended parent has loaded", () => {
         render(<IntendedParentDetailPage />)
 
-        expect(screen.getByTestId("ip-medical-sections-grid")).toHaveClass("grid", "gap-4", "md:grid-cols-2")
+        expect(mockUseIntendedParentHistory).toHaveBeenLastCalledWith("ip1")
+        expect(mockUseEntityActivity).toHaveBeenLastCalledWith("intended_parent", "ip1")
+        expect(mockUseTasks).toHaveBeenLastCalledWith(
+            expect.objectContaining({ intended_parent_id: "ip1" }),
+            { enabled: true },
+        )
+    })
+
+    it("shows the not-found state for a missing intended parent", () => {
+        mockUseIntendedParent.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(404, "Not Found", "Intended parent not found"),
+            refetch: vi.fn(),
+            isFetching: false,
+        })
+
+        render(<IntendedParentDetailPage />)
+
+        expect(screen.getByRole("heading", { level: 1, name: "Intended parent not found" })).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to Intended Parents" })).toHaveAttribute("href", "/intended-parents")
+    })
+
+    it("offers a retry for other intended parent load failures", () => {
+        const refetch = vi.fn()
+        mockUseIntendedParent.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new ApiError(500, "Server Error", "boom"),
+            refetch,
+            isFetching: false,
+        })
+
+        render(<IntendedParentDetailPage />)
+
+        expect(screen.getByRole("heading", { level: 1, name: "Couldn't load intended parent" })).toBeInTheDocument()
+        expect(screen.queryByText("boom")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(refetch).toHaveBeenCalledOnce()
     })
 })
 

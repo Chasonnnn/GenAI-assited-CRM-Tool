@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -22,19 +21,24 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { DateTimePicker } from "@/components/ui/date-time-picker"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
+import {
+    CampaignAudienceFields,
+    campaignStageOptions,
+} from "@/components/campaigns/campaign-audience-fields"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -54,6 +58,8 @@ import {
     RefreshCcwIcon,
     PencilIcon,
     MessageSquareTextIcon,
+    MoreHorizontalIcon,
+    ShieldAlertIcon,
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "@/components/ui/toast"
@@ -82,16 +88,17 @@ import type {
 import type { EmailTemplate, EmailTemplateListItem } from "@/lib/api/email-templates"
 import { listMessagingTemplates, type MessagingTemplateVersion } from "@/lib/api/twilio"
 import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
+import type { StageOption } from "@/lib/stage-options"
 import { useQuery } from "@tanstack/react-query"
 import { getDefaultPipeline } from "@/lib/api/pipelines"
 import { RecipientPreviewCard } from "@/components/recipient-preview-card"
 import { US_STATES } from "@/lib/constants/us-states"
 import { getIntendedParentStageOptions } from "@/lib/intended-parent-stage-utils"
 import {
-    CAMPAIGN_RECIPIENT_OPTIONS,
     getCampaignPipelineEntityType,
     getCampaignRecipientHref,
     getCampaignRecipientLabel,
+    getCampaignSendConfirmTitle,
     isCampaignRecipientType,
     isDonorCampaignRecipientType,
 } from "@/lib/campaign-recipient"
@@ -174,8 +181,8 @@ type CampaignEditDraftAction =
     | { type: "changeDescription"; value: string }
     | { type: "changeTemplate"; value: string }
     | { type: "changeRecipientType"; value: CampaignEditRecipientType }
-    | { type: "toggleStage"; stageId: string; checked: boolean }
-    | { type: "toggleState"; stateCode: string; checked: boolean }
+    | { type: "setStages"; value: string[] }
+    | { type: "setStates"; value: string[] }
     | { type: "toggleIncludeUnsubscribed"; value: boolean }
     | { type: "changeScheduledAt"; value: string }
 
@@ -231,20 +238,10 @@ function campaignEditDraftReducer(
             return { ...state, templateId: action.value }
         case "changeRecipientType":
             return { ...state, recipientType: action.value, stages: [] }
-        case "toggleStage":
-            return {
-                ...state,
-                stages: action.checked
-                    ? [...state.stages, action.stageId]
-                    : state.stages.filter((stageId) => stageId !== action.stageId),
-            }
-        case "toggleState":
-            return {
-                ...state,
-                states: action.checked
-                    ? [...state.states, action.stateCode]
-                    : state.states.filter((stateValue) => stateValue !== action.stateCode),
-            }
+        case "setStages":
+            return { ...state, stages: action.value }
+        case "setStates":
+            return { ...state, states: action.value }
         case "toggleIncludeUnsubscribed":
             return { ...state, includeUnsubscribed: action.value }
         case "changeScheduledAt":
@@ -252,12 +249,6 @@ function campaignEditDraftReducer(
         default:
             return state
     }
-}
-
-type CampaignStageOption = {
-    id: string
-    label: string
-    color?: string | null
 }
 
 type BooleanStateSetter = Dispatch<SetStateAction<boolean>>
@@ -288,10 +279,6 @@ function createCampaignDetailHandlers({
     updateCampaign,
     retryFailed,
     push,
-    setShowDeleteDialog,
-    setShowRetryDialog,
-    setShowCancelDialog,
-    setShowSendDialog,
     setShowEditDialog,
 }: {
     campaign: Campaign
@@ -305,22 +292,15 @@ function createCampaignDetailHandlers({
     updateCampaign: ReturnType<typeof useUpdateCampaign>
     retryFailed: ReturnType<typeof useRetryFailedCampaignRun>
     push: ReturnType<typeof useRouter>["push"]
-    setShowDeleteDialog: BooleanStateSetter
-    setShowRetryDialog: BooleanStateSetter
-    setShowCancelDialog: BooleanStateSetter
-    setShowSendDialog: BooleanStateSetter
     setShowEditDialog: BooleanStateSetter
 }) {
+    // Delete, stop, send and retry run inside ConfirmDialog, which shows failures inline,
+    // so those handlers let errors propagate.
     return {
         handleDelete: async () => {
-            try {
-                await deleteCampaign.mutateAsync(campaignId)
-                toast.success("Campaign deleted")
-                push("/automation/campaigns")
-            } catch {
-                toast.error("Failed to delete campaign. Only drafts can be deleted.")
-            }
-            setShowDeleteDialog(false)
+            await deleteCampaign.mutateAsync(campaignId)
+            toast.success("Campaign deleted")
+            push("/automation/campaigns")
         },
         handleDuplicate: async () => {
             try {
@@ -377,34 +357,19 @@ function createCampaignDetailHandlers({
             if (!latestRun) {
                 return
             }
-            try {
-                const result = await retryFailed.mutateAsync({
-                    campaignId,
-                    runId: latestRun.id,
-                })
-                toast.success(result.message)
-            } catch {
-                toast.error("Failed to retry failed recipients")
-            }
-            setShowRetryDialog(false)
+            const result = await retryFailed.mutateAsync({
+                campaignId,
+                runId: latestRun.id,
+            })
+            toast.success(result.message)
         },
         handleCancel: async () => {
-            try {
-                await cancelCampaign.mutateAsync(campaignId)
-                toast.success("Campaign stopped")
-            } catch {
-                toast.error("Failed to stop campaign")
-            }
-            setShowCancelDialog(false)
+            await cancelCampaign.mutateAsync(campaignId)
+            toast.success("Campaign stopped")
         },
         handleSendNow: async () => {
-            try {
-                await sendCampaign.mutateAsync({ id: campaignId, sendNow: true })
-                toast.success("Campaign queued for sending")
-            } catch {
-                toast.error("Failed to send campaign")
-            }
-            setShowSendDialog(false)
+            await sendCampaign.mutateAsync({ id: campaignId, sendNow: true })
+            toast.success("Campaign queued for sending")
         },
     }
 }
@@ -422,6 +387,7 @@ function CampaignDetailHeader({
     publishPending,
 }: {
     campaign: Campaign
+    /** The API's can_edit for this campaign, limited to draft and scheduled campaigns. */
     canEdit: boolean
     cancelPending: boolean
     onEdit: () => void
@@ -432,10 +398,16 @@ function CampaignDetailHeader({
     onPublish: () => void
     publishPending: boolean
 }) {
+    // Per-campaign flags from the API decide every action (policy v1 derives them from
+    // manage_email_templates; v2 from the campaign permissions and scope).
+    const canEditCampaign = campaign.can_edit === true
+    const canSendCampaign = campaign.can_send === true
+    const canPublishCampaign = campaign.can_publish === true
+    const hasActions = canEditCampaign || canSendCampaign || canPublishCampaign
     return (
         <div className="border-b bg-card">
-            <div className="flex items-center justify-between p-6">
-                <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 p-6">
+                <div className="flex min-w-0 items-center gap-4">
                     <Button
                         variant="ghost"
                         size="icon-sm"
@@ -444,9 +416,9 @@ function CampaignDetailHeader({
                     >
                         <ArrowLeftIcon className="size-4" />
                     </Button>
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <h1 className="text-2xl font-semibold">{campaign.name}</h1>
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <h1 className="min-w-0 break-words text-2xl font-semibold">{campaign.name}</h1>
                             <Badge variant="outline">{campaign.scope === "personal" ? "Personal" : "Organization"}</Badge>
                             <Badge
                                 variant={statusStyles[campaign.status]?.variant || "secondary"}
@@ -462,42 +434,70 @@ function CampaignDetailHeader({
                         )}
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        onClick={onEdit}
-                        disabled={!canEdit}
-                    >
-                        <PencilIcon className="size-4" />
-                        Edit
-                    </Button>
-                    {campaign.status === "draft" && (
-                        <Button disabled={campaign.can_send === false} onClick={onSendNow}>
-                            <SendIcon className="size-4" />
-                            Send Now
-                        </Button>
-                    )}
-                    {(campaign.status === "scheduled" || campaign.status === "sending") && (
-                        <Button
-                            variant="destructive"
-                            onClick={onCancel}
-                            disabled={cancelPending || campaign.can_send === false}
-                        >
-                            Stop
-                        </Button>
-                    )}
-                    <Button variant="outline" disabled={campaign.can_edit === false} onClick={onDuplicate}>
-                        <CopyIcon className="size-4" />
-                        Duplicate
-                    </Button>
-                    {campaign.can_publish && <Button variant="outline" disabled={publishPending} onClick={onPublish}>Publish to organization</Button>}
-                    {campaign.status === "draft" && (
-                        <Button variant="destructive" disabled={campaign.can_edit === false} onClick={onDelete}>
-                            <TrashIcon className="size-4" />
-                            Delete
-                        </Button>
-                    )}
-                </div>
+                {hasActions ? (
+                    <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                        {canEditCampaign ? (
+                            <Button
+                                variant="outline"
+                                onClick={onEdit}
+                                disabled={!canEdit}
+                            >
+                                <PencilIcon className="size-4" />
+                                Edit
+                            </Button>
+                        ) : null}
+                        {canSendCampaign && campaign.status === "draft" && (
+                            <Button onClick={onSendNow}>
+                                <SendIcon className="size-4" />
+                                Send Now
+                            </Button>
+                        )}
+                        {canSendCampaign && (campaign.status === "scheduled" || campaign.status === "sending") && (
+                            <Button
+                                variant="destructive"
+                                onClick={onCancel}
+                                disabled={cancelPending}
+                            >
+                                Stop
+                            </Button>
+                        )}
+                        {canPublishCampaign ? (
+                            <Button variant="outline" disabled={publishPending} onClick={onPublish}>
+                                Publish to organization
+                            </Button>
+                        ) : null}
+                        {canEditCampaign ? (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger
+                                    render={
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            aria-label="More campaign actions"
+                                        >
+                                            <MoreHorizontalIcon className="size-4" aria-hidden="true" />
+                                        </Button>
+                                    }
+                                />
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={onDuplicate}>
+                                        <CopyIcon className="size-4" aria-hidden="true" />
+                                        Duplicate
+                                    </DropdownMenuItem>
+                                    {campaign.status === "draft" ? (
+                                        <>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                                                <TrashIcon className="size-4" aria-hidden="true" />
+                                                Delete
+                                            </DropdownMenuItem>
+                                        </>
+                                    ) : null}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ) : null}
+                    </div>
+                ) : null}
             </div>
         </div>
     )
@@ -631,67 +631,73 @@ function CampaignFilterSummaryCard({
         <Card>
             <CardHeader>
                 <CardTitle>Recipient Filters</CardTitle>
-                <CardDescription>Filters applied when recipients are selected for sending.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
+                {/* One label style and one value style (text-sm) for every filter. */}
+                <dl className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Recipient Type</p>
-                        <p className="font-medium">
+                        <dt className="text-xs text-muted-foreground">Recipient Type</dt>
+                        <dd className="text-sm">
                             {getCampaignRecipientLabel(campaign.recipient_type)}
-                        </p>
+                        </dd>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">
+                        <dt className="text-xs text-muted-foreground">
                             {campaign.recipient_type === "intended_parent" ? "Statuses" : "Stages"}
-                        </p>
-                        {stageLabelsForFilter.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                                {stageLabelsForFilter.map((label) => (
-                                    <Badge key={label} variant="secondary" className="text-xs">
-                                        {label}
-                                    </Badge>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">All</p>
-                        )}
+                        </dt>
+                        <dd className="text-sm">
+                            {stageLabelsForFilter.length > 0 ? (
+                                <span className="flex flex-wrap gap-2">
+                                    {stageLabelsForFilter.map((label) => (
+                                        <Badge key={label} variant="secondary" className="text-xs">
+                                            {label}
+                                        </Badge>
+                                    ))}
+                                </span>
+                            ) : (
+                                "All"
+                            )}
+                        </dd>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">States</p>
-                        {stateLabelsForFilter.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                                {stateLabelsForFilter.map((label) => (
-                                    <Badge key={label} variant="secondary" className="text-xs">
-                                        {label}
-                                    </Badge>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">All</p>
-                        )}
+                        <dt className="text-xs text-muted-foreground">States</dt>
+                        <dd className="text-sm">
+                            {stateLabelsForFilter.length > 0 ? (
+                                <span className="flex flex-wrap gap-2">
+                                    {stateLabelsForFilter.map((label) => (
+                                        <Badge key={label} variant="secondary" className="text-xs">
+                                            {label}
+                                        </Badge>
+                                    ))}
+                                </span>
+                            ) : (
+                                "All"
+                            )}
+                        </dd>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-xs text-muted-foreground">Created Range</p>
-                        {(createdAfter || createdBefore) ? (
-                            <p className="text-sm text-muted-foreground">
-                                {createdAfter ? format(createdAfter, "MMM d, yyyy") : "Anytime"}{" "}
-                                →{" "}
-                                {createdBefore ? format(createdBefore, "MMM d, yyyy") : "Now"}
-                            </p>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">Anytime</p>
-                        )}
+                        <dt className="text-xs text-muted-foreground">Created Range</dt>
+                        <dd className="text-sm">
+                            {(createdAfter || createdBefore) ? (
+                                <>
+                                    {createdAfter ? format(createdAfter, "MMM d, yyyy") : "Anytime"}{" "}
+                                    →{" "}
+                                    {createdBefore ? format(createdBefore, "MMM d, yyyy") : "Now"}
+                                </>
+                            ) : (
+                                "Anytime"
+                            )}
+                        </dd>
                     </div>
                     {campaign.channel === "email" && (
                         <div className="space-y-1">
-                            <p className="text-xs text-muted-foreground">Unsubscribed Recipients</p>
-                            <p className="text-sm text-muted-foreground">
+                            <dt className="text-xs text-muted-foreground">Unsubscribed Recipients</dt>
+                            <dd className="text-sm">
                                 {campaign.include_unsubscribed ? "Included" : "Excluded"}
-                            </p>
+                            </dd>
                         </div>
                     )}
-                </div>
+                </dl>
                 {(filterCriteria.source ||
                     (filterCriteria.is_priority &&
                         !isDonorCampaignRecipientType(campaign.recipient_type))) && (
@@ -802,11 +808,11 @@ function CampaignRecipientsCard({
                 <div className="flex items-center justify-between gap-3">
                     <div>
                         <CardTitle>Recipients</CardTitle>
-                        <CardDescription>
-                            {latestRun
-                                ? `Last run: ${format(parseDateInput(latestRun.started_at), "MMM d, yyyy 'at' h:mm a")}`
-                                : "No runs yet"}
-                        </CardDescription>
+                        {latestRun ? (
+                            <CardDescription>
+                                {`Last run: ${format(parseDateInput(latestRun.started_at), "MMM d, yyyy 'at' h:mm a")}`}
+                            </CardDescription>
+                        ) : null}
                     </div>
                     {latestRun && latestRun.failed_count > 0 && (
                         <Button
@@ -896,12 +902,11 @@ function CampaignRecipientsCard({
                         </TableBody>
                     </Table>
                 ) : (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <UsersIcon className="size-8 text-muted-foreground mb-2" />
-                        <p className="text-muted-foreground">
-                            {latestRun ? "No recipients in this run" : "Campaign hasn't been sent yet"}
-                        </p>
-                    </div>
+                    <EmptyState
+                        icon={UsersIcon}
+                        title={latestRun ? "No recipients in this run" : "Not sent yet"}
+                        className="py-8"
+                    />
                 )}
             </CardContent>
         </Card>
@@ -914,9 +919,6 @@ function CampaignEditDialog({
     editDraft,
     templates,
     editStageOptions,
-    editStageIdSet,
-    editStateCodeSet,
-    minScheduleDate,
     updatePending,
     dispatchEditDraft,
     onOpenChange,
@@ -926,217 +928,142 @@ function CampaignEditDialog({
     campaign: Campaign
     editDraft: CampaignEditDraftState
     templates: Array<Pick<EmailTemplateListItem, "id" | "name">> | undefined
-    editStageOptions: CampaignStageOption[]
-    editStageIdSet: ReadonlySet<string>
-    editStateCodeSet: ReadonlySet<string>
-    minScheduleDate: string
+    editStageOptions: StageOption[]
     updatePending: boolean
     dispatchEditDraft: Dispatch<CampaignEditDraftAction>
     onOpenChange: (open: boolean) => void
     onSave: () => void
 }) {
+    const templateLabel = campaign.channel === "messaging" ? "SMS template" : "Email template"
+    const scheduledAtValue = editDraft.scheduledAt ? new Date(editDraft.scheduledAt) : undefined
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent layout="sectioned" size="2xl">
                 <DialogHeader>
                     <DialogTitle>Edit Campaign</DialogTitle>
-                    <DialogDescription>Update details and recipient filters.</DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="edit-name">Campaign Name *</Label>
-                        <Input
-                            id="edit-name"
-                            value={editDraft.name}
-                            onChange={(event) =>
-                                dispatchEditDraft({
-                                    type: "changeName",
-                                    value: event.target.value,
-                                })
-                            }
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="edit-description">Description</Label>
-                        <Textarea
-                            id="edit-description"
-                            value={editDraft.description}
-                            onChange={(event) =>
-                                dispatchEditDraft({
-                                    type: "changeDescription",
-                                    value: event.target.value,
-                                })
-                            }
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Template *</Label>
-                        <Select
-                            aria-label="Campaign template"
-                            value={editDraft.templateId}
-                            onValueChange={(value) => {
-                                if (value) {
-                                    dispatchEditDraft({
-                                        type: "changeTemplate",
-                                        value,
-                                    })
-                                }
-                            }}
-                        >
-                            <SelectTrigger aria-label="Campaign template" className="w-full">
-                                <SelectValue placeholder="Choose a template">
-                                    {(value: string | null) => {
-                                        if (!value) return "Choose a template"
-                                        const selected = templates?.find(t => t.id === value)
-                                        return selected?.name ?? "Choose a template"
-                                    }}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent className="min-w-[300px]">
-                                {templates?.map((templateOption) => (
-                                    <SelectItem key={templateOption.id} value={templateOption.id}>
-                                        {templateOption.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Recipient Type</Label>
-                        <Select
-                            aria-label="Recipient type"
-                            value={editDraft.recipientType}
-                            onValueChange={(value) => {
-                                if (isCampaignRecipientType(value)) {
-                                    dispatchEditDraft({
-                                        type: "changeRecipientType",
-                                        value,
-                                    })
-                                }
-                            }}
-                        >
-                            <SelectTrigger aria-label="Recipient type">
-                                <SelectValue placeholder="Select type">
-                                    {(value: string | null) => {
-                                        return isCampaignRecipientType(value)
-                                            ? getCampaignRecipientLabel(value)
-                                            : "Select type"
-                                    }}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {CAMPAIGN_RECIPIENT_OPTIONS.map((option) => (
-                                    <SelectItem key={option.value} value={option.value}>
-                                        {option.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="space-y-2">
-                        <Label>{editDraft.recipientType === "intended_parent" ? "Filter by Status" : "Filter by Stage"}</Label>
-                        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                            {editStageOptions.map((stage) => (
-                                <div key={stage.id} className="flex items-center gap-x-2">
-                                    <Checkbox
-                                        id={`edit-stage-${stage.id}`}
-                                        checked={editStageIdSet.has(stage.id)}
-                                        onCheckedChange={(checked) => {
-                                            dispatchEditDraft({
-                                                type: "toggleStage",
-                                                stageId: stage.id,
-                                                checked: checked === true,
-                                            })
-                                        }}
-                                    />
-                                    <Label htmlFor={`edit-stage-${stage.id}`} className="text-sm">
-                                        <span
-                                            className="inline-block size-2 rounded-full mr-1.5"
-                                            style={{ backgroundColor: stage.color ?? undefined }}
-                                        />
-                                        {stage.label}
-                                    </Label>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Filter by State (optional)</Label>
-                        <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                            {US_STATES.map((state) => (
-                                <div key={state.value} className="flex items-center gap-x-2">
-                                    <Checkbox
-                                        id={`edit-state-${state.value}`}
-                                        checked={editStateCodeSet.has(state.value)}
-                                        onCheckedChange={(checked) => {
-                                            dispatchEditDraft({
-                                                type: "toggleState",
-                                                stateCode: state.value,
-                                                checked: checked === true,
-                                            })
-                                        }}
-                                    />
-                                    <Label htmlFor={`edit-state-${state.value}`} className="text-sm cursor-pointer">
-                                        {state.label}
-                                    </Label>
-                                </div>
-                            ))}
-                        </div>
-                        {editDraft.states.length > 0 && (
-                            <p className="text-xs text-muted-foreground">
-                                {editDraft.states.length} state{editDraft.states.length !== 1 ? "s" : ""} selected
-                            </p>
-                        )}
-                    </div>
-                    {campaign.channel === "email" && (
-                        <div className="rounded-lg border bg-card p-4">
-                            <div className="flex items-start gap-3">
-                                <Checkbox
-                                    id="edit-include-unsubscribed"
-                                    checked={editDraft.includeUnsubscribed}
-                                    onCheckedChange={(checked) =>
-                                        dispatchEditDraft({
-                                            type: "toggleIncludeUnsubscribed",
-                                            value: checked === true,
-                                        })
-                                    }
-                                />
-                                <div className="space-y-1">
-                                    <Label htmlFor="edit-include-unsubscribed" className="cursor-pointer">
-                                        Include unsubscribed recipients
-                                    </Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        When enabled, recipients who opted out of marketing emails may be included.
-                                        Hard bounces and complaints are always suppressed.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    {(campaign.status === "draft" || campaign.status === "scheduled") && (
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-scheduled-at">Scheduled send time (optional)</Label>
+                <DialogBody>
+                    <section aria-labelledby="edit-campaign-setup" className="flex flex-col gap-4">
+                        <h3 id="edit-campaign-setup" className="text-sm font-semibold">Setup</h3>
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="edit-channel">Channel</Label>
                             <Input
-                                id="edit-scheduled-at"
-                                type="datetime-local"
-                                min={minScheduleDate}
-                                value={editDraft.scheduledAt}
+                                id="edit-channel"
+                                value={campaign.channel === "messaging" ? "SMS / MMS" : "Email"}
+                                disabled
+                                readOnly
+                            />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="edit-name">Campaign name</Label>
+                            <Input
+                                id="edit-name"
+                                value={editDraft.name}
                                 onChange={(event) =>
                                     dispatchEditDraft({
-                                        type: "changeScheduledAt",
+                                        type: "changeName",
                                         value: event.target.value,
                                     })
                                 }
                             />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="edit-description">Description (optional)</Label>
+                            <Textarea
+                                id="edit-description"
+                                value={editDraft.description}
+                                onChange={(event) =>
+                                    dispatchEditDraft({
+                                        type: "changeDescription",
+                                        value: event.target.value,
+                                    })
+                                }
+                            />
+                        </div>
+                    </section>
+
+                    <section aria-labelledby="edit-campaign-audience" className="flex flex-col gap-4 border-t pt-5">
+                        <h3 id="edit-campaign-audience" className="text-sm font-semibold">Audience</h3>
+                        <CampaignAudienceFields
+                            idPrefix="campaign-edit"
+                            channel={campaign.channel}
+                            recipientType={editDraft.recipientType}
+                            onRecipientTypeChange={(value) =>
+                                dispatchEditDraft({ type: "changeRecipientType", value })
+                            }
+                            stageOptions={editStageOptions}
+                            selectedStages={editDraft.stages}
+                            onSelectedStagesChange={(value) => dispatchEditDraft({ type: "setStages", value })}
+                            selectedStates={editDraft.states}
+                            onSelectedStatesChange={(value) => dispatchEditDraft({ type: "setStates", value })}
+                            includeUnsubscribed={editDraft.includeUnsubscribed}
+                            onIncludeUnsubscribedChange={(value) =>
+                                dispatchEditDraft({ type: "toggleIncludeUnsubscribed", value })
+                            }
+                        />
+                    </section>
+
+                    <section aria-labelledby="edit-campaign-content" className="flex flex-col gap-4 border-t pt-5">
+                        <h3 id="edit-campaign-content" className="text-sm font-semibold">Content</h3>
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="edit-template">{templateLabel}</Label>
+                            <Select
+                                aria-label={templateLabel}
+                                value={editDraft.templateId}
+                                onValueChange={(value) => {
+                                    if (value) {
+                                        dispatchEditDraft({
+                                            type: "changeTemplate",
+                                            value,
+                                        })
+                                    }
+                                }}
+                            >
+                                <SelectTrigger id="edit-template" aria-label={templateLabel} className="w-full">
+                                    <SelectValue placeholder="Choose a template">
+                                        {(value: string | null) => {
+                                            if (!value) return "Choose a template"
+                                            const selected = templates?.find(t => t.id === value)
+                                            return selected?.name ?? "Choose a template"
+                                        }}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent className="min-w-[300px]">
+                                    {templates?.map((templateOption) => (
+                                        <SelectItem key={templateOption.id} value={templateOption.id}>
+                                            {templateOption.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </section>
+
+                    {(campaign.status === "draft" || campaign.status === "scheduled") && (
+                        <section aria-labelledby="edit-campaign-schedule" className="flex flex-col gap-2 border-t pt-5">
+                            <h3 id="edit-campaign-schedule" className="text-sm font-semibold">Schedule</h3>
+                            <Label htmlFor="edit-scheduled-at">Send time (optional)</Label>
+                            <DateTimePicker
+                                triggerId="edit-scheduled-at"
+                                value={scheduledAtValue}
+                                onChange={(value) =>
+                                    dispatchEditDraft({
+                                        type: "changeScheduledAt",
+                                        value: value ? toLocalDateTimeInput(value) : "",
+                                    })
+                                }
+                                className="w-full sm:w-72"
+                            />
                             <p className="text-xs text-muted-foreground">
                                 {campaign.status === "scheduled"
-                                    ? "Updating this will reschedule the pending send."
-                                    : "Leave blank to send manually later."}
+                                    ? "Changing it reschedules the pending send."
+                                    : "Leave empty to send manually."}
                             </p>
-                        </div>
+                        </section>
                     )}
-                </div>
+                </DialogBody>
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -1163,7 +1090,9 @@ type CampaignConfirmationDialogState = {
 }
 
 function CampaignConfirmationDialogs({
+    campaignName,
     channel,
+    recipientCount,
     dialogs,
     onDeleteOpenChange,
     onCancelOpenChange,
@@ -1174,92 +1103,66 @@ function CampaignConfirmationDialogs({
     onSendNow,
     onRetryFailed,
 }: {
+    campaignName: string
     channel: Campaign["channel"]
+    /** Matching recipients from the preview; null while it loads or when it is unavailable. */
+    recipientCount: number | null
     dialogs: CampaignConfirmationDialogState
     onDeleteOpenChange: (open: boolean) => void
     onCancelOpenChange: (open: boolean) => void
     onSendOpenChange: (open: boolean) => void
     onRetryOpenChange: (open: boolean) => void
-    onDelete: () => void
-    onCancel: () => void
-    onSendNow: () => void
-    onRetryFailed: () => void
+    onDelete: () => Promise<void>
+    onCancel: () => Promise<void>
+    onSendNow: () => Promise<void>
+    onRetryFailed: () => Promise<void>
 }) {
+    const messageNoun = channel === "messaging" ? "Messages" : "Emails"
+
     return (
         <>
-            <AlertDialog open={dialogs.deleteOpen} onOpenChange={onDeleteOpenChange}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Are you sure you want to delete this campaign? This action cannot be undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={onDelete}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                            Delete
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmDialog
+                open={dialogs.deleteOpen}
+                onOpenChange={onDeleteOpenChange}
+                title={`Delete ${campaignName}?`}
+                description="This can't be undone."
+                confirmLabel="Delete"
+                errorFallback="Couldn't delete campaign. Only drafts can be deleted."
+                onConfirm={onDelete}
+            />
 
-            <AlertDialog open={dialogs.cancelOpen} onOpenChange={onCancelOpenChange}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Stop Campaign</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will stop any scheduled or in-progress sends. {channel === "messaging" ? "Messages" : "Emails"} already queued may still deliver.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={onCancel}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                            Stop
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmDialog
+                open={dialogs.cancelOpen}
+                onOpenChange={onCancelOpenChange}
+                title={`Stop ${campaignName}?`}
+                description={`Scheduled and in-progress sends stop. ${messageNoun} already queued may still deliver.`}
+                confirmLabel="Stop"
+                errorFallback="Couldn't stop campaign. Try again."
+                onConfirm={onCancel}
+            />
 
-            <AlertDialog open={dialogs.sendOpen} onOpenChange={onSendOpenChange}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Send Campaign Now</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will immediately start sending this campaign. You can stop it once it begins, but some {channel === "messaging" ? "messages" : "emails"} may still deliver.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={onSendNow}>
-                            Send now
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmDialog
+                open={dialogs.sendOpen}
+                onOpenChange={onSendOpenChange}
+                title={getCampaignSendConfirmTitle(recipientCount)}
+                description={`${messageNoun} start sending right away.`}
+                confirmVariant="default"
+                confirmIcon={<SendIcon aria-hidden="true" />}
+                confirmLabel="Send now"
+                errorFallback="Couldn't send campaign. Try again."
+                onConfirm={onSendNow}
+            />
 
-            <AlertDialog open={dialogs.retryOpen} onOpenChange={onRetryOpenChange}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Retry failed recipients</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will retry sending to recipients that previously failed in the latest run.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={onRetryFailed}>
-                            Retry failed
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmDialog
+                open={dialogs.retryOpen}
+                onOpenChange={onRetryOpenChange}
+                title="Retry failed recipients?"
+                description="Sends again to the recipients that failed in the latest run."
+                confirmVariant="default"
+                confirmLabel="Retry failed"
+                errorFallback="Couldn't retry failed recipients. Try again."
+                onConfirm={onRetryFailed}
+            />
         </>
     )
 }
@@ -1288,13 +1191,17 @@ export default function CampaignDetailPage() {
         campaignEditDraftReducer,
         initialCampaignEditDraft,
     )
-    const minScheduleDate = toLocalDateTimeInput(new Date())
-
     // API hooks
-    const { data: campaign, isLoading, error: campaignError } = useCampaign(campaignId)
+    const campaignQuery = useCampaign(campaignId)
+    const { data: campaign, isLoading } = campaignQuery
+    // The recipient preview route requires edit access to this campaign.
+    const canPreviewRecipients = campaign?.can_edit === true
     const { data: runs } = useCampaignRuns(campaignId)
     const latestRun = runs?.[0]
-    const { data: preview, isLoading: previewLoading, refetch: refetchPreview } = useCampaignPreview(campaignId)
+    const { data: preview, isLoading: previewLoading, refetch: refetchPreview } = useCampaignPreview(
+        campaignId,
+        { enabled: canPreviewRecipients },
+    )
     const recipientQuery = {
         limit: 50,
         ...(recipientFilter === "all" ? {} : { status: recipientFilter }),
@@ -1338,7 +1245,6 @@ export default function CampaignDetailPage() {
         enabled: editPipelineEntityType !== null,
     })
     const campaignPipelineStages = campaignPipeline?.stages || []
-    const editPipelineStages = editPipeline?.stages || []
     const intendedParentStageOptions = getIntendedParentStageOptions(
         intendedParentStatuses?.statuses,
     ).map((stage) => ({
@@ -1348,11 +1254,13 @@ export default function CampaignDetailPage() {
         stage_key: stage.stage_key,
         stage_type: stage.stage_type,
     }))
-    const editStageOptions =
-        editDraft.recipientType === "intended_parent"
-            ? intendedParentStageOptions
-            : editPipelineStages.filter(stage => stage.is_active)
-    const canEdit = campaign?.can_edit !== false && (campaign?.status === "draft" || campaign?.status === "scheduled")
+    const editStageOptions = campaignStageOptions(
+        editDraft.recipientType,
+        editPipeline?.stages,
+        intendedParentStatuses?.statuses,
+    )
+    const canEdit =
+        campaign?.can_edit === true && (campaign.status === "draft" || campaign.status === "scheduled")
     const shouldAutoOpenEdit = searchParams.get("edit") === "1"
     const autoEditRequestKey =
         shouldAutoOpenEdit && canEdit && campaign
@@ -1385,7 +1293,24 @@ export default function CampaignDetailPage() {
         )
     }
 
-    if (!campaign) return <div role="alert" className="p-6">{campaignError ? "Could not load campaign" : "Campaign unavailable"}</div>
+    if (!campaign) {
+        return (
+            <QueryErrorState
+                error={campaignQuery.error}
+                onRetry={() => {
+                    void campaignQuery.refetch()
+                }}
+                isRetrying={campaignQuery.isFetching}
+                title="Couldn't load campaign"
+                notFound={{
+                    title: "Campaign not found",
+                    backHref: "/automation/campaigns",
+                    backLabel: "Back to Campaigns",
+                }}
+                headingLevel={1}
+            />
+        )
+    }
 
     const messageTemplate = messagingTemplates?.find(
         (candidate) => candidate.id === campaign.message_template_version_id,
@@ -1413,8 +1338,6 @@ export default function CampaignDetailPage() {
     const stateLabelsForFilter = getSelectedLabels(US_STATES, selectedStateFilters, (state) => state.value)
     const createdAfter = filterCriteria.created_after ? new Date(filterCriteria.created_after) : null
     const createdBefore = filterCriteria.created_before ? new Date(filterCriteria.created_before) : null
-    const editStageIdSet = new Set(editDraft.stages)
-    const editStateCodeSet = new Set(editDraft.states)
     const {
         handleDelete,
         handleDuplicate,
@@ -1434,10 +1357,6 @@ export default function CampaignDetailPage() {
         updateCampaign,
         retryFailed,
         push,
-        setShowDeleteDialog,
-        setShowRetryDialog,
-        setShowCancelDialog,
-        setShowSendDialog,
         setShowEditDialog,
     })
 
@@ -1490,30 +1409,42 @@ export default function CampaignDetailPage() {
                     createdBefore={createdBefore}
                 />
 
-                <RecipientPreviewCard
-                    totalCount={preview?.total_count || 0}
-                    sampleRecipients={
-                        preview?.sample_recipients?.map((recipient) => {
-                            const href = getCampaignRecipientHref(
-                                recipient.entity_type,
-                                recipient.entity_id,
-                            )
-                            return {
-                                email:
-                                    campaign.channel === "messaging"
-                                        ? recipient.phone_last4
-                                            ? `••• ••• ${recipient.phone_last4}`
-                                            : "Phone unavailable"
-                                        : recipient.email ?? "Email unavailable",
-                                name: recipient.name,
-                                ...(href ? { href } : {}),
-                            }
-                        }) || []
-                    }
-                    isLoading={previewLoading}
-                    onRefresh={() => refetchPreview()}
-                    maxVisible={3}
-                />
+                {canPreviewRecipients ? (
+                    <RecipientPreviewCard
+                        totalCount={preview?.total_count || 0}
+                        sampleRecipients={
+                            preview?.sample_recipients?.map((recipient) => {
+                                const href = getCampaignRecipientHref(
+                                    recipient.entity_type,
+                                    recipient.entity_id,
+                                )
+                                return {
+                                    email:
+                                        campaign.channel === "messaging"
+                                            ? recipient.phone_last4
+                                                ? `••• ••• ${recipient.phone_last4}`
+                                                : "Phone unavailable"
+                                            : recipient.email ?? "Email unavailable",
+                                    name: recipient.name,
+                                    ...(href ? { href } : {}),
+                                }
+                            }) || []
+                        }
+                        isLoading={previewLoading}
+                        onRefresh={() => refetchPreview()}
+                        maxVisible={3}
+                    />
+                ) : (
+                    <Card>
+                        <CardContent>
+                            <EmptyState
+                                icon={ShieldAlertIcon}
+                                title="Recipient preview requires campaign access"
+                                className="py-6"
+                            />
+                        </CardContent>
+                    </Card>
+                )}
 
                 <CampaignTemplatePreviewCard
                     template={template}
@@ -1528,7 +1459,7 @@ export default function CampaignDetailPage() {
                     recipients={recipients}
                     recipientFilter={recipientFilter}
                     retryPending={retryFailed.isPending}
-                    canSend={campaign.can_send !== false}
+                    canSend={campaign.can_send === true}
                     onRecipientFilterChange={setRecipientFilter}
                     onRetryFailed={() => setShowRetryDialog(true)}
                 />
@@ -1541,9 +1472,6 @@ export default function CampaignDetailPage() {
                 editDraft={editDraft}
                 templates={templates}
                 editStageOptions={editStageOptions}
-                editStageIdSet={editStageIdSet}
-                editStateCodeSet={editStateCodeSet}
-                minScheduleDate={minScheduleDate}
                 updatePending={updateCampaign.isPending}
                 dispatchEditDraft={dispatchEditDraft}
                 onOpenChange={(open) => {
@@ -1557,7 +1485,9 @@ export default function CampaignDetailPage() {
             />
 
             <CampaignConfirmationDialogs
+                campaignName={campaign.name}
                 channel={campaign.channel}
+                recipientCount={canPreviewRecipients && preview ? preview.total_count : null}
                 dialogs={{
                     deleteOpen: showDeleteDialog,
                     cancelOpen: showCancelDialog,

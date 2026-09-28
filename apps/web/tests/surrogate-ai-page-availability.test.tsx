@@ -6,9 +6,20 @@ import SurrogateAiPage from "@/app/(app)/surrogates/[id]/ai/page"
 const availability = vi.fn()
 const summarize = vi.fn()
 const draft = vi.fn()
+const permissions = vi.fn<() => string[]>()
 
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "surrogate-1" }) }))
 vi.mock("@/components/ui/tabs", () => ({ TabsContent: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
+vi.mock("@/components/app-link", () => ({
+    default: ({ href, children, ...props }: { href: string; children: ReactNode }) => (
+        <a href={href} {...props}>
+            {children}
+        </a>
+    ),
+}))
+vi.mock("@/lib/hooks/use-permission-check", () => ({
+    usePermissionCheck: () => ({ can: (key: string) => permissions().includes(key) }),
+}))
 vi.mock("@/lib/hooks/use-ai", () => ({
     useAIAvailability: () => availability(),
     useSummarizeSurrogate: () => ({ mutateAsync: summarize, isPending: false }),
@@ -19,6 +30,7 @@ describe("Surrogate AI availability", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         availability.mockReturnValue({ data: { is_enabled: true }, isPending: false, isError: false })
+        permissions.mockReturnValue([])
     })
 
     it("waits for staff availability before showing generation controls", () => {
@@ -42,9 +54,21 @@ describe("Surrogate AI availability", () => {
         expect(screen.getByRole("button", { name: /Generate Summary/i })).toBeEnabled()
         availability.mockReturnValue({ data: { is_enabled: false } })
         view.rerender(<SurrogateAiPage />)
-        expect(screen.getByText("AI Assistant Not Enabled")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { name: "AI is turned off for this organization." })).toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "AI settings" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: /Generate Summary/i })).not.toBeInTheDocument()
         expect(summarize).not.toHaveBeenCalled()
         expect(draft).not.toHaveBeenCalled()
+    })
+
+    it("links to AI settings only when the viewer can manage integrations and AI settings", () => {
+        availability.mockReturnValue({ data: { is_enabled: false }, isPending: false, isError: false })
+        permissions.mockReturnValue(["manage_ai_settings"])
+        const view = render(<SurrogateAiPage />)
+        expect(screen.queryByRole("link", { name: "AI settings" })).not.toBeInTheDocument()
+
+        permissions.mockReturnValue(["manage_integrations", "manage_ai_settings"])
+        view.rerender(<SurrogateAiPage />)
+        expect(screen.getByRole("link", { name: "AI settings" })).toHaveAttribute("href", "/settings/integrations")
     })
 })

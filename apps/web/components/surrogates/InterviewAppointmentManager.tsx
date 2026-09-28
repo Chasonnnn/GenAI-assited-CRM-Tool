@@ -7,6 +7,7 @@ import { createSchedulingRequestId } from "@/lib/api/appointments"
 import { SchedulingSyncState, schedulingCanCancel, schedulingCanReschedule } from "@/components/appointments/SchedulingSyncState"
 import {
     useInterviewAppointment,
+    useInterviewOpenDays,
     useInterviewSlots,
     useManageInterviewAppointment,
     useRetryInterviewAppointmentGoogleSync,
@@ -19,7 +20,9 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { CalendarClockIcon, Loader2Icon } from "lucide-react"
 import { SchedulingTimePicker } from "@/components/appointments/SchedulingTimePicker"
-import { formatSchedulingDate, formatSchedulingTime, localDateTimeToIso as parseLocalDateTime, schedulingDateKey, schedulingTimezoneLabel } from "@/lib/scheduling-time"
+import { formatSchedulingDate, formatSchedulingTime, localDateTimeToIso as parseLocalDateTime, schedulingCalendarRange, schedulingDateKey, schedulingTimezoneLabel } from "@/lib/scheduling-time"
+import { parseDateInput } from "@/lib/utils/date"
+import { addMonths, startOfMonth } from "date-fns"
 
 export type AppointmentBadgeStatus = "Upcoming" | "Ongoing" | "Cancelled" | "Past"
 
@@ -59,9 +62,30 @@ function formatAppointment(appointment: InterviewAppointment) {
 }
 
 function localInputValue(iso: string | undefined) {
-    const date = iso ? new Date(iso) : new Date(Date.now() + 24 * 60 * 60 * 1000)
+    const date = iso ? new Date(iso) : nextBusinessHour()
     const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
     return shifted.toISOString().slice(0, 16)
+}
+
+const BUSINESS_DAY_START_HOUR = 9
+const BUSINESS_DAY_END_HOUR = 17
+
+/** Next full hour between 9 AM and 5 PM local time on a weekday: the default custom interview time. */
+export function nextBusinessHour(now = new Date()): Date {
+    const next = new Date(now)
+    next.setMinutes(0, 0, 0)
+    next.setHours(next.getHours() + 1)
+    if (next.getHours() < BUSINESS_DAY_START_HOUR) {
+        next.setHours(BUSINESS_DAY_START_HOUR)
+    } else if (next.getHours() >= BUSINESS_DAY_END_HOUR) {
+        next.setDate(next.getDate() + 1)
+        next.setHours(BUSINESS_DAY_START_HOUR)
+    }
+    while (next.getDay() === 0 || next.getDay() === 6) {
+        next.setDate(next.getDate() + 1)
+        next.setHours(BUSINESS_DAY_START_HOUR)
+    }
+    return next
 }
 
 export function localDateTimeToIso(value: string): string | null {
@@ -95,13 +119,26 @@ export function InterviewAppointmentManager({
     const mutation = useManageInterviewAppointment(surrogateId)
     const retryGoogleSync = useRetryInterviewAppointmentGoogleSync(surrogateId)
     const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
-    const [form, setForm] = useState({ view: "manage" as View, date: "", selectedStart: null as string | null, dateTime: "", cancelChoice: "move", overrideAvailability: false, overrideReason: "", validation: null as string | null })
-    const { view, date, selectedStart, dateTime, cancelChoice, overrideAvailability, overrideReason, validation } = form
+    // dateFallback: the date is the anchor date because open days failed to load.
+    // dateFocusRequest: incremented each time the dialog, not the user, picks the date.
+    const [form, setForm] = useState({ view: "manage" as View, date: "", anchorDate: "", month: null as Date | null, dateFallback: false, dateFocusRequest: 0, selectedStart: null as string | null, dateTime: "", cancelChoice: "move", overrideAvailability: false, overrideReason: "", validation: null as string | null })
+    const { view, date, anchorDate, month, dateFallback, dateFocusRequest, selectedStart, dateTime, cancelChoice, overrideAvailability, overrideReason, validation } = form
     const updateForm = (next: Partial<typeof form>) => setForm((current) => ({ ...current, ...next }))
     const state = query.data
     const appointment = state?.appointment ?? null
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-    const slotsQuery = useInterviewSlots(surrogateId, date, timezone, view === "book" && Boolean(state?.can_manage))
+    const booking = view === "book" && Boolean(state?.can_manage)
+    const slotsQuery = useInterviewSlots(surrogateId, date, timezone, booking)
+    const calendarRange = month ? schedulingCalendarRange(month) : null
+    const openDaysQuery = useInterviewOpenDays(surrogateId, calendarRange?.start ?? "", calendarRange?.end ?? "", timezone, booking)
+    // Days stay disabled while open days load; after a failure every future day stays selectable.
+    const openDates = openDaysQuery.isSuccess ? new Set(openDaysQuery.data.dates) : openDaysQuery.isError ? undefined : new Set<string>()
+    const firstOpenDate = openDaysQuery.isSuccess ? openDaysQuery.data.dates.find((day) => day >= anchorDate) : undefined
+    // When no day from the anchor date is open in its month, the next month is checked once.
+    const nextMonth = anchorDate ? addMonths(startOfMonth(parseDateInput(anchorDate)), 1) : null
+    const nextMonthRange = nextMonth ? schedulingCalendarRange(nextMonth) : null
+    const checkNextMonth = view === "book" && !date && openDaysQuery.isSuccess && !firstOpenDate
+    const nextMonthQuery = useInterviewOpenDays(surrogateId, nextMonthRange?.start ?? "", nextMonthRange?.end ?? "", timezone, booking && checkNextMonth)
     const active = Boolean(appointment && ["pending", "confirmed"].includes(appointment.status))
     const externalSyncStatus = appointment?.scheduling?.google_sync.state ?? state?.external_sync_status
     const legacySyncUnresolved = !appointment?.scheduling && ["pending", "failed", "conflict", "unlinked"].includes(externalSyncStatus ?? "")
@@ -115,8 +152,50 @@ export function InterviewAppointmentManager({
         : canStartNewAppointment
     const open = controlledOpen ?? uncontrolledOpen
     const setOpen = onOpenChange ?? setUncontrolledOpen
+    // With nothing to manage, the trigger opens the booking view directly instead of an empty Manage step.
+    const opensInBooking = !active && canStartNewAppointment
 
-    const resetForm = () => setForm({ view: "manage", validation: null, cancelChoice: "move", overrideAvailability: false, overrideReason: "", date: "", selectedStart: null, dateTime: "" })
+    const resetForm = () => setForm({ view: "manage", validation: null, cancelChoice: "move", overrideAvailability: false, overrideReason: "", date: "", anchorDate: "", month: null, dateFallback: false, dateFocusRequest: 0, selectedStart: null, dateTime: "" })
+    const bookingForm = () => {
+        const today = schedulingDateKey(new Date(), timezone)
+        const current = active && appointment ? schedulingDateKey(appointment.scheduled_start, timezone) : today
+        const nextAnchorDate = current > today ? current : today
+        return {
+            view: "book" as View,
+            date: "",
+            anchorDate: nextAnchorDate,
+            month: startOfMonth(parseDateInput(nextAnchorDate)),
+            dateFallback: false,
+            selectedStart: null,
+            dateTime: localInputValue(active ? appointment?.scheduled_start : undefined),
+            overrideAvailability: false,
+            overrideReason: "",
+            validation: null,
+        }
+    }
+    // The dialog can be opened by this trigger or by a parent through `open`, so the booking
+    // view is chosen when the dialog opens rather than in the click handler.
+    const [wasOpen, setWasOpen] = useState(open)
+    if (wasOpen !== open) {
+        setWasOpen(open)
+        if (open && opensInBooking) updateForm(bookingForm())
+    }
+    // Booking opens on the first open day from the anchor date in its month or the next one, or
+    // on the anchor date when neither has one or open days could not be loaded.
+    if (view === "book" && anchorDate && !date) {
+        let pick: Partial<typeof form> | null = null
+        if (openDaysQuery.isError) pick = { date: anchorDate, dateFallback: true }
+        else if (firstOpenDate) pick = { date: firstOpenDate }
+        else if (openDaysQuery.isSuccess && (nextMonthQuery.isSuccess || nextMonthQuery.isError)) {
+            const nextOpenDate = nextMonthQuery.isSuccess ? nextMonthQuery.data.dates.find((day) => day >= anchorDate) : undefined
+            // The next month's grid holds the data, so it is shown even for a day in its trailing week.
+            pick = nextOpenDate && nextMonth ? { date: nextOpenDate, month: nextMonth } : { date: anchorDate }
+        }
+        if (pick) updateForm({ ...pick, dateFocusRequest: dateFocusRequest + 1 })
+    } else if (view === "book" && dateFallback && openDaysQuery.isSuccess && !selectedStart && calendarRange && date >= calendarRange.start && date <= calendarRange.end) {
+        // Open days for the fallback date's month loaded later, for example after Retry: pick again.
+        updateForm({ date: "", dateFallback: false })
+    }
     const setDialogOpen = (next: boolean) => {
         if (mutation.isPending) return
         if (!next) resetForm()
@@ -159,7 +238,10 @@ export function InterviewAppointmentManager({
                 setDialogOpen(false)
             }
         } catch (error) {
-            if (error instanceof ApiError && error.status === 409) void slotsQuery.refetch()
+            if (error instanceof ApiError && error.status === 409) {
+                void slotsQuery.refetch()
+                void openDaysQuery.refetch()
+            }
             updateForm({ validation: error instanceof ApiError && error.status === 409
                 ? error.message
                 : error instanceof ApiError && error.status === 403 ? "You no longer have permission to manage this appointment."
@@ -184,13 +266,18 @@ export function InterviewAppointmentManager({
         <span className="truncate text-sm text-muted-foreground">{active && appointment ? formatAppointment(appointment) : "No active appointment"}</span>
     </div>
 
+    const triggerLabel = opensInBooking ? "Schedule" : "Manage"
+    const hasBookingTime = overrideAvailability
+        ? Boolean(localDateTimeToIso(dateTime)) && Boolean(overrideReason.trim())
+        : Boolean(selectedStart)
+
     return <>
-        {!hideTrigger && (triggerOnly ? <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openManager} disabled={!state.can_manage}>Manage</Button> : <div className={compact ? "flex items-center justify-between gap-3 rounded-lg border px-3 py-2" : "flex items-center justify-between gap-3"}>
+        {!hideTrigger && (triggerOnly ? <Button size="sm" variant="outline" className="h-7 text-xs" onClick={openManager} disabled={!state.can_manage}>{triggerLabel}</Button> : <div className={compact ? "flex items-center justify-between gap-3 rounded-lg border px-3 py-2" : "flex items-center justify-between gap-3"}>
             <div className="min-w-0"><span className="text-sm font-medium">Interview appointment</span>{row}</div>
-            <Button size="sm" variant="outline" onClick={openManager} disabled={!state.can_manage}>Manage</Button>
+            <Button size="sm" variant="outline" onClick={openManager} disabled={!state.can_manage}>{triggerLabel}</Button>
         </div>)}
         {renderDialog ? <Dialog open={open} onOpenChange={setDialogOpen}>
-            <DialogContent className={`flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl p-0 ${view === "book" ? "sm:max-w-2xl" : "sm:max-w-lg"}`}>
+            <DialogContent size={view === "book" ? "2xl" : "lg"} className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl p-0">
                 <DialogHeader className="shrink-0 border-b px-5 py-4 pr-12"><DialogTitle>{view === "manage" ? "Manage appointment" : view === "cancel" ? "Cancel appointment?" : active ? "Reschedule interview" : "Schedule interview"}</DialogTitle></DialogHeader>
                 <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                 {view === "manage" ? <div className="space-y-5">
@@ -208,15 +295,23 @@ export function InterviewAppointmentManager({
                     <SchedulingTimePicker
                         idPrefix="interview-appointment"
                         date={date}
-                        onDateChange={(next) => updateForm({ date: next, selectedStart: null })}
+                        onDateChange={(next) => updateForm({ date: next, dateFallback: false, selectedStart: null, validation: null })}
+                        availableDates={openDates}
+                        datesLoading={openDaysQuery.isLoading}
+                        {...(month ? { month } : {})}
+                        onMonthChange={(next) => updateForm({ month: next })}
+                        dateFocusRequest={dateFocusRequest}
                         timezone={timezone}
                         slots={slotsQuery.data?.slots}
                         selectedStart={selectedStart}
-                        onSelectStart={(start) => updateForm({ selectedStart: start })}
-                        loading={slotsQuery.isLoading || slotsQuery.isFetching}
+                        onSelectStart={(start) => updateForm({ selectedStart: start, validation: null })}
+                        loading={!date || slotsQuery.isLoading || slotsQuery.isFetching}
                         error={slotsQuery.isError ? "Available times could not be loaded." : undefined}
-                        onRetry={() => void slotsQuery.refetch()}
-                        override={{ enabled: overrideAvailability, onEnabledChange: (enabled) => updateForm({ overrideAvailability: enabled }), dateTime, onDateTimeChange: (next) => updateForm({ dateTime: next }), reason: overrideReason, onReasonChange: (next) => updateForm({ overrideReason: next }) }}
+                        onRetry={() => {
+                            void slotsQuery.refetch()
+                            if (openDaysQuery.isError) void openDaysQuery.refetch()
+                        }}
+                        override={{ enabled: overrideAvailability, onEnabledChange: (enabled) => updateForm({ overrideAvailability: enabled, validation: null }), dateTime, onDateTimeChange: (next) => updateForm({ dateTime: next, validation: null }), reason: overrideReason, onReasonChange: (next) => updateForm({ overrideReason: next, validation: null }) }}
                     />
                     {!state.scheduled_stage ? <p role="alert" className="text-sm text-destructive">Interview Scheduled is not configured. Ask an administrator to finish the rollout.</p> : null}
                 </div> : null}
@@ -231,12 +326,14 @@ export function InterviewAppointmentManager({
                 </div>
                 <DialogFooter className={view === "manage" ? "shrink-0 border-t px-5 py-4 flex-row sm:justify-start" : "shrink-0 border-t px-5 py-4"}>
                     {view === "manage" ? <>
-                        <Button className="h-auto min-h-9 min-w-0 shrink whitespace-normal" disabled={!canOpenBooking} onClick={() => updateForm({ view: "book", date: schedulingDateKey(active && appointment ? appointment.scheduled_start : new Date().toISOString(), timezone), selectedStart: null, dateTime: localInputValue(active ? appointment?.scheduled_start : undefined), overrideAvailability: false, overrideReason: "" })}>{active ? "Reschedule" : "Schedule appointment"}</Button>
+                        <Button className="h-auto min-h-9 min-w-0 shrink whitespace-normal" disabled={!canOpenBooking} onClick={() => updateForm(bookingForm())}>{active ? "Reschedule" : "Schedule appointment"}</Button>
                         {active ? <Button className="h-auto min-h-9 min-w-0 shrink whitespace-normal" variant="outline" disabled={!state.can_manage || legacySyncUnresolved || !schedulingCanCancel(appointment?.scheduling)} onClick={() => updateForm({ view: "cancel" })}>Cancel appointment</Button> : null}
                         {!appointment?.scheduling && externalSyncStatus === "failed" && appointment ? <Button variant="outline" disabled={!state.can_manage || retryGoogleSync.isPending} onClick={() => void retrySync()}>{retryGoogleSync.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}Retry Google update</Button> : null}
                         <Button className="ml-auto" variant="outline" onClick={() => setDialogOpen(false)}>Done</Button>
-                    </> : <Button variant="outline" disabled={mutation.isPending} onClick={() => updateForm({ view: "manage" })}>Back</Button>}
-                    {view === "book" ? <Button disabled={mutation.isPending || !canOpenBooking || (overrideAvailability && !overrideReason.trim())} onClick={() => void submit(active ? "reschedule" : "schedule", stageId === state.reschedule_stage?.id)}>{mutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}{stageId === state.reschedule_stage?.id ? active ? "Reschedule & update stage" : "Schedule & update stage" : active ? "Reschedule" : "Schedule"}</Button> : null}
+                    </> : view === "book" && opensInBooking
+                        ? <Button variant="outline" disabled={mutation.isPending} onClick={() => setDialogOpen(false)}>Cancel</Button>
+                        : <Button variant="outline" disabled={mutation.isPending} onClick={() => updateForm({ view: "manage", validation: null })}>Back</Button>}
+                    {view === "book" ? <Button disabled={mutation.isPending || !canOpenBooking || !hasBookingTime} onClick={() => void submit(active ? "reschedule" : "schedule", stageId === state.reschedule_stage?.id)}>{mutation.isPending && <Loader2Icon className="mr-2 size-4 animate-spin" />}{stageId === state.reschedule_stage?.id ? active ? "Reschedule & update stage" : "Schedule & update stage" : active ? "Reschedule" : "Schedule"}</Button> : null}
                     {view === "cancel" ? <Button variant="destructive" disabled={mutation.isPending || !state.can_manage || legacySyncUnresolved || !schedulingCanCancel(appointment?.scheduling)} onClick={() => void submit("cancel", Boolean(state.reschedule_stage) && cancelChoice === "move" && stageId !== state.reschedule_stage?.id)}>Cancel appointment</Button> : null}
                 </DialogFooter>
             </DialogContent>

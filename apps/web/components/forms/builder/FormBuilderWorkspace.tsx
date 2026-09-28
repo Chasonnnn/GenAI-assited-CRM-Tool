@@ -94,6 +94,8 @@ type FormBuilderWorkspaceProps = {
     onFieldLibrarySearchChange: (value: string) => void
     onFieldLibraryCategoryChange: (value: string) => void
     document: WorkspaceDocument
+    /** Rendered at the top of the right settings panel, above field settings. */
+    inspectorHeader?: React.ReactNode
 }
 
 type FieldSettingsTabState = {
@@ -407,15 +409,14 @@ function PageStrip({
                     </Button>
                     <Button
                         type="button"
-                        variant="outline"
+                        variant="destructive-ghost"
                         size="sm"
-                        className="text-destructive hover:text-destructive"
                         onClick={() => onRequestDeletePage(activePage)}
                         disabled={pages.length === 1}
-                        aria-label={`Delete ${currentPageLabel}`}
+                        aria-label={`Delete page ${currentPageLabel}`}
                     >
                         <Trash2Icon className="mr-2 size-4" />
-                        Delete
+                        Delete page
                     </Button>
                 </div>
             </div>
@@ -531,13 +532,16 @@ function EditCanvas({
 function FieldInspectorEmptyState({
     currentPage,
     settingsPanelClass,
+    header,
 }: {
     currentPage: BuilderFormPage
     settingsPanelClass: string
+    header?: React.ReactNode
 }) {
     return (
         <aside data-testid="form-builder-settings" aria-label="Form builder settings" className={settingsPanelClass}>
             <div className="flex min-h-full flex-col gap-4">
+                {header}
                 <div className="rounded-2xl border border-border/70 bg-background p-4">
                     <div className="flex items-start gap-3">
                         <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -611,7 +615,9 @@ function useFieldInspectorView({
     syncOptionKeys,
     addOption,
     removeOption,
+    header,
 }: {
+    header?: React.ReactNode
     leadKind: FormLeadKind
     currentPage: BuilderFormPage
     selectedFieldData: BuilderFormField | null
@@ -656,12 +662,19 @@ function useFieldInspectorView({
     const mappingLabelMap = new Map(mappingOptions.map((mapping) => [mapping.value, mapping.label] as const))
 
     if (!selectedFieldData) {
-        return <FieldInspectorEmptyState currentPage={currentPage} settingsPanelClass={settingsPanelClass} />
+        return (
+            <FieldInspectorEmptyState
+                currentPage={currentPage}
+                settingsPanelClass={settingsPanelClass}
+                header={header}
+            />
+        )
     }
 
     return (
         <aside data-testid="form-builder-settings" aria-label="Form builder settings" className={settingsPanelClass}>
             <div className="flex min-h-full flex-col gap-4">
+                {header}
                 <SelectedFieldSummary field={selectedFieldData} />
 
                 <Tabs
@@ -1184,6 +1197,7 @@ export function FormBuilderWorkspace({
     onFieldLibrarySearchChange,
     onFieldLibraryCategoryChange,
     document,
+    inspectorHeader,
 }: FormBuilderWorkspaceProps) {
     const [fieldLibraryOpen, setFieldLibraryOpen] = React.useState(false)
 
@@ -1242,6 +1256,7 @@ export function FormBuilderWorkspace({
                     />
 
                     <FieldInspector
+                        header={inspectorHeader}
                         leadKind={leadKind}
                         currentPage={document.currentPage}
                         selectedFieldData={document.selectedFieldData}

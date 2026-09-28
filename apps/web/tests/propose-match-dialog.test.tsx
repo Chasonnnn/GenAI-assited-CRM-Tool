@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import "@testing-library/jest-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -6,6 +6,15 @@ import { ProposeMatchDialog } from "@/components/matches/ProposeMatchDialog"
 
 const mockUseIntendedParents = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
+const mockMutateAsync = vi.fn()
+const mockPush = vi.fn()
+const mockToastSuccess = vi.fn()
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }))
+
+vi.mock("@/components/ui/toast", () => ({
+    toast: { success: (...args: unknown[]) => mockToastSuccess(...args), error: vi.fn() },
+}))
 
 vi.mock("@/lib/auth-context", () => ({
     useAuth: () => ({
@@ -26,14 +35,14 @@ vi.mock("@/lib/hooks/use-intended-parents", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-matches", () => ({
-    useCreateMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCreateMatch: () => ({ mutateAsync: mockMutateAsync, isPending: false }),
 }))
 
-function renderDialog(open = true) {
+function renderDialog(open = true, onOpenChange = vi.fn()) {
     return render(
         <ProposeMatchDialog
             open={open}
-            onOpenChange={vi.fn()}
+            onOpenChange={onOpenChange}
             surrogateId="surrogate-1"
             surrogateName="Test Surrogate"
         />
@@ -86,5 +95,77 @@ describe("ProposeMatchDialog", () => {
             { per_page: 100 },
             { enabled: true }
         )
+    })
+
+    it("focuses the intended parent picker on open and has no title icon", async () => {
+        renderDialog(true)
+
+        const picker = screen.getByRole("button", { name: /intended parent\(s\)/i })
+        await waitFor(() => expect(picker).toHaveFocus())
+        expect(screen.getByRole("dialog").querySelector("h2 svg")).toBeNull()
+        expect(screen.getByRole("textbox", { name: /notes/i })).not.toHaveFocus()
+    })
+
+    it("focuses the picker even while the intended parent list is loading", async () => {
+        mockUseIntendedParents.mockReturnValue({ data: undefined, isLoading: true })
+        renderDialog(true)
+
+        const picker = screen.getByRole("button", { name: /intended parent\(s\)/i })
+        await waitFor(() => expect(picker).toHaveFocus())
+
+        fireEvent.click(picker)
+        expect(await screen.findByRole("status")).toHaveTextContent("Loading…")
+    })
+
+    it("filters intended parents by typed text and selects one", async () => {
+        mockUseIntendedParents.mockReturnValue({
+            data: {
+                items: [
+                    { id: "ip-1", full_name: "Jordan Lee", email: "jordan@example.com", intended_parent_number: "I10001" },
+                    { id: "ip-2", full_name: "Morgan Diaz", email: "morgan@example.com", intended_parent_number: "I10002" },
+                ],
+            },
+            isLoading: false,
+        })
+        renderDialog(true)
+
+        fireEvent.click(screen.getByRole("button", { name: /intended parent\(s\)/i }))
+        const search = await screen.findByRole("combobox", { name: "Search intended parents" })
+        fireEvent.change(search, { target: { value: "morg" } })
+
+        expect(screen.queryByText("Jordan Lee")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByText("Morgan Diaz"))
+
+        await waitFor(() =>
+            expect(screen.queryByRole("combobox", { name: "Search intended parents" })).not.toBeInTheDocument(),
+        )
+        const picker = document.getElementById("ip-select")
+        expect(picker).toHaveTextContent("Morgan Diaz")
+        expect(picker).toHaveAttribute("aria-labelledby", "ip-select-label ip-select")
+        expect(screen.getByText("Propose Match", { selector: "button" })).toBeEnabled()
+    })
+
+    it("names the new match in the success toast with a View action", async () => {
+        mockMutateAsync.mockResolvedValue({ id: "match-42", match_number: "M10042" })
+        mockUseIntendedParents.mockReturnValue({
+            data: { items: [{ id: "ip-1", full_name: "Jordan Lee", email: "jordan@example.com", intended_parent_number: "I10001" }] },
+            isLoading: false,
+        })
+        const onOpenChange = vi.fn()
+        renderDialog(true, onOpenChange)
+
+        fireEvent.click(screen.getByRole("button", { name: /intended parent\(s\)/i }))
+        fireEvent.click(await screen.findByText("Jordan Lee"))
+        fireEvent.click(screen.getByText("Propose Match", { selector: "button" }))
+
+        await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+        expect(mockMutateAsync).toHaveBeenCalledWith({ surrogate_id: "surrogate-1", intended_parent_id: "ip-1" })
+        expect(mockToastSuccess).toHaveBeenCalledWith(
+            "Match M10042 proposed",
+            expect.objectContaining({ action: expect.objectContaining({ label: "View" }) }),
+        )
+        const options = mockToastSuccess.mock.calls[0]?.[1] as { action: { onClick: () => void } }
+        options.action.onClick()
+        expect(mockPush).toHaveBeenCalledWith("/intended-parents/matches/match-42")
     })
 })

@@ -20,12 +20,10 @@ import type {
     FormPurpose,
     FormRead,
     FormSubmissionRead,
-    FormSurrogateFieldOption,
     TrackingMode,
 } from "@/lib/api/forms"
 import {
     FORM_LEAD_KIND_LABELS,
-    getDonorPublishValidationMessage,
     isDonorFormLeadKind,
     normalizePaletteFieldForLeadKind,
     normalizePagesForLeadKind,
@@ -35,9 +33,10 @@ import {
     buildFormSchema,
     buildMappings,
     schemaToPages,
-    type BuilderFormPage,
 } from "@/lib/forms/form-builder-document"
+import type { BuilderPaletteField } from "@/lib/forms/form-builder-library"
 import { getFormPublicationStatus, hasSameContent } from "@/lib/forms/form-publication-status"
+import { getPublishReadinessItems, getPublishReadinessReason } from "@/lib/forms/form-publish-readiness"
 import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 import { useFormBuilderSaveQueue, type SaveTicket } from "@/lib/forms/use-form-builder-save-queue"
 import { useAutomationFormBuilderState } from "@/lib/forms/use-automation-form-builder-state"
@@ -84,65 +83,6 @@ type AutomationDraftValues = Pick<
     | "publicSubtitle"
     | "publicTitle"
 >
-
-function collectCriticalFieldValues(options: FormSurrogateFieldOption[]): string[] {
-    const values: string[] = []
-    for (const option of options) {
-        if (option.is_critical) values.push(option.value)
-    }
-    return values
-}
-
-function getMissingCriticalMappings(
-    pages: BuilderFormPage[],
-    mappingOptions: FormSurrogateFieldOption[],
-): FormSurrogateFieldOption[] {
-    const mappedFields = new Set(buildMappings(pages).map((mapping) => mapping.surrogate_field))
-    const fieldKeys = new Set(pages.flatMap((page) => page.fields.map((field) => field.id)))
-    const mappingCriticalValues = collectCriticalFieldValues(mappingOptions)
-    const criticalValues =
-        mappingCriticalValues.length > 0
-            ? mappingCriticalValues
-            : collectCriticalFieldValues(DEFAULT_FORM_SURROGATE_FIELD_OPTIONS)
-    const optionByValue = new Map(mappingOptions.map((option) => [option.value, option]))
-    const fallbackByValue = new Map(DEFAULT_FORM_SURROGATE_FIELD_OPTIONS.map((option) => [option.value, option]))
-    const missingMappings: FormSurrogateFieldOption[] = []
-
-    for (const value of criticalValues) {
-        if (mappedFields.has(value) || fieldKeys.has(value)) continue
-        missingMappings.push(
-            optionByValue.get(value) ??
-                fallbackByValue.get(value) ??
-                ({ value, label: value, is_critical: true } as FormSurrogateFieldOption),
-        )
-    }
-
-    return missingMappings
-}
-
-function getMissingLeadCaptureMappings(
-    pages: BuilderFormPage[],
-    mappingOptions: FormSurrogateFieldOption[],
-): FormSurrogateFieldOption[] {
-    const mappedFields = new Set(buildMappings(pages).map((mapping) => mapping.surrogate_field))
-    const fieldKeys = new Set(pages.flatMap((page) => page.fields.map((field) => field.id)))
-    const hasFullName = mappedFields.has("full_name") || fieldKeys.has("full_name")
-    const hasEmail = mappedFields.has("email") || fieldKeys.has("email")
-    const hasPhone = mappedFields.has("phone") || fieldKeys.has("phone")
-    const optionByValue = new Map(mappingOptions.map((option) => [option.value, option]))
-    const fallbackByValue = new Map(DEFAULT_FORM_SURROGATE_FIELD_OPTIONS.map((option) => [option.value, option]))
-    const missingValues = [
-        ...(hasFullName ? [] : ["full_name"]),
-        ...(hasEmail || hasPhone ? [] : ["email"]),
-    ]
-
-    return missingValues.map(
-        (value) =>
-            optionByValue.get(value) ??
-            fallbackByValue.get(value) ??
-            ({ value, label: value, is_critical: true } as FormSurrogateFieldOption),
-    )
-}
 
 function buildAutomationDraftPayload(pages: BuilderPages, state: AutomationDraftValues): FormCreatePayload {
     const allowedMimeTypes: string[] = []
@@ -315,8 +255,16 @@ export function useAutomationFormBuilderPage() {
         useAutomationFormBuilderState(formKey, isNewForm)
     const saveQueue = useFormBuilderSaveQueue(formKey)
 
-    const { data: formData, isLoading: isFormLoading } = useForm(formId)
-    const { data: mappingData, isLoading: isMappingsLoading } = useFormMappings(formId)
+    const formQuery = useForm(formId)
+    const mappingsQuery = useFormMappings(formId)
+    const { data: formData, isLoading: isFormLoading } = formQuery
+    const { data: mappingData, isLoading: isMappingsLoading } = mappingsQuery
+    // Only a failure with no loaded data blocks the builder. A failed background refetch keeps
+    // the last data, so unsaved edits stay on screen. A missing mapping list would hydrate the
+    // builder without mappings and the next save would clear them, so it blocks too.
+    const loadErrorQuery = [formQuery, mappingsQuery].find(
+        (query) => query.isError && query.data === undefined,
+    )
     const { data: mappingOptionsData } = useFormMappingOptions(state.formLeadKind)
     const {
         data: intakeLinks = [],
@@ -363,6 +311,7 @@ export function useAutomationFormBuilderPage() {
     const logoInputRef = useRef<HTMLInputElement>(null)
     const {
         pages,
+        setPages,
         activePage,
         setActivePage,
         currentPage,
@@ -419,6 +368,13 @@ export function useAutomationFormBuilderPage() {
             : isDonorFormLeadKind(state.formLeadKind)
                 ? DEFAULT_FORM_DONOR_FIELD_OPTIONS
                 : DEFAULT_FORM_SURROGATE_FIELD_OPTIONS
+    const publishReadiness = getPublishReadinessItems({
+        pages,
+        leadKind: state.formLeadKind,
+        purpose: state.formPurpose,
+        mappingOptions: fieldMappings,
+    })
+    const publishBlockedReason = getPublishReadinessReason(publishReadiness)
 
     if (state.formKey !== formKey) {
         resetForForm(formKey, isNewForm)
@@ -645,27 +601,8 @@ export function useAutomationFormBuilderPage() {
         }
     }
 
-    const getPublishValidationMessage = () => {
-        const donorValidationMessage = getDonorPublishValidationMessage(
-            pages,
-            state.formLeadKind,
-        )
-        if (donorValidationMessage) return donorValidationMessage
-
-        const missingCriticalMappings =
-            state.formPurpose === "lead_capture"
-                ? getMissingLeadCaptureMappings(pages, fieldMappings)
-                : getMissingCriticalMappings(pages, fieldMappings)
-        if (missingCriticalMappings.length === 0) {
-            return null
-        }
-
-        const missingLabels = missingCriticalMappings.map((mapping) => mapping.label).join(", ")
-        return `Add or map required identity fields before publishing: ${missingLabels}.`
-    }
-
     const hasMissingCriticalMappings = () => {
-        const message = getPublishValidationMessage()
+        const message = publishBlockedReason
         if (!message) return false
         toast.error(message)
         return true
@@ -977,9 +914,6 @@ export function useAutomationFormBuilderPage() {
     }
 
     const autoSaveLabel = getAutoSaveLabel(state, isDirty)
-    const publishValidationMessage = state.publishValidationAttempted
-        ? getDonorPublishValidationMessage(pages, state.formLeadKind)
-        : null
 
     const handleLeadKindChange = (value: FormLeadKind) => {
         resetDocument(normalizePagesForLeadKind(pages, value))
@@ -1040,6 +974,18 @@ export function useAutomationFormBuilderPage() {
     return {
         formId,
         isNewForm,
+        loadError:
+            !isNewForm && loadErrorQuery
+                ? {
+                      error: loadErrorQuery.error,
+                      retry: () => {
+                          for (const query of [formQuery, mappingsQuery]) {
+                              if (query.isError) void query.refetch()
+                          }
+                      },
+                      isRetrying: formQuery.isFetching || mappingsQuery.isFetching,
+                  }
+                : null,
         showLoading: !isNewForm && (isFormLoading || isMappingsLoading),
         shouldRenderNull: !isNewForm && !formData,
         state,
@@ -1181,7 +1127,20 @@ export function useAutomationFormBuilderPage() {
         },
         onBack: () => router.push("/automation/forms"),
         formLeadKindLabel: FORM_LEAD_KIND_LABELS[state.formLeadKind],
-        publishValidationMessage,
+        publishReadiness,
+        publishBlockedReason,
+        onAddReadinessField: (field: BuilderPaletteField) =>
+            handleInsertField(normalizePaletteFieldForLeadKind(field, state.formLeadKind)),
+        // The field can sit on any page, so this does not use the active-page handleUpdateField.
+        onMarkReadinessFieldRequired: (fieldId: string) =>
+            setPages((prev) =>
+                prev.map((page) => ({
+                    ...page,
+                    fields: page.fields.map((field) =>
+                        field.id === fieldId ? { ...field, required: true } : field,
+                    ),
+                })),
+            ),
         onFormNameChange: (value: string) => patchState({ formName: value }),
         onWorkspaceTabChange: handleWorkspaceTabChange,
         onShareDialogOpenChange: (open: boolean) => patchState({ showSharePrompt: open }),

@@ -137,7 +137,7 @@ function CapabilityStatus({
                     }
                     aria-hidden="true"
                 />
-                <span className="truncate text-sm font-medium">{label}</span>
+                <span className="min-w-0 break-words text-sm font-medium">{label}</span>
             </div>
             <Badge
                 className="shrink-0"
@@ -315,7 +315,7 @@ function ReadinessCardSkeleton() {
             </CardHeader>
             <CardContent className="space-y-4 pt-6">
                 <Skeleton className="h-16 w-full" />
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {[0, 1, 2, 3, 4].map((item) => (
                         <Skeleton key={item} className="h-12 w-full" />
                     ))}
@@ -439,7 +439,7 @@ export function ResendLiveReadinessCard({
                     </Alert>
                 ) : null}
 
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     <CapabilityStatus
                         testId="live-readiness-domain"
                         label="Domain"

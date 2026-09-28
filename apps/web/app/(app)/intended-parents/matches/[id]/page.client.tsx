@@ -4,6 +4,7 @@ import { useState, type ComponentProps, type ReactNode } from "react"
 import { useParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { toast } from "@/components/ui/toast"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -21,6 +22,7 @@ import {
     UserIcon,
     UsersIcon,
     CalendarPlusIcon,
+    CircleXIcon,
 } from "lucide-react"
 import { useMatch, matchKeys, useAcceptMatch, useDeclineMatch, useCancelMatch, useMatchWork, useCreateMatchNote, useUploadMatchFile, matchWorkKeys, useCompleteMatch, useWithdrawMatchCancellation } from "@/lib/hooks/use-matches"
 import type { MatchRead, MatchWorkSource } from "@/lib/api/matches"
@@ -38,6 +40,7 @@ import { useIntendedParent, intendedParentKeys } from "@/lib/hooks/use-intended-
 import { useCreateTask, taskKeys } from "@/lib/hooks/use-tasks"
 import { useDeleteAttachment, useDownloadAttachment } from "@/lib/hooks/use-attachments"
 import { useAuth } from "@/lib/auth-context"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { useQueryClient } from "@tanstack/react-query"
 import { ScheduleParserDialog } from "@/components/ai/ScheduleParserDialog"
 import { useSetAIContext } from "@/lib/context/ai-context"
@@ -55,6 +58,7 @@ import {
     getMatchStatusBadgeClassName,
     getMatchStatusLabel,
 } from "@/lib/match-status-definitions"
+import { AcceptMatchDialog } from "./components/AcceptMatchDialog"
 import { MatchDetailOverviewTabs } from "./components/MatchDetailOverviewTabs"
 import { useMatchDetailTabState, type SourceFilter } from "./hooks/useMatchDetailTabState"
 import { selectMatchDetailTabData } from "./hooks/useMatchDetailTabData"
@@ -105,12 +109,12 @@ function MatchDetailHeader({
                     render={<Link href="/intended-parents/matches" />}
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs"
                 >
-                    <ArrowLeftIcon className="mr-1 size-3" />
+                    <ArrowLeftIcon className="mr-1 size-4" aria-hidden="true" />
                     Matches
                 </Button>
-                <div className="min-w-0 flex-1 flex flex-wrap items-center gap-2">
+                {/* Full row on phones so the title wraps across the width instead of a narrow column. */}
+                <div className="min-w-0 flex-1 basis-full flex flex-wrap items-center gap-2 sm:basis-0">
                     <h1 className="text-xl font-semibold">
                         {(match.match_kind === "donor" ? match.donor_name || "Donor" : match.surrogate_name || "Surrogate")} ↔ {match.ip_name || "Intended Parents"}
                     </h1>
@@ -193,7 +197,8 @@ function MatchDetailMainTabs({
                 </div>
 
                 <TabsContent value="overview" className="h-[calc(100vh-145px)]">
-                    <div className="grid h-full gap-4 grid-cols-1 lg:grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]">
+                    {/* Below xl the case work column is too narrow for its four tabs, so it spans both card columns. */}
+                    <div className="grid h-full gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]">
                         {participantKind === "donor" ? <DonorProfileColumn donor={donorData} isLoading={donorLoading} isError={donorError} /> : <SurrogateProfileColumn
                             surrogateData={surrogateData}
                             isLoading={surrogateLoading}
@@ -202,7 +207,7 @@ function MatchDetailMainTabs({
                             intendedParentData={intendedParentData}
                             isLoading={intendedParentLoading}
                         />
-                        <MatchDetailOverviewTabs {...overviewTabsProps} />
+                        <MatchDetailOverviewTabs {...overviewTabsProps} className="lg:col-span-2 xl:col-span-1" />
                     </div>
                 </TabsContent>
 
@@ -563,6 +568,7 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
 
     const { activeTab, sourceFilter, handleTabChange, handleSourceFilterChange } =
         useMatchDetailTabState(matchId)
+    const [acceptDialogOpen, setAcceptDialogOpen] = useState(false)
     const [actionError, setActionError] = useState<string | null>(null)
     const [workPage, setWorkPage] = useState(1)
     const [selectedAttemptId, setSelectedAttemptId] = useState("")
@@ -573,8 +579,10 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
     const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false)
     const [uploadFileDialogOpen, setUploadFileDialogOpen] = useState(false)
     const [addTaskDialogOpen, setAddTaskDialogOpen] = useState(false)
+    const [pendingDeleteFile, setPendingDeleteFile] = useState<{ id: string; filename: string } | null>(null)
     const [showScheduleParser, setShowScheduleParser] = useState(false)
     const { user } = useAuth()
+    const { can } = usePermissionCheck()
     const queryClient = useQueryClient()
 
     const {
@@ -582,7 +590,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         isLoading: matchLoading,
         isError: matchIsError,
         error: matchError,
-        refetch: refetchMatch,
     } = useMatch(matchId)
     const acceptMatchMutation = useAcceptMatch()
     const declineMatchMutation = useDeclineMatch()
@@ -611,8 +618,8 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         filteredActivity,
     } = useMatchDetailRelatedData(match, sourceFilter, selectedAttemptId || undefined, workPage)
 
-    // Attempt editing still follows the legacy role gate; match actions come from allowed_actions.
-    const canChangeStatus = !!user?.role && ['case_manager', 'admin', 'developer'].includes(user.role)
+    // Match actions come from allowed_actions. Attempt edits check the key the attempts API requires.
+    const canEditAttempts = can("propose_matches")
     const canCreateWork = match?.status === "under_review" || match?.status === "accepted"
 
     const invalidateMatchSourceQueries = (
@@ -645,14 +652,11 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         }
     }
 
-    // Handle Accept match
+    // Handle Accept match. Failures surface inline in the confirm dialog.
     const handleAcceptMatch = async () => {
-        setActionError(null)
-        try {
-            const updatedMatch = await acceptMatchMutation.mutateAsync({ matchId })
-            invalidateMatchSourceQueries(updatedMatch)
-            void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
-        } catch (error) { setActionError(error instanceof Error ? error.message : "Unable to accept match") }
+        const updatedMatch = await acceptMatchMutation.mutateAsync({ matchId })
+        invalidateMatchSourceQueries(updatedMatch)
+        void queryClient.invalidateQueries({ queryKey: matchKeys.detail(matchId) })
     }
 
     // Handle decline match
@@ -690,7 +694,7 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
     }
 
     const handleMatchAction = (action: MatchAction) => {
-        if (action === "accept") void handleAcceptMatch()
+        if (action === "accept") setAcceptDialogOpen(true)
         else if (action === "decline") setDeclineDialogOpen(true)
         else if (action === "request_cancel") setCancelDialogOpen(true)
         else if (action === "complete") setCompleteDialogOpen(true)
@@ -709,13 +713,11 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
             toast.success("File uploaded successfully")
         } catch (error) { toast.error("Failed to upload file"); throw error }
     }
-    const handleDeleteFile = async (attachmentId: string, _source: MatchWorkSource) => {
-        if (!confirm("Are you sure you want to delete this file?")) return
-        try {
-            await deleteAttachmentMutation.mutateAsync({ attachmentId, surrogateId: match?.surrogate_id || "" })
-            void queryClient.invalidateQueries({ queryKey: matchWorkKeys.all(matchId) })
-            toast.success("File deleted successfully")
-        } catch { toast.error("Failed to delete file") }
+    // Runs from ConfirmDialog, which stays open while it runs and shows a failure inline.
+    const handleDeleteFile = async (attachmentId: string) => {
+        await deleteAttachmentMutation.mutateAsync({ attachmentId, surrogateId: match?.surrogate_id || "" })
+        void queryClient.invalidateQueries({ queryKey: matchWorkKeys.all(matchId) })
+        toast.success("File deleted successfully")
     }
     const handleAddTask = async (target: MatchWorkSource, data: TaskFormData) => {
         try {
@@ -735,13 +737,14 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
     }
 
     if (matchIsError && isPermissionError(matchError)) {
+        // Without view_matches the Matches list is denied too, so point back to Dashboard.
+        const canViewMatches = can("view_matches")
         return (
             <PermissionDeniedState
                 className="min-h-screen"
                 description="Your account does not have permission to view this match. Ask an admin to update your role or permissions."
-                onRetry={() => refetchMatch()}
-                secondaryHref="/intended-parents/matches"
-                secondaryLabel="Back to matches"
+                secondaryHref={canViewMatches ? "/intended-parents/matches" : "/dashboard"}
+                secondaryLabel={canViewMatches ? "Back to matches" : "Go to Dashboard"}
             />
         )
     }
@@ -765,9 +768,24 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                 <MatchAcceptWarnings warnings={match.accept_eligibility_warnings} />
 
                 {actionError && <p role="alert" className="px-6 py-2 text-sm text-destructive">{actionError}</p>}
+                {match.status === "declined" && match.decline_reason ? (
+                    <div
+                        data-slot="match-decline-reason"
+                        className="flex items-start gap-2.5 border-b bg-destructive/10 px-6 py-3 text-sm"
+                    >
+                        <CircleXIcon className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
+                        <p className="min-w-0 break-words">
+                            <span className="font-medium">Decline reason: </span>
+                            {match.decline_reason}
+                            {match.reviewed_at ? (
+                                <span className="text-muted-foreground"> · {formatMatchDateTime(match.reviewed_at)}</span>
+                            ) : null}
+                        </p>
+                    </div>
+                ) : null}
                 {match.outcome && <div className="px-6 py-2 text-sm border-b"><span className="font-medium">Outcome: </span>{match.outcome}{match.closed_at && <span className="text-muted-foreground"> · {formatMatchDate(match.closed_at)}</span>}</div>}
                 <MatchDetailMainTabs
-                    attemptControls={<MatchAttemptControl match={match} selectedId={selectedAttemptId} onSelect={(id) => { setSelectedAttemptId(id); setWorkPage(1) }} canEdit={canChangeStatus} />}
+                    attemptControls={<MatchAttemptControl match={match} selectedId={selectedAttemptId} onSelect={(id) => { setSelectedAttemptId(id); setWorkPage(1) }} canEdit={canEditAttempts} />}
                     {...(selectedAttemptId ? { attemptId: selectedAttemptId } : {})}
                     matchId={matchId}
                     participantKind={match.match_kind ?? "surrogate"}
@@ -801,8 +819,9 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                         onAddNote: canCreateWork ? () => setAddNoteDialogOpen(true) : undefined,
                         onUploadFile: canCreateWork ? () => setUploadFileDialogOpen(true) : undefined,
                         onDownloadFile: (attachmentId) => downloadAttachmentMutation.mutate(attachmentId),
-                        onDeleteFile: (attachmentId, source) => {
-                            void handleDeleteFile(attachmentId, source)
+                        onDeleteFile: (attachmentId) => {
+                            const file = filteredFiles.find((item) => item.id === attachmentId)
+                            setPendingDeleteFile({ id: attachmentId, filename: file?.filename ?? "this file" })
                         },
                         isDownloadPending: downloadAttachmentMutation.isPending,
                         isDeletePending: deleteAttachmentMutation.isPending,
@@ -814,6 +833,23 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                 />
             </div>
 
+            <ConfirmDialog
+                open={pendingDeleteFile !== null}
+                onOpenChange={(open) => { if (!open) setPendingDeleteFile(null) }}
+                title={`Delete ${pendingDeleteFile?.filename ?? "this file"}?`}
+                confirmLabel="Delete file"
+                errorFallback="Couldn't delete this file. Try again."
+                onConfirm={() => (pendingDeleteFile ? handleDeleteFile(pendingDeleteFile.id) : undefined)}
+            />
+            {acceptDialogOpen ? (
+                <AcceptMatchDialog
+                    match={match}
+                    intendedParent={ipData}
+                    open={acceptDialogOpen}
+                    onOpenChange={setAcceptDialogOpen}
+                    onConfirm={handleAcceptMatch}
+                />
+            ) : null}
             {completeDialogOpen && <CompleteMatchDialog onClose={() => setCompleteDialogOpen(false)} isPending={completeMutation.isPending} onComplete={async (data) => { const result = await completeMutation.mutateAsync({ matchId, data }); invalidateMatchSourceQueries(result) }} />}
             <MatchDetailDialogs
                 declineDialogOpen={declineDialogOpen}

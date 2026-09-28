@@ -2,11 +2,15 @@
 
 import { useParams } from "next/navigation"
 import { TabsContent } from "@/components/ui/tabs"
-import { SurrogateApplicationTab } from "@/components/surrogates/SurrogateApplicationTab"
+import {
+    SurrogateApplicationTab,
+    type ApplicationFormsAccess,
+} from "@/components/surrogates/SurrogateApplicationTab"
 import { useForms, useSurrogateApplicationForms } from "@/lib/hooks/use-forms"
 import { useSurrogateDetailData } from "@/components/surrogates/detail/SurrogateDetailLayout/context"
+import { PermissionDeniedState } from "@/components/error-state"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Button } from "@/components/ui/button"
+import { isPermissionError } from "@/lib/error-utils"
 
 export default function SurrogateApplicationPage() {
     const params = useParams<{ id?: string }>()
@@ -17,10 +21,17 @@ export default function SurrogateApplicationPage() {
     const canView = !scoped || permissions.includes("view_form_submissions")
     const canEdit = !scoped || (canEditSurrogate && permissions.includes("review_form_submissions"))
     const canSend = !scoped || (canEditSurrogate && permissions.includes("send_email"))
-    const legacyForms = useForms(!scoped)
+    const legacyForms = useForms({ enabled: !scoped })
     const scopedForms = useSurrogateApplicationForms(scoped && canView ? id ?? null : null)
     const formsQuery = scoped ? scopedForms : legacyForms
     const forms = formsQuery.data
+    // A failed forms list does not hide the tab. Under policy v1 only roles with manage_forms can
+    // list forms, so other roles get a 403 here; the tab shows that state in place of the send-link form.
+    const formsAccess: ApplicationFormsAccess = !formsQuery.isError
+        ? "ready"
+        : isPermissionError(formsQuery.error)
+            ? "forbidden"
+            : "error"
     const publishedForms = (forms || []).filter((form) => form.status === "published")
     const defaultApplicationForm =
         publishedForms.find(
@@ -36,9 +47,27 @@ export default function SurrogateApplicationPage() {
         return null
     }
 
-    if (!canView) return <TabsContent value="application">Application unavailable</TabsContent>
-    if (formsQuery.isLoading) return <TabsContent value="application"><Skeleton className="h-48" /></TabsContent>
-    if (formsQuery.isError) return <TabsContent value="application"><div role="alert"><p>Unable to load application forms.</p><Button variant="outline" onClick={() => { void formsQuery.refetch() }}>Retry</Button></div></TabsContent>
+    if (!canView) {
+        return (
+            <TabsContent value="application">
+                <PermissionDeniedState
+                    title="No access to application"
+                    description="Ask an admin to update your role."
+                    secondaryHref={`/surrogates/${id}`}
+                    secondaryLabel="Back to Overview"
+                    headingLevel={2}
+                />
+            </TabsContent>
+        )
+    }
+
+    if (formsQuery.isLoading) {
+        return (
+            <TabsContent value="application">
+                <Skeleton className="h-48" />
+            </TabsContent>
+        )
+    }
 
     return (
         <TabsContent value="application" className="space-y-4">
@@ -46,6 +75,8 @@ export default function SurrogateApplicationPage() {
                 surrogateId={id}
                 formId={defaultFormId}
                 publishedForms={publishedForms}
+                formsAccess={formsAccess}
+                onRetryForms={() => void formsQuery.refetch()}
                 access={{ scoped, canEdit, canSend }}
             />
         </TabsContent>

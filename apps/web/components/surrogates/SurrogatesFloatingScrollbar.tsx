@@ -173,11 +173,11 @@ function FloatingScrollbarShell({
     return (
         <div
             data-testid="surrogates-floating-scrollbar"
-            className="pointer-events-none fixed z-40 transition-[opacity,transform,filter] duration-300 ease-out motion-reduce:transition-none"
+            className="pointer-events-none fixed z-40"
             style={floatingStyle}
         >
             <div
-                className={`rounded-full border px-1.5 py-1.5 backdrop-blur-sm transition-[opacity,transform,border-color,background-color] duration-300 ease-out motion-reduce:transition-none ${
+                className={`rounded-full border px-1.5 py-1.5 backdrop-blur-sm transition-[opacity,translate,border-color,background-color] duration-300 ease-out motion-reduce:transition-none ${
                     isActive
                         ? "pointer-events-auto translate-y-0 border-border/80 bg-background/88 opacity-100"
                         : "pointer-events-none translate-y-1 border-border/55 bg-background/70 opacity-0"

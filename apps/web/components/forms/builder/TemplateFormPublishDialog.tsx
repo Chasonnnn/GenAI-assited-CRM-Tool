@@ -29,17 +29,13 @@ export function TemplateFormPublishDialog({
 }: TemplateFormPublishDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle>Publish Form Template</DialogTitle>
                     <DialogDescription>
                         Publish this form template to every organization library. Draft edits stay private until you re-publish.
                     </DialogDescription>
                 </DialogHeader>
-
-                <div className="rounded-lg border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900/40 dark:text-stone-300">
-                    Form templates are shared platform-wide, so publishing here does not need org targeting.
-                </div>
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>

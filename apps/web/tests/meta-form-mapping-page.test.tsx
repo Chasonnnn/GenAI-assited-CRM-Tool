@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import MetaFormMappingPage from "../app/(app)/settings/integrations/meta/forms/[id]/page"
+import { ApiError } from "@/lib/api"
 
 const mockPush = vi.fn()
 const mockUseMetaFormMapping = vi.fn()
@@ -26,6 +27,72 @@ vi.mock("@/lib/hooks/use-meta-forms", () => ({
 vi.mock("@/lib/hooks/use-import", () => ({
     useAiMapImport: () => mockUseAiMapImport(),
 }))
+
+let mockPermissions: string[] = ["manage_meta_leads"]
+
+vi.mock("@/lib/hooks/use-permission-check", () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockPermissions.includes(permission),
+    }),
+}))
+
+describe("MetaFormMappingPage access and load failures", () => {
+    beforeEach(() => {
+        mockPermissions = ["manage_meta_leads"]
+        mockUseMetaFormMapping.mockReset()
+        mockUseMetaFormUnconvertedLeads.mockReturnValue({ data: undefined, isLoading: false })
+        mockUseUpdateMetaFormMapping.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseReconvertMetaFormLeads.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+        mockUseAiMapImport.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
+    })
+
+    it("shows the restricted state and requests no mapping without manage_meta_leads", () => {
+        mockPermissions = []
+
+        render(<MetaFormMappingPage />)
+
+        expect(screen.getByRole("heading", { name: "Permission required" })).toBeInTheDocument()
+        expect(mockUseMetaFormMapping).not.toHaveBeenCalled()
+    })
+
+    it("replaces the spinner with a retryable error when the mapping fails to load", () => {
+        const refetch = vi.fn()
+        mockUseMetaFormMapping.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, "Internal Server Error"),
+            refetch,
+        })
+
+        render(<MetaFormMappingPage />)
+
+        expect(screen.getByRole("heading", { name: "Couldn't load this form mapping" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(refetch).toHaveBeenCalled()
+    })
+
+    it("shows the not-found state for a missing form", () => {
+        mockUseMetaFormMapping.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(404, "Not Found"),
+            refetch: vi.fn(),
+        })
+
+        render(<MetaFormMappingPage />)
+
+        expect(screen.getByRole("heading", { name: "Form not found" })).toBeInTheDocument()
+        expect(screen.getAllByRole("link", { name: /Back to forms/ }).length).toBeGreaterThan(0)
+    })
+})
 
 describe("MetaFormMappingPage", () => {
     beforeEach(() => {
@@ -186,11 +253,6 @@ describe("MetaFormMappingPage", () => {
         render(<MetaFormMappingPage />)
 
         expect(screen.queryByText(/mapping repair required/i)).not.toBeInTheDocument()
-    })
-
-    it("renders unconverted lead details when failures exist", () => {
-        render(<MetaFormMappingPage />)
-
         expect(screen.getByText(/reprocess queued/i)).toBeInTheDocument()
         expect(screen.getByText(/lead_failed/i)).toBeInTheDocument()
         expect(screen.getByText(/1 eligible, 1 blocked/i)).toBeInTheDocument()

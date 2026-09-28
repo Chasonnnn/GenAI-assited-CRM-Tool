@@ -13,6 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
+import { PageHeader } from "@/components/page-header"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import {
     BellIcon,
     CheckSquareIcon,
@@ -21,7 +24,6 @@ import {
     CalendarIcon,
     HeartHandshakeIcon,
     ChevronDownIcon,
-    ChevronUpIcon,
 } from "lucide-react"
 import { useNotifications, useMarkRead, useMarkAllRead } from "@/lib/hooks/use-notifications"
 import { useNotificationSocket } from "@/lib/hooks/use-notification-socket"
@@ -93,7 +95,14 @@ export default function NotificationsPage() {
     // Get notification types for filter
     const notificationTypes = typeFilter !== "all" ? TYPE_GROUPS[typeFilter] : undefined
 
-    const { data: notificationsData, isLoading, isError: notificationsError } = useNotifications({
+    const {
+        data: notificationsData,
+        isLoading,
+        isError: notificationsError,
+        error: notificationsQueryError,
+        refetch: refetchNotifications,
+        isFetching: notificationsFetching,
+    } = useNotifications({
         limit: 50,
         refetch_interval_ms: isConnected ? false : 30_000,
         ...(notificationTypes ? { notification_types: notificationTypes } : {}),
@@ -109,7 +118,13 @@ export default function NotificationsPage() {
     const yesterdayStr = formatLocalDate(yesterday, userTimeZone)
 
     // Fetch overdue tasks (incomplete with due_date before today in user timezone)
-    const { data: overdueTasksData, isError: overdueTasksError } = useTasks({
+    const {
+        data: overdueTasksData,
+        isError: overdueTasksError,
+        error: overdueTasksQueryError,
+        refetch: refetchOverdueTasks,
+        isFetching: overdueTasksFetching,
+    } = useTasks({
         is_completed: false,
         my_tasks: true,
         per_page: 100,
@@ -140,12 +155,7 @@ export default function NotificationsPage() {
     if (isLoading) {
         return (
             <div className="flex min-h-screen flex-col">
-                <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <div className="flex h-16 items-center justify-between px-6">
-                        <Skeleton className="h-8 w-48" />
-                        <Skeleton className="h-9 w-28" />
-                    </div>
-                </div>
+                <PageHeader title="Notifications" />
                 <div className="flex-1 space-y-6 p-6">
                     {Array.from({ length: 5 }).map((_, i) => (
                         <Skeleton key={i} className="h-20 w-full" />
@@ -158,48 +168,32 @@ export default function NotificationsPage() {
     if (notificationsError) {
         return (
             <div className="flex min-h-screen flex-col">
-                <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <div className="flex h-16 items-center justify-between px-6">
-                        <div className="flex items-center gap-3">
-                            <BellIcon className="size-6" />
-                            <h1 className="text-2xl font-semibold">Notifications</h1>
-                        </div>
-                    </div>
-                </div>
-                <div className="flex-1 p-6">
-                    <Card className="border-destructive/40 bg-destructive/5">
-                        <CardHeader>
-                            <CardTitle className="text-destructive">Unable to load notifications</CardTitle>
-                            <CardDescription>Please try again in a moment.</CardDescription>
-                        </CardHeader>
-                    </Card>
-                </div>
+                <PageHeader title="Notifications" />
+                <QueryErrorState
+                    error={notificationsQueryError}
+                    onRetry={() => void refetchNotifications()}
+                    isRetrying={notificationsFetching}
+                    title="Couldn't load notifications"
+                    headingLevel={2}
+                />
             </div>
         )
     }
 
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <div className="flex items-center gap-3">
-                        <BellIcon className="size-6" />
-                        <h1 className="text-2xl font-semibold">Notifications</h1>
-                        {unreadCount > 0 && (
-                            <Badge variant="secondary" className="bg-teal-500/10 text-teal-500 border-teal-500/20">
-                                {unreadCount} unread
-                            </Badge>
-                        )}
-                    </div>
-                    {unreadCount > 0 && (
+            <PageHeader
+                title="Notifications"
+                meta={unreadCount > 0 ? <Badge variant="secondary">{unreadCount} unread</Badge> : null}
+                actions={
+                    unreadCount > 0 ? (
                         <Button variant="outline" onClick={handleMarkAllRead} disabled={markAllRead.isPending} aria-busy={markAllRead.isPending}>
                             {markAllRead.isPending && <Spinner aria-hidden="true" />}
                             Mark all read
                         </Button>
-                    )}
-                </div>
-            </div>
+                    ) : null
+                }
+            />
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
@@ -236,9 +230,9 @@ export default function NotificationsPage() {
                                             </CardDescription>
                                         </div>
                                     </div>
-                                    <CollapsibleTrigger>
+                                    <CollapsibleTrigger className="group/overdue-trigger">
                                         <span className="inline-flex items-center justify-center size-9 rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer">
-                                            {isOverdueOpen ? <ChevronUpIcon className="size-4" /> : <ChevronDownIcon className="size-4" />}
+                                            <ChevronDownIcon className="size-4 transition-transform duration-200 ease-smooth-out group-data-panel-open/overdue-trigger:rotate-180" />
                                         </span>
                                     </CollapsibleTrigger>
                                 </div>
@@ -293,11 +287,15 @@ export default function NotificationsPage() {
                 )}
 
                 {overdueTasksError && (
-                    <Card className="border-destructive/40 bg-destructive/5">
-                        <CardHeader>
-                            <CardTitle className="text-destructive">Unable to load overdue tasks</CardTitle>
-                            <CardDescription>Please try again in a moment.</CardDescription>
-                        </CardHeader>
+                    <Card>
+                        <QueryErrorState
+                            error={overdueTasksQueryError}
+                            onRetry={() => void refetchOverdueTasks()}
+                            isRetrying={overdueTasksFetching}
+                            title="Couldn't load overdue tasks"
+                            headingLevel={2}
+                            className="min-h-0 py-6"
+                        />
                     </Card>
                 )}
 
@@ -345,14 +343,15 @@ export default function NotificationsPage() {
                                     })}
                                 </div>
                             </ScrollArea>
+                        ) : typeFilter !== "all" ? (
+                            <EmptyState
+                                icon={BellIcon}
+                                title="No matching notifications"
+                                headingLevel={3}
+                                onClearFilters={() => setTypeFilter("all")}
+                            />
                         ) : (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-muted">
-                                    <BellIcon className="size-8 text-muted-foreground" />
-                                </div>
-                                <h3 className="text-lg font-semibold">You're all caught up!</h3>
-                                <p className="mt-1 text-sm text-muted-foreground">No notifications to display</p>
-                            </div>
+                            <EmptyState icon={BellIcon} title="No notifications" headingLevel={3} />
                         )}
                     </CardContent>
                 </Card>

@@ -38,6 +38,7 @@ import {
     UploadIcon,
 } from "lucide-react"
 import { toast } from "@/components/ui/toast"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { useAuth } from "@/lib/auth-context"
 import {
     useApproveFormSubmission,
@@ -67,10 +68,15 @@ import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { cn } from "@/lib/utils"
 import { openDownloadUrlWithSpreadsheetWarning } from "@/lib/utils/csv-download-warning"
 
+/** Result of the forms list query: roles without forms access get a 403, not an empty list. */
+export type ApplicationFormsAccess = "ready" | "forbidden" | "error"
+
 interface SurrogateApplicationTabProps {
     surrogateId: string
     formId: string | null
     publishedForms?: FormSummary[]
+    formsAccess?: ApplicationFormsAccess
+    onRetryForms?: () => void
     access?: { scoped: boolean; canEdit: boolean; canSend: boolean }
 }
 
@@ -639,6 +645,7 @@ type SurrogateApplicationEmptyStateModel = {
     formId: string | null
     formLink: string
     formLinkCopied: boolean
+    formsAccess: ApplicationFormsAccess
     hasExplicitOverride: boolean
     isSendingLink: boolean
     requiresPurposeOverride: boolean
@@ -662,6 +669,7 @@ type SurrogateApplicationEmptyStateActions = {
     setSelectedTemplateIdOverride: (value: string) => void
     setSendFormModalOpen: (value: boolean) => void
     setUseAdvancedOverride: (value: boolean) => void
+    retryForms: (() => void) | undefined
 }
 
 function SurrogateApplicationEmptyState({
@@ -676,9 +684,11 @@ function SurrogateApplicationEmptyState({
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
                 <FileTextIcon className="size-16 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No Application Submitted</h3>
-                <p className="text-sm text-muted-foreground mb-6 max-w-md">
-                    This candidate has not yet submitted their application form. Send them a secure form link to get started.
-                </p>
+                {state.formsAccess === "ready" ? (
+                    <p className="text-sm text-muted-foreground mb-6 max-w-md">
+                        This candidate has not yet submitted their application form. Send them a secure form link to get started.
+                    </p>
+                ) : null}
                 {state.draftStatus?.started_at && state.draftStatus.updated_at && (
                     <div className="mb-6 w-full max-w-md rounded-xl border border-amber-200/70 bg-amber-50 px-4 py-3 text-left">
                         <div className="flex items-start gap-3">
@@ -693,6 +703,21 @@ function SurrogateApplicationEmptyState({
                         </div>
                     </div>
                 )}
+                {state.formsAccess === "forbidden" ? (
+                    <p className="text-sm text-muted-foreground">Ask an admin to send the application form.</p>
+                ) : state.formsAccess === "error" ? (
+                    <div className="flex flex-col items-center gap-3">
+                        <p role="alert" className="text-sm text-destructive">
+                            Couldn&apos;t load application forms.
+                        </p>
+                        {actions.retryForms ? (
+                            <Button variant="outline" size="sm" onClick={actions.retryForms}>
+                                Try again
+                            </Button>
+                        ) : null}
+                    </div>
+                ) : (
+                <>
                 {state.defaultForm && !state.useAdvancedOverride && (
                     <div className="mb-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
                         <span className="text-muted-foreground">Default form:</span>
@@ -742,13 +767,14 @@ function SurrogateApplicationEmptyState({
                     </div>
                 )}
                 <Button
-                    className="bg-teal-500 hover:bg-teal-600"
                     onClick={actions.handleGenerateFormLink}
                     disabled={!state.canSendLink || !state.selectedIntakeLink}
                 >
                     <SendIcon className="size-4 mr-2" />
                     Send Form Link
                 </Button>
+                </>
+                )}
 
                 <Dialog open={state.sendFormModalOpen} onOpenChange={actions.setSendFormModalOpen}>
                     <DialogContent>
@@ -1055,7 +1081,6 @@ function SurrogateApplicationSubmittedHeader({
                         <Button
                             onClick={actions.handleSaveEdits}
                             disabled={!state.hasEdits || state.updateAnswersPending}
-                            className="bg-primary"
                         >
                             {state.updateAnswersPending ? (
                                 <Loader2Icon className="size-4 animate-spin mr-2" />
@@ -1411,9 +1436,9 @@ function SurrogateApplicationFileRow({
 
                 {isEditMode && (
                     <Button
-                        variant="ghost"
+                        variant="destructive-ghost"
                         size="icon"
-                        className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        className="size-8 text-muted-foreground"
                         onClick={() => actions.handleDeleteFile(file.id, file.filename)}
                         disabled={isDeleting}
                         aria-label={`Delete ${file.filename}`}
@@ -1440,7 +1465,7 @@ function SurrogateApplicationReviewFooter({
     if (!state.isPending || !state.canEdit) return null
 
     return (
-        <div className="sticky bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 -mx-4 md:-mx-6">
+        <div ref={toastClearanceRef} className="sticky bottom-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4 -mx-4 md:-mx-6">
             <div className="flex items-center justify-end gap-3">
                 <Button
                     variant="outline"
@@ -1451,7 +1476,7 @@ function SurrogateApplicationReviewFooter({
                     Reject
                 </Button>
                 <Button
-                    className="bg-teal-500 hover:bg-teal-600"
+                    variant="success"
                     onClick={() => actions.setApproveModalOpen(true)}
                 >
                     <ClipboardCheckIcon className="size-4 mr-2" />
@@ -1554,7 +1579,7 @@ function SurrogateApplicationReviewDialogs({
                             Cancel
                         </Button>
                         <Button
-                            className="bg-teal-500 hover:bg-teal-600"
+                            variant="success"
                             onClick={actions.handleApprove}
                             disabled={state.isApproving}
                         >
@@ -1602,9 +1627,11 @@ type SurrogateApplicationEmptyStateRenderInput = {
     formId: string | null
     formLink: string
     formLinkCopied: boolean
+    formsAccess: ApplicationFormsAccess
     handleGenerateFormLink: () => Promise<void>
     handleSendEmailLink: () => Promise<void>
     isSendingLink: boolean
+    onRetryForms: (() => void) | undefined
     publishedForms: FormSummary[]
     requiresPurposeOverride: boolean
     selectedFormId: string
@@ -1652,6 +1679,7 @@ function renderSurrogateApplicationEmptyState(input: SurrogateApplicationEmptySt
                 setSelectedTemplateIdOverride: input.setSelectedTemplateIdOverride,
                 setSendFormModalOpen: input.setSendFormModalOpen,
                 setUseAdvancedOverride: input.setUseAdvancedOverride,
+                retryForms: input.onRetryForms,
             }}
             state={{
                 availableForms,
@@ -1664,6 +1692,7 @@ function renderSurrogateApplicationEmptyState(input: SurrogateApplicationEmptySt
                 formId: input.formId,
                 formLink: input.formLink,
                 formLinkCopied: input.formLinkCopied,
+                formsAccess: input.formsAccess,
                 hasExplicitOverride,
                 isSendingLink: input.isSendingLink,
                 requiresPurposeOverride: input.requiresPurposeOverride,
@@ -2080,6 +2109,8 @@ export function SurrogateApplicationTab({
     surrogateId,
     formId,
     publishedForms = EMPTY_PUBLISHED_FORMS,
+    formsAccess = "ready",
+    onRetryForms,
     access = LEGACY_ACCESS,
 }: SurrogateApplicationTabProps) {
     const { user } = useAuth()
@@ -2288,9 +2319,11 @@ export function SurrogateApplicationTab({
             formId,
             formLink,
             formLinkCopied,
+            formsAccess,
             handleGenerateFormLink: async () => { if (access.canSend) await handleGenerateFormLink() },
             handleSendEmailLink: async () => { if (access.canSend) await handleSendEmailLink() },
             isSendingLink,
+            onRetryForms,
             publishedForms,
             requiresPurposeOverride,
             selectedFormId,

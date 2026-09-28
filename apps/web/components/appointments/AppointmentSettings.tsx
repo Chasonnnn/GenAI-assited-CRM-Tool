@@ -14,7 +14,9 @@
 import { useState } from "react"
 import Link from "@/components/app-link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Button } from "@/components/ui/button"
+import { CopyField } from "@/components/ui/copy-field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -23,11 +25,16 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
+    DialogBody,
+    DialogClose,
     DialogContent,
-    DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog"
+import { ValidatedField } from "@/components/ui/field"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import {
     Select,
     SelectContent,
@@ -39,12 +46,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
     LinkIcon,
-    CopyIcon,
     ClockIcon,
     PlusIcon,
-    TrashIcon,
-    CheckIcon,
-    AlertCircleIcon,
+    PowerOffIcon,
     VideoIcon,
     PhoneIcon,
     MapPinIcon,
@@ -55,7 +59,6 @@ import {
 } from "lucide-react"
 import { toast } from "@/components/ui/toast"
 import { useAuth } from "@/lib/auth-context"
-import { ApiError } from "@/lib/api"
 import {
     useBookingLink,
     useAppointmentTypes,
@@ -67,16 +70,15 @@ import {
 } from "@/lib/hooks/use-appointments"
 import { useUserIntegrations } from "@/lib/hooks/use-user-integrations"
 import type { AppointmentType, MeetingMode } from "@/lib/api/appointments"
+import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
+import { useFormValidation } from "@/lib/forms/use-form-validation"
+import { validateRequired } from "@/lib/forms/validators"
+import { useTabSearchParam } from "@/lib/hooks/use-tab-search-param"
 
 function openBookingPreview() {
     const baseUrl =
         typeof window !== "undefined" ? `${window.location.origin}/book/preview` : "/book/preview"
     window.open(baseUrl, "_blank")
-}
-
-function getAppointmentTypeErrorMessage(error: unknown, fallback: string) {
-    if (error instanceof ApiError && error.message) return error.message
-    return fallback
 }
 
 // =============================================================================
@@ -180,6 +182,29 @@ type AvailabilityRulesDraft = {
     timezone: string
 }
 
+// The API returns "HH:MM:SS"; TIME_OPTIONS values are "HH:MM".
+function toTimeOptionValue(value: string | null | undefined, fallback: string): string {
+    return value ? value.slice(0, 5) : fallback
+}
+
+const getTimeOptionLabel = createSelectLabelGetter(TIME_OPTIONS, {
+    emptyLabel: "Select time",
+    unknownLabel: "Select time",
+})
+
+const TIMEZONE_LABELS = {
+    "America/Los_Angeles": "Pacific Time",
+    "America/New_York": "Eastern Time",
+    "America/Chicago": "Central Time",
+    "America/Denver": "Mountain Time",
+    UTC: "UTC",
+} as const
+
+const getTimezoneLabel = createSelectLabelGetter(TIMEZONE_LABELS, {
+    emptyLabel: "Select timezone",
+    unknownLabel: "Unknown timezone",
+})
+
 function buildAvailabilityDraft(
     rules: Array<{ day_of_week: number; start_time: string; end_time: string; timezone: string }>,
     fallbackTimezone: string
@@ -190,8 +215,8 @@ function buildAvailabilityDraft(
             const existing = rulesByDay.get(day.value)
             return {
                 day_of_week: day.value,
-                start_time: existing?.start_time || "09:00",
-                end_time: existing?.end_time || "17:00",
+                start_time: toTimeOptionValue(existing?.start_time, "09:00"),
+                end_time: toTimeOptionValue(existing?.end_time, "17:00"),
                 enabled: !!existing,
             }
         }),
@@ -233,21 +258,53 @@ type AppointmentTypeFormUpdater = (
     updater: (current: AppointmentTypeFormState) => AppointmentTypeFormState,
 ) => void
 
+function validateAppointmentTypeForm(values: AppointmentTypeFormState) {
+    return {
+        name: validateRequired(values.name, "Enter a name."),
+        meeting_location: values.meeting_modes.includes("in_person")
+            ? validateRequired(values.meeting_location, "Enter a location for in-person appointments.")
+            : undefined,
+        dial_in_number: values.meeting_modes.includes("phone")
+            ? validateRequired(values.dial_in_number, "Enter a dial-in number for phone appointments.")
+            : undefined,
+    }
+}
+
+type AppointmentTypeValidation = ReturnType<typeof useFormValidation<AppointmentTypeFormState>>
+
+function SettingsCardError({
+    error,
+    onRetry,
+    isRetrying,
+    title,
+}: {
+    error: unknown
+    onRetry: () => void
+    isRetrying: boolean
+    title: string
+}) {
+    return (
+        <Card>
+            <CardContent>
+                <QueryErrorState
+                    error={error}
+                    onRetry={onRetry}
+                    isRetrying={isRetrying}
+                    title={title}
+                    headingLevel={2}
+                    className="min-h-0 py-10"
+                />
+            </CardContent>
+        </Card>
+    )
+}
+
 // =============================================================================
 // Booking Link Card
 // =============================================================================
 
 function BookingLinkCard() {
-    const { data: link, isLoading } = useBookingLink()
-    const [copied, setCopied] = useState(false)
-
-    const copyLink = () => {
-        if (link?.full_url) {
-            void navigator.clipboard.writeText(link.full_url)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-        }
-    }
+    const { data: link, isLoading, isError, error, refetch, isFetching } = useBookingLink()
 
     if (isLoading) {
         return (
@@ -256,6 +313,18 @@ function BookingLinkCard() {
                     <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                 </CardContent>
             </Card>
+        )
+    }
+
+    // Without the link the fallback URL below would point at /book/ with no slug.
+    if (isError) {
+        return (
+            <SettingsCardError
+                error={error}
+                onRetry={() => void refetch()}
+                isRetrying={isFetching}
+                title="Couldn't load booking link"
+            />
         )
     }
 
@@ -268,24 +337,14 @@ function BookingLinkCard() {
                 </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                    <Input
-                        readOnly
-                        value={link?.full_url || `${typeof window !== 'undefined' ? window.location.origin : ''}/book/${link?.public_slug || ''}`}
-                        className="font-mono text-sm"
-                        aria-label="Your booking link"
-                    />
-                    <Button variant="outline" onClick={copyLink} aria-label="Copy booking link">
-                        {copied ? (
-                            <CheckIcon className="size-4" aria-hidden="true" />
-                        ) : (
-                            <CopyIcon className="size-4" aria-hidden="true" />
-                        )}
-                    </Button>
-                </div>
+                <CopyField
+                    aria-label="Your booking link"
+                    value={link?.full_url || `${typeof window !== 'undefined' ? window.location.origin : ''}/book/${link?.public_slug || ''}`}
+                    copyLabel="Copy booking link"
+                />
                 <Button variant="outline" size="sm" onClick={openBookingPreview}>
                     <EyeIcon className="size-4 mr-2" />
-                    Preview Booking Page
+                    Preview booking page
                 </Button>
                 <p className="text-xs text-muted-foreground">
                     This booking link stays the same, so previously shared links remain valid.
@@ -301,7 +360,7 @@ function BookingLinkCard() {
 
 function AvailabilityRulesCard() {
     const { user } = useAuth()
-    const { data: rules, isLoading } = useAvailabilityRules()
+    const { data: rules, isLoading, isError, error, refetch, isFetching } = useAvailabilityRules()
     const setRulesMutation = useSetAvailabilityRules()
     const [availabilityState, setAvailabilityState] = useState<AvailabilityRulesState>(() => ({
         draft: null,
@@ -381,6 +440,19 @@ function AvailabilityRulesCard() {
         )
     }
 
+    // A failed load must not show the editor: its defaults read as "unavailable every day", and
+    // saving them would overwrite the real schedule.
+    if (isError) {
+        return (
+            <SettingsCardError
+                error={error}
+                onRetry={() => void refetch()}
+                isRetrying={isFetching}
+                title="Couldn't load availability"
+            />
+        )
+    }
+
     return (
         <Card>
             <CardHeader>
@@ -396,26 +468,28 @@ function AvailabilityRulesCard() {
                         return (
                             <div
                                 key={day.value}
-                                className="flex items-center gap-4 p-3 rounded-lg border border-border"
+                                className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-border p-3"
                             >
-                                <Switch
-                                    checked={rule?.enabled || false}
-                                    onCheckedChange={() => toggleDay(day.value)}
-                                />
-                                <span className="w-24 font-medium">{day.label}</span>
+                                <div className="flex items-center gap-3 sm:w-36">
+                                    <Switch
+                                        checked={rule?.enabled || false}
+                                        onCheckedChange={() => toggleDay(day.value)}
+                                        aria-label={`Available on ${day.label}`}
+                                    />
+                                    <span className="font-medium">{day.label}</span>
+                                </div>
                                 {rule?.enabled ? (
-                                    <>
+                                    // Below sm the times take their own row so both selects stay fully visible.
+                                    <div className="flex w-full items-center gap-2 sm:w-auto">
                                         <Select
                                             value={rule.start_time}
                                             onValueChange={(v) => v && updateTime(day.value, "start_time", v)}
                                         >
-                                            <SelectTrigger className="w-28">
-                                                <SelectValue>
-                                                    {(value: string | null) => {
-                                                        const opt = TIME_OPTIONS.find(t => t.value === value)
-                                                        return opt?.label ?? "Unknown time"
-                                                    }}
-                                                </SelectValue>
+                                            <SelectTrigger
+                                                className="min-w-0 flex-1 sm:w-32 sm:flex-none"
+                                                aria-label={`${day.label} start time`}
+                                            >
+                                                <SelectValue>{getTimeOptionLabel}</SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {TIME_OPTIONS.map((opt) => (
@@ -430,13 +504,11 @@ function AvailabilityRulesCard() {
                                             value={rule.end_time}
                                             onValueChange={(v) => v && updateTime(day.value, "end_time", v)}
                                         >
-                                            <SelectTrigger className="w-28">
-                                                <SelectValue>
-                                                    {(value: string | null) => {
-                                                        const opt = TIME_OPTIONS.find(t => t.value === value)
-                                                        return opt?.label ?? "Unknown time"
-                                                    }}
-                                                </SelectValue>
+                                            <SelectTrigger
+                                                className="min-w-0 flex-1 sm:w-32 sm:flex-none"
+                                                aria-label={`${day.label} end time`}
+                                            >
+                                                <SelectValue>{getTimeOptionLabel}</SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {TIME_OPTIONS.map((opt) => (
@@ -446,18 +518,18 @@ function AvailabilityRulesCard() {
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                    </>
+                                    </div>
                                 ) : (
-                                    <span className="text-muted-foreground">Unavailable</span>
+                                    <span className="ml-auto text-muted-foreground sm:ml-0">Unavailable</span>
                                 )}
                             </div>
                         )
                     })}
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-border">
-                    <div className="flex items-center gap-2">
-                        <Label>Timezone:</Label>
+                <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Label htmlFor="availability-timezone">Timezone</Label>
                         <Select
                             value={timezone}
                             onValueChange={(v) => {
@@ -476,37 +548,27 @@ function AvailabilityRulesCard() {
                                 })
                             }}
                         >
-                            <SelectTrigger className="w-48">
-                                <SelectValue>
-                                    {(value: string | null) => {
-                                        const labels: Record<string, string> = {
-                                            "America/Los_Angeles": "Pacific Time",
-                                            "America/New_York": "Eastern Time",
-                                            "America/Chicago": "Central Time",
-                                            "America/Denver": "Mountain Time",
-                                            "UTC": "UTC",
-                                        }
-                                        return labels[value ?? ""] ?? "Unknown timezone"
-                                    }}
-                                </SelectValue>
+                            <SelectTrigger id="availability-timezone" className="w-full sm:w-48">
+                                <SelectValue>{getTimezoneLabel}</SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="America/Los_Angeles">Pacific Time</SelectItem>
-                                <SelectItem value="America/New_York">Eastern Time</SelectItem>
-                                <SelectItem value="America/Chicago">Central Time</SelectItem>
-                                <SelectItem value="America/Denver">Mountain Time</SelectItem>
-                                <SelectItem value="UTC">UTC</SelectItem>
+                                {toSelectOptions(TIMEZONE_LABELS).map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
                     <Button
                         onClick={saveRules}
                         disabled={!hasChanges || setRulesMutation.isPending}
+                        className="w-full sm:w-auto"
                     >
                         {setRulesMutation.isPending ? (
                             <Loader2Icon className="size-4 mr-2 animate-spin" />
                         ) : null}
-                        Save Availability
+                        Save availability
                     </Button>
                 </div>
             </CardContent>
@@ -533,23 +595,23 @@ function AppointmentTypesHeader({
     editingType,
     formData,
     isSaving,
+    validation,
     onDialogOpenChange,
     onCreate,
     onFormDataChange,
     onToggleMeetingMode,
     onSubmit,
-    onCancel,
 }: {
     dialogOpen: boolean
     editingType: AppointmentType | null
     formData: AppointmentTypeFormState
     isSaving: boolean
+    validation: AppointmentTypeValidation
     onDialogOpenChange: (open: boolean) => void
     onCreate: () => void
     onFormDataChange: AppointmentTypeFormUpdater
     onToggleMeetingMode: (mode: MeetingMode, checked: boolean | "indeterminate") => void
-    onSubmit: () => void
-    onCancel: () => void
+    onSubmit: (event: React.MouseEvent) => void
 }) {
     return (
         <CardHeader className="flex flex-row items-center justify-between">
@@ -559,16 +621,16 @@ function AppointmentTypesHeader({
             <Dialog open={dialogOpen} onOpenChange={onDialogOpenChange}>
                 <Button onClick={onCreate}>
                     <PlusIcon className="size-4 mr-2" />
-                    Add Type
+                    Add type
                 </Button>
                 <AppointmentTypeDialog
                     editingType={editingType}
                     formData={formData}
                     isSaving={isSaving}
+                    validation={validation}
                     onFormDataChange={onFormDataChange}
                     onToggleMeetingMode={onToggleMeetingMode}
                     onSubmit={onSubmit}
-                    onCancel={onCancel}
                 />
             </Dialog>
         </CardHeader>
@@ -579,56 +641,58 @@ function AppointmentTypeDialog({
     editingType,
     formData,
     isSaving,
+    validation,
     onFormDataChange,
     onToggleMeetingMode,
     onSubmit,
-    onCancel,
 }: {
     editingType: AppointmentType | null
     formData: AppointmentTypeFormState
     isSaving: boolean
+    validation: AppointmentTypeValidation
     onFormDataChange: AppointmentTypeFormUpdater
     onToggleMeetingMode: (mode: MeetingMode, checked: boolean | "indeterminate") => void
-    onSubmit: () => void
-    onCancel: () => void
+    onSubmit: (event: React.MouseEvent) => void
 }) {
     return (
-        <DialogContent>
+        <DialogContent layout="sectioned" size="lg">
             <DialogHeader>
                 <DialogTitle>
                     {editingType ? "Edit Appointment Type" : "New Appointment Type"}
                 </DialogTitle>
-                <DialogDescription>
-                    Configure the details for this appointment type
-                </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                    <Label>Name</Label>
-                    <Input
-                        value={formData.name}
-                        onChange={(e) => onFormDataChange((current) => ({ ...current, name: e.target.value }))}
-                        placeholder="e.g., Initial Consultation"
-                    />
-                </div>
-                <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Textarea
-                        value={formData.description}
-                        onChange={(e) => onFormDataChange((current) => ({ ...current, description: e.target.value }))}
-                        placeholder="Brief description of this appointment type"
-                    />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+            <DialogBody className="gap-4">
+                <ValidatedField label="Name" error={validation.errorFor("name")}>
+                    {(control) => (
+                        <Input
+                            {...control}
+                            value={formData.name}
+                            onChange={(e) => onFormDataChange((current) => ({ ...current, name: e.target.value }))}
+                            onBlur={() => validation.touch("name")}
+                            placeholder="e.g., Initial Consultation"
+                        />
+                    )}
+                </ValidatedField>
+                <ValidatedField label="Description" error={validation.errorFor("description")}>
+                    {(control) => (
+                        <Textarea
+                            {...control}
+                            value={formData.description}
+                            onChange={(e) => onFormDataChange((current) => ({ ...current, description: e.target.value }))}
+                            placeholder="Brief description of this appointment type"
+                        />
+                    )}
+                </ValidatedField>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                        <Label>Duration (minutes)</Label>
+                        <Label htmlFor="appointment-type-duration">Duration (minutes)</Label>
                         <Select
                             value={String(formData.duration_minutes)}
                             onValueChange={(v) =>
                                 v && onFormDataChange((current) => ({ ...current, duration_minutes: parseInt(v) }))
                             }
                         >
-                            <SelectTrigger>
+                            <SelectTrigger id="appointment-type-duration" className="w-full">
                                 <SelectValue>
                                     {(value: string | null) => {
                                         return value ? `${value} min` : "Select duration"
@@ -645,14 +709,14 @@ function AppointmentTypeDialog({
                         </Select>
                     </div>
                     <div className="space-y-2">
-                        <Label>Buffer After</Label>
+                        <Label htmlFor="appointment-type-buffer">Buffer After</Label>
                         <Select
                             value={String(formData.buffer_after_minutes)}
                             onValueChange={(v) =>
                                 v && onFormDataChange((current) => ({ ...current, buffer_after_minutes: parseInt(v) }))
                             }
                         >
-                            <SelectTrigger>
+                            <SelectTrigger id="appointment-type-buffer" className="w-full">
                                 <SelectValue>
                                     {(value: string | null) => {
                                         if (value === "0") return "No buffer"
@@ -675,21 +739,19 @@ function AppointmentTypeDialog({
                 />
                 <AppointmentTypeConditionalFields
                     formData={formData}
+                    validation={validation}
                     onFormDataChange={onFormDataChange}
                 />
-            </div>
-            <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={onCancel}>Cancel</Button>
-                <Button
-                    onClick={onSubmit}
-                    disabled={!formData.name || isSaving}
-                >
+            </DialogBody>
+            <DialogFooter>
+                <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+                <Button onClick={onSubmit} disabled={isSaving}>
                     {isSaving ? (
                         <Loader2Icon className="size-4 mr-2 animate-spin" />
                     ) : null}
-                    {editingType ? "Save Changes" : "Create Type"}
+                    {editingType ? "Save changes" : "Create type"}
                 </Button>
-            </div>
+            </DialogFooter>
         </DialogContent>
     )
 }
@@ -702,8 +764,8 @@ function AppointmentTypeMeetingModeFields({
     onToggleMeetingMode: (mode: MeetingMode, checked: boolean | "indeterminate") => void
 }) {
     return (
-        <div className="space-y-2">
-            <Label>Appointment Format</Label>
+        <div role="group" aria-labelledby="appointment-format-label" className="space-y-2">
+            <p id="appointment-format-label" className="text-sm font-medium">Appointment Format</p>
             <div className="grid gap-2">
                 {MEETING_MODE_OPTIONS.map((option) => {
                     const Icon = option.icon
@@ -727,51 +789,57 @@ function AppointmentTypeMeetingModeFields({
                     )
                 })}
             </div>
-            <p className="text-xs text-muted-foreground">
-                Select one or more formats for clients to choose from.
-            </p>
         </div>
     )
 }
 
 function AppointmentTypeConditionalFields({
     formData,
+    validation,
     onFormDataChange,
 }: {
     formData: AppointmentTypeFormState
+    validation: AppointmentTypeValidation
     onFormDataChange: AppointmentTypeFormUpdater
 }) {
     return (
         <>
             {formData.meeting_modes.includes("in_person") && (
-                <div className="space-y-2">
-                    <Label>Location</Label>
-                    <Input
-                        value={formData.meeting_location}
-                        onChange={(e) => onFormDataChange((current) => ({ ...current, meeting_location: e.target.value }))}
-                        placeholder="e.g., 123 Main St, Suite 4B"
-                    />
-                </div>
+                <ValidatedField label="Location" error={validation.errorFor("meeting_location")}>
+                    {(control) => (
+                        <Input
+                            {...control}
+                            value={formData.meeting_location}
+                            onChange={(e) => onFormDataChange((current) => ({ ...current, meeting_location: e.target.value }))}
+                            onBlur={() => validation.touch("meeting_location")}
+                            placeholder="e.g., 123 Main St, Suite 4B"
+                        />
+                    )}
+                </ValidatedField>
             )}
             {formData.meeting_modes.includes("phone") && (
-                <div className="space-y-2">
-                    <Label>Dial-in Number</Label>
-                    <Input
-                        value={formData.dial_in_number}
-                        onChange={(e) => onFormDataChange((current) => ({ ...current, dial_in_number: e.target.value }))}
-                        placeholder="e.g., +1 (555) 123-4567"
-                    />
-                </div>
+                <ValidatedField label="Dial-in Number" error={validation.errorFor("dial_in_number")}>
+                    {(control) => (
+                        <Input
+                            {...control}
+                            value={formData.dial_in_number}
+                            onChange={(e) => onFormDataChange((current) => ({ ...current, dial_in_number: e.target.value }))}
+                            onBlur={() => validation.touch("dial_in_number")}
+                            placeholder="e.g., +1 (555) 123-4567"
+                        />
+                    )}
+                </ValidatedField>
             )}
             <div className="flex items-start gap-3 rounded-lg border border-border p-3">
                 <Switch
+                    id="appointment-type-auto-approve"
                     checked={formData.auto_approve}
                     onCheckedChange={(checked) =>
                         onFormDataChange((current) => ({ ...current, auto_approve: checked }))
                     }
                 />
                 <div>
-                    <Label className="text-sm">Auto-approve bookings</Label>
+                    <Label htmlFor="appointment-type-auto-approve" className="text-sm">Auto-approve bookings</Label>
                     <p className="text-xs text-muted-foreground">
                         Clients will be instantly confirmed without manual approval.
                     </p>
@@ -781,13 +849,18 @@ function AppointmentTypeConditionalFields({
     )
 }
 
-function AppointmentTypesEmptyState() {
+function AppointmentTypesEmptyState({ onCreate }: { onCreate: () => void }) {
     return (
-        <div className="text-center py-8 text-muted-foreground">
-            <AlertCircleIcon className="size-8 mx-auto mb-2 opacity-50" />
-            <p>No appointment types yet</p>
-            <p className="text-sm">Create your first appointment type to start accepting bookings</p>
-        </div>
+        <EmptyState
+            icon={CalendarIcon}
+            title="No appointment types"
+            action={
+                <Button variant="outline" size="sm" onClick={onCreate}>
+                    <PlusIcon className="size-4" aria-hidden="true" />
+                    Add type
+                </Button>
+            }
+        />
     )
 }
 
@@ -873,9 +946,10 @@ function AppointmentTypeListItem({
                     size="icon-sm"
                     className="text-destructive"
                     onClick={() => onDelete(type.id)}
-                    aria-label={`Delete ${type.name} appointment type`}
+                    aria-label={`Deactivate ${type.name}`}
+                    title="Deactivate"
                 >
-                    <TrashIcon className="size-4" />
+                    <PowerOffIcon className="size-4" aria-hidden="true" />
                 </Button>
             </div>
         </div>
@@ -883,12 +957,20 @@ function AppointmentTypeListItem({
 }
 
 function AppointmentTypesCard() {
-    const { data: types, isLoading } = useAppointmentTypes()
+    const {
+        data: types,
+        isLoading,
+        isError,
+        error: typesError,
+        refetch: refetchTypes,
+        isFetching: typesFetching,
+    } = useAppointmentTypes()
     const createMutation = useCreateAppointmentType()
     const updateMutation = useUpdateAppointmentType()
     const deleteMutation = useDeleteAppointmentType()
     const [dialogOpen, setDialogOpen] = useState(false)
     const [editingType, setEditingType] = useState<AppointmentType | null>(null)
+    const [pendingDeactivateId, setPendingDeactivateId] = useState<string | null>(null)
     const [formData, setFormData] = useState<AppointmentTypeFormState>({
         name: "",
         description: "",
@@ -901,7 +983,10 @@ function AppointmentTypesCard() {
         reminder_hours_before: 24,
     })
 
+    const validation = useFormValidation({ values: formData, validate: validateAppointmentTypeForm })
+
     const openCreate = () => {
+        validation.reset()
         setEditingType(null)
         setFormData({
             name: "",
@@ -918,6 +1003,7 @@ function AppointmentTypesCard() {
     }
 
     const openEdit = (type: AppointmentType) => {
+        validation.reset()
         setEditingType(type)
         const meetingModes =
             type.meeting_modes && type.meeting_modes.length > 0
@@ -953,48 +1039,21 @@ function AppointmentTypesCard() {
         })
     }
 
-    const handleSubmit = async () => {
-        if (!formData.name.trim()) {
-            toast.error("Appointment type name is required")
-            return
-        }
-        if (!formData.meeting_modes.length) {
-            toast.error("Select at least one appointment format")
-            return
-        }
-        if (formData.meeting_modes.includes("in_person") && !formData.meeting_location.trim()) {
-            toast.error("Location is required for in-person appointments")
-            return
-        }
-        if (formData.meeting_modes.includes("phone") && !formData.dial_in_number.trim()) {
-            toast.error("Dial-in number is required for phone appointments")
-            return
-        }
-
-        const selectedModes = new Set(formData.meeting_modes)
-        const orderedModes: MeetingMode[] = []
-        for (const option of MEETING_MODE_OPTIONS) {
-            if (selectedModes.has(option.value)) {
-                orderedModes.push(option.value)
-            }
-        }
-
-        if (orderedModes.length === 0) {
-            toast.error("Select at least one appointment format")
-            return
-        }
+    const handleSubmit = validation.handleSubmit(async (values) => {
+        // The format toggles never allow an empty selection, so a primary mode always exists.
+        const orderedModes = MEETING_MODE_OPTIONS
+            .map((option) => option.value)
+            .filter((mode) => values.meeting_modes.includes(mode))
         const primaryMode = orderedModes[0]
-        if (!primaryMode) {
-            toast.error("Select at least one appointment format")
-            return
-        }
+        if (!primaryMode) return
 
         const payload = {
-            ...formData,
+            ...values,
+            name: values.name.trim(),
             meeting_modes: orderedModes,
             meeting_mode: primaryMode,
-            meeting_location: formData.meeting_location.trim() || null,
-            dial_in_number: formData.dial_in_number.trim() || null,
+            meeting_location: values.meeting_location.trim() || null,
+            dial_in_number: values.dial_in_number.trim() || null,
         }
 
         try {
@@ -1007,17 +1066,20 @@ function AppointmentTypesCard() {
             }
             setDialogOpen(false)
         } catch (error) {
-            toast.error(getAppointmentTypeErrorMessage(error, "Failed to save appointment type"))
-        }
-    }
-
-    const handleDelete = (typeId: string) => {
-        if (confirm("Are you sure you want to deactivate this appointment type?")) {
-            deleteMutation.mutate(typeId, {
-                onSuccess: () => toast.success("Appointment type deactivated"),
-                onError: (error) => toast.error(getAppointmentTypeErrorMessage(error, "Failed to deactivate appointment type")),
+            const formError = validation.applyApiError(error, {
+                fields: ["name", "description", "meeting_location", "dial_in_number"],
+                fallback: "Couldn't save appointment type. Try again.",
             })
+            if (formError) toast.error(formError)
         }
+    })
+
+    const pendingDeactivateType = types?.find((type) => type.id === pendingDeactivateId)
+
+    // Runs from ConfirmDialog, which stays open while it runs and shows a failure inline.
+    const handleDeactivate = async (typeId: string) => {
+        await deleteMutation.mutateAsync(typeId)
+        toast.success("Appointment type deactivated")
     }
 
     if (isLoading) {
@@ -1031,26 +1093,45 @@ function AppointmentTypesCard() {
                 editingType={editingType}
                 formData={formData}
                 isSaving={createMutation.isPending || updateMutation.isPending}
+                validation={validation}
                 onDialogOpenChange={setDialogOpen}
                 onCreate={openCreate}
                 onFormDataChange={setFormData}
                 onToggleMeetingMode={toggleMeetingMode}
-                onSubmit={() => {
-                    void handleSubmit()
+                onSubmit={(event) => {
+                    void handleSubmit(event)
                 }}
-                onCancel={() => setDialogOpen(false)}
             />
             <CardContent>
-                {types?.length === 0 ? (
-                    <AppointmentTypesEmptyState />
+                {isError ? (
+                    <QueryErrorState
+                        error={typesError}
+                        onRetry={() => void refetchTypes()}
+                        isRetrying={typesFetching}
+                        title="Couldn't load appointment types"
+                        headingLevel={2}
+                        className="min-h-0 py-10"
+                    />
+                ) : types?.length === 0 ? (
+                    <AppointmentTypesEmptyState onCreate={openCreate} />
                 ) : (
                     <AppointmentTypesList
                         types={types ?? []}
                         onEdit={openEdit}
-                        onDelete={handleDelete}
+                        onDelete={setPendingDeactivateId}
                     />
                 )}
             </CardContent>
+            <ConfirmDialog
+                open={pendingDeactivateId !== null}
+                onOpenChange={(open) => { if (!open) setPendingDeactivateId(null) }}
+                title={`Deactivate ${pendingDeactivateType?.name ?? "this appointment type"}?`}
+                description="It stops appearing on your booking page."
+                confirmLabel="Deactivate"
+                confirmIcon={<PowerOffIcon aria-hidden="true" />}
+                errorFallback="Couldn't deactivate this appointment type. Try again."
+                onConfirm={() => (pendingDeactivateId ? handleDeactivate(pendingDeactivateId) : undefined)}
+            />
         </Card>
     )
 }
@@ -1059,12 +1140,16 @@ function AppointmentTypesCard() {
 // Main Export
 // =============================================================================
 
+const SETTINGS_TABS = ["availability", "types", "link"] as const
+
 export function AppointmentSettings() {
+    const [tab, setTab] = useTabSearchParam(SETTINGS_TABS, "availability")
+
     return (
         <div className="space-y-6">
             <GoogleCalendarWarningBanner />
-            <Tabs defaultValue="availability" className="w-full">
-                <TabsList className="w-full justify-start">
+            <Tabs value={tab} onValueChange={setTab} className="w-full">
+                <TabsList>
                     <TabsTrigger value="availability">Availability</TabsTrigger>
                     <TabsTrigger value="types">Appointment Types</TabsTrigger>
                     <TabsTrigger value="link">Booking Link</TabsTrigger>

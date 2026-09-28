@@ -2,6 +2,7 @@
 
 import { useAIContext } from "@/lib/context/ai-context"
 import { Button } from "@/components/ui/button"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { SparklesIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { usePathname } from "next/navigation"
@@ -33,12 +34,12 @@ export function AIFloatingButton() {
 
     return (
         <Button
+            ref={toastClearanceRef}
             onClick={togglePanel}
             data-ai-chat-trigger
             size="lg"
             className={cn(
                 "fixed bottom-6 right-6 z-40 size-14 rounded-full shadow-lg transition-all hover:scale-105",
-                "bg-primary text-primary-foreground hover:bg-primary/90",
                 isOpen && "opacity-0 pointer-events-none"
             )}
             title={accessibleLabel}

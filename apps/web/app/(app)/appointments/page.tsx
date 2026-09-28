@@ -1,40 +1,26 @@
-/**
- * Appointments Page - /appointments
- * 
- * Staff-facing dashboard for:
- * - Pending approval queue
- * - Upcoming appointments
- * - Past appointments
- */
-
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { LinkIcon, Loader2Icon, SettingsIcon } from "lucide-react"
+
+import Link from "@/components/app-link"
 import { AppointmentsList } from "@/components/appointments/AppointmentsList"
+import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { CopyField } from "@/components/ui/copy-field"
 import {
     Dialog,
     DialogContent,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogDescription,
 } from "@/components/ui/dialog"
-import { LinkIcon, CopyIcon, CheckIcon, Loader2Icon } from "lucide-react"
 import { useBookingLink } from "@/lib/hooks/use-appointments"
 
 function BookingLinkButton() {
     const { data: link, isLoading, isError, refetch } = useBookingLink()
     const [open, setOpen] = useState(false)
-    const [copied, setCopied] = useState(false)
-
-    const copyLink = () => {
-        if (link?.full_url) {
-            void navigator.clipboard.writeText(link.full_url)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-        }
-    }
+    const fieldRef = useRef<HTMLDivElement>(null)
 
     if (isLoading) {
         return (
@@ -59,34 +45,32 @@ function BookingLinkButton() {
     return (
         <>
             <Button variant="outline" onClick={() => setOpen(true)}>
-                <LinkIcon className="size-4 mr-2" />
-                Share Booking Link
+                <LinkIcon className="size-4 mr-2" aria-hidden="true" />
+                Share booking link
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
-                <DialogContent>
+                <DialogContent
+                    size="lg"
+                    // Focus the copy button, not the URL field, so opening the dialog does not
+                    // select or scroll the link.
+                    initialFocus={() => fieldRef.current?.querySelector<HTMLElement>("button:not(:disabled)") ?? true}
+                >
                     <DialogHeader>
                         <DialogTitle>Your Booking Link</DialogTitle>
-                        <DialogDescription>
-                            Share this link with clients so they can book appointments with you.
-                        </DialogDescription>
                     </DialogHeader>
-                    <div className="flex gap-2 mt-4">
-                        <Input
-                            readOnly
-                            value={link?.full_url || ""}
-                            className="font-mono text-sm"
+                    <div ref={fieldRef}>
+                        <CopyField
+                            aria-label="Booking link"
+                            value={link?.full_url ?? ""}
+                            copyLabel="Copy booking link"
                         />
-                        <Button variant="outline" onClick={copyLink}>
-                            {copied ? (
-                                <CheckIcon className="size-4 text-green-500" />
-                            ) : (
-                                <CopyIcon className="size-4" />
-                            )}
-                        </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                        Tip: Go to Settings → Appointments to manage your availability and appointment types.
-                    </p>
+                    <DialogFooter className="sm:justify-start">
+                        <Button variant="ghost" render={<Link href="/settings/appointments" />}>
+                            <SettingsIcon className="size-4" aria-hidden="true" />
+                            Scheduling settings
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>
@@ -96,18 +80,8 @@ function BookingLinkButton() {
 export default function AppointmentsPage() {
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Appointments</h1>
-                    <BookingLinkButton />
-                </div>
-            </div>
-
-            {/* Main Content */}
-            <div className="flex-1 p-6 space-y-4">
-                <AppointmentsList />
-            </div>
+            <PageHeader title="Appointments" actions={<BookingLinkButton />} />
+            <AppointmentsList />
         </div>
     )
 }

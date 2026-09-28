@@ -33,13 +33,15 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+apps/web/.vitest/
 .pytest_cache/
 
 # Misc
 *.local
 .turbo
 cookies.txt
-/docs/
+/docs/*
+!/docs/adr/
 apps/api/.attachments/
 report_json.json
 report_md.md

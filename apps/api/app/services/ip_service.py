@@ -8,6 +8,7 @@ from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import func, or_, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.encryption import hash_email, hash_phone
@@ -172,6 +173,66 @@ def generate_intended_parent_number(db: Session, org_id: UUID) -> str:
         raise RuntimeError("Failed to generate intended parent number")
 
     return f"I{result:05d}"
+
+
+def is_intended_parent_number_conflict(error: IntegrityError) -> bool:
+    constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+    if constraint_name == "uq_intended_parent_number":
+        return True
+    message = str(error.orig) if error.orig else str(error)
+    return "uq_intended_parent_number" in message
+
+
+def _sync_intended_parent_number_counter_to_max(db: Session, org_id: UUID) -> int:
+    """Move the counter up to the highest number in use; it never moves backwards."""
+    max_existing = db.execute(
+        text("""
+            SELECT COALESCE(MAX(CAST(SUBSTRING(intended_parent_number FROM 2) AS BIGINT)), 10000)
+            FROM intended_parents
+            WHERE organization_id = :org_id
+        """),
+        {"org_id": org_id},
+    ).scalar_one()
+    return int(
+        db.execute(
+            text("""
+                INSERT INTO org_counters (organization_id, counter_type, current_value)
+                VALUES (:org_id, 'intended_parent_number', :current_value)
+                ON CONFLICT (organization_id, counter_type)
+                DO UPDATE SET current_value = GREATEST(org_counters.current_value, :current_value),
+                              updated_at = now()
+                RETURNING current_value
+            """),
+            {"org_id": org_id, "current_value": max_existing},
+        ).scalar_one()
+    )
+
+
+def _insert_with_intended_parent_number(db: Session, org_id: UUID, ip: IntendedParent) -> None:
+    """Assign the next number and insert `ip`.
+
+    A number conflict means the counter fell behind rows written outside the generator
+    (seed data, manual repair). Repair the counter once and retry; a second conflict raises.
+    """
+    for attempt in range(2):
+        try:
+            with db.begin_nested():
+                number = generate_intended_parent_number(db, org_id)
+                ip.intended_parent_number = number
+                ip.intended_parent_number_normalized = normalize_identifier(number)
+                db.add(ip)
+                db.flush()
+            return
+        except IntegrityError as exc:
+            if attempt == 0 and is_intended_parent_number_conflict(exc):
+                repaired = _sync_intended_parent_number_counter_to_max(db, org_id)
+                logger.warning(
+                    "intended_parent_number_counter_repaired org_id=%s counter=%s",
+                    org_id,
+                    repaired,
+                )
+                continue
+            raise
 
 
 def list_intended_parents(
@@ -450,7 +511,6 @@ def create_intended_parent(
     normalized_phone = normalize_phone(phone) if phone else None
     email_domain = extract_email_domain(normalized_email)
     phone_last4 = extract_phone_last4(normalized_phone)
-    intended_parent_number = generate_intended_parent_number(db, org_id)
     normalized_full_name = normalize_search_text(full_name)
 
     # Hash partner email if provided
@@ -467,8 +527,6 @@ def create_intended_parent(
         raise RuntimeError("Default intended parent stage 'new' not found")
 
     ip = IntendedParent(
-        intended_parent_number=intended_parent_number,
-        intended_parent_number_normalized=normalize_identifier(intended_parent_number),
         organization_id=org_id,
         full_name=full_name,
         full_name_normalized=normalized_full_name,
@@ -525,8 +583,7 @@ def create_intended_parent(
         ip_clinic_fax=ip_clinic_fax,
         ip_clinic_email=ip_clinic_email,
     )
-    db.add(ip)
-    db.flush()
+    _insert_with_intended_parent_number(db, org_id, ip)
 
     # Record initial status in history
     history = IntendedParentStatusHistory(

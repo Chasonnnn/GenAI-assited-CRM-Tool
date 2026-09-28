@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { createContext, use, useState, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { toast } from "@/components/ui/toast"
 import {
     useInterviews,
@@ -19,6 +20,7 @@ import {
     useSummarizeInterview,
 } from "@/lib/hooks/use-interviews"
 import { useAuth } from "@/lib/auth-context"
+import { useMediaQuery } from "@/lib/hooks/use-media-query"
 import { isTranscriptEmpty } from "../transcript-utils"
 import type {
     InterviewListItem,
@@ -63,6 +65,8 @@ export interface InterviewTabContextValue {
     notes: InterviewNoteRead[]
     attachments: InterviewAttachmentRead[]
     isLoading: boolean
+    /** The interview list failed to load and nothing was loaded before. */
+    loadError: { error: unknown; retry: () => void; isRetrying: boolean } | null
 
     // Selection
     selectedId: string | null
@@ -308,8 +312,25 @@ function useInterviewAttachmentActions(selectedId: string | null, editPermission
 export function InterviewTabProvider({ surrogateId, children, editPermission, canUseAI = true }: InterviewTabProviderProps) {
     const { user } = useAuth()
 
-    // Selection state
-    const [selectedId, setSelectedId] = useState<string | null>(null)
+    // Selection state. `undefined` means the user has not chosen yet: a `?interview=` link opens that
+    // interview; otherwise the desktop two-pane layout shows the first one and mobile keeps the list.
+    const [chosenId, setSelectedId] = useState<string | null | undefined>(undefined)
+    const isDesktop = useMediaQuery("(min-width: 1024px)")
+    const linkedId = useSearchParams().get("interview")
+    const interviewsQuery = useInterviews(surrogateId)
+    const { data: interviews = [], isLoading } = interviewsQuery
+    const loadError = interviewsQuery.isError && !interviewsQuery.data
+        ? {
+            error: interviewsQuery.error,
+            retry: () => { void interviewsQuery.refetch() },
+            isRetrying: interviewsQuery.isFetching,
+        }
+        : null
+    const linkedInterviewId = interviews.some((interview) => interview.id === linkedId) ? linkedId : null
+    const selectedId =
+        chosenId !== undefined
+            ? chosenId
+            : (linkedInterviewId ?? (isDesktop ? (interviews[0]?.id ?? null) : null))
     const {
         dialog,
         form,
@@ -332,7 +353,6 @@ export function InterviewTabProvider({ surrogateId, children, editPermission, ca
     } = useInterviewAttachmentActions(selectedId, editPermission)
 
     // Data fetching
-    const { data: interviews = [], isLoading } = useInterviews(surrogateId)
     const { data: attachments = [] } = useInterviewAttachments(selectedId || "")
     const hasPendingTranscription = attachments.some((attachment) =>
         ["pending", "processing"].includes(attachment.transcription_status || "")
@@ -408,7 +428,7 @@ export function InterviewTabProvider({ surrogateId, children, editPermission, ca
                 interviewId: dialog.interview.id,
                 surrogateId,
             })
-            setSelectedId(null)
+            setSelectedId(undefined)
             closeDialog()
             toast.success("Interview deleted")
         } catch {
@@ -502,6 +522,7 @@ export function InterviewTabProvider({ surrogateId, children, editPermission, ca
         notes,
         attachments,
         isLoading,
+        loadError,
 
         selectedId,
         selectInterview,

@@ -9,7 +9,7 @@ export type DataSource = "surrogate" | "donor" | "ip" | "match"
 export type SourceFilter = "all" | DataSource
 
 export const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
-    { value: "all", label: "All Source" },
+    { value: "all", label: "All Sources" },
     { value: "surrogate", label: "Surrogate" },
     { value: "donor", label: "Donor" },
     { value: "ip", label: "Intended Parent" },
@@ -17,9 +17,9 @@ export const SOURCE_OPTIONS: { value: SourceFilter; label: string }[] = [
 ]
 
 export const sourceLabel = (value: SourceFilter | null | undefined) =>
-    SOURCE_OPTIONS.find((option) => option.value === value)?.label ?? "All Source"
+    SOURCE_OPTIONS.find((option) => option.value === value)?.label ?? "All Sources"
 
-const isTabType = (value: string | null): value is TabType =>
+export const isTabType = (value: string | null): value is TabType =>
     value === "notes" || value === "files" || value === "tasks" || value === "activity"
 
 export const isSourceFilter = (value: string | null): value is SourceFilter =>

@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+import {
+    getRecordNotFoundPath,
+    RECORD_NOT_FOUND_PATH,
+    type RecordNotFoundKind,
+} from './lib/record-not-found';
 import { buildServerApiHeaders } from './lib/server-api-headers';
 
 const PLATFORM_BASE_DOMAIN =
@@ -158,8 +163,16 @@ function createTenantUnavailableResponse(): NextResponse {
     return response;
 }
 
-function createNotFoundRewrite(request: NextRequest): NextResponse {
-    return NextResponse.rewrite(new URL('/_not-found', request.nextUrl), {
+/**
+ * Rewrites to a not-found page with a 404 status. App-shell records pass their kind so
+ * the state renders inside app/(app)/layout; other routes use the root not-found page.
+ */
+function createNotFoundRewrite(
+    request: NextRequest,
+    recordKind?: RecordNotFoundKind
+): NextResponse {
+    const target = recordKind ? getRecordNotFoundPath(recordKind) : '/_not-found';
+    return NextResponse.rewrite(new URL(target, request.nextUrl), {
         status: 404,
         headers: {
             'Cache-Control': 'no-store',
@@ -167,17 +180,32 @@ function createNotFoundRewrite(request: NextRequest): NextResponse {
     });
 }
 
-function getRouteResourceApiPath(pathname: string): string | null | 'not_found' {
+function isRecordNotFoundPath(pathname: string): boolean {
+    return (
+        pathname === RECORD_NOT_FOUND_PATH ||
+        pathname.startsWith(`${RECORD_NOT_FOUND_PATH}/`)
+    );
+}
+
+type RouteResource = {
+    apiPath: string | null | 'not_found';
+    recordKind: RecordNotFoundKind | undefined;
+};
+
+function getRouteResource(pathname: string): RouteResource | null {
     const routeMatchers: Array<{
         pattern: RegExp;
+        recordKind?: RecordNotFoundKind;
         resolveApiPath: (segment: string) => string | null | 'not_found';
     }> = [
         {
             pattern: /^\/automation\/campaigns\/([^/]+)$/,
+            recordKind: 'campaign',
             resolveApiPath: (id) => (UUID_PARAM_RE.test(id) ? `/campaigns/${id}` : 'not_found'),
         },
         {
             pattern: /^\/automation\/forms\/([^/]+)$/,
+            recordKind: 'form',
             resolveApiPath: (id) => {
                 if (id === 'new') return null;
                 return UUID_PARAM_RE.test(id) ? `/forms/${id}` : 'not_found';
@@ -185,15 +213,18 @@ function getRouteResourceApiPath(pathname: string): string | null | 'not_found' 
         },
         {
             pattern: /^\/intended-parents\/matches\/([^/]+)$/,
+            recordKind: 'match',
             resolveApiPath: (id) => (UUID_PARAM_RE.test(id) ? `/matches/${id}` : 'not_found'),
         },
         {
             pattern: /^\/settings\/team\/members\/([^/]+)$/,
+            recordKind: 'member',
             resolveApiPath: (id) =>
                 UUID_PARAM_RE.test(id) ? `/settings/permissions/members/${id}` : 'not_found',
         },
         {
             pattern: /^\/settings\/team\/roles\/([^/]+)$/,
+            recordKind: 'role',
             resolveApiPath: (role) => `/settings/permissions/roles/${encodeURIComponent(role)}`,
         },
         {
@@ -225,10 +256,10 @@ function getRouteResourceApiPath(pathname: string): string | null | 'not_found' 
         },
     ];
 
-    for (const { pattern, resolveApiPath } of routeMatchers) {
+    for (const { pattern, recordKind, resolveApiPath } of routeMatchers) {
         const match = pathname.match(pattern);
         if (!match) continue;
-        return resolveApiPath(match[1] ?? '');
+        return { apiPath: resolveApiPath(match[1] ?? ''), recordKind };
     }
 
     return null;
@@ -237,13 +268,14 @@ function getRouteResourceApiPath(pathname: string): string | null | 'not_found' 
 async function enforceRouteResourceHardFail(
     request: NextRequest
 ): Promise<NextResponse | null> {
-    const apiPath = getRouteResourceApiPath(request.nextUrl.pathname);
-    if (!apiPath) {
+    const resource = getRouteResource(request.nextUrl.pathname);
+    if (!resource?.apiPath) {
         return null;
     }
 
+    const { apiPath, recordKind } = resource;
     if (apiPath === 'not_found') {
-        return createNotFoundRewrite(request);
+        return createNotFoundRewrite(request, recordKind);
     }
 
     const headers = buildServerApiHeaders(request.headers, {
@@ -274,7 +306,7 @@ async function enforceRouteResourceHardFail(
         }).finally(() => clearTimeout(timeoutId));
 
         if (res.status === 404 || res.status === 422) {
-            return createNotFoundRewrite(request);
+            return createNotFoundRewrite(request, recordKind);
         }
 
         if (res.status === 401 || res.status === 403) {
@@ -355,6 +387,18 @@ export async function proxy(request: NextRequest) {
         pathname.includes('.') // Static files with extensions
     ) {
         return NextResponse.next();
+    }
+
+    // `next dev` runs the proxy again for the rewritten path and takes the status from that
+    // pass. The app shell renders pages only on the client, so a page notFound() cannot
+    // set the status either. Keep the 404 here for that pass and for direct requests.
+    if (isRecordNotFoundPath(pathname)) {
+        return NextResponse.next({
+            status: 404,
+            headers: {
+                'Cache-Control': 'no-store',
+            },
+        });
     }
 
     const embedFramePolicyResponse = await applyEmbedFramePolicy(request);

@@ -3,6 +3,8 @@
 import { useReducer, useState, type FormEvent } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "@/components/app-link"
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -36,7 +38,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { toast } from "@/components/ui/toast"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import { SettingsPageGate } from "../../settings-page-gate"
 import {
     AlertTriangleIcon,
     CheckCircleIcon,
@@ -120,6 +126,24 @@ function metaAccountEditReducer(
     }
 
     return { ...state, formError: action.message }
+}
+
+interface ListLoadError {
+    error: unknown
+    retry: () => void
+    isRetrying: boolean
+}
+
+// A failed background refetch keeps the last list; only a failed first load replaces it.
+function getListLoadError(query: {
+    data: unknown
+    isError: boolean
+    error: unknown
+    isFetching: boolean
+    refetch: () => unknown
+}): ListLoadError | null {
+    if (!query.isError || query.data !== undefined) return null
+    return { error: query.error, retry: () => void query.refetch(), isRetrying: query.isFetching }
 }
 
 // Connection health badge component
@@ -280,8 +304,9 @@ function MetaAssetSelection({
             })
             onClose()
             push("/settings/integrations/meta")
-        } catch {
-            // Error handled by mutation
+        } catch (error) {
+            const message = getActionErrorMessage(error, "Couldn't connect the selected assets. Try again.")
+            if (message) toast.error(message)
         }
     }
 
@@ -427,7 +452,7 @@ function MetaAssetSelection({
                     </div>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleConnect(true)}>Overwrite</AlertDialogAction>
+                        <AlertDialogAction variant="destructive" onClick={() => handleConnect(true)}>Overwrite</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -436,18 +461,33 @@ function MetaAssetSelection({
 }
 
 export default function MetaIntegrationPage() {
+    return (
+        <SettingsPageGate
+            title="Meta Integration"
+            permission="manage_meta_leads"
+            deniedDescription="Meta Lead Ads settings need the Manage Meta Leads permission. Ask an admin to update your role."
+            back={{ href: "/settings/integrations", label: "Back to integrations" }}
+        >
+            <MetaIntegrationContent />
+        </SettingsPageGate>
+    )
+}
+
+function MetaIntegrationContent() {
     const searchParams = useSearchParams()
     const { push } = useRouter()
     const step = searchParams.get("step")
     const activeConnectionId = searchParams.get("connection")
 
-    const { data: connections = [], isLoading: connectionsLoading } = useMetaConnections()
+    const connectionsQuery = useMetaConnections()
+    const connections = connectionsQuery.data ?? []
     const connectUrlMutation = useMetaConnectUrl()
     const disconnectMutation = useDisconnectMetaConnection()
     const connectionsNeedingReauth = useMetaConnectionsNeedingReauth()
     const connectionsWithErrors = useMetaConnectionsWithErrors()
 
-    const { data: adAccounts = [], isLoading: adAccountsLoading } = useAdminMetaAdAccounts()
+    const adAccountsQuery = useAdminMetaAdAccounts()
+    const adAccounts = adAccountsQuery.data ?? []
     const updateAccountMutation = useUpdateMetaAdAccount()
     const deleteAccountMutation = useDeleteMetaAdAccount()
 
@@ -464,18 +504,17 @@ export default function MetaIntegrationPage() {
         try {
             const result = await connectUrlMutation.mutateAsync()
             window.location.href = result.auth_url
-        } catch {
-            // Error handled by mutation
+        } catch (error) {
+            const message = getActionErrorMessage(error, "Couldn't start the Meta connection. Try again.")
+            if (message) toast.error(message)
         }
     }
 
+    // Errors propagate so the confirm dialog stays open and shows them inline.
     const handleDisconnect = async (connectionId: string) => {
-        try {
-            await disconnectMutation.mutateAsync(connectionId)
-            setDisconnectConnectionId(null)
-        } catch {
-            // Error handled by mutation
-        }
+        await disconnectMutation.mutateAsync(connectionId)
+        setDisconnectConnectionId(null)
+        toast.success("Meta account disconnected")
     }
 
     const openEditAccount = (account: MetaAdAccount) => {
@@ -505,17 +544,15 @@ export default function MetaIntegrationPage() {
             })
             dispatchAccountEdit({ type: "close" })
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : "Failed to update ad account"
-            dispatchAccountEdit({ type: "setFormError", message })
+            const message = getActionErrorMessage(error, "Couldn't update the ad account. Try again.")
+            if (message) dispatchAccountEdit({ type: "setFormError", message })
         }
     }
 
+    // Errors propagate so the confirm dialog stays open and shows them inline.
     const handleDeleteAdAccount = async (accountId: string) => {
-        try {
-            await deleteAccountMutation.mutateAsync(accountId)
-        } catch (error) {
-            console.error("Failed to delete ad account:", error)
-        }
+        await deleteAccountMutation.mutateAsync(accountId)
+        toast.success("Ad account deleted")
     }
 
     return (
@@ -525,7 +562,8 @@ export default function MetaIntegrationPage() {
             <div className="flex-1 space-y-6 p-6">
                 <MetaConnectionsCard
                     connections={connections}
-                    connectionsLoading={connectionsLoading}
+                    connectionsLoading={connectionsQuery.isLoading}
+                    loadError={getListLoadError(connectionsQuery)}
                     connectUrlPending={connectUrlMutation.isPending}
                     onConnect={handleConnectWithFacebook}
                     onManageAssets={(connectionId) =>
@@ -551,7 +589,8 @@ export default function MetaIntegrationPage() {
 
                 <MetaAdAccountsCard
                     adAccounts={adAccounts}
-                    adAccountsLoading={adAccountsLoading}
+                    adAccountsLoading={adAccountsQuery.isLoading}
+                    loadError={getListLoadError(adAccountsQuery)}
                     deletePending={deleteAccountMutation.isPending}
                     onEditAccount={openEditAccount}
                     onDeleteAdAccount={handleDeleteAdAccount}
@@ -588,22 +627,22 @@ export default function MetaIntegrationPage() {
 
 function MetaIntegrationHeader() {
     return (
-        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center justify-between px-6">
-                <div>
-                    <h1 className="text-2xl font-semibold">Meta Integration</h1>
-                </div>
+        <PageHeader
+            title="Meta Integration"
+            back={{ href: "/settings/integrations", label: "Back to integrations" }}
+            actions={
                 <Button render={<Link href="/settings/integrations/meta/forms" />} variant="outline">
                     Manage lead forms
                 </Button>
-            </div>
-        </div>
+            }
+        />
     )
 }
 
 function MetaConnectionsCard({
     connections,
     connectionsLoading,
+    loadError,
     connectUrlPending,
     onConnect,
     onManageAssets,
@@ -611,6 +650,7 @@ function MetaConnectionsCard({
 }: {
     connections: MetaOAuthConnection[]
     connectionsLoading: boolean
+    loadError: ListLoadError | null
     connectUrlPending: boolean
     onConnect: () => void
     onManageAssets: (connectionId: string) => void
@@ -622,20 +662,31 @@ function MetaConnectionsCard({
                 <div>
                     <CardTitle>Connections</CardTitle>
                 </div>
-                <Button onClick={onConnect} disabled={connectUrlPending}>
-                    {connectUrlPending ? (
-                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                    ) : (
-                        <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
-                    )}
-                    Connect with Facebook
-                </Button>
+                {/* Hidden after a failed load, so the error does not read as "no connections, connect one". */}
+                {!loadError && (
+                    <Button onClick={onConnect} disabled={connectUrlPending}>
+                        {connectUrlPending ? (
+                            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        ) : (
+                            <MegaphoneIcon className="mr-2 size-4" aria-hidden="true" />
+                        )}
+                        Connect with Facebook
+                    </Button>
+                )}
             </CardHeader>
             <CardContent>
                 {connectionsLoading ? (
                     <div className="flex items-center justify-center py-12">
                         <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                     </div>
+                ) : loadError ? (
+                    <QueryErrorState
+                        error={loadError.error}
+                        onRetry={loadError.retry}
+                        isRetrying={loadError.isRetrying}
+                        title="Couldn't load Meta connections"
+                        className="min-h-0 py-10"
+                    />
                 ) : connections.length === 0 ? (
                     <div className="text-sm text-muted-foreground">No connections yet.</div>
                 ) : (
@@ -749,15 +800,17 @@ function MetaConnectionAlerts({
 function MetaAdAccountsCard({
     adAccounts,
     adAccountsLoading,
+    loadError,
     deletePending,
     onEditAccount,
     onDeleteAdAccount,
 }: {
     adAccounts: MetaAdAccount[]
     adAccountsLoading: boolean
+    loadError: ListLoadError | null
     deletePending: boolean
     onEditAccount: (account: MetaAdAccount) => void
-    onDeleteAdAccount: (accountId: string) => void
+    onDeleteAdAccount: (accountId: string) => Promise<void>
 }) {
     return (
         <Card>
@@ -769,6 +822,14 @@ function MetaAdAccountsCard({
                     <div className="flex items-center justify-center py-12">
                         <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                     </div>
+                ) : loadError ? (
+                    <QueryErrorState
+                        error={loadError.error}
+                        onRetry={loadError.retry}
+                        isRetrying={loadError.isRetrying}
+                        title="Couldn't load ad accounts"
+                        className="min-h-0 py-10"
+                    />
                 ) : adAccounts.length === 0 ? (
                     <div className="text-sm text-muted-foreground">No ad accounts connected yet.</div>
                 ) : (
@@ -830,15 +891,23 @@ function MetaAdAccountsCard({
                                         >
                                             <PencilIcon className="size-4" aria-hidden="true" />
                                         </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => onDeleteAdAccount(account.id)}
-                                            disabled={deletePending}
-                                            aria-label="Delete ad account"
-                                        >
-                                            <TrashIcon className="size-4" aria-hidden="true" />
-                                        </Button>
+                                        <ConfirmDialog
+                                            trigger={
+                                                <Button
+                                                    variant="destructive-ghost"
+                                                    size="sm"
+                                                    disabled={deletePending}
+                                                    aria-label="Delete ad account"
+                                                >
+                                                    <TrashIcon className="size-4" aria-hidden="true" />
+                                                </Button>
+                                            }
+                                            title={`Delete ${account.ad_account_name || account.ad_account_external_id}?`}
+                                            description="Lead sync and CAPI stop for this ad account."
+                                            confirmLabel="Delete"
+                                            errorFallback="Couldn't delete the ad account. Try again."
+                                            onConfirm={() => onDeleteAdAccount(account.id)}
+                                        />
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -956,24 +1025,19 @@ function DisconnectMetaConnectionDialog({
 }: {
     connectionId: string | null
     onClose: () => void
-    onDisconnect: (connectionId: string) => void
+    onDisconnect: (connectionId: string) => Promise<void>
 }) {
     return (
-        <AlertDialog open={!!connectionId} onOpenChange={(open) => !open && onClose()}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Disconnect Meta account?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This will unlink all ad accounts and pages connected through this Facebook account.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => connectionId && onDisconnect(connectionId)}>
-                        Disconnect
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDialog
+            open={!!connectionId}
+            onOpenChange={(open) => {
+                if (!open) onClose()
+            }}
+            title="Disconnect Meta account?"
+            description="This will unlink all ad accounts and pages connected through this Facebook account."
+            confirmLabel="Disconnect"
+            errorFallback="Couldn't disconnect the Meta account. Try again."
+            onConfirm={() => (connectionId ? onDisconnect(connectionId) : undefined)}
+        />
     )
 }

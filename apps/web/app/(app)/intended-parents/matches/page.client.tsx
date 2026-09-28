@@ -4,10 +4,10 @@ import { useState } from "react"
 import type { Route } from "next"
 import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
     Table,
     TableBody,
@@ -23,15 +23,22 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
+import { DateRangePicker, type DateRangePreset } from "@/components/ui/date-range-picker"
 import { PaginationJump } from "@/components/ui/pagination-jump"
-import { PermissionDeniedState } from "@/components/error-state"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
+import { ListToolbar, ListToolbarSearch, MoreFiltersPopover } from "@/components/list-toolbar"
+import { NewMatchDialog } from "@/components/matches/NewMatchDialog"
+import { PageHeader } from "@/components/page-header"
+import { StageSelect } from "@/components/stage-select"
 import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import {
     HeartHandshakeIcon,
     Loader2Icon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    SearchIcon,
+    PlusIcon,
 } from "lucide-react"
 import { useMatches, useMatchStats, type MatchStatus, type ListMatchesParams } from "@/lib/hooks/use-matches"
 import { parseDateInput } from "@/lib/utils/date"
@@ -40,9 +47,17 @@ import {
     getMatchStatusLabel,
     getMatchKindLabel,
     isMatchStatus,
-    MATCH_STATUS_DEFINITIONS,
 } from "@/lib/match-status-definitions"
-import { isPermissionError } from "@/lib/error-utils"
+import { getMatchStatusFilterLabel, matchStatusStageOptions } from "@/lib/stage-options"
+import {
+    EMPTY_DATE_RANGE,
+    getDateRangeBounds,
+    getDateRangeFilterLabel,
+    readDateRangeParams,
+    writeDateRangeParams,
+    type DateRangeSelection,
+} from "@/lib/date-range-filter"
+import { ListPageGate } from "../list-page-gate"
 
 type MatchKindFilter = "all" | "surrogate" | "donor"
 type MatchStatusFilter = MatchStatus | "all"
@@ -60,11 +75,34 @@ type MatchListUrlState = {
     kindFilter: MatchKindFilter
     search: string
     page: number
+    datePreset: DateRangePreset
+    customRange: DateRangeSelection
 }
+
+const DEFAULT_MATCH_LIST_STATE: MatchListUrlState = {
+    statusFilter: "all",
+    kindFilter: "all",
+    search: "",
+    page: 1,
+    datePreset: "all",
+    customRange: EMPTY_DATE_RANGE,
+}
+
+const MATCHES_DENIED_DESCRIPTION = "Matches need the View Matches permission. Ask an admin to update your role."
 
 const parsePageParam = (value: string | null): number => {
     const parsed = Number(value)
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+}
+
+function parseMatchKindFilter(value: string | null): MatchKindFilter {
+    return value === "donor" || value === "surrogate" ? value : "all"
+}
+
+/** The one label helper for the Kind filter: trigger and chip. */
+function getMatchKindFilterLabel(value: string | null | undefined): string {
+    if (!value || value === "all") return "All Kinds"
+    return getMatchKindLabel(value)
 }
 
 function resolveQueryDraft<T>(
@@ -77,39 +115,40 @@ function resolveQueryDraft<T>(
 
 function readMatchListUrlState(searchParams: SearchParamsSnapshot): MatchListUrlState {
     const rawStatus = searchParams.get("status")
+    const { preset, customRange } = readDateRangeParams(searchParams)
     return {
         statusFilter: rawStatus && (rawStatus === "all" || isMatchStatus(rawStatus))
             ? rawStatus
             : "all",
-        kindFilter: searchParams.get("match_kind") === "donor" ? "donor" : searchParams.get("match_kind") === "surrogate" ? "surrogate" : "all",
+        kindFilter: parseMatchKindFilter(searchParams.get("match_kind")),
         search: searchParams.get("q") || "",
         page: parsePageParam(searchParams.get("page")),
+        datePreset: preset,
+        customRange,
     }
 }
 
 function updateMatchListUrl(
     replace: RouterReplace,
     searchParams: SearchParamsSnapshot,
-    status: MatchStatusFilter,
-    searchValue: string,
-    currentPage: number,
-    kind: MatchKindFilter
+    state: MatchListUrlState,
 ) {
     const newParams = new URLSearchParams(searchParams.toString())
-    if (kind !== "all") newParams.set("match_kind", kind)
+    if (state.kindFilter !== "all") newParams.set("match_kind", state.kindFilter)
     else newParams.delete("match_kind")
-    if (status !== "all") {
-        newParams.set("status", status)
+    if (state.statusFilter !== "all") {
+        newParams.set("status", state.statusFilter)
     } else {
         newParams.delete("status")
     }
-    if (searchValue) {
-        newParams.set("q", searchValue)
+    writeDateRangeParams(newParams, state.datePreset, state.customRange)
+    if (state.search) {
+        newParams.set("q", state.search)
     } else {
         newParams.delete("q")
     }
-    if (currentPage > 1) {
-        newParams.set("page", String(currentPage))
+    if (state.page > 1) {
+        newParams.set("page", String(state.page))
     } else {
         newParams.delete("page")
     }
@@ -133,55 +172,71 @@ function formatMatchProposedDate(dateStr: string) {
 }
 
 export default function MatchesPage() {
+    return (
+        <ListPageGate title="Matches" permission="view_matches" deniedDescription={MATCHES_DENIED_DESCRIPTION}>
+            <MatchesList />
+        </ListPageGate>
+    )
+}
+
+function MatchesList() {
     const searchParams = useSearchParams()
     const { replace } = useRouter()
+    const { can, policyVersion } = usePermissionCheck()
+    // Same gate as the surrogate header's Propose Match under v2 (it also needs view_intended_parents).
+    const canProposeMatches = can("propose_matches") && (policyVersion !== 2 || can("view_intended_parents"))
+    const [isNewMatchOpen, setIsNewMatchOpen] = useState(false)
+    const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false)
     const currentQuery = searchParams.toString()
     const urlState = readMatchListUrlState(searchParams)
-    const [kindDraft, setKindDraft] = useState<QueryDraft<MatchKindFilter> | null>(null)
-    const kindFilter = resolveQueryDraft(kindDraft, currentQuery, urlState.kindFilter)
-    const [statusDraft, setStatusDraft] = useState<QueryDraft<MatchStatusFilter> | null>(null)
-    const [pageDraft, setPageDraft] = useState<QueryDraft<number> | null>(null)
-    const [searchDraft, setSearchDraft] = useState<QueryDraft<string> | null>(null)
-    const statusFilter = resolveQueryDraft(statusDraft, currentQuery, urlState.statusFilter)
-    const page = resolveQueryDraft(pageDraft, currentQuery, urlState.page)
-    const search = resolveQueryDraft(searchDraft, currentQuery, urlState.search)
+    const [stateDraft, setStateDraft] = useState<QueryDraft<MatchListUrlState> | null>(null)
+    const listState = resolveQueryDraft(stateDraft, currentQuery, urlState)
+    const { statusFilter, kindFilter, search, page, datePreset, customRange } = listState
     const {
         cancel: clearPendingSearchUpdate,
         schedule: scheduleSearchCommit,
     } = useDebouncedSearchCommit(currentQuery)
 
-    const handleKindChange = (kind: MatchKindFilter) => {
+    /** Applies a filter change right away: the draft shows it until the URL catches up. */
+    const applyListState = (patch: Partial<MatchListUrlState>) => {
+        const next = { ...listState, page: 1, ...patch }
         clearPendingSearchUpdate()
-        setKindDraft({ query: currentQuery, value: kind })
-        setPageDraft({ query: currentQuery, value: 1 })
-        updateMatchListUrl(replace, searchParams, statusFilter, search, 1, kind)
+        setStateDraft({ query: currentQuery, value: next })
+        updateMatchListUrl(replace, searchParams, next)
     }
 
     const handleStatusChange = (value: string) => {
-        const nextStatus = value === "all" || isMatchStatus(value) ? value : "all"
-        clearPendingSearchUpdate()
-        setStatusDraft({ query: currentQuery, value: nextStatus })
-        setPageDraft({ query: currentQuery, value: 1 })
-        updateMatchListUrl(replace, searchParams, nextStatus, search, 1, kindFilter)
+        applyListState({ statusFilter: value === "all" || isMatchStatus(value) ? value : "all" })
+    }
+
+    const handleDatePresetChange = (preset: DateRangePreset) => {
+        applyListState({ datePreset: preset, customRange: preset === "custom" ? customRange : EMPTY_DATE_RANGE })
+    }
+
+    const handleCustomRangeChange = (range: DateRangeSelection) => {
+        applyListState({ datePreset: "custom", customRange: range })
     }
 
     const handlePageChange = (nextPage: number) => {
-        clearPendingSearchUpdate()
-        setPageDraft({ query: currentQuery, value: nextPage })
-        updateMatchListUrl(replace, searchParams, statusFilter, search, nextPage, kindFilter)
+        applyListState({ page: nextPage })
     }
 
     const handleSearchChange = (nextSearch: string) => {
-        setSearchDraft({ query: currentQuery, value: nextSearch })
-        setPageDraft({ query: currentQuery, value: 1 })
+        const next = { ...listState, search: nextSearch, page: 1 }
+        setStateDraft({ query: currentQuery, value: next })
         clearPendingSearchUpdate()
         const scheduledQuery = currentQuery
         scheduleSearchCommit(() => {
             if (searchParams.toString() !== scheduledQuery) return
-            updateMatchListUrl(replace, searchParams, statusFilter, nextSearch, 1, kindFilter)
+            updateMatchListUrl(replace, searchParams, next)
         }, 300)
     }
 
+    const resetFilters = () => {
+        applyListState(DEFAULT_MATCH_LIST_STATE)
+    }
+
+    const dateBounds = getDateRangeBounds(datePreset, customRange)
     const filters = {
         page,
         per_page: 20,
@@ -192,124 +247,154 @@ export default function MatchesPage() {
             : {}),
         ...(kindFilter !== "all" ? { match_kind: kindFilter } : {}),
         ...(urlState.search ? { q: urlState.search } : {}),
+        ...(dateBounds.from ? { proposed_from: dateBounds.from } : {}),
+        ...(dateBounds.to ? { proposed_to: dateBounds.to } : {}),
     } satisfies ListMatchesParams
-    const { data, isLoading, isError, error, refetch } = useMatches(filters)
+    const { data, isLoading, isError, error, refetch, isFetching } = useMatches(filters)
     const { data: stats } = useMatchStats()
 
+    const stageOptions = matchStatusStageOptions(stats?.by_status)
+    const hasActiveFilters =
+        statusFilter !== "all" || kindFilter !== "all" || datePreset !== "all" || Boolean(urlState.search)
     const totalPages = data ? Math.ceil(data.total / data.per_page) : 1
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <h1 className="text-2xl font-semibold">Matches</h1>
-                </div>
-            </div>
+            <PageHeader
+                title="Matches"
+                count={data?.total}
+                countTotal={hasActiveFilters ? stats?.total : undefined}
+                countLabel="matches"
+                actions={
+                    canProposeMatches ? (
+                        <Button onClick={() => setIsNewMatchOpen(true)}>
+                            <PlusIcon className="mr-2 size-4" aria-hidden="true" />
+                            New Match
+                        </Button>
+                    ) : null
+                }
+            />
 
-            {/* Main Content */}
-            <div className="flex-1 p-6 space-y-6">
-                {/* Stats Cards */}
-                <div className="grid gap-4 md:grid-cols-5">
-                    <Card>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium text-muted-foreground">Total</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats?.total ?? 0}</div>
-                        </CardContent>
-                    </Card>
-                    {(["under_review", "accepted", "declined"] as const).map((status) => (
-                        <Card key={status}>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-medium text-muted-foreground">
-                                    {getMatchStatusLabel(status)}
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {stats?.by_status?.[status] ?? 0}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
+            {isNewMatchOpen ? (
+                <NewMatchDialog open={isNewMatchOpen} onOpenChange={setIsNewMatchOpen} />
+            ) : null}
 
-                {/* Filters */}
-                <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                    <Select value={kindFilter} onValueChange={(value) => handleKindChange(value === "donor" || value === "surrogate" ? value : "all")}>
-                        <SelectTrigger className="w-[180px]" aria-label="Match kind">
-                            <SelectValue>{(value: string | null) => !value || value === "all" ? "All Kinds" : getMatchKindLabel(value)}</SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Kinds</SelectItem>
-                            <SelectItem value="surrogate">Surrogate</SelectItem>
-                            <SelectItem value="donor">Donor</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Select value={statusFilter} onValueChange={(v) => { if (v) { handleStatusChange(v) } }}>
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="All statuses">
-                                {(value: string | null) => {
-                                    if (!value || value === "all") return "All statuses"
-                                    return getMatchStatusLabel(value)
-                                }}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All statuses</SelectItem>
-                            {MATCH_STATUS_DEFINITIONS.map((status) => (
-                                <SelectItem key={status.value} value={status.value}>
-                                    {status.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <div className="flex-1" />
-                    <div className="relative w-full max-w-sm">
-                        <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            placeholder="Search match or participant…"
-                            value={search}
-                            onChange={(e) => {
-                                handleSearchChange(e.target.value)
-                            }}
-                            className="pl-9"
+            <ListToolbar
+                filters={
+                    <>
+                        <StageSelect
+                            value={statusFilter}
+                            onValueChange={handleStatusChange}
+                            options={stageOptions}
+                            allLabel="All Stages"
+                            className="w-[180px]"
+                            aria-label="Filter by stage"
                         />
-                    </div>
-                </div>
+                        <DateRangePicker
+                            preset={datePreset}
+                            onPresetChange={handleDatePresetChange}
+                            customRange={customRange}
+                            onCustomRangeChange={handleCustomRangeChange}
+                            ariaLabel="Proposed date range"
+                        />
+                        <MoreFiltersPopover
+                            open={isMoreFiltersOpen}
+                            onOpenChange={setIsMoreFiltersOpen}
+                            active={kindFilter !== "all"}
+                        >
+                            <div className="grid gap-2">
+                                <Label>Kind</Label>
+                                <Select
+                                    value={kindFilter}
+                                    onValueChange={(value) => applyListState({ kindFilter: parseMatchKindFilter(value) })}
+                                >
+                                    <SelectTrigger aria-label="Filter by kind">
+                                        <SelectValue placeholder="All Kinds">
+                                            {(value: string | null) => getMatchKindFilterLabel(value)}
+                                        </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Kinds</SelectItem>
+                                        <SelectItem value="surrogate">Surrogate</SelectItem>
+                                        <SelectItem value="donor">Donor</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </MoreFiltersPopover>
+                    </>
+                }
+                search={
+                    <ListToolbarSearch
+                        placeholder="Search matches"
+                        value={search}
+                        onValueChange={handleSearchChange}
+                        aria-label="Search matches"
+                    />
+                }
+                chips={[
+                    statusFilter !== "all" && {
+                        key: "stage",
+                        label: `Stage: ${getMatchStatusFilterLabel(statusFilter)}`,
+                        onRemove: () => applyListState({ statusFilter: "all" }),
+                    },
+                    datePreset !== "all" && {
+                        key: "date",
+                        label: `Proposed: ${getDateRangeFilterLabel(datePreset, customRange)}`,
+                        onRemove: () => applyListState({ datePreset: "all", customRange: EMPTY_DATE_RANGE }),
+                    },
+                    kindFilter !== "all" && {
+                        key: "kind",
+                        label: `Kind: ${getMatchKindFilterLabel(kindFilter)}`,
+                        onRemove: () => applyListState({ kindFilter: "all" }),
+                    },
+                    search !== "" && {
+                        key: "search",
+                        label: `Search: ${search}`,
+                        onRemove: () => applyListState({ search: "" }),
+                    },
+                ]}
+                onReset={resetFilters}
+            />
 
-                {/* Table */}
+            <div className="flex-1 overflow-auto p-6 space-y-6">
                 <Card className="py-0">
                     <CardContent className="p-0">
                         {isLoading ? (
-                            <div className="flex items-center justify-center py-12">
-                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+                            <div className="flex items-center justify-center py-12" role="status">
+                                <Loader2Icon className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
                                 <span className="ml-2 text-muted-foreground">Loading…</span>
                             </div>
-                        ) : isPermissionError(error) ? (
-                            <PermissionDeniedState
-                                description="Your account does not have permission to view matches. Ask an admin to update your role or permissions."
-                                onRetry={() => refetch()}
-                            />
                         ) : isError ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <HeartHandshakeIcon className="size-12 text-muted-foreground mb-4" />
-                                <h3 className="text-lg font-medium">Unable to load matches</h3>
-                                <p className="text-muted-foreground">
-                                    Please try again in a moment.
-                                </p>
-                            </div>
+                            <QueryErrorState
+                                error={error}
+                                onRetry={() => { void refetch() }}
+                                isRetrying={isFetching}
+                                title="Couldn't load matches"
+                                forbidden={{ description: MATCHES_DENIED_DESCRIPTION, secondaryHref: "/dashboard" }}
+                                headingLevel={2}
+                            />
                         ) : !data?.items.length ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <HeartHandshakeIcon className="size-12 text-muted-foreground mb-4" />
-                                <h3 className="text-lg font-medium">No matches found</h3>
-                                <p className="text-muted-foreground">
-                                    {statusFilter !== "all"
-                                        ? "Try adjusting your filter"
-                                        : "Matches will appear here when surrogates or donors are paired with intended parents"}
-                                </p>
-                            </div>
+                            hasActiveFilters ? (
+                                <EmptyState
+                                    icon={HeartHandshakeIcon}
+                                    title="No matches found"
+                                    headingLevel={2}
+                                    onClearFilters={resetFilters}
+                                />
+                            ) : (
+                                <EmptyState
+                                    icon={HeartHandshakeIcon}
+                                    title="No matches yet"
+                                    headingLevel={2}
+                                    action={
+                                        canProposeMatches ? (
+                                            <Button size="sm" onClick={() => setIsNewMatchOpen(true)}>
+                                                New Match
+                                            </Button>
+                                        ) : undefined
+                                    }
+                                />
+                            )
                         ) : (
                             <Table className="[&_th]:!text-center [&_td]:!text-center [&_th>div]:justify-center">
                                 <TableHeader>

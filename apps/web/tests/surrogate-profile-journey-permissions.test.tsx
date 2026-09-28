@@ -21,7 +21,10 @@ const detail = () => ({
 })
 vi.mock("@/components/surrogates/detail/SurrogateDetailLayout/context", () => ({ useSurrogateDetailData: () => detail() }))
 vi.mock("@/components/surrogates/detail/SurrogateDetailLayout", () => ({ useSurrogateDetailData: () => detail() }))
-vi.mock("next/navigation", () => ({ useParams: () => ({ id: "surrogate-1" }) }))
+vi.mock("next/navigation", () => ({
+    useParams: () => ({ id: "surrogate-1" }),
+    useSearchParams: () => new URLSearchParams(),
+}))
 vi.mock("@/components/ui/tabs", () => ({ TabsContent: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ user: { role: state.role, user_id: "user-1" } }) }))
 vi.mock("@/lib/hooks/use-profile", () => ({
@@ -84,6 +87,13 @@ describe("Surrogate Journey permission controls", () => {
         render(<SurrogateJourneyPage />)
         expect(screen.getAllByText("Match Confirmed").length).toBeGreaterThan(0)
         expect(screen.queryByRole("button", { name: "Set Image" })).not.toBeInTheDocument()
+    })
+
+    it("keeps Export in the header flow on phones and pins it to the corner from sm up", () => {
+        render(<SurrogateJourneyPage />)
+        const exportSlot = screen.getByRole("button", { name: "Export" }).parentElement
+        expect(exportSlot).toHaveClass("flex", "justify-end", "sm:absolute", "sm:right-6", "sm:top-6")
+        expect(exportSlot).not.toHaveClass("absolute")
     })
 
     it("uses delegated edit permission and closes the selector after revocation", () => {

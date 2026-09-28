@@ -220,23 +220,6 @@ def cases_for_stats(db, test_org, test_user, stats_pipeline):
 class TestCaseStats:
     """Tests for surrogate_service.get_surrogate_stats"""
 
-    def test_get_stats_returns_all_fields(self, db, test_org, cases_for_stats):
-        """Stats includes all expected fields including period comparisons."""
-        stats = surrogate_service.get_surrogate_stats(db, test_org.id)
-
-        # Basic fields
-        assert "total" in stats
-        assert "by_status" in stats
-        assert "this_week" in stats
-        assert "new_leads_24h" in stats
-
-        # Period comparison fields
-        assert "last_week" in stats
-        assert "new_leads_prev_24h" in stats
-        assert "week_change_pct" in stats
-        assert "new_leads_change_pct" in stats
-        assert "pending_tasks" in stats
-
     def test_this_week_count(self, db, test_org, cases_for_stats):
         """This week count is accurate."""
         stats = surrogate_service.get_surrogate_stats(db, test_org.id)

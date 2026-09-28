@@ -10,6 +10,7 @@ import type {
 } from "@/lib/api/email-templates"
 import type { EmailTemplateVersion } from "@/lib/api/email-template-history"
 import type { EmailTemplateDraft } from "@/lib/api/email-template-drafts"
+import { ApiError } from "@/lib/api"
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -24,6 +25,8 @@ const mockRollbackEmailTemplate = vi.fn()
 const mockDiscardEmailTemplateDraft = vi.fn()
 const mockRefetchPersonalDrafts = vi.fn()
 const mockPersonalDraftsError = vi.fn()
+const mockPersonalTemplatesError = vi.fn()
+const mockRefetchPersonalTemplates = vi.fn()
 const mockRouterPush = vi.fn()
 let userSignatureData: Record<string, string | null> | null = null
 const FIXED_TIMESTAMP = "2026-01-01T00:00:00.000Z"
@@ -224,6 +227,16 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
             }
         }
         if (params?.scope === "personal") {
+            if (mockPersonalTemplatesError()) {
+                return {
+                    data: undefined,
+                    isLoading: false,
+                    isError: true,
+                    isFetching: false,
+                    error: new ApiError(500, "Internal Server Error", "database exploded"),
+                    refetch: mockRefetchPersonalTemplates,
+                }
+            }
             return {
                 data: params?.activeOnly === false
                     ? personalTemplatesFixture
@@ -315,6 +328,9 @@ describe("EmailTemplatesPage", () => {
         mockRefetchPersonalDrafts.mockReset()
         mockPersonalDraftsError.mockReset()
         mockPersonalDraftsError.mockReturnValue(false)
+        mockPersonalTemplatesError.mockReset()
+        mockPersonalTemplatesError.mockReturnValue(false)
+        mockRefetchPersonalTemplates.mockReset()
         mockRouterPush.mockReset()
         mockSendTestEmailTemplate.mockResolvedValue({ provider_used: "resend" })
         mockRollbackEmailTemplate.mockResolvedValue({
@@ -347,19 +363,26 @@ describe("EmailTemplatesPage", () => {
         })
     })
 
-    it("renders updated tabs", () => {
+    it("renders template tabs and ownership labels", () => {
         render(<EmailTemplatesPage />)
         expect(screen.getByRole("tab", { name: "My Email Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "Organization Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "Platform Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "My Signature" })).toBeInTheDocument()
-    })
-
-    it("shows a friendly label for the personal-template ownership filter", () => {
-        render(<EmailTemplatesPage />)
-
         expect(screen.getByRole("combobox")).toHaveTextContent("My Templates")
         expect(screen.getByRole("combobox")).not.toHaveTextContent(/^mine$/)
+    })
+
+    it("scrolls the template tabs and wraps the list filters at narrow widths", () => {
+        render(<EmailTemplatesPage />)
+
+        const tabList = screen.getByRole("tablist", { name: "Template type" })
+        expect(tabList).toHaveClass("max-w-full", "overflow-x-auto", "justify-start")
+        const row = tabList.parentElement
+        expect(row).toHaveClass("flex-wrap")
+        const filters = screen.getByRole("combobox").closest("div.flex-wrap")
+        expect(filters).not.toBe(row)
+        expect(row).toContainElement(filters as HTMLElement)
     })
 
     it("shows send test email action and opens dialog", async () => {
@@ -496,11 +519,11 @@ describe("EmailTemplatesPage", () => {
         fireEvent.click(screen.getByRole("checkbox", { name: "Send even if unsubscribed" }))
         fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
 
-        const fullNameInput = await screen.findByLabelText("{{full_name}}")
+        const fullNameInput = await screen.findByLabelText("Full name")
         expect(fullNameInput).toHaveValue("Jordan Smith")
         fireEvent.change(fullNameInput, { target: { value: "Custom Recipient" } })
 
-        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
 
         await waitFor(() => {
             expect(mockSendTestEmailTemplate).toHaveBeenCalledWith({
@@ -526,18 +549,42 @@ describe("EmailTemplatesPage", () => {
 
         fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
         fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
-        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
 
         await waitFor(() => expect(mockSendTestEmailTemplate).toHaveBeenCalledTimes(1))
         expect(await screen.findByRole("dialog")).toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
         await waitFor(() => expect(mockSendTestEmailTemplate).toHaveBeenCalledTimes(2))
 
         const firstKey = mockSendTestEmailTemplate.mock.calls[0][0].payload.idempotency_key
         const retriedKey = mockSendTestEmailTemplate.mock.calls[1][0].payload.idempotency_key
         expect(firstKey).toEqual(expect.any(String))
         expect(retriedKey).toBe(firstKey)
+    })
+
+    it("validates the test recipient inline and shows a failed send in the dialog", async () => {
+        mockSendTestEmailTemplate.mockRejectedValueOnce(new Error("provider stack trace"))
+        render(<EmailTemplatesPage />)
+
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Personal Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
+        const toEmailInput = await screen.findByLabelText("To email")
+        fireEvent.change(toEmailInput, { target: { value: "not-an-email" } })
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
+
+        expect(await screen.findByText("Enter a valid email address.")).toBeInTheDocument()
+        expect(toEmailInput).toHaveAttribute("aria-invalid", "true")
+        expect(mockSendTestEmailTemplate).not.toHaveBeenCalled()
+
+        fireEvent.change(toEmailInput, { target: { value: "qa@example.com" } })
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
+
+        expect(
+            await screen.findByText("Couldn't send the test email. Try again."),
+        ).toBeInTheDocument()
+        expect(screen.queryByText("provider stack trace")).not.toBeInTheDocument()
+        expect(screen.getByRole("dialog")).toBeInTheDocument()
     })
 
     it("updates untouched email variable samples when the test recipient changes", async () => {
@@ -548,12 +595,12 @@ describe("EmailTemplatesPage", () => {
         fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
         fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
 
-        expect(await screen.findByLabelText("{{email}}")).toHaveValue("admin@example.com")
+        expect(await screen.findByLabelText("Email")).toHaveValue("admin@example.com")
         fireEvent.change(screen.getByLabelText("To email"), {
             target: { value: "qa@example.com" },
         })
 
-        expect(screen.getByLabelText("{{email}}")).toHaveValue("qa@example.com")
+        expect(screen.getByLabelText("Email")).toHaveValue("qa@example.com")
     })
 
     it("provides donor-specific samples for test sends", async () => {
@@ -565,9 +612,9 @@ describe("EmailTemplatesPage", () => {
         fireEvent.click(await screen.findByRole("menuitem", { name: "Send test email" }))
         fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
 
-        expect(await screen.findByLabelText("{{donor_number}}")).toHaveValue("D10001")
-        expect(screen.getByLabelText("{{donor_type}}")).toHaveValue("Egg Donor")
-        expect(screen.getByLabelText("{{education}}")).toHaveValue("Bachelor's degree")
+        expect(await screen.findByLabelText("Donor number")).toHaveValue("D10001")
+        expect(screen.getByLabelText("Donor type")).toHaveValue("Egg Donor")
+        expect(screen.getByLabelText("Education")).toHaveValue("Bachelor's degree")
     })
 
     it("labels organization template action menus with template context", async () => {
@@ -770,6 +817,8 @@ describe("EmailTemplatesPage", () => {
 
         expect(screen.getByText("New Journey Draft")).toBeInTheDocument()
         expect(screen.getByText("Unpublished draft")).toBeInTheDocument()
+        // The header row must be allowed to shrink, or the badge is pushed out of the card at 390px.
+        expect(screen.getByText("Unpublished draft").parentElement).toHaveClass("min-w-0")
         fireEvent.click(screen.getByRole("button", { name: "Resume New Journey Draft" }))
 
         expect(mockRouterPush).toHaveBeenCalledWith(
@@ -878,9 +927,7 @@ describe("EmailTemplatesPage", () => {
         expect(
             screen.getByText("Unable to load personal drafts"),
         ).toBeInTheDocument()
-        expect(
-            screen.queryByText("You don't have any personal templates yet"),
-        ).not.toBeInTheDocument()
+        expect(screen.queryByText("No personal templates yet")).not.toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Retry drafts" }))
         expect(mockRefetchPersonalDrafts).toHaveBeenCalledTimes(1)
@@ -968,7 +1015,25 @@ describe("EmailTemplatesPage", () => {
         render(<EmailTemplatesPage />)
 
         expect(screen.queryByText("Deleted Personal Template")).not.toBeInTheDocument()
-        expect(screen.getByText("You don't have any personal templates yet")).toBeInTheDocument()
+        expect(
+            screen.getByRole("heading", { level: 2, name: "No personal templates yet" }),
+        ).toBeInTheDocument()
+        fireEvent.click(screen.getAllByRole("button", { name: "Create Template" }).at(-1)!)
+        expect(mockRouterPush).toHaveBeenCalledWith("/automation/email-templates/personal/new")
+    })
+
+    it("shows a load error instead of the empty state when personal templates fail to load", () => {
+        mockPersonalTemplatesError.mockReturnValue(true)
+
+        render(<EmailTemplatesPage />)
+
+        expect(
+            screen.getByRole("heading", { level: 2, name: "Couldn't load email templates" }),
+        ).toBeInTheDocument()
+        expect(screen.queryByText("No personal templates yet")).not.toBeInTheDocument()
+        expect(screen.queryByText(/database exploded/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(mockRefetchPersonalTemplates).toHaveBeenCalledTimes(1)
     })
 
     it("hides inactive personal templates by default and lets users reveal them", async () => {

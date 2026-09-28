@@ -35,6 +35,11 @@ export type InterviewSlots = {
     slots: { start: string; end: string }[]
 }
 
+export type InterviewOpenDays = {
+    timezone: string
+    dates: string[]
+}
+
 export type ManageInterviewAppointmentPayload = {
     action: "schedule" | "reschedule" | "cancel"
     scheduled_start?: string
@@ -53,6 +58,9 @@ export const getInterviewAppointment = (surrogateId: string) =>
 
 export const getInterviewSlots = (surrogateId: string, date: string, timezone: string) =>
     api.get<InterviewSlots>(`/surrogates/${surrogateId}/interview-appointment/slots?date=${encodeURIComponent(date)}&client_timezone=${encodeURIComponent(timezone)}`)
+
+export const getInterviewOpenDays = (surrogateId: string, dateStart: string, dateEnd: string, timezone: string) =>
+    api.get<InterviewOpenDays>(`/surrogates/${surrogateId}/interview-appointment/open-days?date_start=${encodeURIComponent(dateStart)}&date_end=${encodeURIComponent(dateEnd)}&client_timezone=${encodeURIComponent(timezone)}`)
 
 export const manageInterviewAppointment = (surrogateId: string, payload: ManageInterviewAppointmentPayload) =>
     api.post<InterviewAppointmentState>(`/surrogates/${surrogateId}/interview-appointment`, payload)

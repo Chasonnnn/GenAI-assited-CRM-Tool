@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useSyncExternalStore } from "react"
+import { useState, useSyncExternalStore, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import {
-    ArrowLeftIcon,
     EditIcon,
     FileTextIcon,
     LinkIcon,
@@ -26,6 +25,10 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { EmptyState } from "@/components/empty-state"
+import { LoadErrorState, PermissionDeniedState, QueryErrorState } from "@/components/error-state"
+import { FORM_BUILDER_DENIED } from "@/components/forms/builder/FormBuilderAccessStates"
+import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -55,6 +58,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ApiError } from "@/lib/api"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import {
     listFormIntakeLinks,
     type FormIntakeLinkRead,
@@ -207,33 +211,25 @@ async function runWithPendingState(
     }
 }
 
-function FormsPageHeader({
-    onBack,
-    onCreateForm,
-}: {
-    onBack: () => void
-    onCreateForm: () => void
-}) {
+type LoadErrorInfo = {
+    error: unknown
+    retry: () => void
+    isRetrying: boolean
+}
+
+function FormsPageHeader({ onCreateForm }: { onCreateForm?: (() => void) | undefined }) {
     return (
-        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center justify-between px-6">
-                <div className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Back to automation"
-                        onClick={onBack}
-                    >
-                        <ArrowLeftIcon className="size-4" aria-hidden="true" />
+        <PageHeader
+            title="Form Builder"
+            actions={
+                onCreateForm ? (
+                    <Button onClick={onCreateForm}>
+                        <PlusIcon className="mr-2 size-4" />
+                        Create Form
                     </Button>
-                    <h1 className="text-2xl font-semibold">Form Builder</h1>
-                </div>
-                <Button onClick={onCreateForm}>
-                    <PlusIcon className="mr-2 size-4" />
-                    Create Form
-                </Button>
-            </div>
-        </div>
+                ) : null
+            }
+        />
     )
 }
 
@@ -249,6 +245,7 @@ function FormsPageTabs({
     onShareForm,
     templates,
     templatesLoading,
+    templatesLoadError,
     applyingTemplateId,
     isTemplateActionPending,
     onUseTemplate,
@@ -265,6 +262,7 @@ function FormsPageTabs({
     onShareForm: (form: FormSummary) => void
     templates: FormTemplateLibraryItem[] | undefined
     templatesLoading: boolean
+    templatesLoadError: LoadErrorInfo | null
     applyingTemplateId: string | null
     isTemplateActionPending: boolean
     onUseTemplate: (templateId: string, templateName: string) => void
@@ -295,16 +293,10 @@ function FormsPageTabs({
             </TabsContent>
 
             <TabsContent value="templates" className="space-y-6">
-                <Card>
-                    <CardContent className="py-6 text-sm text-muted-foreground">
-                        Platform templates are shared across your organization for consistent intake flows.
-                        Apply a template to create a new form that you can customize and send.
-                    </CardContent>
-                </Card>
-
                 <FormTemplatesGrid
                     templates={templates}
                     isLoading={templatesLoading}
+                    loadError={templatesLoadError}
                     applyingTemplateId={applyingTemplateId}
                     isTemplateActionPending={isTemplateActionPending}
                     onUseTemplate={onUseTemplate}
@@ -342,18 +334,18 @@ function FormsGrid({
 
     if (!forms?.length) {
         return (
-            <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                    <FileTextIcon className="size-12 text-muted-foreground/50" />
-                    <h3 className="mt-4 text-lg font-medium">No forms yet</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Create your first form to start collecting applications
-                    </p>
-                    <Button className="mt-4" onClick={onCreateForm}>
-                        <PlusIcon className="mr-2 size-4" />
-                        Create Form
-                    </Button>
-                </CardContent>
+            <Card className="py-0">
+                <EmptyState
+                    icon={FileTextIcon}
+                    title="No forms yet"
+                    headingLevel={2}
+                    action={
+                        <Button onClick={onCreateForm}>
+                            <PlusIcon className="mr-2 size-4" />
+                            Create Form
+                        </Button>
+                    }
+                />
             </Card>
         )
     }
@@ -482,6 +474,7 @@ function FormCard({
 function FormTemplatesGrid({
     templates,
     isLoading,
+    loadError,
     applyingTemplateId,
     isTemplateActionPending,
     onUseTemplate,
@@ -489,6 +482,7 @@ function FormTemplatesGrid({
 }: {
     templates: FormTemplateLibraryItem[] | undefined
     isLoading: boolean
+    loadError: LoadErrorInfo | null
     applyingTemplateId: string | null
     isTemplateActionPending: boolean
     onUseTemplate: (templateId: string, templateName: string) => void
@@ -502,16 +496,25 @@ function FormTemplatesGrid({
         )
     }
 
+    if (loadError) {
+        return (
+            <Card className="py-0">
+                <QueryErrorState
+                    error={loadError.error}
+                    onRetry={loadError.retry}
+                    isRetrying={loadError.isRetrying}
+                    title="Couldn't load form templates"
+                    forbidden={FORM_BUILDER_DENIED}
+                    headingLevel={2}
+                />
+            </Card>
+        )
+    }
+
     if (!templates?.length) {
         return (
-            <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                    <FileTextIcon className="size-12 text-muted-foreground/50" />
-                    <h3 className="mt-4 text-lg font-medium">No templates yet</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Platform templates will appear here once available
-                    </p>
-                </CardContent>
+            <Card className="py-0">
+                <EmptyState icon={FileTextIcon} title="No form templates yet" headingLevel={2} />
             </Card>
         )
     }
@@ -546,14 +549,14 @@ function FormTemplateCard({
     onDeleteTemplate: (target: DeleteTarget) => void
 }) {
     return (
-        <Card>
+        <Card className="flex flex-col">
             <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
                             <FileTextIcon className="size-5" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                             <CardTitle className="text-base">{template.name}</CardTitle>
                             {template.published_at && (
                                 <Badge variant="outline" className="mt-1 text-xs">
@@ -562,15 +565,7 @@ function FormTemplateCard({
                             )}
                         </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                        <Button
-                            size="sm"
-                            onClick={() => onUseTemplate(template.id, template.name)}
-                            disabled={isTemplateActionPending || isApplying}
-                        >
-                            {isApplying && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                            Use Template
-                        </Button>
+                    <div className="flex shrink-0 items-center">
                         <DropdownMenu>
                             <DropdownMenuTrigger
                                 render={
@@ -601,13 +596,24 @@ function FormTemplateCard({
                     </div>
                 </div>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="flex flex-1 flex-col pt-0">
                 <p className="text-sm text-muted-foreground">
                     {template.description || "No description provided."}
                 </p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                    <FormRelativeTime dateString={template.updated_at} />
-                </p>
+                <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+                    <p className="text-xs text-muted-foreground">
+                        <FormRelativeTime dateString={template.updated_at} />
+                    </p>
+                    <Button
+                        size="sm"
+                        onClick={() => onUseTemplate(template.id, template.name)}
+                        disabled={isTemplateActionPending || isApplying}
+                        aria-label={`Use template ${template.name}`}
+                    >
+                        {isApplying && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                        Use Template
+                    </Button>
+                </div>
             </CardContent>
         </Card>
     )
@@ -730,7 +736,7 @@ function DeleteFormDialog({
                 <AlertDialogFooter>
                     <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
                     <AlertDialogAction
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        variant="destructive"
                         disabled={isPending}
                         onClick={onConfirm}
                     >
@@ -828,11 +834,18 @@ function ShareFormDialog({
 
 export default function FormsListPage() {
     const { push } = useRouter()
-    const { data: forms, isLoading } = useForms()
+    const permissionCheck = usePermissionCheck()
+    // Every /forms route requires manage_forms.
+    const canManageForms = permissionCheck.can("manage_forms")
+    const formsQuery = useForms({ enabled: canManageForms })
+    const { data: forms, isLoading } = formsQuery
     const createFormMutation = useCreateForm()
     const deleteFormMutation = useDeleteForm()
     const deleteFormTemplateMutation = useDeleteFormTemplate()
-    const { data: templates, isLoading: templatesLoading } = useFormTemplates()
+    const templatesQuery = useFormTemplates({
+        enabled: canManageForms,
+    })
+    const { data: templates, isLoading: templatesLoading } = templatesQuery
     const useTemplateMutation = useUseFormTemplate()
 
     const [showCreateModal, setShowCreateModal] = useState(false)
@@ -1012,20 +1025,52 @@ export default function FormsListPage() {
         })
     }
 
+    let blockedState: ReactNode = null
+    if (permissionCheck.isLoading) {
+        blockedState = (
+            <div className="flex items-center justify-center py-12">
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
+            </div>
+        )
+    } else if (permissionCheck.isError) {
+        blockedState = (
+            <LoadErrorState
+                title="Couldn't load forms"
+                onRetry={permissionCheck.retry}
+                isRetrying={permissionCheck.isRetrying}
+            />
+        )
+    } else if (!canManageForms) {
+        blockedState = <PermissionDeniedState {...FORM_BUILDER_DENIED} />
+    } else if (formsQuery.isError) {
+        blockedState = (
+            <QueryErrorState
+                error={formsQuery.error}
+                onRetry={() => {
+                    void formsQuery.refetch()
+                }}
+                isRetrying={formsQuery.isFetching}
+                title="Couldn't load forms"
+                forbidden={FORM_BUILDER_DENIED}
+            />
+        )
+    }
+
+    if (blockedState) {
+        return (
+            <div className="flex min-h-screen flex-col">
+                <FormsPageHeader />
+                {blockedState}
+            </div>
+        )
+    }
+
     return (
         <div className="flex min-h-screen flex-col">
-            <FormsPageHeader
-                onBack={() => push("/automation")}
-                onCreateForm={() => setShowCreateModal(true)}
-            />
+            <FormsPageHeader onCreateForm={() => setShowCreateModal(true)} />
 
             <div className="flex-1 p-6">
                 <div className="space-y-6">
-                    <p className="max-w-2xl text-sm text-muted-foreground">
-                        Create dynamic application forms to collect information from candidates.
-                        Forms can be sent via secure links and submissions can be reviewed and approved.
-                    </p>
-
                     <FormsPageTabs
                         activeTab={activeTab}
                         onActiveTabChange={setActiveTab}
@@ -1038,6 +1083,15 @@ export default function FormsListPage() {
                         onShareForm={(form) => void handleOpenSharePrompt(form)}
                         templates={templates}
                         templatesLoading={templatesLoading}
+                        templatesLoadError={
+                            templatesQuery.isError && templates === undefined
+                                ? {
+                                      error: templatesQuery.error,
+                                      retry: () => void templatesQuery.refetch(),
+                                      isRetrying: templatesQuery.isFetching,
+                                  }
+                                : null
+                        }
                         applyingTemplateId={applyingTemplateId}
                         isTemplateActionPending={
                             useTemplateMutation.isPending || deleteFormTemplateMutation.isPending

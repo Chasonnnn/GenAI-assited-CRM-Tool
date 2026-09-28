@@ -1,6 +1,6 @@
 import type { ReactNode, ButtonHTMLAttributes } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import CSVImportPage from '../app/(app)/surrogates/import/page'
 
 const mockUseImports = vi.fn()
@@ -129,5 +129,73 @@ describe('CSVImportPage', () => {
         expect(screen.getByText('Email is required')).toBeInTheDocument()
         expect(screen.getByText('Row 5')).toBeInTheDocument()
         expect(screen.getByText('Invalid phone number')).toBeInTheDocument()
+    })
+
+    it('shows a first-run empty state without helper copy', () => {
+        mockUseImports.mockReturnValue({ data: [], isLoading: false, refetch: vi.fn() })
+
+        render(<CSVImportPage />)
+
+        expect(screen.getByText('No imports yet')).toBeInTheDocument()
+        expect(screen.queryByText(/to get started/i)).not.toBeInTheDocument()
+    })
+
+    it('shows a load error with retry instead of the empty history', async () => {
+        const { ApiError } = await import('@/lib/api')
+        const refetch = vi.fn()
+        mockUseImports.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, 'Internal Server Error', 'boom'),
+            refetch,
+        })
+
+        render(<CSVImportPage />)
+
+        expect(screen.getByText("Couldn't load imports")).toBeInTheDocument()
+        expect(screen.queryByText('No imports yet')).not.toBeInTheDocument()
+        expect(screen.queryByText('boom')).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not repeat the history heading as a description', () => {
+        render(<CSVImportPage />)
+
+        expect(screen.getByText('Import History')).toBeInTheDocument()
+        expect(screen.queryByText('View past imports and their results')).not.toBeInTheDocument()
+    })
+
+    it('confirms delete with Cancel and a destructive Delete action', async () => {
+        mockCancelImport.mockResolvedValue({ message: 'Import deleted' })
+        render(<CSVImportPage />)
+
+        fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[0])
+
+        const dialog = await screen.findByRole('alertdialog')
+        expect(within(dialog).getByText('Delete surrogates.csv?')).toBeInTheDocument()
+        expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+        expect(within(dialog).queryByRole('button', { name: 'Keep' })).not.toBeInTheDocument()
+        const confirm = within(dialog).getByRole('button', { name: 'Delete' })
+        expect(confirm).toHaveClass('bg-destructive')
+
+        fireEvent.click(confirm)
+
+        await waitFor(() => expect(mockCancelImport).toHaveBeenCalledWith('import-1'))
+        await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    })
+
+    it('keeps the delete confirm open with an inline error when delete fails', async () => {
+        mockCancelImport.mockRejectedValue(new Error('Network down'))
+        render(<CSVImportPage />)
+
+        fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[0])
+        const dialog = await screen.findByRole('alertdialog')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+        expect(await within(dialog).findByRole('alert')).toHaveTextContent("Couldn't delete import. Try again.")
+        expect(screen.getByRole('alertdialog')).toBeInTheDocument()
     })
 })

@@ -32,7 +32,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
     Select,
@@ -56,7 +55,6 @@ import {
     BuildingIcon,
     LayoutTemplateIcon,
     AlertTriangleIcon,
-    SendIcon,
     HistoryIcon,
 } from "lucide-react"
 import {
@@ -112,6 +110,8 @@ import { insertAtCursor } from "@/lib/insert-at-cursor"
 import { SafeHtmlContent } from "@/components/safe-html-content"
 import { EmailTemplateHistoryDialog } from "@/components/email/EmailTemplateHistoryDialog"
 import { EmailTemplatesPageHeader } from "@/components/email/EmailTemplatesPageHeader"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 import { OrgSignaturePreview } from "@/components/email/OrgSignaturePreview"
 import { SignaturePhotoField } from "@/components/email/SignaturePhotoField"
 import { SignaturePreview } from "@/components/email/SignaturePreview"
@@ -121,7 +121,9 @@ import {
     type TemplateCardControls,
 } from "@/components/email/TemplateCard"
 import { TemplateDraftSection } from "@/components/email/TemplateDraftSection"
+import { SendTestEmailDialog } from "@/components/email/SendTestEmailDialog"
 import { getTemplateStudioHref } from "@/components/email/template-studio-route"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 
 // =============================================================================
 // Signature Override Field Component
@@ -339,6 +341,7 @@ type TestSendDialogState = {
     toEmail: string
     ignoreOptOut: boolean
     variables: Record<string, string>
+    error: string | null
 }
 
 type TestSendDialogAction =
@@ -347,6 +350,7 @@ type TestSendDialogAction =
     | { type: "changeToEmail"; value: string }
     | { type: "changeIgnoreOptOut"; value: boolean }
     | { type: "changeVariable"; name: string; value: string }
+    | { type: "setError"; value: string | null }
 
 const initialTestSendDialogState: TestSendDialogState = {
     isOpen: false,
@@ -354,6 +358,7 @@ const initialTestSendDialogState: TestSendDialogState = {
     toEmail: "",
     ignoreOptOut: false,
     variables: {},
+    error: null,
 }
 
 function testSendDialogReducer(
@@ -368,6 +373,7 @@ function testSendDialogReducer(
                 toEmail: action.toEmail,
                 ignoreOptOut: false,
                 variables: {},
+                error: null,
             }
         case "close":
             return initialTestSendDialogState
@@ -375,6 +381,8 @@ function testSendDialogReducer(
             return { ...state, toEmail: action.value }
         case "changeIgnoreOptOut":
             return { ...state, ignoreOptOut: action.value }
+        case "setError":
+            return { ...state, error: action.value }
         case "changeVariable":
             return {
                 ...state,
@@ -532,6 +540,26 @@ function getPersonalTemplateVisibilityLabel(value: string | null) {
 // Main Page Component
 // =============================================================================
 
+function TemplateListLoadError({
+    query,
+}: {
+    query: { error: unknown; isFetching: boolean; refetch: () => Promise<unknown> }
+}) {
+    return (
+        <Card className="py-0">
+            <QueryErrorState
+                error={query.error}
+                onRetry={() => {
+                    void query.refetch()
+                }}
+                isRetrying={query.isFetching}
+                title="Couldn't load email templates"
+                headingLevel={2}
+            />
+        </Card>
+    )
+}
+
 function useEmailTemplatesPageView() {
     const router = useRouter()
     const { user } = useAuth()
@@ -597,15 +625,17 @@ function useEmailTemplatesPageView() {
     const { data: templateVariables = [], isLoading: templateVariablesLoading } = useEmailTemplateVariables()
 
     // API hooks for templates
-    const { data: personalTemplates, isLoading: loadingPersonal } = useEmailTemplates({
+    const personalTemplatesQuery = useEmailTemplates({
         activeOnly: hideInactivePersonal,
         scope: "personal",
         showAllPersonal: isAdmin && showAllPersonal,
     })
-    const { data: orgTemplates, isLoading: loadingOrg } = useEmailTemplates({
+    const { data: personalTemplates, isLoading: loadingPersonal } = personalTemplatesQuery
+    const orgTemplatesQuery = useEmailTemplates({
         activeOnly: canManageEmailTemplates ? hideInactiveOrg : true,
         scope: "org",
     })
+    const { data: orgTemplates, isLoading: loadingOrg } = orgTemplatesQuery
     const {
         data: personalDrafts = [],
         isLoading: loadingPersonalDrafts,
@@ -628,7 +658,8 @@ function useEmailTemplatesPageView() {
             (draft) => draft.template_id === templateStatusTarget.id,
         ) ?? null
         : null
-    const { data: libraryTemplates, isLoading: loadingLibrary } = useEmailTemplateLibrary()
+    const libraryTemplatesQuery = useEmailTemplateLibrary()
+    const { data: libraryTemplates, isLoading: loadingLibrary } = libraryTemplatesQuery
     const discardDraft = useDiscardEmailTemplateDraft()
 
     const createTemplate = useCreateEmailTemplate()
@@ -877,11 +908,9 @@ function useEmailTemplatesPageView() {
 
     const handleSendTest = async () => {
         if (!testSendState.target) return
+        // SendTestEmailDialog validates the address before calling this handler.
         const toEmail = testSendState.toEmail.trim()
-        if (!toEmail) {
-            toast.error("To email is required")
-            return
-        }
+        dispatchTestSend({ type: "setError", value: null })
 
         const overrides: Record<string, string> = {}
         for (const [key, value] of Object.entries(testSendState.variables)) {
@@ -916,7 +945,10 @@ function useEmailTemplatesPageView() {
             )
             handleCloseTestDialog()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to send test email")
+            dispatchTestSend({
+                type: "setError",
+                value: getActionErrorMessage(error, "Couldn't send the test email. Try again."),
+            })
         }
     }
 
@@ -1145,8 +1177,11 @@ function useEmailTemplatesPageView() {
             {/* Content */}
             <div className="flex-1 p-6">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <div className="flex items-center justify-between mb-6">
-                        <TabsList>
+                    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+                        <TabsList
+                            aria-label="Template type"
+                            className="max-w-full justify-start overflow-x-auto"
+                        >
                             <TabsTrigger value="personal" className="gap-2">
                                 <UserIcon className="size-4" />
                                 My Email Templates
@@ -1164,7 +1199,7 @@ function useEmailTemplatesPageView() {
 
                         {(activeTab === "personal" ||
                             (activeTab === "org" && canManageEmailTemplates)) && (
-                            <div className="flex items-center gap-4">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                                 <div className="flex items-center gap-2">
                                     <Checkbox
                                         id={`hide-inactive-${activeTab}-templates`}
@@ -1193,7 +1228,7 @@ function useEmailTemplatesPageView() {
                                         value={showAllPersonal ? "all" : "mine"}
                                         onValueChange={(v) => setShowAllPersonal(v === "all")}
                                     >
-                                        <SelectTrigger className="w-[180px]">
+                                        <SelectTrigger className="w-auto min-w-[180px]">
                                             <SelectValue>
                                                 {(value: string | null) =>
                                                     getPersonalTemplateVisibilityLabel(
@@ -1218,6 +1253,8 @@ function useEmailTemplatesPageView() {
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
+                        ) : personalTemplatesQuery.isError && personalTemplates === undefined ? (
+                            <TemplateListLoadError query={personalTemplatesQuery} />
                         ) : personalDraftsError ? (
                             <Alert variant="destructive">
                                 <AlertTriangleIcon aria-hidden="true" />
@@ -1240,27 +1277,26 @@ function useEmailTemplatesPageView() {
                                 </AlertDescription>
                             </Alert>
                         ) : !personalTemplates?.length && !personalDrafts.length ? (
-                            <Card>
-                                <CardContent className="flex flex-col items-center justify-center py-12">
-                                    <UserIcon className="size-12 text-muted-foreground mb-4" />
-                                    <p className="text-muted-foreground mb-4">
-                                        {showAllPersonal
-                                            ? "No personal templates found"
-                                            : "You don't have any personal templates yet"}
-                                    </p>
-                                    {!showAllPersonal && canCreatePersonal && (
-                                        <Button
-                                            onClick={() =>
-                                                router.push(
-                                                    "/automation/email-templates/personal/new" as Route,
-                                                )
-                                            }
-                                        >
-                                            <PlusIcon className="mr-2 size-4" />
-                                            Create Your First Template
-                                        </Button>
-                                    )}
-                                </CardContent>
+                            <Card className="py-0">
+                                <EmptyState
+                                    icon={UserIcon}
+                                    title="No personal templates yet"
+                                    headingLevel={2}
+                                    action={
+                                        showAllPersonal || !canCreatePersonal ? undefined : (
+                                            <Button
+                                                onClick={() =>
+                                                    router.push(
+                                                        "/automation/email-templates/personal/new" as Route,
+                                                    )
+                                                }
+                                            >
+                                                <PlusIcon className="mr-2 size-4" />
+                                                Create Template
+                                            </Button>
+                                        )
+                                    }
+                                />
                             </Card>
                         ) : (
                             <>
@@ -1348,18 +1384,23 @@ function useEmailTemplatesPageView() {
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
+                        ) : orgTemplatesQuery.isError && orgTemplates === undefined ? (
+                            <TemplateListLoadError query={orgTemplatesQuery} />
                         ) : !orgTemplates?.length && !orgDrafts.length ? (
-                            <Card>
-                                <CardContent className="flex flex-col items-center justify-center py-12">
-                                    <BuildingIcon className="size-12 text-muted-foreground mb-4" />
-                                    <p className="text-muted-foreground mb-4">No organization templates yet</p>
-                                    {canManageEmailTemplates && (
-                                        <Button onClick={() => router.push("/automation/email-templates/org/new")}>
-                                            <PlusIcon className="mr-2 size-4" />
-                                            Create Org Template
-                                        </Button>
-                                    )}
-                                </CardContent>
+                            <Card className="py-0">
+                                <EmptyState
+                                    icon={BuildingIcon}
+                                    title="No organization templates yet"
+                                    headingLevel={2}
+                                    action={
+                                        canManageEmailTemplates ? (
+                                            <Button onClick={() => router.push("/automation/email-templates/org/new")}>
+                                                <PlusIcon className="mr-2 size-4" />
+                                                Create Org Template
+                                            </Button>
+                                        ) : undefined
+                                    }
+                                />
                             </Card>
                         ) : (
                             <>
@@ -1440,12 +1481,15 @@ function useEmailTemplatesPageView() {
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
                             </div>
+                        ) : libraryTemplatesQuery.isError && libraryTemplates === undefined ? (
+                            <TemplateListLoadError query={libraryTemplatesQuery} />
                         ) : !libraryTemplates?.length ? (
-                            <Card>
-                                <CardContent className="flex flex-col items-center justify-center py-12">
-                                    <LayoutTemplateIcon className="size-12 text-muted-foreground mb-4" />
-                                    <p className="text-muted-foreground">No platform templates available</p>
-                                </CardContent>
+                            <Card className="py-0">
+                                <EmptyState
+                                    icon={LayoutTemplateIcon}
+                                    title="No platform templates yet"
+                                    headingLevel={2}
+                                />
                             </Card>
                         ) : (
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -1868,7 +1912,7 @@ function useEmailTemplatesPageView() {
                     }
                 }}
             >
-                <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                <DialogContent size="3xl" className="max-h-[90vh] overflow-hidden flex flex-col">
                     <DialogHeader>
                         <DialogTitle>
                             {editorState.template ? "Edit Template" : "Create Template"}
@@ -2389,144 +2433,42 @@ function useEmailTemplatesPageView() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* Send Test Email Dialog */}
-            <Dialog
+            <SendTestEmailDialog
                 open={testSendState.isOpen}
                 onOpenChange={(open) => {
                     if (!open) {
                         handleCloseTestDialog()
                     }
                 }}
-            >
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Send test email</DialogTitle>
-                        <DialogDescription>
-                            Send a test email for{" "}
-                            <span className="font-medium">{testSendState.target?.name || "this template"}</span>.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="test-send-to">To email</Label>
-                            <Input
-                                id="test-send-to"
-                                type="email"
-                                value={testSendState.toEmail}
-                                onChange={(e) => {
-                                    testSendOccurrenceIdRef.current = null
-                                    dispatchTestSend({
-                                        type: "changeToEmail",
-                                        value: e.target.value,
-                                    })
-                                }}
-                                placeholder="test@example.com"
-                            />
-                            <div className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3">
-                                <Checkbox
-                                    id="test-send-ignore-opt-out"
-                                    checked={testSendState.ignoreOptOut}
-                                    onCheckedChange={(checked) => {
-                                        testSendOccurrenceIdRef.current = null
-                                        dispatchTestSend({
-                                            type: "changeIgnoreOptOut",
-                                            value: checked === true,
-                                        })
-                                    }}
-                                />
-                                <div className="space-y-1">
-                                    <Label htmlFor="test-send-ignore-opt-out" className="cursor-pointer">
-                                        Send even if unsubscribed
-                                    </Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        Test-only override for marketing opt-outs. Hard bounces and complaints
-                                        remain suppressed.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <Accordion defaultValue={[]} className="rounded-lg">
-                            <AccordionItem value="variables">
-                                <AccordionTrigger>Variables (optional)</AccordionTrigger>
-                                <AccordionContent>
-                                    <div className="space-y-3">
-                                        {testSendTemplateLoading ? (
-                                            <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-                                                <Loader2Icon className="size-4 animate-spin" />
-                                                Loading variables…
-                                            </div>
-                                        ) : (
-                                            <>
-                                                {testSendHasUnsubscribeUrl && (
-                                                    <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-                                                        <span className="font-mono">
-                                                            {"{{unsubscribe_url}}"}
-                                                        </span>{" "}
-                                                        is generated automatically for the recipient.
-                                                    </div>
-                                                )}
-
-                                                {testSendEditableVariables.length === 0 ? (
-                                                    <p className="text-sm text-muted-foreground">
-                                                        No variables found in this template.
-                                                    </p>
-                                                ) : (
-                                                    testSendEditableVariables.map((variableName) => (
-                                                        <div key={variableName} className="space-y-1">
-                                                            <Label
-                                                                htmlFor={`test-var-${variableName}`}
-                                                                className="font-mono text-xs"
-                                                            >
-                                                                {`{{${variableName}}}`}
-                                                            </Label>
-                                                            <Input
-                                                                id={`test-var-${variableName}`}
-                                                                value={testSendVariables[variableName] ?? ""}
-                                                                onChange={(e) => {
-                                                                    testSendOccurrenceIdRef.current = null
-                                                                    dispatchTestSend({
-                                                                        type: "changeVariable",
-                                                                        name: variableName,
-                                                                        value: e.target.value,
-                                                                    })
-                                                                }}
-                                                            />
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-                                </AccordionContent>
-                            </AccordionItem>
-                        </Accordion>
-                    </div>
-
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={handleCloseTestDialog}
-                            disabled={sendTest.isPending}
-                        >
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSendTest} disabled={sendTest.isPending}>
-                            {sendTest.isPending ? (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                            ) : (
-                                <SendIcon className="mr-2 size-4" />
-                            )}
-                            Send test
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                description={testSendState.target?.name}
+                toEmail={testSendState.toEmail}
+                onToEmailChange={(value) => {
+                    testSendOccurrenceIdRef.current = null
+                    dispatchTestSend({ type: "changeToEmail", value })
+                }}
+                ignoreOptOut={testSendState.ignoreOptOut}
+                onIgnoreOptOutChange={(value) => {
+                    testSendOccurrenceIdRef.current = null
+                    dispatchTestSend({ type: "changeIgnoreOptOut", value })
+                }}
+                variableNames={testSendEditableVariables}
+                variables={testSendVariables}
+                onVariableChange={(name, value) => {
+                    testSendOccurrenceIdRef.current = null
+                    dispatchTestSend({ type: "changeVariable", name, value })
+                }}
+                variablesLoading={testSendTemplateLoading}
+                hasUnsubscribeUrl={testSendHasUnsubscribeUrl}
+                error={testSendState.error}
+                isSending={sendTest.isPending}
+                onSend={() => {
+                    void handleSendTest()
+                }}
+            />
 
             {/* Preview Modal */}
             <Dialog open={showPreview} onOpenChange={handlePreviewOpenChange}>
-                <DialogContent className="max-w-2xl max-h-[80vh]">
+                <DialogContent size="2xl" className="max-h-[80vh]">
                     <DialogHeader>
                         <DialogTitle>Email Preview</DialogTitle>
                         <DialogDescription>

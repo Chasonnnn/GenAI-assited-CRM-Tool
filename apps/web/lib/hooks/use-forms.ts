@@ -84,11 +84,11 @@ export const formKeys = {
     templateDetail: (id: string) => [...formKeys.templates(), id] as const,
 }
 
-export function useForms(enabled = true) {
+export function useForms(options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: formKeys.list(),
         queryFn: () => listForms(),
-        enabled,
+        enabled: options.enabled ?? true,
     })
 }
 
@@ -651,10 +651,11 @@ export function useUploadSubmissionFile() {
 // Platform Form Template Library Hooks
 // ============================================================================
 
-export function useFormTemplates() {
+export function useFormTemplates(options: { enabled?: boolean } = {}) {
     return useQuery<FormTemplateLibraryItem[]>({
         queryKey: formKeys.templates(),
         queryFn: () => listFormTemplates(),
+        enabled: options.enabled ?? true,
     })
 }
 

@@ -30,6 +30,13 @@ export function getCampaignRecipientLabel(value: CampaignRecipientType): string 
     return CAMPAIGN_RECIPIENT_LABELS[value]
 }
 
+/** Title for a send confirmation. The count is unknown (null) while the recipient preview loads. */
+export function getCampaignSendConfirmTitle(recipientCount: number | null | undefined): string {
+    if (recipientCount === null || recipientCount === undefined) return "Send campaign now?"
+    const noun = recipientCount === 1 ? "recipient" : "recipients"
+    return `Send to ${recipientCount.toLocaleString()} ${noun} now?`
+}
+
 export function getCampaignPipelineEntityType(
     value: CampaignRecipientType,
 ): PipelineEntityType | null {

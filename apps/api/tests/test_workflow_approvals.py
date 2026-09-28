@@ -189,6 +189,22 @@ class TestWorkflowActionPreview:
         assert "Follow up call" in preview
         assert "3 day" in preview
 
+    @pytest.mark.parametrize(
+        ("action_type", "expected"),
+        [
+            ("auto_match_submission", "Match the form submission to an existing record"),
+            ("create_intake_lead", "Create an intake lead from the form submission"),
+            ("promote_intake_lead", "Promote the intake lead to a case"),
+            ("some_future_action", "Some future action"),
+        ],
+    )
+    def test_preview_names_actions_without_raw_keys(self, db, action_type, expected):
+        class MockSubmission:
+            id = uuid4()
+
+        preview = build_action_preview(db, {"action_type": action_type}, MockSubmission())
+        assert preview == expected
+
     def test_render_action_payload(self):
         """Payload should include action config and entity context."""
         action = {

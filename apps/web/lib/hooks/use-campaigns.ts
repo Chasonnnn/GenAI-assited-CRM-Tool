@@ -86,11 +86,14 @@ export function useCampaign(id: string | undefined) {
 // Campaign Preview
 // =============================================================================
 
-export function useCampaignPreview(id: string | undefined) {
+export function useCampaignPreview(
+    id: string | undefined,
+    options: { enabled?: boolean } = {},
+) {
     return useQuery({
         queryKey: campaignKeys.preview(id!),
         queryFn: () => previewRecipients(id!),
-        enabled: !!id,
+        enabled: !!id && (options.enabled ?? true),
         staleTime: 30000, // 30 seconds
     });
 }

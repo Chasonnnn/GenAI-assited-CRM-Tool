@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import AgenciesPage from "../app/ops/agencies/page.client"
 
 const mockListOrganizations = vi.fn()
+const mockGetPlatformStats = vi.fn()
 const mockPush = vi.fn()
 
 vi.unmock("@tanstack/react-query")
@@ -15,6 +16,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api/platform", () => ({
     listOrganizations: (...args: unknown[]) => mockListOrganizations(...args),
+    getPlatformStats: (...args: unknown[]) => mockGetPlatformStats(...args),
 }))
 
 type Deferred<T> = {
@@ -70,7 +72,72 @@ describe("Ops agencies data loading", () => {
 
     beforeEach(() => {
         mockListOrganizations.mockReset()
+        mockGetPlatformStats.mockReset()
+        mockGetPlatformStats.mockResolvedValue({ agency_count: 3, active_user_count: 5, open_alerts: 0 })
         mockPush.mockReset()
+    })
+
+    it("shows the filtered count against the platform total and labels plan and status", async () => {
+        mockListOrganizations.mockResolvedValue({
+            items: [{ ...org("one", "Agency One"), subscription_status: "past_due", subscription_plan: "professional" }],
+            total: 1,
+        })
+
+        renderAgenciesPage()
+
+        expect(await screen.findByText("Agency One")).toBeInTheDocument()
+        await waitFor(() =>
+            expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent(
+                "1 of 3 agencies"
+            )
+        )
+        expect(screen.getByRole("heading", { level: 1, name: "Agencies" })).toBeInTheDocument()
+        expect(screen.getByText("Past due")).toBeInTheDocument()
+        expect(screen.getByText("Professional")).toBeInTheDocument()
+        expect(screen.queryByText("past_due")).not.toBeInTheDocument()
+    })
+
+    it("shows a first-run empty state with a create action when no agencies exist", async () => {
+        mockListOrganizations.mockResolvedValue({ items: [], total: 0 })
+
+        renderAgenciesPage()
+
+        expect(await screen.findByRole("heading", { name: "No agencies yet" })).toBeInTheDocument()
+        expect(screen.getAllByRole("link", { name: /Create Agency/ })).toHaveLength(2)
+        expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument()
+    })
+
+    it("shows a filtered empty state that clears the search", async () => {
+        mockListOrganizations.mockImplementation(async (params?: { search?: string }) =>
+            params?.search
+                ? { items: [], total: 0 }
+                : { items: [org("one", "Agency One")], total: 1 }
+        )
+
+        renderAgenciesPage()
+        await screen.findByText("Agency One")
+
+        const searchInput = screen.getByRole("textbox", { name: "Search agencies" })
+        fireEvent.change(searchInput, { target: { value: "zzz" } })
+
+        expect(await screen.findByRole("heading", { name: "No matching agencies" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Clear filters" }))
+
+        expect(await screen.findByText("Agency One")).toBeInTheDocument()
+        expect(searchInput).toHaveValue("")
+    })
+
+    it("shows a retryable error state instead of an empty list when loading fails", async () => {
+        mockListOrganizations.mockRejectedValueOnce(new Error("boom"))
+        mockListOrganizations.mockResolvedValueOnce({ items: [org("one", "Agency One")], total: 1 })
+
+        renderAgenciesPage()
+
+        expect(await screen.findByRole("heading", { name: "Couldn't load agencies" })).toBeInTheDocument()
+        expect(screen.queryByText("No agencies yet")).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: /Try again|Retry/ }))
+        expect(await screen.findByText("Agency One")).toBeInTheDocument()
     })
 
     it("ignores stale list responses and keeps latest search results", async () => {

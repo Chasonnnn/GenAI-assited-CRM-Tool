@@ -2,20 +2,13 @@
 
 import { useState } from "react"
 import { CSVUpload } from "@/components/import/CSVUpload"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -147,12 +140,14 @@ function normalizeImportErrors(importDetails: ImportDetail | undefined): Normali
 }
 
 export default function CSVImportPage() {
-    const { data: imports = [], isLoading, refetch } = useImports()
+    const importsQuery = useImports()
+    const { data: imports = [], isLoading, refetch } = importsQuery
     const { user } = useAuth()
     const cancelMutation = useCancelImport()
     const retryMutation = useRetryImport()
     const runInlineMutation = useRunImportInline()
     const [deleteTarget, setDeleteTarget] = useState<ImportHistoryItem | null>(null)
+    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
     const [errorTarget, setErrorTarget] = useState<ImportHistoryItem | null>(null)
     const [retryValidationMode, setRetryValidationMode] = useState<ValidationMode>("drop_invalid_fields")
     const {
@@ -184,15 +179,16 @@ export default function CSVImportPage() {
         }
     }
 
+    const handleRequestDelete = (imp: ImportHistoryItem) => {
+        setDeleteTarget(imp)
+        setIsDeleteConfirmOpen(true)
+    }
+
+    // ConfirmDialog keeps itself open while this runs and shows a rejection inline.
     const handleConfirmDelete = async () => {
         if (!deleteTarget) return
-        try {
-            const response = await cancelMutation.mutateAsync(deleteTarget.id)
-            toast.success(response.message || "Import cancelled")
-            setDeleteTarget(null)
-        } catch (err: unknown) {
-            toast.error(err instanceof Error ? err.message : "Failed to cancel import")
-        }
+        const response = await cancelMutation.mutateAsync(deleteTarget.id)
+        toast.success(response.message || "Import deleted")
     }
 
     const normalizedErrors = normalizeImportErrors(importDetails)
@@ -224,19 +220,29 @@ export default function CSVImportPage() {
                 <ImportHistoryTable
                     imports={imports}
                     isLoading={isLoading}
+                    loadError={importsQuery.isError && !importsQuery.data
+                        ? {
+                            error: importsQuery.error,
+                            onRetry: () => { void refetch() },
+                            isRetrying: importsQuery.isFetching,
+                        }
+                        : null}
                     userRole={user?.role}
                     pendingState={pendingState}
                     onViewErrors={setErrorTarget}
                     onRetry={handleRetry}
                     onRunInline={handleRunInline}
-                    onDelete={setDeleteTarget}
+                    onDelete={handleRequestDelete}
                 />
             </div>
 
-            <DeleteImportDialog
-                target={deleteTarget}
-                isPending={cancelMutation.isPending}
-                onClose={() => setDeleteTarget(null)}
+            <ConfirmDialog
+                open={isDeleteConfirmOpen}
+                onOpenChange={setIsDeleteConfirmOpen}
+                title={`Delete ${deleteTarget?.filename ?? "import"}?`}
+                description="This will cancel the import and remove it from history. You can re-upload the CSV if needed."
+                confirmLabel="Delete"
+                errorFallback="Couldn't delete import. Try again."
                 onConfirm={handleConfirmDelete}
             />
             <ImportErrorsDialog
@@ -264,6 +270,7 @@ export default function CSVImportPage() {
 function ImportHistoryTable({
     imports,
     isLoading,
+    loadError,
     userRole,
     pendingState,
     onViewErrors,
@@ -273,6 +280,7 @@ function ImportHistoryTable({
 }: {
     imports: ImportHistoryItem[]
     isLoading: boolean
+    loadError: { error: unknown; onRetry: () => void; isRetrying: boolean } | null
     userRole: string | null | undefined
     pendingState: ImportPendingState
     onViewErrors: (imp: ImportHistoryItem) => void
@@ -284,19 +292,23 @@ function ImportHistoryTable({
         <Card>
             <CardHeader>
                 <CardTitle>Import History</CardTitle>
-                <CardDescription>View past imports and their results</CardDescription>
             </CardHeader>
             <CardContent>
                 {isLoading ? (
                     <div className="flex items-center justify-center py-12">
                         <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
                     </div>
+                ) : loadError ? (
+                    <QueryErrorState
+                        error={loadError.error}
+                        onRetry={loadError.onRetry}
+                        isRetrying={loadError.isRetrying}
+                        title="Couldn't load imports"
+                        className="min-h-0 py-10"
+                    />
                 ) : imports.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                        <FileUpIcon className="mb-4 size-12" />
-                        <p className="text-lg font-medium">No imports yet</p>
-                        <p className="text-sm">Upload a CSV file above to get started</p>
-                    </div>
+                    // The upload card above is the create action.
+                    <EmptyState icon={FileUpIcon} title="No imports yet" />
                 ) : (
                     <Table>
                         <TableHeader>
@@ -526,37 +538,6 @@ function ImportActionsMenu({
     )
 }
 
-function DeleteImportDialog({
-    target,
-    isPending,
-    onClose,
-    onConfirm,
-}: {
-    target: ImportHistoryItem | null
-    isPending: boolean
-    onClose: () => void
-    onConfirm: () => void
-}) {
-    return (
-        <AlertDialog open={!!target} onOpenChange={(open) => !open && onClose()}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Delete import?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This will cancel the import and remove it from history. You can re-upload the CSV if needed.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Keep</AlertDialogCancel>
-                    <AlertDialogAction onClick={onConfirm} disabled={isPending}>
-                        Delete
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-    )
-}
-
 function ImportErrorsDialog({
     target,
     errors,
@@ -582,7 +563,7 @@ function ImportErrorsDialog({
 }) {
     return (
         <Dialog open={!!target} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-2xl">
+            <DialogContent size="2xl">
                 <DialogHeader>
                     <DialogTitle>Import errors</DialogTitle>
                     <DialogDescription>

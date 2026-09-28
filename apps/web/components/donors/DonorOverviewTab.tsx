@@ -3,6 +3,8 @@
 import * as React from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { CopyButton } from "@/components/ui/copy-button"
+import { EmptyValue } from "@/components/ui/empty-value"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -31,9 +33,7 @@ import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverview
 import {
     CalendarDaysIcon,
     ChevronDownIcon,
-    CopyIcon,
     InfoIcon,
-    CheckIcon,
     PencilIcon,
     PlusIcon,
     RulerIcon,
@@ -44,6 +44,7 @@ import {
     WeightIcon,
 } from "lucide-react"
 import { computeBmi, formatDate } from "@/components/surrogates/detail/surrogate-detail-utils"
+import { getDonorSourceLabel } from "@/lib/donor-source-labels"
 import { getMaritalStatusOptions } from "@/lib/intended-parent-marital-status"
 import type { Donor, DonorUpdate } from "@/lib/types/donor"
 import type { DonorProfile } from "@/lib/types/donor-profile"
@@ -83,7 +84,6 @@ function DonorOverviewContent({ donor, profile, canEdit, activityPanel }: {
         if (!canEdit) throw new Error("You cannot edit this donor")
         await updateDonorMutation.mutateAsync({ id, data })
     }
-    const [copiedEmail, setCopiedEmail] = React.useState(false)
     const [revealedSsn, setRevealedSsn] = React.useState<string | null>(null)
     const [revealedPartnerSsn, setRevealedPartnerSsn] = React.useState<string | null>(null)
     const [donorPersonalSectionAdded, setDonorPersonalSectionAdded] = React.useState(false)
@@ -124,14 +124,6 @@ function DonorOverviewContent({ donor, profile, canEdit, activityPanel }: {
         (hasDonorPersonalInfo || donorPersonalSectionAdded) && !donorPersonalSectionHidden
     const showPartnerInfo = (hasPartnerInfo || partnerSectionAdded) && !partnerSectionHidden
     const hasAnyPersonalInfoSection = showDonorPersonalInfo || showPartnerInfo
-
-    const copyEmail = async () => {
-        try {
-            await navigator.clipboard.writeText(donorData.email)
-            setCopiedEmail(true)
-            setTimeout(() => setCopiedEmail(false), 2000)
-        } catch { toast.error("Unable to copy email") }
-    }
 
     const updateProfile = async (data: DonorUpdate) => {
         await onUpdate(data)
@@ -234,19 +226,14 @@ function DonorOverviewContent({ donor, profile, canEdit, activityPanel }: {
                                     label="Email"
                                 />
                             </div>
-                            <Button
+                            <CopyButton
                                 variant="ghost"
                                 size="icon"
                                 className="size-6"
-                                onClick={copyEmail}
+                                iconClassName="size-3"
+                                value={donorData.email}
                                 aria-label="Copy email"
-                            >
-                                {copiedEmail ? (
-                                    <CheckIcon className="size-3" />
-                                ) : (
-                                    <CopyIcon className="size-3" />
-                                )}
-                            </Button>
+                            />
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Phone:</span>
@@ -282,9 +269,13 @@ function DonorOverviewContent({ donor, profile, canEdit, activityPanel }: {
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Source:</span>
-                            <Badge variant="secondary" className="capitalize">
-                                {donorData.source}
-                            </Badge>
+                            {donorData.source?.trim() ? (
+                                <Badge variant="secondary">
+                                    {getDonorSourceLabel(donorData.source)}
+                                </Badge>
+                            ) : (
+                                <EmptyValue className="text-sm" />
+                            )}
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Created:</span>
@@ -365,13 +356,13 @@ function DonorOverviewContent({ donor, profile, canEdit, activityPanel }: {
                                                     variant="outline"
                                                     size="sm"
                                                     aria-label="Edit Personal Information"
-                                                    className="group h-8 rounded-full border-border/70 bg-background/90 px-3.5 text-xs font-medium shadow-none transition-colors hover:bg-accent/70 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+                                                    className="group h-8 rounded-full border-border/70 bg-background/90 px-3.5 text-xs font-medium shadow-none transition-colors hover:bg-accent/70 data-popup-open:bg-accent data-popup-open:text-accent-foreground"
                                                 />
                                             }
                                         >
-                                            <PencilIcon className="size-3.5 text-muted-foreground transition-colors group-data-[state=open]:text-current" />
+                                            <PencilIcon className="size-3.5 text-muted-foreground transition-colors group-data-popup-open:text-current" />
                                             Edit Info
-                                            <ChevronDownIcon className="ml-0.5 size-3.5 text-muted-foreground transition-[color,transform] group-data-[state=open]:translate-y-px group-data-[state=open]:text-current" />
+                                            <ChevronDownIcon className="ml-0.5 size-3.5 text-muted-foreground transition-[color,translate] group-data-popup-open:translate-y-px group-data-popup-open:text-current" />
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent
                                             align="end"

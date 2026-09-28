@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react"
+import { useState, type Dispatch, type SetStateAction } from "react"
 import Link from "@/components/app-link"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Badge } from "@/components/ui/badge"
@@ -12,23 +12,28 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { DateTimePicker } from "@/components/ui/date-time-picker"
+import { ValidatedField } from "@/components/ui/field"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
+import { useCurrentMinuteTimestamp } from "@/components/ui/use-current-minute-timestamp"
+import { WizardStepper } from "@/components/automation/wizard-stepper"
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+    CampaignAudienceFields,
+    campaignStageOptions,
+    summarizeCampaignAudience,
+    type CampaignChannel,
+} from "@/components/campaigns/campaign-audience-fields"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -52,19 +57,19 @@ import {
     CopyIcon,
     TrashIcon,
     Loader2Icon,
-    ArrowLeftIcon,
     CalendarIcon,
     EyeIcon,
     PencilIcon,
+    MessageSquareTextIcon,
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
-import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { parseDateInput } from "@/lib/utils/date"
 import {
     useCampaigns,
+    useCampaignPreview,
     useCreateCampaign,
     useDeleteCampaign,
     useDuplicateCampaign,
@@ -74,11 +79,9 @@ import {
 } from "@/lib/hooks/use-campaigns"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import { useIntendedParentStatuses } from "@/lib/hooks/use-metadata"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { getDefaultPipeline } from "@/lib/api/pipelines"
 import { useQuery } from "@tanstack/react-query"
-import { RecipientPreviewCard } from "@/components/recipient-preview-card"
-import { US_STATES } from "@/lib/constants/us-states"
-import { getIntendedParentStageOptions } from "@/lib/intended-parent-stage-utils"
 import type {
     CampaignListItem,
     CampaignRecipientType,
@@ -87,13 +90,13 @@ import type {
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { listMessagingTemplates } from "@/lib/api/twilio"
 import {
-    CAMPAIGN_RECIPIENT_OPTIONS,
     getCampaignPipelineEntityType,
     getCampaignRecipientHref,
     getCampaignRecipientLabel,
-    isCampaignRecipientType,
+    getCampaignSendConfirmTitle,
     isDonorCampaignRecipientType,
 } from "@/lib/campaign-recipient"
+import type { StageOption } from "@/lib/stage-options"
 
 const statusStyles: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
     draft: { variant: "secondary" },
@@ -115,52 +118,35 @@ const statusLabels: Record<string, string> = {
     cancelled: "Cancelled",
 }
 
-const toLocalDateTimeInput = (date: Date) => {
-    const pad = (value: number) => String(value).padStart(2, "0")
-    const year = date.getFullYear()
-    const month = pad(date.getMonth() + 1)
-    const day = pad(date.getDate())
-    const hours = pad(date.getHours())
-    const minutes = pad(date.getMinutes())
-    return `${year}-${month}-${day}T${hours}:${minutes}`
+type CampaignScope = "personal" | "org"
+type CampaignScopeFilter = CampaignScope | "all"
+
+const CAMPAIGN_SCOPE_LABELS: Record<CampaignScope, string> = {
+    personal: "Personal",
+    org: "Organization",
 }
 
-const TOTAL_STEPS = 7
-const TERRITORY_CODES = new Set(["PR", "GU", "VI", "AS", "MP"])
-const STATE_OPTIONS = US_STATES.filter((state) => !TERRITORY_CODES.has(state.value))
-const TERRITORY_OPTIONS = US_STATES.filter((state) => TERRITORY_CODES.has(state.value))
+function getCampaignScopeFilterLabel(value: string | null): string {
+    return value === "personal" || value === "org" ? CAMPAIGN_SCOPE_LABELS[value] : "All campaigns"
+}
+
+function getCampaignScopeLabel(value: string | null): string {
+    return value === "personal" ? CAMPAIGN_SCOPE_LABELS.personal : CAMPAIGN_SCOPE_LABELS.org
+}
+
+const CAMPAIGN_WIZARD_STEPS = ["Setup", "Audience", "Content", "Review & send"] as const
+const SETUP_STEP = 1
+const AUDIENCE_STEP = 2
+const CONTENT_STEP = 3
+const REVIEW_STEP = CAMPAIGN_WIZARD_STEPS.length
 
 type RecipientType = CampaignRecipientType
-type CampaignChannel = "email" | "messaging"
-type ScheduleFor = "now" | "later"
+/** Final action of the wizard. Saving a draft is the default; sends and schedules are explicit. */
+type SendMode = "draft" | "now" | "later"
 type StateSetter<T> = Dispatch<SetStateAction<T>>
-type StateOption = (typeof US_STATES)[number]
-
-type CampaignStageOption = {
-    id: string
-    label: string
-    color: string
-    stage_key: string
-    category?: string | null
-    stage_type?: string | null
-    semantics?: {
-        capabilities?: {
-            shows_pregnancy_tracking?: boolean
-            requires_delivery_details?: boolean
-        } | undefined
-        pause_behavior?: string | null
-        terminal_outcome?: string | null
-    } | null | undefined
-}
-
-type StagePreset = {
-    key: string
-    label: string
-    stageIds: string[]
-}
 
 type CampaignWizardState = {
-    scope: "personal" | "org"
+    scope: CampaignScope
     policyV2: boolean
     canManageOrg: boolean
     canSend: boolean
@@ -171,15 +157,11 @@ type CampaignWizardState = {
     selectedTemplateId: string
     recipientType: RecipientType
     selectedStages: string[]
-    selectedStageIdSet: Set<string>
     selectedStates: string[]
-    selectedStateCodeSet: Set<string>
     includeUnsubscribed: boolean
-    stateSearch: string
-    showTerritories: boolean
-    scheduleFor: ScheduleFor
-    scheduledDate: string
-    minScheduleDate: string
+    sendMode: SendMode
+    scheduledAt: Date | undefined
+    scheduleError: string | undefined
 }
 
 type CampaignTemplateOption = Pick<EmailTemplateListItem, "id" | "name"> & {
@@ -189,51 +171,43 @@ type CampaignTemplateOption = Pick<EmailTemplateListItem, "id" | "name"> & {
 
 type CampaignWizardData = {
     templates: CampaignTemplateOption[] | undefined
+    templatesLoading: boolean
     selectedTemplate: CampaignTemplateOption | undefined
-    stageOptions: CampaignStageOption[]
-    stagePresetsAvailable: StagePreset[]
-    selectedStageLabels: string[]
-    selectedStateLabels: string[]
-    visibleStateOptions: StateOption[]
-    filteredTerritories: StateOption[]
-    includeTerritories: boolean
-    normalizedStateSearch: string
-    stageById: Map<string, CampaignStageOption>
-    stateLabelByCode: Map<string, string>
-    previewTotalCount: number
+    stageOptions: StageOption[]
+    /** Null until the recipient preview has loaded. */
+    previewTotalCount: number | null
     previewSampleRecipients: { email: string; name: string | null; href?: string }[]
     isPreviewLoading: boolean
 }
 
 type CampaignWizardActions = {
-    setScope: (scope: "personal" | "org") => void
+    setScope: (scope: CampaignScope) => void
     resetWizard: () => void
     setWizardStep: StateSetter<number>
     setCampaignName: StateSetter<string>
     setCampaignDescription: StateSetter<string>
-    setChannel: StateSetter<CampaignChannel>
+    setChannel: (next: CampaignChannel) => void
     setSelectedTemplateId: StateSetter<string>
-    setRecipientType: StateSetter<RecipientType>
-    setSelectedStages: StateSetter<string[]>
-    setSelectedStates: StateSetter<string[]>
-    setIncludeUnsubscribed: StateSetter<boolean>
-    setStateSearch: StateSetter<string>
-    setShowTerritories: StateSetter<boolean>
-    setScheduleFor: StateSetter<ScheduleFor>
-    setScheduledDate: StateSetter<string>
+    setRecipientType: (next: RecipientType) => void
+    setSelectedStages: (next: string[]) => void
+    setSelectedStates: (next: string[]) => void
+    setIncludeUnsubscribed: (next: boolean) => void
+    setSendMode: (next: SendMode) => void
+    setScheduledAt: (next: Date | undefined) => void
     previewRecipients: () => void
-    handleCreateCampaign: () => Promise<void>
+    submitCampaign: () => Promise<void>
 }
 
 type CampaignWizardPending = {
-    isCreating: boolean
-    isSending: boolean
+    isSubmitting: boolean
 }
 
 type CampaignDialogState = {
     deleteDialogId: string | null
     cancelDialogId: string | null
     sendNowDialogId: string | null
+    getCampaignName: (id: string | null) => string | undefined
+    sendNowRecipientCount: number | null
 }
 
 type CampaignDialogActions = {
@@ -245,124 +219,15 @@ type CampaignDialogActions = {
     handleSendNowCampaign: () => Promise<void>
 }
 
-function getStageIdsByPredicate(
-    stages: readonly CampaignStageOption[],
-    predicate: (stage: CampaignStageOption) => boolean,
-): string[] {
-    const stageIds: string[] = []
-    for (const stage of stages) {
-        if (predicate(stage)) stageIds.push(stage.id)
-    }
-    return stageIds
+function getScheduleError(sendMode: SendMode, scheduledAt: Date | undefined, now: number): string | undefined {
+    if (sendMode !== "later" || !scheduledAt) return undefined
+    return scheduledAt.getTime() <= now ? "Choose a time in the future." : undefined
 }
 
-function buildCampaignStagePresets(
-    recipientType: RecipientType,
-    stageOptions: readonly CampaignStageOption[],
-): StagePreset[] {
-    if (recipientType === "intended_parent") {
-        return [
-            {
-                key: "ip-new-ready",
-                label: "New + Ready",
-                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                    ["new", "ready_to_match"].includes(stage.stage_key)
-                ),
-            },
-            {
-                key: "ip-active",
-                label: "Active",
-                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                    ["new", "ready_to_match", "matched"].includes(stage.stage_key)
-                ),
-            },
-            {
-                key: "ip-delivered",
-                label: "Delivered",
-                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                    stage.stage_key === "delivered"
-                ),
-            },
-        ]
-    }
-
-    if (isDonorCampaignRecipientType(recipientType)) {
-        return [
-            {
-                key: "donor-intake",
-                label: "Screening",
-                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                    (stage.category ?? stage.stage_type) === "intake"
-                ),
-            },
-            {
-                key: "donor-active",
-                label: "Active",
-                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                    (stage.category ?? stage.stage_type) === "post_approval"
-                ),
-            },
-            {
-                key: "donor-paused",
-                label: "On Hold",
-                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                    (stage.category ?? stage.stage_type) === "paused"
-                ),
-            },
-            {
-                key: "donor-terminal",
-                label: "Closed",
-                stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                    (stage.category ?? stage.stage_type) === "terminal"
-                ),
-            },
-        ]
-    }
-
-    return [
-        {
-            key: "surrogate-intake",
-            label: "Intake",
-            stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                (stage.category ?? stage.stage_type) === "intake"
-            ),
-        },
-        {
-            key: "surrogate-post-approval",
-            label: "Post-Approval",
-            stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                (stage.category ?? stage.stage_type) === "post_approval" &&
-                !stage.semantics?.capabilities?.shows_pregnancy_tracking
-            ),
-        },
-        {
-            key: "surrogate-pregnancy",
-            label: "Pregnancy",
-            stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                Boolean(
-                    stage.semantics?.capabilities?.shows_pregnancy_tracking ||
-                        stage.semantics?.capabilities?.requires_delivery_details,
-                )
-            ),
-        },
-        {
-            key: "surrogate-paused",
-            label: "Paused",
-            stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                stage.semantics?.pause_behavior === "resume_previous_stage"
-            ),
-        },
-        {
-            key: "surrogate-terminal",
-            label: "Terminal",
-            stageIds: getStageIdsByPredicate(stageOptions, (stage) =>
-                Boolean(
-                    stage.semantics?.terminal_outcome &&
-                        stage.semantics.terminal_outcome !== "none"
-                )
-            ),
-        },
-    ]
+function getTimeZoneAbbreviation(date: Date): string | undefined {
+    return new Intl.DateTimeFormat(undefined, { timeZoneName: "short" })
+        .formatToParts(date)
+        .find((part) => part.type === "timeZoneName")?.value
 }
 
 function buildCampaignFilterCriteria(
@@ -383,149 +248,72 @@ function buildCampaignFilterCriteria(
     }
 }
 
-function buildCampaignWizardDerivedData({
-    recipientType,
-    stageOptions,
-    selectedStages,
-    selectedStates,
-    stateSearch,
-    showTerritories,
-    templates,
-    selectedTemplateId,
-    previewFiltersData,
-}: {
-    recipientType: RecipientType
-    stageOptions: CampaignStageOption[]
-    selectedStages: string[]
-    selectedStates: string[]
-    stateSearch: string
-    showTerritories: boolean
-    templates: CampaignTemplateOption[] | undefined
-    selectedTemplateId: string
-    previewFiltersData:
-        | {
-              sample_recipients?: {
-                  entity_type: CampaignRecipientType
-                  entity_id: string
-                  email: string | null
-                  phone_last4: string | null
-                  name: string | null
-              }[]
-          }
-        | undefined
-}) {
-    const normalizedStateSearch = stateSearch.trim().toLowerCase()
-    const filteredStates = STATE_OPTIONS.filter((state) =>
-        normalizedStateSearch
-            ? state.label.toLowerCase().includes(normalizedStateSearch)
-            : true
-    )
-    const filteredTerritories = TERRITORY_OPTIONS.filter((state) =>
-        normalizedStateSearch
-            ? state.label.toLowerCase().includes(normalizedStateSearch)
-            : true
-    )
-    const includeTerritories = showTerritories || normalizedStateSearch.length > 0
-    const visibleStateOptions = includeTerritories
-        ? [...filteredStates, ...filteredTerritories]
-        : filteredStates
-    const stagePresets = buildCampaignStagePresets(recipientType, stageOptions)
-    const stagePresetsAvailable = stagePresets.filter((preset) => preset.stageIds.length > 0)
-    const stageById = new Map<string, CampaignStageOption>(
-        stageOptions.map((stage) => [stage.id, stage]),
-    )
-    const stageLabelById = new Map<string, string>(
-        stageOptions.map((stage) => [stage.id, stage.label]),
-    )
-    const stateLabelByCode = new Map<string, string>(
-        US_STATES.map((state) => [state.value, state.label]),
-    )
-    const selectedStageLabels: string[] = []
-    for (const stageId of selectedStages) {
-        const label = stageLabelById.get(stageId)
-        if (label) selectedStageLabels.push(label)
-    }
-    const selectedStateLabels: string[] = []
-    for (const stateCode of selectedStates) {
-        const label = stateLabelByCode.get(stateCode)
-        if (label) selectedStateLabels.push(label)
-    }
-    const selectedStageIdSet = new Set(selectedStages)
-    const selectedStateCodeSet = new Set(selectedStates)
-    const selectedTemplate = templates?.find((template) => template.id === selectedTemplateId)
-    const previewSampleRecipients =
-        previewFiltersData?.sample_recipients?.map((recipient) => {
-            const href = getCampaignRecipientHref(recipient.entity_type, recipient.entity_id)
-            return {
-                email:
-                    recipient.email ??
-                    (recipient.phone_last4
-                        ? `••• ••• ${recipient.phone_last4}`
-                        : "Contact unavailable"),
-                name: recipient.name,
-                ...(href ? { href } : {}),
-            }
-        }) || []
-
-    return {
-        selectedTemplate,
-        stagePresetsAvailable,
-        selectedStageLabels,
-        selectedStateLabels,
-        visibleStateOptions,
-        filteredTerritories,
-        includeTerritories,
-        normalizedStateSearch,
-        stageById,
-        stateLabelByCode,
-        selectedStageIdSet,
-        selectedStateCodeSet,
-        previewSampleRecipients,
-    }
+type PreviewSampleRecipient = {
+    entity_type: CampaignRecipientType
+    entity_id: string
+    email: string | null
+    phone_last4: string | null
+    name: string | null
 }
 
-const isScheduleFor = (value: unknown): value is ScheduleFor =>
-    value === "now" || value === "later"
+function toPreviewSampleRecipients(recipients: readonly PreviewSampleRecipient[] | undefined) {
+    return (recipients ?? []).map((recipient) => {
+        const href = getCampaignRecipientHref(recipient.entity_type, recipient.entity_id)
+        return {
+            email:
+                recipient.email ??
+                (recipient.phone_last4 ? `••• ••• ${recipient.phone_last4}` : "Contact unavailable"),
+            name: recipient.name,
+            ...(href ? { href } : {}),
+        }
+    })
+}
+
+const isSendMode = (value: unknown): value is SendMode =>
+    value === "draft" || value === "now" || value === "later"
 
 function useCampaignsPageController() {
     const { push } = useRouter()
     const { user } = useAuth()
-    const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
-    const permissions = effectivePermissions?.permissions ?? []
-    const policyV2 = (effectivePermissions?.policy_version ?? 1) >= 2
-    const canCreate = permissions.includes(policyV2 ? "edit_campaigns" : "manage_email_templates")
-    const canManageOrg = canCreate && (!policyV2 || permissions.includes("manage_org_campaigns"))
-    const [scopeSelection, setScopeSelection] = useState<"personal" | "org" | null>(null)
-    const campaignScope = scopeSelection ?? (policyV2 ? "personal" : "org")
-    const [scopeFilter, setScopeFilter] = useState("all")
+    const { can, policyVersion } = usePermissionCheck()
+    const policyV2 = (policyVersion ?? 1) >= 2
+    // Campaign creation checks manage_email_templates under policy v1 and edit_campaigns under v2.
+    // Per-campaign actions use the can_edit / can_send flags from the API instead.
+    const canCreate = can(policyV2 ? "edit_campaigns" : "manage_email_templates")
+    const canManageOrg = canCreate && (!policyV2 || can("manage_org_campaigns"))
+    const [scopeSelection, setScopeSelection] = useState<CampaignScope | null>(null)
+    const campaignScope: CampaignScope = scopeSelection ?? (policyV2 ? "personal" : "org")
+    const [scopeFilter, setScopeFilter] = useState<CampaignScopeFilter>("all")
     const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
     const [showCreateWizard, setShowCreateWizard] = useState(false)
-    const [wizardStep, setWizardStep] = useState(1)
+    const [wizardStep, setWizardStep] = useState(SETUP_STEP)
     const [page, setPage] = useState(1)
     const perPage = 20
     const [campaignName, setCampaignName] = useState("")
     const [campaignDescription, setCampaignDescription] = useState("")
     const [channel, setChannel] = useState<CampaignChannel>("email")
-    const canSend = canCreate && (!policyV2 || (permissions.includes("send_campaigns") && permissions.includes(channel === "email" ? "send_email" : "send_sms")))
+    const canSend = canCreate && (!policyV2 || (can("send_campaigns") && can(channel === "email" ? "send_email" : "send_sms")))
     const [selectedTemplateId, setSelectedTemplateId] = useState("")
     const [recipientType, setRecipientType] = useState<RecipientType>("case")
     const [selectedStages, setSelectedStages] = useState<string[]>([])
     const [selectedStates, setSelectedStates] = useState<string[]>([])
     const [includeUnsubscribed, setIncludeUnsubscribed] = useState(false)
-    const [stateSearch, setStateSearch] = useState("")
-    const [showTerritories, setShowTerritories] = useState(false)
-    const [scheduleFor, setScheduleFor] = useState<ScheduleFor>("now")
-    const [scheduledDate, setScheduledDate] = useState("")
+    const [sendMode, setSendMode] = useState<SendMode>("draft")
+    const [scheduledAt, setScheduledAt] = useState<Date | undefined>(undefined)
     const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null)
     const [cancelDialogId, setCancelDialogId] = useState<string | null>(null)
     const [sendNowDialogId, setSendNowDialogId] = useState<string | null>(null)
-    const minScheduleDate = toLocalDateTimeInput(new Date())
 
-    const { data: campaigns, isLoading } = useCampaigns(statusFilter)
-    const { data: emailTemplates } = useEmailTemplates({ scope: campaignScope === "org" ? "org" : null })
-    const { data: messageTemplates } = useQuery({
+    const campaignsQuery = useCampaigns(statusFilter)
+    const { data: campaigns, isLoading } = campaignsQuery
+    const { data: emailTemplates, isLoading: emailTemplatesLoading } = useEmailTemplates({
+        scope: campaignScope === "org" ? "org" : null,
+    })
+    const { data: messageTemplates, isLoading: messageTemplatesLoading } = useQuery({
         queryKey: ["messaging-templates", "promotional", "published"],
         queryFn: () => listMessagingTemplates({ purpose: "promotional", status: "published" }),
+        // Only the SMS path of the wizard needs these; loading them for every viewer caused 403s.
+        enabled: showCreateWizard && channel === "messaging",
     })
     const templates: CampaignTemplateOption[] | undefined = channel === "email"
         ? emailTemplates?.filter((template) => template.scope !== "personal" || (campaignScope === "personal" && template.owner_user_id === user?.user_id))
@@ -540,6 +328,13 @@ function useCampaignsPageController() {
     const cancelCampaign = useCancelCampaign()
     const sendCampaign = useSendCampaign()
     const previewFilters = usePreviewFilters()
+    const sendNowCampaign = sendNowDialogId
+        ? campaigns?.find((campaign) => campaign.id === sendNowDialogId)
+        : undefined
+    const sendNowPreview = useCampaignPreview(sendNowDialogId ?? undefined, {
+        // The preview route requires edit access to the campaign.
+        enabled: sendNowCampaign?.can_edit === true,
+    })
     const { data: intendedParentStatuses } = useIntendedParentStatuses()
 
     const buildFilterCriteria = () =>
@@ -549,40 +344,24 @@ function useCampaignsPageController() {
     const { data: pipeline } = useQuery({
         queryKey: ["defaultPipeline", pipelineEntityType],
         queryFn: () => getDefaultPipeline(pipelineEntityType ?? "surrogate"),
-        enabled: pipelineEntityType !== null,
+        enabled: showCreateWizard && pipelineEntityType !== null,
     })
-    const pipelineStages = pipeline?.stages || []
-    const intendedParentStageOptions: CampaignStageOption[] = getIntendedParentStageOptions(
-        intendedParentStatuses?.statuses,
-    ).map((stage) => ({
-        id: stage.stage_slug,
-        label: stage.label,
-        color: stage.color,
-        stage_key: stage.stage_key,
-        category: stage.stage_type,
-        stage_type: stage.stage_type,
-        semantics: undefined,
-    }))
-    const stageOptions: CampaignStageOption[] =
-        recipientType === "intended_parent"
-            ? intendedParentStageOptions
-            : pipelineStages.filter((stage) => stage.is_active)
-
-    const wizardDerivedData = buildCampaignWizardDerivedData({
+    const stageOptions = campaignStageOptions(
         recipientType,
-        stageOptions,
-        selectedStages,
-        selectedStates,
-        stateSearch,
-        showTerritories,
-        templates,
-        selectedTemplateId,
-        previewFiltersData: previewFilters.data,
-    })
-    const filteredCampaigns = (campaigns || []).filter((campaign) => scopeFilter === "all" || (campaign.scope ?? "org") === scopeFilter)
+        pipeline?.stages,
+        intendedParentStatuses?.statuses,
+    )
+    const filteredCampaigns = (campaigns || []).filter(
+        (campaign) => scopeFilter === "all" || (campaign.scope ?? "org") === scopeFilter,
+    )
+    const currentMinute = useCurrentMinuteTimestamp()
+    // Without send permission the wizard only saves drafts.
+    const effectiveSendMode: SendMode = canSend ? sendMode : "draft"
+    const scheduleError =
+        currentMinute === null ? undefined : getScheduleError(effectiveSendMode, scheduledAt, currentMinute)
 
     const resetWizard = () => {
-        setWizardStep(1)
+        setWizardStep(SETUP_STEP)
         setScopeSelection(null)
         setCampaignName("")
         setCampaignDescription("")
@@ -592,10 +371,9 @@ function useCampaignsPageController() {
         setSelectedStages([])
         setSelectedStates([])
         setIncludeUnsubscribed(false)
-        setStateSearch("")
-        setShowTerritories(false)
-        setScheduleFor("now")
-        setScheduledDate("")
+        setSendMode("draft")
+        setScheduledAt(undefined)
+        previewFilters.reset()
         setShowCreateWizard(false)
     }
 
@@ -609,33 +387,19 @@ function useCampaignsPageController() {
         })
     }
 
-    const handleCreateCampaign = async () => {
-        if (!campaignName || !selectedTemplateId) {
-            toast.error("Please fill in required fields")
+    const submitCampaign = async () => {
+        if (!campaignName.trim() || !selectedTemplateId) {
+            toast.error("Add a campaign name and a template first.")
+            return
+        }
+        const mode = effectiveSendMode
+        if (mode === "later" && (!scheduledAt || scheduledAt.getTime() <= Date.now())) {
+            toast.error("Choose a send time in the future.")
             return
         }
 
-        if (canSend && scheduleFor === "later") {
-            if (!scheduledDate) {
-                toast.error("Please select a scheduled date and time")
-                return
-            }
-            const parsedDate = new Date(scheduledDate)
-            if (Number.isNaN(parsedDate.getTime())) {
-                toast.error("Scheduled date is invalid")
-                return
-            }
-            if (parsedDate <= new Date()) {
-                toast.error("Scheduled date must be in the future")
-                return
-            }
-        }
-
+        let campaignId: string
         try {
-            const scheduledAt =
-                canSend && scheduleFor === "later" && scheduledDate
-                    ? new Date(scheduledDate).toISOString()
-                    : undefined
             const campaign = await createCampaign.mutateAsync({
                 name: campaignName,
                 scope: campaignScope,
@@ -647,40 +411,40 @@ function useCampaignsPageController() {
                 filter_criteria: buildFilterCriteria(),
                 include_unsubscribed: channel === "email" && includeUnsubscribed,
                 ...(campaignDescription ? { description: campaignDescription } : {}),
-                ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
+                ...(mode === "later" && scheduledAt
+                    ? { scheduled_at: scheduledAt.toISOString() }
+                    : {}),
             })
-
-            toast.success("Campaign created successfully")
-
-            if (canSend) try {
-                await sendCampaign.mutateAsync({ id: campaign.id, sendNow: scheduleFor === "now" })
-                if (scheduleFor === "now") {
-                    toast.success("Campaign queued for sending")
-                } else {
-                    toast.success("Campaign scheduled successfully")
-                }
-            } catch {
-                toast.error("Campaign created but failed to start")
-            }
-
-            resetWizard()
+            campaignId = campaign.id
         } catch {
-            toast.error("Failed to create campaign")
+            toast.error("Couldn't create campaign. Try again.")
+            return
         }
+
+        if (mode === "draft") {
+            toast.success("Campaign saved as draft")
+            resetWizard()
+            return
+        }
+
+        try {
+            await sendCampaign.mutateAsync({ id: campaignId, sendNow: mode === "now" })
+            toast.success(mode === "now" ? "Campaign queued for sending" : "Campaign scheduled")
+        } catch {
+            toast.error(
+                mode === "now"
+                    ? "Saved as draft, but sending didn't start."
+                    : "Saved as draft, but scheduling failed.",
+            )
+        }
+        resetWizard()
     }
 
+    // The confirm dialogs show server failures inline, so these handlers let errors propagate.
     const handleDeleteCampaign = async () => {
         if (!deleteDialogId) return
-
-        const closeDeleteDialog = () => setDeleteDialogId(null)
-        try {
-            await deleteCampaign.mutateAsync(deleteDialogId)
-            toast.success("Campaign deleted")
-            closeDeleteDialog()
-        } catch {
-            toast.error("Failed to delete campaign. Only drafts can be deleted.")
-            closeDeleteDialog()
-        }
+        await deleteCampaign.mutateAsync(deleteDialogId)
+        toast.success("Campaign deleted")
     }
 
     const handleDuplicateCampaign = async (id: string) => {
@@ -688,36 +452,20 @@ function useCampaignsPageController() {
             await duplicateCampaign.mutateAsync(id)
             toast.success("Campaign duplicated")
         } catch {
-            toast.error("Failed to duplicate campaign")
+            toast.error("Couldn't duplicate campaign")
         }
     }
 
     const handleCancelCampaign = async () => {
         if (!cancelDialogId) return
-
-        const closeCancelDialog = () => setCancelDialogId(null)
-        try {
-            await cancelCampaign.mutateAsync(cancelDialogId)
-            toast.success("Campaign stopped")
-            closeCancelDialog()
-        } catch {
-            toast.error("Failed to stop campaign")
-            closeCancelDialog()
-        }
+        await cancelCampaign.mutateAsync(cancelDialogId)
+        toast.success("Campaign stopped")
     }
 
     const handleSendNowCampaign = async () => {
         if (!sendNowDialogId) return
-
-        const closeSendNowDialog = () => setSendNowDialogId(null)
-        try {
-            await sendCampaign.mutateAsync({ id: sendNowDialogId, sendNow: true })
-            toast.success("Campaign queued for sending")
-            closeSendNowDialog()
-        } catch {
-            toast.error("Failed to send campaign")
-            closeSendNowDialog()
-        }
+        await sendCampaign.mutateAsync({ id: sendNowDialogId, sendNow: true })
+        toast.success("Campaign queued for sending")
     }
 
     const wizardState: CampaignWizardState = {
@@ -729,31 +477,19 @@ function useCampaignsPageController() {
         selectedTemplateId,
         recipientType,
         selectedStages,
-        selectedStageIdSet: wizardDerivedData.selectedStageIdSet,
         selectedStates,
-        selectedStateCodeSet: wizardDerivedData.selectedStateCodeSet,
         includeUnsubscribed,
-        stateSearch,
-        showTerritories,
-        scheduleFor,
-        scheduledDate,
-        minScheduleDate,
+        sendMode: effectiveSendMode,
+        scheduledAt,
+        scheduleError,
     }
     const wizardData: CampaignWizardData = {
         templates,
-        selectedTemplate: wizardDerivedData.selectedTemplate,
+        templatesLoading: channel === "email" ? emailTemplatesLoading : messageTemplatesLoading,
+        selectedTemplate: templates?.find((template) => template.id === selectedTemplateId),
         stageOptions,
-        stagePresetsAvailable: wizardDerivedData.stagePresetsAvailable,
-        selectedStageLabels: wizardDerivedData.selectedStageLabels,
-        selectedStateLabels: wizardDerivedData.selectedStateLabels,
-        visibleStateOptions: wizardDerivedData.visibleStateOptions,
-        filteredTerritories: wizardDerivedData.filteredTerritories,
-        includeTerritories: wizardDerivedData.includeTerritories,
-        normalizedStateSearch: wizardDerivedData.normalizedStateSearch,
-        stageById: wizardDerivedData.stageById,
-        stateLabelByCode: wizardDerivedData.stateLabelByCode,
-        previewTotalCount: previewFilters.data?.total_count || 0,
-        previewSampleRecipients: wizardDerivedData.previewSampleRecipients,
+        previewTotalCount: previewFilters.data ? previewFilters.data.total_count : null,
+        previewSampleRecipients: toPreviewSampleRecipients(previewFilters.data?.sample_recipients),
         isPreviewLoading: previewFilters.isPending,
     }
     const wizardActions: CampaignWizardActions = {
@@ -765,7 +501,7 @@ function useCampaignsPageController() {
         setChannel: (next) => {
             setChannel(next)
             setSelectedTemplateId("")
-            if (typeof next !== "function" && next === "messaging") {
+            if (next === "messaging") {
                 setIncludeUnsubscribed(false)
                 if (isDonorCampaignRecipientType(recipientType)) {
                     setRecipientType("case")
@@ -774,25 +510,28 @@ function useCampaignsPageController() {
             }
         },
         setSelectedTemplateId,
-        setRecipientType,
+        setRecipientType: (next) => {
+            setRecipientType(next)
+            setSelectedStages([])
+        },
         setSelectedStages,
         setSelectedStates,
         setIncludeUnsubscribed,
-        setStateSearch,
-        setShowTerritories,
-        setScheduleFor,
-        setScheduledDate,
+        setSendMode,
+        setScheduledAt,
         previewRecipients: previewRecipientSelection,
-        handleCreateCampaign,
+        submitCampaign,
     }
     const wizardPending: CampaignWizardPending = {
-        isCreating: createCampaign.isPending,
-        isSending: sendCampaign.isPending,
+        isSubmitting: createCampaign.isPending || sendCampaign.isPending,
     }
     const dialogState: CampaignDialogState = {
         deleteDialogId,
         cancelDialogId,
         sendNowDialogId,
+        getCampaignName: (id) =>
+            id ? filteredCampaigns.find((campaign) => campaign.id === id)?.name : undefined,
+        sendNowRecipientCount: sendNowPreview.data ? sendNowPreview.data.total_count : null,
     }
     const dialogActions: CampaignDialogActions = {
         setDeleteDialogId,
@@ -802,22 +541,32 @@ function useCampaignsPageController() {
         handleCancelCampaign,
         handleSendNowCampaign,
     }
+    const openCreateWizard = canCreate ? () => setShowCreateWizard(true) : undefined
 
     return {
         headerProps: {
-            canCreate, scopeFilter, onScopeFilterChange: setScopeFilter,
-            onCreateCampaign: () => { if (canCreate) setShowCreateWizard(true) },
+            scopeFilter,
+            onScopeFilterChange: setScopeFilter,
+            onCreateCampaign: openCreateWizard,
         },
         listProps: {
-            canCreate,
             statusFilter,
+            scopeFilter,
             onStatusFilterChange: setStatusFilter,
             campaigns: filteredCampaigns,
             isLoading,
+            loadError:
+                campaignsQuery.isError && campaigns === undefined
+                    ? {
+                          error: campaignsQuery.error,
+                          retry: () => void campaignsQuery.refetch(),
+                          isRetrying: campaignsQuery.isFetching,
+                      }
+                    : null,
             page,
             perPage,
             onPageChange: setPage,
-            onCreateCampaign: () => { if (canCreate) setShowCreateWizard(true) },
+            onCreateCampaign: openCreateWizard,
             onViewCampaign: (campaignId: string) => push(`/automation/campaigns/${campaignId}`),
             onEditCampaign: (campaignId: string) =>
                 push(`/automation/campaigns/${campaignId}?edit=1`),
@@ -854,46 +603,55 @@ export default function CampaignsPage() {
     )
 }
 
-function CampaignsPageHeader({ onCreateCampaign, canCreate, scopeFilter, onScopeFilterChange }: {
-    onCreateCampaign: () => void; canCreate: boolean; scopeFilter: string; onScopeFilterChange: (value: string) => void
+function CampaignsPageHeader({
+    onCreateCampaign,
+    scopeFilter,
+    onScopeFilterChange,
+}: {
+    onCreateCampaign: (() => void) | undefined
+    scopeFilter: CampaignScopeFilter
+    onScopeFilterChange: (value: CampaignScopeFilter) => void
 }) {
     return (
-        <div className="border-b bg-card">
-            <div className="flex items-center justify-between p-6">
-                <div className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label="Back to automation"
-                        render={<Link href="/automation" />}
+        <PageHeader
+            title="Campaigns"
+            actions={
+                <>
+                    <Select
+                        value={scopeFilter}
+                        onValueChange={(value) => {
+                            if (value === "all" || value === "personal" || value === "org") onScopeFilterChange(value)
+                        }}
+                        aria-label="Campaign scope filter"
                     >
-                        <ArrowLeftIcon className="size-4" />
-                    </Button>
-                    <div>
-                        <h1 className="text-2xl font-semibold">Campaigns</h1>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                <Select value={scopeFilter} onValueChange={(value) => value && onScopeFilterChange(value)} aria-label="Campaign scope filter">
-                    <SelectTrigger aria-label="Campaign scope filter"><SelectValue>{() => scopeFilter === "personal" ? "Personal" : scopeFilter === "org" ? "Organization" : "All campaigns"}</SelectValue></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All campaigns</SelectItem><SelectItem value="personal">Personal</SelectItem><SelectItem value="org">Organization</SelectItem></SelectContent>
-                </Select>
-                <Button disabled={!canCreate} onClick={onCreateCampaign}>
-                    <PlusIcon className="size-4" />
-                    Create Campaign
-                </Button>
-                </div>
-            </div>
-        </div>
+                        <SelectTrigger aria-label="Campaign scope filter" className="w-40">
+                            <SelectValue>{getCampaignScopeFilterLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All campaigns</SelectItem>
+                            <SelectItem value="personal">{CAMPAIGN_SCOPE_LABELS.personal}</SelectItem>
+                            <SelectItem value="org">{CAMPAIGN_SCOPE_LABELS.org}</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    {onCreateCampaign ? (
+                        <Button onClick={onCreateCampaign}>
+                            <PlusIcon className="size-4" />
+                            Create Campaign
+                        </Button>
+                    ) : null}
+                </>
+            }
+        />
     )
 }
 
 function CampaignsListSection({
-    canCreate,
     statusFilter,
+    scopeFilter,
     onStatusFilterChange,
     campaigns,
     isLoading,
+    loadError,
     page,
     perPage,
     onPageChange,
@@ -905,15 +663,16 @@ function CampaignsListSection({
     onCancelCampaign,
     onDeleteCampaign,
 }: {
-    canCreate: boolean
     statusFilter: string | undefined
+    scopeFilter: CampaignScopeFilter
     onStatusFilterChange: StateSetter<string | undefined>
     campaigns: CampaignListItem[]
     isLoading: boolean
+    loadError: { error: unknown; retry: () => void; isRetrying: boolean } | null
     page: number
     perPage: number
     onPageChange: StateSetter<number>
-    onCreateCampaign: () => void
+    onCreateCampaign: (() => void) | undefined
     onViewCampaign: (campaignId: string) => void
     onEditCampaign: (campaignId: string) => void
     onSendNowCampaign: (campaignId: string) => void
@@ -942,8 +701,21 @@ function CampaignsListSection({
                 <TabsContent value={statusFilter || "all"} className="space-y-4">
                     {isLoading ? (
                         <CampaignsLoadingState />
+                    ) : loadError ? (
+                        <Card className="py-0">
+                            <QueryErrorState
+                                error={loadError.error}
+                                onRetry={loadError.retry}
+                                isRetrying={loadError.isRetrying}
+                                title="Couldn't load campaigns"
+                                headingLevel={3}
+                            />
+                        </Card>
                     ) : campaigns.length === 0 ? (
-                        <CampaignsEmptyState canCreate={canCreate} onCreateCampaign={onCreateCampaign} />
+                        <CampaignsEmptyState
+                            onCreateCampaign={onCreateCampaign}
+                            filter={statusFilter ? "status" : scopeFilter !== "all" ? "scope" : null}
+                        />
                     ) : (
                         <CampaignsTable
                             campaigns={campaigns}
@@ -977,20 +749,34 @@ function CampaignsLoadingState() {
     )
 }
 
-function CampaignsEmptyState({ onCreateCampaign, canCreate }: { onCreateCampaign: () => void; canCreate: boolean }) {
+function CampaignsEmptyState({
+    onCreateCampaign,
+    filter,
+}: {
+    onCreateCampaign: (() => void) | undefined
+    filter: "status" | "scope" | null
+}) {
+    const title =
+        filter === "status"
+            ? "No campaigns with this status"
+            : filter === "scope"
+              ? "No campaigns in this scope"
+              : "No campaigns yet"
     return (
-        <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-                <MailIcon className="size-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium">No campaigns found</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                    Create your first campaign to send consent-gated email or text messages
-                </p>
-                <Button disabled={!canCreate} onClick={onCreateCampaign}>
-                    <PlusIcon className="size-4" />
-                    Create Campaign
-                </Button>
-            </CardContent>
+        <Card className="py-0">
+            <EmptyState
+                icon={MailIcon}
+                title={title}
+                headingLevel={3}
+                action={
+                    onCreateCampaign ? (
+                        <Button onClick={onCreateCampaign}>
+                            <PlusIcon className="size-4" />
+                            Create Campaign
+                        </Button>
+                    ) : null
+                }
+            />
         </Card>
     )
 }
@@ -1087,7 +873,7 @@ function CampaignsTableRow({
                 >
                     {campaign.name}
                 </Link>
-                <Badge variant="outline" className="ml-2">{campaign.scope === "personal" ? "Personal" : "Organization"}</Badge>
+                <Badge variant="outline" className="ml-2">{getCampaignScopeLabel(campaign.scope ?? "org")}</Badge>
             </TableCell>
             <TableCell className="text-muted-foreground">
                 <div className="space-y-1">
@@ -1123,7 +909,7 @@ function CampaignsTableRow({
                         <CheckCircle2Icon className="size-4" />
                         {campaign.sent_count}
                     </span>
-                    <span className="flex items-center gap-1 text-red-600">
+                    <span className="flex items-center gap-1 text-destructive">
                         <XCircleIcon className="size-4" />
                         {campaign.failed_count}
                     </span>
@@ -1189,34 +975,36 @@ function CampaignActionsMenu({
                     <EyeIcon className="mr-2 size-4" />
                     View Details
                 </DropdownMenuItem>
-                {campaign.status === "draft" && (
-                    <DropdownMenuItem disabled={campaign.can_send === false} onClick={() => onSendNowCampaign(campaign.id)}>
+                {campaign.can_send === true && campaign.status === "draft" && (
+                    <DropdownMenuItem onClick={() => onSendNowCampaign(campaign.id)}>
                         <SendIcon className="mr-2 size-4" />
                         Send Now
                     </DropdownMenuItem>
                 )}
-                {(campaign.status === "draft" || campaign.status === "scheduled") && (
-                    <DropdownMenuItem disabled={campaign.can_edit === false} onClick={() => onEditCampaign(campaign.id)}>
+                {campaign.can_edit === true && (campaign.status === "draft" || campaign.status === "scheduled") && (
+                    <DropdownMenuItem onClick={() => onEditCampaign(campaign.id)}>
                         <PencilIcon className="mr-2 size-4" />
                         Edit
                     </DropdownMenuItem>
                 )}
-                <DropdownMenuItem disabled={campaign.can_edit === false} onClick={() => { void onDuplicateCampaign(campaign.id) }}>
-                    <CopyIcon className="mr-2 size-4" />
-                    Duplicate
-                </DropdownMenuItem>
-                {(campaign.status === "scheduled" || campaign.status === "sending") && (
+                {campaign.can_edit === true ? (
+                    <DropdownMenuItem onClick={() => { void onDuplicateCampaign(campaign.id) }}>
+                        <CopyIcon className="mr-2 size-4" />
+                        Duplicate
+                    </DropdownMenuItem>
+                ) : null}
+                {campaign.can_send === true && (campaign.status === "scheduled" || campaign.status === "sending") && (
                     <DropdownMenuItem
-                        disabled={campaign.can_send === false} onClick={() => onCancelCampaign(campaign.id)}
+                        onClick={() => onCancelCampaign(campaign.id)}
                         className="text-destructive"
                     >
                         <TrashIcon className="mr-2 size-4" />
                         Stop
                     </DropdownMenuItem>
                 )}
-                {campaign.status === "draft" && (
+                {campaign.can_edit === true && campaign.status === "draft" && (
                     <DropdownMenuItem
-                        disabled={campaign.can_edit === false} onClick={() => onDeleteCampaign(campaign.id)}
+                        onClick={() => onDeleteCampaign(campaign.id)}
                         className="text-destructive"
                     >
                         <TrashIcon className="mr-2 size-4" />
@@ -1283,44 +1071,27 @@ function CampaignCreateWizardDialog({
 }) {
     return (
         <Dialog open={open} onOpenChange={(dialogOpen) => !dialogOpen && actions.resetWizard()}>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent layout="sectioned" size="2xl">
                 <DialogHeader>
                     <DialogTitle>Create Campaign</DialogTitle>
-                    <DialogDescription>
-                        Step {state.wizardStep} of {TOTAL_STEPS}
-                    </DialogDescription>
                 </DialogHeader>
-                <CampaignWizardProgress wizardStep={state.wizardStep} />
-                <CampaignWizardStepContent state={state} data={data} actions={actions} />
-                <CampaignWizardFooter state={state} actions={actions} pending={pending} />
+                <DialogBody>
+                    <WizardStepper steps={CAMPAIGN_WIZARD_STEPS} currentStep={state.wizardStep} />
+                    <CampaignWizardStepContent state={state} data={data} actions={actions} />
+                </DialogBody>
+                <CampaignWizardFooter state={state} data={data} actions={actions} pending={pending} />
             </DialogContent>
         </Dialog>
     )
 }
 
-function CampaignWizardProgress({ wizardStep }: { wizardStep: number }) {
-    return (
-        <div className="flex items-center justify-between py-4">
-            {Array.from({ length: TOTAL_STEPS }, (_, index) => index + 1).map((step) => (
-                <div key={step} className="flex items-center flex-1 last:flex-none">
-                    <div
-                        className={`flex size-8 items-center justify-center rounded-full text-sm font-medium shrink-0 ${step <= wizardStep
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                            }`}
-                    >
-                        {step}
-                    </div>
-                    {step < TOTAL_STEPS && (
-                        <div
-                            className={`flex-1 h-0.5 mx-2 ${step < wizardStep ? "bg-primary" : "bg-muted"
-                                }`}
-                        />
-                    )}
-                </div>
-            ))}
-        </div>
-    )
+const CHANNEL_LABELS: Record<CampaignChannel, string> = {
+    email: "Email",
+    messaging: "SMS / MMS",
+}
+
+function getChannelLabel(value: string | null): string {
+    return value === "email" || value === "messaging" ? CHANNEL_LABELS[value] : "Choose a channel"
 }
 
 function CampaignWizardStepContent({
@@ -1332,20 +1103,33 @@ function CampaignWizardStepContent({
     data: CampaignWizardData
     actions: CampaignWizardActions
 }) {
-    return (
-        <div className="min-h-[300px]">
-            {state.wizardStep === 1 && <CampaignDetailsStep state={state} actions={actions} />}
-            {state.wizardStep === 2 && <CampaignTemplateStep state={state} data={data} actions={actions} />}
-            {state.wizardStep === 3 && <CampaignRecipientsStep state={state} data={data} actions={actions} />}
-            {state.wizardStep === 4 && <CampaignStateFilterStep state={state} data={data} actions={actions} />}
-            {state.wizardStep === 5 && <CampaignReviewStep state={state} data={data} />}
-            {state.wizardStep === 6 && <CampaignRecipientPreviewStep data={data} actions={actions} />}
-            {state.wizardStep === 7 && (state.canSend ? <CampaignScheduleStep state={state} actions={actions} /> : <h3 className="font-medium">Save draft</h3>)}
-        </div>
-    )
+    if (state.wizardStep === SETUP_STEP) {
+        return <CampaignSetupStep state={state} actions={actions} />
+    }
+    if (state.wizardStep === AUDIENCE_STEP) {
+        return (
+            <CampaignAudienceFields
+                idPrefix="campaign-create"
+                channel={state.channel}
+                recipientType={state.recipientType}
+                onRecipientTypeChange={actions.setRecipientType}
+                stageOptions={data.stageOptions}
+                selectedStages={state.selectedStages}
+                onSelectedStagesChange={actions.setSelectedStages}
+                selectedStates={state.selectedStates}
+                onSelectedStatesChange={actions.setSelectedStates}
+                includeUnsubscribed={state.includeUnsubscribed}
+                onIncludeUnsubscribedChange={actions.setIncludeUnsubscribed}
+            />
+        )
+    }
+    if (state.wizardStep === CONTENT_STEP) {
+        return <CampaignContentStep state={state} data={data} actions={actions} />
+    }
+    return <CampaignReviewStep state={state} data={data} actions={actions} />
 }
 
-function CampaignDetailsStep({
+function CampaignSetupStep({
     state,
     actions,
 }: {
@@ -1353,55 +1137,65 @@ function CampaignDetailsStep({
     actions: CampaignWizardActions
 }) {
     return (
-        <div className="space-y-4">
-            <h3 className="font-medium">Campaign Details</h3>
-            {state.policyV2 && <div className="space-y-2">
-                <Label>Scope</Label>
-                <Select aria-label="Campaign scope" value={state.scope} onValueChange={(value) => { if (value === "personal" || value === "org") actions.setScope(value) }}>
-                    <SelectTrigger aria-label="Campaign scope"><SelectValue>{() => state.scope === "personal" ? "Personal" : "Organization"}</SelectValue></SelectTrigger>
-                    <SelectContent><SelectItem value="personal">Personal</SelectItem><SelectItem value="org" disabled={!state.canManageOrg}>Organization</SelectItem></SelectContent>
-                </Select>
-            </div>}
-            <div className="space-y-2">
-                <Label>Channel *</Label>
+        <div className="flex flex-col gap-4">
+            {state.policyV2 ? (
+                <div className="flex flex-col gap-2">
+                    <Label htmlFor="campaign-scope">Scope</Label>
+                    <Select
+                        aria-label="Campaign scope"
+                        value={state.scope}
+                        onValueChange={(value) => {
+                            if (value === "personal" || value === "org") actions.setScope(value)
+                        }}
+                    >
+                        <SelectTrigger id="campaign-scope" className="w-full">
+                            <SelectValue>{getCampaignScopeLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="personal">{CAMPAIGN_SCOPE_LABELS.personal}</SelectItem>
+                            <SelectItem value="org" disabled={!state.canManageOrg}>
+                                {CAMPAIGN_SCOPE_LABELS.org}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            ) : null}
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="campaign-channel">Channel</Label>
                 <Select
-                    aria-label="Campaign channel"
+                    aria-label="Channel"
                     value={state.channel}
                     onValueChange={(value) => {
                         if (value === "email" || value === "messaging") actions.setChannel(value)
                     }}
                 >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Choose a channel">
-                            {(value: string | null) => value === "messaging" ? "SMS / MMS" : "Email"}
-                        </SelectValue>
+                    <SelectTrigger id="campaign-channel" className="w-full">
+                        <SelectValue placeholder="Choose a channel">{getChannelLabel}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="email">Email</SelectItem>
-                        <SelectItem value="messaging">SMS / MMS</SelectItem>
+                        <SelectItem value="email">{CHANNEL_LABELS.email}</SelectItem>
+                        <SelectItem value="messaging">{CHANNEL_LABELS.messaging}</SelectItem>
                     </SelectContent>
                 </Select>
                 {state.channel === "messaging" ? (
                     <p className="text-xs text-muted-foreground">
-                        Messaging campaigns always use the promotional route and exclude recipients
-                        without current promotional consent.
+                        Recipients without current promotional consent are excluded.
                     </p>
                 ) : null}
             </div>
-            <div className="space-y-2">
-                <Label htmlFor="name">Campaign Name *</Label>
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="campaign-name">Campaign name</Label>
                 <Input
-                    id="name"
+                    id="campaign-name"
                     placeholder="e.g., March Newsletter"
                     value={state.campaignName}
                     onChange={(event) => actions.setCampaignName(event.target.value)}
                 />
             </div>
-            <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="campaign-description">Description (optional)</Label>
                 <Textarea
-                    id="description"
-                    placeholder="Optional description..."
+                    id="campaign-description"
                     value={state.campaignDescription}
                     onChange={(event) => actions.setCampaignDescription(event.target.value)}
                 />
@@ -1410,7 +1204,7 @@ function CampaignDetailsStep({
     )
 }
 
-function CampaignTemplateStep({
+function CampaignContentStep({
     state,
     data,
     actions,
@@ -1419,19 +1213,41 @@ function CampaignTemplateStep({
     data: CampaignWizardData
     actions: CampaignWizardActions
 }) {
+    const isMessaging = state.channel === "messaging"
+    const label = isMessaging ? "SMS template" : "Email template"
+
+    if (data.templatesLoading) {
+        return (
+            <div className="flex flex-col gap-2" aria-busy="true">
+                <span className="text-sm font-medium">{label}</span>
+                <Skeleton className="h-9 w-full" />
+            </div>
+        )
+    }
+
+    if (!data.templates || data.templates.length === 0) {
+        return (
+            <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium">{label}</span>
+                <EmptyState
+                    icon={isMessaging ? MessageSquareTextIcon : MailIcon}
+                    title={isMessaging ? "No promotional SMS templates" : "No email templates"}
+                    className="rounded-lg border border-dashed"
+                />
+            </div>
+        )
+    }
+
     return (
-        <div className="space-y-4">
-            <h3 className="font-medium">
-                Select {state.channel === "messaging" ? "Promotional Message" : "Email"} Template
-            </h3>
-            <div className="space-y-2">
-                <Label>Template *</Label>
+        <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="campaign-template">{label}</Label>
                 <Select
-                    aria-label="Email template"
+                    aria-label={label}
                     value={state.selectedTemplateId}
                     onValueChange={(value) => value && actions.setSelectedTemplateId(value)}
                 >
-                    <SelectTrigger aria-label="Email template" className="w-full">
+                    <SelectTrigger id="campaign-template" aria-label={label} className="w-full">
                         <SelectValue placeholder="Choose a template">
                             {(value: string | null) => {
                                 if (!value) return "Choose a template"
@@ -1441,7 +1257,7 @@ function CampaignTemplateStep({
                         </SelectValue>
                     </SelectTrigger>
                     <SelectContent className="min-w-[300px]">
-                        {data.templates?.map((template) => (
+                        {data.templates.map((template) => (
                             <SelectItem key={template.id} value={template.id}>
                                 {template.name}
                             </SelectItem>
@@ -1449,568 +1265,301 @@ function CampaignTemplateStep({
                     </SelectContent>
                 </Select>
             </div>
-            {data.selectedTemplate && (
-                <Card className="mt-4">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">Preview</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-sm">
-                            <p className="font-medium text-muted-foreground">
-                                {state.channel === "messaging" ? "Message:" : "Subject:"}
-                            </p>
-                            <p className="mb-2 whitespace-pre-wrap">
-                                {state.channel === "messaging"
-                                    ? data.selectedTemplate.body
-                                    : data.selectedTemplate.subject}
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
+            {data.selectedTemplate ? (
+                <div className="rounded-lg border bg-muted/40 p-4 text-sm">
+                    <p className="text-muted-foreground">{isMessaging ? "Message" : "Subject"}</p>
+                    <p className="mt-1 whitespace-pre-wrap">
+                        {isMessaging ? data.selectedTemplate.body : data.selectedTemplate.subject}
+                    </p>
+                </div>
+            ) : null}
         </div>
     )
 }
 
-function CampaignRecipientsStep({
-    state,
-    data,
-    actions,
-}: {
-    state: CampaignWizardState
-    data: CampaignWizardData
-    actions: CampaignWizardActions
-}) {
-    const recipientOptionItems: ReactNode[] = []
-    for (const option of CAMPAIGN_RECIPIENT_OPTIONS) {
-        if (
-            state.channel === "email" ||
-            !isDonorCampaignRecipientType(option.value)
-        ) {
-            recipientOptionItems.push(
-                <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                </SelectItem>,
-            )
-        }
+const SEND_MODE_OPTIONS: ReadonlyArray<{ value: SendMode; label: string }> = [
+    { value: "draft", label: "Save as draft" },
+    { value: "now", label: "Send now" },
+    { value: "later", label: "Schedule for later" },
+]
+
+function getRecipientInitials(name: string | null, email: string): string {
+    const source = name?.trim() || email
+    const parts = source.split(/\s+/).filter(Boolean)
+    if (parts.length > 1) {
+        return `${parts[0]?.[0] ?? ""}${parts[parts.length - 1]?.[0] ?? ""}`.toUpperCase()
     }
-
-    return (
-        <div className="space-y-4">
-            <h3 className="font-medium">Recipients</h3>
-            <div className="space-y-2">
-                <Label>Recipient Type</Label>
-                <Select
-                    aria-label="Recipient type"
-                    value={state.recipientType}
-                    onValueChange={(value) => {
-                        if (isCampaignRecipientType(value)) {
-                            actions.setRecipientType(value)
-                            actions.setSelectedStages([])
-                        }
-                    }}
-                >
-                    <SelectTrigger aria-label="Recipient type">
-                        <SelectValue placeholder="Select type">
-                            {(value: string | null) => {
-                                return isCampaignRecipientType(value)
-                                    ? getCampaignRecipientLabel(value)
-                                    : "Select type"
-                            }}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        {recipientOptionItems}
-                    </SelectContent>
-                </Select>
-            </div>
-            <CampaignStageFilter state={state} data={data} actions={actions} />
-            {state.channel === "email" ? <div className="rounded-lg border bg-card p-4">
-                <div className="flex items-start gap-3">
-                    <Checkbox
-                        id="include-unsubscribed"
-                        checked={state.includeUnsubscribed}
-                        onCheckedChange={(checked) =>
-                            actions.setIncludeUnsubscribed(checked === true)
-                        }
-                    />
-                    <div className="space-y-1">
-                        <Label htmlFor="include-unsubscribed" className="cursor-pointer">
-                            Include unsubscribed recipients
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                            By default, recipients who opted out of marketing emails are excluded.
-                            Enable this only if you have explicit consent. Hard bounces and
-                            complaints are always suppressed.
-                        </p>
-                    </div>
-                </div>
-            </div> : null}
-            <Card className="bg-muted/50">
-                <CardContent className="py-4">
-                    <p className="text-sm text-muted-foreground">
-                        {state.channel === "messaging"
-                            ? "Recipients are suppressed unless promotional consent is current. There is no unsubscribe bypass for messaging campaigns."
-                            : "Recipients will be filtered when the campaign is sent. Hard bounces and complaints are always suppressed. Marketing opt-outs are excluded by default unless enabled above."}
-                    </p>
-                </CardContent>
-            </Card>
-        </div>
-    )
-}
-
-function CampaignStageFilter({
-    state,
-    data,
-    actions,
-}: {
-    state: CampaignWizardState
-    data: CampaignWizardData
-    actions: CampaignWizardActions
-}) {
-    const { selectedStageIdSet } = state
-
-    return (
-        <div className="space-y-2">
-            <div className="flex items-center justify-between">
-                <Label>
-                    {state.recipientType === "intended_parent"
-                        ? "Filter by Status (optional)"
-                        : "Filter by Stage (optional)"}
-                </Label>
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => actions.setSelectedStages(data.stageOptions.map((stage) => stage.id))}
-                        disabled={data.stageOptions.length === 0}
-                    >
-                        Select all
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => actions.setSelectedStages([])}
-                        disabled={state.selectedStages.length === 0}
-                    >
-                        Clear
-                    </Button>
-                </div>
-            </div>
-            {data.stagePresetsAvailable.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                    {data.stagePresetsAvailable.map((preset) => (
-                        <Button
-                            key={preset.key}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => actions.setSelectedStages(preset.stageIds)}
-                        >
-                            {preset.label}
-                        </Button>
-                    ))}
-                </div>
-            )}
-            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                {data.stageOptions.map((stage) => (
-                    <div key={stage.id} className="flex items-center gap-x-2">
-                        <Checkbox
-                            id={stage.id}
-                            checked={selectedStageIdSet.has(stage.id)}
-                            onCheckedChange={(checked) => {
-                                actions.setSelectedStages((previousStages) =>
-                                    checked
-                                        ? [...previousStages, stage.id]
-                                        : previousStages.filter((stageId) => stageId !== stage.id)
-                                )
-                            }}
-                        />
-                        <Label htmlFor={stage.id} className="text-sm cursor-pointer">
-                            <span
-                                className="inline-block size-2 rounded-full mr-1.5"
-                                style={{ backgroundColor: stage.color }}
-                            />
-                            {stage.label}
-                        </Label>
-                    </div>
-                ))}
-            </div>
-            {data.selectedStageLabels.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                    {data.selectedStageLabels.map((label) => (
-                        <Badge key={label} variant="secondary" className="text-xs">
-                            {label}
-                        </Badge>
-                    ))}
-                </div>
-            ) : (
-                <p className="text-xs text-muted-foreground">All stages included.</p>
-            )}
-        </div>
-    )
-}
-
-function CampaignStateFilterStep({
-    state,
-    data,
-    actions,
-}: {
-    state: CampaignWizardState
-    data: CampaignWizardData
-    actions: CampaignWizardActions
-}) {
-    const { selectedStateCodeSet } = state
-
-    return (
-        <div className="space-y-4">
-            <h3 className="font-medium">Filter by State (optional)</h3>
-            <div className="space-y-2">
-                <Label htmlFor="state-search">Search states</Label>
-                <Input
-                    id="state-search"
-                    placeholder="Search by state name"
-                    value={state.stateSearch}
-                    onChange={(event) => actions.setStateSearch(event.target.value)}
-                />
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                        actions.setSelectedStates((previousStates) => {
-                            const next = new Set(previousStates)
-                            data.visibleStateOptions.forEach((option) => next.add(option.value))
-                            return Array.from(next)
-                        })
-                    }
-                    disabled={data.visibleStateOptions.length === 0}
-                >
-                    {data.normalizedStateSearch ? "Select results" : "Select all"}
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => actions.setSelectedStates([])}
-                    disabled={state.selectedStates.length === 0}
-                >
-                    Clear
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => actions.setShowTerritories((showTerritories) => !showTerritories)}
-                >
-                    {state.showTerritories ? "Hide territories" : "Show territories"}
-                </Button>
-            </div>
-            <div className="grid grid-cols-3 gap-2 max-h-56 overflow-y-auto border rounded-md p-3">
-                {data.visibleStateOptions.length === 0 && (
-                    <p className="text-sm text-muted-foreground col-span-3">
-                        No states match your search.
-                    </p>
-                )}
-                {data.visibleStateOptions.map((state) => (
-                    <div key={state.value} className="flex items-center gap-x-2">
-                        <Checkbox
-                            id={`state-${state.value}`}
-                            checked={selectedStateCodeSet.has(state.value)}
-                            onCheckedChange={(checked) => {
-                                actions.setSelectedStates((previousStates) =>
-                                    checked
-                                        ? [...previousStates, state.value]
-                                        : previousStates.filter((stateCode) => stateCode !== state.value)
-                                )
-                            }}
-                        />
-                        <Label htmlFor={`state-${state.value}`} className="text-sm cursor-pointer">
-                            {state.label}
-                        </Label>
-                    </div>
-                ))}
-            </div>
-            {data.includeTerritories && data.filteredTerritories.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                    Territories included in results.
-                </p>
-            )}
-            {data.selectedStateLabels.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                    {data.selectedStateLabels.map((label) => (
-                        <Badge key={label} variant="secondary" className="text-xs">
-                            {label}
-                        </Badge>
-                    ))}
-                </div>
-            ) : (
-                <p className="text-xs text-muted-foreground">All states included.</p>
-            )}
-        </div>
-    )
+    return source.slice(0, 2).toUpperCase()
 }
 
 function CampaignReviewStep({
     state,
     data,
-}: {
-    state: CampaignWizardState
-    data: CampaignWizardData
-}) {
-    return (
-        <div className="space-y-4">
-            <h3 className="font-medium">Review Selection</h3>
-            <Card>
-                <CardContent className="py-4 space-y-3">
-                    <div className="flex justify-between">
-                        <span className="text-muted-foreground">Channel:</span>
-                        <span className="font-medium">
-                            {state.channel === "messaging" ? "SMS / MMS" : "Email"}
-                        </span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-muted-foreground">Campaign Name:</span>
-                        <span className="font-medium">{state.campaignName}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-muted-foreground">Template:</span>
-                        <span className="font-medium">{data.selectedTemplate?.name || "-"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-muted-foreground">Recipients:</span>
-                        <span className="font-medium">
-                            {getCampaignRecipientLabel(state.recipientType)}
-                        </span>
-                    </div>
-                    {state.channel === "email" ? <div className="flex justify-between">
-                        <span className="text-muted-foreground">Unsubscribed Recipients:</span>
-                        <span className="font-medium">
-                            {state.includeUnsubscribed ? "Included" : "Excluded"}
-                        </span>
-                    </div> : null}
-                    <CampaignReviewStageSummary state={state} data={data} />
-                    <CampaignReviewStateSummary state={state} data={data} />
-                </CardContent>
-            </Card>
-        </div>
-    )
-}
-
-function CampaignReviewStageSummary({
-    state,
-    data,
-}: {
-    state: CampaignWizardState
-    data: CampaignWizardData
-}) {
-    if (state.selectedStages.length === 0) return null
-
-    return (
-        <div className="flex justify-between items-start">
-            <span className="text-muted-foreground">
-                {state.recipientType === "intended_parent"
-                    ? "Filtered by Status:"
-                    : "Filtered by Stage:"}
-            </span>
-            <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
-                {state.selectedStages.map((stageId) => {
-                    const stage = data.stageById.get(stageId)
-                    return stage ? (
-                        <Badge key={stageId} variant="secondary" className="text-xs">
-                            <span className="inline-block size-2 rounded-full mr-1" style={{ backgroundColor: stage.color }} />
-                            {stage.label}
-                        </Badge>
-                    ) : null
-                })}
-            </div>
-        </div>
-    )
-}
-
-function CampaignReviewStateSummary({
-    state,
-    data,
-}: {
-    state: CampaignWizardState
-    data: CampaignWizardData
-}) {
-    if (state.selectedStates.length === 0) return null
-
-    return (
-        <div className="flex justify-between items-start">
-            <span className="text-muted-foreground">Filtered by State:</span>
-            <div className="flex flex-wrap gap-1 justify-end max-w-[60%]">
-                {state.selectedStates.map((stateCode) => {
-                    const label = data.stateLabelByCode.get(stateCode)
-                    return label ? (
-                        <Badge key={stateCode} variant="secondary" className="text-xs">
-                            {label}
-                        </Badge>
-                    ) : null
-                })}
-            </div>
-        </div>
-    )
-}
-
-function CampaignRecipientPreviewStep({
-    data,
-    actions,
-}: {
-    data: CampaignWizardData
-    actions: CampaignWizardActions
-}) {
-    return (
-        <div className="space-y-4">
-            <h3 className="font-medium">Recipient Preview</h3>
-            <RecipientPreviewCard
-                totalCount={data.previewTotalCount}
-                sampleRecipients={data.previewSampleRecipients}
-                isLoading={data.isPreviewLoading}
-                onRefresh={actions.previewRecipients}
-                maxVisible={3}
-            />
-        </div>
-    )
-}
-
-function CampaignScheduleStep({
-    state,
     actions,
 }: {
     state: CampaignWizardState
+    data: CampaignWizardData
     actions: CampaignWizardActions
 }) {
+    const rows = [
+        { key: "name", label: "Name", value: state.campaignName, step: SETUP_STEP },
+        {
+            key: "channel",
+            label: "Channel",
+            value: `${CHANNEL_LABELS[state.channel]} · ${data.selectedTemplate?.name ?? "No template"}`,
+            step: CONTENT_STEP,
+        },
+        {
+            key: "audience",
+            label: "Audience",
+            value: summarizeCampaignAudience({
+                channel: state.channel,
+                recipientType: state.recipientType,
+                stageOptions: data.stageOptions,
+                selectedStages: state.selectedStages,
+                selectedStates: state.selectedStates,
+                includeUnsubscribed: state.includeUnsubscribed,
+            }),
+            step: AUDIENCE_STEP,
+        },
+    ]
+    const timeZone = state.scheduledAt ? getTimeZoneAbbreviation(state.scheduledAt) : undefined
+
     return (
-        <div className="space-y-4">
-            <h3 className="font-medium">Schedule & Send</h3>
-            <div className="space-y-2">
-                <p className="text-sm font-medium">When to send?</p>
-                <RadioGroup
-                    value={state.scheduleFor}
-                    onValueChange={(value) => {
-                        if (isScheduleFor(value)) {
-                            actions.setScheduleFor(value)
-                        }
-                    }}
-                    className="flex gap-4"
-                >
-                    <div className="flex items-center gap-2">
-                        <RadioGroupItem id="campaign-send-now" value="now" />
-                        <Label htmlFor="campaign-send-now" className="cursor-pointer">
-                            Send now
-                        </Label>
+        <div className="flex flex-col gap-5">
+            <dl className="flex flex-col">
+                {rows.map((row) => (
+                    <div key={row.key} className="flex items-start gap-3 border-b py-2 text-sm">
+                        <dt className="w-24 shrink-0 text-muted-foreground">{row.label}</dt>
+                        <dd className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                            <span className="min-w-0 break-words">{row.value}</span>
+                            <Button
+                                type="button"
+                                variant="link"
+                                size="sm"
+                                className="h-auto shrink-0 p-0"
+                                aria-label={`Edit ${row.label.toLowerCase()}`}
+                                onClick={() => actions.setWizardStep(row.step)}
+                            >
+                                Edit
+                            </Button>
+                        </dd>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <RadioGroupItem id="campaign-send-later" value="later" />
-                        <Label htmlFor="campaign-send-later" className="cursor-pointer">
-                            Schedule for later
-                        </Label>
-                    </div>
-                </RadioGroup>
-            </div>
-            {state.scheduleFor === "later" && (
-                <div className="space-y-2">
-                    <Label htmlFor="scheduled-date">Scheduled Date & Time</Label>
-                    <Input
-                        id="scheduled-date"
-                        type="datetime-local"
-                        min={state.minScheduleDate}
-                        value={state.scheduledDate}
-                        onChange={(event) => actions.setScheduledDate(event.target.value)}
-                    />
-                </div>
-            )}
-            <Card className="bg-green-50 dark:bg-green-950/20 border-green-200">
-                <CardContent className="py-4 flex items-center gap-3">
-                    <CheckCircle2Icon className="size-5 text-green-600" />
-                    <span className="text-sm text-green-700 dark:text-green-400">
-                        Campaign is ready to {state.scheduleFor === "now" ? "send" : "schedule"}
+                ))}
+            </dl>
+
+            <CampaignRecipientSummary data={data} />
+
+            {state.canSend ? (
+                <div className="flex flex-col gap-3">
+                    <span id="campaign-send-mode-label" className="text-sm font-medium">
+                        When to send
                     </span>
-                </CardContent>
-            </Card>
+                    <RadioGroup
+                        aria-labelledby="campaign-send-mode-label"
+                        value={state.sendMode}
+                        onValueChange={(value) => {
+                            if (isSendMode(value)) actions.setSendMode(value)
+                        }}
+                        className="flex flex-wrap gap-x-5 gap-y-2"
+                    >
+                        {SEND_MODE_OPTIONS.map((option) => (
+                            <div key={option.value} className="flex items-center gap-2">
+                                <RadioGroupItem id={`campaign-send-${option.value}`} value={option.value} />
+                                <Label htmlFor={`campaign-send-${option.value}`} className="cursor-pointer font-normal">
+                                    {option.label}
+                                </Label>
+                            </div>
+                        ))}
+                    </RadioGroup>
+                    {state.sendMode === "later" ? (
+                        <ValidatedField label="Send time" error={state.scheduleError}>
+                            {(control) => (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <DateTimePicker
+                                        triggerId={control.id}
+                                        aria-invalid={control["aria-invalid"]}
+                                        aria-describedby={control["aria-describedby"]}
+                                        value={state.scheduledAt}
+                                        onChange={actions.setScheduledAt}
+                                        className="w-full sm:w-72"
+                                    />
+                                    {timeZone ? (
+                                        <span className="text-sm text-muted-foreground">{timeZone}</span>
+                                    ) : null}
+                                </div>
+                            )}
+                        </ValidatedField>
+                    ) : null}
+                </div>
+            ) : null}
         </div>
+    )
+}
+
+function CampaignRecipientSummary({ data }: { data: CampaignWizardData }) {
+    const samples = data.previewSampleRecipients.slice(0, 3)
+
+    return (
+        <section
+            aria-label="Recipients"
+            aria-busy={data.isPreviewLoading || undefined}
+            className="flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-start"
+        >
+            <div className="flex w-32 shrink-0 flex-col">
+                {data.isPreviewLoading ? (
+                    <Skeleton className="h-8 w-16" />
+                ) : (
+                    <span className="text-3xl font-semibold tabular-nums">
+                        {data.previewTotalCount === null ? "—" : data.previewTotalCount.toLocaleString()}
+                    </span>
+                )}
+                <span className="text-xs text-muted-foreground">
+                    {data.previewTotalCount === 1 ? "recipient" : "recipients"}
+                </span>
+            </div>
+            {data.isPreviewLoading ? (
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                    <Skeleton className="h-6 w-40" />
+                    <Skeleton className="h-6 w-32" />
+                </div>
+            ) : data.previewTotalCount === 0 ? (
+                <p className="min-w-0 flex-1 text-sm text-muted-foreground">No matching recipients</p>
+            ) : (
+                <ul className="flex min-w-0 flex-1 flex-col gap-2">
+                    {samples.map((recipient) => {
+                        const name = recipient.name || recipient.email
+                        return (
+                            <li
+                                key={`${recipient.href ?? recipient.email}-${recipient.name ?? ""}`}
+                                className="flex min-w-0 items-center gap-2"
+                            >
+                                <Avatar className="size-6">
+                                    <AvatarFallback className="bg-primary/10 text-[10px] text-primary">
+                                        {getRecipientInitials(recipient.name, recipient.email)}
+                                    </AvatarFallback>
+                                </Avatar>
+                                {recipient.href ? (
+                                    <Link href={recipient.href} className="truncate text-sm text-primary hover:underline">
+                                        {name}
+                                    </Link>
+                                ) : (
+                                    <span className="truncate text-sm">{name}</span>
+                                )}
+                            </li>
+                        )
+                    })}
+                </ul>
+            )}
+        </section>
+    )
+}
+
+function CampaignSubmitButton({
+    state,
+    data,
+    actions,
+    pending,
+}: {
+    state: CampaignWizardState
+    data: CampaignWizardData
+    actions: CampaignWizardActions
+    pending: CampaignWizardPending
+}) {
+    const spinner = pending.isSubmitting ? <Loader2Icon className="size-4 animate-spin" aria-hidden="true" /> : null
+
+    if (state.sendMode === "now") {
+        return (
+            <ConfirmDialog
+                trigger={
+                    <Button
+                        disabled={pending.isSubmitting || data.isPreviewLoading || data.previewTotalCount === 0}
+                    >
+                        {spinner ?? <SendIcon className="size-4" aria-hidden="true" />}
+                        Send Campaign
+                    </Button>
+                }
+                title={getCampaignSendConfirmTitle(data.previewTotalCount)}
+                description={
+                    state.channel === "messaging"
+                        ? "Messages start sending right away."
+                        : "Emails start sending right away."
+                }
+                confirmVariant="default"
+                confirmIcon={<SendIcon aria-hidden="true" />}
+                confirmLabel="Send now"
+                onConfirm={actions.submitCampaign}
+            />
+        )
+    }
+
+    if (state.sendMode === "later") {
+        return (
+            <Button
+                onClick={() => { void actions.submitCampaign() }}
+                disabled={pending.isSubmitting || !state.scheduledAt || Boolean(state.scheduleError)}
+            >
+                {spinner ?? <CalendarIcon className="size-4" aria-hidden="true" />}
+                Schedule Campaign
+            </Button>
+        )
+    }
+
+    return (
+        <Button onClick={() => { void actions.submitCampaign() }} disabled={pending.isSubmitting}>
+            {spinner}
+            Save Draft
+        </Button>
     )
 }
 
 function CampaignWizardFooter({
     state,
+    data,
     actions,
     pending,
 }: {
     state: CampaignWizardState
+    data: CampaignWizardData
     actions: CampaignWizardActions
     pending: CampaignWizardPending
 }) {
+    const canAdvance =
+        state.wizardStep === SETUP_STEP
+            ? state.campaignName.trim().length > 0
+            : state.wizardStep === CONTENT_STEP
+              ? Boolean(state.selectedTemplateId)
+              : true
     const goToStep = (nextStep: number) => {
         actions.setWizardStep(nextStep)
-        if (nextStep === 6) {
+        if (nextStep === REVIEW_STEP) {
             actions.previewRecipients()
         }
     }
 
     return (
-        <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={actions.resetWizard}>
+        <DialogFooter
+            start={
+                state.wizardStep > SETUP_STEP ? (
+                    <Button
+                        variant="outline"
+                        disabled={pending.isSubmitting}
+                        onClick={() => actions.setWizardStep((previousStep) => previousStep - 1)}
+                    >
+                        Back
+                    </Button>
+                ) : undefined
+            }
+        >
+            <Button variant="outline" onClick={actions.resetWizard} disabled={pending.isSubmitting}>
                 Cancel
             </Button>
-            {state.wizardStep > 1 && (
-                <Button
-                    variant="outline"
-                    onClick={() => actions.setWizardStep((previousStep) => previousStep - 1)}
-                >
-                    Back
-                </Button>
-            )}
-            {(state.wizardStep === 3 || state.wizardStep === 4) && (
-                <Button
-                    variant="ghost"
-                    onClick={() => {
-                        if (state.wizardStep === 3) {
-                            actions.setSelectedStages([])
-                        }
-                        if (state.wizardStep === 4) {
-                            actions.setSelectedStates([])
-                        }
-                        goToStep(state.wizardStep + 1)
-                    }}
-                >
-                    Skip
-                </Button>
-            )}
-            {state.wizardStep < TOTAL_STEPS ? (
-                <Button
-                    onClick={() => goToStep(state.wizardStep + 1)}
-                    disabled={
-                        (state.wizardStep === 1 && !state.campaignName) ||
-                        (state.wizardStep === 2 && !state.selectedTemplateId)
-                    }
-                >
+            {state.wizardStep < REVIEW_STEP ? (
+                <Button onClick={() => goToStep(state.wizardStep + 1)} disabled={!canAdvance}>
                     Next
                 </Button>
             ) : (
-                <Button
-                    onClick={() => { void actions.handleCreateCampaign() }}
-                    disabled={
-                        pending.isCreating ||
-                        pending.isSending ||
-                        (state.canSend && state.scheduleFor === "later" && !state.scheduledDate)
-                    }
-                >
-                    {pending.isCreating || pending.isSending ? (
-                        <Loader2Icon className="size-4 animate-spin" />
-                    ) : !state.canSend ? "Save draft" : state.scheduleFor === "now" ? (
-                        <>
-                            <SendIcon className="size-4" />
-                            Send Campaign
-                        </>
-                    ) : (
-                        <>
-                            <CalendarIcon className="size-4" />
-                            Schedule Campaign
-                        </>
-                    )}
-                </Button>
+                <CampaignSubmitButton state={state} data={data} actions={actions} pending={pending} />
             )}
         </DialogFooter>
     )
@@ -2023,73 +1572,48 @@ function CampaignConfirmationDialogs({
     state: CampaignDialogState
     actions: CampaignDialogActions
 }) {
+    const deleteName = state.getCampaignName(state.deleteDialogId)
+    const cancelName = state.getCampaignName(state.cancelDialogId)
+
     return (
         <>
-            <AlertDialog
-                open={!!state.deleteDialogId}
-                onOpenChange={(open) => !open && actions.setDeleteDialogId(null)}
-            >
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Are you sure you want to delete this campaign? This action cannot be undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={() => { void actions.handleDeleteCampaign() }}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                            Delete
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmDialog
+                open={state.deleteDialogId !== null}
+                onOpenChange={(open) => {
+                    if (!open) actions.setDeleteDialogId(null)
+                }}
+                title={deleteName ? `Delete ${deleteName}?` : "Delete campaign?"}
+                description="This can't be undone."
+                confirmLabel="Delete"
+                errorFallback="Couldn't delete campaign. Only drafts can be deleted."
+                onConfirm={actions.handleDeleteCampaign}
+            />
 
-            <AlertDialog
-                open={!!state.cancelDialogId}
-                onOpenChange={(open) => !open && actions.setCancelDialogId(null)}
-            >
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Stop Campaign</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will stop any scheduled or in-progress sends. Emails already queued may still deliver.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={() => { void actions.handleCancelCampaign() }}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                            Stop
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmDialog
+                open={state.cancelDialogId !== null}
+                onOpenChange={(open) => {
+                    if (!open) actions.setCancelDialogId(null)
+                }}
+                title={cancelName ? `Stop ${cancelName}?` : "Stop campaign?"}
+                description="Scheduled and in-progress sends stop. Messages already queued may still deliver."
+                confirmLabel="Stop"
+                errorFallback="Couldn't stop campaign. Try again."
+                onConfirm={actions.handleCancelCampaign}
+            />
 
-            <AlertDialog
-                open={!!state.sendNowDialogId}
-                onOpenChange={(open) => !open && actions.setSendNowDialogId(null)}
-            >
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Send Campaign Now</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will immediately start sending this campaign. You can stop it once it begins, but some emails may still deliver.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => { void actions.handleSendNowCampaign() }}>
-                            Send now
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmDialog
+                open={state.sendNowDialogId !== null}
+                onOpenChange={(open) => {
+                    if (!open) actions.setSendNowDialogId(null)
+                }}
+                title={getCampaignSendConfirmTitle(state.sendNowRecipientCount)}
+                description="Sending starts right away."
+                confirmVariant="default"
+                confirmIcon={<SendIcon aria-hidden="true" />}
+                confirmLabel="Send now"
+                errorFallback="Couldn't send campaign. Try again."
+                onConfirm={actions.handleSendNowCampaign}
+            />
         </>
     )
 }

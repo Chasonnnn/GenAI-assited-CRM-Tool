@@ -19,7 +19,6 @@ import {
     CheckCircleIcon,
     AlertTriangleIcon,
     XCircleIcon,
-    ArrowLeftIcon,
     SparklesIcon,
     MailIcon,
 } from "lucide-react"
@@ -36,7 +35,12 @@ import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { useCreateEmailTemplateDraft } from "@/lib/hooks/use-email-template-drafts"
 import { useEmailTemplateVariables } from "@/lib/hooks/use-email-templates"
 import type { TemplateVariableRead } from "@/lib/types/template-variable"
-import Link from "@/components/app-link"
+import { PageHeader } from "@/components/page-header"
+import {
+    AiUnavailableNotice,
+    getAiUnavailableReason,
+    type AiUnavailableReason,
+} from "@/components/ai/AiUnavailableNotice"
 
 // Trigger display labels
 const TRIGGER_LABELS: Record<string, string> = {
@@ -353,11 +357,8 @@ function useAIBuilderController() {
         : []
     const hasUnknownTemplateVariables = unknownTemplateVariables.length > 0
 
-    const disableReason = !isAIEnabled
-        ? "AI is disabled for your organization."
-        : !canUseAI
-            ? "You don't have permission to use AI."
-            : null
+    const unavailableReason = getAiUnavailableReason({ aiEnabled: isAIEnabled, canUseAI })
+    const canManageAISettings = user?.role === "developer" || permissions.includes("manage_integrations")
 
     const activePrompt = mode === "workflow" ? workflowPrompt : emailPrompt
 
@@ -487,15 +488,11 @@ function useAIBuilderController() {
         }
     }
 
-    const backHref =
-        mode === "email_template" ? "/automation/email-templates" : "/automation?tab=workflows"
-
     return {
         mode,
-        backHref,
         activePrompt,
         workflowScope,
-        permissions: { canUseAI, canManageAutomation, disableReason },
+        permissions: { canUseAI, canManageAutomation, unavailableReason, canManageAISettings },
         status: {
             isGenerating,
             isSavingWorkflow,
@@ -540,7 +537,6 @@ export default function AIWorkflowBuilderPage() {
 
 function AIBuilderPageShell({
     mode,
-    backHref,
     activePrompt,
     workflowScope,
     permissions,
@@ -565,13 +561,13 @@ function AIBuilderPageShell({
     onTemplateSave,
 }: {
     mode: "workflow" | "email_template"
-    backHref: string
     activePrompt: string
     workflowScope: "personal" | "org"
     permissions: {
         canUseAI: boolean
         canManageAutomation: boolean
-        disableReason: string | null
+        unavailableReason: AiUnavailableReason | null
+        canManageAISettings: boolean
     }
     status: {
         isGenerating: boolean
@@ -607,17 +603,14 @@ function AIBuilderPageShell({
 }) {
     return (
         <div className="flex min-h-screen flex-col bg-background">
-            <AIBuilderHeader mode={mode} backHref={backHref} onModeChange={onModeChange} />
+            <AIBuilderHeader mode={mode} onModeChange={onModeChange} />
 
             <div className="flex-1 p-6 space-y-6 max-w-4xl mx-auto w-full">
-                {!permissions.canUseAI && (
-                    <Alert variant="destructive">
-                        <XCircleIcon className="size-4" />
-                        <AlertTitle>AI Builder is disabled</AlertTitle>
-                        <AlertDescription>
-                            {permissions.disableReason || "AI is currently unavailable."}
-                        </AlertDescription>
-                    </Alert>
+                {permissions.unavailableReason && (
+                    <AiUnavailableNotice
+                        reason={permissions.unavailableReason}
+                        canManageSettings={permissions.canManageAISettings}
+                    />
                 )}
 
                 <PromptComposerCard
@@ -700,46 +693,16 @@ function AIBuilderPageShell({
 
 function AIBuilderHeader({
     mode,
-    backHref,
     onModeChange,
 }: {
     mode: "workflow" | "email_template"
-    backHref: string
     onModeChange: (value: string) => void
 }) {
     return (
-        <div className="border-b bg-card">
-            <div className="flex items-center justify-between p-6">
-                <div className="flex items-center gap-4">
-                    <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={mode === "email_template" ? "Back to email templates" : "Back to workflows"}
-                        render={<Link href={backHref} />}
-                    >
-                        <ArrowLeftIcon className="size-4" />
-                    </Button>
-                    <div>
-                        <div className="flex items-center gap-3">
-                            {mode === "workflow" ? (
-                                <SparklesIcon className="size-6 text-teal-500" />
-                            ) : (
-                                <MailIcon className="size-6 text-primary" />
-                            )}
-                            <h1 className="text-2xl font-semibold">
-                                {mode === "workflow" ? "AI Workflow Builder" : "AI Email Template Builder"}
-                            </h1>
-                            <Badge variant="secondary" className="bg-teal-500/10 text-teal-500 border-teal-500/20">
-                                Beta
-                            </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                            {mode === "workflow"
-                                ? "Describe what you want in plain English, and AI will create the workflow for you."
-                                : "Describe the email template you need, and AI will draft it for you."}
-                        </p>
-                    </div>
-                </div>
+        <PageHeader
+            title="AI Builder"
+            meta={<Badge variant="secondary">Beta</Badge>}
+            actions={
                 <Tabs value={mode} onValueChange={onModeChange}>
                     <TabsList>
                         <TabsTrigger value="workflow" className="gap-2">
@@ -752,8 +715,8 @@ function AIBuilderHeader({
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>
-            </div>
-        </div>
+            }
+        />
     )
 }
 
@@ -805,11 +768,13 @@ function PromptComposerCard({
             </CardHeader>
             <CardContent className="space-y-4">
                 <Textarea
+                    aria-label={promptTitle}
                     placeholder={promptPlaceholder}
                     value={activePrompt}
                     onChange={(e) => onPromptChange(e.target.value)}
                     rows={4}
                     className="resize-none"
+                    disabled={!canUseAI}
                 />
 
                 <div className="space-y-2">
@@ -820,7 +785,8 @@ function PromptComposerCard({
                                 type="button"
                                 key={suggestion}
                                 onClick={() => onSuggestionClick(suggestion)}
-                                className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                                disabled={!canUseAI}
+                                className="text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors disabled:pointer-events-none disabled:opacity-50"
                             >
                                 {suggestion.length > 50 ? suggestion.slice(0, 50) + "…" : suggestion}
                             </Button>
@@ -833,8 +799,8 @@ function PromptComposerCard({
                         <span>Scope:</span>
                         <Tabs value={workflowScope} onValueChange={onWorkflowScopeChange}>
                             <TabsList>
-                                <TabsTrigger value="personal">Personal</TabsTrigger>
-                                <TabsTrigger value="org" disabled={!canManageAutomation}>
+                                <TabsTrigger value="personal" disabled={!canUseAI}>Personal</TabsTrigger>
+                                <TabsTrigger value="org" disabled={!canUseAI || !canManageAutomation}>
                                     Org
                                 </TabsTrigger>
                             </TabsList>

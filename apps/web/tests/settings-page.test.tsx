@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { ApiError } from '@/lib/api'
 import SettingsPage from '../app/(app)/settings/page'
 
 const mockReplace = vi.fn()
@@ -10,16 +11,44 @@ vi.mock('next/navigation', () => ({
 
 const mockUpdateNotificationSettings = vi.fn()
 const mockRollbackPipeline = vi.fn()
+const mockToastError = vi.fn()
+const mockToastSuccess = vi.fn()
+const mockRevokeSession = vi.fn()
+const mockRevokeAllSessions = vi.fn()
+
+let mockUser: Record<string, string> = {
+    user_id: 'user-1',
+    role: 'developer',
+    org_id: 'org-1',
+    org_name: 'Test Organization',
+    display_name: 'Dana Developer',
+    title: 'Agency Director',
+    phone: '(555) 000-1111',
+    email: 'dana@example.com',
+}
 
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({
-        user: {
-            role: 'developer',
-            org_id: 'org-1',
-            org_name: 'Test Organization',
-        },
+        user: mockUser,
         refetch: vi.fn(),
     }),
+}))
+
+vi.mock('@/components/ui/toast', () => ({
+    toast: {
+        success: (...args: unknown[]) => mockToastSuccess(...args),
+        error: (...args: unknown[]) => mockToastError(...args),
+    },
+}))
+
+let mockSessions: Array<Record<string, unknown>> = []
+
+vi.mock('@/lib/hooks/use-sessions', () => ({
+    useSessions: () => ({ data: mockSessions, isLoading: false }),
+    useRevokeSession: () => ({ mutateAsync: mockRevokeSession, isPending: false }),
+    useRevokeAllSessions: () => ({ mutateAsync: mockRevokeAllSessions, isPending: false }),
+    useUploadAvatar: () => ({ mutate: vi.fn(), isPending: false }),
+    useDeleteAvatar: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 const mockGetOrgSettings = vi.fn()
@@ -62,7 +91,7 @@ vi.mock('@/lib/hooks/use-signature', () => ({
     useOrgSignature: () => ({ data: mockOrgSignature, isLoading: false }),
     useUpdateOrgSignature: () => ({ mutateAsync: mockUpdateOrgSignature, isPending: false }),
     useUploadOrgLogo: () => ({ mutate: vi.fn(), isPending: false }),
-    useDeleteOrgLogo: () => ({ mutate: vi.fn(), isPending: false }),
+    useDeleteOrgLogo: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-notifications', () => ({
@@ -162,6 +191,22 @@ async function renderSettingsPage(searchParams: Record<string, string | string[]
 
 describe('SettingsPage', () => {
     beforeEach(() => {
+        mockUser = {
+            user_id: 'user-1',
+            role: 'developer',
+            org_id: 'org-1',
+            org_name: 'Test Organization',
+            display_name: 'Dana Developer',
+            title: 'Agency Director',
+            phone: '(555) 000-1111',
+            email: 'dana@example.com',
+        }
+        mockSessions = []
+        mockToastError.mockReset()
+        mockToastSuccess.mockReset()
+        mockRevokeSession.mockReset()
+        mockRevokeAllSessions.mockReset()
+        mockUpdateProfile.mockReset()
         mockUpdateNotificationSettings.mockReset()
         mockUpdateOrgSignature.mockReset()
         mockUpdateOrgSignature.mockResolvedValue({})
@@ -257,10 +302,10 @@ describe('SettingsPage', () => {
 
     it('preserves an in-progress social link edit when equivalent signature data rerenders', async () => {
         const view = await renderSettingsPage({ tab: 'email-signature' })
-        const platformInput = screen.getByLabelText('Social platform 1')
+        const urlInput = await screen.findByLabelText('Social URL 1')
 
-        fireEvent.change(platformInput, { target: { value: 'Edited Network' } })
-        expect(platformInput).toHaveValue('Edited Network')
+        fireEvent.change(urlInput, { target: { value: 'https://linkedin.com/company/edited' } })
+        expect(urlInput).toHaveValue('https://linkedin.com/company/edited')
 
         mockOrgSignature = {
             signature_social_links: [
@@ -272,7 +317,175 @@ describe('SettingsPage', () => {
             await Promise.resolve()
         })
 
-        expect(screen.getByLabelText('Social platform 1')).toHaveValue('Edited Network')
+        expect(screen.getByLabelText('Social URL 1')).toHaveValue('https://linkedin.com/company/edited')
+    })
+
+    it('shows a stored lowercase platform with its display label', async () => {
+        mockOrgSignature = {
+            signature_social_links: [{ platform: 'linkedin', url: 'https://linkedin.com/company/test' }],
+        }
+
+        await renderSettingsPage({ tab: 'email-signature' })
+
+        expect(await screen.findByRole('combobox', { name: 'Social platform 1' })).toHaveTextContent('LinkedIn')
+        expect(screen.queryByText('linkedin')).not.toBeInTheDocument()
+    })
+
+    it('saves branding and social links from one save bar', async () => {
+        await renderSettingsPage({ tab: 'email-signature' })
+        await screen.findByText('Organization Branding')
+
+        expect(screen.queryByRole('button', { name: /save organization branding/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /save social links/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText('Website'), { target: { value: 'https://agency.example.com' } })
+        fireEvent.change(screen.getByLabelText('Social URL 1'), {
+            target: { value: 'https://linkedin.com/company/agency' },
+        })
+
+        const bar = screen.getByRole('region', { name: 'Unsaved changes' })
+        expect(within(bar).getByText('2 unsaved changes')).toBeInTheDocument()
+
+        fireEvent.click(within(bar).getByRole('button', { name: 'Save changes' }))
+
+        await waitFor(() => expect(mockUpdateOrgSignature).toHaveBeenCalledTimes(1))
+        expect(mockUpdateOrgSignature).toHaveBeenCalledWith(
+            expect.objectContaining({
+                signature_website: 'https://agency.example.com',
+                signature_social_links: [{ platform: 'LinkedIn', url: 'https://linkedin.com/company/agency' }],
+            })
+        )
+        await waitFor(() => expect(mockToastSuccess).toHaveBeenCalledWith('Email signature saved'))
+    })
+
+    it('blocks saving a social link without https and shows the field error', async () => {
+        await renderSettingsPage({ tab: 'email-signature' })
+
+        const urlInput = await screen.findByLabelText('Social URL 1')
+        fireEvent.change(urlInput, { target: { value: 'linkedin.com/company/test' } })
+        fireEvent.blur(urlInput)
+
+        expect(urlInput).toHaveAttribute('aria-invalid', 'true')
+        expect(screen.getByText('Enter a URL that starts with https://.')).toBeInTheDocument()
+        const bar = screen.getByRole('region', { name: 'Unsaved changes' })
+        expect(within(bar).getByRole('button', { name: 'Save changes' })).toBeDisabled()
+        expect(mockUpdateOrgSignature).not.toHaveBeenCalled()
+    })
+
+    it('matches signature textareas to the input fill', async () => {
+        await renderSettingsPage({ tab: 'email-signature' })
+
+        expect(await screen.findByLabelText('Address')).toHaveClass('bg-transparent')
+        expect(screen.getByLabelText('Address')).not.toHaveClass('bg-input/30')
+    })
+
+    it('clears Phone by sending an empty string', async () => {
+        await renderSettingsPage()
+
+        expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: '  Director ' } })
+        fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '   ' } })
+        const bar = screen.getByRole('region', { name: 'Unsaved changes' })
+        expect(bar).toHaveTextContent('2 unsaved changes')
+        fireEvent.click(within(bar).getByRole('button', { name: 'Save changes' }))
+
+        await waitFor(() =>
+            expect(mockUpdateProfile).toHaveBeenCalledWith({
+                display_name: 'Dana Developer',
+                phone: '',
+                title: 'Director',
+            })
+        )
+        await waitFor(() => expect(mockToastSuccess).toHaveBeenCalledWith('Profile saved'))
+        expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    })
+
+    it('requires a title because an empty title sends the user back to the welcome page', async () => {
+        await renderSettingsPage()
+
+        const title = screen.getByLabelText('Title')
+        fireEvent.change(title, { target: { value: ' ' } })
+        expect(title).toHaveAttribute('aria-invalid', 'true')
+        expect(screen.getByText('Enter your title.')).toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText('Full Name'), { target: { value: '' } })
+        const bar = screen.getByRole('region', { name: 'Unsaved changes' })
+        expect(within(bar).getByRole('button', { name: 'Save changes' })).toBeDisabled()
+        expect(within(bar).getByRole('button', { name: '2 errors' })).toBeInTheDocument()
+        expect(mockUpdateProfile).not.toHaveBeenCalled()
+    })
+
+    it('discards profile edits from the save bar', async () => {
+        await renderSettingsPage()
+
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Director' } })
+        const bar = screen.getByRole('region', { name: 'Unsaved changes' })
+        expect(bar).toHaveTextContent('1 unsaved change')
+        fireEvent.click(within(bar).getByRole('button', { name: 'Discard' }))
+
+        expect(screen.getByLabelText('Title')).toHaveValue('Agency Director')
+        expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    })
+
+    it('requires a full name before saving the profile', async () => {
+        await renderSettingsPage()
+
+        const name = screen.getByLabelText('Full Name')
+        fireEvent.change(name, { target: { value: '  ' } })
+        expect(name).toHaveAttribute('aria-invalid', 'true')
+
+        const bar = screen.getByRole('region', { name: 'Unsaved changes' })
+        expect(within(bar).getByRole('button', { name: 'Save changes' })).toBeDisabled()
+        fireEvent.click(within(bar).getByRole('button', { name: '1 error' }))
+
+        expect(name).toHaveFocus()
+        expect(name).toHaveAttribute('aria-invalid', 'true')
+        expect(screen.getByText('Enter your full name.')).toBeInTheDocument()
+        expect(mockUpdateProfile).not.toHaveBeenCalled()
+    })
+
+    it('shows an error toast when the profile save fails', async () => {
+        mockUpdateProfile.mockRejectedValue(new ApiError(500, 'Internal Server Error', 'db down'))
+        await renderSettingsPage()
+
+        fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Director' } })
+        const bar = screen.getByRole('region', { name: 'Unsaved changes' })
+        fireEvent.click(within(bar).getByRole('button', { name: 'Save changes' }))
+
+        await waitFor(() => expect(mockToastError).toHaveBeenCalledWith("Couldn't save your profile. Try again."))
+        expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument()
+    })
+
+    it('confirms session revoke in an in-app dialog', async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm')
+        mockSessions = [
+            {
+                id: 'session-current',
+                device_info: 'Chrome on macOS',
+                ip_address: '10.0.0.1',
+                last_active_at: new Date().toISOString(),
+                is_current: true,
+            },
+            {
+                id: 'session-other',
+                device_info: 'Safari on iPhone',
+                ip_address: '10.0.0.2',
+                last_active_at: new Date().toISOString(),
+                is_current: false,
+            },
+        ]
+        mockRevokeSession.mockResolvedValue(undefined)
+        await renderSettingsPage()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Revoke session on Safari on iPhone' }))
+        const dialog = await screen.findByRole('alertdialog')
+        expect(within(dialog).getByText('Revoke the session on Safari on iPhone?')).toBeInTheDocument()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke session' }))
+
+        await waitFor(() => expect(mockRevokeSession).toHaveBeenCalledWith('session-other'))
+        expect(confirmSpy).not.toHaveBeenCalled()
+        confirmSpy.mockRestore()
     })
 
     it('shows intelligent suggestions tab for admin roles', async () => {

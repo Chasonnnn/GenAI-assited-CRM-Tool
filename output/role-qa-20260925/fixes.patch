@@ -1,0 +1,339 @@
+--- a/apps/web/app/(app)/reports/page.tsx
++++ b/apps/web/app/(app)/reports/page.tsx
+@@ -21,6 +21,8 @@
+ import { formatLocalDate } from "@/lib/utils/date"
+ import { getCsrfHeaders } from "@/lib/csrf"
+ import type { AnalyticsSummary, Campaign, MetaPerformance, PerformanceByUserResponse, SpendTotals } from "@/lib/api/analytics"
++import { PermissionDeniedState } from "@/components/error-state"
++import { PermissionError, PermissionLoading } from "@/components/permissions/permission-controls"
+ 
+ const ReportsChartsGrid = dynamic(
+     () => import("./components/ReportsChartsGrid").then((mod) => mod.ReportsChartsGrid),
+@@ -608,10 +610,17 @@
+ 
+ export default function ReportsPage() {
+     const { user } = useAuth()
+-    const aiEnabled = user?.ai_enabled ?? false
+-    const { data: access } = useEffectivePermissions(user?.user_id ?? null)
+-    const canViewOrgReports = Boolean(access && ((access.policy_version ?? 1) < 2 || access.capabilities?.can_view_org_reports))
+-
++    const effective = useEffectivePermissions(user?.user_id ?? null)
++    if (effective.error) return <PermissionError error={effective.error} retry={() => void effective.refetch()} />
++    if (!effective.data) return <PermissionLoading />
++    if (!effective.data.permissions.includes("view_reports")) {
++        return <PermissionDeniedState description="Your account does not have permission to view reports." />
++    }
++    const access = effective.data
++    return <ReportsContent aiEnabled={user?.ai_enabled ?? false} canViewOrgReports={(access.policy_version ?? 1) < 2 || !!access.capabilities?.can_view_org_reports} />
++}
++
++function ReportsContent({ aiEnabled, canViewOrgReports }: { aiEnabled: boolean; canViewOrgReports: boolean }) {
+     const [dateRange, setDateRange] = useState<DateRangePreset>('all')
+     const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+         from: undefined,
+--- a/apps/web/app/(app)/settings/team/page.tsx
++++ b/apps/web/app/(app)/settings/team/page.tsx
+@@ -44,8 +44,10 @@
+ import { formatRelativeTime } from "@/lib/formatters"
+ 
+ import { PermissionBulkRoleReview } from "@/components/permissions/permission-bulk-role-review"
+-import { ChoiceField, PermissionError, ROLE_LABELS } from "@/components/permissions/permission-controls"
++import { ChoiceField, PermissionError, PermissionLoading, ROLE_LABELS } from "@/components/permissions/permission-controls"
+ import { PermissionNavigation } from "@/components/permissions/permission-navigation"
++import { PermissionDeniedState } from "@/components/error-state"
++import type { EffectivePermissions } from "@/lib/api/permissions"
+ 
+ const ROLE_COLORS: Record<string, string> = {
+     intake_specialist: "bg-blue-100 text-blue-800",
+@@ -444,13 +446,22 @@
+ }
+ 
+ export default function TeamSettingsPage() {
++    const { user } = useAuth()
++    const effective = useEffectivePermissions(user?.user_id ?? null)
++    if (effective.error) return <PermissionError error={effective.error} retry={() => void effective.refetch()} />
++    if (!effective.data) return <PermissionLoading />
++    if (!effective.data.capabilities?.can_manage_members) {
++        return <PermissionDeniedState description="Your account does not have permission to manage team members." />
++    }
++    return <TeamSettingsContent access={effective.data} />
++}
++
++function TeamSettingsContent({ access }: { access: EffectivePermissions }) {
+     const [showInviteModal, setShowInviteModal] = useState(false)
+     const [includeInactive, setIncludeInactive] = useState(false)
+-    const { user } = useAuth()
+-    const effective = useEffectivePermissions(user?.user_id ?? null)
+-    const v2 = effective.data?.policy_version === 2
+-    const canManage = !!effective.data?.capabilities?.can_manage_members
+-    const canAssignDeveloper = !!effective.data?.capabilities?.can_assign_developer
++    const v2 = access.policy_version === 2
++    const canManage = !!access.capabilities?.can_manage_members
++    const canAssignDeveloper = !!access.capabilities?.can_assign_developer
+     const { data: inviteData } = useInvites()
+     const { data: members } = useMembers()
+ 
+@@ -459,7 +470,7 @@
+ 
+     return (
+         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-6 sm:p-8">
+-            <header className="flex flex-wrap items-center justify-between gap-5"><h1 className="text-3xl font-semibold tracking-tight">Permissions</h1><PermissionNavigation current="people" capabilities={effective.data?.capabilities} /></header>
++            <header className="flex flex-wrap items-center justify-between gap-5"><h1 className="text-3xl font-semibold tracking-tight">Permissions</h1><PermissionNavigation current="people" capabilities={access.capabilities} /></header>
+             <div className="flex items-center justify-between">
+                 <div>
+                     <h2 className="text-2xl font-semibold">People</h2>
+--- a/apps/web/app/(app)/appointments/page.tsx
++++ b/apps/web/app/(app)/appointments/page.tsx
+@@ -22,6 +22,7 @@
+ } from "@/components/ui/dialog"
+ import { LinkIcon, CopyIcon, CheckIcon, Loader2Icon } from "lucide-react"
+ import { useBookingLink } from "@/lib/hooks/use-appointments"
++import { AppointmentAccess } from "@/components/appointments/AppointmentAccess"
+ 
+ function BookingLinkButton() {
+     const { data: link, isLoading, isError, refetch } = useBookingLink()
+@@ -95,6 +96,7 @@
+ 
+ export default function AppointmentsPage() {
+     return (
++        <AppointmentAccess>
+         <div className="flex min-h-screen flex-col">
+             {/* Page Header */}
+             <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+@@ -109,5 +111,6 @@
+                 <AppointmentsList />
+             </div>
+         </div>
++        </AppointmentAccess>
+     )
+ }
+--- /dev/null
++++ b/apps/web/components/appointments/AppointmentAccess.tsx
+@@ -0,0 +1,18 @@
++"use client"
++
++import type { ReactNode } from "react"
++import { PermissionDeniedState } from "@/components/error-state"
++import { PermissionError, PermissionLoading } from "@/components/permissions/permission-controls"
++import { useAuth } from "@/lib/auth-context"
++import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
++
++export function AppointmentAccess({ children }: { children: ReactNode }) {
++    const { user } = useAuth()
++    const effective = useEffectivePermissions(user?.user_id ?? null)
++    if (effective.error) return <PermissionError error={effective.error} retry={() => void effective.refetch()} />
++    if (!effective.data) return <PermissionLoading />
++    if (!effective.data.permissions.includes("manage_appointments")) {
++        return <PermissionDeniedState description="Your account does not have permission to manage appointments." />
++    }
++    return children
++}
+--- a/apps/web/components/appointments/AppointmentSettings.tsx
++++ b/apps/web/components/appointments/AppointmentSettings.tsx
+@@ -67,6 +67,7 @@
+ } from "@/lib/hooks/use-appointments"
+ import { useUserIntegrations } from "@/lib/hooks/use-user-integrations"
+ import type { AppointmentType, MeetingMode } from "@/lib/api/appointments"
++import { AppointmentAccess } from "@/components/appointments/AppointmentAccess"
+ 
+ function openBookingPreview() {
+     const baseUrl =
+@@ -1061,6 +1062,7 @@
+ 
+ export function AppointmentSettings() {
+     return (
++        <AppointmentAccess>
+         <div className="space-y-6">
+             <GoogleCalendarWarningBanner />
+             <Tabs defaultValue="availability" className="w-full">
+@@ -1083,5 +1085,6 @@
+                 </TabsContent>
+             </Tabs>
+         </div>
+-    )
+-}
++        </AppointmentAccess>
++    )
++}
+--- a/apps/web/components/tasks/TasksCalendarView.tsx
++++ b/apps/web/components/tasks/TasksCalendarView.tsx
+@@ -2,6 +2,8 @@
+ 
+ import { UnifiedCalendar } from "@/components/appointments/UnifiedCalendar"
+ import type { TaskListItem } from "@/lib/types/task"
++import { useAuth } from "@/lib/auth-context"
++import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
+ 
+ type TasksCalendarViewProps = {
+     filter: "my_tasks" | "all"
+@@ -9,8 +11,11 @@
+ }
+ 
+ export function TasksCalendarView({ filter, onTaskClick }: TasksCalendarViewProps) {
++    const { user } = useAuth()
++    const { data: access } = useEffectivePermissions(user?.user_id ?? null)
+     return (
+         <UnifiedCalendar
++            includeAppointments={access?.permissions.includes("manage_appointments") ?? false}
+             taskFilter={{ my_tasks: filter === "my_tasks" }}
+             onTaskClick={onTaskClick}
+         />
+--- a/apps/web/tests/reports-page.test.tsx
++++ b/apps/web/tests/reports-page.test.tsx
+@@ -1,10 +1,13 @@
+ import type { PropsWithChildren } from "react"
+-import { describe, it, expect, vi } from 'vitest'
++import { beforeEach, describe, it, expect, vi } from 'vitest'
+ import { render, screen } from '@testing-library/react'
+ 
+ const dynamicState = vi.hoisted(() => ({
+     policyVersion: 1,
+     canViewOrgReports: true,
++    permissions: ['view_reports', 'view_donors'],
++    permissionsLoading: false,
++    analyticsReads: 0,
+     calls: [] as Array<{ options?: { ssr?: boolean } }>,
+ }))
+ 
+@@ -24,8 +27,8 @@
+ 
+ vi.mock('@/lib/hooks/use-permissions', () => ({
+     useEffectivePermissions: () => ({
+-        data: { permissions: ['view_reports', 'view_donors'], policy_version: dynamicState.policyVersion, capabilities: {can_view_org_reports: dynamicState.canViewOrgReports} },
+-        isLoading: false,
++        data: dynamicState.permissionsLoading ? undefined : { permissions: dynamicState.permissions, policy_version: dynamicState.policyVersion, capabilities: {can_view_org_reports: dynamicState.canViewOrgReports} },
++        isLoading: dynamicState.permissionsLoading,
+     }),
+ }))
+ 
+@@ -91,7 +94,7 @@
+ }))
+ 
+ vi.mock('@/lib/hooks/use-analytics', () => ({
+-    useAnalyticsSummary: () => ({
++    useAnalyticsSummary: () => (dynamicState.analyticsReads++, {
+         data: {
+             total_surrogates: 42,
+             new_this_period: 5,
+@@ -181,6 +184,27 @@
+ }))
+ 
+ describe('ReportsPage', () => {
++    beforeEach(() => {
++        dynamicState.permissions = ['view_reports', 'view_donors']
++        dynamicState.permissionsLoading = false
++        dynamicState.analyticsReads = 0
++    })
++
++    it('denies direct access before loading report data', () => {
++        dynamicState.permissions = ['view_surrogates']
++        render(<ReportsPage />)
++        expect(screen.getByText('Permission required')).toBeInTheDocument()
++        expect(screen.queryByText('42')).not.toBeInTheDocument()
++        expect(dynamicState.analyticsReads).toBe(0)
++    })
++
++    it('waits for permissions before loading report data', () => {
++        dynamicState.permissionsLoading = true
++        render(<ReportsPage />)
++        expect(screen.queryByText('42')).not.toBeInTheDocument()
++        expect(dynamicState.analyticsReads).toBe(0)
++    })
++
+     it('lazy loads report visualizations', () => {
+         expect(dynamicState.calls.length).toBeGreaterThan(0)
+         expect(dynamicState.calls.some((call) => call.options?.ssr === false)).toBe(true)
+--- a/apps/web/tests/team-settings-page.test.tsx
++++ b/apps/web/tests/team-settings-page.test.tsx
+@@ -119,6 +119,21 @@
+         expect(screen.queryByText('accepted@example.com')).not.toBeInTheDocument()
+     })
+ 
++    it('denies direct access without requesting members or invitations', () => {
++        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, capabilities: { can_manage_members: false } } })
++        render(<TeamSettingsPage />)
++        expect(screen.getByText('Permission required')).toBeInTheDocument()
++        expect(mockUseMembers).not.toHaveBeenCalled()
++        expect(mockUseInvites).not.toHaveBeenCalled()
++    })
++
++    it('waits for permissions before requesting team data', () => {
++        mockUseEffectivePermissions.mockReturnValue({ isLoading: true })
++        render(<TeamSettingsPage />)
++        expect(mockUseMembers).not.toHaveBeenCalled()
++        expect(mockUseInvites).not.toHaveBeenCalled()
++    })
++
+     it('offers Operations invitations only after policy activation', () => {
+         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, capabilities: { can_manage_members: true } } })
+         render(<TeamSettingsPage />)
+--- /dev/null
++++ b/apps/web/tests/appointment-access.test.tsx
+@@ -0,0 +1,54 @@
++import { beforeEach, expect, it, vi } from 'vitest'
++import { render, screen } from '@testing-library/react'
++import AppointmentsPage from '@/app/(app)/appointments/page'
++import { AppointmentSettings } from '@/components/appointments/AppointmentSettings'
++import { TasksCalendarView } from '@/components/tasks/TasksCalendarView'
++
++const state = vi.hoisted(() => ({ permissions: [] as string[], loading: false, booking: vi.fn(), calendar: vi.fn() }))
++vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { user_id: 'operations' } }) }))
++vi.mock('@/lib/hooks/use-permissions', () => ({ useEffectivePermissions: () => ({ data: state.loading ? undefined : { permissions: state.permissions }, isLoading: state.loading }) }))
++vi.mock('@/components/appointments/AppointmentsList', () => ({ AppointmentsList: () => <div>Appointment list</div> }))
++vi.mock('@/lib/hooks/use-appointments', () => ({
++    useBookingLink: () => { state.booking(); return {} },
++    useAvailabilityRules: () => ({ isLoading: true }),
++    useSetAvailabilityRules: () => ({ mutateAsync: vi.fn() }),
++}))
++vi.mock('@/lib/hooks/use-user-integrations', () => ({ useUserIntegrations: () => ({ data: [] }) }))
++vi.mock('@/components/appointments/UnifiedCalendar', () => ({ UnifiedCalendar: (props: { includeAppointments?: boolean }) => { state.calendar({ ...props, includeAppointments: props.includeAppointments ?? true }); return <div>Task calendar</div> } }))
++
++beforeEach(() => { state.permissions = []; state.loading = false; vi.clearAllMocks() })
++
++it('denies appointment navigation without loading a booking link', () => {
++    render(<AppointmentsPage />)
++    expect(screen.getByText('Permission required')).toBeInTheDocument()
++    expect(state.booking).not.toHaveBeenCalled()
++    expect(screen.queryByText('Appointment list')).not.toBeInTheDocument()
++})
++
++it('waits for permission before loading appointments', () => {
++    state.loading = true
++    render(<AppointmentsPage />)
++    expect(state.booking).not.toHaveBeenCalled()
++})
++
++it('allows appointment management for an authorized role', () => {
++    state.permissions = ['manage_appointments']
++    render(<AppointmentsPage />)
++    expect(screen.getByText('Appointment list')).toBeInTheDocument()
++})
++
++it('denies availability settings before mounting its data requests', () => {
++    render(<AppointmentSettings />)
++    expect(screen.getByText('Permission required')).toBeInTheDocument()
++})
++
++it('keeps the Operations task calendar without requesting appointments', () => {
++    render(<TasksCalendarView filter="my_tasks" onTaskClick={() => {}} />)
++    expect(state.calendar).toHaveBeenCalledWith(expect.objectContaining({ includeAppointments: false }))
++})
++
++it('includes appointments in an authorized staff task calendar', () => {
++    state.permissions = ['manage_appointments']
++    render(<TasksCalendarView filter="my_tasks" onTaskClick={() => {}} />)
++    expect(state.calendar).toHaveBeenCalledWith(expect.objectContaining({ includeAppointments: true }))
++})
+--- a/apps/web/tests/appointments-google-meet.test.tsx
++++ b/apps/web/tests/appointments-google-meet.test.tsx
+@@ -35,6 +35,10 @@
+             org_timezone: "America/Los_Angeles",
+         },
+     }),
++}))
++
++vi.mock("@/lib/hooks/use-permissions", () => ({
++    useEffectivePermissions: () => ({ data: { permissions: ["manage_appointments"] } }),
+ }))
+ 
+ vi.mock("@/lib/hooks/use-user-integrations", () => ({

@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.74](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.73...surrogacy-crm-platform-v0.91.74) (2026-09-28)
+
+
+### Features
+
+* include the paused-from stage on surrogate list items ([a51903f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a51903f427dac7abf17609fa148955c199aa69a8))
+* UI QA fixes, shared UI primitives and backend filter fixes ([64e5be4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/64e5be47e901d5ea6a3ddd2fa27b89214a1feab4))
+
+
+### Bug Fixes
+
+* align the surrogate AI tab's off state with other AI pages ([72511f2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/72511f2830217dade5156b7754d96d635e5c0937))
+* always show hosted and embedded forms in the light theme ([b0fa2a6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b0fa2a65b83c1147d2cdb145e6b029ccbc774a7e))
+* apply the Matched guard and delivery details in the shared stage change ([90c450c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/90c450cf6f377d1fadf72b85ac9c6dfe986e3ab2))
+* check main's effective permissions on branch pages ([cb7042a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cb7042a6ba012d8c3872c074d470e0f1e5403aa3))
+* check template permissions before loading org template drafts ([bb4e743](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bb4e7431f2f159e8a760395f05c63d5012c53ffd))
+* dim disabled buttons that stay focusable ([9c54b99](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9c54b992239cc70e21976271970ec9ff5d7be282))
+* drop the stray zero from the workflow success rate ([91a02b2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/91a02b29b685957693597c585848ad4b8a2c296a))
+* find eligible match candidates beyond the first page ([11f0123](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/11f0123ccfbc96957311750396d75f6af90affde))
+* hide PHI view audits and show task due times in match work ([cfe5272](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cfe52727422c894677449cd52c3d3ff13d90f968))
+* keep the change stage dialog open and show an error when saving fails ([26e3467](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/26e3467661c751eac4918fe0f649e3967b4ab8b9))
+* keep the journey export button clear of the title at phone width ([0227060](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/022706005169a40bae631e9aa9234d404fb016d3))
+* keep the messaging settings header on loading and denied states ([f57d30e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f57d30e0f005df384f062e9b33c4f605cac80696))
+* keep the surrogates selection bar on screen at phone width ([33ad5ea](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/33ad5ea7a0546fdfa1deeb81adb201a36d0f6cf5))
+* label agency roles and invite statuses in ops ([ae8fe9e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ae8fe9ebd13f6628e74eaa2aa3efbae8d0bb7b94))
+* let bulk Change stage move to every stage ([fee6441](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/fee6441a736061c20bb5325b65828b00a2f5fd0a))
+* let bulk stage change move to every stage ([cf008d9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cf008d9e20ed427e322fdeccf2dde3a03be0811c))
+* name workflow approval actions without raw keys ([ecea2fa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ecea2fa4440d2ca5a5491d6c80674b30f3ad5fb5))
+* offer every stage in the bulk change stage dialog ([8109c1d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8109c1dc0ff53eabb83620ad4cf5b57829481b45))
+* offer linked-record task filters only for records the viewer can open ([0a26f2f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0a26f2f1ec322b1b677f7fbf79404d73962135ce))
+* port the proposed-date match filter to match_queries ([1144cf2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1144cf2941cc638eadb335a622f8f31a03126eb1))
+* put form submissions on the shared page header and states ([55cd005](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/55cd0058e310aad0bf4305397cfd33b079344a00))
+* read the stage change result correctly in v2 workflow actions ([0e0cb4b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0e0cb4b6de8b5b1a8ef8e9e96d733aa20384ff13))
+* require an accepted match in every stage change path ([d027491](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d0274910980b5cf1c6a49e06274df39ff9d736b7))
+* scope appointment status counts to visible records ([da21bde](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/da21bdee6effddfd525c7154518175f6d70689a1))
+* send denied form builder users to the dashboard ([e8514d9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e8514d9710b525e958f633ebca88cec7008c7621))
+* show stage labels, not keys, in match accept warnings ([5e3b142](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5e3b142080d286721e6fae0f06048046af249e27))
+* use main's match statuses in stage options ([6c563e0](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6c563e05363c587437c51094fd68c56f9a2863ab))
+
+
+### Maintenance
+
+* merge origin/main into codex/ui-qa-polish ([d3240c1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d3240c10c6e21096e5c371aa3a7e57094121c74b))
+* merge origin/main into codex/ui-qa-polish ([cdb4800](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cdb480029202a2f4651a302e253b5ce1f4d36667))
+* merge origin/main into codex/ui-qa-polish ([44baefe](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/44baefebef31f3b9ffa115162fb256cd0f8c2b94))
+* merge origin/main into codex/ui-qa-polish ([2509860](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2509860059519b12b590440904b349017c4c82f7))
+
 ## [0.91.73](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.72...surrogacy-crm-platform-v0.91.73) (2026-09-27)
 
 

@@ -30,7 +30,8 @@ export function TemplateDraftSection({
                 {drafts.map((draft) => (
                     <Card key={draft.id}>
                         <CardHeader className="pb-2">
-                            <div className="flex items-start justify-between gap-3">
+                            {/* min-w-0 lets the header grid column shrink so the title truncates instead of pushing the badge out of the card. */}
+                            <div className="flex min-w-0 items-start justify-between gap-3">
                                 <div className="min-w-0 space-y-1">
                                     <CardTitle className="truncate text-base">{draft.name}</CardTitle>
                                     <CardDescription className="line-clamp-2">{draft.subject}</CardDescription>

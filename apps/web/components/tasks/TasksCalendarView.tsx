@@ -1,17 +1,18 @@
 "use client"
 
 import { UnifiedCalendar } from "@/components/appointments/UnifiedCalendar"
+import type { UnifiedCalendarTaskFilter } from "@/lib/hooks/use-unified-calendar-data"
 import type { TaskListItem } from "@/lib/types/task"
 
 type TasksCalendarViewProps = {
-    filter: "my_tasks" | "all"
+    taskFilter: UnifiedCalendarTaskFilter
     onTaskClick: (task: TaskListItem) => void
 }
 
-export function TasksCalendarView({ filter, onTaskClick }: TasksCalendarViewProps) {
+export function TasksCalendarView({ taskFilter, onTaskClick }: TasksCalendarViewProps) {
     return (
         <UnifiedCalendar
-            taskFilter={{ my_tasks: filter === "my_tasks" }}
+            taskFilter={taskFilter}
             onTaskClick={onTaskClick}
         />
     )

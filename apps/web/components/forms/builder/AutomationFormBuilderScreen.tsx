@@ -12,11 +12,18 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { QueryErrorState } from "@/components/error-state"
 import { AutomationFormSettingsPanel } from "@/components/forms/builder/AutomationFormSettingsPanel"
 import { AutomationFormSubmissionsPanel } from "@/components/forms/builder/AutomationFormSubmissionsPanel"
 import { DeletePageDialog } from "@/components/forms/builder/DeletePageDialog"
+import {
+    FORM_BUILDER_EDITOR_DENIED,
+    FormBuilderBlockedScreen,
+    FormBuilderLoadingState,
+} from "@/components/forms/builder/FormBuilderAccessStates"
 import { FormBuilderHeader } from "@/components/forms/builder/FormBuilderHeader"
 import { FormBuilderPreviewPane } from "@/components/forms/builder/FormBuilderPreviewPane"
+import { FormPublishReadiness } from "@/components/forms/builder/FormPublishReadiness"
 import { FormBuilderWorkspace } from "@/components/forms/builder/FormBuilderWorkspace"
 import { FormBuilderWorkspaceTabs } from "@/components/forms/builder/FormBuilderWorkspaceTabs"
 import { ShareApplicationDialog } from "@/components/forms/builder/ShareApplicationDialog"
@@ -29,15 +36,24 @@ type AutomationFormBuilderScreenProps = {
 export function AutomationFormBuilderScreen({
     controller,
 }: AutomationFormBuilderScreenProps) {
-    if (controller.showLoading) {
+    if (controller.loadError) {
         return (
-            <div className="flex h-screen items-center justify-center bg-background">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                    <Loader2Icon className="size-5 animate-spin" />
-                    <span>Loading form&hellip;</span>
-                </div>
-            </div>
+            <FormBuilderBlockedScreen>
+                <QueryErrorState
+                    error={controller.loadError.error}
+                    onRetry={controller.loadError.retry}
+                    isRetrying={controller.loadError.isRetrying}
+                    title="Couldn't load form"
+                    forbidden={FORM_BUILDER_EDITOR_DENIED}
+                    notFound={{ title: "Form not found", backHref: "/automation/forms", backLabel: "Back to forms" }}
+                    headingLevel={2}
+                />
+            </FormBuilderBlockedScreen>
         )
+    }
+
+    if (controller.showLoading) {
+        return <FormBuilderLoadingState label="Loading form…" />
     }
 
     if (controller.shouldRenderNull) {
@@ -61,6 +77,7 @@ export function AutomationFormBuilderScreen({
                 onPublish={controller.handlePublish}
                 saveDisabled={controller.hasPendingSave}
                 publishDisabled={controller.publishDisabled}
+                publishDisabledReason={controller.publishBlockedReason}
             />
 
             <FormBuilderWorkspaceTabs
@@ -78,17 +95,19 @@ export function AutomationFormBuilderScreen({
                 ]}
             />
 
-            {controller.publishValidationMessage ? (
-                <div
-                    role="alert"
-                    className="border-b border-destructive/30 bg-destructive/10 px-6 py-2 text-sm text-destructive"
-                >
-                    {controller.publishValidationMessage}
-                </div>
-            ) : null}
-
             {controller.state.workspaceTab === "edit" ? (
-                <FormBuilderWorkspace {...controller.workspaceProps} />
+                <FormBuilderWorkspace
+                    {...controller.workspaceProps}
+                    inspectorHeader={
+                        controller.publishBlockedReason ? (
+                            <FormPublishReadiness
+                                items={controller.publishReadiness}
+                                onAddField={controller.onAddReadinessField}
+                                onMarkRequired={controller.onMarkReadinessFieldRequired}
+                            />
+                        ) : null
+                    }
+                />
             ) : (
                 <div data-testid="form-builder-workspace" className="hidden" />
             )}
@@ -141,8 +160,7 @@ export function AutomationFormBuilderScreen({
                         <AlertDialogCancel disabled={controller.state.isPublishing}>Cancel</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={controller.confirmPublish}
-                            className="bg-teal-600 hover:bg-teal-700"
-                            disabled={controller.hasPendingSave}
+                            disabled={controller.state.isPublishing || controller.hasPendingSave}
                         >
                             {controller.state.isPublishing ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
                             Publish

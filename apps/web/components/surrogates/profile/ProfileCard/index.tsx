@@ -1,7 +1,11 @@
 "use client"
 
+import { useSearchParams } from "next/navigation"
+import Link from "@/components/app-link"
+import { EmptyState } from "@/components/empty-state"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { Input } from "@/components/ui/input"
 import { Loader2Icon, FileTextIcon } from "lucide-react"
 import { ProfileCardProvider, useProfileCardData, useProfileCardEdits, useProfileCardMode } from "./context"
@@ -118,7 +122,8 @@ function SectionCustomQas({ sectionKey }: { sectionKey: string }) {
 // ============================================================================
 
 function ProfileCardContent() {
-    const { profile, isLoading, error } = useProfileCardData()
+    const { surrogateId, profile, isLoading, error } = useProfileCardData()
+    const searchParams = useSearchParams()
 
     // Loading state
     if (isLoading) {
@@ -145,14 +150,25 @@ function ProfileCardContent() {
 
     // Empty state - no submission
     if (!profile?.base_submission_id) {
+        const search = searchParams.toString()
+        const applicationTabHref = `/surrogates/${surrogateId}/application${search ? `?${search}` : ""}`
         return (
             <Card>
                 <Header />
-                <CardContent className="flex flex-col items-center justify-center py-8 text-center">
-                    <FileTextIcon className="size-12 text-muted-foreground/50 mb-4" />
-                    <p className="text-sm text-muted-foreground">
-                        No application submitted yet
-                    </p>
+                <CardContent>
+                    <EmptyState
+                        icon={FileTextIcon}
+                        title="No application submitted"
+                        headingLevel={2}
+                        action={
+                            <Link
+                                href={applicationTabHref}
+                                className={buttonVariants({ variant: "outline", size: "sm" })}
+                            >
+                                Open Application
+                            </Link>
+                        }
+                    />
                 </CardContent>
             </Card>
         )

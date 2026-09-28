@@ -1,6 +1,7 @@
 "use client"
 
 import { getAppointmentStatusLabel } from "@/lib/appointment-status-labels"
+import { APPOINTMENT_STATUSES, getAppointmentStatusTone } from "@/lib/appointment-status-tones"
 
 /**
  * Unified Calendar View - Combined view of appointments and tasks
@@ -12,7 +13,7 @@ import { getAppointmentStatusLabel } from "@/lib/appointment-status-labels"
  * - Click to view details
  */
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { TaskRelatedRecordLinks } from "@/components/tasks/TaskRelatedRecordLinks"
@@ -26,12 +27,6 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog"
-import {
     Sheet,
     SheetContent,
     SheetDescription,
@@ -43,28 +38,16 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
     CalendarIcon,
-    ClockIcon,
-    VideoIcon,
-    PhoneIcon,
-    MapPinIcon,
     CheckSquareIcon,
-    UserIcon,
     Loader2Icon,
-    LinkIcon,
-    XIcon,
 } from "lucide-react"
 import type { UnifiedCalendarTaskFilter } from "@/lib/hooks/use-unified-calendar-data"
-import { useUpdateAppointmentLink } from "@/lib/hooks/use-appointments"
 import { useUnifiedCalendarData } from "@/lib/hooks/use-unified-calendar-data"
-import { useAuth } from "@/lib/auth-context"
-import { useSurrogates } from "@/lib/hooks/use-surrogates"
-import { useIntendedParents } from "@/lib/hooks/use-intended-parents"
-import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
-import { AppointmentDetailDialog as AppointmentManagementDialog } from "@/components/appointments/AppointmentsList"
-import type { AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
+import { AppointmentDetailDialog } from "@/components/appointments/AppointmentDetailDialog"
+import { QueryErrorState } from "@/components/error-state"
+import type { AppointmentFilterParams, AppointmentListItem, GoogleCalendarEvent } from "@/lib/api/appointments"
 import type { TaskListItem } from "@/lib/api/tasks"
-import type { IntendedParentListItem } from "@/lib/types/intended-parent"
-import type { SurrogateListItem } from "@/lib/types/surrogate"
+import { compareTasksByDueTime } from "@/lib/utils/task-due"
 import Link from "@/components/app-link"
 import {
     format,
@@ -82,16 +65,6 @@ import {
 } from "date-fns"
 import { cn } from "@/lib/utils"
 
-// Status colors for appointments
-const STATUS_COLORS = {
-    pending: "bg-yellow-500",
-    confirmed: "bg-green-500",
-    completed: "bg-blue-500",
-    cancelled: "bg-red-500",
-    no_show: "bg-gray-500",
-    expired: "bg-gray-500",
-}
-
 // Task color
 const TASK_COLOR = "bg-purple-500"
 
@@ -99,24 +72,32 @@ const TASK_COLOR = "bg-purple-500"
 const GOOGLE_EVENT_COLOR = "bg-neutral-400"
 const EMPTY_GOOGLE_EVENTS: GoogleCalendarEvent[] = []
 
-// Meeting mode icons
-const MEETING_MODE_ICONS: Record<string, typeof VideoIcon> = {
-    zoom: VideoIcon,
-    google_meet: VideoIcon,
-    phone: PhoneIcon,
-    in_person: MapPinIcon,
-}
-
 function formatItemCount(count: number) {
     return `${count} item${count === 1 ? "" : "s"}`
 }
 
-const DAY_VIEW_HOURS = Array.from({ length: 13 }, (_, i) => i + 8)
+/** Month cells show this many items before "+N more". */
+const MONTH_CELL_ITEM_LIMIT = 3
+
+// The day view covers the full day; it scrolls to DAY_VIEW_DEFAULT_SCROLL_HOUR or the first timed item.
+const DAY_VIEW_HOURS = Array.from({ length: 24 }, (_, i) => i)
+const DAY_VIEW_DEFAULT_SCROLL_HOUR = 7
 const DAY_VIEW_HOUR_LABELS = DAY_VIEW_HOURS.reduce<Record<number, string>>((labels, hour) => {
-    const displayHour = hour > 12 ? hour - 12 : hour
+    const displayHour = hour % 12 === 0 ? 12 : hour % 12
     labels[hour] = `${displayHour} ${hour >= 12 ? "PM" : "AM"}`
     return labels
 }, {})
+
+function groupTasksByDueDate(tasks: TaskListItem[]) {
+    const tasksByDate = new Map<string, TaskListItem[]>()
+    for (const task of tasks.toSorted(compareTasksByDueTime)) {
+        if (!task.due_date) continue
+        const bucket = tasksByDate.get(task.due_date)
+        if (bucket) bucket.push(task)
+        else tasksByDate.set(task.due_date, [task])
+    }
+    return tasksByDate
+}
 
 // View type
 type ViewType = "month" | "week" | "day"
@@ -259,7 +240,7 @@ function EventItem({
     draggable?: boolean
     onDragStart?: (e: React.DragEvent, appointment: AppointmentListItem) => void
 }) {
-    const statusColor = STATUS_COLORS[appointment.status as keyof typeof STATUS_COLORS] || "bg-gray-500"
+    const statusTone = getAppointmentStatusTone(appointment.status)
     const time = format(parseISO(appointment.scheduled_start), "h:mm a")
     const canDrag = draggable && (appointment.status === "pending" || appointment.status === "confirmed")
     const handleAppointmentClick = () => onClick?.(appointment)
@@ -271,7 +252,7 @@ function EventItem({
     }
 
     if (compact) {
-        const compactClassName = `w-full text-left px-2 py-1 rounded text-xs truncate ${statusColor} text-white hover:opacity-90 transition-opacity ${canDrag ? "cursor-grab active:cursor-grabbing" : onClick ? "cursor-pointer" : ""}`
+        const compactClassName = `w-full text-left px-2 py-1 rounded border text-xs font-medium truncate ${statusTone.tint} hover:opacity-90 transition-opacity ${canDrag ? "cursor-grab active:cursor-grabbing" : onClick ? "cursor-pointer" : ""}`
 
         if (onClick) {
             return (
@@ -298,7 +279,7 @@ function EventItem({
         )
     }
 
-    const fullClassName = `w-full text-left p-2 rounded-lg border-l-4 ${statusColor.replace('bg-', 'border-')} bg-muted/50 hover:bg-muted transition-colors ${canDrag ? "cursor-grab active:cursor-grabbing" : onClick ? "cursor-pointer" : ""}`
+    const fullClassName = `w-full text-left p-2 rounded-lg border-l-4 ${statusTone.accent} bg-muted/50 hover:bg-muted transition-colors ${canDrag ? "cursor-grab active:cursor-grabbing" : onClick ? "cursor-pointer" : ""}`
     const fullContent = (
         <>
             <p className="font-medium text-sm truncate">{appointment.client_name}</p>
@@ -330,494 +311,6 @@ function EventItem({
             className={fullClassName}
         >
             {fullContent}
-        </div>
-    )
-}
-
-// =============================================================================
-// Appointment Detail Dialog
-// =============================================================================
-
-function AppointmentDetailDialog({
-    appointment,
-    open,
-    onOpenChange,
-}: {
-    appointment: AppointmentListItem | null
-    open: boolean
-    onOpenChange: (open: boolean) => void
-}) {
-    const [showLinkSection, setShowLinkSection] = useState(false)
-    const [selectedSurrogateId, setSelectedSurrogateId] = useState(() => appointment?.surrogate_id ?? null)
-    const [selectedIpId, setSelectedIpId] = useState(() => appointment?.intended_parent_id ?? null)
-
-    const updateLinkMutation = useUpdateAppointmentLink()
-    const { user } = useAuth()
-    const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
-    const permissions = permissionsQuery.data?.permissions ?? []
-    const permissionsLoaded = !permissionsQuery.isLoading
-    const canViewIntendedParents = permissions.includes("view_intended_parents")
-    const canLoadIntendedParents = open && showLinkSection && canViewIntendedParents
-
-    // Fetch surrogates and IPs for linking
-    const { data: surrogatesData } = useSurrogates({ per_page: 100 })
-    const { data: ipsData } = useIntendedParents(
-        { per_page: 100 },
-        { enabled: canLoadIntendedParents }
-    )
-
-    const surrogates = surrogatesData?.items || []
-    const ips = ipsData?.items || []
-
-    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles"
-    const clientTimezone = appointment?.client_timezone || userTimezone
-    const showClientTimezone = !!appointment && clientTimezone !== userTimezone
-
-    const clientDateFormatter = Intl.DateTimeFormat(undefined, {
-        timeZone: clientTimezone,
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-    })
-
-    const clientTimeFormatter = Intl.DateTimeFormat(undefined, {
-        timeZone: clientTimezone,
-        hour: "numeric",
-        minute: "2-digit",
-    })
-
-    const formatDateInClientZone = (iso: string) => clientDateFormatter.format(new Date(iso))
-    const formatTimeInClientZone = (iso: string) => clientTimeFormatter.format(new Date(iso))
-
-    if (!appointment) return null
-
-    const handleSaveLink = () => {
-        updateLinkMutation.mutate(
-            {
-                appointmentId: appointment.id,
-                data: {
-                    surrogate_id: selectedSurrogateId,
-                    intended_parent_id: selectedIpId,
-                },
-            },
-            {
-                onSuccess: () => {
-                    setShowLinkSection(false)
-                },
-            }
-        )
-    }
-
-    const handleUnlinkSurrogate = () => {
-        updateLinkMutation.mutate({
-            appointmentId: appointment.id,
-            data: { surrogate_id: null },
-        })
-    }
-
-    const handleUnlinkIp = () => {
-        updateLinkMutation.mutate({
-            appointmentId: appointment.id,
-            data: { intended_parent_id: null },
-        })
-    }
-
-    const handleCancelLink = () => {
-        setShowLinkSection(false)
-        setSelectedSurrogateId(appointment.surrogate_id)
-        setSelectedIpId(appointment.intended_parent_id)
-    }
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-md">
-                <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                        <CalendarIcon className="size-5" />
-                        Appointment Details
-                    </DialogTitle>
-                </DialogHeader>
-
-                <div className="space-y-4 py-4">
-                    <AppointmentStatusPill appointment={appointment} />
-                    <AppointmentClientSummary appointment={appointment} />
-                    <AppointmentScheduleSummary
-                        appointment={appointment}
-                        timezoneDisplay={{
-                            userTimezone,
-                            clientTimezone,
-                            showClientTimezone,
-                            formatDateInClientZone,
-                            formatTimeInClientZone,
-                        }}
-                    />
-                    <AppointmentFormatSummary appointment={appointment} />
-                    <div className="border-t pt-4">
-                        <AppointmentLinkSection
-                            appointment={appointment}
-                            surrogates={surrogates}
-                            intendedParents={ips}
-                            state={{
-                                showEditor: showLinkSection,
-                                selectedSurrogateId,
-                                selectedIpId,
-                                canViewIntendedParents,
-                                permissionsLoaded,
-                                isSaving: updateLinkMutation.isPending,
-                            }}
-                            actions={{
-                                onShowEditor: () => setShowLinkSection(true),
-                                onSurrogateChange: setSelectedSurrogateId,
-                                onIntendedParentChange: setSelectedIpId,
-                                onSave: handleSaveLink,
-                                onCancel: handleCancelLink,
-                                onUnlinkSurrogate: handleUnlinkSurrogate,
-                                onUnlinkIntendedParent: handleUnlinkIp,
-                            }}
-                        />
-                    </div>
-                </div>
-            </DialogContent>
-        </Dialog>
-    )
-}
-
-type AppointmentTimezoneDisplay = {
-    userTimezone: string
-    clientTimezone: string
-    showClientTimezone: boolean
-    formatDateInClientZone: (iso: string) => string
-    formatTimeInClientZone: (iso: string) => string
-}
-
-type AppointmentLinkSectionState = {
-    showEditor: boolean
-    selectedSurrogateId: string | null
-    selectedIpId: string | null
-    canViewIntendedParents: boolean
-    permissionsLoaded: boolean
-    isSaving: boolean
-}
-
-type AppointmentLinkSectionActions = {
-    onShowEditor: () => void
-    onSurrogateChange: (surrogateId: string | null) => void
-    onIntendedParentChange: (intendedParentId: string | null) => void
-    onSave: () => void
-    onCancel: () => void
-    onUnlinkSurrogate: () => void
-    onUnlinkIntendedParent: () => void
-}
-
-function AppointmentStatusPill({
-    appointment,
-}: {
-    appointment: AppointmentListItem
-}) {
-    const statusColor = STATUS_COLORS[appointment.status as keyof typeof STATUS_COLORS] || "bg-gray-500"
-
-    return (
-        <div className="flex items-center gap-2">
-            <Badge className={`${statusColor} text-white`}>
-                {getAppointmentStatusLabel(appointment.status)}
-            </Badge>
-        </div>
-    )
-}
-
-function AppointmentClientSummary({
-    appointment,
-}: {
-    appointment: AppointmentListItem
-}) {
-    return (
-        <div>
-            <p className="text-sm text-muted-foreground">Client</p>
-            <p className="font-medium flex items-center gap-2">
-                <UserIcon className="size-4" />
-                {appointment.client_name}
-            </p>
-            <p className="text-sm text-muted-foreground">{appointment.client_email}</p>
-            <p className="text-sm text-muted-foreground">{appointment.client_phone}</p>
-        </div>
-    )
-}
-
-function AppointmentScheduleSummary({
-    appointment,
-    timezoneDisplay,
-}: {
-    appointment: AppointmentListItem
-    timezoneDisplay: AppointmentTimezoneDisplay
-}) {
-    return (
-        <div>
-            <p className="text-sm text-muted-foreground">Date & Time</p>
-            <p className="font-medium flex items-center gap-2">
-                <CalendarIcon className="size-4" />
-                {format(parseISO(appointment.scheduled_start), "EEEE, MMMM d, yyyy")}
-            </p>
-            <p className="flex items-center gap-2 text-muted-foreground">
-                <ClockIcon className="size-4" />
-                {format(parseISO(appointment.scheduled_start), "h:mm a")} - {format(parseISO(appointment.scheduled_end), "h:mm a")}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-                Your timezone: {timezoneDisplay.userTimezone}
-            </p>
-            {timezoneDisplay.showClientTimezone && (
-                <div className="mt-2 rounded-md border border-dashed border-border bg-muted/40 p-2 text-xs text-muted-foreground">
-                    <p>Client timezone: {timezoneDisplay.clientTimezone}</p>
-                    <p className="mt-1">
-                        {timezoneDisplay.formatDateInClientZone(appointment.scheduled_start)}{" "}
-                        {timezoneDisplay.formatTimeInClientZone(appointment.scheduled_start)} -{" "}
-                        {timezoneDisplay.formatTimeInClientZone(appointment.scheduled_end)}
-                    </p>
-                </div>
-            )}
-        </div>
-    )
-}
-
-function AppointmentFormatSummary({
-    appointment,
-}: {
-    appointment: AppointmentListItem
-}) {
-    const ModeIcon = MEETING_MODE_ICONS[appointment.meeting_mode as keyof typeof MEETING_MODE_ICONS] || VideoIcon
-
-    return (
-        <>
-            <div>
-                <p className="text-sm text-muted-foreground">Appointment Format</p>
-                <p className="font-medium flex items-center gap-2 capitalize">
-                    <ModeIcon className="size-4" />
-                    {appointment.meeting_mode.replace("_", " ")}
-                </p>
-            </div>
-
-            {appointment.appointment_type_name && (
-                <div>
-                    <p className="text-sm text-muted-foreground">Appointment Type</p>
-                    <p className="font-medium">{appointment.appointment_type_name}</p>
-                </div>
-            )}
-        </>
-    )
-}
-
-function getSurrogateSelectLabel(value: string | null, surrogates: SurrogateListItem[]) {
-    if (!value || value === "none") return "None"
-    const surrogate = surrogates.find((candidate) => candidate.id === value)
-    return surrogate ? `#${surrogate.surrogate_number} - ${surrogate.full_name}` : "Selected surrogate"
-}
-
-function getIntendedParentSelectLabel(value: string | null, intendedParents: IntendedParentListItem[]) {
-    if (!value || value === "none") return "None"
-    const intendedParent = intendedParents.find((candidate) => candidate.id === value)
-    if (!intendedParent) return "Selected intended parent"
-    return intendedParent.intended_parent_number
-        ? `#${intendedParent.intended_parent_number} - ${intendedParent.full_name}`
-        : intendedParent.full_name
-}
-
-function AppointmentLinkSection({
-    appointment,
-    surrogates,
-    intendedParents,
-    state,
-    actions,
-}: {
-    appointment: AppointmentListItem
-    surrogates: SurrogateListItem[]
-    intendedParents: IntendedParentListItem[]
-    state: AppointmentLinkSectionState
-    actions: AppointmentLinkSectionActions
-}) {
-    const hasLink = appointment.surrogate_id || appointment.intended_parent_id
-
-    return (
-        <>
-            <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium flex items-center gap-2">
-                    <LinkIcon className="size-4" />
-                    Linked To
-                </p>
-                {!state.showEditor && (
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={actions.onShowEditor}
-                    >
-                        {hasLink ? "Edit" : "Link"}
-                    </Button>
-                )}
-            </div>
-
-            {!state.showEditor ? (
-                <AppointmentLinkedEntities
-                    appointment={appointment}
-                    isSaving={state.isSaving}
-                    onUnlinkSurrogate={actions.onUnlinkSurrogate}
-                    onUnlinkIntendedParent={actions.onUnlinkIntendedParent}
-                />
-            ) : (
-                <AppointmentLinkEditor
-                    surrogates={surrogates}
-                    intendedParents={intendedParents}
-                    state={state}
-                    actions={actions}
-                />
-            )}
-        </>
-    )
-}
-
-function AppointmentLinkedEntities({
-    appointment,
-    isSaving,
-    onUnlinkSurrogate,
-    onUnlinkIntendedParent,
-}: {
-    appointment: AppointmentListItem
-    isSaving: boolean
-    onUnlinkSurrogate: () => void
-    onUnlinkIntendedParent: () => void
-}) {
-    const hasLink = appointment.surrogate_id || appointment.intended_parent_id
-
-    return (
-        <div className="space-y-2">
-            {appointment.surrogate_id && appointment.surrogate_number ? (
-                <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-                    <span className="text-sm">
-                        <Badge variant="outline" className="mr-2">Surrogate</Badge>
-                        #{appointment.surrogate_number}
-                    </span>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onUnlinkSurrogate}
-                        disabled={isSaving}
-                        aria-label={`Unlink surrogate ${appointment.surrogate_number}`}
-                    >
-                        <XIcon className="size-4" />
-                    </Button>
-                </div>
-            ) : null}
-            {appointment.intended_parent_id && appointment.intended_parent_name ? (
-                <div className="flex items-center justify-between p-2 rounded-md bg-muted/50">
-                    <span className="text-sm">
-                        <Badge variant="outline" className="mr-2">IP</Badge>
-                        {appointment.intended_parent_name}
-                    </span>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onUnlinkIntendedParent}
-                        disabled={isSaving}
-                        aria-label={`Unlink intended parent ${appointment.intended_parent_name}`}
-                    >
-                        <XIcon className="size-4" />
-                    </Button>
-                </div>
-            ) : null}
-            {!hasLink && (
-                <p className="text-sm text-muted-foreground">Not linked to any surrogate or IP</p>
-            )}
-        </div>
-    )
-}
-
-function AppointmentLinkEditor({
-    surrogates,
-    intendedParents,
-    state,
-    actions,
-}: {
-    surrogates: SurrogateListItem[]
-    intendedParents: IntendedParentListItem[]
-    state: AppointmentLinkSectionState
-    actions: AppointmentLinkSectionActions
-}) {
-    return (
-        <div className="space-y-3">
-            <div>
-                <p className="text-xs text-muted-foreground">Link to Surrogate</p>
-                <Select
-                    value={state.selectedSurrogateId || "none"}
-                    onValueChange={(value) => actions.onSurrogateChange(value === "none" ? null : value)}
-                >
-                    <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Select a surrogate...">
-                            {(value: string | null) => getSurrogateSelectLabel(value, surrogates)}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {surrogates.map((surrogate) => (
-                            <SelectItem key={surrogate.id} value={surrogate.id}>
-                                #{surrogate.surrogate_number} - {surrogate.full_name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-
-            <div>
-                <p className="text-xs text-muted-foreground">Link to Intended Parent</p>
-                {!state.canViewIntendedParents && state.permissionsLoaded ? (
-                    <Alert className="mt-1">
-                        <AlertDescription>
-                            Your account does not have permission to view intended parents. Ask an admin to update your role or permissions.
-                        </AlertDescription>
-                    </Alert>
-                ) : (
-                    <Select
-                        value={state.selectedIpId || "none"}
-                        onValueChange={(value) => actions.onIntendedParentChange(value === "none" ? null : value)}
-                    >
-                        <SelectTrigger className="mt-1">
-                            <SelectValue placeholder="Select an IP...">
-                                {(value: string | null) => getIntendedParentSelectLabel(value, intendedParents)}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
-                            {intendedParents.map((intendedParent) => (
-                                <SelectItem key={intendedParent.id} value={intendedParent.id}>
-                                    {intendedParent.intended_parent_number ? `#${intendedParent.intended_parent_number} - ` : ""}
-                                    {intendedParent.full_name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                )}
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
-                <Button
-                    size="sm"
-                    onClick={actions.onSave}
-                    disabled={state.isSaving}
-                >
-                    {state.isSaving ? (
-                        <>
-                            <Loader2Icon className="size-4 mr-2 animate-spin" />
-                            Saving…
-                        </>
-                    ) : (
-                        "Save"
-                    )}
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={actions.onCancel}
-                >
-                    Cancel
-                </Button>
-            </div>
         </div>
     )
 }
@@ -866,13 +359,7 @@ function MonthView({
         appointmentsByDate.get(dateStr)!.push(appt)
     })
 
-    const tasksByDate = new Map<string, TaskListItem[]>()
-    tasks.forEach((task) => {
-        if (!task.due_date) return
-        const dateStr = task.due_date
-        if (!tasksByDate.has(dateStr)) tasksByDate.set(dateStr, [])
-        tasksByDate.get(dateStr)!.push(task)
-    })
+    const tasksByDate = groupTasksByDueDate(tasks)
 
     const googleEventsByDate = new Map<string, GoogleCalendarEvent[]>()
     googleEvents.forEach((event) => {
@@ -928,17 +415,25 @@ function MonthView({
                     const isDropTarget = dragOverDate === dateStr
                     const appointmentSlots = 2
                     const shownAppointments = dayAppointments.slice(0, appointmentSlots)
-                    const remainingSlots = Math.max(0, 3 - shownAppointments.length)
+                    const remainingSlots = Math.max(0, MONTH_CELL_ITEM_LIMIT - shownAppointments.length)
                     const shownTasks = dayTasks.slice(0, remainingSlots)
                     const remainingAfterTasks = Math.max(0, remainingSlots - shownTasks.length)
                     const shownGoogleEvents = dayGoogleEvents.slice(0, remainingAfterTasks)
+                    const hiddenCount =
+                        totalEvents - shownAppointments.length - shownTasks.length - shownGoogleEvents.length
                     const canOpenDayAgenda = totalEvents > 0 && typeof onOpenDayAgenda === "function"
+                    // Below sm a cell is too narrow for item labels, so it shows one dot per item.
+                    const dotColors = [
+                        ...dayAppointments.map((appt) => getAppointmentStatusTone(appt.status).dot),
+                        ...dayTasks.map(() => TASK_COLOR),
+                        ...dayGoogleEvents.map(() => GOOGLE_EVENT_COLOR),
+                    ]
 
                     return (
                         <div
                             key={dateStr}
                             className={cn(
-                                "min-h-[128px] border-b border-r border-border p-2 transition-colors",
+                                "min-h-16 min-w-0 border-b border-r border-border p-1 transition-colors sm:min-h-[128px] sm:p-2",
                                 !isCurrentMonth && "bg-muted/20",
                                 isDropTarget && "bg-primary/10 ring-2 ring-primary/50 ring-inset"
                             )}
@@ -952,14 +447,14 @@ function MonthView({
                                 onDrop?.(e, day)
                             }}
                         >
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start justify-center sm:justify-start">
                                 <Button unstyled
                                     type="button"
                                     onClick={() => onOpenDayAgenda?.(day)}
                                     disabled={!canOpenDayAgenda}
                                     aria-label={
                                         canOpenDayAgenda
-                                            ? `Open agenda for ${format(day, "EEEE, MMMM d")}`
+                                            ? `Open agenda for ${format(day, "EEEE, MMMM d")}, ${formatItemCount(totalEvents)}`
                                             : undefined
                                     }
                                     className={cn(
@@ -973,16 +468,15 @@ function MonthView({
                                 >
                                     {format(day, "d")}
                                 </Button>
-                                {totalEvents > 0 && (
-                                    <Badge
-                                        variant="outline"
-                                        className="rounded-full bg-background/90 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
-                                    >
-                                        {formatItemCount(totalEvents)}
-                                    </Badge>
-                                )}
                             </div>
-                            <div className="mt-2 space-y-1">
+                            {dotColors.length > 0 && (
+                                <div aria-hidden="true" className="mt-1 flex flex-wrap justify-center gap-1 sm:hidden">
+                                    {dotColors.slice(0, MONTH_CELL_ITEM_LIMIT).map((color, index) => (
+                                        <span key={index} className={cn("size-1.5 rounded-full", color)} />
+                                    ))}
+                                </div>
+                            )}
+                            <div className="mt-2 hidden space-y-1 sm:block">
                                 {/* Surrogacy Force Appointments */}
                                 {shownAppointments.map((appt) => (
                                     <EventItem
@@ -1011,16 +505,16 @@ function MonthView({
                                         compact
                                     />
                                 ))}
-                                {totalEvents > 3 && (
+                                {hiddenCount > 0 && (
                                     <Button
                                         variant="ghost"
                                         size="sm"
                                         type="button"
                                         onClick={() => onOpenDayAgenda?.(day)}
-                                        aria-label={`View all ${totalEvents} items`}
+                                        aria-label={`+${hiddenCount} more items`}
                                         className="h-7 w-full justify-start rounded-md px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
                                     >
-                                        View all {totalEvents}
+                                        +{hiddenCount} more
                                     </Button>
                                 )}
                             </div>
@@ -1062,11 +556,7 @@ function DayAgendaSheet({
     const dayTasks = dateStr
         ? tasks
             .filter((task) => task.due_date === dateStr)
-            .toSorted((a, b) => {
-                const first = a.due_time ?? "99:99:99"
-                const second = b.due_time ?? "99:99:99"
-                return first.localeCompare(second)
-            })
+            .toSorted(compareTasksByDueTime)
         : []
 
     const dayGoogleEvents = dateStr
@@ -1204,13 +694,7 @@ function WeekView({
         appointmentsByDate.get(dateStr)!.push(appt)
     })
 
-    const tasksByDate = new Map<string, TaskListItem[]>()
-    tasks.forEach((task) => {
-        if (!task.due_date) return
-        const dateStr = task.due_date
-        if (!tasksByDate.has(dateStr)) tasksByDate.set(dateStr, [])
-        tasksByDate.get(dateStr)!.push(task)
-    })
+    const tasksByDate = groupTasksByDueDate(tasks)
 
     const googleEventsByDate = new Map<string, GoogleCalendarEvent[]>()
     googleEvents.forEach((event) => {
@@ -1236,7 +720,9 @@ function WeekView({
     })
 
     return (
-        <div className="grid grid-cols-7 gap-2">
+        // Seven readable columns need about 640px; narrower screens scroll the week sideways.
+        <div className="overflow-x-auto">
+        <div className="grid min-w-[640px] grid-cols-7 gap-2">
             {days.map((day) => {
                 const dateStr = format(day, "yyyy-MM-dd")
                 const dayAppointments = appointmentsByDate.get(dateStr) || []
@@ -1280,6 +766,7 @@ function WeekView({
                 )
             })}
         </div>
+        </div>
     )
 }
 
@@ -1308,7 +795,7 @@ function DayView({
         format(parseISO(appt.scheduled_start), "yyyy-MM-dd") === dateStr
     ).toSorted((a, b) => a.scheduled_start.localeCompare(b.scheduled_start))
 
-    const dayTasks = tasks.filter((task) => task.due_date === dateStr)
+    const dayTasks = tasks.filter((task) => task.due_date === dateStr).toSorted(compareTasksByDueTime)
 
     const dayGoogleEvents = googleEvents.filter((event) => {
         if (event.is_all_day) {
@@ -1328,55 +815,63 @@ function DayView({
     const allDayTasks = dayTasks.filter((task) => !task.due_time)
     const timedTasks = dayTasks.filter((task) => task.due_time)
 
+    const appointmentHour = (appt: AppointmentListItem) => parseISO(appt.scheduled_start).getHours()
+    const taskHour = (task: TaskListItem) => parseISO(`2000-01-01T${task.due_time}`).getHours()
+    const googleEventHour = (event: GoogleCalendarEvent) => parseISO(event.start).getHours()
+    const timedHours = [
+        ...dayAppointments.map(appointmentHour),
+        ...timedTasks.map(taskHour),
+        ...timedGoogleEvents.map(googleEventHour),
+    ]
+    // Show the hour before the first item for context, but never start later than the default hour.
+    const scrollHour = timedHours.length > 0
+        ? Math.max(0, Math.min(DAY_VIEW_DEFAULT_SCROLL_HOUR, Math.min(...timedHours) - 1))
+        : DAY_VIEW_DEFAULT_SCROLL_HOUR
+    const hourGridRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        const grid = hourGridRef.current
+        const row = grid?.querySelector<HTMLElement>(`[data-hour="${scrollHour}"]`)
+        if (grid && row) grid.scrollTop = row.offsetTop
+    }, [dateStr, scrollHour])
+
     return (
         <div className="border border-border rounded-lg overflow-hidden">
             <div className="p-3 bg-muted border-b border-border text-center">
                 <p className="font-medium">{format(currentDate, "EEEE, MMMM d, yyyy")}</p>
             </div>
-            {/* All-day events section */}
-            {allDayEvents.length > 0 && (
-                <div className="p-2 bg-muted/50 border-b border-border">
-                    <p className="text-xs text-muted-foreground mb-1">All day</p>
-                    <div className="space-y-1">
+            {(allDayEvents.length > 0 || allDayTasks.length > 0) && (
+                <div className="flex border-b border-border bg-muted/50">
+                    <div className="w-20 flex-shrink-0 border-r border-border p-2 text-xs text-muted-foreground">
+                        All day
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1 p-2">
                         {allDayEvents.map((event) => (
                             <GoogleEventItem key={`gcal-${event.id}`} event={event} compact />
+                        ))}
+                        {allDayTasks.map((task) => (
+                            <TaskItem
+                                task={task}
+                                compact
+                                {...(onTaskClick ? { onClick: onTaskClick } : {})}
+                                key={task.id}
+                            />
                         ))}
                     </div>
                 </div>
             )}
-            {allDayTasks.length > 0 && (
-                <div className="p-2 bg-muted/50 border-b border-border">
-                    <p className="text-xs text-muted-foreground mb-1">Tasks</p>
-                        <div className="space-y-1">
-                            {allDayTasks.map((task) => (
-                                <TaskItem
-                                    task={task}
-                                    compact
-                                    {...(onTaskClick ? { onClick: onTaskClick } : {})}
-                                    key={task.id}
-                                />
-                            ))}
-                        </div>
-                </div>
-            )}
-            <div className="divide-y divide-border">
+            <div
+                ref={hourGridRef}
+                data-testid="day-view-hours"
+                className="relative max-h-[600px] divide-y divide-border overflow-y-auto"
+            >
                 {DAY_VIEW_HOURS.map((hour) => {
-                    const hourAppointments = dayAppointments.filter((appt) => {
-                        const apptHour = parseISO(appt.scheduled_start).getHours()
-                        return apptHour === hour
-                    })
-                    const hourTasks = timedTasks.filter((task) => {
-                        if (!task.due_time) return false
-                        const taskHour = parseISO(`2000-01-01T${task.due_time}`).getHours()
-                        return taskHour === hour
-                    })
-                    const hourGoogleEvents = timedGoogleEvents.filter((event) => {
-                        const eventHour = parseISO(event.start).getHours()
-                        return eventHour === hour
-                    })
+                    const hourAppointments = dayAppointments.filter((appt) => appointmentHour(appt) === hour)
+                    const hourTasks = timedTasks.filter((task) => taskHour(task) === hour)
+                    const hourGoogleEvents = timedGoogleEvents.filter((event) => googleEventHour(event) === hour)
 
                     return (
-                        <div key={hour} className="flex min-h-[60px]">
+                        <div key={hour} data-hour={hour} className="flex min-h-[60px]">
                             <div className="w-20 p-2 text-sm text-muted-foreground border-r border-border flex-shrink-0">
                                 {DAY_VIEW_HOUR_LABELS[hour]}
                             </div>
@@ -1425,33 +920,33 @@ function UnifiedCalendarHeader({
     onViewTypeChange: (viewType: ViewType) => void
 }) {
     return (
-        <CardHeader className="grid-cols-[minmax(0,1fr)_auto] grid-rows-1 items-center gap-3 border-b border-border/70 bg-muted/20 pb-4">
-            <div className="flex min-w-0 items-center gap-3">
-                <div className="flex min-w-0 items-center rounded-xl border border-border/70 bg-background p-1 shadow-sm">
-                    <Button variant="ghost" size="sm" onClick={() => onNavigate("prev")} aria-label="Previous period">
-                        <ChevronLeftIcon className="size-4" aria-hidden="true" />
-                    </Button>
-                    <div className="min-w-[160px] px-2 text-center sm:min-w-[200px]">
-                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                            Calendar
-                        </p>
-                        <h2 className="truncate text-lg font-semibold" aria-live="polite">
-                            {viewType === "month" && format(currentDate, "MMMM yyyy")}
-                            {viewType === "week" && `Week of ${format(startOfWeek(currentDate), "MMM d")}`}
-                            {viewType === "day" && format(currentDate, "MMMM d, yyyy")}
-                        </h2>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => onNavigate("next")} aria-label="Next period">
-                        <ChevronRightIcon className="size-4" aria-hidden="true" />
-                    </Button>
+        // Below sm the navigation takes the full first row so the period title is not cut off, and
+        // Today shares the second row with the period switcher.
+        <CardHeader className="flex flex-wrap items-center gap-3 border-b border-border/70 bg-muted/20 pb-4">
+            <div
+                data-testid="calendar-period-nav"
+                className="flex w-full min-w-0 items-center rounded-xl border border-border/70 bg-background p-1 shadow-sm sm:w-auto"
+            >
+                <Button variant="ghost" size="sm" onClick={() => onNavigate("prev")} aria-label="Previous period">
+                    <ChevronLeftIcon className="size-4" aria-hidden="true" />
+                </Button>
+                <div className="min-w-0 flex-1 px-2 text-center sm:min-w-[200px]">
+                    <h2 className="truncate text-lg font-semibold" aria-live="polite">
+                        {viewType === "month" && format(currentDate, "MMMM yyyy")}
+                        {viewType === "week" && `Week of ${format(startOfWeek(currentDate), "MMM d")}`}
+                        {viewType === "day" && format(currentDate, "MMMM d, yyyy")}
+                    </h2>
                 </div>
-                <Button variant="outline" size="sm" onClick={onTodayClick}>
-                    Today
+                <Button variant="ghost" size="sm" onClick={() => onNavigate("next")} aria-label="Next period">
+                    <ChevronRightIcon className="size-4" aria-hidden="true" />
                 </Button>
             </div>
+            <Button variant="outline" size="sm" onClick={onTodayClick}>
+                Today
+            </Button>
 
             <Select value={viewType} onValueChange={(value) => value && onViewTypeChange(value as ViewType)}>
-                <SelectTrigger className="w-28 shrink-0 bg-background sm:w-36">
+                <SelectTrigger aria-label="Calendar period" className="min-w-0 flex-1 bg-background sm:ml-auto sm:w-36 sm:flex-none">
                     <SelectValue placeholder="View">
                         {(value: string | null) => {
                             if (value === "month") return "Month"
@@ -1469,6 +964,11 @@ function UnifiedCalendarHeader({
             </Select>
         </CardHeader>
     )
+}
+
+function getCalendarLoadErrorTitle(appointmentsFailed: boolean, tasksFailed: boolean): string {
+    if (appointmentsFailed && tasksFailed) return "Couldn't load calendar"
+    return tasksFailed ? "Couldn't load tasks" : "Couldn't load appointments"
 }
 
 function UnifiedCalendarLoadingState() {
@@ -1580,9 +1080,11 @@ function UnifiedCalendarViewContent({
 }
 
 function UnifiedCalendarLegend({
+    includeTasks,
     includeAppointments,
     includeGoogleEvents,
 }: {
+    includeTasks: boolean
     includeAppointments: boolean
     includeGoogleEvents: boolean
 }) {
@@ -1591,9 +1093,9 @@ function UnifiedCalendarLegend({
             <span className="mr-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Legend
             </span>
-            {includeAppointments && Object.entries(STATUS_COLORS).map(([status, color]) => (
+            {includeAppointments && APPOINTMENT_STATUSES.map((status) => (
                 <Badge key={status} variant="outline" className="gap-1.5 rounded-full font-normal">
-                    <span className={`size-2 rounded-full ${color}`} />
+                    <span className={`size-2 rounded-full ${getAppointmentStatusTone(status).dot}`} />
                     <span className="capitalize">{getAppointmentStatusLabel(status)}</span>
                 </Badge>
             ))}
@@ -1603,10 +1105,12 @@ function UnifiedCalendarLegend({
                     <span>Google Calendar</span>
                 </Badge>
             )}
-            <Badge variant="outline" className="gap-1.5 rounded-full font-normal">
-                <span className={`size-2 rounded-full ${TASK_COLOR}`} />
-                <span>Tasks</span>
-            </Badge>
+            {includeTasks && (
+                <Badge variant="outline" className="gap-1.5 rounded-full font-normal">
+                    <span className={`size-2 rounded-full ${TASK_COLOR}`} />
+                    <span>Tasks</span>
+                </Badge>
+            )}
             {includeAppointments && (
                 <span className="ml-auto text-xs text-muted-foreground">
                     Drag pending or confirmed appointments to open the reschedule picker.
@@ -1618,8 +1122,7 @@ function UnifiedCalendarLegend({
 
 type AppointmentDetailDialogState = {
     enabled: boolean
-    key: string
-    appointment: AppointmentListItem | null
+    appointmentId: string | null
     open: boolean
     onOpenChange: (open: boolean) => void
 }
@@ -1657,14 +1160,13 @@ function UnifiedCalendarDialogs({
         <>
             {appointmentDetail.enabled && (
                 <AppointmentDetailDialog
-                    key={appointmentDetail.key}
-                    appointment={appointmentDetail.appointment}
+                    appointmentId={appointmentDetail.appointmentId}
                     open={appointmentDetail.open}
                     onOpenChange={appointmentDetail.onOpenChange}
                 />
             )}
             {dragReschedule.enabled && (
-                <AppointmentManagementDialog
+                <AppointmentDetailDialog
                     appointmentId={dragReschedule.appointmentId}
                     open={dragReschedule.open}
                     onOpenChange={(open) => {
@@ -1697,18 +1199,23 @@ function UnifiedCalendarDialogs({
 
 export function UnifiedCalendar({
     taskFilter,
+    appointmentFilters,
+    includeTasks = true,
     includeAppointments = true,
     includeGoogleEvents = true,
     onTaskClick,
 }: {
     taskFilter?: UnifiedCalendarTaskFilter
+    /** Search, type and format filters from the Appointments toolbar. */
+    appointmentFilters?: Omit<AppointmentFilterParams, "date_start" | "date_end">
+    includeTasks?: boolean
     includeAppointments?: boolean
     includeGoogleEvents?: boolean
     onTaskClick?: (task: TaskListItem) => void
 } = {}) {
     const [currentDate, setCurrentDate] = useState(new Date())
     const [viewType, setViewType] = useState<ViewType>("month")
-    const [selectedAppointment, setSelectedAppointment] = useState<AppointmentListItem | null>(null)
+    const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
     const [dialogOpen, setDialogOpen] = useState(false)
     const [dayAgendaDate, setDayAgendaDate] = useState<Date | null>(null)
     const [dayAgendaOpen, setDayAgendaOpen] = useState(false)
@@ -1736,11 +1243,17 @@ export function UnifiedCalendar({
         googleEvents,
         calendarConnected,
         calendarError,
+        appointmentsError,
+        tasksError,
+        retryFailed,
+        isRetryingFailed,
     } = useUnifiedCalendarData({
         dateRange,
+        includeTasks,
         includeAppointments,
         includeGoogleEvents,
         ...(taskFilter ? { taskFilter } : {}),
+        ...(appointmentFilters ? { appointmentFilters } : {}),
     })
 
     // Navigation
@@ -1758,7 +1271,7 @@ export function UnifiedCalendar({
 
     const handleEventClick = (appt: AppointmentListItem) => {
         if (!includeAppointments) return
-        setSelectedAppointment(appt)
+        setSelectedAppointmentId(appt.id)
         setDialogOpen(true)
     }
 
@@ -1816,13 +1329,6 @@ export function UnifiedCalendar({
     const handleTodayClick = () => {
         setCurrentDate(new Date())
     }
-    const appointmentDetailDialogKey = dialogOpen && selectedAppointment
-        ? [
-            selectedAppointment.id,
-            selectedAppointment.surrogate_id ?? "no-surrogate",
-            selectedAppointment.intended_parent_id ?? "no-intended-parent",
-        ].join(":")
-        : "closed"
 
     return (
         <Card className="gap-3 overflow-hidden border-border/70">
@@ -1839,6 +1345,16 @@ export function UnifiedCalendar({
                     <UnifiedCalendarLoadingState />
                 ) : (
                     <>
+                        {/* The grid stays below so the other source and date navigation still work. */}
+                        {appointmentsError || tasksError ? (
+                            <QueryErrorState
+                                error={tasksError ?? appointmentsError}
+                                onRetry={retryFailed}
+                                isRetrying={isRetryingFailed}
+                                title={getCalendarLoadErrorTitle(Boolean(appointmentsError), Boolean(tasksError))}
+                                className="mb-4 min-h-0 rounded-lg border border-border p-0"
+                            />
+                        ) : null}
                         {includeGoogleEvents && !calendarConnected && (
                             <GoogleCalendarDisconnectedAlert calendarError={calendarError} />
                         )}
@@ -1865,17 +1381,20 @@ export function UnifiedCalendar({
                     </>
                 )}
 
-                <UnifiedCalendarLegend
-                    includeAppointments={includeAppointments}
-                    includeGoogleEvents={includeGoogleEvents}
-                />
+                {/* A tasks-only calendar has one event type, so a legend adds nothing. */}
+                {(includeAppointments || includeGoogleEvents) && (
+                    <UnifiedCalendarLegend
+                        includeTasks={includeTasks}
+                        includeAppointments={includeAppointments}
+                        includeGoogleEvents={includeGoogleEvents}
+                    />
+                )}
             </CardContent>
 
             <UnifiedCalendarDialogs
                 appointmentDetail={{
                     enabled: includeAppointments,
-                    key: appointmentDetailDialogKey,
-                    appointment: selectedAppointment,
+                    appointmentId: selectedAppointmentId,
                     open: dialogOpen,
                     onOpenChange: setDialogOpen,
                 }}

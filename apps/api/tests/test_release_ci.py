@@ -217,7 +217,16 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations() -> None:
     assert "--ignore-glob 'tests/test_migration_*.py'" in workflow
     assert "-n 4 --dist loadscope" in workflow
     assert "tests/test_migration_*.py" in workflow
-    assert "--cov-append" in workflow
+    assert "group: [parallel-1, parallel-2, serial]" in workflow
+    assert "files[shard::2]" in workflow
+    assert '"${test_files[@]}"' in workflow
+    assert "COVERAGE_FILE: .coverage.${{ matrix.group }}" in workflow
+    assert "needs: backend-test-groups" in workflow
+    assert 'test "$GROUP_RESULT" = success' in workflow
+    assert "uv run coverage combine" in workflow
+    assert "uv run coverage report" in workflow
+    coverage = tomllib.loads(pyproject)["tool"]["coverage"]["report"]
+    assert coverage["fail_under"] > 0
 
 
 def test_ci_runs_committed_outbox_tests_outside_shared_database_workers() -> None:
@@ -230,7 +239,10 @@ def test_ci_runs_committed_outbox_tests_outside_shared_database_workers() -> Non
     assert "--ignore tests/test_email_delivery_outbox.py" in parallel
     assert "tests/test_email_delivery_outbox.py" in serial
     assert "-n 4" not in serial
-    assert "--cov-append" in serial
+    assert "if: startsWith(matrix.group, 'parallel-')" in parallel
+    assert "if: matrix.group == 'serial'" in serial
+    assert "--cov-fail-under=0" in parallel
+    assert "--cov-fail-under=0" in serial
 
 
 def test_ci_shards_frontend_tests_and_preserves_aggregate_gate() -> None:
@@ -240,6 +252,10 @@ def test_ci_shards_frontend_tests_and_preserves_aggregate_gate() -> None:
     assert "pnpm test --shard=${{ matrix.shard }}/2" in workflow
     assert "needs: [frontend-build, frontend-test-shards]" in workflow
     assert "name: Frontend Tests" in workflow
+    assert "--coverage --reporter=default --reporter=blob" in workflow
+    assert "path: apps/web/.vitest/blob/*.json" in workflow
+    assert "path: apps/web/.vitest/blob\n" in workflow
+    assert "pnpm test --merge-reports --coverage" in workflow
 
 
 def test_ci_uses_the_repository_pnpm_release() -> None:

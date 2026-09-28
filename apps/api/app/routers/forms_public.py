@@ -215,6 +215,9 @@ def get_shared_public_form(
     if not schema:
         raise HTTPException(status_code=404, detail="Form not found")
 
+    agency_name, agency_logo_url = form_intake_service.get_public_agency_branding(
+        db, intake_link.organization_id
+    )
     return FormIntakePublicRead(
         form_id=form.id,
         intake_link_id=intake_link.id,
@@ -236,6 +239,8 @@ def get_shared_public_form(
                 db, form=form, published_version=version
             ),
         ),
+        agency_name=agency_name,
+        agency_logo_url=agency_logo_url,
     )
 
 

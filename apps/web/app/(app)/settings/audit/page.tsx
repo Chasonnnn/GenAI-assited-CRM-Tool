@@ -18,6 +18,8 @@ import {
     XIcon,
 } from "lucide-react"
 
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { Badge as StatusBadge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -41,6 +43,7 @@ import {
     useEventTypes,
 } from "@/lib/hooks/use-audit"
 import { formatDateTime, formatRelativeTime } from "@/lib/formatters"
+import { SettingsPageGate } from "../settings-page-gate"
 
 const EVENT_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string }> = {
     pipeline_updated: { icon: Settings, label: "Pipeline Updated", color: "bg-blue-500" },
@@ -85,6 +88,8 @@ function isAiActivityHours(value: number): value is AiActivityHours {
 
 type AuditDateRange = { from: Date | undefined; to: Date | undefined }
 
+type AuditLoadError = { error: unknown; onRetry: () => void; isRetrying: boolean }
+
 function getEventConfig(eventType: string) {
     return EVENT_CONFIG[eventType] || {
         icon: FileText,
@@ -117,16 +122,6 @@ function getExportDates(exportRange: DateRangePreset, customRange: AuditDateRang
         return { start, end: now }
     }
     return { start: new Date(0), end: now }
-}
-
-function AuditPageHeader() {
-    return (
-        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center px-6">
-                <h1 className="text-2xl font-semibold">Audit Log</h1>
-            </div>
-        </div>
-    )
 }
 
 function AuditExportCard({
@@ -369,6 +364,7 @@ function AuditActivityCard({
     auditEntries,
     auditTotal,
     isLoading,
+    loadError,
     page,
     totalPages,
     onPageChange,
@@ -383,6 +379,7 @@ function AuditActivityCard({
     auditEntries: AuditLogEntry[]
     auditTotal: number
     isLoading: boolean
+    loadError: AuditLoadError | null
     page: number
     totalPages: number
     onPageChange: (updater: (page: number) => number) => void
@@ -428,7 +425,7 @@ function AuditActivityCard({
                     onEventTypeFilterChange={onEventTypeFilterChange}
                 />
 
-                <AuditLogEntriesList entries={auditEntries} isLoading={isLoading} />
+                <AuditLogEntriesList entries={auditEntries} isLoading={isLoading} loadError={loadError} />
 
                 <AuditPagination
                     page={page}
@@ -562,9 +559,11 @@ function AuditAiActivityPanel({
 function AuditLogEntriesList({
     entries,
     isLoading,
+    loadError,
 }: {
     entries: AuditLogEntry[]
     isLoading: boolean
+    loadError: AuditLoadError | null
 }) {
     if (isLoading) {
         return (
@@ -574,6 +573,18 @@ function AuditLogEntriesList({
                     aria-hidden="true"
                 />
             </div>
+        )
+    }
+
+    if (loadError) {
+        return (
+            <QueryErrorState
+                error={loadError.error}
+                onRetry={loadError.onRetry}
+                isRetrying={loadError.isRetrying}
+                title="Couldn't load audit log"
+                className="min-h-0 py-10"
+            />
         )
     }
 
@@ -629,13 +640,13 @@ function AuditLogEntryCard({ entry }: { entry: AuditLogEntry }) {
                     ) : (
                         <span className="italic">System</span>
                     )}
-                    {detailsJson && (
-                        <span className="ml-2">
-                            {detailsJson.slice(0, 100)}
-                            {detailsJson.length > 100 ? "…" : ""}
-                        </span>
-                    )}
                 </p>
+                {detailsJson && (
+                    <p className="mt-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                        {detailsJson.slice(0, 100)}
+                        {detailsJson.length > 100 ? "…" : ""}
+                    </p>
+                )}
                 <p className="mt-1 text-xs text-muted-foreground">
                     {formatDateTime(entry.created_at, "Unknown")}
                     {entry.ip_address && <span className="ml-2">from {entry.ip_address}</span>}
@@ -688,6 +699,18 @@ function AuditPagination({
 }
 
 export default function AuditLogPage() {
+    return (
+        <SettingsPageGate
+            title="Audit Log"
+            permission="view_audit_log"
+            deniedDescription="The audit log needs the View audit log permission. Ask an admin to update your role."
+        >
+            <AuditLogContent />
+        </SettingsPageGate>
+    )
+}
+
+function AuditLogContent() {
     const { user } = useAuth()
     const isDeveloper = user?.role === "developer"
 
@@ -712,7 +735,8 @@ export default function AuditLogPage() {
         ...(eventTypeFilter !== "all" && { event_type: eventTypeFilter }),
     }
 
-    const { data: auditData, isLoading } = useAuditLogs(filters)
+    const auditQuery = useAuditLogs(filters)
+    const { data: auditData, isLoading } = auditQuery
     const { data: eventTypes } = useEventTypes()
     const { data: exportJobs } = useAuditExports({ includeFull: isDeveloper })
     const createExport = useCreateAuditExport()
@@ -753,7 +777,7 @@ export default function AuditLogPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            <AuditPageHeader />
+            <PageHeader title="Audit Log" />
 
             <div className="flex-1 p-6">
                 <AuditExportCard
@@ -786,6 +810,15 @@ export default function AuditLogPage() {
                     auditEntries={auditEntries}
                     auditTotal={auditTotal}
                     isLoading={isLoading}
+                    loadError={
+                        auditQuery.isError
+                            ? {
+                                  error: auditQuery.error,
+                                  onRetry: () => void auditQuery.refetch(),
+                                  isRetrying: auditQuery.isFetching,
+                              }
+                            : null
+                    }
                     page={page}
                     totalPages={totalPages}
                     onPageChange={setPage}

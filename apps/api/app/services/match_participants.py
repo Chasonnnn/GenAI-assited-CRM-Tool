@@ -345,7 +345,7 @@ def _stage_warning(record, label: str, eligible: set[str]) -> str | None:
     stage = record.stage if record else None
     if stage and stage.stage_key in eligible and stage.is_active and not stage.deleted_at:
         return None
-    current = f"{stage.label} ({stage.stage_key})" if stage else "Unknown"
+    current = stage.label if stage else "an unknown stage"
     return f"{label} at {current} is not eligible to accept"
 
 
