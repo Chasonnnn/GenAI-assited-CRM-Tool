@@ -2196,7 +2196,7 @@ describe('IntegrationsPage', () => {
         fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
         expect(
             within(dialog).getByLabelText('Enable Egg donor Egg Donor Pipeline Ready to match'),
-        ).toBeChecked()
+        ).not.toBeChecked()
 
         mockUseZapierSettingsQuery.mockImplementation(() => ({
             data: { ...zapierSettingsData, inbound_webhooks: [...zapierSettingsData.inbound_webhooks] },
@@ -2210,7 +2210,7 @@ describe('IntegrationsPage', () => {
         fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
         expect(
             within(dialog).getByLabelText('Enable Egg donor Egg Donor Pipeline Ready to match'),
-        ).toBeChecked()
+        ).not.toBeChecked()
 
         fireEvent.click(within(dialog).getByRole('tab', { name: /incoming leads/i }))
         await act(async () => {
@@ -2224,7 +2224,7 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).getByLabelText('Enable donor stage events')).toBeChecked()
         expect(
             within(dialog).getByLabelText('Enable Egg donor Egg Donor Pipeline Ready to match'),
-        ).toBeChecked()
+        ).not.toBeChecked()
 
         await act(async () => {
             fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
@@ -2239,14 +2239,14 @@ describe('IntegrationsPage', () => {
                         pipeline_id: 'egg-pipeline-1',
                         stage_id: 'egg-stage-ready',
                         event_name: 'Converted',
-                        enabled: true,
+                        enabled: false,
                     }),
                     expect.objectContaining({
                         donor_type: 'sperm',
                         pipeline_id: 'sperm-pipeline-1',
                         stage_id: 'sperm-stage-new',
                         event_name: 'Lead',
-                        enabled: true,
+                        enabled: false,
                     }),
                 ]),
             }),
@@ -2400,6 +2400,122 @@ describe('IntegrationsPage', () => {
         })
         expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_outbound_enabled')
         expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_event_mapping')
+    })
+
+    it('suggests donor events from stage semantics and saves only tracked stages', async () => {
+        const eggPipeline = {
+            ...donorPipelineData.egg_donor[0],
+            stages: [
+                ...donorPipelineData.egg_donor[0].stages,
+                {
+                    id: 'egg-stage-hold',
+                    stage_key: 'on_hold',
+                    slug: 'on_hold',
+                    label: 'On hold',
+                    stage_type: 'paused',
+                    is_active: true,
+                    semantics: { integration_bucket: 'none' },
+                },
+                {
+                    id: 'egg-stage-disqualified',
+                    stage_key: 'disqualified',
+                    slug: 'disqualified',
+                    label: 'Disqualified',
+                    stage_type: 'terminal',
+                    is_active: true,
+                    semantics: { integration_bucket: 'not_qualified' },
+                },
+                {
+                    id: 'egg-stage-closed',
+                    stage_key: 'closed',
+                    slug: 'closed',
+                    label: 'Closed',
+                    stage_type: 'terminal',
+                    is_active: true,
+                    semantics: { integration_bucket: 'converted' },
+                },
+            ],
+        }
+        mockUsePipelines.mockImplementation((entityType = 'surrogate') => ({
+            data: entityType === 'surrogate'
+                ? pipelineData
+                : entityType === 'egg_donor'
+                    ? [eggPipeline]
+                    : donorPipelineData.sperm_donor,
+            isLoading: false,
+            isError: false,
+        }))
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
+        fireEvent.click(within(dialog).getByLabelText('Enable donor stage events'))
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
+
+        const expectRow = (stageLabel: string, eventLabel: string, enabled: boolean) => {
+            expect(
+                within(dialog).getByLabelText(`Zapier event for Egg donor ${stageLabel}`),
+            ).toHaveTextContent(eventLabel)
+            const toggle = within(dialog).getByLabelText(
+                `Enable Egg donor Egg Donor Pipeline ${stageLabel}`,
+            )
+            if (enabled) {
+                expect(toggle).toBeChecked()
+            } else {
+                expect(toggle).not.toBeChecked()
+                expect(toggle).toHaveAttribute('data-disabled')
+            }
+        }
+        expectRow('New inquiry', 'Lead', true)
+        expectRow('Ready to match', 'Converted', true)
+        expectRow('On hold', 'Not Tracked', false)
+        expectRow('Disqualified', 'Not Qualified', true)
+        expectRow('Closed', 'Not Tracked', false)
+
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+
+        const payload = mockZapierOutboundUpdate.mock.calls[0]?.[0]
+        expect(payload.donor_event_mapping).toEqual([
+            { donor_type: 'egg', pipeline_id: 'egg-pipeline-1', stage_id: 'egg-stage-new', event_name: 'Lead', enabled: true },
+            { donor_type: 'egg', pipeline_id: 'egg-pipeline-1', stage_id: 'egg-stage-ready', event_name: 'Converted', enabled: true },
+            { donor_type: 'egg', pipeline_id: 'egg-pipeline-1', stage_id: 'egg-stage-disqualified', event_name: 'Not Qualified', enabled: true },
+            { donor_type: 'sperm', pipeline_id: 'sperm-pipeline-1', stage_id: 'sperm-stage-new', event_name: 'Lead', enabled: true },
+        ])
+    })
+
+    it('does not re-suggest donor events for stages left out of a saved mapping', async () => {
+        const savedItem = {
+            donor_type: 'egg' as const,
+            pipeline_id: 'egg-pipeline-1',
+            stage_id: 'egg-stage-ready',
+            event_name: 'Converted' as const,
+            enabled: true,
+        }
+        zapierSettingsData = {
+            ...createZapierSettingsData(),
+            donor_outbound_enabled: true,
+            donor_event_mapping: [savedItem],
+        }
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
+
+        expect(
+            within(dialog).getByLabelText('Zapier event for Egg donor New inquiry'),
+        ).toHaveTextContent('Not Tracked')
+        expect(
+            within(dialog).getByLabelText('Enable Egg donor Egg Donor Pipeline New inquiry'),
+        ).not.toBeChecked()
+
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+
+        expect(mockZapierOutboundUpdate.mock.calls[0]?.[0].donor_event_mapping).toEqual([savedItem])
     })
 
     it('passes a real lead id to the outbound zapier test action', async () => {

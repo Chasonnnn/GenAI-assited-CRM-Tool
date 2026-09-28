@@ -196,7 +196,13 @@ const ZAPIER_BUCKET_OPTIONS: Array<{ value: ZapierStageBucket; label: string }> 
     { value: "not_qualified", label: "Not Qualified" },
 ]
 
-const ZAPIER_EVENT_OPTIONS: Array<{ value: ZapierDonorEventMappingItem["event_name"]; label: string }> = [
+type ZapierDonorEventName = ZapierDonorEventMappingItem["event_name"]
+// Form rows keep untracked stages with an empty event name; saving drops them.
+type ZapierDonorMappingDraftItem = Omit<ZapierDonorEventMappingItem, "event_name"> & {
+    event_name: ZapierDonorEventName | ""
+}
+
+const ZAPIER_EVENT_OPTIONS: Array<{ value: ZapierDonorEventName; label: string }> = [
     { value: "Lead", label: "Lead" },
     { value: "Qualified", label: "Qualified" },
     { value: "Converted", label: "Converted" },
@@ -359,41 +365,54 @@ function getLeadKindLabel(leadKind: ZapierMetaFormOption["lead_kind"]): string {
 }
 
 function getDonorEventLabel(value: string | null | undefined): string {
+    if (!value || value === UNTRACKED_BUCKET_VALUE) return "Not Tracked"
     return getSelectOptionLabel(ZAPIER_EVENT_OPTIONS, value)
 }
 
-function getDefaultDonorEventName(stage: Pipeline["stages"][number]): ZapierDonorEventMappingItem["event_name"] {
+function getDefaultDonorEventName(stage: Pipeline["stages"][number]): ZapierDonorEventName | "" {
     const bucket = getStageSemantics(stage).integration_bucket
-    if (bucket === "qualified") return "Qualified"
-    if (bucket === "converted") return "Converted"
     if (bucket === "lost") return "Lost"
     if (bucket === "not_qualified") return "Not Qualified"
-    return "Lead"
+    // A terminal stage reports only a negative outcome, never Lead or Converted.
+    if (stage.stage_type === "terminal") return ""
+    if (bucket === "intake") return "Lead"
+    if (bucket === "qualified") return "Qualified"
+    if (bucket === "converted") return "Converted"
+    return ""
+}
+
+function isTrackedDonorMappingItem(
+    item: ZapierDonorMappingDraftItem,
+): item is ZapierDonorEventMappingItem {
+    return item.event_name !== ""
 }
 
 function buildDonorEventMapping(
     savedMapping: ZapierDonorEventMappingItem[] | null | undefined,
     pipelinesByType: Record<ZapierDonorType, Pipeline[] | null | undefined>,
-): ZapierDonorEventMappingItem[] {
+): ZapierDonorMappingDraftItem[] {
     const savedByStage = new Map(
         (savedMapping ?? []).map((item) => [
             `${item.donor_type}:${item.pipeline_id}:${item.stage_id}`,
             item,
         ]),
     )
-    const result: ZapierDonorEventMappingItem[] = []
+    const result: ZapierDonorMappingDraftItem[] = []
+    // Unsaved stages start from the suggestion only before any donor mapping is saved.
+    const suggest = !savedMapping?.length
 
     for (const donorType of DONOR_TYPES) {
         for (const pipeline of pipelinesByType[donorType] ?? []) {
             for (const stage of pipeline.stages ?? []) {
                 if (stage.is_active === false) continue
                 const key = `${donorType}:${pipeline.id}:${stage.id}`
+                const eventName = suggest ? getDefaultDonorEventName(stage) : ""
                 result.push(savedByStage.get(key) ?? {
                     donor_type: donorType,
                     pipeline_id: pipeline.id,
                     stage_id: stage.id,
-                    event_name: getDefaultDonorEventName(stage),
-                    enabled: false,
+                    event_name: eventName,
+                    enabled: eventName !== "",
                 })
             }
         }
@@ -840,7 +859,7 @@ type ZapierOutboundFormState = {
     donorOutboundEnabled: boolean
     sendHashedPii: boolean
     eventMapping: ZapierEventMappingItem[]
-    donorEventMapping: ZapierDonorEventMappingItem[]
+    donorEventMapping: ZapierDonorMappingDraftItem[]
     removeUnavailableDonorMappings: boolean
     selectedOutboundStage: string
 }
@@ -4409,10 +4428,10 @@ function ZapierDonorMappingAvailabilityMessage({
 }
 
 function updateZapierDonorMappingItem(
-    mapping: ZapierDonorEventMappingItem[],
-    target: ZapierDonorEventMappingItem,
-    updater: (item: ZapierDonorEventMappingItem) => ZapierDonorEventMappingItem,
-): ZapierDonorEventMappingItem[] {
+    mapping: ZapierDonorMappingDraftItem[],
+    target: ZapierDonorMappingDraftItem,
+    updater: (item: ZapierDonorMappingDraftItem) => ZapierDonorMappingDraftItem,
+): ZapierDonorMappingDraftItem[] {
     return mapping.map((item) =>
         item.donor_type === target.donor_type
         && item.pipeline_id === target.pipeline_id
@@ -4430,10 +4449,10 @@ function ZapierDonorPipelineMapping({
 }: {
     donorType: ZapierDonorType
     pipeline: Pipeline
-    mapping: ZapierDonorEventMappingItem[]
+    mapping: ZapierDonorMappingDraftItem[]
     onUpdateItem: (
-        target: ZapierDonorEventMappingItem,
-        updater: (item: ZapierDonorEventMappingItem) => ZapierDonorEventMappingItem,
+        target: ZapierDonorMappingDraftItem,
+        updater: (item: ZapierDonorMappingDraftItem) => ZapierDonorMappingDraftItem,
     ) => void
 }) {
     return (
@@ -4455,8 +4474,16 @@ function ZapierDonorPipelineMapping({
                         >
                             <span className="text-sm font-medium">{stage.label}</span>
                             <Select
-                                value={item.event_name}
+                                value={item.event_name || UNTRACKED_BUCKET_VALUE}
                                 onValueChange={(value) => {
+                                    if (value === UNTRACKED_BUCKET_VALUE) {
+                                        onUpdateItem(item, (current) => ({
+                                            ...current,
+                                            event_name: "",
+                                            enabled: false,
+                                        }))
+                                        return
+                                    }
                                     const eventName = ZAPIER_EVENT_OPTIONS.find(
                                         (option) => option.value === value,
                                     )?.value
@@ -4464,6 +4491,7 @@ function ZapierDonorPipelineMapping({
                                     onUpdateItem(item, (current) => ({
                                         ...current,
                                         event_name: eventName,
+                                        enabled: true,
                                     }))
                                 }}
                             >
@@ -4473,6 +4501,9 @@ function ZapierDonorPipelineMapping({
                                     </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
+                                    <SelectItem value={UNTRACKED_BUCKET_VALUE}>
+                                        {getDonorEventLabel(UNTRACKED_BUCKET_VALUE)}
+                                    </SelectItem>
                                     {ZAPIER_EVENT_OPTIONS.map((option) => (
                                         <SelectItem key={option.value} value={option.value}>
                                             {option.label}
@@ -4483,6 +4514,7 @@ function ZapierDonorPipelineMapping({
                             <div className="flex items-center gap-2 sm:justify-end">
                                 <Switch
                                     checked={item.enabled}
+                                    disabled={item.event_name === ""}
                                     onCheckedChange={(checked) => onUpdateItem(
                                         item,
                                         (current) => ({ ...current, enabled: checked }),
@@ -4534,8 +4566,8 @@ function ZapierDonorStageMappingRows({
     }
 
     const updateItem = (
-        target: ZapierDonorEventMappingItem,
-        updater: (item: ZapierDonorEventMappingItem) => ZapierDonorEventMappingItem,
+        target: ZapierDonorMappingDraftItem,
+        updater: (item: ZapierDonorMappingDraftItem) => ZapierDonorMappingDraftItem,
     ) => {
         onOutboundFormChange(
             "donorEventMapping",
@@ -4941,7 +4973,9 @@ function useZapierWebhookController(variant: "page" | "dialog") {
                 && outboundForm.removeUnavailableDonorMappings
             )) {
                 payload.donor_outbound_enabled = outboundForm.donorOutboundEnabled
-                payload.donor_event_mapping = outboundForm.donorEventMapping
+                payload.donor_event_mapping = outboundForm.donorEventMapping.filter(
+                    isTrackedDonorMappingItem,
+                )
             } else if (
                 donorSettingsAvailable
                 && !donorPipelinesLoading
