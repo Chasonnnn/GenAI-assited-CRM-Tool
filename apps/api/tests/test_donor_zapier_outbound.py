@@ -613,6 +613,46 @@ def test_website_donor_uses_first_party_submission_not_meta_lead_id(db, test_org
     assert "medical_answer" not in str(payload)
 
 
+def test_backdated_donor_change_reports_its_effective_time(db, test_org, test_user):
+    # Surrogate stage events send the backdated effective time unchanged; donors match.
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    now = datetime.now(UTC)
+    donor.created_at = now - timedelta(days=5)
+    db.commit()
+    _attach_meta_lead(db, donor, meta_created_time=now - timedelta(days=5))
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+    effective_at = (now - timedelta(days=2)).replace(hour=15, minute=30, second=0, microsecond=0)
+
+    result = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        reason="Recorded late",
+        effective_at=effective_at,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    history = result["history"]
+    assert history.effective_at == effective_at
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.donor_status_history_id == history.id)
+        .one()
+    )
+    assert event.status == "queued"
+    payload = db.get(Job, event.job_id).payload["data"]
+    assert payload["event_time"] == effective_at.isoformat()
+
+
 def _hosted_submission(db, org_id, donor, *, submitted_at, fbc=None):
     form = Form(
         organization_id=org_id,
