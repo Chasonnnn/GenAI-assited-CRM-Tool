@@ -1741,7 +1741,11 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                             onFilesChange={(nextFiles) => updateFileUploads(field.key, nextFiles)}
                                             maxFiles={getMaxFilesForField(field.key)}
                                             maxFileSizeBytes={formConfig.max_file_size_bytes}
-                                            allowedMimeTypes={formConfig.allowed_mime_types ?? null}
+                                            allowedMimeTypes={
+                                                formConfig.field_allowed_mime_types?.[field.key] ??
+                                                formConfig.allowed_mime_types ??
+                                                null
+                                            }
                                         />
                                         {error ? <FieldError id={errorId}>{error}</FieldError> : null}
                                         {field.help_text && (

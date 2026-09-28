@@ -294,6 +294,7 @@ async def test_shared_public_intake_adds_only_agency_name_and_logo_from_link_org
         "max_file_size_bytes",
         "max_file_count",
         "allowed_mime_types",
+        "field_allowed_mime_types",
         "campaign_name",
         "event_name",
         "messaging_consent",

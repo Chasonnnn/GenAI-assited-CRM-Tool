@@ -1062,6 +1062,34 @@ def get_intake_mapping_snapshot(
     return form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
 
 
+def get_public_field_allowed_mime_types(
+    *,
+    form: Form,
+    lead_kind: str | None,
+    mapping_snapshot: list[dict[str, Any]],
+) -> dict[str, list[str]]:
+    """Return per-field upload types that are narrower than the form list.
+
+    The donor profile photo accepts only PNG or JPEG at submit, so the hosted picker offers
+    only those types even when the form allows other files.
+    """
+    if lead_kind not in DONOR_LEAD_KINDS:
+        return {}
+    photo_field_key = _mapping_lookup_from_snapshot(mapping_snapshot).get("profile_photo")
+    if not photo_field_key:
+        return {}
+    form_allowed = (
+        form.allowed_mime_types or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES
+    )
+    photo_types = sorted(DONOR_PROFILE_PHOTO_CONTENT_TYPES)
+    allowed_photo_types = [
+        content_type
+        for content_type in photo_types
+        if form_submission_service._mime_allowed(content_type, form_allowed)  # type: ignore[attr-defined]
+    ]
+    return {photo_field_key: allowed_photo_types or photo_types}
+
+
 def resolve_phone_field_key(
     *,
     field_keys: Collection[str],

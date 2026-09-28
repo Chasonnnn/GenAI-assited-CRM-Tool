@@ -1425,6 +1425,38 @@ describe('Shared Intake Public Page', () => {
         })
     })
 
+    it('limits the donor profile photo picker to its field upload types', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            allowed_mime_types: ['application/pdf', 'image/png', 'image/jpeg'],
+            field_allowed_mime_types: { profile_photo: ['image/jpeg', 'image/png'] },
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Donor Application',
+                        fields: [
+                            { key: 'profile_photo', label: 'Profile Photo', type: 'file', required: true },
+                            { key: 'medical_records', label: 'Medical Records', type: 'file', required: false },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="donor-form" />)
+
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        const photoInput = screen
+            .getByRole('group', { name: 'Profile Photo' })
+            .querySelector('input[type="file"]')
+        const recordsInput = screen
+            .getByRole('group', { name: 'Medical Records' })
+            .querySelector('input[type="file"]')
+        expect(photoInput).toHaveAttribute('accept', 'image/jpeg,image/png')
+        expect(recordsInput).toHaveAttribute('accept', 'application/pdf,image/png,image/jpeg')
+    })
+
     it('clears the local draft session after successful submit', async () => {
         window.localStorage.setItem('intake-draft-session:event-abc', 'saved-session-1')
 

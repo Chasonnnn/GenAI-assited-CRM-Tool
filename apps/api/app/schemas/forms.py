@@ -370,6 +370,8 @@ class FormIntakePublicRead(BaseModel):
     max_file_size_bytes: int
     max_file_count: int
     allowed_mime_types: list[str] | None
+    # Upload types for fields narrower than the form list, keyed by field key.
+    field_allowed_mime_types: dict[str, list[str]]
     campaign_name: str | None
     event_name: str | None
     messaging_consent: MessagingConsentOptionsRead

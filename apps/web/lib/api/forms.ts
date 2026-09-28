@@ -347,6 +347,7 @@ export interface FormIntakePublicRead {
     max_file_size_bytes: number
     max_file_count: number
     allowed_mime_types?: string[] | null
+    field_allowed_mime_types?: Record<string, string[]>
     campaign_name?: string | null
     event_name?: string | null
     messaging_consent?: MessagingConsentOptionsRead

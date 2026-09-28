@@ -229,6 +229,9 @@ def get_shared_public_form(
     agency_name, agency_logo_url = form_intake_service.get_public_agency_branding(
         db, intake_link.organization_id
     )
+    mapping_snapshot = form_intake_service.get_intake_mapping_snapshot(
+        db, form=form, published_version=version
+    )
     return FormIntakePublicRead(
         form_id=form.id,
         intake_link_id=intake_link.id,
@@ -240,15 +243,18 @@ def get_shared_public_form(
         max_file_count=form.max_file_count,
         allowed_mime_types=form.allowed_mime_types
         or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES,
+        field_allowed_mime_types=form_intake_service.get_public_field_allowed_mime_types(
+            form=form,
+            lead_kind=version.lead_kind_snapshot,
+            mapping_snapshot=mapping_snapshot,
+        ),
         campaign_name=intake_link.campaign_name,
         event_name=intake_link.event_name,
         messaging_consent=form_intake_service.get_messaging_consent_options(
             db,
             intake_link.organization_id,
             schema=schema,
-            mapping_snapshot=form_intake_service.get_intake_mapping_snapshot(
-                db, form=form, published_version=version
-            ),
+            mapping_snapshot=mapping_snapshot,
         ),
         agency_name=agency_name,
         agency_logo_url=agency_logo_url,
