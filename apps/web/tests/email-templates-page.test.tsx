@@ -347,17 +347,12 @@ describe("EmailTemplatesPage", () => {
         })
     })
 
-    it("renders updated tabs", () => {
+    it("renders template tabs and ownership labels", () => {
         render(<EmailTemplatesPage />)
         expect(screen.getByRole("tab", { name: "My Email Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "Organization Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "Platform Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "My Signature" })).toBeInTheDocument()
-    })
-
-    it("shows a friendly label for the personal-template ownership filter", () => {
-        render(<EmailTemplatesPage />)
-
         expect(screen.getByRole("combobox")).toHaveTextContent("My Templates")
         expect(screen.getByRole("combobox")).not.toHaveTextContent(/^mine$/)
     })

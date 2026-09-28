@@ -266,13 +266,19 @@ describe('SurrogatesPage', () => {
             error: null,
         })
 
-        render(<SurrogatesPage />)
-        // We expect the loader icon (lucide-react) or a card with loading spinner
-        // Since we can't easily query by icon, we'll check if the main content area is present
-        // or check for implicit loading indicators.
-        // In the code: <Loader2Icon /> is rendered.
-        // simpler check: "Surrogates" header should be present
-        expect(screen.getByText('Surrogates')).toBeInTheDocument()
+        const { container, rerender } = render(<SurrogatesPage />)
+        expect(container.querySelector('.animate-spin')).toBeInTheDocument()
+        expect(screen.queryByText('No surrogates yet')).not.toBeInTheDocument()
+        expect(screen.queryByRole('table')).not.toBeInTheDocument()
+
+        mockUseSurrogates.mockReturnValue({
+            data: { items: [], total: 0, pages: 0 },
+            isLoading: false,
+            error: null,
+        })
+        rerender(<SurrogatesPage />)
+        expect(container.querySelector('.animate-spin')).not.toBeInTheDocument()
+        expect(screen.getByText('No surrogates yet')).toBeInTheDocument()
     })
 
     it('renders empty state', () => {

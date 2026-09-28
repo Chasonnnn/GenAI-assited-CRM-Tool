@@ -241,11 +241,9 @@ def test_get_pending_requests_skips_count_for_short_first_page(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("version", [1, 2])
-@pytest.mark.parametrize("kind", ["match", "surrogate", "donor", "intended_parent"])
-@pytest.mark.parametrize("action", ["approve", "reject"])
 @pytest.mark.parametrize("role", [Role.CASE_MANAGER, Role.ADMIN])
 async def test_review_authority_preserves_v1_non_match_admin_gate(
-    authed_client, db, test_auth, version, kind, action, role
+    authed_client, db, test_auth, version, role, subtests
 ):
     from app.db.models import Donor, IntendedParent
     from app.services import pipeline_service
@@ -259,48 +257,58 @@ async def test_review_authority_preserves_v1_non_match_admin_gate(
         _activate_v2(db, test_auth.org.id)
         if role == Role.CASE_MANAGER:
             _set_role_permission(db, test_auth.org.id, role, "approve_status_change_requests", True)
-    if kind == "match":
-        _, request = await _pending_cancellation(authed_client, db)
-        record = None
-    else:
-        create, model, target_key = {
-            "surrogate": (_create_surrogate, Surrogate, "new_unread"),
-            "donor": (_donor, Donor, "new"),
-            "intended_parent": (_create_intended_parent, IntendedParent, "new"),
-        }[kind]
-        data = await create(authed_client)
-        record = db.get(model, uuid.UUID(data["id"]))
-        original_stage_id = record.stage_id
-        target = pipeline_service.get_stage_by_key(db, record.stage.pipeline_id, target_key)
-        request = StatusChangeRequest(
-            organization_id=test_auth.org.id,
-            entity_type=kind,
-            entity_id=record.id,
-            target_stage_id=target.id,
-            effective_at=datetime.now(UTC),
-            reason="Regression review",
-            requested_by_user_id=test_auth.user.id,
-            status="pending",
-        )
-        db.add(request)
-        db.commit()
-    async with _client_for(
-        db,
-        test_auth.org.id,
-        role=role,
-        grant=("approve_status_change_requests",) if version == 1 else (),
-    ) as (_, client):
-        response = await client.post(f"/status-change-requests/{request.id}/{action}", json={})
-    denied = version == 1 and kind != "match" and role == Role.CASE_MANAGER
-    assert response.status_code == (400 if denied else 200), response.text
-    db.refresh(request)
-    if denied:
-        assert response.json()["detail"] == f"Only admins can {action} status change requests"
-        assert request.status == "pending"
-    else:
-        assert request.status == ("approved" if action == "approve" else "rejected")
-    if record:
-        db.refresh(record)
-        assert record.stage_id == (
-            target.id if not denied and action == "approve" else original_stage_id
-        )
+    for kind in ["match", "surrogate", "donor", "intended_parent"]:
+        for action in ["approve", "reject"]:
+            with subtests.test(kind=kind, action=action):
+                if kind == "match":
+                    _, request = await _pending_cancellation(authed_client, db)
+                    record = None
+                else:
+                    create, model, target_key = {
+                        "surrogate": (_create_surrogate, Surrogate, "new_unread"),
+                        "donor": (_donor, Donor, "new"),
+                        "intended_parent": (_create_intended_parent, IntendedParent, "new"),
+                    }[kind]
+                    data = await create(authed_client)
+                    record = db.get(model, uuid.UUID(data["id"]))
+                    original_stage_id = record.stage_id
+                    target = pipeline_service.get_stage_by_key(
+                        db, record.stage.pipeline_id, target_key
+                    )
+                    request = StatusChangeRequest(
+                        organization_id=test_auth.org.id,
+                        entity_type=kind,
+                        entity_id=record.id,
+                        target_stage_id=target.id,
+                        effective_at=datetime.now(UTC),
+                        reason="Regression review",
+                        requested_by_user_id=test_auth.user.id,
+                        status="pending",
+                    )
+                    db.add(request)
+                    db.commit()
+                async with _client_for(
+                    db,
+                    test_auth.org.id,
+                    role=role,
+                    grant=("approve_status_change_requests",) if version == 1 else (),
+                ) as (_, client):
+                    response = await client.post(
+                        f"/status-change-requests/{request.id}/{action}", json={}
+                    )
+                denied = version == 1 and kind != "match" and role == Role.CASE_MANAGER
+                assert response.status_code == (400 if denied else 200), response.text
+                db.refresh(request)
+                if denied:
+                    assert (
+                        response.json()["detail"]
+                        == f"Only admins can {action} status change requests"
+                    )
+                    assert request.status == "pending"
+                else:
+                    assert request.status == ("approved" if action == "approve" else "rejected")
+                if record:
+                    db.refresh(record)
+                    assert record.stage_id == (
+                        target.id if not denied and action == "approve" else original_stage_id
+                    )

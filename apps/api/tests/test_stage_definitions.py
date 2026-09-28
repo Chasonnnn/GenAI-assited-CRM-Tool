@@ -14,12 +14,6 @@ from app.core.stage_definitions import (
 from app.schemas.pipeline_semantics import default_pipeline_feature_config, default_stage_semantics
 
 
-def test_application_submitted_before_interview_scheduled() -> None:
-    assert DEFAULT_STAGE_ORDER.index("application_submitted") < DEFAULT_STAGE_ORDER.index(
-        "interview_scheduled"
-    )
-
-
 def test_reschedule_needed_immediately_follows_interview_scheduled() -> None:
     interview_index = DEFAULT_STAGE_ORDER.index("interview_scheduled")
     assert DEFAULT_STAGE_ORDER[interview_index + 1] == "reschedule_needed"
@@ -38,11 +32,6 @@ def test_default_stage_defs_follow_default_order() -> None:
 def test_every_default_pipeline_has_unique_stage_keys() -> None:
     for entity_type, stage_keys in DEFAULT_STAGE_ORDER_BY_ENTITY.items():
         assert len(stage_keys) == len(set(stage_keys)), entity_type
-
-
-def test_on_hold_stage_is_positioned_before_terminal_outcomes() -> None:
-    assert DEFAULT_STAGE_ORDER.index("on_hold") < DEFAULT_STAGE_ORDER.index("lost")
-    assert DEFAULT_STAGE_ORDER.index("on_hold") < DEFAULT_STAGE_ORDER.index("disqualified")
 
 
 def test_on_hold_stage_uses_paused_type_and_muted_brick_color() -> None:

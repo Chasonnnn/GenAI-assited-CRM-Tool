@@ -274,10 +274,13 @@ describe('MatchDetailPage', () => {
         mockCreateTaskMutateAsync.mockResolvedValue({})
     })
 
-    it('renders match page tabs', () => {
+    it('renders match tabs, participants, and status', () => {
         render(<MatchDetailPage />)
         expect(screen.getByRole('tab', { name: /overview/i })).toBeInTheDocument()
         expect(screen.getByRole('tab', { name: /calendar/i })).toBeInTheDocument()
+        expect(screen.getAllByText(/Jane Doe/).length).toBeGreaterThan(0)
+        expect(screen.getByText('John Smith')).toBeInTheDocument()
+        expect(screen.getByText('Under Review')).toBeInTheDocument()
     })
 
     it('shows loading state when match is loading', () => {
@@ -321,12 +324,6 @@ describe('MatchDetailPage', () => {
         render(<MatchDetailPage />)
         fireEvent.click(screen.getByRole('button', { name: /files/i }))
         expect(screen.getByRole('button', { name: /upload file/i })).toBeInTheDocument()
-    })
-
-    it('shows add task button in overview tasks tab', () => {
-        render(<MatchDetailPage />)
-        fireEvent.click(screen.getByRole('button', { name: /^tasks$/i }))
-        expect(screen.getByRole('button', { name: /add task/i })).toBeInTheDocument()
     })
 
     it('defaults the add task dialog to match target', () => {
@@ -524,29 +521,6 @@ describe('MatchDetailPage', () => {
             fireEvent.click(screen.getByRole('button', { name: 'Cancel Match' }))
             expect(screen.getByRole('dialog', { name: 'Cancel Match' })).toBeInTheDocument()
         })
-    })
-
-    it('displays surrogate name when loaded', () => {
-        render(<MatchDetailPage />)
-        // Should show surrogate name (full name from match data) - in the header which combines both names
-        expect(screen.getAllByText(/Jane Doe/).length).toBeGreaterThan(0)
-    })
-
-    it('displays IP name when loaded', () => {
-        render(<MatchDetailPage />)
-        // Should show IP's name from match data
-        expect(screen.getByText('John Smith')).toBeInTheDocument()
-    })
-
-    it('displays match status badge', () => {
-        render(<MatchDetailPage />)
-        expect(screen.getByText('Under Review')).toBeInTheDocument()
-    })
-
-    it('renders tabs for Overview and Calendar', () => {
-        render(<MatchDetailPage />)
-        const tabs = screen.getAllByRole('tab')
-        expect(tabs.length).toBeGreaterThanOrEqual(2)
     })
 
     it('renders the intended parent status label instead of the raw status slug', () => {

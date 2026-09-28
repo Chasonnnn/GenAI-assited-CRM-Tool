@@ -12,7 +12,7 @@ ignored, legacy user grants still add, and Admin/Developer ignore role rows.
 """
 
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -30,8 +30,9 @@ from app.db.models import (
 )
 from app.db.models.permission_policy import OrganizationPermissionPolicy
 from app.services import pipeline_service, schedule_parser
+from tests.match_fixtures import seed_surrogate_match
 from tests.test_match_cancel_request import _create_intended_parent, _create_surrogate
-from tests.test_match_cases import _accept, _case, _donor
+from tests.test_match_cases import _case, _donor
 from tests.test_match_lifecycle_characterization import _client_for, _match_row, _other_org
 
 
@@ -87,24 +88,34 @@ async def _ready_surrogate(client, db, org_id) -> dict:
 
 
 async def _target(client, db, org_id, status="accepted") -> dict:
-    """Match ids for a route: an under-review match, or an accepted one with an event and attempt.
-
-    The attempt is completed so the complete route is not refused for an open attempt.
-    """
-    ip = await _create_intended_parent(client)
-    match = await _case(client, ip, surrogate=await _ready_surrogate(client, db, org_id))
-    ids = {"id": match["id"], "event_id": uuid.uuid4(), "attempt_id": uuid.uuid4()}
-    if status == "under_review":
-        return ids
-    await _accept(client, match)
-    event = await client.post(f"/matches/{match['id']}/events", json=_EVENT)
-    assert event.status_code == 201, event.text
-    attempt = await client.post(
-        f"/matches/{match['id']}/attempts",
-        json={"attempt_type": "embryo_transfer", "status": "completed"},
-    )
-    assert attempt.status_code == 201, attempt.text
-    ids.update(event_id=event.json()["id"], attempt_id=attempt.json()["id"])
+    """Seed route prerequisites; lifecycle suites exercise their creation through HTTP."""
+    match = seed_surrogate_match(db, client, status=status)
+    assert match.organization_id == org_id
+    user_id = match.proposed_by_user_id
+    ids = {"id": str(match.id), "event_id": uuid.uuid4(), "attempt_id": uuid.uuid4()}
+    if status == "accepted":
+        event = MatchEvent(
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            match_id=match.id,
+            person_type="ip",
+            event_type="legal",
+            title="Legal consult",
+            starts_at=datetime(2026, 10, 1, 10, tzinfo=UTC),
+            created_by_user_id=user_id,
+        )
+        attempt = MatchAttempt(
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            match_id=match.id,
+            sequence=1,
+            attempt_type="embryo_transfer",
+            status="completed",
+            created_by_user_id=user_id,
+        )
+        db.add_all([event, attempt])
+        ids.update(event_id=str(event.id), attempt_id=str(attempt.id))
+    db.commit()
     return ids
 
 
@@ -215,59 +226,60 @@ async def _propose(client, authed_client, db, org_id):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", [Role.CASE_MANAGER, Role.OPERATIONS, Role.ADMIN, Role.DEVELOPER])
-@pytest.mark.parametrize("method,path,body,status", MATCH_READS)
 async def test_v2_roles_with_view_matches_can_read_every_match_route(
-    authed_client, db, v2_org, role, method, path, body, status
+    authed_client, db, v2_org, subtests
 ):
-    ids = await _target(authed_client, db, v2_org.id, status)
+    ids = await _target(authed_client, db, v2_org.id)
     before = _state(db, ids["id"])
-
-    async with _client_for(db, v2_org.id, role=role) as (_user, client):
-        response = await client.request(method, path.format(**ids), json=body)
-
-    assert response.status_code == 200, response.text
-    assert _state(db, ids["id"]) == before
+    for role in [Role.CASE_MANAGER, Role.OPERATIONS, Role.ADMIN, Role.DEVELOPER]:
+        with subtests.test(role=repr(role)):
+            async with _client_for(db, v2_org.id, role=role) as (_user, client):
+                for method, path, body, _status in MATCH_READS:
+                    with subtests.test(method=method, path=path):
+                        response = await client.request(method, path.format(**ids), json=body)
+                        assert response.status_code == 200, response.text
+                        assert _state(db, ids["id"]) == before
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", [Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])
-@pytest.mark.parametrize(
-    "method,path,body,status,code,after", MATCH_WRITES, ids=[_write_id(r) for r in MATCH_WRITES]
-)
 async def test_v2_roles_with_propose_matches_can_run_every_match_mutation(
-    authed_client, db, v2_org, role, method, path, body, status, code, after
+    authed_client, db, v2_org, subtests
 ):
-    ids = await _target(authed_client, db, v2_org.id, status)
-
-    async with _client_for(db, v2_org.id, role=role) as (_user, client):
-        response = await client.request(method, path.format(**ids), json=body)
-
-    assert response.status_code == code, response.text
-    assert _match_row(db, ids["id"]).status == after
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("role", [Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])
-async def test_v2_roles_with_propose_matches_can_propose(authed_client, db, v2_org, role):
-    async with _client_for(db, v2_org.id, role=role) as (user, client):
-        response = await _propose(client, authed_client, db, v2_org.id)
-
-    assert response.status_code == 201, response.text
-    assert response.json()["proposed_by_user_id"] == str(user.id)
+    for role in [Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER]:
+        with subtests.test(role=repr(role)):
+            async with _client_for(db, v2_org.id, role=role) as (_user, client):
+                for method, path, body, status, code, after in MATCH_WRITES:
+                    with subtests.test(method=method, path=path):
+                        # Each successful mutation still has its own match and participants.
+                        ids = await _target(authed_client, db, v2_org.id, status)
+                        response = await client.request(method, path.format(**ids), json=body)
+                        assert response.status_code == code, response.text
+                        assert _match_row(db, ids["id"]).status == after
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", [Role.CASE_MANAGER, Role.OPERATIONS, Role.ADMIN])
-async def test_v2_match_list_and_stats_include_scoped_match(authed_client, db, v2_org, role):
+async def test_v2_roles_with_propose_matches_can_propose(authed_client, db, v2_org, subtests):
+    for role in [Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER]:
+        with subtests.test(role=repr(role)):
+            async with _client_for(db, v2_org.id, role=role) as (user, client):
+                response = await _propose(client, authed_client, db, v2_org.id)
+
+            assert response.status_code == 201, response.text
+            assert response.json()["proposed_by_user_id"] == str(user.id)
+
+
+@pytest.mark.asyncio
+async def test_v2_match_list_and_stats_include_scoped_match(authed_client, db, v2_org, subtests):
     ids = await _target(authed_client, db, v2_org.id)
 
-    async with _client_for(db, v2_org.id, role=role) as (_user, client):
-        listed = await client.get("/matches/")
-        stats = await client.get("/matches/stats")
+    for role in [Role.CASE_MANAGER, Role.OPERATIONS, Role.ADMIN]:
+        with subtests.test(role=repr(role)):
+            async with _client_for(db, v2_org.id, role=role) as (_user, client):
+                listed = await client.get("/matches/")
+                stats = await client.get("/matches/stats")
 
-    assert ids["id"] in {item["id"] for item in listed.json()["items"]}
-    assert stats.json()["by_status"]["accepted"] >= 1
+            assert ids["id"] in {item["id"] for item in listed.json()["items"]}
+            assert stats.json()["by_status"]["accepted"] >= 1
 
 
 # =============================================================================
@@ -283,58 +295,70 @@ _ALL_MATCH_ROUTES = [
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("configured", ["intake_default", "case_manager_role_denied"])
-@pytest.mark.parametrize("method,path,body,status", _ALL_MATCH_ROUTES)
 async def test_v2_role_without_view_matches_is_denied_every_match_route(
-    authed_client, db, v2_org, configured, method, path, body, status
+    authed_client, db, v2_org, configured, subtests
 ):
-    ids = await _target(authed_client, db, v2_org.id, status)
-    if body == "propose":
-        surrogate = await _ready_surrogate(authed_client, db, v2_org.id)
-        ip = await _create_intended_parent(authed_client)
-        body = {"surrogate_id": surrogate["id"], "intended_parent_id": ip["id"]}
+    targets = {
+        status: await _target(authed_client, db, v2_org.id, status)
+        for status in ("accepted", "under_review")
+    }
+    surrogate = await _ready_surrogate(authed_client, db, v2_org.id)
+    ip = await _create_intended_parent(authed_client)
     role = Role.INTAKE_SPECIALIST
     if configured == "case_manager_role_denied":
         role = Role.CASE_MANAGER
         _set_role_permission(db, v2_org.id, role, "view_matches", False)
-    before = _state(db, ids["id"])
+    before = {status: _state(db, ids["id"]) for status, ids in targets.items()}
     count = _count(db, Match, v2_org.id)
-
     async with _client_for(db, v2_org.id, role=role) as (_user, client):
-        response = await client.request(method, path.format(**ids), json=body)
-
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Missing permission: view_matches"
-    assert _state(db, ids["id"]) == before
-    assert _count(db, Match, v2_org.id) == count
+        for method, path, body, status in _ALL_MATCH_ROUTES:
+            with subtests.test(method=method, path=path):
+                ids = targets[status]
+                if body == "propose":
+                    body = {"surrogate_id": surrogate["id"], "intended_parent_id": ip["id"]}
+                response = await client.request(method, path.format(**ids), json=body)
+                assert response.status_code == 403
+                assert response.json()["detail"] == "Missing permission: view_matches"
+                assert _state(db, ids["id"]) == before[status]
+                assert _count(db, Match, v2_org.id) == count
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("configured", ["operations_default", "case_manager_role_denied"])
-@pytest.mark.parametrize(
-    "method,path,body,status,code,after", MATCH_WRITES, ids=[_write_id(r) for r in MATCH_WRITES]
-)
 async def test_v2_role_without_action_permission_is_denied_every_mutation(
-    authed_client, db, v2_org, configured, method, path, body, status, code, after
+    authed_client, db, v2_org, configured, subtests
 ):
-    ids = await _target(authed_client, db, v2_org.id, status)
-    permission = {
-        "accept": "decide_matches",
-        "decline": "decide_matches",
-        "cancel-request": "close_matches",
-        "complete": "close_matches",
-    }.get(path.rsplit("/", 1)[-1], "propose_matches")
-    role = Role.OPERATIONS
-    if configured == "case_manager_role_denied":
-        role = Role.CASE_MANAGER
-        _set_role_permission(db, v2_org.id, role, permission, False)
-    before = _state(db, ids["id"])
+    for method, path, body, status, code, after in MATCH_WRITES:
+        with subtests.test(
+            method=repr(method),
+            path=repr(path),
+            body=repr(body),
+            status=repr(status),
+            code=repr(code),
+            after=repr(after),
+        ):
+            # Only the current action is denied; other action permissions stay at their defaults.
+            db.query(RolePermission).filter_by(organization_id=v2_org.id).delete()
+            db.flush()
+            ids = await _target(authed_client, db, v2_org.id, status)
+            permission = {
+                "accept": "decide_matches",
+                "decline": "decide_matches",
+                "cancel-request": "close_matches",
+                "complete": "close_matches",
+            }.get(path.rsplit("/", 1)[-1], "propose_matches")
+            role = Role.OPERATIONS
+            if configured == "case_manager_role_denied":
+                role = Role.CASE_MANAGER
+                _set_role_permission(db, v2_org.id, role, permission, False)
+            before = _state(db, ids["id"])
 
-    async with _client_for(db, v2_org.id, role=role) as (_user, client):
-        response = await client.request(method, path.format(**ids), json=body)
+            async with _client_for(db, v2_org.id, role=role) as (_user, client):
+                response = await client.request(method, path.format(**ids), json=body)
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == f"Missing permission: {permission}"
-    assert _state(db, ids["id"]) == before
+            assert response.status_code == 403
+            assert response.json()["detail"] == f"Missing permission: {permission}"
+            assert _state(db, ids["id"]) == before
 
 
 @pytest.mark.asyncio
@@ -354,17 +378,14 @@ async def test_v2_role_with_view_matches_can_propose(authed_client, db, v2_org, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path,body,status", MATCH_READS)
-async def test_v2_role_denied_propose_matches_still_reads(
-    authed_client, db, v2_org, method, path, body, status
-):
-    ids = await _target(authed_client, db, v2_org.id, status)
+async def test_v2_role_denied_propose_matches_still_reads(authed_client, db, v2_org, subtests):
+    ids = await _target(authed_client, db, v2_org.id)
     _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "propose_matches", False)
-
     async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_user, client):
-        response = await client.request(method, path.format(**ids), json=body)
-
-    assert response.status_code == 200, response.text
+        for method, path, body, _status in MATCH_READS:
+            with subtests.test(method=method, path=path):
+                response = await client.request(method, path.format(**ids), json=body)
+                assert response.status_code == 200, response.text
 
 
 # =============================================================================
@@ -373,22 +394,19 @@ async def test_v2_role_denied_propose_matches_still_reads(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "method,path,body,status,code,after", MATCH_WRITES, ids=[_write_id(r) for r in MATCH_WRITES]
-)
 async def test_v2_ignores_legacy_user_revoke_of_match_permissions(
-    authed_client, db, v2_org, method, path, body, status, code, after
+    authed_client, db, v2_org, subtests
 ):
-    ids = await _target(authed_client, db, v2_org.id, status)
-
     async with _client_for(
         db, v2_org.id, role=Role.CASE_MANAGER, revoke=("view_matches", "propose_matches")
     ) as (user, client):
-        response = await client.request(method, path.format(**ids), json=body)
-
-    assert response.status_code == code, response.text
-    assert _match_row(db, ids["id"]).status == after
-    assert db.query(UserPermissionOverride).filter_by(user_id=user.id).count() == 2
+        for method, path, body, status, code, after in MATCH_WRITES:
+            with subtests.test(method=method, path=path):
+                ids = await _target(authed_client, db, v2_org.id, status)
+                response = await client.request(method, path.format(**ids), json=body)
+                assert response.status_code == code, response.text
+                assert _match_row(db, ids["id"]).status == after
+                assert db.query(UserPermissionOverride).filter_by(user_id=user.id).count() == 2
 
 
 @pytest.mark.asyncio
@@ -503,32 +521,36 @@ async def test_v2_intake_granted_view_matches_is_stopped_by_intended_parent_scop
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", [Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER])
 async def test_v2_ai_bulk_tasks_allowed_for_roles_with_view_matches_and_create_tasks(
-    authed_client, db, v2_org, role
+    authed_client, db, v2_org, subtests
 ):
     ids = await _target(authed_client, db, v2_org.id)
 
-    async with _client_for(db, v2_org.id, role=role) as (user, client):
-        response = await client.post("/ai/create-bulk-tasks", json=_ai_body("bulk", ids["id"]))
+    for role in [Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER]:
+        with subtests.test(role=repr(role)):
+            async with _client_for(db, v2_org.id, role=role) as (user, client):
+                response = await client.post(
+                    "/ai/create-bulk-tasks", json=_ai_body("bulk", ids["id"])
+                )
 
-    assert response.status_code == 200, response.text
-    assert db.query(Task).filter(Task.created_by_user_id == user.id).count() == 1
+            assert response.status_code == 200, response.text
+            assert db.query(Task).filter(Task.created_by_user_id == user.id).count() == 1
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("path", ["/ai/parse-schedule", "/ai/parse-schedule/stream"])
-@pytest.mark.parametrize("role", [Role.CASE_MANAGER, Role.OPERATIONS, Role.ADMIN, Role.DEVELOPER])
 async def test_v2_ai_parse_schedule_allowed_for_roles_with_view_matches(
-    authed_client, db, v2_org, monkeypatch, role, path
+    authed_client, db, v2_org, monkeypatch, subtests
 ):
     _stub_schedule_parser(monkeypatch)
     ids = await _target(authed_client, db, v2_org.id)
 
-    async with _client_for(db, v2_org.id, role=role) as (_user, client):
-        response = await client.post(path, json=_ai_body("parse", ids["id"]))
+    for path in ["/ai/parse-schedule", "/ai/parse-schedule/stream"]:
+        for role in [Role.CASE_MANAGER, Role.OPERATIONS, Role.ADMIN, Role.DEVELOPER]:
+            with subtests.test(path=repr(path), role=repr(role)):
+                async with _client_for(db, v2_org.id, role=role) as (_user, client):
+                    response = await client.post(path, json=_ai_body("parse", ids["id"]))
 
-    assert response.status_code == 200, response.text
+                assert response.status_code == 200, response.text
 
 
 @pytest.mark.asyncio
@@ -548,11 +570,8 @@ async def test_v2_ai_bulk_tasks_denied_for_operations_before_match_access(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path,kind", AI_ROUTES)
 @pytest.mark.parametrize("configured", ["intake_default", "case_manager_role_denied"])
-async def test_v2_ai_routes_require_view_matches(
-    authed_client, db, v2_org, configured, method, path, kind
-):
+async def test_v2_ai_routes_require_view_matches(authed_client, db, v2_org, configured, subtests):
     ids = await _target(authed_client, db, v2_org.id)
     role = Role.INTAKE_SPECIALIST
     if configured == "case_manager_role_denied":
@@ -560,49 +579,55 @@ async def test_v2_ai_routes_require_view_matches(
         _set_role_permission(db, v2_org.id, role, "view_matches", False)
     count = _count(db, Task, v2_org.id)
 
-    async with _client_for(db, v2_org.id, role=role) as (_user, client):
-        response = await client.request(method, path, json=_ai_body(kind, ids["id"]))
-        missing = await client.request(method, path, json=_ai_body(kind, uuid.uuid4()))
+    for method, path, kind in AI_ROUTES:
+        with subtests.test(method=repr(method), path=repr(path), kind=repr(kind)):
+            async with _client_for(db, v2_org.id, role=role) as (_user, client):
+                response = await client.request(method, path, json=_ai_body(kind, ids["id"]))
+                missing = await client.request(method, path, json=_ai_body(kind, uuid.uuid4()))
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Missing permission: view_matches"
-    assert missing.status_code == 404
-    assert missing.json()["detail"] == "Match not found"
-    assert _count(db, Task, v2_org.id) == count
+            assert response.status_code == 403
+            assert response.json()["detail"] == "Missing permission: view_matches"
+            assert missing.status_code == 404
+            assert missing.json()["detail"] == "Match not found"
+            assert _count(db, Task, v2_org.id) == count
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path,kind", AI_ROUTES)
 async def test_v2_ai_routes_ignore_legacy_user_revoke_of_view_matches(
-    authed_client, db, v2_org, monkeypatch, method, path, kind
+    authed_client, db, v2_org, monkeypatch, subtests
 ):
     _stub_schedule_parser(monkeypatch)
     ids = await _target(authed_client, db, v2_org.id)
 
-    async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER, revoke=("view_matches",)) as (
-        _user,
-        client,
-    ):
-        response = await client.request(method, path, json=_ai_body(kind, ids["id"]))
+    for method, path, kind in AI_ROUTES:
+        with subtests.test(method=repr(method), path=repr(path), kind=repr(kind)):
+            async with _client_for(
+                db, v2_org.id, role=Role.CASE_MANAGER, revoke=("view_matches",)
+            ) as (
+                _user,
+                client,
+            ):
+                response = await client.request(method, path, json=_ai_body(kind, ids["id"]))
 
-    assert response.status_code == 200, response.text
+            assert response.status_code == 200, response.text
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path,kind", AI_ROUTES)
-async def test_v2_ai_routes_apply_party_record_scope(authed_client, db, v2_org, method, path, kind):
+async def test_v2_ai_routes_apply_party_record_scope(authed_client, db, v2_org, subtests):
     ip = await _create_intended_parent(authed_client)
     created = await _case(
         authed_client, ip, surrogate=await _create_surrogate(authed_client, ready=False)
     )
     count = _count(db, Task, v2_org.id)
 
-    async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_user, client):
-        response = await client.request(method, path, json=_ai_body(kind, created["id"]))
+    for method, path, kind in AI_ROUTES:
+        with subtests.test(method=repr(method), path=repr(path), kind=repr(kind)):
+            async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_user, client):
+                response = await client.request(method, path, json=_ai_body(kind, created["id"]))
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "You don't have access to this surrogate"
-    assert _count(db, Task, v2_org.id) == count
+            assert response.status_code == 403
+            assert response.json()["detail"] == "You don't have access to this surrogate"
+            assert _count(db, Task, v2_org.id) == count
 
 
 # =============================================================================
@@ -620,26 +645,25 @@ _CROSS_ORG_ROUTES = [
 @pytest.mark.parametrize(
     "role,owner_version", [(Role.ADMIN, 2), (Role.CASE_MANAGER, 2), (Role.ADMIN, 1)]
 )
-@pytest.mark.parametrize("method,path,body", _CROSS_ORG_ROUTES)
 async def test_v2_other_org_user_gets_404_for_every_match_route(
-    authed_client, db, test_auth, role, owner_version, method, path, body
+    authed_client, db, test_auth, role, owner_version, subtests
 ):
     if owner_version == 2:
         _activate_v2(db, test_auth.org.id)
     ids = await _target(authed_client, db, test_auth.org.id)
-    if body in ("bulk", "parse"):
-        body = _ai_body(body, ids["id"])
     before = _state(db, ids["id"])
     other_org = _v2_other_org(db)
     count = _count(db, Task, test_auth.org.id, other_org.id)
-
     async with _client_for(db, other_org.id, role=role) as (_user, client):
-        response = await client.request(method, path.format(**ids), json=body)
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Match not found"
-    assert _state(db, ids["id"]) == before
-    assert _count(db, Task, test_auth.org.id, other_org.id) == count
+        for method, path, body in _CROSS_ORG_ROUTES:
+            with subtests.test(method=method, path=path):
+                if body in ("bulk", "parse"):
+                    body = _ai_body(body, ids["id"])
+                response = await client.request(method, path.format(**ids), json=body)
+                assert response.status_code == 404
+                assert response.json()["detail"] == "Match not found"
+                assert _state(db, ids["id"]) == before
+                assert _count(db, Task, test_auth.org.id, other_org.id) == count
 
 
 @pytest.mark.asyncio

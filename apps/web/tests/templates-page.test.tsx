@@ -195,6 +195,14 @@ describe('WorkflowTemplatesPanel', () => {
     it('renders the workflow templates panel', () => {
         render(<WorkflowTemplatesPanel />)
         expect(screen.getByText('Workflow Templates')).toBeInTheDocument()
+        expect(screen.getByText('Welcome New Lead')).toBeInTheDocument()
+        expect(screen.getByText('Task Reminder')).toBeInTheDocument()
+        expect(
+            screen.getByRole('button', { name: /use template welcome new lead/i })
+        ).toBeInTheDocument()
+        expect(
+            screen.getByRole('button', { name: /use template task reminder/i })
+        ).toBeInTheDocument()
     })
 
     it.each([
@@ -208,23 +216,6 @@ describe('WorkflowTemplatesPanel', () => {
         render(<WorkflowTemplatesPanel />)
         expect(screen.getByText(`Trigger: ${label}`)).toBeInTheDocument()
         expect(screen.queryByText(`Trigger: ${triggerType}`)).not.toBeInTheDocument()
-    })
-
-    it('renders template list from mocked data', () => {
-        render(<WorkflowTemplatesPanel />)
-        expect(screen.getByText('Welcome New Lead')).toBeInTheDocument()
-        expect(screen.getByText('Task Reminder')).toBeInTheDocument()
-    })
-
-    it('renders each template card as an accessible button', () => {
-        render(<WorkflowTemplatesPanel />)
-
-        expect(
-            screen.getByRole('button', { name: /use template welcome new lead/i })
-        ).toBeInTheDocument()
-        expect(
-            screen.getByRole('button', { name: /use template task reminder/i })
-        ).toBeInTheDocument()
     })
 
     it('shows email template selection when template with missing email is selected', async () => {

@@ -186,11 +186,6 @@ describe("MetaFormMappingPage", () => {
         render(<MetaFormMappingPage />)
 
         expect(screen.queryByText(/mapping repair required/i)).not.toBeInTheDocument()
-    })
-
-    it("renders unconverted lead details when failures exist", () => {
-        render(<MetaFormMappingPage />)
-
         expect(screen.getByText(/reprocess queued/i)).toBeInTheDocument()
         expect(screen.getByText(/lead_failed/i)).toBeInTheDocument()
         expect(screen.getByText(/1 eligible, 1 blocked/i)).toBeInTheDocument()

@@ -394,7 +394,7 @@ async def test_repeat_proposal_for_open_surrogate_pair_returns_409(
     if existing_status == "cancellation_pending":
         await _request_cancel(authed_client, created)
     assert _match_row(db, created["id"]).status == existing_status
-    count = db.query(Match).count()
+    count = db.query(Match).filter_by(organization_id=test_auth.org.id).count()
 
     response = await authed_client.post(
         "/matches/", json={"surrogate_id": surrogate["id"], "intended_parent_id": ip["id"]}
@@ -402,7 +402,7 @@ async def test_repeat_proposal_for_open_surrogate_pair_returns_409(
 
     assert response.status_code == 409
     assert response.json()["detail"] == f"Match already exists with status: {existing_status}"
-    assert db.query(Match).count() == count
+    assert db.query(Match).filter_by(organization_id=test_auth.org.id).count() == count
 
 
 @pytest.mark.asyncio
@@ -425,7 +425,7 @@ async def test_repeat_proposal_after_closed_surrogate_pair_creates_new_match(aut
 @pytest.mark.asyncio
 @pytest.mark.parametrize("committed_status", ["accepted", "cancellation_pending"])
 async def test_propose_for_surrogate_with_committed_match_stays_open_and_flagged(
-    authed_client, db, committed_status
+    authed_client, db, test_auth, committed_status
 ):
     surrogate = await _create_surrogate(authed_client)
     first_ip = await _create_intended_parent(authed_client)
@@ -433,7 +433,7 @@ async def test_propose_for_surrogate_with_committed_match_stays_open_and_flagged
     first = await _accept(authed_client, await _case(authed_client, first_ip, surrogate=surrogate))
     if committed_status == "cancellation_pending":
         await _request_cancel(authed_client, first)
-    count = db.query(Match).count()
+    count = db.query(Match).filter_by(organization_id=test_auth.org.id).count()
 
     response = await authed_client.post(
         "/matches/",
@@ -443,7 +443,7 @@ async def test_propose_for_surrogate_with_committed_match_stays_open_and_flagged
     assert response.status_code == 201
     assert response.json()["surrogate_has_accepted_match"] is True
     assert response.json()["status"] == "under_review"
-    assert db.query(Match).count() == count + 1
+    assert db.query(Match).filter_by(organization_id=test_auth.org.id).count() == count + 1
 
 
 @pytest.mark.asyncio
@@ -1364,7 +1364,7 @@ MATCH_MUTATIONS = [
 async def test_user_without_propose_matches_cannot_propose(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     ip = await _create_intended_parent(authed_client)
-    count = db.query(Match).count()
+    count = db.query(Match).filter_by(organization_id=test_auth.org.id).count()
 
     async with _client_for(db, test_auth.org.id, revoke=("propose_matches",)) as (_user, client):
         response = await client.post(
@@ -1373,7 +1373,7 @@ async def test_user_without_propose_matches_cannot_propose(authed_client, db, te
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Missing permission: propose_matches"
-    assert db.query(Match).count() == count
+    assert db.query(Match).filter_by(organization_id=test_auth.org.id).count() == count
 
 
 @pytest.mark.asyncio
@@ -1531,8 +1531,9 @@ async def test_other_org_user_cannot_update_match_attempt(authed_client, db):
 async def test_other_org_user_cannot_propose_with_foreign_parties(authed_client, db, test_auth):
     surrogate = await _create_surrogate(authed_client)
     ip = await _create_intended_parent(authed_client)
-    count = db.query(Match).count()
     other_org = _other_org(db)
+    matches = db.query(Match).filter(Match.organization_id.in_((test_auth.org.id, other_org.id)))
+    count = matches.count()
 
     async with _client_for(db, other_org.id) as (_user, client):
         response = await client.post(
@@ -1540,7 +1541,7 @@ async def test_other_org_user_cannot_propose_with_foreign_parties(authed_client,
         )
 
     assert response.status_code == 404
-    assert db.query(Match).count() == count
+    assert matches.count() == count
 
 
 @pytest.mark.asyncio
@@ -1550,7 +1551,8 @@ async def test_propose_with_one_foreign_party_returns_404(
     authed_client, db, test_auth, kind, foreign_side
 ):
     create_party = _donor if kind == "donor" else _create_surrogate
-    async with _client_for(db, _other_org(db).id, role=Role.DEVELOPER) as (_user, foreign):
+    other_org = _other_org(db)
+    async with _client_for(db, other_org.id, role=Role.DEVELOPER) as (_user, foreign):
         foreign_ip = await _create_intended_parent(foreign)
         foreign_party = await create_party(foreign)
     local_ip = await _create_intended_parent(authed_client)
@@ -1559,14 +1561,15 @@ async def test_propose_with_one_foreign_party_returns_404(
         ip, party = foreign_ip, local_party
     else:
         ip, party = local_ip, foreign_party
-    count = db.query(Match).count()
+    matches = db.query(Match).filter(Match.organization_id.in_((test_auth.org.id, other_org.id)))
+    count = matches.count()
 
     response = await authed_client.post(
         "/matches/", json={f"{kind}_id": party["id"], "intended_parent_id": ip["id"]}
     )
 
     assert response.status_code == 404
-    assert db.query(Match).count() == count
+    assert matches.count() == count
 
 
 async def _foreign_accepted_match(db) -> dict:
@@ -1582,11 +1585,16 @@ async def _foreign_accepted_match(db) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_create_attempt_on_foreign_match_returns_404(authed_client, db):
+async def test_create_attempt_on_foreign_match_returns_404(authed_client, db, test_auth):
     from app.db.models import MatchAttempt
 
     match = await _foreign_accepted_match(db)
-    count = db.query(MatchAttempt).count()
+    attempts = db.query(MatchAttempt).filter(
+        MatchAttempt.organization_id.in_(
+            (test_auth.org.id, _match_row(db, match["id"]).organization_id)
+        )
+    )
+    count = attempts.count()
 
     response = await authed_client.post(
         f"/matches/{match['id']}/attempts", json={"attempt_type": "embryo_transfer"}
@@ -1594,13 +1602,16 @@ async def test_create_attempt_on_foreign_match_returns_404(authed_client, db):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Match not found"
-    assert db.query(MatchAttempt).count() == count
+    assert attempts.count() == count
 
 
 @pytest.mark.asyncio
-async def test_ai_routes_return_404_for_foreign_match(authed_client, db):
+async def test_ai_routes_return_404_for_foreign_match(authed_client, db, test_auth):
     match = await _foreign_accepted_match(db)
-    count = db.query(Task).count()
+    tasks = db.query(Task).filter(
+        Task.organization_id.in_((test_auth.org.id, _match_row(db, match["id"]).organization_id))
+    )
+    count = tasks.count()
 
     bulk = await authed_client.post(
         "/ai/create-bulk-tasks",
@@ -1618,7 +1629,7 @@ async def test_ai_routes_return_404_for_foreign_match(authed_client, db):
     assert bulk.json()["detail"] == "Match not found"
     assert parsed.status_code == 404
     assert parsed.json()["detail"] == "Match not found"
-    assert db.query(Task).count() == count
+    assert tasks.count() == count
 
 
 @pytest.mark.asyncio
@@ -1645,7 +1656,9 @@ async def test_other_org_match_list_and_stats_exclude_foreign_matches(authed_cli
     "method,path,body",
     [("POST", "/matches/", "propose"), *MATCH_MUTATIONS],
 )
-async def test_match_mutations_require_csrf_header(authed_client, db, method, path, body):
+async def test_match_mutations_require_csrf_header(
+    authed_client, db, test_auth, method, path, body
+):
     surrogate = await _create_surrogate(authed_client)
     ip = await _create_intended_parent(authed_client)
     created = await _case(
@@ -1653,7 +1666,7 @@ async def test_match_mutations_require_csrf_header(authed_client, db, method, pa
     )
     if body == "propose":
         body = {"surrogate_id": surrogate["id"], "intended_parent_id": ip["id"]}
-    count = db.query(Match).count()
+    count = db.query(Match).filter_by(organization_id=test_auth.org.id).count()
 
     response = await authed_client.request(
         method, path.format(id=created["id"]), json=body, headers={CSRF_HEADER: "invalid"}
@@ -1661,7 +1674,7 @@ async def test_match_mutations_require_csrf_header(authed_client, db, method, pa
 
     assert response.status_code == 403
     assert "CSRF" in response.json()["detail"]
-    assert db.query(Match).count() == count
+    assert db.query(Match).filter_by(organization_id=test_auth.org.id).count() == count
     assert _match_row(db, created["id"]).status == "under_review"
 
 
@@ -2237,7 +2250,7 @@ async def test_ai_routes_require_record_scope_on_both_parties(
 ):
     ip = await _create_intended_parent(authed_client)
     created = await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client))
-    count = db.query(Task).count()
+    count = db.query(Task).filter_by(organization_id=test_auth.org.id).count()
 
     async with _client_for(db, test_auth.org.id, revoke=(revoked,)) as (_user, client):
         detail = await client.get(f"/matches/{created['id']}")
@@ -2259,7 +2272,7 @@ async def test_ai_routes_require_record_scope_on_both_parties(
             detail.status_code,
             detail.json()["detail"],
         )
-    assert db.query(Task).count() == count
+    assert db.query(Task).filter_by(organization_id=test_auth.org.id).count() == count
 
 
 def _transition_history(db, org_id):
