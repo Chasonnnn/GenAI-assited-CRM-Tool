@@ -2047,6 +2047,93 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).queryByText('Paste the Zapier field list first.')).not.toBeInTheDocument()
     })
 
+    it('lists every active form as a Zapier route and links to mappings only with manage_meta_leads', () => {
+        metaFormsData = [
+            metaFormsData[0],
+            { ...metaFormsData[0], id: 'meta-form-2', form_external_id: '1234567890', form_name: 'Page Intake', page_id: '555', lead_kind: 'egg_donor' as const },
+            { ...metaFormsData[0], id: 'meta-form-3', form_external_id: '999', form_name: 'Retired Intake', page_id: '555', is_active: false },
+        ]
+        const view = render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        let dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Form routing' }))
+
+        const routes = within(dialog).getByRole('table')
+        expect(within(routes).getByText('Zapier Intake')).toBeInTheDocument()
+        expect(within(routes).getByText('Page Intake')).toBeInTheDocument()
+        expect(within(routes).getByText('Egg donor')).toBeInTheDocument()
+        expect(within(routes).queryByText('Retired Intake')).not.toBeInTheDocument()
+        expect(within(routes).queryByRole('columnheader', { name: 'Action' })).not.toBeInTheDocument()
+        expect(within(dialog).queryByRole('link', { name: 'Edit route' })).not.toBeInTheDocument()
+        expect(within(dialog).queryByRole('link', { name: 'Open form mappings' })).not.toBeInTheDocument()
+        view.unmount()
+
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_integrations', 'manage_meta_leads', 'view_donors', 'edit_donors'] },
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Form routing' }))
+        expect(within(dialog).getAllByRole('link', { name: 'Edit route' }).map((link) => link.getAttribute('href'))).toEqual([
+            '/settings/integrations/meta/forms/meta-form-1',
+            '/settings/integrations/meta/forms/meta-form-2',
+        ])
+        expect(within(dialog).getByRole('link', { name: 'Open form mappings' })).toHaveAttribute('href', '/settings/integrations/meta/forms')
+    })
+
+    it('sends the Meta form ID with a Zapier field paste and shows a rejected paste inline', async () => {
+        const detail = 'The pasted field list names form_id but not its value. Enter the Meta form ID, or paste sample data that includes it (form_id: 1234567890).'
+        mockZapierFieldPaste
+            .mockRejectedValueOnce(new ApiError(400, 'Bad Request', detail))
+            .mockResolvedValueOnce({
+                form_id: '1234567890',
+                form_name: null,
+                meta_form_id: 'meta-form-2',
+                field_count: 2,
+                field_keys: ['full_name', 'email'],
+                mapping_url: '/settings/integrations/meta/forms/meta-form-2',
+            })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Form routing' }))
+
+        const paste = ['form_id', 'full_name', 'email'].map((key) => `{{=gives["312"]["${key}"]}}`).join('\n')
+        fireEvent.change(within(dialog).getByLabelText('Paste Zapier Field List'), { target: { value: paste } })
+        fireEvent.click(within(dialog).getByRole('button', { name: /extract fields/i }))
+
+        expect(await within(dialog).findByText(detail)).toBeInTheDocument()
+        expect(mockZapierFieldPaste).toHaveBeenLastCalledWith({ paste, webhook_id: 'abc' })
+
+        fireEvent.change(within(dialog).getByLabelText('Meta form ID (optional)'), { target: { value: ' 1234567890 ' } })
+        fireEvent.click(within(dialog).getByRole('button', { name: /extract fields/i }))
+
+        await waitFor(() => expect(mockZapierFieldPaste).toHaveBeenLastCalledWith({ paste, webhook_id: 'abc', form_id: '1234567890' }))
+        expect(await within(dialog).findByText('Fields detected')).toBeInTheDocument()
+        expect(within(dialog).queryByText(detail)).not.toBeInTheDocument()
+        expect(within(dialog).queryByRole('link', { name: 'Open mapping' })).not.toBeInTheDocument()
+    })
+
+    it('defaults the test lead to the only active form when its page is not Zapier', async () => {
+        metaFormsData = [{ ...metaFormsData[0], form_external_id: '1234567890', page_id: '555' }]
+        mockZapierTestLead.mockResolvedValue({
+            status: 'converted',
+            duplicate: false,
+            meta_lead_id: 'lead-1',
+            surrogate_id: 'surrogate-1',
+            message: 'Stored',
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /send test lead/i }))
+
+        expect(mockZapierTestLead).toHaveBeenCalledWith({ form_id: '1234567890' })
+    })
+
     it('rotates the Resend webhook URL only after confirmation', async () => {
         mockRotateWebhook.mockResolvedValue({ webhook_url: 'https://api.test/webhooks/resend/new' })
 
@@ -2071,6 +2158,9 @@ describe('IntegrationsPage', () => {
             { ...metaFormsData[0], id: 'route-egg', form_name: 'Egg donor inquiry', lead_kind: 'egg_donor' },
             { ...metaFormsData[0], id: 'route-sperm', form_name: 'Sperm donor intake', lead_kind: 'sperm_donor' },
         ]
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_integrations', 'manage_meta_leads', 'view_donors', 'edit_donors'] },
+        })
 
         render(<IntegrationsPage />)
         fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))

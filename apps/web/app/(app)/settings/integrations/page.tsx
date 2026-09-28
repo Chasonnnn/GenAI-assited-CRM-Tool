@@ -967,20 +967,21 @@ function getActiveFieldPasteWebhookId(
     return inbound[0]?.webhook_id ?? ""
 }
 
+// A Zapier payload that carries a Meta page id creates its form under that page id, so every
+// active form can receive Zapier leads; filtering on page_id "zapier" would hide those routes.
+function getActiveZapierRouteForms<T extends { is_active?: boolean }>(forms: T[]): T[] {
+    return forms.filter((form) => form.is_active)
+}
+
 function getSingleZapierFormId(
     forms: Array<{
         is_active?: boolean
-        page_id?: string | null
         form_external_id?: string | null
     }>,
 ) {
-    const activeZapierForms = forms.filter(
-        (form) =>
-            form.is_active &&
-            (form.page_id === "zapier" || form.form_external_id?.startsWith("zapier-"))
-    )
-    if (activeZapierForms.length !== 1) return ""
-    return activeZapierForms[0]?.form_external_id?.trim() ?? ""
+    const activeForms = getActiveZapierRouteForms(forms)
+    if (activeForms.length !== 1) return ""
+    return activeForms[0]?.form_external_id?.trim() ?? ""
 }
 
 function createZapierOutboundDraftKey(
@@ -3705,24 +3706,30 @@ function ZapierFieldPasteCard({
     isDialog,
     inboundWebhooks,
     activeWebhookId,
+    canManageMetaLeads,
     fieldPaste,
     fieldPasteError,
+    fieldPasteFormId,
     fieldPasteResult,
     parsePending,
     onWebhookChange,
     onFieldPasteChange,
+    onFieldPasteFormIdChange,
     onParse,
     onClear,
 }: {
     isDialog: boolean
     inboundWebhooks: ZapierInboundWebhookView[]
     activeWebhookId: string
+    canManageMetaLeads: boolean
     fieldPaste: string
     fieldPasteError: string | null
+    fieldPasteFormId: string
     fieldPasteResult: ZapierFieldPasteResponse | null
     parsePending: boolean
     onWebhookChange: (webhookId: string) => void
     onFieldPasteChange: (value: string) => void
+    onFieldPasteFormIdChange: (value: string) => void
     onParse: () => void
     onClear: () => void
 }) {
@@ -3750,6 +3757,19 @@ function ZapierFieldPasteCard({
                     </p>
                 </div>
             ) : null}
+
+            <div className="space-y-2">
+                <Label htmlFor="zapier-field-paste-form-id">Meta form ID (optional)</Label>
+                <Input
+                    id="zapier-field-paste-form-id"
+                    value={fieldPasteFormId}
+                    onChange={(event) => onFieldPasteFormIdChange(event.target.value)}
+                    className={isDialog ? "w-full" : "w-full md:w-72"}
+                    name="zapier-field-paste-form-id"
+                    inputMode="numeric"
+                    autoComplete="off"
+                />
+            </div>
 
             <ValidatedField
                 id="zapier-field-paste"
@@ -3796,10 +3816,15 @@ function ZapierFieldPasteCard({
                     <AlertTitle>Fields detected</AlertTitle>
                     <AlertDescription>
                         Found {fieldPasteResult.field_count} fields for{" "}
-                        {fieldPasteResult.form_name || fieldPasteResult.form_id}.{" "}
-                        <Link href={fieldPasteResult.mapping_url} className="text-primary underline">
-                            Open mapping
-                        </Link>
+                        {fieldPasteResult.form_name || fieldPasteResult.form_id}.
+                        {canManageMetaLeads ? (
+                            <>
+                                {" "}
+                                <Link href={fieldPasteResult.mapping_url} className="text-primary underline">
+                                    Open mapping
+                                </Link>
+                            </>
+                        ) : null}
                     </AlertDescription>
                 </Alert>
             ) : null}
@@ -3874,16 +3899,22 @@ function ZapierTestLeadControls({
 }
 
 function ZapierFormRouting({
+    canManageMetaLeads,
     forms,
     metaFormsLoading,
     mappingHref,
     fieldPasteContent,
 }: {
+    canManageMetaLeads: boolean
     forms: ZapierMetaFormOption[]
     metaFormsLoading: boolean
     mappingHref: string
     fieldPasteContent: ReactNode
 }) {
+    // Route links open the Meta form mapping page, which requires manage_meta_leads.
+    const routeHeaders = canManageMetaLeads
+        ? ZAPIER_FORM_ROUTE_HEADERS
+        : ZAPIER_FORM_ROUTE_HEADERS.filter((header) => header.label !== "Action")
     return (
         <div className="space-y-4">
             {metaFormsLoading ? (
@@ -3906,7 +3937,7 @@ function ZapierFormRouting({
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    {ZAPIER_FORM_ROUTE_HEADERS.map((header) => (
+                                    {routeHeaders.map((header) => (
                                         <TableHead key={header.label} className={header.className}>
                                             {header.label}
                                         </TableHead>
@@ -3918,7 +3949,7 @@ function ZapierFormRouting({
                                     <TableRow key={form.id}>
                                         <TableCell>
                                             <div className="font-medium">
-                                                {form.form_name || "Unnamed Zapier form"}
+                                                {form.form_name || "Unnamed form"}
                                             </div>
                                             <div className="text-xs text-muted-foreground">
                                                 {form.form_external_id || "Form ID unavailable"}
@@ -3930,15 +3961,17 @@ function ZapierFormRouting({
                                                 {form.mapping_status === "mapped" ? "Mapped" : "Needs mapping"}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                render={<Link href={`/settings/integrations/meta/forms/${form.id}`} />}
-                                            >
-                                                Edit route
-                                            </Button>
-                                        </TableCell>
+                                        {canManageMetaLeads ? (
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    render={<Link href={`/settings/integrations/meta/forms/${form.id}`} />}
+                                                >
+                                                    Edit route
+                                                </Button>
+                                            </TableCell>
+                                        ) : null}
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -3951,7 +3984,7 @@ function ZapierFormRouting({
                 <CardHeader className="pb-3">
                     <div className="flex items-center justify-between gap-3">
                         <CardTitle className="text-base">Add or refresh a route</CardTitle>
-                        {forms.length ? (
+                        {forms.length && canManageMetaLeads ? (
                             <Button variant="outline" size="sm" render={<Link href={mappingHref} />}>
                                 Open form mappings
                             </Button>
@@ -4609,6 +4642,7 @@ function useZapierWebhookController(variant: "page" | "dialog") {
     const permissions = effectivePermissions?.permissions ?? []
     const canEditDonorSettings = user?.role === "developer"
         || (permissions.includes("view_donors") && permissions.includes("edit_donors"))
+    const canManageMetaLeads = user?.role === "developer" || permissions.includes("manage_meta_leads")
     const { data: pipelines } = usePipelines("surrogate")
     const eggDonorPipelinesQuery = usePipelines("egg_donor")
     const spermDonorPipelinesQuery = usePipelines("sperm_donor")
@@ -4647,6 +4681,7 @@ function useZapierWebhookController(variant: "page" | "dialog") {
     const [fieldPaste, setFieldPaste] = useState('')
     const [fieldPasteError, setFieldPasteError] = useState<string | null>(null)
     const [fieldPasteWebhookId, setFieldPasteWebhookId] = useState('')
+    const [fieldPasteFormId, setFieldPasteFormId] = useState('')
     const [fieldPasteResult, setFieldPasteResult] = useState<ZapierFieldPasteResponse | null>(null)
     const sendTestLead = useZapierTestLead()
     const sendOutboundTest = useZapierOutboundTest()
@@ -4848,9 +4883,13 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         }
         setFieldPasteError(null)
         try {
-            const payload: { paste: string; webhook_id?: string } = { paste }
+            const payload: { paste: string; webhook_id?: string; form_id?: string } = { paste }
             if (activeFieldPasteWebhookId) {
                 payload.webhook_id = activeFieldPasteWebhookId
+            }
+            const formId = fieldPasteFormId.trim()
+            if (formId) {
+                payload.form_id = formId
             }
             const result = await parseFieldPaste.mutateAsync(payload)
             setFieldPasteResult(result)
@@ -4858,13 +4897,18 @@ function useZapierWebhookController(variant: "page" | "dialog") {
                 setTestFormId(result.form_id)
             }
             toast.success(`Detected ${result.field_count} fields`)
-        } catch {
-            toast.error("Unable to parse fields. Check the pasted data and try again.")
+        } catch (error) {
+            const message = getActionErrorMessage(
+                error,
+                "Unable to parse fields. Check the pasted data and try again.",
+            )
+            if (message) setFieldPasteError(message)
         }
     }
 
     const handleFieldPasteClear = () => {
         setFieldPaste('')
+        setFieldPasteFormId('')
         setFieldPasteResult(null)
         setFieldPasteError(null)
     }
@@ -4958,11 +5002,7 @@ function useZapierWebhookController(variant: "page" | "dialog") {
     const showHeading = variant === "page"
     const isDialog = variant === "dialog"
     const containerClass = showHeading ? "border-t pt-6" : "space-y-4"
-    const zapierForms = metaForms.filter(
-        (form) =>
-            form.is_active &&
-            (form.page_id === "zapier" || form.form_external_id?.startsWith("zapier-"))
-    )
+    const zapierForms = getActiveZapierRouteForms(metaForms)
     const singleZapierForm = zapierForms.length === 1 ? zapierForms[0] : null
     const mappingHref = singleZapierForm
         ? `/settings/integrations/meta/forms/${singleZapierForm.id}`
@@ -4972,6 +5012,7 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         activeFieldPasteWebhookId,
         activeTestFormId,
         applyRecommendedBucketMapping,
+        canManageMetaLeads,
         containerClass,
         createInboundPending: createInboundWebhook.isPending,
         deletingWebhookId,
@@ -4982,6 +5023,7 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         donorSettingsAvailable,
         fieldPaste,
         fieldPasteError,
+        fieldPasteFormId,
         fieldPasteResult,
         getStageKeyLabel,
         handleCreateInbound,
@@ -5014,6 +5056,7 @@ function useZapierWebhookController(variant: "page" | "dialog") {
         sendOutboundTestPending: sendOutboundTest.isPending,
         sendTestLeadPending: sendTestLead.isPending,
         setFieldPaste,
+        setFieldPasteFormId,
         setFieldPasteWebhookId,
         setOutboundSecret,
         setOutboundTestLeadId,
@@ -5133,6 +5176,7 @@ function ZapierWebhookSection({
 
                 <TabsContent value="routing" keepMounted className="space-y-4">
                     <ZapierFormRouting
+                        canManageMetaLeads={controller.canManageMetaLeads}
                         forms={controller.zapierForms}
                         metaFormsLoading={controller.metaFormsLoading}
                         mappingHref={controller.mappingHref}
@@ -5141,12 +5185,15 @@ function ZapierWebhookSection({
                             isDialog={controller.isDialog}
                             inboundWebhooks={controller.inboundWebhooks}
                             activeWebhookId={controller.activeFieldPasteWebhookId}
+                            canManageMetaLeads={controller.canManageMetaLeads}
                             fieldPaste={controller.fieldPaste}
                             fieldPasteError={controller.fieldPasteError}
+                            fieldPasteFormId={controller.fieldPasteFormId}
                             fieldPasteResult={controller.fieldPasteResult}
                             parsePending={controller.parseFieldPastePending}
                             onWebhookChange={controller.setFieldPasteWebhookId}
                             onFieldPasteChange={controller.handleFieldPasteChange}
+                            onFieldPasteFormIdChange={controller.setFieldPasteFormId}
                             onParse={() => {
                                 void controller.handleFieldPaste()
                             }}
