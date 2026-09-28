@@ -145,11 +145,11 @@ def build_pipeline_dependency_graph(
     }
 
     if pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+        # Archived intended parents are restored onto their stored stage, so count them too.
         entity_counts = dict(
             db.query(IntendedParent.stage_id, func.count(IntendedParent.id))
             .filter(
                 IntendedParent.organization_id == pipeline.organization_id,
-                IntendedParent.is_archived.is_(False),
                 IntendedParent.stage_id.is_not(None),
             )
             .group_by(IntendedParent.stage_id)

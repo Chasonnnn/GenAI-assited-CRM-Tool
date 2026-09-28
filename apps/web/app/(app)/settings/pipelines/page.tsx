@@ -229,6 +229,7 @@ const REMAP_REASON_LABELS: Record<string, string> = {
     campaigns: "Campaign filters",
     intelligent_suggestions: "Intelligent suggestions",
     integrations: "Integration mappings",
+    records: "Records",
     workflows: "Workflow references",
 }
 
@@ -325,7 +326,8 @@ function getVisibleCapabilityLabels(entityType: PipelineEntityType) {
 
 function getEntityRecordLabel(entityType: PipelineEntityType, count: number) {
     if (entityType === "intended_parent") {
-        return `${count} active record${count === 1 ? "" : "s"}`
+        // Includes archived intended parents, which keep their stage.
+        return `${count} record${count === 1 ? "" : "s"}`
     }
     if (entityType === "egg_donor") {
         return `${count} active egg donor${count === 1 ? "" : "s"}`

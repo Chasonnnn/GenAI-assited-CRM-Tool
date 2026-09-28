@@ -1221,6 +1221,125 @@ def test_apply_intended_parent_pipeline_remap_leaves_surrogate_workflows_unchang
     assert surrogate_workflow.conditions == conditions_before
 
 
+def _intended_parent_draft_without(db, pipeline: Pipeline, removed: PipelineStage) -> list[dict]:
+    kept_stages = [
+        stage
+        for stage in pipeline_service.get_stages(db, pipeline.id, include_inactive=True)
+        if stage.is_active and stage.id != removed.id
+    ]
+    return [
+        {
+            "id": str(stage.id),
+            "stage_key": stage.stage_key,
+            "slug": stage.slug,
+            "label": stage.label,
+            "color": stage.color,
+            "order": index + 1,
+            "category": stage.stage_type,
+            "is_active": stage.is_active,
+            "semantics": stage.semantics,
+        }
+        for index, stage in enumerate(kept_stages)
+    ]
+
+
+def test_apply_intended_parent_pipeline_remap_moves_archived_records(db, test_org, test_user):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=INTENDED_PARENT_PIPELINE_ENTITY
+    )
+    custom_stage = pipeline_service.create_stage(
+        db,
+        pipeline.id,
+        slug="secondary_review",
+        label="Secondary Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    target_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "new")
+    assert target_stage is not None
+    active_record = _create_intended_parent_for_stage(db, org_id=test_org.id, stage=custom_stage)
+    archived_record = _create_intended_parent_for_stage(db, org_id=test_org.id, stage=custom_stage)
+    archived_record.is_archived = True
+    archived_record.archived_at = datetime.now(UTC)
+    db.commit()
+
+    pipeline_service.apply_pipeline_draft(
+        db,
+        pipeline,
+        name=pipeline.name,
+        stages=_intended_parent_draft_without(db, pipeline, custom_stage),
+        feature_config=pipeline.feature_config,
+        remaps=[
+            {
+                "removed_stage_key": custom_stage.stage_key,
+                "target_stage_key": target_stage.stage_key,
+            }
+        ],
+        user_id=test_user.id,
+    )
+
+    db.refresh(active_record)
+    db.refresh(archived_record)
+    assert active_record.stage_id == target_stage.id
+    assert archived_record.stage_id == target_stage.id
+    assert archived_record.status == target_stage.stage_key
+
+
+def test_apply_intended_parent_pipeline_draft_requires_remap_for_archived_records(
+    db, test_org, test_user
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=INTENDED_PARENT_PIPELINE_ENTITY
+    )
+    custom_stage = pipeline_service.create_stage(
+        db,
+        pipeline.id,
+        slug="secondary_review",
+        label="Secondary Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    archived_record = _create_intended_parent_for_stage(db, org_id=test_org.id, stage=custom_stage)
+    archived_record.is_archived = True
+    archived_record.archived_at = datetime.now(UTC)
+    db.commit()
+    draft_stages = _intended_parent_draft_without(db, pipeline, custom_stage)
+
+    preview = pipeline_service.build_pipeline_draft_preview(
+        db,
+        pipeline,
+        name=pipeline.name,
+        stages=draft_stages,
+        feature_config=pipeline.feature_config,
+        remaps=[],
+    )
+    assert preview["required_remaps"] == [
+        {
+            "stage_key": custom_stage.stage_key,
+            "label": custom_stage.label,
+            "surrogate_count": 1,
+            "reasons": ["records"],
+        }
+    ]
+    with pytest.raises(ValueError, match="requires a remap target before removal"):
+        pipeline_service.apply_pipeline_draft(
+            db,
+            pipeline,
+            name=pipeline.name,
+            stages=draft_stages,
+            feature_config=pipeline.feature_config,
+            remaps=[],
+            user_id=test_user.id,
+        )
+
+    db.refresh(custom_stage)
+    db.refresh(archived_record)
+    assert custom_stage.is_active is True
+    assert archived_record.stage_id == custom_stage.id
+
+
 def test_delete_donor_stage_migrates_matching_subtype_records(db, test_org, test_user):
     pipeline = pipeline_service.get_or_create_default_pipeline(
         db, test_org.id, test_user.id, entity_type=SPERM_DONOR_PIPELINE_ENTITY

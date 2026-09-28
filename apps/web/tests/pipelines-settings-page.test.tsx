@@ -1120,6 +1120,54 @@ describe("PipelinesSettingsPage", () => {
         expect((screen.getByLabelText("Stage 4 color") as HTMLInputElement).value).toBe("#4f46e5")
     })
 
+    it("labels intended-parent record remap reasons", () => {
+        mockUsePipelines.mockImplementation(() => ({
+            data: [intendedParentPipelineFixture],
+            isLoading: false,
+        }))
+        mockUsePipeline.mockImplementation(() => ({
+            data: intendedParentPipelineFixture,
+            isLoading: false,
+        }))
+        mockUsePipelineDependencyGraph.mockImplementation(() => ({
+            data: intendedParentDependencyGraphFixture,
+            isLoading: false,
+        }))
+        mockUsePipelineChangePreview.mockImplementation((_id: string | null, draft: unknown) => ({
+            data: draft
+                ? {
+                      ...intendedParentPreviewFixture,
+                      required_remaps: [
+                          {
+                              stage_key: "secondary_review",
+                              label: "Secondary Review",
+                              surrogate_count: 1,
+                              reasons: ["records", "workflows"],
+                          },
+                      ],
+                  }
+                : null,
+            isLoading: false,
+        }))
+
+        vi.useFakeTimers()
+        try {
+            render(<PipelinesSettingsPage />)
+
+            fireEvent.click(screen.getByRole("button", { name: "Add Custom Stage" }))
+            act(() => {
+                vi.advanceTimersByTime(1200)
+            })
+
+            expect(
+                screen.getByText("Secondary Review: Records, Workflow references"),
+            ).toBeInTheDocument()
+            expect(screen.queryByText(/records, workflows/)).not.toBeInTheDocument()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
     it("rehydrates saved gray custom stages with suggested colors", () => {
         const colorizedPipelineFixture = {
             ...pipelineFixture,
@@ -1663,7 +1711,7 @@ describe("PipelinesSettingsPage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: /edit details for ready to match/i }))
 
-        expect(screen.getByText("2 active records")).toBeInTheDocument()
+        expect(screen.getByText("2 records")).toBeInTheDocument()
         expect(screen.queryByText("Integration bucket")).not.toBeInTheDocument()
         expect(screen.queryByText("Suggestion profile")).not.toBeInTheDocument()
         expect(screen.queryByText("Analytics bucket")).not.toBeInTheDocument()

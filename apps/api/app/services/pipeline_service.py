@@ -2076,7 +2076,6 @@ def apply_pipeline_draft(
                     .filter(
                         IntendedParent.organization_id == pipeline.organization_id,
                         IntendedParent.stage_id == stage.id,
-                        IntendedParent.is_archived.is_(False),
                     )
                     .update(
                         {

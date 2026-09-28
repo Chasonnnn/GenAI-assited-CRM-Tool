@@ -487,7 +487,7 @@ def build_pipeline_change_preview(
                 dependency_graph.get("entity_type")
             )
             active_reason_by_entity = {
-                INTENDED_PARENT_PIPELINE_ENTITY: "active_records",
+                INTENDED_PARENT_PIPELINE_ENTITY: "records",
                 SURROGATE_PIPELINE_ENTITY: "active_surrogates",
             }
             reasons.append(active_reason_by_entity.get(dependency_entity_type, "active_donors"))
