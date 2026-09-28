@@ -788,6 +788,12 @@ def test_surrogate_conversion_failure_alerts_only_for_real_leads(
         "_mark_conversion_failed",
         lambda _db, _error, **kwargs: failures.append(kwargs["emit_alert"]),
     )
+    review_tasks = []
+    monkeypatch.setattr(
+        meta_lead_service,
+        "_ensure_review_task_for_mapping_conversion_failure",
+        lambda *args: review_tasks.append(args),
+    )
 
     surrogate, error = meta_lead_service.convert_to_surrogate_with_mapping(
         db, lead, form.mapping_rules
@@ -796,6 +802,26 @@ def test_surrogate_conversion_failure_alerts_only_for_real_leads(
     assert surrogate is None
     assert error
     assert failures == [not zapier_test]
+    assert len(review_tasks) == (0 if zapier_test else 1)
+
+
+@pytest.mark.asyncio
+async def test_zapier_test_lead_on_an_unmapped_form_opens_no_review_task(
+    authed_client, db, test_org, test_user
+):
+    form = _create_mapped_meta_form(
+        db, test_org.id, test_user.id, form_external_id="form_unmapped", lead_kind="surrogate"
+    )
+    form.mapping_status = "unmapped"
+    db.commit()
+
+    res = await authed_client.post(
+        "/integrations/zapier/test-lead", json={"form_id": "form_unmapped"}
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "awaiting_mapping"
+    assert _zapier_test_side_effects(db, test_org.id) == (0, 0, 0)
 
 
 @pytest.mark.asyncio

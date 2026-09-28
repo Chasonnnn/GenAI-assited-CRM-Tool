@@ -527,7 +527,8 @@ def convert_to_surrogate_with_mapping(
             unmapped_fields=unmapped_fields,
             emit_alert=not is_test_lead,
         )
-        _ensure_review_task_for_mapping_conversion_failure(db, organization_id, meta_form_id, e)
+        if not is_test_lead:
+            _ensure_review_task_for_mapping_conversion_failure(db, organization_id, meta_form_id, e)
         return None, f"Conversion failed: {_safe_conversion_error(e)}"
 
 
@@ -632,7 +633,10 @@ def convert_to_donor_with_mapping(
             unmapped_fields=unmapped_fields,
             emit_alert=not is_test_lead,
         )
-        _ensure_review_task_for_mapping_conversion_failure(db, organization_id, meta_form_id, exc)
+        if not is_test_lead:
+            _ensure_review_task_for_mapping_conversion_failure(
+                db, organization_id, meta_form_id, exc
+            )
         return None, f"Conversion failed: {_safe_conversion_error(exc)}"
 
     try:
@@ -742,7 +746,8 @@ def process_stored_meta_lead(
         meta_lead.status = "awaiting_mapping"
         db.commit()
         reason = "Mapping missing" if form.mapping_status != "mapped" else "Mapping outdated"
-        meta_form_mapping_service.ensure_mapping_review_task(db, form, reason=reason)
+        if not _is_zapier_test_lead(meta_lead):
+            meta_form_mapping_service.ensure_mapping_review_task(db, form, reason=reason)
         logger.info(
             "Meta lead %s awaiting mapping for form %s",
             meta_lead.meta_lead_id,
