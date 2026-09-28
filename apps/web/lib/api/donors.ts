@@ -13,11 +13,13 @@ import type {
     DonorType,
     DonorUpdate,
 } from "@/lib/types/donor"
+import type { SurrogateSource } from "@/lib/types/surrogate"
 
 export interface DonorFilters {
     donor_type: DonorType
     stage_id?: string
     state?: string
+    source?: SurrogateSource
     q?: string
     owner_id?: string
     dynamic_filter?: "attention_stuck"
@@ -43,6 +45,7 @@ export async function listDonors(filters: DonorFilters): Promise<DonorListRespon
     const params = new URLSearchParams({ donor_type: filters.donor_type })
     if (filters.stage_id) params.set("stage_id", filters.stage_id)
     if (filters.state) params.set("state", filters.state)
+    if (filters.source) params.set("source", filters.source)
     if (filters.q) params.set("q", filters.q)
     if (filters.owner_id) params.set("owner_id", filters.owner_id)
     if (filters.dynamic_filter) params.set("dynamic_filter", filters.dynamic_filter)

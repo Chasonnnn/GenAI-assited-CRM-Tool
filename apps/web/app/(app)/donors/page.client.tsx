@@ -40,6 +40,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
 import type { DonorSortBy } from "@/lib/api/donors"
 import type { PipelineStage } from "@/lib/api/pipelines"
+import {
+    DONOR_SOURCE_LABELS,
+    getDonorSourceFilterLabel,
+    getDonorSourceLabel,
+    isDonorSource,
+    type DonorSource,
+} from "@/lib/donor-source-labels"
 import { getActiveDonorStages, getDonorStageLabel, getDonorStageStyle } from "@/lib/donor-stage-utils"
 import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
 import { useCreateDonor, useDonors } from "@/lib/hooks/use-donors"
@@ -50,6 +57,7 @@ import { formatLocalDate, parseDateInput } from "@/lib/utils/date"
 import { getDateRangeFilterLabel } from "@/lib/date-range-filter"
 import { useFormValidation } from "@/lib/forms/use-form-validation"
 import { EMAIL_INVALID_MESSAGE, validateEmail, validateRequired } from "@/lib/forms/validators"
+import { toSelectOptions } from "@/lib/select-labels"
 import { getStageOptionLabel, pipelineStageOptions, type StageOption } from "@/lib/stage-options"
 import { toast } from "@/components/ui/toast"
 import {
@@ -69,6 +77,12 @@ const DONOR_SORT_FIELDS: DonorSortBy[] = [
     "created_at",
 ]
 const DATE_RANGE_PRESETS: DateRangePreset[] = ["all", "today", "week", "month", "custom"]
+const SOURCE_OPTIONS = toSelectOptions(DONOR_SOURCE_LABELS)
+type SourceFilter = "all" | DonorSource
+
+function parseSourceFilter(value: string | null): SourceFilter {
+    return isDonorSource(value) ? value : "all"
+}
 
 function parseDonorType(value: string | null): DonorType {
     return value === "sperm" ? "sperm" : "egg"
@@ -146,6 +160,7 @@ function buildDonorsHref(
         new?: boolean
         dynamicFilter?: "attention_stuck" | null
         ownerId?: string | null
+        source?: SourceFilter
         range?: DateRangePreset
         rangeDates?: { from: Date | undefined; to: Date | undefined }
         sortBy?: DonorSortBy | null
@@ -185,6 +200,10 @@ function buildDonorsHref(
     if (update.ownerId !== undefined) {
         if (update.ownerId) params.set("owner_id", update.ownerId)
         else params.delete("owner_id")
+    }
+    if (update.source !== undefined) {
+        if (update.source === "all") params.delete("source")
+        else params.set("source", update.source)
     }
     if (update.range !== undefined) {
         if (update.range === "all") {
@@ -301,6 +320,7 @@ function DonorListCard({
                                 <TableHead>Phone</TableHead>
                                 <SortableTableHead column="state" label="State" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
                                 <SortableTableHead column="education" label="Education" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
+                                <TableHead>Source</TableHead>
                                 <SortableTableHead column="stage" label="Stage" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
                                 <SortableTableHead column="created_at" label="Created" currentSort={sortBy} currentOrder={sortOrder} onSort={onSort} />
                             </TableRow>
@@ -321,6 +341,11 @@ function DonorListCard({
                                     <TableCell className="text-muted-foreground">{donor.phone || "—"}</TableCell>
                                     <TableCell className="text-muted-foreground">{donor.state || "—"}</TableCell>
                                     <TableCell className="text-muted-foreground">{donor.education || "—"}</TableCell>
+                                    <TableCell>
+                                        {donor.source ? (
+                                            <Badge variant="secondary">{getDonorSourceLabel(donor.source)}</Badge>
+                                        ) : "—"}
+                                    </TableCell>
                                     <TableCell>
                                         <div className="flex flex-wrap justify-center gap-1">
                                             <Badge variant="outline" style={getDonorStageStyle(stages, donor)}>
@@ -398,6 +423,7 @@ function getRecordStatusFilterLabel(value: string | null | undefined): string {
 function DonorsToolbar({
     view,
     onArchivedChange,
+    onSourceChange,
     onDatePresetChange,
     onCustomDateChange,
     onStageChange,
@@ -406,6 +432,7 @@ function DonorsToolbar({
 }: {
     view: {
         showArchived: boolean
+        sourceFilter: SourceFilter
         dateRange: DateRangePreset
         customRange: { from: Date | undefined; to: Date | undefined }
         stageFilter: string
@@ -414,13 +441,14 @@ function DonorsToolbar({
         chips: FilterChip[]
     }
     onArchivedChange: (archived: boolean) => void
+    onSourceChange: (source: SourceFilter) => void
     onDatePresetChange: (range: DateRangePreset) => void
     onCustomDateChange: (range: { from: Date | undefined; to: Date | undefined }) => void
     onStageChange: (stage: string) => void
     onSearchChange: (value: string) => void
     onClearAll: () => void
 }) {
-    const { showArchived, dateRange, customRange, stageFilter, stageOptions, search, chips } = view
+    const { showArchived, sourceFilter, dateRange, customRange, stageFilter, stageOptions, search, chips } = view
     const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false)
     return (
         <ListToolbar
@@ -444,8 +472,29 @@ function DonorsToolbar({
                     <MoreFiltersPopover
                         open={isMoreFiltersOpen}
                         onOpenChange={setIsMoreFiltersOpen}
-                        active={showArchived}
+                        active={showArchived || sourceFilter !== "all"}
                     >
+                        <div className="grid gap-2">
+                            <Label>Source</Label>
+                            <Select
+                                value={sourceFilter}
+                                onValueChange={(value) => onSourceChange(parseSourceFilter(value))}
+                            >
+                                <SelectTrigger aria-label="Filter by source">
+                                    <SelectValue>
+                                        {(value: string | null) => getDonorSourceFilterLabel(value)}
+                                    </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">{getDonorSourceFilterLabel("all")}</SelectItem>
+                                    {SOURCE_OPTIONS.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                         <div className="grid gap-2">
                             <Label>Record status</Label>
                             <Select
@@ -498,6 +547,7 @@ export default function DonorsPageClient() {
         ? "attention_stuck"
         : null
     const ownerId = searchParams.get("owner_id")
+    const sourceFilter = parseSourceFilter(searchParams.get("source"))
     const dateRange = parseDateRange(searchParams.get("range"))
     const customRange = {
         from: parseDate(searchParams.get("from")),
@@ -527,6 +577,7 @@ export default function DonorsPageClient() {
         ...(showArchived ? { include_archived: true, archived_only: true } : {}),
         ...(dynamicFilter ? { dynamic_filter: dynamicFilter } : {}),
         ...(ownerId ? { owner_id: ownerId } : {}),
+        ...(sourceFilter !== "all" ? { source: sourceFilter } : {}),
         ...getCreatedDateParams(dateRange, customRange),
         ...(sortBy ? { sort_by: sortBy, sort_order: sortOrder } : {}),
     })
@@ -542,7 +593,7 @@ export default function DonorsPageClient() {
     const totalPages = data?.pages ?? 1
     const isFiltered = Boolean(
         committedSearch || stageFilter !== "all" || showArchived || dynamicFilter || ownerId ||
-        dateRange !== "all",
+        sourceFilter !== "all" || dateRange !== "all",
     )
     const stageOptions = pipelineStageOptions(stages)
     const currentListHref = buildDonorsHref(query, { new: false })
@@ -579,6 +630,7 @@ export default function DonorsPageClient() {
             archived: false,
             dynamicFilter: null,
             ownerId: null,
+            source: "all",
             range: "all",
             page: 1,
         })
@@ -628,6 +680,11 @@ export default function DonorsPageClient() {
             key: "date",
             label: `Date: ${getDateRangeFilterLabel(dateRange, customRange)}`,
             onRemove: () => setUrl({ range: "all", page: 1 }),
+        }] : []),
+        ...(sourceFilter !== "all" ? [{
+            key: "source",
+            label: `Source: ${getDonorSourceFilterLabel(sourceFilter)}`,
+            onRemove: () => setUrl({ source: "all", page: 1 }),
         }] : []),
         ...(showArchived ? [{
             key: "archive",
@@ -690,6 +747,7 @@ export default function DonorsPageClient() {
                 <DonorsToolbar
                     view={{
                         showArchived,
+                        sourceFilter,
                         dateRange,
                         customRange,
                         stageFilter,
@@ -698,6 +756,7 @@ export default function DonorsPageClient() {
                         chips: filterChips,
                     }}
                     onArchivedChange={(archived) => setUrl({ archived, page: 1 })}
+                    onSourceChange={(source) => setUrl({ source, page: 1 })}
                     onDatePresetChange={(range) => setUrl({
                         range,
                         ...(range === "custom" ? { rangeDates: customRange } : {}),

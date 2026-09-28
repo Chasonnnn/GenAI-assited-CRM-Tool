@@ -92,6 +92,7 @@ describe("DonorsPage", () => {
         mockSearchParams.delete("to")
         mockSearchParams.delete("sort_by")
         mockSearchParams.delete("sort_order")
+        mockSearchParams.delete("source")
         mockRouterReplace.mockReset()
         mockUseDonors.mockReset()
         mockCreateDonor.mockReset()
@@ -275,6 +276,32 @@ describe("DonorsPage", () => {
         expect(mockUseDonors).toHaveBeenCalledWith(
             expect.objectContaining({ include_archived: true, archived_only: true }),
         )
+    })
+
+    it("labels the Source column and filters by a URL-backed source in More Filters", async () => {
+        mockSearchParams.set("source", "meta")
+
+        render(<DonorsPage />)
+
+        expect(screen.getByRole("columnheader", { name: "Source" })).toBeInTheDocument()
+        expect(screen.getByText("Manual")).toHaveAttribute("data-slot", "badge")
+        expect(mockUseDonors).toHaveBeenCalledWith(expect.objectContaining({ source: "meta" }))
+        fireEvent.click(screen.getByRole("button", { name: "More Filters" }))
+        const trigger = await screen.findByRole("combobox", { name: "Filter by source" })
+        expect(trigger).toHaveTextContent("Meta")
+        expect(trigger).not.toHaveTextContent("meta")
+
+        fireEvent.click(screen.getByRole("button", { name: "Remove filter: Source: Meta" }))
+        expect(mockRouterReplace).toHaveBeenLastCalledWith("/donors", { scroll: false })
+    })
+
+    it("ignores an unknown source value instead of forwarding it", () => {
+        mockSearchParams.set("source", "Meta")
+
+        render(<DonorsPage />)
+
+        expect(mockUseDonors).toHaveBeenCalledWith(expect.not.objectContaining({ source: "Meta" }))
+        expect(screen.queryByRole("button", { name: /Remove filter: Source/ })).not.toBeInTheDocument()
     })
 
     it("keeps the type tabs above a Stage, Date, More Filters, search toolbar", () => {
