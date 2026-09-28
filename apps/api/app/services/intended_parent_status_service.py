@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.permissions import PermissionKey as P
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.db.enums import AuditEventType, Role
 from app.db.models import (
@@ -19,7 +20,7 @@ from app.db.models import (
     StatusChangeRequest,
     User,
 )
-from app.services import pipeline_semantics_service
+from app.services import permission_service, pipeline_semantics_service
 from app.utils.datetime_parsing import normalize_effective_at
 
 
@@ -152,7 +153,10 @@ def change_status(
         raise ValueError("Reason required for backdated or regressed status changes")
 
     if is_regression:
-        if role_str in {Role.ADMIN.value, Role.DEVELOPER.value}:
+        # Whoever may approve status corrections applies their own regression directly.
+        if permission_service.check_permission(
+            db, ip.organization_id, user_id, role_str, P.APPROVE_STATUS_CHANGE_REQUESTS.value
+        ):
             return _apply_with_audit(
                 db,
                 ip=ip,

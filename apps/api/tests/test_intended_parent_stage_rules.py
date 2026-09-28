@@ -347,3 +347,49 @@ async def test_match_accept_allows_intended_parent_on_stage_eligible_for_matchin
 
     assert response.status_code == 200, response.text
     assert _stage_id(db, ip["id"]) == _get_stage(db, test_org.id, "matched").id
+
+
+APPROVE = "approve_status_change_requests"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "policy,role,grant,revoke,expected",
+    [
+        (1, Role.CASE_MANAGER, (APPROVE,), (), "applied"),
+        (2, Role.CASE_MANAGER, (), (), "applied"),
+        (1, Role.ADMIN, (), (APPROVE,), "pending_approval"),
+    ],
+    ids=["v1_granted_case_manager", "v2_granted_case_manager", "v1_revoked_admin"],
+)
+async def test_regression_self_approval_follows_approve_permission(
+    db, test_org, authed_client, policy, role, grant, revoke, expected
+):
+    if policy == 2:
+        _activate_v2(db, test_org.id)
+        _set_role_permission(db, test_org.id, Role.CASE_MANAGER, APPROVE, True)
+    new = _get_stage(db, test_org.id, "new")
+    ready = _get_stage(db, test_org.id, "ready_to_match")
+    ip = await _create_intended_parent(authed_client)
+    moved = await authed_client.patch(
+        f"/intended-parents/{ip['id']}/status", json={"stage_id": str(ready.id)}
+    )
+    assert moved.status_code == 200, moved.text
+
+    async with _client_for(db, test_org.id, role=role, grant=grant, revoke=revoke) as (
+        user,
+        client,
+    ):
+        response = await client.patch(
+            f"/intended-parents/{ip['id']}/status",
+            json={"stage_id": str(new.id), "reason": "Requested correction"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == expected
+    if expected == "applied":
+        assert _stage_id(db, ip["id"]) == new.id
+        assert _latest_history(db, ip["id"]).approved_by_user_id == user.id
+    else:
+        assert _stage_id(db, ip["id"]) == ready.id
+        assert response.json()["request_id"] is not None
