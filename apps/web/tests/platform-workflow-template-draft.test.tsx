@@ -38,7 +38,7 @@ const workflowOptions = vi.hoisted(() => ({
     condition_fields: [],
     users: [],
     queues: [],
-    forms: [],
+    forms: [] as Array<{ id: string; name: string; lead_kind?: string; lead_kinds?: string[] }>,
     action_types_by_trigger: {},
 }))
 
@@ -133,6 +133,7 @@ describe("platform workflow template draft ownership", () => {
         workflowOptionsMocks.use.mockReset()
         workflowOptions.statuses = []
         workflowOptions.trigger_types = []
+        workflowOptions.forms = []
         mutationMocks.update.mockImplementation(async () => ({
             ...templateState.data,
             current_version: templateState.data.current_version + 1,
@@ -644,6 +645,67 @@ describe("platform workflow template draft ownership", () => {
                     trigger_type: "status_changed",
                     trigger_config: {},
                 }),
+            })
+        })
+    })
+
+    describe("promote intake lead options", () => {
+        const promoteAction = {
+            action_type: "promote_intake_lead",
+            source: "website",
+            is_priority: true,
+            assign_to_user: true,
+        }
+        const renderPromoteTemplate = (triggerConfig: Record<string, string>) => {
+            templateState.data = {
+                ...templateState.data,
+                draft: {
+                    ...templateState.data.draft,
+                    subject_type: "intake_lead",
+                    trigger_type: "intake_lead_created",
+                    trigger_config: triggerConfig,
+                    actions: [promoteAction],
+                },
+            }
+            mutationMocks.update.mockResolvedValue(templateState.data)
+            render(<PlatformWorkflowTemplatePage />)
+        }
+
+        it.each([
+            { source: "donor lead type", triggerConfig: { lead_type: "egg_donor" } },
+            { source: "donor form", triggerConfig: { form_id: "form-sperm-donor" } },
+        ])("hides and drops surrogate-only options for a $source", async ({ triggerConfig }) => {
+            workflowOptions.forms = [
+                { id: "form-sperm-donor", name: "Sperm Donor Application", lead_kind: "sperm_donor" },
+            ]
+            renderPromoteTemplate(triggerConfig)
+
+            expect(screen.queryByText("Mark as priority")).not.toBeInTheDocument()
+            expect(screen.queryByText("Assign to workflow owner if available")).not.toBeInTheDocument()
+            fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+            await waitFor(() => {
+                expect(mutationMocks.update).toHaveBeenCalledWith({
+                    id: "workflow-template-1",
+                    payload: expect.objectContaining({
+                        actions: [{ action_type: "promote_intake_lead", source: "website" }],
+                    }),
+                })
+            })
+        })
+
+        it("keeps surrogate-only options for a generic intake template", async () => {
+            renderPromoteTemplate({})
+
+            expect(screen.getByText("Mark as priority")).toBeInTheDocument()
+            expect(screen.getByText("Assign to workflow owner if available")).toBeInTheDocument()
+            fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+            await waitFor(() => {
+                expect(mutationMocks.update).toHaveBeenCalledWith({
+                    id: "workflow-template-1",
+                    payload: expect.objectContaining({ actions: [promoteAction] }),
+                })
             })
         })
     })

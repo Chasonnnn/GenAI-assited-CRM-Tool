@@ -100,6 +100,7 @@ import {
     EMAIL_RECIPIENT_OPTIONS,
     FORM_MATCH_STATUS_OPTIONS,
     FORM_SOURCE_MODE_OPTIONS,
+    INTAKE_LEAD_KIND_CONFIG_KEYS,
     LIST_OPERATORS,
     MULTISELECT_FIELDS,
     OWNER_TYPE_OPTIONS,
@@ -108,10 +109,13 @@ import {
     createClientRowId,
     getEmailRecipientKind,
     getEmailRecipientUserId,
+    isDonorIntakeWorkflow,
+    isDonorLeadKind,
     normalizeEditableActionsForSave as normalizeActionsForSave,
     normalizeEditableActionsForUi as normalizeActionsForUi,
     normalizeEditableConditionsForSave as normalizeConditionsForSave,
     normalizeEditableConditionsForUi as normalizeConditionsForUi,
+    stripDonorPromotionOptions,
     toListArray,
     type EditableAction,
     type EditableCondition,
@@ -232,17 +236,8 @@ function isDonorSubject(
     return subjectType === "egg_donor" || subjectType === "sperm_donor"
 }
 
-function isDonorLeadKind(value: unknown): value is Extract<WorkflowSubjectType, "egg_donor" | "sperm_donor"> {
-    return value === "egg_donor" || value === "sperm_donor"
-}
-
 // Mirrors workflow_service.SHARED_DONOR_STAGE_ERROR.
 const SHARED_DONOR_STAGE_ERROR = "Stage references need a form for one donor type."
-
-const INTAKE_LEAD_KIND_CONFIG_KEYS: Partial<Record<string, string>> = {
-    form_submitted: "lead_kind",
-    intake_lead_created: "lead_type",
-}
 
 function getDonorExecutionLink(execution: WorkflowExecution): string | null {
     if (
@@ -1052,8 +1047,7 @@ function useAutomationPageView({
     const { data: options } = useWorkflowOptions(workflowScope, subjectType)
     const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
     const triggerForm = options?.forms?.find((form) => form.id === triggerConfig.form_id)
-    const isDonorIntakeTrigger =
-        isDonorLeadKind(triggerForm?.lead_kind) || isDonorLeadKind(triggerConfig.lead_type)
+    const isDonorIntakeTrigger = isDonorIntakeWorkflow({ triggerConfig, formLeadKind: triggerForm?.lead_kind })
     // Intake workflows update the linked surrogate or donor, so their stage and update-field
     // options come from the pipeline of the trigger form's lead kind (mirrors
     // workflow_service.resolve_workflow_record_type).
@@ -1416,14 +1410,7 @@ function useAutomationPageView({
             ) {
                 return { ...action, recipients: "donor" }
             }
-            if (isDonorIntakeTrigger && action.action_type === "promote_intake_lead") {
-                // Priority and owner assignment are surrogate-only promotion options.
-                const donorAction = { ...action }
-                delete donorAction.is_priority
-                delete donorAction.assign_to_user
-                return donorAction
-            }
-            return action
+            return isDonorIntakeTrigger ? stripDonorPromotionOptions(action) : action
         })
 
         const data: WorkflowCreate = {

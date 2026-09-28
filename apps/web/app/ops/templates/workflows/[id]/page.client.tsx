@@ -66,10 +66,12 @@ import {
     createClientRowId,
     getEmailRecipientKind,
     getEmailRecipientUserId,
+    isDonorIntakeWorkflow,
     normalizeEditableActionsForSave as normalizeActionsForSave,
     normalizeEditableActionsForUi as normalizeActionsForUi,
     normalizeEditableConditionsForSave as normalizeConditionsForSave,
     normalizeEditableConditionsForUi as normalizeConditionsForUi,
+    stripDonorPromotionOptions,
     toListArray,
     type EditableAction,
     type EditableCondition,
@@ -407,7 +409,8 @@ function getWorkflowEmailRecipientOptions(isDonorSubject: boolean): SelectOption
 
 function normalizeWorkflowTemplateActionsForSave(
     actions: EditableAction[],
-    isDonorSubject: boolean
+    isDonorSubject: boolean,
+    isDonorIntake: boolean
 ): ActionConfig[] {
     return normalizeActionsForSave(actions).map((action) => {
         if (
@@ -417,7 +420,7 @@ function normalizeWorkflowTemplateActionsForSave(
         ) {
             return { ...action, recipients: "donor" }
         }
-        return action
+        return isDonorIntake ? stripDonorPromotionOptions(action) : action
     })
 }
 
@@ -2100,12 +2103,14 @@ type WorkflowTemplatePromoteLeadFieldsProps = {
     action: EditableAction
     index: number
     updateAction: UpdateActionHandler
+    isDonorIntake: boolean
 }
 
 function WorkflowTemplatePromoteLeadFields({
     action,
     index,
     updateAction,
+    isDonorIntake,
 }: WorkflowTemplatePromoteLeadFieldsProps) {
     return (
         <div className="space-y-3">
@@ -2114,20 +2119,24 @@ function WorkflowTemplatePromoteLeadFields({
                 value={typeof action.source === "string" ? action.source : ""}
                 onChange={(event) => updateAction(index, { source: event.target.value })}
             />
-            <div className="flex items-center justify-between rounded-md border p-3">
-                <div className="text-sm">Mark as priority</div>
-                <Switch
-                    checked={typeof action.is_priority === "boolean" ? action.is_priority : false}
-                    onCheckedChange={(checked) => updateAction(index, { is_priority: checked })}
-                />
-            </div>
-            <div className="flex items-center justify-between rounded-md border p-3">
-                <div className="text-sm">Assign to workflow owner if available</div>
-                <Switch
-                    checked={typeof action.assign_to_user === "boolean" ? action.assign_to_user : false}
-                    onCheckedChange={(checked) => updateAction(index, { assign_to_user: checked })}
-                />
-            </div>
+            {!isDonorIntake && (
+                <>
+                    <div className="flex items-center justify-between rounded-md border p-3">
+                        <div className="text-sm">Mark as priority</div>
+                        <Switch
+                            checked={typeof action.is_priority === "boolean" ? action.is_priority : false}
+                            onCheckedChange={(checked) => updateAction(index, { is_priority: checked })}
+                        />
+                    </div>
+                    <div className="flex items-center justify-between rounded-md border p-3">
+                        <div className="text-sm">Assign to workflow owner if available</div>
+                        <Switch
+                            checked={typeof action.assign_to_user === "boolean" ? action.assign_to_user : false}
+                            onCheckedChange={(checked) => updateAction(index, { assign_to_user: checked })}
+                        />
+                    </div>
+                </>
+            )}
         </div>
     )
 }
@@ -2141,6 +2150,7 @@ type WorkflowTemplateActionFieldsProps = {
     updateFields: string[]
     stageIdOptions: SelectOption[]
     isDonorSubject: boolean
+    isDonorIntake: boolean
 }
 
 function WorkflowTemplateActionFields({
@@ -2152,6 +2162,7 @@ function WorkflowTemplateActionFields({
     updateFields,
     stageIdOptions,
     isDonorSubject,
+    isDonorIntake,
 }: WorkflowTemplateActionFieldsProps) {
     if (action.action_type === "send_email") {
         return (
@@ -2265,7 +2276,14 @@ function WorkflowTemplateActionFields({
     }
 
     if (action.action_type === "promote_intake_lead") {
-        return <WorkflowTemplatePromoteLeadFields action={action} index={index} updateAction={updateAction} />
+        return (
+            <WorkflowTemplatePromoteLeadFields
+                action={action}
+                index={index}
+                updateAction={updateAction}
+                isDonorIntake={isDonorIntake}
+            />
+        )
     }
 
     return null
@@ -2282,6 +2300,7 @@ type WorkflowTemplateActionCardProps = {
     updateFields: string[]
     stageIdOptions: SelectOption[]
     isDonorSubject: boolean
+    isDonorIntake: boolean
 }
 
 function WorkflowTemplateActionCard({
@@ -2295,6 +2314,7 @@ function WorkflowTemplateActionCard({
     updateFields,
     stageIdOptions,
     isDonorSubject,
+    isDonorIntake,
 }: WorkflowTemplateActionCardProps) {
     return (
         <Card>
@@ -2336,6 +2356,7 @@ function WorkflowTemplateActionCard({
                     updateFields={updateFields}
                     stageIdOptions={stageIdOptions}
                     isDonorSubject={isDonorSubject}
+                    isDonorIntake={isDonorIntake}
                 />
 
                 {action.action_type && action.action_type !== "promote_intake_lead" && (
@@ -2368,6 +2389,7 @@ type WorkflowTemplateActionsSectionProps = {
     updateFields: string[]
     stageIdOptions: SelectOption[]
     isDonorSubject: boolean
+    isDonorIntake: boolean
 }
 
 function WorkflowTemplateActionsSection({
@@ -2381,6 +2403,7 @@ function WorkflowTemplateActionsSection({
     updateFields,
     stageIdOptions,
     isDonorSubject,
+    isDonorIntake,
 }: WorkflowTemplateActionsSectionProps) {
     return (
         <Card>
@@ -2413,6 +2436,7 @@ function WorkflowTemplateActionsSection({
                             updateFields={updateFields}
                             stageIdOptions={stageIdOptions}
                             isDonorSubject={isDonorSubject}
+                            isDonorIntake={isDonorIntake}
                         />
                     ))
                 )}
@@ -2580,6 +2604,11 @@ function useWorkflowTemplatePageState() {
     const userOptions = options?.users ?? []
     const queueOptions = options?.queues ?? []
     const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
+    const isDonorIntake = isDonorIntakeWorkflow({
+        triggerConfig,
+        formLeadKind: options?.forms?.find((form) => form.id === triggerConfig.form_id)?.lead_kind,
+        subjectType,
+    })
 
     const actionTypeValuesForTrigger =
         triggerType && options?.action_types_by_trigger?.[triggerType]
@@ -2776,7 +2805,7 @@ function useWorkflowTemplatePageState() {
             trigger_config: buildTriggerConfig(),
             conditions: normalizeConditionsForSave(conditions),
             condition_logic: conditionLogic,
-            actions: normalizeWorkflowTemplateActionsForSave(actions, isDonorSubject),
+            actions: normalizeWorkflowTemplateActionsForSave(actions, isDonorSubject, isDonorIntake),
         }
 
         if (isNew) {
@@ -2894,6 +2923,8 @@ function useWorkflowTemplatePageState() {
         setConditionLogic,
         actions,
         filteredActionTypes,
+        isDonorSubject,
+        isDonorIntake,
         updateFields,
         userOptions,
         queueOptions,
@@ -2957,6 +2988,8 @@ export default function PlatformWorkflowTemplatePage() {
         setConditionLogic,
         actions,
         filteredActionTypes,
+        isDonorSubject,
+        isDonorIntake,
         updateFields,
         userOptions,
         queueOptions,
@@ -3081,7 +3114,8 @@ export default function PlatformWorkflowTemplatePage() {
                         queueOptions={queueOptions}
                         updateFields={updateFields}
                         stageIdOptions={stageIdOptions}
-                        isDonorSubject={isDonorSubjectType(subjectType)}
+                        isDonorSubject={isDonorSubject}
+                        isDonorIntake={isDonorIntake}
                     />
                 </div>
 
