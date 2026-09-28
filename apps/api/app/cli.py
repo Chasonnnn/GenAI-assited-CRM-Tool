@@ -474,6 +474,8 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
     """
     Find and repair records marked matched without an accepted Match row.
 
+    An intended parent whose match completed at delivery stays at Matched and is not repaired.
+
     Preview by default. Use --apply to reset affected records back to ready_to_match.
 
     Example:
@@ -541,7 +543,10 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
                 and_(
                     accepted_ip_match.organization_id == IntendedParent.organization_id,
                     accepted_ip_match.intended_parent_id == IntendedParent.id,
-                    accepted_ip_match.status == MatchStatus.ACCEPTED.value,
+                    # Delivery completes the match and leaves the intended parent at Matched.
+                    accepted_ip_match.status.in_(
+                        (MatchStatus.ACCEPTED.value, MatchStatus.COMPLETED.value)
+                    ),
                 ),
             )
             .outerjoin(PipelineStage, IntendedParent.stage_id == PipelineStage.id)
