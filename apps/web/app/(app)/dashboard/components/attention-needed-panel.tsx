@@ -449,9 +449,6 @@ function AttentionItemsSection({
             />
             {open && (
                 <>
-                    <div className="text-xs text-muted-foreground mb-3">
-                        Items needing follow-up
-                    </div>
                     <div className="flex-1 min-h-0 overflow-auto">
                         <AttentionItemsContent
                             status={status}
@@ -629,7 +626,6 @@ function UpcomingItemsSection({
             />
             {open && (
                 <>
-                    <div className="text-xs text-muted-foreground mb-3">Next 7 days</div>
                     <div className="flex-1 min-h-0 overflow-auto">
                         <UpcomingItemsContent
                             status={status}

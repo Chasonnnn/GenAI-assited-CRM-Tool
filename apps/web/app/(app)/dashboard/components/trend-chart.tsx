@@ -3,7 +3,7 @@
 import { useState } from "react"
 import dynamic from "next/dynamic"
 import Link from "@/components/app-link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -31,11 +31,6 @@ type SurrogatesTrendChartProps = {
     chartData: TrendChartDatum[]
 }
 
-const periodLabels: Record<TrendPeriod, string> = {
-    day: "Daily",
-    week: "Weekly",
-    month: "Monthly",
-}
 const trendWindowLabels: Record<TrendPeriod, string> = {
     day: "30 days",
     week: "30 weeks",
@@ -199,9 +194,6 @@ export function TrendChart() {
         }))
     })()
 
-    // Calculate total for subtitle
-    const totalCount = trendData.reduce((sum, item) => sum + item.count, 0)
-
     const buildSurrogatesUrl = () => {
         const params = new URLSearchParams()
         params.set("range", "custom")
@@ -213,13 +205,10 @@ export function TrendChart() {
         return `/surrogates?${params.toString()}`
     }
 
-    const rangeLabel =
-        filters.dateRange === "all" ? `last ${trendWindowLabels[period]}` : "selected range"
-
     return (
         <Card className="h-full flex flex-col gap-0 p-0">
             <CardHeader className="p-6 pb-0 gap-0">
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-4">
                     <CardTitle className="text-base font-semibold">Surrogates Trend</CardTitle>
                     <ToggleGroup
                         value={[period]}
@@ -240,10 +229,6 @@ export function TrendChart() {
                         <ToggleGroupItem value="month" className="h-8">Month</ToggleGroupItem>
                     </ToggleGroup>
                 </div>
-                <CardDescription className="text-sm text-muted-foreground mb-4">
-                    {periodLabels[period]} new surrogates ({rangeLabel})
-                    {totalCount > 0 && ` (${totalCount} total)`}
-                </CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-6 pt-0 flex-1">
                 {isLoading ? (

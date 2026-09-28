@@ -215,6 +215,10 @@ describe('DashboardPage', () => {
         expect(await screen.findByText('Pipeline Distribution')).toBeInTheDocument()
         expect(await screen.findByText('No new surrogates in the last 30 days')).toBeInTheDocument()
         expect(await screen.findByText('View surrogates')).toBeInTheDocument()
+        expect(screen.queryByText(/new surrogates \(/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/in pipeline$/)).not.toBeInTheDocument()
+        expect(screen.queryByText('Items needing follow-up')).not.toBeInTheDocument()
+        expect(screen.queryByText('Next 7 days')).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: /Attention Needed/i })).toHaveClass(
             'focus-visible:ring-2',
             'focus-visible:ring-ring',
