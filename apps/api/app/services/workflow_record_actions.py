@@ -167,6 +167,11 @@ def update_field(
                 emit_workflow_events=False,
                 **({"execution_permissions": execution_permissions} if v2_authority else {}),
             )
+            if result["status"] != "applied":
+                return {
+                    "success": False,
+                    "error": "Workflow stage change requires regression approval",
+                }
             updated = result["donor"]
             if updated is None:
                 return {"success": False, "error": "Donor stage change was not applied"}
