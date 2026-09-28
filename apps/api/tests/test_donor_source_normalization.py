@@ -92,3 +92,39 @@ async def test_create_donor_api_stores_canonical_source_and_rejects_unknown(auth
     )
     assert updated.status_code == 200, updated.text
     assert updated.json()["source"] == "referral"
+
+
+@pytest.mark.asyncio
+async def test_donor_list_filters_by_source_within_the_session_org(authed_client, db, test_org):
+    from app.core.constants import SYSTEM_USER_ID
+    from app.db.models import Organization
+    from app.services import donor_service
+
+    def _donor(org_id, source, label):
+        return donor_service.create_donor(
+            db,
+            org_id,
+            SYSTEM_USER_ID,
+            DonorCreate(
+                donor_type="egg",
+                full_name=f"{label} Donor",
+                email=f"{label}-{uuid.uuid4().hex[:8]}@example.com",
+                source=source,
+            ),
+        )
+
+    meta_donor = _donor(test_org.id, "meta", "meta")
+    _donor(test_org.id, "website", "website")
+    other_org = Organization(id=uuid.uuid4(), name="Other", slug=f"other-{uuid.uuid4().hex[:8]}")
+    db.add(other_org)
+    db.flush()
+    _donor(other_org.id, "meta", "foreign-meta")
+
+    response = await authed_client.get("/donors", params={"source": "meta"})
+
+    assert response.status_code == 200, response.text
+    assert [item["id"] for item in response.json()["items"]] == [str(meta_donor.id)]
+    assert response.json()["items"][0]["source"] == "meta"
+
+    rejected = await authed_client.get("/donors", params={"source": "Meta"})
+    assert rejected.status_code == 422

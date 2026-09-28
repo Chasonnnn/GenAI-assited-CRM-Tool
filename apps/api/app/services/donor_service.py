@@ -472,6 +472,7 @@ def list_donors(
     donor_type: str | None = None,
     stage_id: UUID | None = None,
     state: str | None = None,
+    source: str | None = None,
     q: str | None = None,
     owner_id: UUID | None = None,
     dynamic_filter: str | None = None,
@@ -507,6 +508,8 @@ def list_donors(
         query = query.filter(Donor.stage_id == stage_id)
     if state:
         query = query.filter(Donor.state == state)
+    if source:
+        query = query.filter(Donor.source == source)
     if owner_id:
         query = query.filter(Donor.owner_id == owner_id)
     if created_from:
