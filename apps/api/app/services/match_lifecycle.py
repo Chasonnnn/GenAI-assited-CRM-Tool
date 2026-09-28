@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.constants import SYSTEM_USER_ID
 from app.db.enums import AuditEventType, MatchStatus, SurrogateActivityType
-from app.db.models import Match, StatusChangeRequest, SurrogateStatusHistory
+from app.db.models import Match, StatusChangeRequest, Surrogate, SurrogateStatusHistory
 from app.services import match_effects, match_participants, match_queries
 
 UNDER_REVIEW = MatchStatus.UNDER_REVIEW.value
@@ -115,7 +115,9 @@ TRANSITIONS: dict[str, Transition] = {
 }
 
 # No user action offers these. The surrogate stage service applies them in its
-# own transaction; a match outside ``sources`` is left unchanged.
+# own transaction; a match outside ``sources`` is left unchanged. Rejecting or
+# withdrawing a cancellation also completes the restored match of a surrogate
+# who is in Delivered.
 SYSTEM_TRANSITIONS: dict[str, Transition] = {
     t.action: t
     for t in (
@@ -687,6 +689,15 @@ def _restore_accepted(ctx: _Context) -> list:
         TRANSITIONS[ctx.action].history,
         {"status_request_id": str(ctx.request.id)},
     )
+    if match.surrogate_id:
+        from app.services import pipeline_service
+
+        # _lock refreshed the surrogate row under its lock, so its stage is current.
+        surrogate = ctx.db.get(Surrogate, match.surrogate_id)
+        stage = pipeline_service.get_stage_by_id(ctx.db, surrogate.stage_id)
+        if stage is not None and _is_delivered(stage):
+            # Delivery left the match pending; it completes once the request is resolved.
+            _complete(ctx.db, match, stage, _system_actor(ctx.actor_user_id), ctx.now)
     return []
 
 
@@ -742,30 +753,36 @@ def _lock_surrogate_matches(
     return query.order_by(Match.id).populate_existing().with_for_update().all()
 
 
+def _complete(db: Session, match: Match, delivered_stage, actor: UUID | None, now: datetime):
+    from app.services import match_attempts
+
+    spec = SYSTEM_TRANSITIONS["complete_on_delivery"]
+    match.status = spec.target
+    match.closed_at = now
+    match.closed_by_user_id = actor
+    match.closure_reason = None
+    match.outcome = delivered_stage.label
+    match.updated_at = now
+    match_attempts.close_open_attempts(db, match, now)
+    write_case_change(db, match, actor, spec.history)
+
+
 def complete_on_delivery(
     db: Session, surrogate, new_stage, *, actor_user_id: UUID | None, now: datetime
 ) -> list[Match]:
     """Complete the surrogate's accepted match when she enters the Delivered stage.
 
     The Delivered stage label becomes the outcome and open attempts close.
-    Cancellation-pending matches stay pending. Does not commit.
+    Cancellation-pending matches stay pending; rejecting or withdrawing the
+    request later completes them (``_restore_accepted``). Does not commit.
     """
     if not _is_delivered(new_stage):
         return []
-    from app.services import match_attempts
-
     spec = SYSTEM_TRANSITIONS["complete_on_delivery"]
     actor = _system_actor(actor_user_id)
     matches = _lock_surrogate_matches(db, surrogate, spec.sources)
     for match in matches:
-        match.status = spec.target
-        match.closed_at = now
-        match.closed_by_user_id = actor
-        match.closure_reason = None
-        match.outcome = new_stage.label
-        match.updated_at = now
-        match_attempts.close_open_attempts(db, match, now)
-        write_case_change(db, match, actor, spec.history)
+        _complete(db, match, new_stage, actor, now)
     return matches
 
 

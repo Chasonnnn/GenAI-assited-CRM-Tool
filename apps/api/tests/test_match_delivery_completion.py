@@ -474,6 +474,48 @@ async def test_delivered_leaves_a_cancellation_pending_match_untouched(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "resolution,event",
+    [("reject", "match_cancel_request_rejected"), ("cancel", "match_cancel_request_withdrawn")],
+)
+async def test_cancellation_resolved_after_delivery_completes_the_restored_match(
+    authed_client, db, test_auth, resolution, event
+):
+    delivered = _stage(db, test_auth.org.id, role="delivered")
+    match = await _create_accepted_match(authed_client)
+    requested = await authed_client.post(
+        f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+    )
+    assert requested.status_code == 200, requested.text
+    assert (await _move(authed_client, match["surrogate_id"], delivered)).status_code == 200
+    request = (
+        db.query(StatusChangeRequest)
+        .filter_by(entity_id=uuid.UUID(match["id"]), status="pending")
+        .one()
+    )
+    before = _snapshot(db, test_auth.org.id)
+    started = datetime.now(UTC)
+
+    response = await authed_client.post(
+        f"/status-change-requests/{request.id}/{resolution}", json={}
+    )
+
+    assert response.status_code == 200, response.text
+    row = _match_row(db, match["id"])
+    _assert_completed(row, actor=test_auth.user.id, outcome="Delivered", recorded_after=started)
+    assert _match_events(_history_only(db, test_auth.org.id, before))["audit"] == {
+        (event, "match"): 1,
+        ("match_completed", "match"): 1,
+    }
+    assert (
+        match_queries.get_accepted_match_for_surrogate(
+            db, test_auth.org.id, uuid.UUID(match["surrogate_id"])
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
 async def test_delivered_completion_stays_inside_the_surrogates_organization(
     authed_client, db, test_auth
 ):

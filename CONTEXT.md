@@ -26,7 +26,7 @@ _Avoid_: Rejected, denied, withdrawn
 
 **Cancelled**: An accepted match ended through an approved cancellation request.
 
-**Completed**: An accepted surrogate match closed when the surrogate entered the Delivered stage. No user action completes a match.
+**Completed**: An accepted surrogate match closed because the surrogate reached the Delivered stage. A match whose cancellation was pending at delivery completes when that request is rejected or withdrawn. No user action completes a match.
 
 ## Match work
 
