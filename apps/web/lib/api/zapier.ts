@@ -103,6 +103,22 @@ interface ZapierOutboundTestResponse {
     lead_id: string;
 }
 
+export type ZapierDonorAttributionSource = 'meta' | 'website';
+
+export interface ZapierDonorOutboundTestRequest {
+    donor_type: ZapierDonorEventMappingItem['donor_type'];
+    event_name: ZapierDonorEventMappingItem['event_name'];
+    attribution_source: ZapierDonorAttributionSource;
+    lead_id?: string;
+}
+
+interface ZapierDonorOutboundTestResponse {
+    status: string;
+    event_name: string;
+    event_id: string;
+    lead_id: string | null;
+}
+
 type ZapierOutboundEventStatus = 'queued' | 'delivered' | 'failed' | 'skipped';
 
 export interface ZapierOutboundEvent {
@@ -222,6 +238,15 @@ export async function sendZapierOutboundTest(
     payload: ZapierOutboundTestRequest,
 ): Promise<ZapierOutboundTestResponse> {
     return api.post<ZapierOutboundTestResponse>('/integrations/zapier/test-outbound', payload);
+}
+
+export async function sendZapierDonorOutboundTest(
+    payload: ZapierDonorOutboundTestRequest,
+): Promise<ZapierDonorOutboundTestResponse> {
+    return api.post<ZapierDonorOutboundTestResponse>(
+        '/integrations/zapier/test-outbound/donor',
+        payload,
+    );
 }
 
 export async function getZapierOutboundEvents(

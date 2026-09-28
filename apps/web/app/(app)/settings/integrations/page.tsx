@@ -84,6 +84,7 @@ import {
     useZapierTestLead,
     useUpdateZapierOutboundSettings,
     useZapierOutboundTest,
+    useZapierDonorOutboundTest,
     useZapierOutboundEvents,
     useZapierOutboundEventsSummary,
     useCreateZapierInboundWebhook,
@@ -139,7 +140,9 @@ import type {
     MetaCrmDatasetEventMappingItem,
 } from "@/lib/api/meta-crm-dataset"
 import type {
+    ZapierDonorAttributionSource,
     ZapierDonorEventMappingItem,
+    ZapierDonorOutboundTestRequest,
     ZapierEventMappingItem,
     ZapierFieldPasteResponse,
     ZapierOutboundEvent,
@@ -222,6 +225,15 @@ const DONOR_TYPES = ["egg", "sperm"] as const
 type ZapierDonorType = (typeof DONOR_TYPES)[number]
 
 const UNTRACKED_BUCKET_VALUE = "__none__"
+
+const ZAPIER_DONOR_TYPE_OPTIONS: Array<{ value: ZapierDonorType; label: string }> = DONOR_TYPES.map(
+    (donorType) => ({ value: donorType, label: getDonorTypeLabel(donorType) }),
+)
+
+const ZAPIER_DONOR_ATTRIBUTION_OPTIONS: Array<{ value: ZapierDonorAttributionSource; label: string }> = [
+    { value: "meta", label: "Meta lead" },
+    { value: "website", label: "Website form" },
+]
 
 const isZapierStageBucket = (value: unknown): value is ZapierStageBucket =>
     value === "qualified" ||
@@ -4700,6 +4712,142 @@ function ZapierOutboundTestControls({
     )
 }
 
+function ZapierDonorOutboundTestControls({
+    isDialog,
+    donorOutboundEnabled,
+}: {
+    isDialog: boolean
+    donorOutboundEnabled: boolean
+}) {
+    const sendDonorTest = useZapierDonorOutboundTest()
+    const [donorType, setDonorType] = useState<ZapierDonorType>("egg")
+    const [eventName, setEventName] = useState<ZapierDonorEventName>("Lead")
+    const [attributionSource, setAttributionSource] = useState<ZapierDonorAttributionSource>("meta")
+    const [leadId, setLeadId] = useState("")
+
+    const handleSend = async () => {
+        const payload: ZapierDonorOutboundTestRequest = {
+            donor_type: donorType,
+            event_name: eventName,
+            attribution_source: attributionSource,
+        }
+        const trimmedLeadId = leadId.trim()
+        if (attributionSource === "meta" && trimmedLeadId) {
+            payload.lead_id = trimmedLeadId
+        }
+        try {
+            const result = await sendDonorTest.mutateAsync(payload)
+            toast.success(
+                result.lead_id
+                    ? `Test event queued: ${result.event_name} for ${result.lead_id}`
+                    : `Test event queued: ${result.event_name}`,
+            )
+        } catch (error) {
+            const message = getActionErrorMessage(error, "Failed to send donor test event")
+            if (message) toast.error(message)
+        }
+    }
+
+    return (
+        <div className="flex flex-col gap-2">
+            <div className={isDialog ? "grid gap-2" : "grid gap-2 md:grid-cols-3"}>
+                <Select
+                    value={donorType}
+                    onValueChange={(value) => {
+                        const option = ZAPIER_DONOR_TYPE_OPTIONS.find((item) => item.value === value)
+                        if (option) setDonorType(option.value)
+                    }}
+                >
+                    <SelectTrigger className="w-full" aria-label="Donor test type">
+                        <SelectValue>
+                            {(value: string | null) => getSelectOptionLabel(ZAPIER_DONOR_TYPE_OPTIONS, value)}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {ZAPIER_DONOR_TYPE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <Select
+                    value={eventName}
+                    onValueChange={(value) => {
+                        const option = ZAPIER_EVENT_OPTIONS.find((item) => item.value === value)
+                        if (option) setEventName(option.value)
+                    }}
+                >
+                    <SelectTrigger className="w-full" aria-label="Donor test event">
+                        <SelectValue>
+                            {(value: string | null) => getSelectOptionLabel(ZAPIER_EVENT_OPTIONS, value)}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {ZAPIER_EVENT_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <Select
+                    value={attributionSource}
+                    onValueChange={(value) => {
+                        const option = ZAPIER_DONOR_ATTRIBUTION_OPTIONS.find((item) => item.value === value)
+                        if (option) setAttributionSource(option.value)
+                    }}
+                >
+                    <SelectTrigger className="w-full" aria-label="Donor test attribution">
+                        <SelectValue>
+                            {(value: string | null) => getSelectOptionLabel(ZAPIER_DONOR_ATTRIBUTION_OPTIONS, value)}
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {ZAPIER_DONOR_ATTRIBUTION_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            {attributionSource === "meta" ? (
+                <div className={isDialog ? "space-y-2" : "flex flex-col gap-2 md:max-w-sm"}>
+                    <Label htmlFor="zapier-donor-test-lead-id">Lead ID (optional)</Label>
+                    <Input
+                        id="zapier-donor-test-lead-id"
+                        value={leadId}
+                        onChange={(event) => setLeadId(event.target.value)}
+                        name="zapier-donor-test-lead-id"
+                        autoComplete="off"
+                    />
+                </div>
+            ) : null}
+            <Button
+                variant="outline"
+                onClick={() => {
+                    void handleSend()
+                }}
+                disabled={sendDonorTest.isPending || !donorOutboundEnabled}
+                className={isDialog ? "w-full" : "self-start"}
+            >
+                {sendDonorTest.isPending ? (
+                    <>
+                        <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        Sending…
+                    </>
+                ) : (
+                    <>
+                        <ActivityIcon className="mr-2 size-4" aria-hidden="true" />
+                        Send Donor Test Event
+                    </>
+                )}
+            </Button>
+        </div>
+    )
+}
+
 function useZapierWebhookController(variant: "page" | "dialog") {
     const { user } = useAuth()
     const { data: effectivePermissions } = useEffectivePermissions(user?.user_id ?? null)
@@ -5331,6 +5479,19 @@ function ZapierWebhookSection({
                         />
                             </CardContent>
                         </Card>
+                        {controller.donorSettingsAvailable ? (
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-base">Donor event test</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <ZapierDonorOutboundTestControls
+                                        isDialog={controller.isDialog}
+                                        donorOutboundEnabled={controller.outboundForm.donorOutboundEnabled}
+                                    />
+                                </CardContent>
+                            </Card>
+                        ) : null}
                     </div>
                     <ZapierMonitoringSection
                         variant={controller.variant}

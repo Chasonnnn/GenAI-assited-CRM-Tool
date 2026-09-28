@@ -113,6 +113,24 @@ export function useZapierOutboundTest() {
     });
 }
 
+export function useZapierDonorOutboundTest() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: zapierApi.sendZapierDonorOutboundTest,
+        onSuccess: () => {
+            void queryClient.invalidateQueries({
+                queryKey: [...zapierKeys.all, 'outbound-events'],
+                exact: false,
+            });
+            void queryClient.invalidateQueries({
+                queryKey: [...zapierKeys.all, 'outbound-events-summary'],
+                exact: false,
+            });
+        },
+    });
+}
+
 export function useZapierOutboundEventsSummary(windowHours = 24) {
     return useQuery({
         queryKey: zapierKeys.outboundEventsSummary(windowHours),

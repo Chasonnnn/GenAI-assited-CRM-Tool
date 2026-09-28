@@ -33,6 +33,7 @@ const mockZapierInboundUpdate = vi.fn()
 const mockZapierTestLead = vi.fn()
 const mockZapierOutboundUpdate = vi.fn()
 const mockZapierOutboundTest = vi.fn()
+const mockZapierDonorOutboundTest = vi.fn()
 const mockRetryZapierOutboundEvent = vi.fn()
 const mockZapierFieldPaste = vi.fn()
 const mockZapierInboundDelete = vi.fn()
@@ -516,6 +517,7 @@ vi.mock('@/lib/hooks/use-zapier', () => ({
     useZapierTestLead: () => ({ mutateAsync: mockZapierTestLead, isPending: false }),
     useUpdateZapierOutboundSettings: () => ({ mutateAsync: mockZapierOutboundUpdate, isPending: false }),
     useZapierOutboundTest: () => ({ mutateAsync: mockZapierOutboundTest, isPending: false }),
+    useZapierDonorOutboundTest: () => ({ mutateAsync: mockZapierDonorOutboundTest, isPending: false }),
     useZapierOutboundEventsSummary: () => ({ data: zapierEventsSummaryData, isLoading: false }),
     useZapierOutboundEvents: () => ({ data: zapierEventsData, isLoading: false }),
     useRetryZapierOutboundEvent: () => ({ mutateAsync: mockRetryZapierOutboundEvent, isPending: false }),
@@ -762,6 +764,7 @@ describe('IntegrationsPage', () => {
         mockZapierInboundUpdate.mockReset()
         mockZapierOutboundUpdate.mockReset()
         mockZapierOutboundTest.mockReset()
+        mockZapierDonorOutboundTest.mockReset()
         mockZapierTestLead.mockReset()
         mockRetryZapierOutboundEvent.mockReset()
         mockZapierFieldPaste.mockReset()
@@ -2546,6 +2549,65 @@ describe('IntegrationsPage', () => {
             stage_key: 'new_unread',
             lead_id: 'real-lead-123',
         })
+    })
+
+    it('sends a donor test event from the activity tab', async () => {
+        zapierSettingsData = {
+            ...createZapierSettingsData(),
+            outbound_webhook_url: 'https://hooks.zapier.com/hooks/catch/123/abc',
+            donor_outbound_enabled: true,
+        }
+        mockZapierDonorOutboundTest.mockResolvedValue({
+            status: 'queued',
+            event_name: 'Lead',
+            event_id: 'zapier_donor_test:egg:lead:1',
+            lead_id: 'real-donor-lead',
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        expect(within(dialog).getByRole('combobox', { name: 'Donor test type' })).toHaveTextContent('Egg donor')
+        expect(within(dialog).getByRole('combobox', { name: 'Donor test event' })).toHaveTextContent('Lead')
+        expect(within(dialog).getByRole('combobox', { name: 'Donor test attribution' })).toHaveTextContent('Meta lead')
+        fireEvent.change(within(dialog).getByLabelText('Lead ID (optional)'), {
+            target: { value: 'real-donor-lead' },
+        })
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: /send donor test event/i }))
+        })
+
+        expect(mockZapierDonorOutboundTest).toHaveBeenCalledWith({
+            donor_type: 'egg',
+            event_name: 'Lead',
+            attribution_source: 'meta',
+            lead_id: 'real-donor-lead',
+        })
+        expect(mockZapierOutboundTest).not.toHaveBeenCalled()
+    })
+
+    it('disables the donor test event while donor reporting is off', () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        expect(within(dialog).getByRole('button', { name: /send donor test event/i })).toBeDisabled()
+    })
+
+    it('hides the donor test event without donor edit access', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_integrations', 'view_donors'] },
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        expect(within(dialog).queryByRole('button', { name: /send donor test event/i })).not.toBeInTheDocument()
+        expect(within(dialog).getByRole('button', { name: /send test event/i })).toBeInTheDocument()
     })
 
     it('labels donor skip reasons, sources and test events in zapier activity', () => {
