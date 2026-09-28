@@ -82,6 +82,8 @@ from app.utils.normalization import (
 IDENTITY_SURROGATE_FIELDS = ("full_name", "date_of_birth", "phone", "email")
 IDENTITY_DONOR_FIELDS = ("full_name", "email", "phone", "state", "education")
 DONOR_LEAD_KINDS = {FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value}
+# Hosted and embedded donor intake are website traffic; the review path stays in lead metadata.
+DONOR_INTAKE_SOURCE = "website"
 DONOR_PROFILE_PHOTO_CONTENT_TYPES = {"image/png", "image/jpeg"}
 INTAKE_SLUG_MAX_LENGTH = 100
 # Allowed attribution keys and their maximum lengths, matching the LeadAttribution columns.
@@ -2883,7 +2885,10 @@ def create_intake_lead_for_submission(
     )
     if auto_promote_website_lead and not commit:
         raise ValueError("Website promotion must own its transaction")
-    lead_source = "website" if auto_promote_website_lead else (source or "shared_intake")
+    if submission.lead_kind in DONOR_LEAD_KINDS:
+        lead_source = DONOR_INTAKE_SOURCE
+    else:
+        lead_source = "website" if auto_promote_website_lead else (source or "shared_intake")
     metadata.setdefault("source", lead_source)
 
     lead = _create_intake_lead(
@@ -3602,6 +3607,46 @@ def _copy_profile_photo_to_donor_attachment(
     return attachment
 
 
+def _dispatch_promoted_donor_side_effects(
+    db: Session,
+    *,
+    donor: Donor,
+    attachment_id: uuid.UUID,
+) -> None:
+    """Run post-commit donor workflows with the same isolation and alerts as manual creation."""
+    from app.services import donor_service, workflow_triggers
+
+    def trigger_document_uploaded(workflow_db: Session, workflow_donor: Donor) -> None:
+        attachment = (
+            workflow_db.query(Attachment)
+            .filter(
+                Attachment.organization_id == workflow_donor.organization_id,
+                Attachment.donor_id == workflow_donor.id,
+                Attachment.id == attachment_id,
+            )
+            .one()
+        )
+        workflow_triggers.trigger_document_uploaded(workflow_db, attachment)
+
+    donor_service._dispatch_side_effect_isolated(
+        db=db,
+        donor=donor,
+        event_key="created",
+        failure_kind="workflow",
+        trigger=lambda workflow_db, workflow_donor: workflow_triggers.trigger_donor_created(
+            workflow_db, workflow_donor
+        ),
+    )
+    donor_service._dispatch_side_effect_isolated(
+        db=db,
+        donor=donor,
+        event_key="document_uploaded",
+        failure_kind="workflow",
+        trigger=trigger_document_uploaded,
+        details={"attachment_id": str(attachment_id)},
+    )
+
+
 def _promote_donor_intake_lead(
     db: Session,
     *,
@@ -3723,16 +3768,7 @@ def _promote_donor_intake_lead(
         raise
     db.refresh(lead)
     donor = donor_service.get_donor(db, lead.organization_id, donor.id) or donor
-    from app.services import workflow_triggers
-
-    try:
-        workflow_triggers.trigger_donor_created(db, donor)
-    except Exception:
-        logger.debug("trigger_promoted_donor_created_failed", exc_info=True)
-    try:
-        workflow_triggers.trigger_document_uploaded(db, attachment)
-    except Exception:
-        logger.debug("trigger_promoted_donor_document_uploaded_failed", exc_info=True)
+    _dispatch_promoted_donor_side_effects(db, donor=donor, attachment_id=attachment.id)
     return donor, int(linked_count or 0)
 
 
@@ -3765,7 +3801,7 @@ def promote_intake_lead(
             db,
             lead=lead,
             user_id=user_id,
-            source=source,
+            source=DONOR_INTAKE_SOURCE,
         )
     if lead.status == IntakeLeadStatus.PROMOTED.value and lead.promoted_surrogate_id:
         surrogate = (
