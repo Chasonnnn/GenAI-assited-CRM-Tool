@@ -4,7 +4,8 @@
 
 - Existing match IDs, numbers, table, side-by-side party profiles, work tabs, and Calendar remain.
 - Each case contains one IP and either one surrogate or one donor. IPs and donors can overlap across cases; a surrogate has one accepted or cancellation-pending case.
-- Cases support completion and multiple attempts. Another relationship after closure uses a new case.
+- Cases support completion. Another relationship after closure uses a new case.
+- New attempts are not recorded; the attempt routes and UI are removed. Existing `match_attempts` rows stay attached to their case, block completion while open, and close when the case is cancelled.
 - New tasks, notes, files, and appointments persist exact case and optional attempt IDs. Participant attribution stays within that case.
 - IP and donor pages share Related Matches, Appointments, and Correspondence cards within their existing light layouts.
 - Correspondence includes explicitly linked conversations and recorded outbound email. Current email addresses never infer historical ownership.
@@ -33,7 +34,7 @@ No deployment, production database inspection, external message delivery, or pro
 
 ## Explicit expansion release
 
-`MATCH_CASE_EXPANSION_ENABLED` defaults to `false`. Normal first-time surrogate proposals, acceptance (including an IP with another accepted surrogate match), rejection, cancellation, and reads remain available. Donor cases, repeated pairs, attempts, completion, and new case-scoped work require activation. Test fixtures enable the flag explicitly.
+`MATCH_CASE_EXPANSION_ENABLED` defaults to `false`. Normal first-time surrogate proposals, acceptance (including an IP with another accepted surrogate match), rejection, cancellation, and reads remain available. Case-scoped notes, files, tasks, and match links on appointments also work while the flag is off. Donor cases, repeated pairs, completion, and donor links on appointments require activation. Test fixtures enable the flag explicitly.
 
 `cloudbuild/api.yaml` uses `python -m app.db.release_migration` for preflight and migration. An ordinary release refuses to cross the match expansion boundary. Known starting revisions are `20260830_0100`, `20260905_1400_match_cases`, and `20260905_1500_match_work`; older or unknown baselines require their own reviewed migration plan. Existing commitment conflicts abort with a count and no automatic record changes. The migration itself repeats the check under a write-blocking lock.
 
