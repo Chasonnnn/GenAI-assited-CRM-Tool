@@ -283,6 +283,36 @@ async def test_intended_parent_stage_change_request_does_not_commit_when_audit_f
 
 
 @pytest.mark.asyncio
+async def test_duplicate_intended_parent_regression_request_is_rejected(db, test_org):
+    new_stage = _get_stage(db, test_org.id, "new")
+    ready_stage = _get_stage(db, test_org.id, "ready_to_match")
+
+    async with _client_for_role(db, test_org.id, Role.CASE_MANAGER) as (_, client):
+        intended_parent = await _create_intended_parent(client)
+        await _apply_then_age_last_change(db, client, intended_parent["id"], ready_stage.id)
+        db.get(IntendedParent, UUID(intended_parent["id"])).created_at = datetime.now(
+            UTC
+        ) - timedelta(days=2)
+        db.commit()
+        path = f"/intended-parents/{intended_parent['id']}/status"
+        payload = {
+            "stage_id": str(new_stage.id),
+            "reason": "Requested correction",
+            "effective_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+        }
+
+        first = await client.patch(path, json=payload)
+        assert first.status_code == 200, first.text
+        assert first.json()["status"] == "pending_approval"
+        duplicate = await client.patch(path, json=payload)
+
+    assert duplicate.status_code == 403
+    assert duplicate.json()["detail"] == (
+        "A pending regression request already exists for this stage and date."
+    )
+
+
+@pytest.mark.asyncio
 async def test_intended_parent_stage_change_request_audit_records_request(db, test_org):
     new_stage = _get_stage(db, test_org.id, "new")
     ready_stage = _get_stage(db, test_org.id, "ready_to_match")

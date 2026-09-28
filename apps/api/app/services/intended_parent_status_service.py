@@ -184,16 +184,17 @@ def change_status(
             status="pending",
         )
         db.add(status_request)
-        db.flush()
         from app.services import entity_activity_service
 
-        result = StatusChangeResult(
-            status="pending_approval",
-            intended_parent=ip,
-            request_id=status_request.id,
-            message="Regression requires admin approval. Request submitted.",
-        )
         try:
+            # The partial unique index on pending requests fires on this flush.
+            db.flush()
+            result = StatusChangeResult(
+                status="pending_approval",
+                intended_parent=ip,
+                request_id=status_request.id,
+                message="Regression requires admin approval. Request submitted.",
+            )
             entity_activity_service.record_activity(
                 db,
                 org_id=ip.organization_id,
