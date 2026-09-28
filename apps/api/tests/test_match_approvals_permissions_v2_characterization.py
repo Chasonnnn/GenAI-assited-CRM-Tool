@@ -421,7 +421,7 @@ async def test_v2_cancel_requires_no_stage_permission_when_parties_already_at_ha
     _stage(db, db.get(IntendedParent, uuid.UUID(match["intended_parent_id"])), "ready_to_match")
     _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "approve_status_change_requests", True)
     _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "change_surrogate_status", False)
-    _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "edit_intended_parents", False)
+    _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "change_intended_parent_status", False)
     async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_, client):
         response = await client.post(f"/status-change-requests/{request.id}/approve")
     assert response.status_code == 200, response.text

@@ -344,7 +344,7 @@ def update_status(
     data: IntendedParentStatusUpdate,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[object, "fastapi_param"] = Depends(
-        require_permission(POLICIES["intended_parents"].actions["edit"])
+        require_permission(POLICIES["intended_parents"].actions["change_status"])
     ),
 ):
     """Change status of an intended parent."""

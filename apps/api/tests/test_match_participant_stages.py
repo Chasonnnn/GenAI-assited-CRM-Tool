@@ -370,7 +370,7 @@ async def test_accept_requires_ip_stage_permission_and_rolls_back_primary_move(
     if policy == 2:
         _activate_v2(db, test_auth.org.id)
         _set_role_permission(
-            db, test_auth.org.id, Role.CASE_MANAGER, "edit_intended_parents", False
+            db, test_auth.org.id, Role.CASE_MANAGER, "change_intended_parent_status", False
         )
     for kind in ["surrogate", "egg", "sperm"]:
         with subtests.test(kind=repr(kind)):
@@ -391,11 +391,11 @@ async def test_accept_requires_ip_stage_permission_and_rolls_back_primary_move(
                 db,
                 test_auth.org.id,
                 role=Role.CASE_MANAGER if policy == 2 else Role.ADMIN,
-                revoke=("edit_intended_parents",) if policy == 1 else (),
+                revoke=("change_intended_parent_status",) if policy == 1 else (),
             ) as (_, client):
                 response = await client.put(f"/matches/{match['id']}/accept", json={})
             assert response.status_code == 400
-            assert response.json()["detail"] == "Missing permission: edit_intended_parents"
+            assert response.json()["detail"] == "Missing permission: change_intended_parent_status"
             assert _match_row(db, match["id"]).status == "under_review"
             assert db.get(model, uuid.UUID(party["id"])).stage_id == before
             assert (

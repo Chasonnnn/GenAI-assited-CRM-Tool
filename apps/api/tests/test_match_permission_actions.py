@@ -234,7 +234,7 @@ async def test_approval_uses_permission_not_admin_role(
     "kind,permission",
     [
         ("surrogate", "change_surrogate_status"),
-        ("surrogate", "edit_intended_parents"),
+        ("surrogate", "change_intended_parent_status"),
         ("egg", "change_donor_status"),
         ("sperm", "change_donor_status"),
     ],

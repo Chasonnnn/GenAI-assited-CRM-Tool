@@ -56,7 +56,7 @@ _CANCEL_PERMISSIONS: dict[str, tuple[PermissionKey, ...]] = {
     ),
     "intended_parent": (
         PermissionKey.INTENDED_PARENTS_VIEW,
-        PermissionKey.INTENDED_PARENTS_EDIT,
+        PermissionKey.INTENDED_PARENTS_CHANGE_STATUS,
     ),
     "donor": (
         PermissionKey.DONORS_VIEW,

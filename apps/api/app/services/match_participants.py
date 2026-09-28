@@ -350,7 +350,7 @@ def _authorize_stage_move(db, match, actor_user_id, kind, record, target, *, pre
     )
 
     member = permission_service.get_membership_for_user(db, match.organization_id, actor_user_id)
-    permission = "edit_intended_parents" if kind == "intended_parent" else f"change_{kind}_status"
+    permission = f"change_{kind}_status"
     if not member or not permission_service.check_permission(
         db, match.organization_id, actor_user_id, member.role, permission
     ):
