@@ -302,8 +302,16 @@ enable_domain_mapping = false
 Then verify domain ownership in Google Search Console and re-enable.
 
 ## 5) Build + Deploy
-Cloud Build triggers are created for API and Web builds.
-Push to `main` to build + deploy both services.
+Cloud Build triggers run separate API/worker and web builds on release tags matching
+`github_tag_regex` (default: `^surrogacy-crm-platform-v.*$`).
+
+The web build stores dependency layers and `.next/cache` in the existing private
+image repository under `web:build-cache-<CACHE_BUST>`. The runner image remains
+separate. The first build is cold; later builds seed from the previous builder's
+immutable digest. Missing caches and failed cache uploads do not fail a release.
+Change `_CACHE_BUST` to a new tag-safe value to discard both caches. Each Cloud
+Build ID is also the Next.js deployment ID, allowing clients to detect version
+skew during rollouts.
 
 ## Notes
 - Migrations are defined as a Cloud Run job. Run manually when needed:
