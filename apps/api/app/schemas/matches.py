@@ -1,11 +1,10 @@
 """Match API schemas."""
 
-from datetime import date as date_type
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.db.enums import MatchStatus
 
@@ -202,37 +201,3 @@ class MatchEventRead(BaseModel):
 class MatchCompleteRequest(BaseModel):
     outcome: str = Field(min_length=1, max_length=2000)
     reason: str | None = Field(None, max_length=2000)
-
-
-class AttemptCreate(BaseModel):
-    attempt_type: Literal["embryo_transfer", "retrieval", "collection", "other"]
-    status: Literal["planned", "in_progress", "completed", "cancelled"] = "planned"
-    started_at: date_type | None = None
-    ended_at: date_type | None = None
-    outcome: str | None = Field(None, max_length=2000)
-
-
-class AttemptUpdate(BaseModel):
-    attempt_type: Literal["embryo_transfer", "retrieval", "collection", "other"] | None = None
-    status: Literal["planned", "in_progress", "completed", "cancelled"] | None = None
-    started_at: date_type | None = None
-    ended_at: date_type | None = None
-    outcome: str | None = Field(None, max_length=2000)
-
-    @model_validator(mode="after")
-    def reject_null_required(self):
-        if any(
-            field in self.model_fields_set and getattr(self, field) is None
-            for field in ("attempt_type", "status")
-        ):
-            raise ValueError("Attempt type and status cannot be null")
-        return self
-
-
-class AttemptRead(AttemptCreate):
-    model_config = ConfigDict(from_attributes=True)
-    id: UUID
-    match_id: UUID
-    sequence: int
-    created_at: datetime
-    updated_at: datetime

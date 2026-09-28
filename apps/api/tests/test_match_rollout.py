@@ -5,7 +5,8 @@ import uuid
 import pytest
 
 from app.core.config import settings
-from app.db.models import Match, MatchAttempt
+from app.db.models import Match
+from tests.match_fixtures import seed_attempt
 from tests.test_match_cancel_request import _create_intended_parent, _create_surrogate
 from tests.test_match_cases import _accept, _case, _donor
 
@@ -28,11 +29,6 @@ async def test_disabled_expansion_preserves_legacy_match_operations(
     )
     assert response.status_code == 503
     assert db.query(Match).filter_by(organization_id=test_auth.org.id).count() == before
-    response = await authed_client.post(
-        f"/matches/{case['id']}/attempts", json={"attempt_type": "embryo_transfer"}
-    )
-    assert response.status_code == 503
-    assert db.query(MatchAttempt).filter_by(organization_id=test_auth.org.id).count() == 0
     response = await authed_client.put(
         f"/matches/{case['id']}/complete", json={"outcome": "Completed"}
     )
@@ -98,18 +94,13 @@ async def test_disabling_expansion_keeps_history_readable_and_match_work_open(
     donor = await _donor(authed_client)
     ip = await _create_intended_parent(authed_client)
     case = await _accept(authed_client, await _case(authed_client, ip, donor=donor))
-    attempt = await authed_client.post(
-        f"/matches/{case['id']}/attempts", json={"attempt_type": "retrieval"}
-    )
-    assert attempt.status_code == 201
+    attempt = seed_attempt(db, case["id"], attempt_type="retrieval")
     monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", False)
     assert (await authed_client.get(f"/matches/{case['id']}")).status_code == 200
-    assert len((await authed_client.get(f"/matches/{case['id']}/attempts")).json()) == 1
-    assert (await authed_client.get(f"/matches/{case['id']}/work")).status_code == 200
-    updated = await authed_client.patch(
-        f"/matches/{case['id']}/attempts/{attempt.json()['id']}", json={"status": "completed"}
+    history = await authed_client.get(
+        f"/matches/{case['id']}/work", params={"attempt_id": str(attempt.id)}
     )
-    assert updated.status_code == 503
+    assert history.status_code == 200, history.text
     note = await authed_client.post(f"/matches/{case['id']}/notes", json={"content": "Open"})
     assert note.status_code == 201, note.text
     task = await authed_client.post("/tasks", json={"title": "Open", "match_id": case["id"]})

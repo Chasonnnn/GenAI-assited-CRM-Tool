@@ -130,7 +130,7 @@ def require_expansion() -> None:
     """Fence new match data until all application readers support it.
 
     Gated while disabled: donor proposals, repeat surrogate/IP proposals, donor
-    accept, complete, attempt writes, and donor links on appointments.
+    accept, complete, and donor links on appointments.
     Surrogate propose, accept, decline, cancellation requests and their
     resolution, match notes, files and tasks, match links on appointments,
     and reads stay open.

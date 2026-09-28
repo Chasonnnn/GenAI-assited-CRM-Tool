@@ -282,7 +282,6 @@ async def test_archived_match_history_read_preserves_role_checks_and_denies_writ
         for path in (
             f"/matches/{current.id}",
             f"/matches/{current.id}/work",
-            f"/matches/{current.id}/attempts",
         ):
             response = await authed_client.get(path)
             assert response.status_code == 200, response.text

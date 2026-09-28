@@ -17,9 +17,6 @@ from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.schemas.auth import UserSession
 from app.schemas.matches import (
-    AttemptCreate,
-    AttemptRead,
-    AttemptUpdate,
     MatchAcceptRequest,
     MatchCancelRequest,
     MatchCompleteRequest,
@@ -35,7 +32,6 @@ from app.schemas.matches import (
 )
 from app.services import (
     match_access,
-    match_attempts,
     match_event_service,
     match_lifecycle,
     match_queries,
@@ -390,59 +386,3 @@ def complete_match(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ) -> MatchRead:
     return _transition(db, session, match_id, "complete", outcome=data.outcome, reason=data.reason)
-
-
-@router.get("/{match_id}/attempts", response_model=list[AttemptRead])
-def list_attempts(
-    match_id: UUID,
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
-):
-    match = match_access.load(db, session, match_id, "view", allow_archived=True)
-    return match_attempts.list_attempts(db, match)
-
-
-@router.post(
-    "/{match_id}/attempts",
-    response_model=AttemptRead,
-    status_code=201,
-    dependencies=[Depends(require_csrf_header)],
-)
-def create_attempt(
-    match_id: UUID,
-    data: AttemptCreate,
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_edit_permission),
-):
-    match = match_access.load(db, session, match_id, "edit_attempts")
-    try:
-        return match_attempts.save_attempt(
-            db, match, actor_user_id=session.user_id, values=data.model_dump()
-        )
-    except ValueError as exc:
-        raise _refused(exc)
-
-
-@router.patch(
-    "/{match_id}/attempts/{attempt_id}",
-    response_model=AttemptRead,
-    dependencies=[Depends(require_csrf_header)],
-)
-def update_attempt(
-    match_id: UUID,
-    attempt_id: UUID,
-    data: AttemptUpdate,
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(_edit_permission),
-):
-    match = match_access.load(db, session, match_id, "edit_attempts")
-    try:
-        return match_attempts.save_attempt(
-            db,
-            match,
-            actor_user_id=session.user_id,
-            values=data.model_dump(exclude_unset=True),
-            attempt_id=attempt_id,
-        )
-    except ValueError as exc:
-        raise _refused(exc)

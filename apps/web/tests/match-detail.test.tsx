@@ -64,9 +64,7 @@ vi.mock('@tanstack/react-query', async () => {
 })
 
 // Mock match hooks
-const mockUseMatchAttempts = vi.fn()
 const mockCompleteMatchMutateAsync = vi.fn()
-const mockSaveAttemptMutateAsync = vi.fn()
 const mockUseMatchWork = vi.fn()
 const mockUseDonor = vi.fn()
 const mockCreateMatchNote = vi.fn()
@@ -80,10 +78,8 @@ const mockUseWithdrawMatchCancellation = vi.fn()
 
 vi.mock('@/lib/hooks/use-matches', () => ({
     useMatch: (id: string) => mockUseMatch(id),
-    useMatchWork: (id: string, attemptId?: string, page?: number) => mockUseMatchWork(id, attemptId, page),
-    useMatchAttempts: () => mockUseMatchAttempts(),
+    useMatchWork: (id: string, page?: number) => mockUseMatchWork(id, page),
     useCompleteMatch: () => ({ mutateAsync: mockCompleteMatchMutateAsync, isPending: false }),
-    useSaveMatchAttempt: () => ({ mutateAsync: mockSaveAttemptMutateAsync, isPending: false }),
     useCreateMatchNote: () => ({ mutateAsync: mockCreateMatchNote, isPending: false }),
     useUploadMatchFile: () => ({ mutateAsync: mockUploadMatchFile, isPending: false }),
     matchWorkKeys: { all: (id: string) => ['matches', 'detail', id, 'work'] },
@@ -265,7 +261,6 @@ describe('MatchDetailPage', () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
-        mockUseMatchAttempts.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
         mockUseDonor.mockReturnValue({ data: undefined, isLoading: false, isError: false })
         mockUseMatchWork.mockReturnValue({ data: { notes: [], files: [], tasks: [], activity: [] }, isLoading: false, error: null, refetch: vi.fn() })
         mockInvalidateQueries.mockReset()
@@ -425,10 +420,9 @@ describe('MatchDetailPage', () => {
 
     it('loads only the exact case work endpoint and renders a donor participant safely', () => {
         mockUseMatch.mockReturnValue({ data: { ...mockMatch, match_kind: 'donor', surrogate_id: null, surrogate_name: null, donor_id: 'donor1', donor_name: 'Taylor Donor' }, isLoading: false })
-        mockUseMatchAttempts.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: vi.fn() })
         mockUseDonor.mockReturnValue({ data: { id: 'donor1', full_name: 'Taylor Donor', donor_number: 'D10001', email: 'donor@example.com', donor_type: 'egg', status_label: 'Ready' }, isLoading: false })
         render(<MatchDetailPage />)
-        expect(mockUseMatchWork).toHaveBeenCalledWith('match1', undefined, 1)
+        expect(mockUseMatchWork).toHaveBeenCalledWith('match1', 1)
         expect(mockUseSurrogate).toHaveBeenCalledWith('')
         expect(mockUseSurrogateActivity).not.toHaveBeenCalled()
         expect(mockUseIntendedParentHistory).not.toHaveBeenCalled()
@@ -458,7 +452,7 @@ describe('MatchDetailPage', () => {
         mockUseMatchWork.mockReturnValue({ data: { notes: [], files: [], tasks: [], activity: [], has_more: true }, isLoading: false })
         render(<MatchDetailPage />)
         fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-        expect(mockUseMatchWork).toHaveBeenLastCalledWith('match1', undefined, 2)
+        expect(mockUseMatchWork).toHaveBeenLastCalledWith('match1', 2)
     })
 
     it('keeps note permission denial distinct from an empty notes list', () => {
@@ -468,18 +462,13 @@ describe('MatchDetailPage', () => {
         expect(screen.queryByRole('button', { name: 'Add Note' })).not.toBeInTheDocument()
     })
 
-    it('propagates selected attempt to case work and task creation', async () => {
-        mockUseMatchAttempts.mockReturnValue({ data: [{ id: 'attempt2', match_id: 'match1', sequence: 2, attempt_type: 'embryo_transfer', status: 'planned', started_at: null, ended_at: null, outcome: null }], isLoading: false })
+    it('creates case tasks on the whole match', async () => {
         render(<MatchDetailPage />)
-        fireEvent.click(screen.getByRole('combobox', { name: 'Treatment attempt' }))
-        fireEvent.mouseMove(screen.getByRole('option', { name: 'Attempt 2 · Embryo Transfer · Planned' }))
-        fireEvent.click(screen.getByRole('option', { name: 'Attempt 2 · Embryo Transfer · Planned' }))
-        expect(mockUseMatchWork).toHaveBeenLastCalledWith('match1', 'attempt2', 1)
         fireEvent.click(screen.getByRole('tab', { name: /^tasks$/i }))
         fireEvent.click(screen.getByRole('button', { name: /add task/i }))
-        fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Attempt follow-up' } })
+        fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Transfer follow-up' } })
         fireEvent.click(screen.getByRole('button', { name: /create task/i }))
-        await waitFor(() => expect(mockCreateTaskMutateAsync).toHaveBeenCalledWith({ title: 'Attempt follow-up', task_type: 'other', match_id: 'match1', work_source: 'match', attempt_id: 'attempt2' }))
+        await waitFor(() => expect(mockCreateTaskMutateAsync).toHaveBeenCalledWith({ title: 'Transfer follow-up', task_type: 'other', match_id: 'match1', work_source: 'match' }))
     })
 
     it('keeps a refused concurrent acceptance visible in the confirm dialog', async () => {
@@ -537,19 +526,12 @@ describe('MatchDetailPage', () => {
         expect(row).toHaveTextContent('Decline reason: Budget does not align')
     })
 
-    it('shows attempt editing to a custom role that holds propose_matches', () => {
+    it('shows no attempt controls on an accepted match', () => {
         mockUserRole = 'match_coordinator'
         mockPermissions = ['view_matches', 'propose_matches']
         mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted', allowed_actions: [] }, isLoading: false })
         render(<MatchDetailPage />)
-        expect(screen.getByRole('button', { name: 'Add Attempt' })).toBeInTheDocument()
-    })
-
-    it('hides attempt editing from a listed role without propose_matches', () => {
-        mockUserRole = 'admin'
-        mockPermissions = ['view_matches']
-        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted', allowed_actions: [] }, isLoading: false })
-        render(<MatchDetailPage />)
+        expect(screen.queryByRole('combobox', { name: 'Treatment attempt' })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Add Attempt' })).not.toBeInTheDocument()
     })
 

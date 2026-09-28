@@ -13,8 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/components/ui/toast"
-import { listMatches, listMatchAttempts } from "@/lib/api/matches"
-import { getMatchAttemptLabel } from "@/components/matches/MatchAttemptDialog"
+import { listMatches } from "@/lib/api/matches"
 import { SchedulingSyncBadge } from "@/components/appointments/SchedulingSyncState"
 import { SchedulingTimePicker } from "@/components/appointments/SchedulingTimePicker"
 import { formatSchedulingDate, formatSchedulingTime, localDateTimeToIso } from "@/lib/scheduling-time"
@@ -55,11 +54,8 @@ function ScheduleForm({ record, onDone, canViewMatches }: { record: RecordContac
     const types = useAppointmentTypes()
     const queryClient = useQueryClient()
     const [matchId, setMatchId] = useState("")
-    const [attemptId, setAttemptId] = useState("")
     const matches = useQuery({ queryKey: ["appointment-record-matches", record.kind, record.id], queryFn: () => listMatches({ [`${record.kind}_id`]: record.id, per_page: 100 }), enabled: canViewMatches })
-    const attempts = useQuery({ queryKey: ["match-attempts", matchId], queryFn: () => listMatchAttempts(matchId), enabled: !!matchId && canViewMatches })
     const matchLabel = (id: string | null) => { const item = matches.data?.items.find(item => item.id === id); return item ? `${item.match_number} · ${record.kind === "donor" ? item.ip_name : item.donor_name ?? item.surrogate_name}` : "Record only" }
-    const attemptLabel = (id: string | null) => { const item = attempts.data?.find(item => item.id === id); return item ? getMatchAttemptLabel(item) : "No attempt" }
     const [typeId, setTypeId] = useState("")
     const [date, setDate] = useState("")
     const [slot, setSlot] = useState<string | null>(null)
@@ -81,7 +77,7 @@ function ScheduleForm({ record, onDone, canViewMatches }: { record: RecordContac
         event.preventDefault()
         if (!typeId || !selectedStart) return
         if (overrideAvailability && !overrideReason.trim()) return
-        create.mutate({ appointment_type_id: typeId, client_name: record.name, client_email: record.email, client_phone: phone, client_timezone: timezone, scheduled_start: selectedStart, idempotency_key: idempotencyKey, request_id: createSchedulingRequestId(), [`${record.kind}_id`]: record.id, ...(overrideAvailability ? { override_availability: true, override_reason: overrideReason.trim() } : {}), ...(matchId ? { match_id: matchId } : {}), ...(attemptId ? { attempt_id: attemptId } : {}) })
+        create.mutate({ appointment_type_id: typeId, client_name: record.name, client_email: record.email, client_phone: phone, client_timezone: timezone, scheduled_start: selectedStart, idempotency_key: idempotencyKey, request_id: createSchedulingRequestId(), [`${record.kind}_id`]: record.id, ...(overrideAvailability ? { override_availability: true, override_reason: overrideReason.trim() } : {}), ...(matchId ? { match_id: matchId } : {}) })
     }}>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
         <div className="text-sm text-muted-foreground">{record.name} · {record.email}</div>
@@ -108,8 +104,7 @@ function ScheduleForm({ record, onDone, canViewMatches }: { record: RecordContac
                 onReasonChange: setOverrideReason,
             }}
         />
-        {canViewMatches && <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">Match and attempt</summary><div className="mt-3 space-y-4"><div className="space-y-2"><Label htmlFor="record-appointment-case">Match Case</Label><Select value={matchId || "none"} onValueChange={value => { setMatchId(value === "none" ? "" : value ?? ""); setAttemptId("") }}><SelectTrigger id="record-appointment-case"><SelectValue>{(value: string | null) => matchLabel(value)}</SelectValue></SelectTrigger><SelectContent><SelectItem value="none">Record only</SelectItem>{matches.data?.items.map(item => <SelectItem key={item.id} value={item.id}>{matchLabel(item.id)}</SelectItem>)}</SelectContent></Select>{matches.isError && <p role="alert" className="text-sm text-destructive">Unable to load match cases. <Button type="button" variant="ghost" size="sm" onClick={() => void matches.refetch()}>Retry</Button></p>}</div>
-        {matchId && <div className="space-y-2"><Label htmlFor="record-appointment-attempt">Attempt</Label><Select value={attemptId || "none"} onValueChange={value => setAttemptId(value === "none" ? "" : value ?? "")}><SelectTrigger id="record-appointment-attempt"><SelectValue>{(value: string | null) => attemptLabel(value)}</SelectValue></SelectTrigger><SelectContent><SelectItem value="none">No attempt</SelectItem>{attempts.data?.map(item => <SelectItem key={item.id} value={item.id}>{getMatchAttemptLabel(item)}</SelectItem>)}</SelectContent></Select>{attempts.isError && <p role="alert" className="text-sm text-destructive">Unable to load attempts. <Button type="button" variant="ghost" size="sm" onClick={() => void attempts.refetch()}>Retry</Button></p>}</div>}
+        {canViewMatches && <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">Match</summary><div className="mt-3 space-y-4"><div className="space-y-2"><Label htmlFor="record-appointment-case">Match Case</Label><Select value={matchId || "none"} onValueChange={value => setMatchId(value === "none" ? "" : value ?? "")}><SelectTrigger id="record-appointment-case"><SelectValue>{(value: string | null) => matchLabel(value)}</SelectValue></SelectTrigger><SelectContent><SelectItem value="none">Record only</SelectItem>{matches.data?.items.map(item => <SelectItem key={item.id} value={item.id}>{matchLabel(item.id)}</SelectItem>)}</SelectContent></Select>{matches.isError && <p role="alert" className="text-sm text-destructive">Unable to load match cases. <Button type="button" variant="ghost" size="sm" onClick={() => void matches.refetch()}>Retry</Button></p>}</div>
         </div></details>}
         {create.isError && <p role="alert" className="text-sm text-destructive">{create.error.message}</p>}
         </>}

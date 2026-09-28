@@ -56,9 +56,6 @@ class Party:
     ) -> list[Effect]:
         return []
 
-    def check_attempt_type(self, attempt_type: str | None) -> None:
-        """Raise ValueError for attempt types that belong to the other participant kind."""
-
 
 class SurrogateParty(Party):
     kind = "surrogate"
@@ -154,10 +151,6 @@ class SurrogateParty(Party):
         )
         return list(result.get("after_commit_effects", []))
 
-    def check_attempt_type(self, attempt_type: str | None) -> None:
-        if attempt_type in ("retrieval", "collection"):
-            raise ValueError("Retrieval and collection attempts belong to donor cases")
-
 
 class DonorParty(Party):
     """Donors can retain multiple active matches at Matched."""
@@ -229,10 +222,6 @@ class DonorParty(Party):
         return self._move(
             db, match, actor_user_id=actor_user_id, now=now, role="handoff", request=request
         )
-
-    def check_attempt_type(self, attempt_type: str | None) -> None:
-        if attempt_type == "embryo_transfer":
-            raise ValueError("Embryo transfers belong to surrogate cases")
 
 
 class IntendedParentParty(Party):

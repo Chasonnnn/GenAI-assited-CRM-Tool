@@ -92,7 +92,7 @@ async def _target(client, db, org_id, status="accepted") -> dict:
     match = seed_surrogate_match(db, client, status=status)
     assert match.organization_id == org_id
     user_id = match.proposed_by_user_id
-    ids = {"id": str(match.id), "event_id": uuid.uuid4(), "attempt_id": uuid.uuid4()}
+    ids = {"id": str(match.id), "event_id": uuid.uuid4()}
     if status == "accepted":
         event = MatchEvent(
             id=uuid.uuid4(),
@@ -104,17 +104,8 @@ async def _target(client, db, org_id, status="accepted") -> dict:
             starts_at=datetime(2026, 10, 1, 10, tzinfo=UTC),
             created_by_user_id=user_id,
         )
-        attempt = MatchAttempt(
-            id=uuid.uuid4(),
-            organization_id=org_id,
-            match_id=match.id,
-            sequence=1,
-            attempt_type="embryo_transfer",
-            status="completed",
-            created_by_user_id=user_id,
-        )
-        db.add_all([event, attempt])
-        ids.update(event_id=str(event.id), attempt_id=str(attempt.id))
+        db.add(event)
+        ids.update(event_id=str(event.id))
     db.commit()
     return ids
 
@@ -160,7 +151,6 @@ MATCH_READS = [
     ("GET", "/matches/{id}", None, "accepted"),
     ("GET", "/matches/{id}/events", None, "accepted"),
     ("GET", "/matches/{id}/events/{event_id}", None, "accepted"),
-    ("GET", "/matches/{id}/attempts", None, "accepted"),
 ]
 
 # (method, path, body, target status, success code, match status after success)
@@ -180,15 +170,6 @@ MATCH_WRITES = [
     ("POST", "/matches/{id}/events", _EVENT, "accepted", 201, "accepted"),
     ("PUT", "/matches/{id}/events/{event_id}", {"title": "Moved"}, "accepted", 200, "accepted"),
     ("DELETE", "/matches/{id}/events/{event_id}", None, "accepted", 204, "accepted"),
-    ("POST", "/matches/{id}/attempts", {"attempt_type": "other"}, "accepted", 201, "accepted"),
-    (
-        "PATCH",
-        "/matches/{id}/attempts/{attempt_id}",
-        {"outcome": "Updated"},
-        "accepted",
-        200,
-        "accepted",
-    ),
 ]
 
 AI_ROUTES = [

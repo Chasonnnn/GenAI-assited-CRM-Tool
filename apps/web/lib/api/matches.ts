@@ -316,18 +316,15 @@ export interface MatchWork {
     tasks: MatchWorkTask[]
     activity: MatchWorkActivity[]
 }
-export async function getMatchWork(matchId: string, attemptId?: string, page = 1): Promise<MatchWork> {
-    const params = new URLSearchParams()
-    if (attemptId) params.set('attempt_id', attemptId)
-    params.set('page', String(page))
-    return api.get<MatchWork>(`/matches/${matchId}/work${params.size ? `?${params}` : ''}`)
+export async function getMatchWork(matchId: string, page = 1): Promise<MatchWork> {
+    const params = new URLSearchParams({ page: String(page) })
+    return api.get<MatchWork>(`/matches/${matchId}/work?${params}`)
 }
-export async function createMatchNote(matchId: string, data: { content: string; source: MatchWorkSource; attempt_id?: string }): Promise<MatchWorkNote> {
+export async function createMatchNote(matchId: string, data: { content: string; source: MatchWorkSource }): Promise<MatchWorkNote> {
     return api.post<MatchWorkNote>(`/matches/${matchId}/notes`, data)
 }
-export async function uploadMatchFile(matchId: string, file: File, source: MatchWorkSource, attemptId?: string): Promise<MatchWorkFile> {
+export async function uploadMatchFile(matchId: string, file: File, source: MatchWorkSource): Promise<MatchWorkFile> {
     const params = new URLSearchParams({ source })
-    if (attemptId) params.set('attempt_id', attemptId)
     const body = new FormData()
     body.append('file', file)
     return api.upload<MatchWorkFile>(`/matches/${matchId}/attachments?${params}`, body)
@@ -336,32 +333,4 @@ export async function uploadMatchFile(matchId: string, file: File, source: Match
 export interface MatchCompleteRequest { outcome: string; reason?: string }
 export function completeMatch(matchId: string, data: MatchCompleteRequest): Promise<MatchRead> {
     return api.put<MatchRead>(`/matches/${matchId}/complete`, data)
-}
-export type MatchAttemptType = 'embryo_transfer' | 'retrieval' | 'collection' | 'other'
-export type MatchAttemptStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled'
-export interface MatchAttemptInput {
-    attempt_type: MatchAttemptType
-    status?: MatchAttemptStatus
-    started_at?: string | null
-    ended_at?: string | null
-    outcome?: string | null
-}
-export interface MatchAttempt {
-    id: string
-    match_id: string
-    sequence: number
-    attempt_type: MatchAttemptType
-    status: MatchAttemptStatus
-    started_at: string | null
-    ended_at: string | null
-    outcome: string | null
-}
-export function listMatchAttempts(matchId: string): Promise<MatchAttempt[]> {
-    return api.get<MatchAttempt[]>(`/matches/${matchId}/attempts`)
-}
-export function createMatchAttempt(matchId: string, data: MatchAttemptInput): Promise<MatchAttempt> {
-    return api.post<MatchAttempt>(`/matches/${matchId}/attempts`, data)
-}
-export function updateMatchAttempt(matchId: string, attemptId: string, data: Partial<MatchAttemptInput>): Promise<MatchAttempt> {
-    return api.patch<MatchAttempt>(`/matches/${matchId}/attempts/${attemptId}`, data)
 }

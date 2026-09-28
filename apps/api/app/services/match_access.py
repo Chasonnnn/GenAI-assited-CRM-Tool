@@ -26,7 +26,6 @@ MatchAction = Literal[
     "approve_cancel",
     "reject_cancel",
     "edit_notes",
-    "edit_attempts",
     "edit_events",
 ]
 
@@ -39,7 +38,6 @@ _ACTION_PERMISSIONS = {
     "approve_cancel": "approve_status_change_requests",
     "reject_cancel": "approve_status_change_requests",
     "edit_notes": "propose_matches",
-    "edit_attempts": "propose_matches",
     "edit_events": "propose_matches",
 }
 PUBLIC_ACTIONS = ("accept", "decline", "request_cancel", "withdraw_cancel", "complete")

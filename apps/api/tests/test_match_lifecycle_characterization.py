@@ -1448,7 +1448,6 @@ async def test_intake_specialist_role_cannot_view_or_mutate_match(authed_client,
     [
         ("GET", "/matches/{id}", None),
         ("GET", "/matches/{id}/events", None),
-        ("GET", "/matches/{id}/attempts", None),
         *MATCH_MUTATIONS,
     ],
 )
@@ -1496,31 +1495,6 @@ async def test_other_org_user_gets_404_for_match_event_actions(authed_client, db
 
     async with _client_for(db, _other_org(db).id) as (_user, client):
         response = await client.request(method, target, json=payload)
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Match not found"
-    assert (await authed_client.get(path)).json() == before
-
-
-@pytest.mark.asyncio
-async def test_other_org_user_cannot_update_match_attempt(authed_client, db):
-    match = await _accept(
-        authed_client,
-        await _case(
-            authed_client,
-            await _create_intended_parent(authed_client),
-            surrogate=await _create_surrogate(authed_client),
-        ),
-    )
-    path = f"/matches/{match['id']}/attempts"
-    created = await authed_client.post(path, json={"attempt_type": "embryo_transfer"})
-    assert created.status_code == 201, created.text
-    before = (await authed_client.get(path)).json()
-
-    async with _client_for(db, _other_org(db).id) as (_user, client):
-        response = await client.patch(
-            f"{path}/{created.json()['id']}", json={"status": "completed", "outcome": "Changed"}
-        )
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Match not found"
@@ -1582,27 +1556,6 @@ async def _foreign_accepted_match(db) -> dict:
                 surrogate=await _create_surrogate(foreign),
             ),
         )
-
-
-@pytest.mark.asyncio
-async def test_create_attempt_on_foreign_match_returns_404(authed_client, db, test_auth):
-    from app.db.models import MatchAttempt
-
-    match = await _foreign_accepted_match(db)
-    attempts = db.query(MatchAttempt).filter(
-        MatchAttempt.organization_id.in_(
-            (test_auth.org.id, _match_row(db, match["id"]).organization_id)
-        )
-    )
-    count = attempts.count()
-
-    response = await authed_client.post(
-        f"/matches/{match['id']}/attempts", json={"attempt_type": "embryo_transfer"}
-    )
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Match not found"
-    assert attempts.count() == count
 
 
 @pytest.mark.asyncio

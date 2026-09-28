@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type ComponentProps, type ReactNode } from "react"
+import { useState, type ComponentProps } from "react"
 import { useParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { toast } from "@/components/ui/toast"
@@ -28,7 +28,6 @@ import { useMatch, matchKeys, useAcceptMatch, useDeclineMatch, useCancelMatch, u
 import type { MatchRead, MatchWorkSource } from "@/lib/api/matches"
 import { CompleteMatchDialog } from "@/components/matches/CompleteMatchDialog"
 import { MatchAcceptWarnings, MatchActionControls, MatchConflictBadge, type MatchAction } from "@/components/matches/MatchActionControls"
-import { MatchAttemptControl } from "@/components/matches/MatchAttemptControl"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
 import { DeclineMatchDialog } from "@/components/matches/DeclineMatchDialog"
 import { CancelMatchDialog } from "@/components/matches/CancelMatchDialog"
@@ -139,9 +138,7 @@ function MatchDetailHeader({
 
 function MatchDetailMainTabs({
     userAiEnabled,
-    attemptControls,
     matchId,
-    attemptId,
     participantKind,
     donorData,
     donorLoading,
@@ -157,9 +154,7 @@ function MatchDetailMainTabs({
     onAddTask,
 }: {
     userAiEnabled: boolean
-    attemptControls: ReactNode
     matchId: string
-    attemptId?: string
     participantKind: "surrogate" | "donor"
     donorData: Donor | undefined
     donorLoading: boolean
@@ -182,7 +177,6 @@ function MatchDetailMainTabs({
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="calendar">Calendar</TabsTrigger>
                     </TabsList>
-                    {attemptControls}
                     {userAiEnabled && participantKind === "surrogate" && (
                         <Button
                             variant="outline"
@@ -215,7 +209,6 @@ function MatchDetailMainTabs({
                     <MatchTasksCalendar
                         matchId={matchId}
                         participantKind={participantKind}
-                        {...(attemptId ? { attemptId } : {})}
                         surrogateId={surrogateId ?? ""}
                         ipId={intendedParentId}
                         {...(onAddTask ? { onAddTask } : {})}
@@ -549,11 +542,11 @@ function MatchDetailDialogs({
     )
 }
 
-function useMatchDetailRelatedData(match: MatchRead | undefined, sourceFilter: SourceFilter, attemptId?: string, workPage = 1) {
+function useMatchDetailRelatedData(match: MatchRead | undefined, sourceFilter: SourceFilter, workPage = 1) {
     const { data: surrogateData, isLoading: surrogateLoading } = useSurrogate(match?.surrogate_id || "")
     const { data: ipData, isLoading: ipLoading } = useIntendedParent(match?.intended_parent_id || "")
     const donorQuery = useDonor(match?.donor_id ?? null)
-    const work = useMatchWork(match?.id ?? "", attemptId, workPage)
+    const work = useMatchWork(match?.id ?? "", workPage)
     return {
         surrogateData, surrogateLoading, ipData, ipLoading,
         donorData: donorQuery.data, donorLoading: donorQuery.isLoading, donorError: donorQuery.isError,
@@ -571,7 +564,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
     const [acceptDialogOpen, setAcceptDialogOpen] = useState(false)
     const [actionError, setActionError] = useState<string | null>(null)
     const [workPage, setWorkPage] = useState(1)
-    const [selectedAttemptId, setSelectedAttemptId] = useState("")
     const [completeDialogOpen, setCompleteDialogOpen] = useState(false)
     const completeMutation = useCompleteMatch()
     const [declineDialogOpen, setDeclineDialogOpen] = useState(false)
@@ -616,10 +608,8 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         filteredFiles,
         filteredTasks,
         filteredActivity,
-    } = useMatchDetailRelatedData(match, sourceFilter, selectedAttemptId || undefined, workPage)
+    } = useMatchDetailRelatedData(match, sourceFilter, workPage)
 
-    // Match actions come from allowed_actions. Attempt edits check the key the attempts API requires.
-    const canEditAttempts = can("propose_matches")
     const canCreateWork = match?.status === "under_review" || match?.status === "accepted"
 
     const invalidateMatchSourceQueries = (
@@ -703,13 +693,13 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
 
     const handleAddNote = async (source: MatchWorkSource, content: string) => {
         try {
-            await createNoteMutation.mutateAsync({ source, content, ...(selectedAttemptId ? { attempt_id: selectedAttemptId } : {}) })
+            await createNoteMutation.mutateAsync({ source, content })
             toast.success("Note added successfully")
         } catch (error) { toast.error("Failed to add note"); throw error }
     }
     const handleUploadFile = async (source: MatchWorkSource, file: File) => {
         try {
-            await uploadAttachmentMutation.mutateAsync({ source, file, ...(selectedAttemptId ? { attemptId: selectedAttemptId } : {}) })
+            await uploadAttachmentMutation.mutateAsync({ source, file })
             toast.success("File uploaded successfully")
         } catch (error) { toast.error("Failed to upload file"); throw error }
     }
@@ -721,7 +711,7 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
     }
     const handleAddTask = async (target: MatchWorkSource, data: TaskFormData) => {
         try {
-            await createTaskMutation.mutateAsync({ ...data, match_id: matchId, work_source: target, ...(selectedAttemptId ? { attempt_id: selectedAttemptId } : {}) })
+            await createTaskMutation.mutateAsync({ ...data, match_id: matchId, work_source: target })
             void queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: matchWorkKeys.all(matchId) })
             toast.success("Task created successfully")
@@ -785,8 +775,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                 ) : null}
                 {match.outcome && <div className="px-6 py-2 text-sm border-b"><span className="font-medium">Outcome: </span>{match.outcome}{match.closed_at && <span className="text-muted-foreground"> · {formatMatchDate(match.closed_at)}</span>}</div>}
                 <MatchDetailMainTabs
-                    attemptControls={<MatchAttemptControl match={match} selectedId={selectedAttemptId} onSelect={(id) => { setSelectedAttemptId(id); setWorkPage(1) }} canEdit={canEditAttempts} />}
-                    {...(selectedAttemptId ? { attemptId: selectedAttemptId } : {})}
                     matchId={matchId}
                     participantKind={match.match_kind ?? "surrogate"}
                     donorData={donorData}

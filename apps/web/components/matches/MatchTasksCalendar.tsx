@@ -58,7 +58,6 @@ type FilterType = "all" | "match" | "surrogate" | "donor" | "ip" | "appointments
 
 interface MatchTasksCalendarProps {
     matchId: string
-    attemptId?: string
     participantKind?: "surrogate" | "donor"
     surrogateId?: string
     ipId?: string
@@ -368,7 +367,7 @@ function DayView({
 }
 
 // Main Component
-export function MatchTasksCalendar({ matchId, attemptId, participantKind = "surrogate", onAddTask }: MatchTasksCalendarProps) {
+export function MatchTasksCalendar({ matchId, participantKind = "surrogate", onAddTask }: MatchTasksCalendarProps) {
     const [currentDate, setCurrentDate] = useState(new Date())
     const [viewType, setViewType] = useState<ViewType>("month")
     const [filter, setFilter] = useState<FilterType>("all")
@@ -394,7 +393,7 @@ export function MatchTasksCalendar({ matchId, attemptId, participantKind = "surr
 
     const { data: matchTasks, isLoading: loadingTasks, isError: tasksError } = useTasks({
         match_id: matchId,
-        ...(attemptId ? { attempt_id: attemptId } : { include_record_history: true }),
+        include_record_history: true,
         is_completed: false,
         per_page: 100,
         exclude_approvals: true,
@@ -403,7 +402,7 @@ export function MatchTasksCalendar({ matchId, attemptId, participantKind = "surr
         date_start: dateStart,
         date_end: dateEnd,
         match_id: matchId,
-        ...(attemptId ? { attempt_id: attemptId } : { include_record_history: true }),
+        include_record_history: true,
         per_page: 100,
     })
     const tasks = matchTasks?.items ?? []
