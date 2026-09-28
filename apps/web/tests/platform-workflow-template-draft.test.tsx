@@ -647,4 +647,137 @@ describe("platform workflow template draft ownership", () => {
             })
         })
     })
+
+    describe("fixed-trigger subjects", () => {
+        const selectTrigger = (label: string) => {
+            const triggerSelect = screen.getByText("Trigger Type *").parentElement?.querySelector("button")
+            fireEvent.click(triggerSelect as HTMLButtonElement)
+            const option = screen.getByRole("option", { name: label })
+            fireEvent.mouseMove(option)
+            fireEvent.click(option)
+        }
+        const subjectSelect = () => screen.getByText("Subject Type *").parentElement?.querySelector("button")
+
+        beforeEach(() => {
+            mutationMocks.update.mockResolvedValue(templateState.data)
+            workflowOptions.trigger_types = [
+                { value: "surrogate_created", label: "Surrogate Created" },
+                { value: "form_submitted", label: "Application Submitted" },
+                { value: "intake_lead_created", label: "Intake Lead Created" },
+                { value: "match_proposed", label: "Match Proposed" },
+                { value: "appointment_scheduled", label: "Appointment Scheduled" },
+            ]
+            templateState.data = {
+                ...templateState.data,
+                draft: {
+                    ...templateState.data.draft,
+                    actions: [{ action_type: "add_note", content: "Review the record." }],
+                },
+            }
+        })
+
+        it.each([
+            { trigger: "Application Submitted", subject: "form_submission", label: "Form Submission" },
+            { trigger: "Intake Lead Created", subject: "intake_lead", label: "Intake Lead" },
+            { trigger: "Match Proposed", subject: "match", label: "Match" },
+            { trigger: "Appointment Scheduled", subject: "appointment", label: "Appointment" },
+        ])("saves the $subject subject for the $trigger trigger", async ({ trigger, subject, label }) => {
+            render(<PlatformWorkflowTemplatePage />)
+
+            selectTrigger(trigger)
+            expect(subjectSelect()).toHaveTextContent(label)
+            fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+            await waitFor(() => {
+                expect(mutationMocks.update).toHaveBeenCalledWith({
+                    id: "workflow-template-1",
+                    payload: expect.objectContaining({ subject_type: subject }),
+                })
+            })
+        })
+
+        it("returns a fixed subject to surrogate when the trigger no longer fixes it", async () => {
+            templateState.data = {
+                ...templateState.data,
+                draft: { ...templateState.data.draft, subject_type: "match", trigger_type: "match_proposed" },
+            }
+            render(<PlatformWorkflowTemplatePage />)
+
+            selectTrigger("Surrogate Created")
+            expect(subjectSelect()).toHaveTextContent("Surrogate")
+            fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+            await waitFor(() => {
+                expect(mutationMocks.update).toHaveBeenCalledWith({
+                    id: "workflow-template-1",
+                    payload: expect.objectContaining({ subject_type: "surrogate", trigger_type: "surrogate_created" }),
+                })
+            })
+        })
+
+        it("publishes the trigger's subject for a draft saved with the surrogate subject", async () => {
+            templateState.data = {
+                ...templateState.data,
+                draft: { ...templateState.data.draft, subject_type: "surrogate", trigger_type: "form_submitted" },
+            }
+            render(<PlatformWorkflowTemplatePage />)
+
+            fireEvent.click(screen.getByRole("button", { name: "Publish" }))
+            fireEvent.click(screen.getByRole("button", { name: "Confirm workflow publish" }))
+
+            await waitFor(() => {
+                expect(mutationMocks.update).toHaveBeenCalledWith({
+                    id: "workflow-template-1",
+                    payload: expect.objectContaining({
+                        subject_type: "form_submission",
+                        trigger_type: "form_submitted",
+                    }),
+                })
+            })
+            await waitFor(() => expect(mutationMocks.publish).toHaveBeenCalled())
+        })
+
+        it("saves the trigger's subject after an explicit surrogate pick", async () => {
+            templateState.data = {
+                ...templateState.data,
+                draft: { ...templateState.data.draft, subject_type: "form_submission", trigger_type: "form_submitted" },
+            }
+            render(<PlatformWorkflowTemplatePage />)
+
+            fireEvent.click(subjectSelect() as HTMLButtonElement)
+            const surrogateOption = screen.getByRole("option", { name: "Surrogate" })
+            fireEvent.mouseMove(surrogateOption)
+            fireEvent.click(surrogateOption)
+            fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+            await waitFor(() => {
+                expect(mutationMocks.update).toHaveBeenCalledWith({
+                    id: "workflow-template-1",
+                    payload: expect.objectContaining({
+                        subject_type: "form_submission",
+                        trigger_type: "form_submitted",
+                    }),
+                })
+            })
+        })
+
+        it("keeps a donor subject and blocks a trigger it does not support", () => {
+            templateState.data = {
+                ...templateState.data,
+                draft: { ...templateState.data.draft, subject_type: "egg_donor", trigger_type: "donor_created" },
+            }
+            workflowOptions.trigger_types = [
+                ...workflowOptions.trigger_types,
+                { value: "donor_created", label: "Donor Created" },
+            ]
+            render(<PlatformWorkflowTemplatePage />)
+
+            selectTrigger("Application Submitted")
+            expect(subjectSelect()).toHaveTextContent("Egg Donor")
+            fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+            expect(screen.getByText("Egg Donor does not support this trigger.")).toBeInTheDocument()
+            expect(mutationMocks.update).not.toHaveBeenCalled()
+        })
+    })
 })

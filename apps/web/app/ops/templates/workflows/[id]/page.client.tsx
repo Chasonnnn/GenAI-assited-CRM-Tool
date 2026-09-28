@@ -166,6 +166,27 @@ function getWorkflowOptionsSubjectType(value: string | null): WorkflowSubjectTyp
     return isWorkflowSubjectType(value) ? value : "surrogate"
 }
 
+// Mirrors workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES; the engine matches on subject_type.
+const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubjectType>> = {
+    form_submitted: "form_submission",
+    intake_lead_created: "intake_lead",
+    match_proposed: "match",
+    match_accepted: "match",
+    match_declined: "match",
+    match_cancelled: "match",
+    appointment_scheduled: "appointment",
+    appointment_completed: "appointment",
+}
+const FIXED_TRIGGER_SUBJECTS = new Set(Object.values(FIXED_TRIGGER_SUBJECT_TYPES))
+
+// Mirrors workflow_service._subject_type_for_trigger: donor subjects stay explicit.
+function getSubjectTypeForTrigger(subjectType: string | null, triggerType: string): string | null {
+    if (!isWorkflowSubjectType(subjectType) || isDonorSubjectType(subjectType)) return subjectType
+    const fixedSubject = FIXED_TRIGGER_SUBJECT_TYPES[triggerType]
+    if (fixedSubject) return fixedSubject
+    return FIXED_TRIGGER_SUBJECTS.has(subjectType) ? "surrogate" : subjectType
+}
+
 function getWorkflowSubjectValidationError(subjectType: string | null, triggerType: string): string | null {
     if (!isWorkflowSubjectType(subjectType)) return "Subject type is required."
     if (DONOR_ONLY_TRIGGER_TYPES.has(triggerType) && !isDonorSubjectType(subjectType)) {
@@ -665,7 +686,7 @@ function workflowTemplateEditorReducer(
                 description: draft.description ?? "",
                 icon: draft.icon ?? "template",
                 category: draft.category ?? "general",
-                subjectType: draft.subject_type ?? null,
+                subjectType: getSubjectTypeForTrigger(draft.subject_type ?? null, draft.trigger_type ?? ""),
                 triggerType: draft.trigger_type ?? "",
                 triggerConfig: normalizeTriggerConfigForUi(
                     draft.trigger_type ?? "",
@@ -726,6 +747,7 @@ function workflowTemplateEditorReducer(
             if (action.value === state.triggerType) return state
             return {
                 ...state,
+                subjectType: getSubjectTypeForTrigger(state.subjectType, action.value),
                 triggerType: action.value,
                 triggerConfig: normalizeTriggerConfigForUi(action.value, {}, []),
             }
@@ -2547,6 +2569,8 @@ function useWorkflowTemplatePageState() {
     const setIsPublished = (value: boolean) => dispatchEditor({ type: "setIsPublished", value })
 
     const isDonorSubject = isDonorSubjectType(subjectType)
+    // An explicit subject pick does not follow a fixed trigger; the saved subject does.
+    const savedSubjectType = getSubjectTypeForTrigger(subjectType, triggerType)
     const fallbackOptions = getWorkflowTemplateFallbackOptions(isDonorSubject)
     const actionTypeOptions = options?.action_types ?? fallbackOptions.actionTypes
     const triggerTypeOptions = options?.trigger_types ?? fallbackOptions.triggerTypes
@@ -2656,7 +2680,7 @@ function useWorkflowTemplatePageState() {
 
     // The name error is shown on the name field, so the summary panel only lists the other rules.
     const getWorkflowRulesValidationError = (): string | null => {
-        const subjectError = getWorkflowSubjectValidationError(subjectType, triggerType)
+        const subjectError = getWorkflowSubjectValidationError(savedSubjectType, triggerType)
         if (subjectError) return subjectError
         const triggerError = getTriggerValidationError()
         if (triggerError) return triggerError
@@ -2747,7 +2771,7 @@ function useWorkflowTemplatePageState() {
             description: description.trim() || null,
             icon: icon || "template",
             category: category || "general",
-            subject_type: subjectType,
+            subject_type: savedSubjectType,
             trigger_type: triggerType,
             trigger_config: buildTriggerConfig(),
             conditions: normalizeConditionsForSave(conditions),
