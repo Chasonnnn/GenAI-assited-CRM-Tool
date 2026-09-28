@@ -27,6 +27,7 @@ export interface MatchRead {
     donor_name?: string | null
     donor_number?: string | null
     donor_stage_label?: string | null
+    donor_stage_color?: string | null
     closed_at?: string | null
     closure_reason?: string | null
     outcome?: string | null
@@ -53,6 +54,8 @@ export interface MatchRead {
     surrogate_stage_id: string | null
     surrogate_stage_slug: string | null
     surrogate_stage_label: string | null
+    surrogate_stage_color?: string | null
+    ip_stage_color?: string | null
 }
 
 export interface MatchListItem {
@@ -64,6 +67,7 @@ export interface MatchListItem {
     donor_name?: string | null
     donor_number?: string | null
     donor_stage_label?: string | null
+    donor_stage_color?: string | null
     closed_at?: string | null
     closure_reason?: string | null
     outcome?: string | null
@@ -78,6 +82,7 @@ export interface MatchListItem {
     surrogate_stage_id: string | null
     surrogate_stage_slug: string | null
     surrogate_stage_label: string | null
+    surrogate_stage_color?: string | null
 }
 
 export interface MatchListResponse {

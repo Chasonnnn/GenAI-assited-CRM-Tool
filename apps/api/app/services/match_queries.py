@@ -398,6 +398,7 @@ def to_read(db: Session, match: Match, *, session: UserSession) -> MatchRead:
         donor_name=donor.full_name if donor else None,
         donor_number=donor.donor_number if donor else None,
         donor_stage_label=donor.stage.label if donor and donor.stage else None,
+        donor_stage_color=donor.stage.color if donor and donor.stage else None,
         match_kind=match.match_kind,
         closed_at=match.closed_at.isoformat() if match.closed_at else None,
         closure_reason=match.closure_reason,
@@ -428,6 +429,8 @@ def to_read(db: Session, match: Match, *, session: UserSession) -> MatchRead:
         surrogate_stage_id=str(surrogate.stage.id) if surrogate and surrogate.stage else None,
         surrogate_stage_slug=surrogate.stage.slug if surrogate and surrogate.stage else None,
         surrogate_stage_label=surrogate.stage.label if surrogate and surrogate.stage else None,
+        surrogate_stage_color=surrogate.stage.color if surrogate and surrogate.stage else None,
+        ip_stage_color=ip.stage.color if ip and ip.stage else None,
     )
 
 
@@ -446,6 +449,7 @@ def to_list_item(
         donor_name=donor.full_name if donor else None,
         donor_number=donor.donor_number if donor else None,
         donor_stage_label=donor.stage.label if donor and donor.stage else None,
+        donor_stage_color=donor.stage.color if donor and donor.stage else None,
         match_kind=match.match_kind,
         closed_at=match.closed_at.isoformat() if match.closed_at else None,
         closure_reason=match.closure_reason,
@@ -460,6 +464,7 @@ def to_list_item(
         surrogate_stage_id=str(surrogate.stage.id) if surrogate and surrogate.stage else None,
         surrogate_stage_slug=surrogate.stage.slug if surrogate and surrogate.stage else None,
         surrogate_stage_label=surrogate.stage.label if surrogate and surrogate.stage else None,
+        surrogate_stage_color=surrogate.stage.color if surrogate and surrogate.stage else None,
     )
 
 

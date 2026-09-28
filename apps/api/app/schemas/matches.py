@@ -34,6 +34,7 @@ class MatchRead(BaseModel):
     donor_name: str | None = None
     donor_number: str | None = None
     donor_stage_label: str | None = None
+    donor_stage_color: str | None = None
     match_kind: Literal["surrogate", "donor"] = "surrogate"
     closed_at: str | None = None
     closure_reason: str | None = None
@@ -62,6 +63,8 @@ class MatchRead(BaseModel):
     surrogate_stage_id: str | None = None
     surrogate_stage_slug: str | None = None
     surrogate_stage_label: str | None = None
+    surrogate_stage_color: str | None = None
+    ip_stage_color: str | None = None
 
 
 class MatchListItem(BaseModel):
@@ -74,6 +77,7 @@ class MatchListItem(BaseModel):
     donor_name: str | None = None
     donor_number: str | None = None
     donor_stage_label: str | None = None
+    donor_stage_color: str | None = None
     match_kind: Literal["surrogate", "donor"] = "surrogate"
     closed_at: str | None = None
     closure_reason: str | None = None
@@ -89,6 +93,7 @@ class MatchListItem(BaseModel):
     surrogate_stage_id: str | None = None
     surrogate_stage_slug: str | None = None
     surrogate_stage_label: str | None = None
+    surrogate_stage_color: str | None = None
 
 
 class MatchListResponse(BaseModel):

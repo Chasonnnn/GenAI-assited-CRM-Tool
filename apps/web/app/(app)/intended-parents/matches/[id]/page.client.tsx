@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, type ComponentProps } from "react"
+import { useState, type ComponentProps, type ReactNode } from "react"
 import { useParams } from "next/navigation"
 import Link from "@/components/app-link"
 import { toast } from "@/components/ui/toast"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Badge } from "@/components/ui/badge"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -91,6 +92,13 @@ function formatMatchDateTime(dateStr: string | null | undefined) {
 
 type MatchDetailOverviewTabsProps = ComponentProps<typeof MatchDetailOverviewTabs>
 
+/** Stage badge in the stage's color; neutral when the stage color is unknown. */
+function StageBadge({ color, className, children }: { color: string | null | undefined; className: string; children: ReactNode }) {
+    return color
+        ? <Badge className={className} style={stageBadgeStyle(color)}>{children}</Badge>
+        : <Badge variant="secondary" className={className}>{children}</Badge>
+}
+
 function MatchDetailHeader({
     match,
     pending,
@@ -120,9 +128,9 @@ function MatchDetailHeader({
                         {match.match_number ? `Match #${match.match_number}` : "—"}
                     </span>
                     {match.surrogate_stage_label && (
-                        <Badge variant="secondary" className="text-xs">
+                        <StageBadge color={match.surrogate_stage_color} className="text-xs">
                             {match.surrogate_stage_label}
-                        </Badge>
+                        </StageBadge>
                     )}
                 </div>
                 <Badge className={getMatchStatusBadgeClassName(match.status)}>
@@ -148,6 +156,8 @@ function MatchDetailMainTabs({
     surrogateLoading,
     intendedParentData,
     intendedParentLoading,
+    participantStageColor,
+    intendedParentStageColor,
     overviewTabsProps,
     onShowScheduleParser,
     onAddTask,
@@ -164,6 +174,8 @@ function MatchDetailMainTabs({
     surrogateLoading: boolean
     intendedParentData: IntendedParent | undefined
     intendedParentLoading: boolean
+    participantStageColor: string | null | undefined
+    intendedParentStageColor: string | null | undefined
     overviewTabsProps: MatchDetailOverviewTabsProps
     onShowScheduleParser: () => void
     onAddTask?: (() => void) | undefined
@@ -192,12 +204,14 @@ function MatchDetailMainTabs({
                 <TabsContent value="overview" className="h-[calc(100vh-145px)]">
                     {/* Below xl the case work column is too narrow for its four tabs, so it spans both card columns. */}
                     <div className="grid h-full gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]">
-                        {participantKind === "donor" ? <DonorProfileColumn donor={donorData} isLoading={donorLoading} isError={donorError} /> : <SurrogateProfileColumn
+                        {participantKind === "donor" ? <DonorProfileColumn donor={donorData} stageColor={participantStageColor} isLoading={donorLoading} isError={donorError} /> : <SurrogateProfileColumn
                             surrogateData={surrogateData}
+                            stageColor={participantStageColor}
                             isLoading={surrogateLoading}
                         />}
                         <IntendedParentProfileColumn
                             intendedParentData={intendedParentData}
+                            stageColor={intendedParentStageColor}
                             isLoading={intendedParentLoading}
                         />
                         <MatchDetailOverviewTabs {...overviewTabsProps} className="lg:col-span-2 xl:col-span-1" />
@@ -218,13 +232,13 @@ function MatchDetailMainTabs({
     )
 }
 
-function DonorProfileColumn({ donor, isLoading, isError }: { donor: Donor | undefined; isLoading: boolean; isError: boolean }) {
+function DonorProfileColumn({ donor, stageColor, isLoading, isError }: { donor: Donor | undefined; stageColor: string | null | undefined; isLoading: boolean; isError: boolean }) {
     return <div className="min-w-0 border rounded-lg p-4 overflow-y-auto">
         <div className="flex items-center gap-2 mb-3"><UserIcon className="size-4 text-purple-500" /><h2 className="text-sm font-semibold text-purple-500">Donor</h2></div>
         {isLoading ? <div role="status" className="flex justify-center h-32 items-center"><Loader2Icon className="size-5 animate-spin" /></div> : isError ? <p role="alert" className="text-sm text-muted-foreground">Unable to load donor profile</p> : donor ? <div className="space-y-3">
             <div className="flex items-start gap-3">
                 <Avatar className="size-10"><AvatarFallback className="bg-purple-500/10 text-purple-500 text-sm">{donor.full_name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
-                <div className="min-w-0"><h3 className="text-base font-semibold truncate"><Link href={`/donors/${donor.id}`} className="hover:underline">{donor.full_name}</Link></h3><div className="flex flex-wrap gap-1 mt-0.5"><Badge variant="outline" className="text-xs px-1.5 py-0">#{donor.donor_number}</Badge><Badge variant="secondary" className="text-xs px-1.5 py-0">{donor.status_label}</Badge></div></div>
+                <div className="min-w-0"><h3 className="text-base font-semibold truncate"><Link href={`/donors/${donor.id}`} className="hover:underline">{donor.full_name}</Link></h3><div className="flex flex-wrap gap-1 mt-0.5"><Badge variant="outline" className="text-xs px-1.5 py-0">#{donor.donor_number}</Badge><StageBadge color={stageColor} className="text-xs px-1.5 py-0">{donor.status_label}</StageBadge></div></div>
             </div>
             <Separator />
             <div className="space-y-2 text-sm">
@@ -241,9 +255,11 @@ function DonorProfileColumn({ donor, isLoading, isError }: { donor: Donor | unde
 
 function SurrogateProfileColumn({
     surrogateData,
+    stageColor,
     isLoading,
 }: {
     surrogateData: SurrogateRead | undefined
+    stageColor: string | null | undefined
     isLoading: boolean
 }) {
     return (
@@ -276,7 +292,7 @@ function SurrogateProfileColumn({
                             </h3>
                             <div className="flex items-center gap-1 mt-0.5">
                                 <Badge variant="outline" className="text-xs px-1.5 py-0">#{surrogateData.surrogate_number}</Badge>
-                                <Badge variant="secondary" className="text-xs px-1.5 py-0">{surrogateData.status_label}</Badge>
+                                <StageBadge color={stageColor} className="text-xs px-1.5 py-0">{surrogateData.status_label}</StageBadge>
                             </div>
                         </div>
                     </div>
@@ -333,9 +349,11 @@ function SurrogateProfileColumn({
 
 function IntendedParentProfileColumn({
     intendedParentData,
+    stageColor,
     isLoading,
 }: {
     intendedParentData: IntendedParent | undefined
+    stageColor: string | null | undefined
     isLoading: boolean
 }) {
     return (
@@ -366,9 +384,9 @@ function IntendedParentProfileColumn({
                                     {intendedParentData.full_name || "Intended Parent"}
                                 </Link>
                             </h3>
-                            <Badge variant="secondary" className="text-xs px-1.5 py-0 mt-0.5">
+                            <StageBadge color={stageColor} className="text-xs px-1.5 py-0 mt-0.5">
                                 {intendedParentData.status_label || intendedParentData.status || "—"}
-                            </Badge>
+                            </StageBadge>
                         </div>
                     </div>
 
@@ -783,6 +801,8 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                     surrogateLoading={surrogateLoading}
                     intendedParentData={ipData}
                     intendedParentLoading={ipLoading}
+                    participantStageColor={match.match_kind === "donor" ? match.donor_stage_color : match.surrogate_stage_color}
+                    intendedParentStageColor={match.ip_stage_color}
                     overviewTabsProps={{
                         participantKind: match.match_kind ?? "surrogate",
                         hasMore: hasMoreWork,

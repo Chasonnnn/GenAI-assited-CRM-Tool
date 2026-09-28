@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import '@testing-library/jest-dom'
 import MatchDetailPage from '../app/(app)/intended-parents/matches/[id]/page.client'
 import { ApiError } from '@/lib/api'
+import { stageBadgeStyle } from '@/lib/stage-colors'
 
 const mockPush = vi.fn()
 const mockReplace = vi.fn()
@@ -486,6 +487,21 @@ describe('MatchDetailPage', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Accept Match' }))
         await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent('Surrogate has an accepted match'))
         expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+    })
+
+    it('renders surrogate and intended parent stages in their stage colors', () => {
+        mockUseMatch.mockReturnValue({
+            data: { ...mockMatch, surrogate_stage_label: 'Matched', surrogate_stage_color: '#10B981', ip_stage_color: '#0EA5E9' },
+            isLoading: false,
+        })
+        mockUseSurrogate.mockReturnValue({ data: { ...mockSurrogate, status_label: 'Matched' }, isLoading: false })
+        mockUseIntendedParent.mockReturnValue({ data: { ...mockIP, status_label: 'Ready to Match IP' }, isLoading: false })
+        render(<MatchDetailPage />)
+        const surrogateStyle = { backgroundColor: stageBadgeStyle('#10B981').backgroundColor, color: '#FFFFFF' }
+        const badges = screen.getAllByText('Matched')
+        expect(badges).toHaveLength(2)
+        for (const badge of badges) expect(badge).toHaveStyle(surrogateStyle)
+        expect(screen.getByText('Ready to Match IP')).toHaveStyle({ backgroundColor: stageBadgeStyle('#0EA5E9').backgroundColor, color: '#FFFFFF' })
     })
 
     it('confirms acceptance with the stage changes the API applies', async () => {
