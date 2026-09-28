@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { stageMatchesKey } from "@/lib/surrogate-stage-context"
 import type { LatestContactOutcome } from "@/lib/types/surrogate"
-import { readableForeground } from "@/lib/stage-colors"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 
 type SurrogateDetailHeaderProps = {
     recordLabel?: string
@@ -52,7 +52,7 @@ export function SurrogateDetailHeader({
                 </Button>
                 <h1 className="text-xl font-semibold">{recordLabel} #{surrogateNumber}</h1>
                 <div className="flex flex-wrap items-center gap-2">
-                    <Badge style={{ backgroundColor: statusColor, color: readableForeground(statusColor) }}>{statusLabel}</Badge>
+                    <Badge style={stageBadgeStyle(statusColor)}>{statusLabel}</Badge>
                     {statusBadge}
                 </div>
                 {showContactOutcome && (

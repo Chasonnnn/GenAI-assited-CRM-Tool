@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server"
 import { fireEvent, render, screen } from "@testing-library/react"
 
 import UnassignedSurrogatesPage from "@/app/(app)/surrogates/unassigned/page.client"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 
 const mocks = vi.hoisted(() => ({
     redirect: vi.fn(),
@@ -119,7 +120,8 @@ describe("UnassignedSurrogatesPage", () => {
             expect(screen.getByText("Agency")).toBeInTheDocument()
             expect(screen.queryByText("agency")).not.toBeInTheDocument()
             const stageBadge = screen.getByText("New Unread")
-            expect(stageBadge).toHaveStyle({ backgroundColor: "#3B82F6" })
+            expect(stageBadge).toHaveStyle({ ...stageBadgeStyle("#3B82F6"), color: "#FFFFFF" })
+            expect(stageBadgeStyle("#3B82F6").backgroundColor).not.toBe("#3B82F6")
         })
 
         it("shows the empty state without a first-page button on page 1", () => {

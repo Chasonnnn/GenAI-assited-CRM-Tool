@@ -12,7 +12,7 @@ import { useClaimSurrogate } from "@/lib/hooks/use-queues"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useTrackUnassignedQueueView } from "@/lib/hooks/use-track-unassigned-queue-view"
 import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
-import { readableForeground } from "@/lib/stage-colors"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 import { getSurrogateSourceLabel } from "@/lib/surrogate-source-labels"
 
 import { Card } from "@/components/ui/card"
@@ -217,12 +217,7 @@ function UnassignedSurrogatesContent({
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                <Badge
-                                                    style={{
-                                                        backgroundColor: stageColor,
-                                                        color: readableForeground(stageColor),
-                                                    }}
-                                                >
+                                                <Badge style={stageBadgeStyle(stageColor)}>
                                                     {s.status_label || stage?.label || "Unknown stage"}
                                                 </Badge>
                                             </TableCell>

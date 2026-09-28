@@ -50,7 +50,7 @@ import {
 import { SurrogatesFloatingScrollbar } from "@/components/surrogates/SurrogatesFloatingScrollbar"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { useDebouncedSearchCommit } from "@/lib/hooks/use-debounced-search-commit"
-import { readableForeground } from "@/lib/stage-colors"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 import { getStageOptionLabel, pipelineStageOptions } from "@/lib/stage-options"
 import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
 import { SURROGATE_SOURCE_LABELS, isSurrogateSource } from "@/lib/surrogate-source-labels"
@@ -1707,7 +1707,7 @@ export function SurrogatesPageClient() {
                                                     {surrogateItem.phone || "—"}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge style={{ backgroundColor: statusColor, color: readableForeground(statusColor) }}>
+                                                    <Badge style={stageBadgeStyle(statusColor)}>
                                                         {statusLabel}
                                                     </Badge>
                                                 </TableCell>

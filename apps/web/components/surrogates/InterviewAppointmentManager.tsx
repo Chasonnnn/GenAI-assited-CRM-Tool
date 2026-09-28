@@ -12,7 +12,7 @@ import {
     useManageInterviewAppointment,
     useRetryInterviewAppointmentGoogleSync,
 } from "@/lib/hooks/use-interview-appointment"
-import { readableForeground } from "@/lib/stage-colors"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -53,7 +53,7 @@ export function AppointmentStatusBadge({ appointment }: { appointment: Interview
 }
 
 function StageBadge({ stage, className }: { stage: AppointmentStage; className?: string }) {
-    return <Badge className={className} style={{ backgroundColor: stage.color, color: readableForeground(stage.color) }}>{stage.label}</Badge>
+    return <Badge className={className} style={stageBadgeStyle(stage.color)}>{stage.label}</Badge>
 }
 
 function formatAppointment(appointment: InterviewAppointment) {
