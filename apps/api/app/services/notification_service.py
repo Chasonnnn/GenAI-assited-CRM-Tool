@@ -611,6 +611,90 @@ def notify_surrogate_status_changed(
         )
 
 
+def _donor_type_label(donor: Donor) -> str:
+    return "Egg Donor" if donor.donor_type == "egg" else "Sperm Donor"
+
+
+def get_donor_creator_id(db: Session, donor: Donor) -> UUID | None:
+    """Return the user who created a donor; donors record it only as activity."""
+    from app.core.constants import SYSTEM_USER_ID
+    from app.db.models import EntityActivityLog
+
+    creator_id = (
+        db.query(EntityActivityLog.actor_user_id)
+        .filter(
+            EntityActivityLog.organization_id == donor.organization_id,
+            EntityActivityLog.donor_id == donor.id,
+            EntityActivityLog.activity_type == "record_created",
+        )
+        .order_by(EntityActivityLog.occurred_at.asc())
+        .limit(1)
+        .scalar()
+    )
+    return None if creator_id == SYSTEM_USER_ID else creator_id
+
+
+def notify_donor_assigned(
+    db: Session,
+    donor: Donor,
+    assignee_id: UUID,
+    actor_name: str,
+) -> None:
+    """Notify user when a donor is assigned to them."""
+    if not assignee_id:
+        return
+
+    if not should_notify(db, assignee_id, donor.organization_id, "surrogate_assigned"):
+        return
+
+    donor_type_label = _donor_type_label(donor)
+    create_notification(
+        db=db,
+        org_id=donor.organization_id,
+        user_id=assignee_id,
+        type=NotificationType.SURROGATE_ASSIGNED,
+        title=f"{donor_type_label} #{donor.donor_number} assigned to you",
+        body=f"{actor_name} assigned {donor_type_label.lower()} {donor.full_name} to you",
+        entity_type="donor",
+        entity_id=donor.id,
+        dedupe_key=f"donor_assigned:{donor.id}:{assignee_id}",
+    )
+
+
+def notify_donor_stage_changed(
+    db: Session,
+    donor: Donor,
+    from_stage: str,
+    to_stage: str,
+    actor_id: UUID | None,
+    actor_name: str,
+) -> None:
+    """Notify owner and creator when a donor changes stage."""
+    recipients = set()
+    if donor.owner_type == OwnerType.USER.value and donor.owner_id and donor.owner_id != actor_id:
+        recipients.add(donor.owner_id)
+    creator_id = get_donor_creator_id(db, donor)
+    if creator_id and creator_id != actor_id:
+        recipients.add(creator_id)
+
+    donor_type_label = _donor_type_label(donor)
+    for user_id in recipients:
+        if not should_notify(db, user_id, donor.organization_id, "surrogate_status_changed"):
+            continue
+
+        create_notification(
+            db=db,
+            org_id=donor.organization_id,
+            user_id=user_id,
+            type=NotificationType.SURROGATE_STATUS_CHANGED,
+            title=f"{donor_type_label} #{donor.donor_number} stage changed",
+            body=f"{actor_name} changed stage from {from_stage} to {to_stage}",
+            entity_type="donor",
+            entity_id=donor.id,
+            dedupe_key=f"donor_stage:{donor.id}:{to_stage}:{user_id}",
+        )
+
+
 def notify_surrogate_ready_for_claim(
     db: Session,
     surrogate: Surrogate,

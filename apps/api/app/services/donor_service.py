@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.encryption import hash_email, hash_phone
-from app.db.enums import AuditEventType, DonorType, Role
+from app.db.enums import AuditEventType, DonorType, OwnerType, Role
 from app.db.models import (
     Donor,
     DonorStatusHistory,
@@ -71,7 +71,7 @@ def _dispatch_side_effect_isolated(
     donor: Donor,
     event_key: str,
     trigger: Callable[[Session, Donor], None],
-    failure_kind: Literal["workflow", "notification"],
+    failure_kind: Literal["workflow", "notification", "record_notification"],
     details: dict | None = None,
 ) -> None:
     """Run a post-commit donor side effect without changing the mutation result."""
@@ -95,11 +95,23 @@ def _dispatch_side_effect_isolated(
         from app.db.enums import AlertSeverity, AlertType
         from app.services import alert_service
 
-        error_message = (
-            "Donor workflow trigger failed"
-            if failure_kind == "workflow"
-            else "Donor status request notification failed"
-        )
+        error_message, alert_message, integration_key = {
+            "workflow": (
+                "Donor workflow trigger failed",
+                "A donor workflow trigger failed after the donor change was saved.",
+                f"donor_{event_key}",
+            ),
+            "notification": (
+                "Donor status request notification failed",
+                "A donor status request notification failed after the request change was saved.",
+                f"donor_status_request_{event_key}",
+            ),
+            "record_notification": (
+                "Donor notification failed",
+                "A donor notification failed after the donor change was saved.",
+                f"donor_notification_{event_key}",
+            ),
+        }[failure_kind]
         logger.error(
             error_message,
             extra={
@@ -125,16 +137,8 @@ def _dispatch_side_effect_isolated(
                 ),
                 severity=AlertSeverity.ERROR,
                 title=error_message,
-                message=(
-                    "A donor workflow trigger failed after the donor change was saved."
-                    if failure_kind == "workflow"
-                    else "A donor status request notification failed after the request change was saved."
-                ),
-                integration_key=(
-                    f"donor_{event_key}"
-                    if failure_kind == "workflow"
-                    else f"donor_status_request_{event_key}"
-                ),
+                message=alert_message,
+                integration_key=integration_key,
                 error_class=type(exc).__name__,
                 details={
                     "donor_id": str(donor_id),
@@ -201,6 +205,54 @@ def dispatch_stage_changed_workflow(
             "new_stage_id": str(new_stage.id),
         },
     )
+
+
+def dispatch_stage_changed_notification(
+    db: Session,
+    *,
+    donor: Donor,
+    old_stage: PipelineStage,
+    new_stage: PipelineStage,
+    user_id: UUID | None,
+) -> None:
+    from app.services import notification_service, pipeline_service
+
+    if pipeline_service.stage_matches_key(new_stage, "application_submitted"):
+        return
+    from_label = old_stage.label
+    to_label = new_stage.label
+    actor_name = _org_user_display_name(db, donor.organization_id, user_id)
+
+    def trigger(notification_db: Session, notification_donor: Donor) -> None:
+        actor_id = (
+            user_id
+            or notification_service.get_donor_creator_id(notification_db, notification_donor)
+            or notification_donor.owner_id
+        )
+        notification_service.notify_donor_stage_changed(
+            db=notification_db,
+            donor=notification_donor,
+            from_stage=from_label,
+            to_stage=to_label,
+            actor_id=actor_id,
+            actor_name=actor_name,
+        )
+
+    _dispatch_side_effect_isolated(
+        db=db,
+        donor=donor,
+        event_key="stage_changed",
+        trigger=trigger,
+        failure_kind="record_notification",
+        details={"old_stage_id": str(old_stage.id), "new_stage_id": str(new_stage.id)},
+    )
+
+
+def _org_user_display_name(db: Session, org_id: UUID, user_id: UUID | None) -> str:
+    from app.services import membership_service
+
+    membership = membership_service.get_membership_for_org(db, org_id, user_id) if user_id else None
+    return membership.user.display_name if membership and membership.user else "Someone"
 
 
 def dispatch_status_request_pending_notification(
@@ -754,6 +806,30 @@ def update_donor(
             )
         db.commit()
         refreshed = get_donor(db, donor.organization_id, donor.id) or donor
+        if (
+            refreshed.owner_type == OwnerType.USER.value
+            and refreshed.owner_id
+            and refreshed.owner_id != user_id
+            and (old_owner_type, old_owner_id) != (refreshed.owner_type, refreshed.owner_id)
+        ):
+            from app.services import notification_service
+
+            assignee_id = refreshed.owner_id
+            actor_name = _org_user_display_name(db, donor.organization_id, user_id)
+            _dispatch_side_effect_isolated(
+                db=db,
+                donor=refreshed,
+                event_key="assigned",
+                failure_kind="record_notification",
+                trigger=lambda notification_db, notification_donor: (
+                    notification_service.notify_donor_assigned(
+                        notification_db,
+                        notification_donor,
+                        assignee_id,
+                        actor_name,
+                    )
+                ),
+            )
         if emit_workflow_events:
             from app.services import workflow_triggers
 
@@ -1232,6 +1308,14 @@ def apply_status_change(
         db.rollback()
         raise
 
+    if commit:
+        dispatch_stage_changed_notification(
+            db,
+            donor=refreshed,
+            old_stage=old_stage,
+            new_stage=new_stage,
+            user_id=user_id,
+        )
     if emit_workflow_events and commit:
         dispatch_stage_changed_workflow(
             db,
