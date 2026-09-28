@@ -4,6 +4,7 @@ import { render, screen, fireEvent, within, act, waitFor } from '@testing-librar
 import IntegrationsPage from '../app/(app)/settings/integrations/page'
 import { ApiError } from '../lib/api'
 import type { ResendSettings } from '../lib/api/resend'
+import { toast } from '../components/ui/toast'
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -35,6 +36,7 @@ const mockZapierOutboundUpdate = vi.fn()
 const mockZapierOutboundTest = vi.fn()
 const mockZapierDonorOutboundTest = vi.fn()
 const mockRetryZapierOutboundEvent = vi.fn()
+const mockReplayZapierOutboundEvent = vi.fn()
 const mockZapierFieldPaste = vi.fn()
 const mockZapierInboundDelete = vi.fn()
 const mockMetaConnectUrl = vi.fn()
@@ -522,6 +524,7 @@ vi.mock('@/lib/hooks/use-zapier', () => ({
     useZapierOutboundEventsSummary: () => ({ data: zapierEventsSummaryData, isLoading: false }),
     useZapierOutboundEvents: () => ({ data: zapierEventsData, isLoading: false }),
     useRetryZapierOutboundEvent: () => ({ mutateAsync: mockRetryZapierOutboundEvent, isPending: false }),
+    useReplayZapierOutboundEvent: () => ({ mutateAsync: mockReplayZapierOutboundEvent, isPending: false }),
     useZapierFieldPaste: () => ({ mutateAsync: mockZapierFieldPaste, isPending: false }),
     useDeleteZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundDelete, isPending: false }),
 }))
@@ -768,6 +771,7 @@ describe('IntegrationsPage', () => {
         mockZapierDonorOutboundTest.mockReset()
         mockZapierTestLead.mockReset()
         mockRetryZapierOutboundEvent.mockReset()
+        mockReplayZapierOutboundEvent.mockReset()
         mockZapierFieldPaste.mockReset()
         mockZapierInboundDelete.mockReset()
         mockMetaConnectUrl.mockReset()
@@ -2852,6 +2856,64 @@ describe('IntegrationsPage', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: /retry/i }))
 
         expect(mockRetryZapierOutboundEvent).toHaveBeenCalledWith({ eventId: 'event-1' })
+    })
+
+    it('replays skipped zapier events only when the event allows it', async () => {
+        const baseEvent = zapierEventsData.items[0]
+        zapierEventsData = {
+            items: [
+                {
+                    ...baseEvent,
+                    id: 'event-replayable',
+                    status: 'skipped',
+                    reason: 'outbound_disabled',
+                    last_error: null,
+                    can_retry: false,
+                    can_replay: true,
+                },
+                {
+                    ...baseEvent,
+                    id: 'event-final',
+                    status: 'skipped',
+                    reason: 'duplicate',
+                    last_error: null,
+                    can_retry: false,
+                    can_replay: false,
+                },
+            ],
+            total: 2,
+        }
+        const success = vi.spyOn(toast, 'success')
+        const warning = vi.spyOn(toast, 'warning')
+        const error = vi.spyOn(toast, 'error')
+        mockReplayZapierOutboundEvent
+            .mockResolvedValueOnce({ ...zapierEventsData.items[0], status: 'queued', reason: null, can_replay: false })
+            .mockResolvedValueOnce({ ...zapierEventsData.items[0], reason: 'unmapped_stage', can_replay: true })
+            .mockRejectedValueOnce(new Error('network'))
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        const replayButtons = within(dialog).getAllByRole('button', { name: /^replay$/i })
+        expect(replayButtons).toHaveLength(2)
+        expect(replayButtons[0]).toBeEnabled()
+        expect(replayButtons[1]).toBeDisabled()
+        expect(within(dialog).queryByRole('button', { name: /^retry$/i })).not.toBeInTheDocument()
+
+        fireEvent.click(replayButtons[0])
+        await waitFor(() => expect(success).toHaveBeenCalledWith('Replay queued'))
+        expect(mockReplayZapierOutboundEvent).toHaveBeenCalledWith({ eventId: 'event-replayable' })
+
+        fireEvent.click(replayButtons[0])
+        await waitFor(() => expect(warning).toHaveBeenCalledWith('Replay skipped: Stage not mapped'))
+
+        fireEvent.click(replayButtons[0])
+        await waitFor(() => expect(error).toHaveBeenCalledWith('Failed to replay outbound event'))
+        success.mockRestore()
+        warning.mockRestore()
+        error.mockRestore()
     })
 
     it('loads and saves Meta CRM dataset settings in the Meta dialog', async () => {

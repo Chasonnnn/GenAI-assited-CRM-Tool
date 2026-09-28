@@ -91,6 +91,7 @@ import {
     useRotateZapierInboundWebhook,
     useUpdateZapierInboundWebhook,
     useRetryZapierOutboundEvent,
+    useReplayZapierOutboundEvent,
     useZapierFieldPaste,
     useDeleteZapierInboundWebhook,
 } from "@/lib/hooks/use-zapier"
@@ -3307,6 +3308,7 @@ function ZapierMonitoringSection({
         isError: eventsError,
     } = useZapierOutboundEvents({ limit: 20 })
     const retryOutboundEvent = useRetryZapierOutboundEvent()
+    const replayOutboundEvent = useReplayZapierOutboundEvent()
     const isDialog = variant === "dialog"
 
     const handleRetry = async (eventId: string) => {
@@ -3315,6 +3317,19 @@ function ZapierMonitoringSection({
             toast.success("Retry queued")
         } catch {
             toast.error("Failed to retry outbound event")
+        }
+    }
+
+    const handleReplay = async (eventId: string) => {
+        try {
+            const replayed = await replayOutboundEvent.mutateAsync({ eventId })
+            if (replayed.status === "skipped") {
+                toast.warning(`Replay skipped: ${formatZapierReason(replayed.reason)}`)
+            } else {
+                toast.success("Replay queued")
+            }
+        } catch {
+            toast.error("Failed to replay outbound event")
         }
     }
 
@@ -3463,15 +3478,27 @@ function ZapierMonitoringSection({
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => handleRetry(event.id)}
-                                                disabled={!event.can_retry || retryOutboundEvent.isPending}
-                                                className={isDialog ? "" : "min-w-24"}
-                                            >
-                                                {retryOutboundEvent.isPending ? "Retrying…" : "Retry"}
-                                            </Button>
+                                            {event.status === "skipped" ? (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleReplay(event.id)}
+                                                    disabled={!event.can_replay || replayOutboundEvent.isPending}
+                                                    className={isDialog ? "" : "min-w-24"}
+                                                >
+                                                    {replayOutboundEvent.isPending ? "Replaying…" : "Replay"}
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleRetry(event.id)}
+                                                    disabled={!event.can_retry || retryOutboundEvent.isPending}
+                                                    className={isDialog ? "" : "min-w-24"}
+                                                >
+                                                    {retryOutboundEvent.isPending ? "Retrying…" : "Retry"}
+                                                </Button>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                     )

@@ -162,6 +162,18 @@ export function useRetryZapierOutboundEvent() {
     });
 }
 
+export function useReplayZapierOutboundEvent() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ eventId }: { eventId: string }) =>
+            zapierApi.replayZapierOutboundEvent(eventId),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: zapierKeys.outboundEventsSummary(24) });
+            void queryClient.invalidateQueries({ queryKey: [...zapierKeys.all, 'outbound-events'] });
+        },
+    });
+}
+
 export function useZapierFieldPaste() {
     const queryClient = useQueryClient();
     return useMutation({

@@ -148,6 +148,7 @@ export interface ZapierOutboundEvent {
     delivered_at?: string | null;
     last_attempt_at?: string | null;
     can_retry: boolean;
+    can_replay: boolean;
 }
 
 interface ZapierOutboundEventsResponse {
@@ -282,6 +283,10 @@ export async function retryZapierOutboundEvent(
     payload: RetryZapierOutboundEventRequest = {},
 ): Promise<ZapierOutboundEvent> {
     return api.post<ZapierOutboundEvent>(`/integrations/zapier/events/${eventId}/retry`, payload);
+}
+
+export async function replayZapierOutboundEvent(eventId: string): Promise<ZapierOutboundEvent> {
+    return api.post<ZapierOutboundEvent>(`/integrations/zapier/events/${eventId}/replay`);
 }
 
 export async function parseZapierFieldPaste(
