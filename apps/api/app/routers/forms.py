@@ -1547,6 +1547,8 @@ def resolve_submission_match(
             reviewer_id=session.user_id,
             review_notes=body.review_notes,
         )
+    except form_intake_service.SubmissionLinkConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

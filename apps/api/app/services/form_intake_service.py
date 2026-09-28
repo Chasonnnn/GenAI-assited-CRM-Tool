@@ -197,6 +197,19 @@ class DuplicateApplicantSubmissionError(ValueError):
     """Raised when a public applicant already has an unresolved submission."""
 
 
+SURROGATE_FORM_SUBMISSION_CONFLICT_MESSAGE = "Surrogate already has a submission for this form"
+DONOR_FORM_SUBMISSION_CONFLICT_MESSAGE = "Donor already has a submission for this form"
+
+
+class SubmissionLinkConflictError(ValueError):
+    """Raised when the link target already has a submission for the same form."""
+
+
+def _is_unique_violation(exc: IntegrityError, constraint_name: str) -> bool:
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None) == constraint_name
+
+
 def _default_tracking_mode_for_form(db: Session, form: Form) -> str:
     if form.purpose == FormPurpose.LEAD_CAPTURE.value:
         try:
@@ -3417,7 +3430,7 @@ def _link_submission_to_donor(
         .first()
         is not None
     ):
-        raise ValueError("Donor already has a submission for this form")
+        raise SubmissionLinkConflictError(DONOR_FORM_SUBMISSION_CONFLICT_MESSAGE)
 
     try:
         now = datetime.now(UTC)
@@ -3454,6 +3467,11 @@ def _link_submission_to_donor(
             details={"donor_id": str(donor.id), "reason": submission.match_reason},
         )
         db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if _is_unique_violation(exc, "uq_form_submission_donor_non_null"):
+            raise SubmissionLinkConflictError(DONOR_FORM_SUBMISSION_CONFLICT_MESSAGE) from None
+        raise
     except Exception:
         db.rollback()
         raise
@@ -3486,16 +3504,26 @@ def resolve_submission_match(
     if surrogate_id:
         if submission.lead_kind in DONOR_LEAD_KINDS:
             raise ValueError("Donor submissions cannot be linked to a surrogate")
+        # Lock the surrogate so concurrent links to it serialize before the pre-check.
         surrogate = (
             db.query(Surrogate)
             .filter(
                 Surrogate.organization_id == submission.organization_id,
                 Surrogate.id == surrogate_id,
             )
+            .with_for_update()
             .first()
         )
         if not surrogate:
             raise ValueError("Surrogate not found")
+        if _has_existing_submission_for_surrogate_form(
+            db,
+            org_id=submission.organization_id,
+            form_id=submission.form_id,
+            surrogate_id=surrogate.id,
+            exclude_submission_id=submission.id,
+        ):
+            raise SubmissionLinkConflictError(SURROGATE_FORM_SUBMISSION_CONFLICT_MESSAGE)
         submission.surrogate_id = surrogate.id
         submission.match_status = FormSubmissionMatchStatus.LINKED.value
         submission.match_reason = "manually_linked"
@@ -3505,7 +3533,15 @@ def resolve_submission_match(
         db.query(FormSubmissionMatchCandidate).filter(
             FormSubmissionMatchCandidate.submission_id == submission.id
         ).delete(synchronize_session=False)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            if _is_unique_violation(exc, "uq_form_submission_surrogate_non_null"):
+                raise SubmissionLinkConflictError(
+                    SURROGATE_FORM_SUBMISSION_CONFLICT_MESSAGE
+                ) from None
+            raise
         db.refresh(submission)
         return submission, FormSubmissionMatchStatus.LINKED.value
 

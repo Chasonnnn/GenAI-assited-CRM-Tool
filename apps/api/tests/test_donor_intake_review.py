@@ -572,7 +572,7 @@ async def test_donor_link_rejects_other_org_other_subtype_and_duplicate_form_lin
     assert candidates.status_code == 200
     assert str(foreign.id) not in {row["donor_id"] for row in candidates.json()}
 
-    for donor_id, expected in [(foreign.id, 404), (sperm.id, 400), (taken.id, 400)]:
+    for donor_id, expected in [(foreign.id, 404), (sperm.id, 400), (taken.id, 409)]:
         response = await authed_client.post(
             f"/forms/submissions/{submission.id}/match/resolve", json={"donor_id": str(donor_id)}
         )

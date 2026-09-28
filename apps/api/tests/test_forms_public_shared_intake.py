@@ -1294,6 +1294,83 @@ async def test_shared_submit_ambiguous_then_manual_resolve(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("race", [False, True], ids=["precheck", "unique-index-race"])
+async def test_manual_resolve_to_surrogate_with_existing_form_submission_conflicts(
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    default_stage,
+    monkeypatch,
+    race,
+):
+    from app.services import form_intake_service
+
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    surrogate = _create_surrogate(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=default_stage,
+        full_name="Already Submitted",
+        email="already-submitted@example.com",
+        phone="+1 (555) 888-1000",
+        date_of_birth="1990-05-06",
+    )
+    db.add(
+        FormSubmission(
+            organization_id=test_org.id,
+            form_id=uuid.UUID(form_id),
+            surrogate_id=surrogate.id,
+            lead_kind="surrogate",
+            source_mode="shared",
+            match_status="linked",
+            status="approved",
+            answers_json={},
+        )
+    )
+    db.commit()
+
+    submit_res = await authed_client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Already Submitted",
+                    "date_of_birth": "1990-05-06",
+                    "phone": "+1 (555) 888-1000",
+                    "email": "second-application@example.com",
+                }
+            )
+        },
+    )
+    assert submit_res.status_code == 200
+    submission_id = submit_res.json()["id"]
+    if race:
+        # A concurrent link commits between the pre-check and this commit.
+        monkeypatch.setattr(
+            form_intake_service,
+            "_has_existing_submission_for_surrogate_form",
+            lambda *_args, **_kwargs: False,
+        )
+
+    resolve_res = await authed_client.post(
+        f"/forms/submissions/{submission_id}/match/resolve",
+        json={"surrogate_id": str(surrogate.id), "create_intake_lead": False},
+    )
+
+    assert resolve_res.status_code == 409, resolve_res.text
+    assert resolve_res.json()["detail"] == "Surrogate already has a submission for this form"
+    if race:
+        # The service's rollback also discards this test's outer transaction.
+        return
+    db.expire_all()
+    submission = db.get(FormSubmission, uuid.UUID(submission_id))
+    assert submission.surrogate_id is None
+    assert submission.match_status != "linked"
+
+
+@pytest.mark.asyncio
 async def test_shared_submission_retry_allows_unlink_and_relink(
     authed_client,
     db,
