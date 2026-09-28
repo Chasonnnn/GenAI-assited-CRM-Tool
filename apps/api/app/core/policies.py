@@ -30,7 +30,10 @@ POLICIES: dict[str, ResourcePolicy] = {
     ),
     "intended_parents": ResourcePolicy(
         default=P.INTENDED_PARENTS_VIEW,
-        actions={"edit": P.INTENDED_PARENTS_EDIT},
+        actions={
+            "edit": P.INTENDED_PARENTS_EDIT,
+            "change_status": P.INTENDED_PARENTS_CHANGE_STATUS,
+        },
     ),
     "donors": ResourcePolicy(
         default=P.DONORS_VIEW,
