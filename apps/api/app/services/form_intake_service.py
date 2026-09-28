@@ -437,14 +437,25 @@ def ensure_default_intake_link(
     )
 
 
-def _embed_file_upload_blocker(form: Form) -> str | None:
-    """Return why a form cannot be embedded: the embed flow submits no files."""
-    if form.lead_kind in DONOR_LEAD_KINDS:
+def _embed_file_upload_blocker(
+    form: Form, version: PublishedIntakeVersion | None = None
+) -> str | None:
+    """Return why a form cannot be embedded: the embed flow submits no files.
+
+    Reads what the link serves: its published version, or else the schema the next version
+    snapshots (published before draft, as create_published_intake_version does).
+    """
+    lead_kinds = (form.lead_kind, version.lead_kind_snapshot if version is not None else None)
+    if any(lead_kind in DONOR_LEAD_KINDS for lead_kind in lead_kinds):
         return (
             "Donor forms need a profile photo upload and cannot be embedded. "
             "Share the hosted link instead."
         )
-    schema_json = form.schema_json or form.published_schema_json
+    schema_json = (
+        version.form_schema_snapshot_json
+        if version is not None
+        else form.published_schema_json or form.schema_json
+    )
     if not schema_json:
         return None
     fields = form_submission_service.flatten_fields(
@@ -601,7 +612,11 @@ def get_embed_setup_health(
     else:
         add_check("purpose", "Lead capture purpose", "pass", "The form uses lead_capture purpose.")
 
-    file_upload_blocker = _embed_file_upload_blocker(form) if form else None
+    file_upload_blocker = (
+        _embed_file_upload_blocker(form, _published_version_for_link(db, link=link))
+        if form
+        else None
+    )
     if file_upload_blocker:
         add_check("file_uploads", "File uploads", "block", file_upload_blocker)
     else:

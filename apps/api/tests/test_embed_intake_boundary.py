@@ -131,3 +131,52 @@ async def test_embed_allows_an_optional_file_field(authed_client):
     assert enable.status_code == 200, enable.text
     _status, checks = await _health_checks(authed_client, link_id)
     assert checks["file_uploads"]["status"] == "pass"
+
+
+FILE_EMBED_BLOCK = (
+    "Embedded forms cannot collect file uploads: Supporting Documents. "
+    "Share the hosted link instead."
+)
+FILE_FIELD = {
+    "key": "supporting_docs",
+    "label": "Supporting Documents",
+    "type": "file",
+    "required": True,
+    "sensitivity": "file",
+}
+
+
+@pytest.mark.asyncio
+async def test_embed_rule_reads_the_published_form_not_an_unpublished_draft(authed_client, db):
+    blocked_link_id = await _create_lead_capture_form_with_file(authed_client, required=True)
+    blocked_form_id = str(db.get(FormIntakeLink, uuid.UUID(blocked_link_id)).form_id)
+    draft = await authed_client.patch(
+        f"/forms/{blocked_form_id}", json={"form_schema": _lead_capture_schema()}
+    )
+    assert draft.status_code == 200, draft.text
+    _status, checks = await _health_checks(authed_client, blocked_link_id)
+    assert checks["file_uploads"]["status"] == "block"
+
+    live_form_id, live_link_id, _slug = await _create_published_lead_capture_form_with_schema(
+        authed_client, form_schema=_lead_capture_schema()
+    )
+    enabled = await authed_client.patch(f"/forms/intake-links/{live_link_id}", json=EMBED_SETTINGS)
+    assert enabled.status_code == 200, enabled.text
+    draft = await authed_client.patch(
+        f"/forms/{live_form_id}",
+        json={"form_schema": _lead_capture_schema(extra_fields=[FILE_FIELD])},
+    )
+    assert draft.status_code == 200, draft.text
+    _status, checks = await _health_checks(authed_client, live_link_id)
+    assert checks["file_uploads"]["status"] == "pass"
+    edited = await authed_client.patch(
+        f"/forms/intake-links/{live_link_id}", json={"consent_text": "Updated consent."}
+    )
+    assert edited.status_code == 200, edited.text
+
+    # The failed update rolls back the request session, so it runs last.
+    enable = await authed_client.patch(
+        f"/forms/intake-links/{blocked_link_id}", json=EMBED_SETTINGS
+    )
+    assert enable.status_code == 400
+    assert enable.json()["detail"] == FILE_EMBED_BLOCK
