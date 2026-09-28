@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from sqlalchemy import case, exists, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -570,27 +571,31 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
             "fields": fields,
         }
 
+    promoted_submission_ids = select(IntakeLead.form_submission_id).where(
+        IntakeLead.organization_id == donor.organization_id,
+        IntakeLead.promoted_donor_id == donor.id,
+    )
+    has_attribution = exists().where(
+        LeadAttribution.organization_id == donor.organization_id,
+        LeadAttribution.form_submission_id == FormSubmission.id,
+    )
+    # Prefer the latest submission that carries ad attribution; else the latest submission.
     submission = (
         db.query(FormSubmission)
         .filter(
             FormSubmission.organization_id == donor.organization_id,
-            FormSubmission.donor_id == donor.id,
+            or_(
+                FormSubmission.donor_id == donor.id,
+                FormSubmission.id.in_(promoted_submission_ids),
+            ),
         )
-        .order_by(FormSubmission.submitted_at.desc(), FormSubmission.id.desc())
+        .order_by(
+            case((has_attribution, 0), else_=1),
+            FormSubmission.submitted_at.desc(),
+            FormSubmission.id.desc(),
+        )
         .first()
     )
-    if submission is None:
-        submission = (
-            db.query(FormSubmission)
-            .join(IntakeLead, IntakeLead.form_submission_id == FormSubmission.id)
-            .filter(
-                FormSubmission.organization_id == donor.organization_id,
-                IntakeLead.organization_id == donor.organization_id,
-                IntakeLead.promoted_donor_id == donor.id,
-            )
-            .order_by(FormSubmission.submitted_at.desc(), FormSubmission.id.desc())
-            .first()
-        )
     if submission is None:
         return None
 

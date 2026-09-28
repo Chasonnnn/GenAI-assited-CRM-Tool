@@ -613,6 +613,120 @@ def test_website_donor_uses_first_party_submission_not_meta_lead_id(db, test_org
     assert "medical_answer" not in str(payload)
 
 
+def _hosted_submission(db, org_id, donor, *, submitted_at, fbc=None):
+    form = Form(
+        organization_id=org_id,
+        name=f"Hosted donor form {uuid.uuid4().hex[:6]}",
+        status="published",
+        purpose="shared_intake",
+        lead_kind="egg_donor",
+    )
+    db.add(form)
+    db.flush()
+    link = FormIntakeLink(
+        organization_id=org_id,
+        form_id=form.id,
+        slug=f"hosted-{uuid.uuid4().hex[:8]}",
+    )
+    db.add(link)
+    db.flush()
+    submission = FormSubmission(
+        organization_id=org_id,
+        form_id=form.id,
+        donor_id=donor.id,
+        intake_link_id=link.id,
+        lead_kind="egg_donor",
+        answers_json={},
+        submitted_at=submitted_at,
+    )
+    db.add(submission)
+    db.flush()
+    if fbc:
+        db.add(
+            LeadAttribution(
+                organization_id=org_id,
+                form_submission_id=submission.id,
+                intake_link_id=link.id,
+                source_surface="hosted_intake",
+                source="meta",
+                fbc=fbc,
+            )
+        )
+    db.commit()
+    return submission
+
+
+def test_website_donor_uses_latest_attributed_submission(db, test_org, test_user):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    now = datetime.now(UTC)
+    _hosted_submission(
+        db, test_org.id, donor, submitted_at=now - timedelta(days=3), fbc="fb.1.1.first-click"
+    )
+    attributed = _hosted_submission(
+        db, test_org.id, donor, submitted_at=now - timedelta(days=2), fbc="fb.1.2.second-click"
+    )
+    _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=1))
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+
+    result = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.donor_status_history_id == result["history"].id)
+        .one()
+    )
+    assert event.first_party_submission_id == attributed.id
+    payload = db.get(Job, event.job_id).payload["data"]
+    assert payload["first_party_submission_id"] == str(attributed.id)
+    assert payload["fbc"] == "fb.1.2.second-click"
+
+
+def test_website_donor_without_attribution_uses_latest_submission(db, test_org, test_user):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    now = datetime.now(UTC)
+    _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=2))
+    latest = _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=1))
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+
+    result = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.donor_status_history_id == result["history"].id)
+        .one()
+    )
+    assert event.first_party_submission_id == latest.id
+    assert event.status == "queued"
+
+
 def test_pending_and_rejected_donor_changes_do_not_enqueue_but_approved_change_does(
     db, test_org, test_user
 ):
