@@ -30,6 +30,7 @@ DONOR_PAYLOAD_KEYS = frozenset(
         "lifecycle_stage_name",
         "stage_in_sales_process",
         "event_time",
+        "record_type",
         "attribution_source",
         "lead_id",
         "facebook_lead_id",
@@ -40,20 +41,52 @@ DONOR_PAYLOAD_KEYS = frozenset(
         "meta_ad_id",
         "meta_adset_id",
         "meta_campaign_id",
+        "meta_ad_name",
+        "meta_adset_name",
+        "meta_campaign_name",
+        "meta_form_name",
+        "meta_page_name",
+        "meta_platform",
         "ad_id",
         "adset_id",
         "campaign_id",
         "fbclid",
         "fbc",
+        "facebook_click_id",
         "fbp",
+        "customer_email",
+        "customer_phone_number",
         "user_data",
+        "test_mode",
     }
 )
 DONOR_USER_DATA_KEYS = frozenset({"email_hash", "phone_hash"})
+# Sent only while the shared outbound_send_hashed_pii setting is on, as for surrogates.
+DONOR_CONTACT_KEYS = ("customer_email", "customer_phone_number", "user_data")
 
 
 def _skip_donor_delivery(db, job, reason: str) -> None:
     zapier_monitor_service.mark_job_skipped(db=db, job_id=job.id, reason=reason)
+
+
+def _filter_donor_payload(webhook_data: object, *, settings) -> dict:
+    """Apply the donor positive allowlist and the current hashed-PII setting."""
+    if not isinstance(webhook_data, dict):
+        raise RuntimeError("Donor Zapier event payload is invalid")
+    filtered = {key: value for key, value in webhook_data.items() if key in DONOR_PAYLOAD_KEYS}
+    user_data = filtered.get("user_data")
+    if isinstance(user_data, dict):
+        filtered["user_data"] = {
+            key: value for key, value in user_data.items() if key in DONOR_USER_DATA_KEYS
+        }
+        if not filtered["user_data"]:
+            filtered.pop("user_data")
+    else:
+        filtered.pop("user_data", None)
+    if not settings.outbound_send_hashed_pii:
+        for key in DONOR_CONTACT_KEYS:
+            filtered.pop(key, None)
+    return filtered
 
 
 async def _process_donor_stage_event(db, job, payload: dict) -> None:
@@ -192,21 +225,7 @@ async def _process_donor_stage_event(db, job, payload: dict) -> None:
         _skip_donor_delivery(db, job, "donor_config_changed")
         return
 
-    webhook_data = payload.get("data")
-    if not isinstance(webhook_data, dict):
-        raise RuntimeError("Donor Zapier event payload is invalid")
-    webhook_data = {key: value for key, value in webhook_data.items() if key in DONOR_PAYLOAD_KEYS}
-    user_data = webhook_data.get("user_data")
-    if isinstance(user_data, dict):
-        webhook_data["user_data"] = {
-            key: value for key, value in user_data.items() if key in DONOR_USER_DATA_KEYS
-        }
-        if not webhook_data["user_data"]:
-            webhook_data.pop("user_data")
-    else:
-        webhook_data.pop("user_data", None)
-    if not settings.outbound_send_hashed_pii:
-        webhook_data.pop("user_data", None)
+    webhook_data = _filter_donor_payload(payload.get("data"), settings=settings)
     if webhook_data.get("attribution_source") == "website" and not (
         webhook_data.get("fbc") or webhook_data.get("fbp") or webhook_data.get("user_data")
     ):

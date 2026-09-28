@@ -129,9 +129,15 @@ def _attach_meta_lead(db, donor, *, org_id=None):
         field_data_raw={
             "email": "must-not-leak@example.com",
             "medical_condition": "must-not-leak",
-            "ad_id": "sensitive-ad-answer",
-            "campaign_id": "sensitive-campaign-answer",
-            "fbc": "sensitive-fbc-answer",
+            # Tracking keys written by the Zapier inbound handler, read like surrogate leads.
+            "meta_ad_id": "ad-123",
+            "meta_ad_name": "Donor ad",
+            "meta_adset_id": "adset-123",
+            "meta_adset_name": "Donor ad set",
+            "meta_campaign_id": "campaign-123",
+            "meta_campaign_name": "Donor campaign",
+            "meta_platform": "facebook",
+            "fbc": "fb.1.1772942400.meta-donor-click",
             "nested_answers": {
                 "meta_ad_id": "sensitive-nested-meta-ad",
                 "meta_adset_id": "sensitive-nested-meta-adset",
@@ -273,37 +279,34 @@ def test_applied_donor_stage_queues_one_minimal_meta_payload(db, test_org, test_
     assert job.idempotency_key == event.event_id
     assert payload["lead_id"] == meta_lead.meta_lead_id
     assert payload["event_name"] == "Qualified"
+    assert payload["record_type"] == "egg_donor"
     assert payload["meta_form_id"] == meta_lead.meta_form_id
     assert payload["meta_page_id"] == meta_lead.meta_page_id
-    for excluded_key in (
-        "meta_ad_id",
-        "meta_adset_id",
-        "meta_campaign_id",
-        "ad_id",
-        "adset_id",
-        "campaign_id",
-        "fbc",
-        "fbp",
-        "fbclid",
-    ):
+    assert payload["meta_ad_id"] == "ad-123"
+    assert payload["meta_ad_name"] == "Donor ad"
+    assert payload["meta_adset_id"] == "adset-123"
+    assert payload["meta_adset_name"] == "Donor ad set"
+    assert payload["meta_campaign_id"] == "campaign-123"
+    assert payload["meta_campaign_name"] == "Donor campaign"
+    assert payload["meta_platform"] == "facebook"
+    assert payload["fbc"] == "fb.1.1772942400.meta-donor-click"
+    assert payload["facebook_click_id"] == "fb.1.1772942400.meta-donor-click"
+    for excluded_key in ("ad_id", "adset_id", "campaign_id", "fbp", "fbclid"):
         assert excluded_key not in payload
+    # Hashed PII on: the same contact fields surrogate payloads carry.
+    assert payload["customer_email"] == donor.email
+    assert payload["customer_phone_number"] == donor.phone
     assert set(payload["user_data"]) == {"email_hash", "phone_hash"}
     serialized = str(payload)
     for forbidden in (
         donor.full_name,
-        donor.email,
-        donor.phone,
         "medical_condition",
         "must-not-leak",
-        "sensitive-ad-answer",
-        "sensitive-campaign-answer",
-        "sensitive-fbc-answer",
         "sensitive-nested-meta-ad",
         "sensitive-nested-meta-adset",
         "sensitive-nested-meta-campaign",
         "sensitive-nested-meta-fbc",
         ready_stage.label,
-        "egg",
     ):
         assert forbidden not in serialized
 
@@ -423,6 +426,69 @@ async def test_dispatch_uses_positive_payload_allowlist(db, test_org, test_user,
     assert "stage_label" not in sent_payload
     assert "raw_email" not in sent_payload["user_data"]
     assert set(sent_payload["user_data"]) == {"email_hash", "phone_hash"}
+    assert sent_payload["record_type"] == "egg_donor"
+    assert sent_payload["customer_email"] == donor.email
+    assert sent_payload["customer_phone_number"] == donor.phone
+    assert sent_payload["meta_ad_id"] == "ad-123"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_drops_contact_fields_when_hashed_pii_turned_off(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    settings = _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+    donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    job = db.query(Job).filter(Job.organization_id == test_org.id).one()
+    assert job.payload["data"]["customer_email"] == donor.email
+    settings.outbound_send_hashed_pii = False
+    db.commit()
+
+    sent: dict[str, object] = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, *, json, headers):
+            sent.update({"json": json})
+            return Response()
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", Client)
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    sent_payload = sent["json"]
+    assert isinstance(sent_payload, dict)
+    for contact_key in ("customer_email", "customer_phone_number", "user_data"):
+        assert contact_key not in sent_payload
+    assert sent_payload["lead_id"] == job.payload["data"]["lead_id"]
 
 
 def test_website_donor_uses_first_party_submission_not_meta_lead_id(db, test_org, test_user):
@@ -493,6 +559,8 @@ def test_website_donor_uses_first_party_submission_not_meta_lead_id(db, test_org
     )
     payload = job.payload["data"]
     assert payload["first_party_submission_id"] == str(submission.id)
+    assert payload["record_type"] == "sperm_donor"
+    assert payload["attribution_source"] == "website"
     assert "lead_id" not in payload
     assert "facebook_lead_id" not in payload
     assert "medical_answer" not in str(payload)

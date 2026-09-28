@@ -36,6 +36,8 @@ MAX_META_LEAD_AGE = timedelta(days=90)
 FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
 # Meta leads without an email get this generated address; it must never reach Meta.
 PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid"
+# Surrogate and donor events share one webhook URL; record_type lets one Zap branch.
+SURROGATE_RECORD_TYPE = "surrogate"
 
 
 def _now_utc() -> datetime:
@@ -203,6 +205,7 @@ def build_stage_event_payload(
         "lifecycle_stage_name": event_name,
         "stage_in_sales_process": event_name,
         "event_time": event_time.astimezone(UTC).isoformat(),
+        "record_type": SURROGATE_RECORD_TYPE,
         "lead_id": lead_id,
         "facebook_lead_id": lead_id,
         "stage_key": stage_key,
@@ -231,20 +234,24 @@ def build_stage_event_payload(
     return payload
 
 
-def _extract_meta_fields(meta_lead: MetaLead, surrogate: Surrogate) -> dict[str, str | None]:
+def _extract_meta_fields(
+    meta_lead: MetaLead,
+    surrogate: Surrogate | None = None,
+) -> dict[str, str | None]:
+    """Meta lead tracking fields; surrogates prefer their tracked columns, donors have none."""
     fields = meta_lead.field_data_raw or meta_lead.field_data or {}
     return {
         "meta_lead_id": meta_lead.meta_lead_id,
-        "meta_form_id": surrogate.meta_form_id or meta_lead.meta_form_id,
+        "meta_form_id": (surrogate.meta_form_id if surrogate else None) or meta_lead.meta_form_id,
         "meta_page_id": meta_lead.meta_page_id,
-        "meta_ad_id": surrogate.meta_ad_external_id
+        "meta_ad_id": (surrogate.meta_ad_external_id if surrogate else None)
         or fields.get("meta_ad_id")
         or fields.get("ad_id"),
-        "meta_adset_id": surrogate.meta_adset_external_id
+        "meta_adset_id": (surrogate.meta_adset_external_id if surrogate else None)
         or fields.get("meta_adset_id")
         or fields.get("adset_id")
         or fields.get("ad_set_id"),
-        "meta_campaign_id": surrogate.meta_campaign_external_id
+        "meta_campaign_id": (surrogate.meta_campaign_external_id if surrogate else None)
         or fields.get("meta_campaign_id")
         or fields.get("campaign_id"),
         "meta_ad_name": fields.get("meta_ad_name") or fields.get("ad_name"),
@@ -517,14 +524,18 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
         .first()
     )
     if meta_lead is not None:
+        fields = _extract_meta_fields(meta_lead)
+        # lead_id is written from the attribution itself, not from lead tracking fields.
+        fields.pop("meta_lead_id", None)
+        fbc = _resolve_meta_click_id(meta_lead)
+        if fbc:
+            fields["fbc"] = fbc
+            fields["facebook_click_id"] = fbc
         return {
             "source": "meta",
             "lead_id": meta_lead.meta_lead_id or None,
             "first_party_submission_id": None,
-            "fields": {
-                "meta_form_id": meta_lead.meta_form_id,
-                "meta_page_id": meta_lead.meta_page_id,
-            },
+            "fields": fields,
         }
 
     submission = (
@@ -584,9 +595,11 @@ def build_donor_stage_event_payload(
     event_name: str,
     event_time: datetime,
     attribution: dict[str, object],
+    donor_type: str,
     include_hashed_pii: bool,
     email: str | None,
     phone: str | None,
+    test_mode: bool = False,
 ) -> dict[str, object]:
     """Build the minimal external donor payload without internal stage/profile data."""
     payload: dict[str, object] = {
@@ -595,6 +608,7 @@ def build_donor_stage_event_payload(
         "lifecycle_stage_name": event_name,
         "stage_in_sales_process": event_name,
         "event_time": event_time.astimezone(UTC).isoformat(),
+        "record_type": f"{donor_type}_donor",
         "attribution_source": attribution["source"],
     }
     lead_id = attribution.get("lead_id")
@@ -611,9 +625,9 @@ def build_donor_stage_event_payload(
         payload.update({str(key): value for key, value in fields.items() if value})
 
     if include_hashed_pii:
-        user_data = _customer_match_fields(email, phone).get("user_data")
-        if user_data:
-            payload["user_data"] = user_data
+        payload.update(_customer_match_fields(email, phone))
+    if test_mode:
+        payload["test_mode"] = True
     return payload
 
 
@@ -714,6 +728,7 @@ def enqueue_donor_stage_event(
         event_name=event_name,
         event_time=history.effective_at,
         attribution=attribution,
+        donor_type=donor.donor_type,
         include_hashed_pii=settings.outbound_send_hashed_pii,
         email=donor.email,
         phone=donor.phone,

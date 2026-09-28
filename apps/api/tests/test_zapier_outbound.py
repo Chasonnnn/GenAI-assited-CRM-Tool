@@ -124,6 +124,7 @@ def test_build_stage_event_payload_exposes_zapier_matching_fields():
 
     assert payload["lead_id"] == "1559954882011881"
     assert payload["event_name"] == "Qualified"
+    assert payload["record_type"] == "surrogate"
     assert payload["lifecycle_stage_name"] == "Qualified"
     assert payload["customer_email"] == "lead@example.com"
     assert payload["customer_phone_number"] == "+15551234567"
