@@ -14,7 +14,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         value: "under_review",
         label: "Under Review",
         order: 2,
-        badgeClassName: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+        badgeClassName: "bg-amber-700 text-white",
         allowedTransitions: ["accepted", "declined"],
         systemTransitions: [],
     },
@@ -22,7 +22,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         value: "accepted",
         label: "Accepted",
         order: 3,
-        badgeClassName: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+        badgeClassName: "bg-green-700 text-white",
         allowedTransitions: ["cancellation_pending"],
         systemTransitions: ["completed"],
     },
@@ -30,7 +30,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         value: "cancellation_pending",
         label: "Cancellation Pending",
         order: 4,
-        badgeClassName: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200",
+        badgeClassName: "bg-orange-700 text-white",
         allowedTransitions: ["accepted", "cancelled"],
         systemTransitions: [],
     },
@@ -38,7 +38,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         value: "declined",
         label: "Declined",
         order: 5,
-        badgeClassName: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+        badgeClassName: "bg-red-700 text-white",
         allowedTransitions: [],
         systemTransitions: [],
     },
@@ -46,7 +46,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         value: "cancelled",
         label: "Cancelled",
         order: 6,
-        badgeClassName: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+        badgeClassName: "bg-gray-600 text-white",
         allowedTransitions: [],
         systemTransitions: [],
     },
@@ -54,7 +54,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         value: "completed",
         label: "Completed",
         order: 7,
-        badgeClassName: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+        badgeClassName: "bg-teal-700 text-white",
         allowedTransitions: [],
         systemTransitions: ["accepted"],
     },
@@ -75,7 +75,7 @@ export function getMatchStatusLabel(value: string | null | undefined): string {
 export function getMatchStatusBadgeClassName(value: string | null | undefined): string {
     return isMatchStatus(value)
         ? MATCH_STATUS_BY_VALUE[value].badgeClassName
-        : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+        : "bg-gray-600 text-white"
 }
 
 export function getMatchKindLabel(kind: string | null | undefined): string {

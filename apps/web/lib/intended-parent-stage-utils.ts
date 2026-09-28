@@ -2,14 +2,10 @@ import type { CSSProperties } from "react"
 
 import type { StageMetadataOption } from "@/lib/api/metadata"
 import type { PipelineStage } from "@/lib/api/pipelines"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 
 function normalizeColor(color: string | null | undefined): string {
     return /^#[0-9A-Fa-f]{6}$/.test(color ?? "") ? String(color) : "#6B7280"
-}
-
-function withHexAlpha(color: string, alphaHex: string): string {
-    const normalized = normalizeColor(color)
-    return `${normalized}${alphaHex}`
 }
 
 /** Stage ids come only from the org's pipeline; there is no built-in fallback list. */
@@ -54,14 +50,9 @@ export function getIntendedParentStatusStyle(
     value: string | null | undefined,
     fallbackColor?: string | null,
 ): CSSProperties {
-    const color = normalizeColor(
+    return stageBadgeStyle(normalizeColor(
         getIntendedParentStageOptionByValue(options, value)?.color ?? fallbackColor,
-    )
-    return {
-        borderColor: withHexAlpha(color, "33"),
-        backgroundColor: withHexAlpha(color, "14"),
-        color,
-    }
+    ))
 }
 
 export function toPipelineStages(options: StageMetadataOption[] | undefined | null): PipelineStage[] {

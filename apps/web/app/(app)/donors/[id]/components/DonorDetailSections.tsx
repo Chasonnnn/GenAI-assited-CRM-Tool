@@ -24,7 +24,7 @@ import type { PipelineStage } from "@/lib/api/pipelines"
 import type { EntityActivity } from "@/lib/api/activity"
 import type { TaskListItem } from "@/lib/api/tasks"
 import { normalizeDonorHistory } from "@/lib/activity-history"
-import { getDonorStageLabel, getDonorStageStyle } from "@/lib/donor-stage-utils"
+import { getDonorStageColor, getDonorStageLabel } from "@/lib/donor-stage-utils"
 import type { Donor, DonorStatusHistoryItem } from "@/lib/types/donor"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 
@@ -115,7 +115,7 @@ export function DonorDetailSections({
             recordLabel="Donor"
             surrogateNumber={donor.donor_number}
             statusLabel={getDonorStageLabel(stages, donor)}
-            statusColor={String(getDonorStageStyle(stages, donor).color)}
+            statusColor={getDonorStageColor(stages, donor)}
             isArchived={donor.is_archived}
             onBack={() => router.push(returnTo as Route)}>
             {access.changeStage && !donor.is_archived && <Button size="sm" variant="outline" onClick={onChangeStage}>Change Stage</Button>}
