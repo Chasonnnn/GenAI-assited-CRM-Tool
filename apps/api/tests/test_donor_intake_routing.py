@@ -29,8 +29,19 @@ def donor_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
 
 
+def _disable_generated_routing(db, form_id):
+    """These tests drive matching and lead creation by hand, so skip the generated workflow."""
+    from app.db.models import AutomationWorkflow
+
+    db.query(AutomationWorkflow).filter(
+        AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}"
+    ).update({AutomationWorkflow.is_enabled: False})
+    db.commit()
+
+
 async def _submission(client, db, *, kind="egg_donor", email="routing@example.com"):
-    _, slug = await _create_donor_form(client, lead_kind=kind)
+    form_id, slug = await _create_donor_form(client, lead_kind=kind)
+    _disable_generated_routing(db, form_id)
     response = await _submit_donor_form(client, slug=slug, email=email)
     assert response.status_code == 200, response.text
     return db.query(FormSubmission).filter_by(id=uuid.UUID(response.json()["id"])).one()
@@ -100,6 +111,7 @@ async def test_same_form_repeat_is_held_for_review_without_linking_or_promoting(
         ),
     )
     form_id, slug = await _create_donor_form(authed_client, shared_donor=True)
+    _disable_generated_routing(db, form_id)
     donor_type = "Egg donor" if kind == "egg_donor" else "Sperm donor"
     first_response = await _submit_donor_form(
         authed_client, slug=slug, email="repeat@example.com", donor_type=donor_type

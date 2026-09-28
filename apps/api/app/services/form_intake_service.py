@@ -706,41 +706,64 @@ def _has_enabled_form_scoped_submission_workflow(
     *,
     org_id: uuid.UUID,
     form_id: uuid.UUID,
+    exclude_workflow_id: uuid.UUID | None = None,
 ) -> bool:
-    workflows = (
-        db.query(AutomationWorkflow)
-        .filter(
-            AutomationWorkflow.organization_id == org_id,
-            AutomationWorkflow.scope == "org",
-            AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
-            AutomationWorkflow.is_enabled.is_(True),
-        )
-        .all()
+    # Only form_submission-subject workflows run for submissions; a surrogate-subject
+    # workflow with a form trigger never executes and must not suppress default routing.
+    query = db.query(AutomationWorkflow).filter(
+        AutomationWorkflow.organization_id == org_id,
+        AutomationWorkflow.scope == "org",
+        AutomationWorkflow.subject_type == "form_submission",
+        AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
+        AutomationWorkflow.is_enabled.is_(True),
     )
+    if exclude_workflow_id is not None:
+        query = query.filter(AutomationWorkflow.id != exclude_workflow_id)
     target_form_id = str(form_id)
     return any(
-        _trigger_config_form_id(workflow.trigger_config) == target_form_id for workflow in workflows
+        _trigger_config_form_id(workflow.trigger_config) == target_form_id
+        for workflow in query.all()
     )
+
+
+SURROGATE_DEFAULT_INTAKE_ROUTING_ACTIONS: tuple[dict[str, Any], ...] = (
+    {"action_type": "auto_match_submission", "requires_approval": True},
+    {"action_type": "create_intake_lead", "requires_approval": True},
+)
+# Matches scripts/fixtures/donor-intake-workflow.json: link exact matches, otherwise create
+# the donor once the profile photo scan is clean.
+DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS: tuple[dict[str, Any], ...] = (
+    {"action_type": "auto_match_submission", "requires_approval": False},
+    {
+        "action_type": "create_intake_lead",
+        "source": "website",
+        "auto_promote": True,
+        "requires_approval": False,
+    },
+)
+# Earlier generated donor routing; republishing upgrades it because no admin edited it.
+_LEGACY_DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS: tuple[dict[str, Any], ...] = (
+    {"action_type": "create_intake_lead", "requires_approval": True},
+)
+_GENERATED_INTAKE_ROUTING_ACTION_SETS = (
+    SURROGATE_DEFAULT_INTAKE_ROUTING_ACTIONS,
+    DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS,
+    _LEGACY_DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS,
+)
 
 
 def _default_intake_routing_actions(form: Form) -> list[dict[str, Any]]:
     if form.lead_kind in DONOR_LEAD_KINDS:
-        return [
-            {
-                "action_type": "create_intake_lead",
-                "requires_approval": True,
-            }
-        ]
-    return [
-        {
-            "action_type": "auto_match_submission",
-            "requires_approval": True,
-        },
-        {
-            "action_type": "create_intake_lead",
-            "requires_approval": True,
-        },
-    ]
+        return [dict(action) for action in DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS]
+    return [dict(action) for action in SURROGATE_DEFAULT_INTAKE_ROUTING_ACTIONS]
+
+
+def _has_generated_intake_routing_configuration(workflow: AutomationWorkflow) -> bool:
+    """True when the routing workflow still holds a generated configuration, not admin edits."""
+    if workflow.conditions:
+        return False
+    actions = list(workflow.actions or [])
+    return any(actions == list(generated) for generated in _GENERATED_INTAKE_ROUTING_ACTION_SETS)
 
 
 def ensure_default_intake_routing_workflow(
@@ -751,12 +774,13 @@ def ensure_default_intake_routing_workflow(
     user_id: uuid.UUID | None,
     commit: bool = True,
 ) -> AutomationWorkflow | None:
-    """Ensure an enabled, form-scoped shared-intake routing workflow exists."""
-    if form.status != FormStatus.PUBLISHED.value:
-        return None
+    """Ensure an enabled, form-scoped shared-intake routing workflow exists.
 
-    # Respect existing enabled custom workflows for this form.
-    if _has_enabled_form_scoped_submission_workflow(db, org_id=org_id, form_id=form.id):
+    Republishing keeps admin edits to the generated workflow; it only refreshes a
+    configuration that still matches a generated default and re-enables routing when
+    no other enabled form_submission workflow routes this form.
+    """
+    if form.status != FormStatus.PUBLISHED.value:
         return None
 
     system_key = f"shared_intake_routing:{form.id}"
@@ -771,6 +795,15 @@ def ensure_default_intake_routing_workflow(
         .first()
     )
 
+    # Respect existing enabled custom workflows for this form.
+    if _has_enabled_form_scoped_submission_workflow(
+        db,
+        org_id=org_id,
+        form_id=form.id,
+        exclude_workflow_id=workflow.id if workflow else None,
+    ):
+        return None
+
     trigger_config = {"form_id": str(form.id)}
     actions = _default_intake_routing_actions(form)
     now = datetime.now(UTC)
@@ -778,9 +811,10 @@ def ensure_default_intake_routing_workflow(
     if workflow:
         workflow.subject_type = "form_submission"
         workflow.trigger_config = trigger_config
-        workflow.actions = actions
-        workflow.conditions = []
-        workflow.condition_logic = "AND"
+        if _has_generated_intake_routing_configuration(workflow):
+            workflow.actions = actions
+            workflow.conditions = []
+            workflow.condition_logic = "AND"
         workflow.is_enabled = True
         workflow.requires_review = False
         workflow.is_system_workflow = True
@@ -797,7 +831,8 @@ def ensure_default_intake_routing_workflow(
         organization_id=org_id,
         name=f"Intake Routing ({str(form.id)[:8]})",
         description=(
-            "Creates a donor intake lead for review."
+            "Matches donor submissions to an existing donor, or creates a donor after the "
+            "uploaded photo passes scanning."
             if form.lead_kind in DONOR_LEAD_KINDS
             else (
                 "Automatically routes shared form submissions by running auto-match first, "
