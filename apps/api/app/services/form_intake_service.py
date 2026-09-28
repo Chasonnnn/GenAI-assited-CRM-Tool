@@ -434,7 +434,35 @@ def ensure_default_intake_link(
     )
 
 
+def _embed_file_upload_blocker(form: Form) -> str | None:
+    """Return why a form cannot be embedded: the embed flow submits no files."""
+    if form.lead_kind in DONOR_LEAD_KINDS:
+        return (
+            "Donor forms need a profile photo upload and cannot be embedded. "
+            "Share the hosted link instead."
+        )
+    schema_json = form.schema_json or form.published_schema_json
+    if not schema_json:
+        return None
+    fields = form_submission_service.flatten_fields(
+        form_submission_service.parse_schema(schema_json)
+    )
+    required_file_labels = [
+        field.label for field in fields.values() if field.type == "file" and field.required
+    ]
+    if not required_file_labels:
+        return None
+    return (
+        f"Embedded forms cannot collect file uploads: {', '.join(required_file_labels)}. "
+        "Share the hosted link instead."
+    )
+
+
 def _validate_link_embed_policy(*, db: Session, form: Form, link: FormIntakeLink) -> None:
+    if link.embed_enabled:
+        file_upload_blocker = _embed_file_upload_blocker(form)
+        if file_upload_blocker:
+            raise ValueError(file_upload_blocker)
     if link.embed_enabled and not link.allowed_embed_origins:
         raise ValueError("Allowed embed origins are required when embed is enabled")
     if link.tracking_mode in PRIVACY_SAFE_FIELD_POLICY_MODES:
@@ -569,6 +597,12 @@ def get_embed_setup_health(
         )
     else:
         add_check("purpose", "Lead capture purpose", "pass", "The form uses lead_capture purpose.")
+
+    file_upload_blocker = _embed_file_upload_blocker(form) if form else None
+    if file_upload_blocker:
+        add_check("file_uploads", "File uploads", "block", file_upload_blocker)
+    else:
+        add_check("file_uploads", "File uploads", "pass", "No file upload is required.")
 
     if link.embed_enabled:
         add_check("embed_enabled", "Embed enabled", "pass", "Iframe embedding is enabled.")
