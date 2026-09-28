@@ -232,8 +232,13 @@ function isDonorSubject(
     return subjectType === "egg_donor" || subjectType === "sperm_donor"
 }
 
-function isDonorLeadKind(value: unknown): boolean {
+function isDonorLeadKind(value: unknown): value is Extract<WorkflowSubjectType, "egg_donor" | "sperm_donor"> {
     return value === "egg_donor" || value === "sperm_donor"
+}
+
+const INTAKE_LEAD_KIND_CONFIG_KEYS: Partial<Record<string, string>> = {
+    form_submitted: "lead_kind",
+    intake_lead_created: "lead_type",
 }
 
 function getDonorExecutionLink(execution: WorkflowExecution): string | null {
@@ -1041,8 +1046,27 @@ function useAutomationPageView({
     const { data: workflows, isLoading: workflowsLoading } = workflowsQuery
     const { data: stats, isLoading: statsLoading } = useWorkflowStats()
     const { data: options } = useWorkflowOptions(workflowScope, subjectType)
-    const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
+    const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
+    const triggerForm = options?.forms?.find((form) => form.id === triggerConfig.form_id)
+    const isDonorIntakeTrigger =
+        isDonorLeadKind(triggerForm?.lead_kind) || isDonorLeadKind(triggerConfig.lead_type)
+    // Intake workflows update the linked surrogate or donor, so their stage and update-field
+    // options come from the pipeline of the trigger form's lead kind (mirrors
+    // workflow_service.resolve_workflow_record_type).
+    const intakeLeadKindKey = INTAKE_LEAD_KIND_CONFIG_KEYS[triggerType]
+    const configuredIntakeLeadKind = intakeLeadKindKey ? triggerConfig[intakeLeadKindKey] : undefined
+    const intakeLeadKind =
+        isDonorLeadKind(triggerForm?.lead_kind) && isDonorLeadKind(configuredIntakeLeadKind)
+            ? configuredIntakeLeadKind
+            : triggerForm?.lead_kind ?? configuredIntakeLeadKind
+    const recordSubjectType: WorkflowSubjectType =
+        intakeLeadKindKey && !isDonorSubject(subjectType) && isDonorLeadKind(intakeLeadKind)
+            ? intakeLeadKind
+            : subjectType
+    const { data: recordOptions } = useWorkflowOptions(workflowScope, recordSubjectType)
+    const statusOptions = recordOptions?.statuses ?? EMPTY_STATUS_OPTIONS
     const activeStatusOptions = statusOptions.filter((status) => status.is_active !== false)
+    const updateFields = recordOptions?.update_fields ?? []
     const actionTypeOptions = options?.action_types ?? []
     const actionTypeValuesForTrigger = triggerType && options?.action_types_by_trigger?.[triggerType]
         ? new Set(options.action_types_by_trigger[triggerType])
@@ -1066,11 +1090,6 @@ function useAutomationPageView({
             }),
         ]
         : EMAIL_RECIPIENT_OPTIONS
-    const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
-    const triggerForm = options?.forms?.find((form) => form.id === triggerConfig.form_id)
-    const isDonorIntakeTrigger =
-        isDonorLeadKind(triggerForm?.lead_kind) || isDonorLeadKind(triggerConfig.lead_type)
-    const updateFields = options?.update_fields ?? []
     const conditionOperators = options?.condition_operators ?? []
     const { data: executions } = useWorkflowExecutions(selectedWorkflowId || "", { limit: 20 })
     const historyWorkflowName = workflows?.find((workflow) => workflow.id === selectedWorkflowId)?.name
@@ -2599,10 +2618,11 @@ function useAutomationPageView({
                                                         </Select>
                                                         {action.field === "stage_id" ? (
                                                             <Select
+                                                                aria-label={`Stage value ${index + 1}`}
                                                                 value={typeof action.value === "string" ? action.value : ""}
                                                                 onValueChange={(value) => value && updateAction(index, { value })}
                                                             >
-                                                                <SelectTrigger>
+                                                                <SelectTrigger aria-label={`Stage value ${index + 1}`}>
                                                                     <SelectValue placeholder="Select stage" />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
