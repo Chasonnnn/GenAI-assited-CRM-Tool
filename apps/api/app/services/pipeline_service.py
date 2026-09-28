@@ -1828,6 +1828,57 @@ def get_stage_reference_workflows(db: Session, pipeline: Pipeline) -> list[Autom
     return []
 
 
+def _remap_donor_zapier_mapping(
+    db: Session,
+    pipeline: Pipeline,
+    remap_by_key: dict[str, str | None],
+) -> None:
+    """Move donor Zapier mappings off removed stages, as surrogate mappings move by key."""
+    zapier_settings = (
+        db.query(ZapierWebhookSettings)
+        .filter(ZapierWebhookSettings.organization_id == pipeline.organization_id)
+        .first()
+    )
+    mapping = zapier_settings.donor_outbound_event_mapping if zapier_settings else None
+    if not isinstance(mapping, list):
+        return
+
+    stages = get_stages(db, pipeline.id, include_inactive=True)
+    active_stage_by_key = {
+        normalize_stage_ref(stage.stage_key): stage for stage in stages if stage.is_active
+    }
+    target_by_removed_stage_id: dict[str, PipelineStage | None] = {}
+    for stage in stages:
+        removed_key = normalize_stage_ref(stage.stage_key)
+        if stage.is_active or removed_key not in remap_by_key:
+            continue
+        target_key = remap_by_key[removed_key]
+        target_by_removed_stage_id[str(stage.id)] = (
+            active_stage_by_key.get(target_key) if target_key else None
+        )
+    if not target_by_removed_stage_id:
+        return
+
+    pipeline_id = str(pipeline.id)
+    mapped_stage_ids = {
+        str(item.get("stage_id"))
+        for item in mapping
+        if isinstance(item, dict) and str(item.get("pipeline_id")) == pipeline_id
+    }
+    remapped: list = []
+    for item in mapping:
+        stage_id = str(item.get("stage_id")) if isinstance(item, dict) else None
+        if stage_id in target_by_removed_stage_id and str(item.get("pipeline_id")) == pipeline_id:
+            target = target_by_removed_stage_id[stage_id]
+            # A target stage keeps its own mapping; without a target the mapping is dropped.
+            if target is None or str(target.id) in mapped_stage_ids:
+                continue
+            item = {**item, "stage_id": str(target.id)}
+            mapped_stage_ids.add(str(target.id))
+        remapped.append(item)
+    zapier_settings.donor_outbound_event_mapping = remapped
+
+
 def _apply_external_stage_remaps(
     db: Session,
     pipeline: Pipeline,
@@ -1907,6 +1958,8 @@ def _apply_external_stage_remaps(
                 db=db,
                 organization_id=pipeline.organization_id,
             )
+    elif pipeline.entity_type in DONOR_PIPELINE_ENTITY_TYPES:
+        _remap_donor_zapier_mapping(db, pipeline, remap_by_key)
 
     campaign_recipient_type = {
         SURROGATE_PIPELINE_ENTITY: "case",

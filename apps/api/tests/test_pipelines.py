@@ -1373,6 +1373,117 @@ def test_apply_donor_pipeline_remap_updates_only_same_subtype_workflows(db, test
     assert UUID(sperm_workflow.trigger_config["to_stage_id"]) == sperm_custom.id
 
 
+def test_apply_donor_pipeline_remap_moves_its_zapier_mappings(db, test_org, test_user):
+    egg_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=EGG_DONOR_PIPELINE_ENTITY
+    )
+    sperm_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=SPERM_DONOR_PIPELINE_ENTITY
+    )
+    moved_stage = pipeline_service.create_stage(
+        db,
+        egg_pipeline.id,
+        slug="secondary_review",
+        label="Secondary Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    colliding_stage = pipeline_service.create_stage(
+        db,
+        egg_pipeline.id,
+        slug="final_review",
+        label="Final Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    sperm_custom = pipeline_service.create_stage(
+        db,
+        sperm_pipeline.id,
+        slug="secondary_review",
+        label="Secondary Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    egg_contacted = pipeline_service.get_stage_by_key(db, egg_pipeline.id, "contacted")
+    egg_new = pipeline_service.get_stage_by_key(db, egg_pipeline.id, "new")
+    assert egg_contacted is not None and egg_new is not None
+
+    def item(donor_type, pipeline, stage, event_name):
+        return {
+            "donor_type": donor_type,
+            "pipeline_id": str(pipeline.id),
+            "stage_id": str(stage.id),
+            "event_name": event_name,
+            "enabled": True,
+        }
+
+    zapier_settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    zapier_settings.donor_outbound_event_mapping = [
+        item("egg", egg_pipeline, egg_new, "Lead"),
+        item("egg", egg_pipeline, moved_stage, "Qualified"),
+        item("egg", egg_pipeline, colliding_stage, "Converted"),
+        item("sperm", sperm_pipeline, sperm_custom, "Qualified"),
+    ]
+    db.commit()
+
+    kept_stages = [
+        stage
+        for stage in pipeline_service.get_stages(db, egg_pipeline.id, include_inactive=True)
+        if stage.is_active and stage.id not in {moved_stage.id, colliding_stage.id}
+    ]
+    pipeline_service.apply_pipeline_draft(
+        db,
+        egg_pipeline,
+        name=egg_pipeline.name,
+        stages=[
+            {
+                "id": str(stage.id),
+                "stage_key": stage.stage_key,
+                "slug": stage.slug,
+                "label": stage.label,
+                "color": stage.color,
+                "order": index + 1,
+                "category": stage.stage_type,
+                "is_active": stage.is_active,
+                "semantics": stage.semantics,
+            }
+            for index, stage in enumerate(kept_stages)
+        ],
+        feature_config=egg_pipeline.feature_config,
+        remaps=[
+            {
+                "removed_stage_key": moved_stage.stage_key,
+                "target_stage_key": egg_contacted.stage_key,
+            },
+            {
+                "removed_stage_key": colliding_stage.stage_key,
+                "target_stage_key": egg_new.stage_key,
+            },
+        ],
+        user_id=test_user.id,
+    )
+
+    db.refresh(zapier_settings)
+    # The target stage's own mapping wins over one moved onto it.
+    assert zapier_settings.donor_outbound_event_mapping == [
+        item("egg", egg_pipeline, egg_new, "Lead"),
+        item("egg", egg_pipeline, egg_contacted, "Qualified"),
+        item("sperm", sperm_pipeline, sperm_custom, "Qualified"),
+    ]
+    assert (
+        zapier_settings_service.resolve_donor_mapping_item(
+            zapier_settings.donor_outbound_event_mapping,
+            donor_type="egg",
+            pipeline_id=egg_pipeline.id,
+            stage_id=egg_contacted.id,
+        )["event_name"]
+        == "Qualified"
+    )
+
+
 def test_apply_intended_parent_pipeline_remap_leaves_surrogate_workflows_unchanged(
     db, test_org, test_user
 ):
