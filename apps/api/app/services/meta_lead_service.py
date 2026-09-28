@@ -1,7 +1,7 @@
 """Meta Lead service - ingestion and conversion to surrogates."""
 
 import logging
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.constants import SYSTEM_USER_ID
-from app.db.enums import AlertSeverity, AlertType, SurrogateSource
+from app.db.enums import AlertSeverity, AlertType, SurrogateSource, TaskType
 from app.db.models import (
     Donor,
     MetaAd,
@@ -554,11 +554,18 @@ def convert_to_donor_with_mapping(
     if not email or "@" not in email:
         email = f"meta-{meta_lead.meta_lead_id[:16]}@placeholder.invalid"
 
-    if donor_service.get_active_donor_by_email(db, meta_lead.organization_id, email):
-        error = "An active donor with this email already exists"
-        meta_lead.conversion_error = error
+    existing_donor = donor_service.get_active_donor_by_email(db, meta_lead.organization_id, email)
+    if existing_donor:
+        error = donor_service.DonorConflictError("An active donor with this email already exists")
+        meta_lead.conversion_error = str(error)
         meta_lead.unmapped_fields = unmapped_fields or None
+        # Surrogate conversion failures raise an alert; a duplicate donor also needs a
+        # person to decide whether the lead is a returning donor.
+        _record_conversion_failure_alert_in_session(
+            db, meta_lead, error, reason="active_donor_email"
+        )
         db.commit()
+        _ensure_duplicate_donor_review_task(db, meta_lead, existing_donor)
         return None, f"Conversion failed: {error}"
 
     identity = sa_inspect(meta_lead).identity
@@ -904,6 +911,85 @@ def _build_meta_tracking_fields(db: Session, meta_lead: MetaLead) -> dict[str, s
         tracking["meta_platform"] = _stringify_value(platform)
 
     return tracking
+
+
+def _record_conversion_failure_alert_in_session(
+    db: Session, meta_lead: MetaLead, error: Exception, *, reason: str
+) -> None:
+    """Same alert as _record_conversion_failure_alert, for failures that do not roll back."""
+    from app.services import alert_service
+
+    form_key = meta_lead.meta_form_id or "unknown"
+    alert_service.create_or_update_alert(
+        db=db,
+        org_id=meta_lead.organization_id,
+        alert_type=AlertType.META_CONVERT_FAILED,
+        severity=AlertSeverity.ERROR,
+        title=f"Meta lead conversion failed for form {form_key}",
+        message="A Meta lead failed conversion. Review the unconverted leads list for details.",
+        integration_key=f"meta_form:{form_key}",
+        error_class=type(error).__name__,
+        details={
+            "meta_lead_id": meta_lead.meta_lead_id,
+            "meta_form_id": meta_lead.meta_form_id,
+            "status": "convert_failed",
+            "reason": reason,
+        },
+    )
+
+
+def _ensure_duplicate_donor_review_task(
+    db: Session, meta_lead: MetaLead, existing_donor: Donor
+) -> None:
+    """Open one review task on the matching donor; the description carries no lead PII."""
+    from app.db.models import Task
+    from app.schemas.task import TaskCreate
+    from app.services import meta_form_mapping_service, task_service
+
+    marker = f"Meta lead record: {meta_lead.id}"
+    try:
+        open_task = db.scalar(
+            select(Task.id).where(
+                Task.organization_id == meta_lead.organization_id,
+                Task.donor_id == existing_donor.id,
+                Task.is_completed.is_(False),
+                Task.description.contains(marker),
+            )
+        )
+        if open_task:
+            return
+        form = meta_form_mapping_service.get_form_by_external_id(
+            db, meta_lead.organization_id, meta_lead.meta_form_id
+        )
+        owner_type, owner_id, created_by = meta_form_mapping_service._resolve_task_owner(
+            db, meta_lead.organization_id
+        )
+        task_service.create_task(
+            db=db,
+            org_id=meta_lead.organization_id,
+            user_id=created_by,
+            data=TaskCreate(
+                title="Review duplicate donor Meta lead",
+                description=(
+                    "A Meta lead has the email of this active donor and was not converted.\n"
+                    f"Donor: {existing_donor.donor_number}\n"
+                    f"Form: {form.form_name if form else meta_lead.meta_form_id or 'Unknown'}\n"
+                    f"{marker}\n"
+                    "Review the lead in Settings → Integrations → Meta → Manage lead forms."
+                ),
+                task_type=TaskType.REVIEW,
+                donor_id=existing_donor.id,
+                owner_type=owner_type,
+                owner_id=owner_id,
+                due_date=(datetime.now(UTC) + timedelta(days=2)).date(),
+            ),
+        )
+    except Exception as exc:
+        db.rollback()
+        logger.warning(
+            "Failed to create duplicate donor review task",
+            extra={"error_class": type(exc).__name__},
+        )
 
 
 def _record_conversion_failure_alert(meta_lead: MetaLead, error: Exception) -> None:
