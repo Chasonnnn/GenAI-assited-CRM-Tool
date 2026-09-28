@@ -507,7 +507,15 @@ def parse_field_paste(
         if not inbound or inbound.organization_id != session.org_id:
             raise HTTPException(status_code=404, detail="Inbound webhook not found.")
 
-    form_id = data.form_id or parsed.get("form_id")
+    form_id = (data.form_id or "").strip() or parsed.get("form_id")
+    if not form_id and parsed.get("form_id_without_value"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The pasted field list names form_id but not its value. Enter the Meta form "
+                "ID, or paste sample data that includes it (form_id: 1234567890)."
+            ),
+        )
     if not form_id and inbound:
         form_id = f"zapier-{inbound.webhook_id}"
 
@@ -516,6 +524,18 @@ def parse_field_paste(
             status_code=400,
             detail="form_id or webhook_id is required to create the mapping.",
         )
+
+    existing_form = meta_form_mapping_service.get_form_by_external_id(
+        db, session.org_id, str(form_id)
+    )
+    if existing_form is not None and (
+        existing_form.lead_kind in workflow_access.DONOR_SUBJECT_TYPES
+        or meta_form_mapping_service.form_has_donor_leads(
+            db, session.org_id, existing_form.form_external_id
+        )
+    ):
+        _require_donor_view(db, session)
+        _require_donor_edit(db, session)
 
     form_name = data.form_name or parsed.get("form_name")
     if not form_name:

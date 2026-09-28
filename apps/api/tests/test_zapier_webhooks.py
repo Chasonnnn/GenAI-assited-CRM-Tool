@@ -258,16 +258,26 @@ async def test_zapier_field_paste_creates_form(authed_client, db, test_org):
         ]
     )
 
-    res = await authed_client.post(
+    # "312067957" is the Zap step id, not the Meta form id.
+    rejected = await authed_client.post(
         "/integrations/zapier/field-paste",
         json={"paste": paste, "webhook_id": inbound.webhook_id},
     )
+    assert rejected.status_code == 400
+    assert "names form_id but not its value" in rejected.json()["detail"]
+    assert meta_form_mapping_service.get_form_by_external_id(db, test_org.id, "312067957") is None
+
+    res = await authed_client.post(
+        "/integrations/zapier/field-paste",
+        json={"paste": paste, "webhook_id": inbound.webhook_id, "form_id": " 1234567890 "},
+    )
     assert res.status_code == 200
     body = res.json()
-    assert body["form_id"] == "312067957"
+    assert body["form_id"] == "1234567890"
     assert body["field_count"] >= 3
 
-    form = meta_form_mapping_service.get_form_by_external_id(db, test_org.id, "312067957")
+    assert meta_form_mapping_service.get_form_by_external_id(db, test_org.id, "312067957") is None
+    form = meta_form_mapping_service.get_form_by_external_id(db, test_org.id, "1234567890")
     assert form is not None
     version = meta_form_mapping_service.get_form_version(db, form)
     keys = {item.get("key") for item in (version.field_schema or [])}

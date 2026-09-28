@@ -6,7 +6,6 @@ import hmac
 import logging
 import re
 import uuid
-from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
@@ -53,14 +52,24 @@ _NON_LEAD_KEYS = {
     "labelids",
 }
 
+# camelCase keys (leadId, formId, pageId) normalize to "leadid", "formid" and "pageid".
 _META_ID_KEYS = {
-    "lead_id": ("lead_id", "leadgen_id", "meta_lead_id"),
+    "lead_id": ("lead_id", "leadgen_id", "meta_lead_id", "leadid", "leadgenid", "metaleadid"),
     "ad_id": ("ad_id", "meta_ad_id"),
     "adset_id": ("adset_id", "adgroup_id", "ad_set_id"),
     "campaign_id": ("campaign_id", "meta_campaign_id"),
-    "form_id": ("form_id", "meta_form_id"),
-    "page_id": ("page_id", "meta_page_id"),
+    "form_id": ("form_id", "meta_form_id", "formid", "metaformid"),
+    "page_id": ("page_id", "meta_page_id", "pageid", "metapageid"),
     "platform": ("platform", "publisher_platform", "meta_platform"),
+}
+_CAMEL_CASE_ID_KEYS = {
+    "leadid",
+    "leadgenid",
+    "metaleadid",
+    "formid",
+    "metaformid",
+    "pageid",
+    "metapageid",
 }
 
 _META_NAME_KEYS = {
@@ -126,7 +135,10 @@ def _extract_values(value: Any) -> list[Any]:
 
 def _accumulate_field(field_map: dict[str, list[Any]], key: Any, value: Any) -> None:
     normalized = _normalize_field_key(key)
-    if not normalized or normalized in _META_FIELD_KEYS:
+    if not normalized or normalized in _META_FIELD_KEYS or normalized in _CAMEL_CASE_ID_KEYS:
+        return
+    if normalized == "form" and isinstance(value, dict):
+        # A nested {"form": {"id", "name"}} object identifies the form; it is not an answer.
         return
     values = [_coerce_simple_value(item) for item in _extract_values(value)]
     if not values:
@@ -205,17 +217,32 @@ def _unwrap_payload(value: Any) -> Any:
 
 def _normalize_payload(value: Any) -> dict[str, Any]:
     unwrapped = _unwrap_payload(value)
-    if isinstance(unwrapped, dict):
-        return unwrapped
-    return {"payload": unwrapped}
+    if not isinstance(unwrapped, dict):
+        return {"payload": unwrapped}
+    if isinstance(value, dict) and unwrapped is not value:
+        # The lead fields can sit in a nested object while the form id stays on the
+        # outer payload; keep the outer form identity so the lead reaches its form.
+        form_id, form_name = _find_form_identity(unwrapped)
+        outer_form_id, outer_form_name = _find_form_identity(value)
+        if not form_id and outer_form_id:
+            unwrapped = {**unwrapped, "form_id": outer_form_id}
+            if outer_form_name and not form_name:
+                unwrapped["form_name"] = outer_form_name
+    return unwrapped
 
 
 def parse_zapier_field_paste(paste: str) -> dict[str, Any]:
+    """Read field keys, and a form id when the paste carries its value.
+
+    Zapier token syntax (``{{=gives["<step id>"]["form_id"]}}``) names fields but has no
+    values: the first token is the Zap step id, never the Meta form id. A token paste that
+    names form_id reports ``form_id_without_value`` so the caller can ask for the id.
+    """
     field_keys: list[str] = []
     seen: set[str] = set()
-    token0_counts: Counter[str] = Counter()
     form_id: str | None = None
     form_name: str | None = None
+    form_id_without_value = False
 
     for raw_line in paste.splitlines():
         line = raw_line.strip()
@@ -224,14 +251,12 @@ def parse_zapier_field_paste(paste: str) -> dict[str, Any]:
 
         tokens = [match.group(2).strip() for match in _FIELD_LIST_TOKEN_RE.finditer(line)]
         if tokens:
-            if len(tokens) >= 2 and tokens[0]:
-                token0_counts[tokens[0]] += 1
             field_key = tokens[-1].strip()
             if not field_key:
                 continue
             normalized = _normalize_field_key(field_key)
-            if normalized in {"form_id", "formid"} and tokens[0]:
-                form_id = form_id or tokens[0]
+            if normalized in {"form_id", "formid"}:
+                form_id_without_value = True
                 continue
             if normalized in {"form_name", "formname"}:
                 continue
@@ -262,16 +287,11 @@ def parse_zapier_field_paste(paste: str) -> dict[str, Any]:
             seen.add(normalized_label)
             field_keys.append(normalized_label)
 
-    if not form_id and token0_counts:
-        candidate, count = token0_counts.most_common(1)[0]
-        normalized_candidate = _normalize_field_key(candidate)
-        if normalized_candidate not in _META_FIELD_LABELS and (count >= 2 or candidate.isdigit()):
-            form_id = candidate
-
     return {
         "form_id": form_id,
         "form_name": form_name,
         "field_keys": field_keys,
+        "form_id_without_value": form_id_without_value and not form_id,
     }
 
 
@@ -428,29 +448,57 @@ def _parse_created_time(payload: dict[str, Any]) -> datetime | None:
     return None
 
 
+def _scalar_identifier(value: Any) -> str | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (str, int)):
+        text = str(value).strip()
+        return text or None
+    return None
+
+
+def _find_form_identity(payload: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Form id and name from snake_case, camelCase or nested ``form`` payload shapes."""
+    normalized = {_normalize_field_key(key): key for key in payload}
+    form_id = next(
+        (
+            identifier
+            for key in _META_ID_KEYS["form_id"]
+            if key in normalized
+            for identifier in [_scalar_identifier(payload.get(normalized[key]))]
+            if identifier
+        ),
+        None,
+    )
+    form_name_key = normalized.get("form_name") or normalized.get("formname")
+    form_name = _scalar_identifier(payload.get(form_name_key)) if form_name_key else None
+    nested = payload.get(normalized["form"]) if "form" in normalized else None
+    if isinstance(nested, dict):
+        form_id = form_id or _scalar_identifier(nested.get("id") or nested.get("form_id"))
+        form_name = form_name or _scalar_identifier(nested.get("name") or nested.get("form_name"))
+    return form_id, form_name
+
+
 def _ensure_form_identifier(payload: Any, webhook_id: str) -> Any:
     """
     Ensure Zapier payloads include a stable form_id so mapping can be configured.
+
+    Leads without a recognizable form id attach to the webhook's fallback form, which
+    raises a mapping review task, so no lead is stored without a form.
     """
     if isinstance(payload, list):
         return [_ensure_form_identifier(item, webhook_id) for item in payload]
     if not isinstance(payload, dict):
         return payload
 
-    if payload.get("form_id") or payload.get("formId") or payload.get("meta_form_id"):
+    form_id, form_name = _find_form_identity(payload)
+    if form_id:
+        payload["form_id"] = form_id
+        if form_name and not payload.get("form_name"):
+            payload["form_name"] = form_name
         return payload
 
-    normalized = {_normalize_field_key(k): k for k in payload.keys()}
-    if "form_id" in normalized:
-        normalized_value = payload.get(normalized["form_id"])
-        if normalized_value:
-            payload["form_id"] = normalized_value
-            if "form_name" not in payload and "form_name" in normalized:
-                payload["form_name"] = payload.get(normalized["form_name"])
-            return payload
-
-    form_id = f"zapier-{webhook_id}"
-    payload["form_id"] = form_id
+    payload["form_id"] = f"zapier-{webhook_id}"
     if not payload.get("form_name"):
         payload["form_name"] = f"Zapier Lead Intake ({webhook_id[:8]})"
     return payload
@@ -601,7 +649,14 @@ def process_zapier_payload(
         str(tracking.get("page_id")) if tracking.get("page_id") else payload.get("page_id")
     )
     meta_form_name = tracking.get("form_name") or payload.get("form_name")
-    if meta_form_id:
+    # A test lead must not rewrite a configured form: its sample fields can differ from
+    # the form schema, which would add a version and mark the mapping outdated.
+    keep_existing_form = test_mode and (
+        meta_form_mapping_service.get_form_by_external_id(db, org_id, str(meta_form_id)) is not None
+        if meta_form_id
+        else False
+    )
+    if meta_form_id and not keep_existing_form:
         meta_form_mapping_service.upsert_form_from_payload(
             db,
             org_id,
@@ -611,10 +666,16 @@ def process_zapier_payload(
             page_id=str(meta_page_id) if meta_page_id else None,
         )
 
+    warnings: list[str] = []
+    if not lead_id:
+        warnings.append(
+            "The payload has no lead_id, so the CRM generated one. Map the Meta lead ID to "
+            "lead_id so repeated deliveries are detected as duplicates."
+        )
     meta_lead, error = meta_lead_service.store_meta_lead(
         db=db,
         org_id=org_id,
-        meta_lead_id=str(lead_id or f"zapier-{uuid.uuid4()}"),
+        meta_lead_id=str(lead_id or meta_lead_service.generate_synthetic_meta_lead_id()),
         field_data=field_data,
         field_data_raw=field_data_raw,
         raw_payload=raw_payload if raw_payload is not None else payload,
@@ -643,6 +704,7 @@ def process_zapier_payload(
         "surrogate_id": surrogate_id,
         "donor_id": donor_id,
         "message": message,
+        "warnings": warnings,
     }
 
 
@@ -717,14 +779,14 @@ class ZapierWebhookHandler:
             if kv_payload:
                 payload = kv_payload
 
-        payload = _ensure_form_identifier(payload, webhook_id)
-
+        # The form id is resolved after unwrapping, so a nested lead object keeps the
+        # outer form id or falls back to the webhook form instead of losing it.
         if isinstance(payload, list):
             if not payload:
                 return {"status": "ignored", "processed": 0}
             results = []
             for item in payload:
-                normalized = _normalize_payload(item)
+                normalized = _ensure_form_identifier(_normalize_payload(item), webhook_id)
                 results.append(
                     process_zapier_payload(
                         db,
@@ -738,7 +800,7 @@ class ZapierWebhookHandler:
             else:
                 result = {"status": "ok", "processed": len(results), "results": results}
         else:
-            normalized = _normalize_payload(payload)
+            normalized = _ensure_form_identifier(_normalize_payload(payload), webhook_id)
             result = process_zapier_payload(
                 db,
                 org_id,
