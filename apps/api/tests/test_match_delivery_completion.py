@@ -555,6 +555,26 @@ async def test_cancellation_resolved_after_delivery_completes_the_restored_match
 
 
 @pytest.mark.asyncio
+async def test_delivered_completion_and_undo_work_with_match_expansion_off(
+    authed_client, db, test_auth, monkeypatch
+):
+    from app.core.config import settings
+
+    delivered = _stage(db, test_auth.org.id, role="delivered")
+    matched = _stage(db, test_auth.org.id, role="matched")
+    monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", False)
+    match = await _create_accepted_match(authed_client)
+
+    completed = await _move(authed_client, match["surrogate_id"], delivered)
+    assert completed.status_code == 200, completed.text
+    assert _match_row(db, match["id"]).status == "completed"
+    undone = await _move(authed_client, match["surrogate_id"], matched)
+
+    assert undone.status_code == 200, undone.text
+    _assert_accepted(_match_row(db, match["id"]))
+
+
+@pytest.mark.asyncio
 async def test_delivered_completion_stays_inside_the_surrogates_organization(
     authed_client, db, test_auth
 ):
