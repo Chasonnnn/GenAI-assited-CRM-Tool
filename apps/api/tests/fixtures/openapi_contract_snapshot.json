@@ -1582,6 +1582,12 @@
       "422"
     ]
   },
+  "/forms/submissions/{submission_id}/files/{file_id}/rescan": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/submissions/{submission_id}/match-candidates": {
     "GET": [
       "200",

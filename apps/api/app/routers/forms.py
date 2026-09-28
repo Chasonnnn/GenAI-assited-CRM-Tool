@@ -1934,6 +1934,64 @@ def upload_submission_file(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post(
+    "/submissions/{submission_id}/files/{file_id}/rescan",
+    response_model=FormSubmissionFileRead,
+    dependencies=[
+        Depends(
+            require_any_permissions(
+                [
+                    POLICIES["surrogates"].actions["edit"],
+                    POLICIES["donors"].actions["edit"],
+                ]
+            )
+        ),
+        Depends(require_csrf_header),
+    ],
+)
+def rescan_submission_file(
+    submission_id: UUID,
+    file_id: UUID,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    """Queue a new scan for a file whose scan failed."""
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    _check_submission_subject_access(db, submission, session, require_write=True)
+    file_record = form_submission_service.get_submission_file(
+        db, session.org_id, submission_id, file_id
+    )
+    if not file_record:
+        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        file_record = form_submission_service.request_submission_file_rescan(
+            db,
+            submission=submission,
+            file_record=file_record,
+            user_id=session.user_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="File not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    form_submission_service.dispatch_submission_file_scan_if_needed(
+        db=db,
+        org_id=session.org_id,
+        submission_file_id=file_record.id,
+    )
+    return FormSubmissionFileRead(
+        id=file_record.id,
+        filename=file_record.filename,
+        content_type=file_record.content_type,
+        file_size=file_record.file_size,
+        quarantined=file_record.quarantined,
+        scan_status=file_record.scan_status,
+        field_key=file_record.field_key,
+    )
+
+
 @router.delete(
     "/submissions/{submission_id}/files/{file_id}",
     dependencies=[

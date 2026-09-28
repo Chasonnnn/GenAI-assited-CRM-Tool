@@ -527,6 +527,163 @@ async def test_donor_link_and_candidates_require_donor_permissions(authed_client
 
 
 @pytest.mark.asyncio
+async def test_rescan_errored_photo_then_clean_scan_auto_promotes(
+    authed_client, db, test_org, monkeypatch
+):
+    from app.db.models import AuditLog, Job
+    from app.jobs.handlers.form_submissions import process_donor_intake_promote
+    from app.services import form_submission_service
+
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", True, raising=False)
+    _, slug = await _create_donor_form(authed_client)
+    response = await _submit_donor_form(authed_client, slug=slug, email="rescan@example.com")
+    assert response.status_code == 200, response.text
+    submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
+    photo = _photo(db, submission)
+    for job in db.query(Job).filter(Job.job_type == "form_submission_file_scan").all():
+        job.status = "failed"
+    form_submission_service.mark_submission_file_scanned(db, photo.id, "error")
+    db.commit()
+
+    rescanned = await authed_client.post(
+        f"/forms/submissions/{submission.id}/files/{photo.id}/rescan"
+    )
+
+    assert rescanned.status_code == 200, rescanned.text
+    assert rescanned.json()["scan_status"] == "pending"
+    assert rescanned.json()["quarantined"] is False
+    pending_scans = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == "form_submission_file_scan",
+            Job.status == "pending",
+        )
+        .all()
+    )
+    assert [job.payload["submission_file_id"] for job in pending_scans] == [str(photo.id)]
+    assert (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.organization_id == test_org.id,
+            AuditLog.event_type == "form_submission_file_rescan_requested",
+            AuditLog.target_id == photo.id,
+        )
+        .count()
+        == 1
+    )
+
+    again = await authed_client.post(f"/forms/submissions/{submission.id}/files/{photo.id}/rescan")
+    assert again.status_code == 409
+
+    form_submission_service.mark_submission_file_scanned(db, photo.id, "clean")
+    db.commit()
+    await process_donor_intake_promote(db, _promote_job(db, test_org.id))
+    db.refresh(submission)
+    assert submission.donor_id is not None
+    assert submission.status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_rescan_is_permissioned_and_org_scoped(authed_client, db, test_org):
+    from app.services import form_submission_service
+
+    _, _, submission = await _manual_submission(authed_client, db, email="rescandeny@example.com")
+    photo = _photo(db, submission)
+    form_submission_service.mark_submission_file_scanned(db, photo.id, "error")
+    db.commit()
+    foreign = _foreign_donor_submission(db)
+
+    cross_org = await authed_client.post(f"/forms/submissions/{foreign.id}/files/{photo.id}/rescan")
+    assert cross_org.status_code == 404
+    unknown_file = await authed_client.post(
+        f"/forms/submissions/{submission.id}/files/{uuid.uuid4()}/rescan"
+    )
+    assert unknown_file.status_code == 404
+
+    async with _restricted_client(db, test_org.id, "edit_donors") as client:
+        denied = await client.post(f"/forms/submissions/{submission.id}/files/{photo.id}/rescan")
+        assert denied.status_code == 403
+
+    db.refresh(photo)
+    assert photo.scan_status == "error"
+
+
+class _SessionProxy:
+    """Lets the scan job use the test transaction without closing it."""
+
+    def __init__(self, db):
+        self._db = db
+
+    def close(self):
+        return None
+
+    def __getattr__(self, name):
+        return getattr(self._db, name)
+
+
+@pytest.mark.asyncio
+async def test_transient_scan_failure_retries_with_backoff_then_errors(
+    authed_client, db, test_org, monkeypatch
+):
+    from datetime import UTC, datetime, timedelta
+
+    from app.db.models import Job
+    from app.jobs import scan_attachment
+
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", True, raising=False)
+    _, slug = await _create_donor_form(authed_client)
+    response = await _submit_donor_form(authed_client, slug=slug, email="transient@example.com")
+    assert response.status_code == 200, response.text
+    photo = _photo(db, db.get(FormSubmission, uuid.UUID(response.json()["id"])))
+    monkeypatch.setattr(settings, "ENV", "production", raising=False)
+    monkeypatch.setattr(scan_attachment, "SessionLocal", lambda: _SessionProxy(db))
+    monkeypatch.setattr(scan_attachment, "_download_storage_key_to_temp", lambda _key: "/nope")
+    monkeypatch.setattr(scan_attachment, "_run_clamav_scan", lambda _path: ("timeout", "timeout"))
+
+    def scan_jobs():
+        return (
+            db.query(Job)
+            .filter(
+                Job.organization_id == test_org.id,
+                Job.job_type == "form_submission_file_scan",
+                Job.payload["submission_file_id"].as_string() == str(photo.id),
+            )
+            .order_by(Job.created_at.asc())
+            .all()
+        )
+
+    def finish_current_scan():
+        for job in scan_jobs():
+            if job.status == "pending":
+                job.status = "running"
+        db.commit()
+
+    attempts = []
+    for expected_delay in (60, 300, 900):
+        finish_current_scan()
+        started = datetime.now(UTC)
+        assert scan_attachment.scan_form_submission_file_job(photo.id) is True
+        db.refresh(photo)
+        assert photo.scan_status == "pending"
+        retry = [job for job in scan_jobs() if job.status == "pending"]
+        assert len(retry) == 1
+        assert retry[0].run_at >= started + timedelta(seconds=expected_delay - 5)
+        attempts.append(retry[0].payload["scan_attempt"])
+        for job in scan_jobs():
+            if job.status == "running":
+                job.status = "completed"
+    assert attempts == [2, 3, 4]
+
+    finish_current_scan()
+    scan_attachment.scan_form_submission_file_job(photo.id)
+    db.refresh(photo)
+    assert photo.scan_status == "error"
+    assert photo.quarantined is True
+    assert not [job for job in scan_jobs() if job.status == "pending"]
+
+
+@pytest.mark.asyncio
 async def test_retry_match_replays_failed_donor_promotion(authed_client, db, test_org):
     from app.jobs.handlers.form_submissions import process_donor_intake_promote
 

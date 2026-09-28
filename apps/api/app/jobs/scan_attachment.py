@@ -280,6 +280,12 @@ def scan_form_submission_file_job(file_id: UUID) -> bool:
                     "Form submission scan unavailable in dev/test (%s); treating as clean",
                     scan_status,
                 )
+            elif form_submission_service.schedule_submission_file_scan_retry(db, file_id):
+                logger.warning(
+                    "Form submission scan failed (%s) for %s; retry scheduled",
+                    scan_status,
+                    file_id,
+                )
             else:
                 form_submission_service.mark_submission_file_scanned(db, file_id, "error")
                 logger.error(
@@ -319,7 +325,8 @@ def scan_form_submission_file_job(file_id: UUID) -> bool:
         try:
             from app.services import form_submission_service
 
-            form_submission_service.mark_submission_file_scanned(db, file_id, "error")
+            if not form_submission_service.schedule_submission_file_scan_retry(db, file_id):
+                form_submission_service.mark_submission_file_scanned(db, file_id, "error")
             db.commit()
         except Exception as mark_error:
             logger.warning(

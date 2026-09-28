@@ -154,6 +154,7 @@ class AuditEventType(str, Enum):
     FORM_SUBMISSION_APPROVED = "form_submission_approved"
     FORM_SUBMISSION_REJECTED = "form_submission_rejected"
     FORM_SUBMISSION_FILE_DOWNLOADED = "form_submission_file_downloaded"
+    FORM_SUBMISSION_FILE_RESCAN_REQUESTED = "form_submission_file_rescan_requested"
 
     # Tasks
     TASK_DELETED = "task_deleted"

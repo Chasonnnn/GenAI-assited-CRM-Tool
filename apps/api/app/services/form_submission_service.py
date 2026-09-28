@@ -719,6 +719,112 @@ def mark_submission_file_scanned(
     return record
 
 
+# Transient scanner failures retry after these delays before the file is marked "error".
+SUBMISSION_FILE_SCAN_RETRY_DELAYS_SECONDS = (60, 300, 900)
+
+
+def _in_flight_submission_file_scan_jobs(
+    db: Session, org_id: uuid.UUID, submission_file_id: uuid.UUID
+) -> list[Job]:
+    return (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == JobType.FORM_SUBMISSION_FILE_SCAN.value,
+            Job.status.in_([JobStatus.PENDING.value, JobStatus.RUNNING.value]),
+            Job.payload["submission_file_id"].as_string() == str(submission_file_id),
+        )
+        .all()
+    )
+
+
+def schedule_submission_file_scan_retry(db: Session, file_id: uuid.UUID) -> bool:
+    """Keep a transiently failed scan pending and enqueue the next attempt; caller commits.
+
+    Returns False when the attempts are exhausted and the caller must mark the file "error".
+    """
+    record = (
+        db.query(FormSubmissionFile)
+        .filter(FormSubmissionFile.id == file_id)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if record is None or record.scan_status != "pending":
+        return False
+    jobs = _in_flight_submission_file_scan_jobs(db, record.organization_id, record.id)
+    if any(job.status == JobStatus.PENDING.value for job in jobs):
+        return True
+    # The running job is the attempt that just failed; a rescan starts again at attempt 1.
+    attempt = max(
+        (
+            int((job.payload or {}).get("scan_attempt") or 1)
+            for job in jobs
+            if job.status == JobStatus.RUNNING.value
+        ),
+        default=1,
+    )
+    if attempt > len(SUBMISSION_FILE_SCAN_RETRY_DELAYS_SECONDS):
+        return False
+    job_service.enqueue_job(
+        db=db,
+        org_id=record.organization_id,
+        job_type=JobType.FORM_SUBMISSION_FILE_SCAN,
+        payload={"submission_file_id": str(record.id), "scan_attempt": attempt + 1},
+        run_at=datetime.now(UTC)
+        + timedelta(seconds=SUBMISSION_FILE_SCAN_RETRY_DELAYS_SECONDS[attempt - 1]),
+        commit=False,
+    )
+    return True
+
+
+def request_submission_file_rescan(
+    db: Session,
+    *,
+    submission: FormSubmission,
+    file_record: FormSubmissionFile,
+    user_id: uuid.UUID,
+) -> FormSubmissionFile:
+    """Reset a file whose scan failed and queue a fresh bounded scan cycle."""
+    from app.services import audit_service
+
+    record = (
+        db.query(FormSubmissionFile)
+        .filter(
+            FormSubmissionFile.organization_id == submission.organization_id,
+            FormSubmissionFile.submission_id == submission.id,
+            FormSubmissionFile.id == file_record.id,
+            FormSubmissionFile.deleted_at.is_(None),
+        )
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if record is None:
+        raise LookupError("File not found")
+    if record.scan_status != "error":
+        raise ValueError("Only files whose scan failed can be rescanned")
+    try:
+        record.scan_status = "pending"
+        record.quarantined = False
+        audit_service.log_event(
+            db=db,
+            org_id=submission.organization_id,
+            event_type=AuditEventType.FORM_SUBMISSION_FILE_RESCAN_REQUESTED,
+            actor_user_id=user_id,
+            target_type="form_submission_file",
+            target_id=record.id,
+            details={"submission_id": str(submission.id)},
+        )
+        ensure_submission_file_scan_job(db, submission.organization_id, record.id, commit=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(record)
+    return record
+
+
 def _approve_donor_submission(
     db: Session,
     submission: FormSubmission,
