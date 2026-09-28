@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.77](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.76...surrogacy-crm-platform-v0.91.77) (2026-09-28)
+
+
+### Features
+
+* donor readiness across website, Zapier and workflows, plus intended parent stage rules ([#762](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/762)) ([30f2d26](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/30f2d265c605516c846061266ee484c6a9736a0c))
+
 ## [0.91.76](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.75...surrogacy-crm-platform-v0.91.76) (2026-09-28)
 
 
