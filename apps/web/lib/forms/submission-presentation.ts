@@ -1,4 +1,4 @@
-import type { FormFieldMappingItem, FormSubmissionRead } from "@/lib/api/forms"
+import type { FormFieldMappingItem, FormSubmissionRead, FormSubmissionStatus } from "@/lib/api/forms"
 
 export function readAnswerValue(
     submission: FormSubmissionRead,
@@ -39,18 +39,61 @@ export function submissionOutcomeBadgeClass(submission: FormSubmissionRead) {
     return "border-amber-200 bg-amber-50 text-amber-700"
 }
 
-export function submissionReviewLabel(submission: FormSubmissionRead) {
-    if (submission.status === "approved") return "Approved"
-    if (submission.status === "rejected") return "Rejected"
+export function submissionStatusLabel(status: FormSubmissionStatus) {
+    if (status === "approved") return "Approved"
+    if (status === "rejected") return "Rejected"
     return "Pending Review"
 }
 
-export function submissionReviewBadgeClass(submission: FormSubmissionRead) {
-    if (submission.status === "approved") {
+export function submissionReviewLabel(submission: FormSubmissionRead) {
+    return submissionStatusLabel(submission.status)
+}
+
+const MATCH_REASON_LABELS: Record<string, string> = {
+    phone_dob_name_exact: "Name, date of birth and phone match",
+    email_dob_name_exact: "Name, date of birth and email match",
+    phone_dob_name_ambiguous: "Several records share name, date of birth and phone",
+    email_dob_name_ambiguous: "Several records share name, date of birth and email",
+    no_deterministic_match: "No matching record",
+    existing_submission_for_surrogate: "Surrogate already has an application on this form",
+    already_linked: "Already linked",
+    manually_linked: "Linked by reviewer",
+    manual_lead_creation: "Lead created by reviewer",
+    manual_review_required: "Matching record outside your access",
+    manual_retry_reset: "Reset for reprocessing",
+    manual_retry_lead_creation: "Lead created on reprocess",
+    manual_retry_requires_manual_link: "Previously promoted; link manually",
+    existing_lead_retained: "Existing lead kept",
+    existing_lead_relinked: "Existing lead relinked",
+    workflow_lead_creation: "Lead created by workflow",
+    workflow_website_lead_creation: "Website lead created by workflow",
+    lead_promoted_to_surrogate: "Lead promoted to surrogate",
+    lead_promoted_to_donor: "Lead promoted to donor",
+    donor_email_name_type_exact: "Name, email and donor type match",
+    donor_identity_conflict: "Email or phone belongs to a different donor",
+    donor_no_deterministic_match: "No matching donor",
+    existing_submission_for_donor: "Donor already has an application on this form",
+    donor_photo_requires_review: "Profile photo needs review",
+    donor_email_phone_match: "Email and phone match",
+    donor_email_match: "Email matches",
+    donor_phone_match: "Phone matches",
+}
+
+export function matchReasonLabel(reason: string | null | undefined) {
+    if (!reason) return "—"
+    return MATCH_REASON_LABELS[reason] ?? "Other reason"
+}
+
+export function submissionStatusBadgeClass(status: FormSubmissionStatus) {
+    if (status === "approved") {
         return "border-emerald-200 bg-emerald-50 text-emerald-700"
     }
-    if (submission.status === "rejected") {
+    if (status === "rejected") {
         return "border-red-200 bg-red-50 text-red-700"
     }
     return "border-stone-200 bg-stone-100 text-stone-700"
+}
+
+export function submissionReviewBadgeClass(submission: FormSubmissionRead) {
+    return submissionStatusBadgeClass(submission.status)
 }

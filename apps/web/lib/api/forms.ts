@@ -9,7 +9,7 @@ import type { JsonObject } from '../types/json'
 type FormStatus = 'draft' | 'published' | 'archived'
 export type FormPurpose = 'surrogate_application' | 'lead_capture' | 'event_intake' | 'other'
 export type FormLeadKind = 'surrogate' | 'egg_donor' | 'sperm_donor'
-type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
+export type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
 type FormLinkMode = 'shared'
 type SharedSubmissionOutcome = 'workflow_pending' | 'linked' | 'ambiguous_review' | 'lead_created'
 type EmbedHealthCheckStatus = 'pass' | 'warning' | 'block'
@@ -419,8 +419,28 @@ export interface MatchCandidateRead {
     created_at: string
 }
 
+export type DonorMatchCandidateReason = 'donor_email_phone_match' | 'donor_email_match' | 'donor_phone_match'
+
+export interface DonorMatchCandidateRead {
+    donor_id: string
+    donor_number: string
+    full_name: string
+    donor_type: 'egg' | 'sperm'
+    reason: DonorMatchCandidateReason
+}
+
+export interface DonorSubmissionRead {
+    id: string
+    form_id: string
+    form_name: string
+    status: FormSubmissionStatus
+    submitted_at: string
+    reviewed_at: string | null
+}
+
 export interface ResolveSubmissionMatchPayload {
     surrogate_id?: string | null
+    donor_id?: string | null
     create_intake_lead?: boolean
     review_notes?: string | null
 }
@@ -885,6 +905,18 @@ export function updateSubmissionAnswers(
 
 export function listSubmissionMatchCandidates(submissionId: string): Promise<MatchCandidateRead[]> {
     return api.get<MatchCandidateRead[]>(`/forms/submissions/${submissionId}/match-candidates`)
+}
+
+export function listSubmissionDonorCandidates(submissionId: string): Promise<DonorMatchCandidateRead[]> {
+    return api.get<DonorMatchCandidateRead[]>(`/forms/submissions/${submissionId}/donor-candidates`)
+}
+
+export function listDonorSubmissions(donorId: string): Promise<DonorSubmissionRead[]> {
+    return api.get<DonorSubmissionRead[]>(`/forms/donors/${donorId}/submissions`)
+}
+
+export function rescanSubmissionFile(submissionId: string, fileId: string): Promise<FormSubmissionFileRead> {
+    return api.post<FormSubmissionFileRead>(`/forms/submissions/${submissionId}/files/${fileId}/rescan`)
 }
 
 export function resolveSubmissionMatch(
