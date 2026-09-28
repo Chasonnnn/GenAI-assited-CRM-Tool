@@ -495,7 +495,8 @@ def _resolve_stage_ref(
     return str(stage.id), stage.stage_key
 
 
-def _form_intake_lead_kinds(db: Session, form: Form) -> set[str]:
+def form_intake_lead_kinds(db: Session, form: Form) -> set[str]:
+    """Return the lead kinds a form produces, including both subtypes for shared donor forms."""
     if form.lead_kind not in DONOR_SUBJECT_TYPES:
         return {form.lead_kind}
     published_mappings = (
@@ -557,7 +558,7 @@ def _canonicalize_trigger_config(
         if not form:
             raise ValueError("Workflow form not found in organization")
         configured_kind = config.get(intake_context_key)
-        supported_kinds = _form_intake_lead_kinds(db, form)
+        supported_kinds = form_intake_lead_kinds(db, form)
         if configured_kind is not None and configured_kind not in supported_kinds:
             raise ValueError(f"Workflow {intake_context_key} must match the selected form")
         if len(supported_kinds) == 1:

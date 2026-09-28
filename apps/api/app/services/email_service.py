@@ -1090,7 +1090,90 @@ def build_donor_template_variables(db: Session, donor: Donor) -> dict[str, str]:
         "donor_type": humanize_identifier(donor.pipeline_entity_type),
         "education": donor.education or "",
         "status_label": donor.status_label or "",
+        "form_link": _donor_form_link(db, donor, org),
+        "appointment_link": _donor_appointment_link(db, donor, org),
     }
+
+
+# The donor link helpers mirror build_surrogate_template_variables; the surrogate
+# builder keeps its inline copy so this donor change leaves surrogate sends untouched.
+def _donor_form_link(db: Session, donor: Donor, org: Organization | None) -> str:
+    """Link to the newest published donor form that accepts this donor's subtype."""
+    from app.db.enums import FormStatus
+    from app.db.models import Form
+    from app.services import form_intake_service, org_service, workflow_service
+
+    donor_kind = donor.pipeline_entity_type
+    forms = (
+        db.query(Form)
+        .filter(
+            Form.organization_id == donor.organization_id,
+            Form.status == FormStatus.PUBLISHED.value,
+            Form.lead_kind.in_(["egg_donor", "sperm_donor"]),
+        )
+        .order_by(Form.updated_at.desc(), Form.created_at.desc())
+        .all()
+    )
+    selected_form = next((form for form in forms if form.lead_kind == donor_kind), None)
+    if selected_form is None:
+        selected_form = next(
+            (
+                form
+                for form in forms
+                if donor_kind in workflow_service.form_intake_lead_kinds(db, form)
+            ),
+            None,
+        )
+    if selected_form is None:
+        return ""
+    intake_link = form_intake_service.get_active_intake_link_for_form(
+        db,
+        org_id=donor.organization_id,
+        form_id=selected_form.id,
+    )
+    if not intake_link:
+        intake_link = form_intake_service.ensure_default_intake_link(
+            db,
+            org_id=donor.organization_id,
+            form=selected_form,
+            user_id=None,
+        )
+    return form_intake_service.build_shared_application_link(
+        org_service.get_org_portal_base_url(org),
+        intake_link.slug,
+    )
+
+
+def _donor_appointment_link(db: Session, donor: Donor, org: Organization | None) -> str:
+    """Booking link of the donor's user owner; donors carry no creator fallback."""
+    from app.db.enums import OwnerType
+    from app.db.models import BookingLink
+    from app.services import appointment_service, org_service
+
+    if donor.owner_type != OwnerType.USER.value or not donor.owner_id:
+        return ""
+    booking_link = (
+        db.query(BookingLink)
+        .filter(
+            BookingLink.organization_id == donor.organization_id,
+            BookingLink.user_id == donor.owner_id,
+        )
+        .first()
+    )
+    if not booking_link:
+        booking_link = appointment_service.get_or_create_booking_link(
+            db=db,
+            user_id=donor.owner_id,
+            org_id=donor.organization_id,
+        )
+    if not booking_link:
+        return ""
+    portal_base_url = org_service.get_org_portal_base_url(org)
+    return (
+        f"{portal_base_url}/book/{booking_link.public_slug}"
+        if portal_base_url
+        else f"/book/{booking_link.public_slug}"
+    )
 
 
 def _build_record_contact_template_variables(
