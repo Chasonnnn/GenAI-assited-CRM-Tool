@@ -1070,6 +1070,76 @@ def test_undo_does_not_count_toward_the_actionable_skip_rate(db, test_org, test_
     assert summary["skipped_rate"] == 0.0
 
 
+@pytest.mark.asyncio
+async def test_failed_attempt_bookkeeping_keeps_an_undo_withdrawal(
+    db, test_org, test_user, monkeypatch
+):
+    from app import worker
+    from app.jobs.handlers import zapier as zapier_handler
+    from app.services import job_service
+
+    pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+    forward = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    forward_event = _history_event(db, forward["history"])
+    job = db.get(Job, forward_event.job_id)
+    claim_token = uuid.uuid4()
+    job.status = JobStatus.RUNNING.value
+    job.claim_token = claim_token
+    job.attempts = 1
+    db.commit()
+
+    # The worker returns the failed attempt to the queue before it records the failure;
+    # an undo that lands in between withdraws the event.
+    job = job_service.fail_claimed_job(
+        db,
+        job_id=job.id,
+        claim_token=claim_token,
+        error="Zapier webhook returned HTTP 500",
+    )
+    assert job.status == JobStatus.PENDING.value
+    donor_service.change_status(
+        db,
+        donor,
+        new_stage.id,
+        test_user.id,
+        reason="Undo accidental change",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    worker._record_job_failure(db, job, "Zapier webhook returned HTTP 500")
+
+    db.refresh(forward_event)
+    assert (forward_event.status, forward_event.reason) == ("skipped", "donor_stage_undone")
+    assert forward_event.attempts == 1
+    assert forward_event.last_error == "Zapier webhook returned HTTP 500"
+
+    class UnexpectedClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("An undone donor event must not be sent")
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", UnexpectedClient)
+    await zapier_handler.process_zapier_stage_event(db, db.get(Job, forward_event.job_id))
+    db.refresh(forward_event)
+    assert (forward_event.status, forward_event.reason) == ("skipped", "donor_stage_undone")
+
+
 def test_repeated_stage_visit_reports_the_event_once(db, test_org, test_user):
     pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
     donor = _create_donor(db, test_org.id, test_user.id)

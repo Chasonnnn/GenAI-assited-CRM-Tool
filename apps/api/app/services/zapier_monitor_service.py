@@ -321,11 +321,20 @@ def mark_job_failed(
     db: Session | None = None,
 ) -> None:
     def _update(db: Session) -> None:
-        event = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.job_id == job_id).first()
+        # Lock and re-read the row: an undo can withdraw the event after the worker returns
+        # the job to PENDING and before this bookkeeping runs.
+        event = (
+            db.query(ZapierOutboundEvent)
+            .filter(ZapierOutboundEvent.job_id == job_id)
+            .with_for_update()
+            .populate_existing()
+            .first()
+        )
         if not event:
             return
         now = _now_utc()
-        event.status = "failed" if job_status == JobStatus.FAILED.value else "queued"
+        if event.status != "skipped":
+            event.status = "failed" if job_status == JobStatus.FAILED.value else "queued"
         event.attempts = attempts
         event.last_error = error_message[:1000]
         event.updated_at = now
