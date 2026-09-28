@@ -1,5 +1,6 @@
 """Workflow service - CRUD operations for automation workflows."""
 
+from collections.abc import Sequence
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -601,36 +602,55 @@ def _resolve_stage_ref(
 
 def form_intake_lead_kinds(db: Session, form: Form) -> set[str]:
     """Return the lead kinds a form produces, including both subtypes for shared donor forms."""
-    if form.lead_kind not in DONOR_SUBJECT_TYPES:
-        return {form.lead_kind}
-    published_mappings = (
-        db.query(PublishedIntakeVersion.mapping_snapshot_json)
-        .join(FormIntakeLink, FormIntakeLink.published_version_id == PublishedIntakeVersion.id)
-        .filter(
-            FormIntakeLink.organization_id == form.organization_id,
-            FormIntakeLink.form_id == form.id,
-            PublishedIntakeVersion.organization_id == form.organization_id,
-            PublishedIntakeVersion.form_id == form.id,
-            PublishedIntakeVersion.lead_kind_snapshot.in_(DONOR_SUBJECT_TYPES),
-        )
-        .all()
-    )
-    if published_mappings:
-        shared = any(
-            mapping.get("surrogate_field") == "donor_type"
-            for (mappings,) in published_mappings
-            for mapping in mappings
-        )
-    else:
-        shared = (
-            db.query(FormFieldMapping.id)
+    return forms_intake_lead_kinds(db, [form])[form.id]
+
+
+def forms_intake_lead_kinds(db: Session, forms: Sequence[Form]) -> dict[UUID, set[str]]:
+    """Batch form_intake_lead_kinds with two queries per organization.
+
+    A donor form is shared when its published intake versions map donor_type; a form
+    without a published donor version falls back to its draft field mappings.
+    """
+    result = {form.id: {form.lead_kind} for form in forms}
+    donor_forms_by_org: dict[UUID, set[UUID]] = {}
+    for form in forms:
+        if form.lead_kind in DONOR_SUBJECT_TYPES:
+            donor_forms_by_org.setdefault(form.organization_id, set()).add(form.id)
+    shared: set[UUID] = set()
+    for org_id, form_ids in donor_forms_by_org.items():
+        published_rows = (
+            db.query(PublishedIntakeVersion.form_id, PublishedIntakeVersion.mapping_snapshot_json)
+            .join(FormIntakeLink, FormIntakeLink.published_version_id == PublishedIntakeVersion.id)
             .filter(
-                FormFieldMapping.form_id == form.id,
-                FormFieldMapping.surrogate_field == "donor_type",
+                FormIntakeLink.organization_id == org_id,
+                FormIntakeLink.form_id == PublishedIntakeVersion.form_id,
+                PublishedIntakeVersion.organization_id == org_id,
+                PublishedIntakeVersion.form_id.in_(form_ids),
+                PublishedIntakeVersion.lead_kind_snapshot.in_(DONOR_SUBJECT_TYPES),
             )
-            .first()
-        ) is not None
-    return DONOR_SUBJECT_TYPES if shared else {form.lead_kind}
+            .all()
+        )
+        published = {form_id for form_id, _ in published_rows}
+        shared.update(
+            form_id
+            for form_id, mappings in published_rows
+            if any(mapping.get("surrogate_field") == "donor_type" for mapping in mappings or [])
+        )
+        draft_form_ids = form_ids - published
+        if draft_form_ids:
+            shared.update(
+                form_id
+                for (form_id,) in db.query(FormFieldMapping.form_id)
+                .filter(
+                    FormFieldMapping.form_id.in_(draft_form_ids),
+                    FormFieldMapping.surrogate_field == "donor_type",
+                )
+                .distinct()
+                .all()
+            )
+    for form_id in shared:
+        result[form_id] = set(DONOR_SUBJECT_TYPES)
+    return result
 
 
 def _canonicalize_trigger_config(
@@ -2045,12 +2065,13 @@ def get_workflow_options(
     published_forms = forms_query.order_by(Form.name.asc()).all()
     # lead_kinds lists both donor types for a shared donor form, whose workflows cannot
     # reference stages (see resolve_workflow_record_type).
+    lead_kinds_by_form = forms_intake_lead_kinds(db, published_forms)
     forms = [
         {
             "id": str(f.id),
             "name": f.name,
             "lead_kind": f.lead_kind,
-            "lead_kinds": sorted(form_intake_lead_kinds(db, f)),
+            "lead_kinds": sorted(lead_kinds_by_form[f.id]),
         }
         for f in published_forms
     ]

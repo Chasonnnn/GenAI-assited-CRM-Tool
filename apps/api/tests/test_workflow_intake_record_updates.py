@@ -716,3 +716,34 @@ def test_workflow_options_list_the_lead_kinds_each_form_produces(db, test_org, t
     assert lead_kinds[str(surrogate_form.id)] == ["surrogate"]
     assert lead_kinds[str(egg_form.id)] == ["egg_donor"]
     assert lead_kinds[str(shared_form.id)] == ["egg_donor", "sperm_donor"]
+
+
+def test_workflow_options_read_form_lead_kinds_in_a_fixed_number_of_queries(
+    db, test_org, test_user
+):
+    from sqlalchemy import event
+
+    def count_selects():
+        statements = []
+
+        def record(conn, cursor, statement, parameters, context, executemany):
+            if "published_intake_versions" in statement or "form_field_mappings" in statement:
+                statements.append(statement)
+
+        event.listen(db.bind, "before_cursor_execute", record)
+        try:
+            workflow_service.get_workflow_options(
+                db, test_org.id, subject_type="form_submission", include_donor_forms=True
+            )
+        finally:
+            event.remove(db.bind, "before_cursor_execute", record)
+        return len(statements)
+
+    _form(db, test_org.id, test_user.id, "egg_donor")
+    db.flush()
+    baseline = count_selects()
+    for lead_kind in ("egg_donor", "sperm_donor", "egg_donor"):
+        _form(db, test_org.id, test_user.id, lead_kind)
+    db.flush()
+
+    assert count_selects() == baseline == 2
