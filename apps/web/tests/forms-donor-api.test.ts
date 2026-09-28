@@ -64,5 +64,16 @@ describe("hosted donor forms API client", () => {
         const body = mockUpload.mock.calls[0]?.[1] as FormData
         expect(body.get("idempotency_key")).toBe("submission-attempt")
         expect(body.get("published_version_id")).toBe("published-version")
+        expect(body.has("attribution")).toBe(false)
+    })
+
+    it("sends landing attribution as a JSON multipart part", async () => {
+        const attribution = { utm_source: "facebook", fbc: "fb.1.1790510400123.click-abc" }
+        await submitSharedPublicForm(
+            "donor-intake", { full_name: "Test Applicant" }, [], undefined,
+            undefined, undefined, "published-version", "submission-attempt", attribution,
+        )
+        const body = mockUpload.mock.calls[0]?.[1] as FormData
+        expect(JSON.parse(String(body.get("attribution")))).toEqual(attribution)
     })
 })

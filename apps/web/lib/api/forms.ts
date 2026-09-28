@@ -803,6 +803,7 @@ export function submitSharedPublicForm(
     messagingConsent?: { operational?: boolean; promotional?: boolean; phoneFieldKey?: string | null },
     publishedVersionId?: string | null,
     idempotencyKey?: string,
+    attribution?: Record<string, string>,
 ): Promise<FormSubmissionSharedResponse> {
     const formData = new FormData()
     formData.append('answers', JSON.stringify(answers))
@@ -821,6 +822,9 @@ export function submitSharedPublicForm(
     // Multipart has no null; omitting the part sends sms_phone_field_key as null.
     if (messagingConsent?.phoneFieldKey) {
         formData.append('sms_phone_field_key', messagingConsent.phoneFieldKey)
+    }
+    if (attribution && Object.keys(attribution).length > 0) {
+        formData.append('attribution', JSON.stringify(attribution))
     }
     const options = challengeToken ? { headers: { "X-Intake-Challenge": challengeToken } } : undefined
     return api.upload<FormSubmissionSharedResponse>(`/forms/public/intake/${slug}/submit`, formData, options)

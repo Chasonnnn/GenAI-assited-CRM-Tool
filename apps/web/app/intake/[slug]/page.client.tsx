@@ -47,6 +47,7 @@ import {
     type FormSchema,
 } from "@/lib/api/forms"
 import { useHostedIntakeAutosave } from "@/lib/hooks/use-hosted-intake-autosave"
+import { captureHostedIntakeAttribution, clearHostedIntakeAttribution } from "./hosted-intake-attribution"
 import { FileUploadZone } from "./components/file-upload-zone"
 import { PrivacyNotice } from "./components/privacy-notice"
 import { ProgressStepper, type Step } from "./components/progress-stepper"
@@ -931,6 +932,11 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const suppressedIdentityFingerprintsRef = React.useRef<Set<string> | null>(null)
     const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found"> | null>(null)
 
+    React.useEffect(() => {
+        // Record the landing attribution on arrival, before a reload or later visit drops the URL query.
+        captureHostedIntakeAttribution(token)
+    }, [token])
+
     const bootstrapDraftSession = createDraftSessionState(token)
     const bootstrapQuery = useQuery({
         queryKey: ["hosted-intake-bootstrap", token],
@@ -1305,8 +1311,10 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                     : undefined,
                 formConfig?.published_version_id,
                 attempt.key,
+                captureHostedIntakeAttribution(token),
             )
             clearSubmissionAttempt(attemptScope)
+            clearHostedIntakeAttribution(token)
             submissionAttemptRef.current = null
             if (draftSessionId) {
                 window.localStorage.removeItem(`intake-draft-session:${token}`)
