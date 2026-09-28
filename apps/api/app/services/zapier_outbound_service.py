@@ -44,6 +44,18 @@ PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid"
 SURROGATE_RECORD_TYPE = "surrogate"
 # A donor event in these states was sent or will be; later occurrences are duplicates.
 DONOR_REPORTED_EVENT_STATUSES = ("queued", "delivered", "failed")
+# Click and campaign fields; source, medium and campaign hold the utm_* values.
+AD_ATTRIBUTION_COLUMNS = (
+    LeadAttribution.fbc,
+    LeadAttribution.fbp,
+    LeadAttribution.fbclid,
+    LeadAttribution.ad_id,
+    LeadAttribution.adset_id,
+    LeadAttribution.campaign_id,
+    LeadAttribution.source,
+    LeadAttribution.medium,
+    LeadAttribution.campaign,
+)
 
 
 def _now_utc() -> datetime:
@@ -561,9 +573,12 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
         IntakeLead.organization_id == donor.organization_id,
         IntakeLead.promoted_donor_id == donor.id,
     )
-    has_attribution = exists().where(
+    # The hosted page records landing_url on every submit, so a row alone is not ad data.
+    has_ad_data = or_(*(column != "" for column in AD_ATTRIBUTION_COLUMNS))
+    has_ad_attribution = exists().where(
         LeadAttribution.organization_id == donor.organization_id,
         LeadAttribution.form_submission_id == FormSubmission.id,
+        has_ad_data,
     )
     # Prefer the latest submission that carries ad attribution; else the latest submission.
     submission = (
@@ -576,7 +591,7 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
             ),
         )
         .order_by(
-            case((has_attribution, 0), else_=1),
+            case((has_ad_attribution, 0), else_=1),
             FormSubmission.submitted_at.desc(),
             FormSubmission.id.desc(),
         )
@@ -591,7 +606,7 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
             LeadAttribution.organization_id == donor.organization_id,
             LeadAttribution.form_submission_id == submission.id,
         )
-        .order_by(LeadAttribution.created_at.desc())
+        .order_by(case((has_ad_data, 0), else_=1), LeadAttribution.created_at.desc())
         .first()
     )
     fields: dict[str, str | None] = {}

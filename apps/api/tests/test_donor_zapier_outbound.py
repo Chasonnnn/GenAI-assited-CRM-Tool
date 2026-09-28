@@ -653,7 +653,7 @@ def test_backdated_donor_change_reports_its_effective_time(db, test_org, test_us
     assert payload["event_time"] == effective_at.isoformat()
 
 
-def _hosted_submission(db, org_id, donor, *, submitted_at, fbc=None):
+def _hosted_submission(db, org_id, donor, *, submitted_at, **ad_fields):
     form = Form(
         organization_id=org_id,
         name=f"Hosted donor form {uuid.uuid4().hex[:6]}",
@@ -681,19 +681,38 @@ def _hosted_submission(db, org_id, donor, *, submitted_at, fbc=None):
     )
     db.add(submission)
     db.flush()
-    if fbc:
-        db.add(
-            LeadAttribution(
-                organization_id=org_id,
-                form_submission_id=submission.id,
-                intake_link_id=link.id,
-                source_surface="hosted_intake",
-                source="meta",
-                fbc=fbc,
-            )
+    # The hosted page sends landing_url on every submit, so every submission gets a row.
+    db.add(
+        LeadAttribution(
+            organization_id=org_id,
+            form_submission_id=submission.id,
+            intake_link_id=link.id,
+            source_surface="hosted_intake",
+            landing_url=f"https://app.surrogacyforce.com/intake/{link.slug}",
+            **ad_fields,
         )
+    )
     db.commit()
     return submission
+
+
+def _website_stage_event(db, test_org, test_user, donor, pipeline, ready_stage):
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+    result = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    return _history_event(db, result["history"])
 
 
 def test_website_donor_uses_latest_attributed_submission(db, test_org, test_user):
@@ -707,32 +726,45 @@ def test_website_donor_uses_latest_attributed_submission(db, test_org, test_user
         db, test_org.id, donor, submitted_at=now - timedelta(days=2), fbc="fb.1.2.second-click"
     )
     _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=1))
-    _configure_reporting(
-        db,
-        test_org.id,
-        donor_type="egg",
-        pipeline=pipeline,
-        stage=ready_stage,
-    )
 
-    result = donor_service.change_status(
-        db,
-        donor,
-        ready_stage.id,
-        test_user.id,
-        user_role=Role.DEVELOPER,
-        emit_workflow_events=False,
-    )
+    event = _website_stage_event(db, test_org, test_user, donor, pipeline, ready_stage)
 
-    event = (
-        db.query(ZapierOutboundEvent)
-        .filter(ZapierOutboundEvent.donor_status_history_id == result["history"].id)
-        .one()
-    )
     assert event.first_party_submission_id == attributed.id
     payload = db.get(Job, event.job_id).payload["data"]
     assert payload["first_party_submission_id"] == str(attributed.id)
     assert payload["fbc"] == "fb.1.2.second-click"
+
+
+@pytest.mark.parametrize(
+    "ad_fields",
+    [
+        {"fbc": "fb.1.1.ad-click"},
+        {"fbp": "fb.1.1.browser"},
+        {"fbclid": "ad-click"},
+        {"ad_id": "ad-1"},
+        {"adset_id": "adset-1"},
+        {"campaign_id": "campaign-1"},
+        {"source": "facebook", "medium": "paid_social", "campaign": "donors"},
+    ],
+    ids=lambda fields: next(iter(fields)),
+)
+def test_website_donor_prefers_an_earlier_ad_click_over_a_later_plain_visit(
+    db, test_org, test_user, ad_fields
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    now = datetime.now(UTC)
+    clicked = _hosted_submission(
+        db, test_org.id, donor, submitted_at=now - timedelta(days=2), **ad_fields
+    )
+    _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=1))
+
+    event = _website_stage_event(db, test_org, test_user, donor, pipeline, ready_stage)
+
+    assert event.first_party_submission_id == clicked.id
+    if "fbc" in ad_fields:
+        payload = db.get(Job, event.job_id).payload["data"]
+        assert payload["fbc"] == "fb.1.1.ad-click"
 
 
 def test_website_donor_without_attribution_uses_latest_submission(db, test_org, test_user):
@@ -741,28 +773,9 @@ def test_website_donor_without_attribution_uses_latest_submission(db, test_org, 
     now = datetime.now(UTC)
     _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=2))
     latest = _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=1))
-    _configure_reporting(
-        db,
-        test_org.id,
-        donor_type="egg",
-        pipeline=pipeline,
-        stage=ready_stage,
-    )
 
-    result = donor_service.change_status(
-        db,
-        donor,
-        ready_stage.id,
-        test_user.id,
-        user_role=Role.DEVELOPER,
-        emit_workflow_events=False,
-    )
+    event = _website_stage_event(db, test_org, test_user, donor, pipeline, ready_stage)
 
-    event = (
-        db.query(ZapierOutboundEvent)
-        .filter(ZapierOutboundEvent.donor_status_history_id == result["history"].id)
-        .one()
-    )
     assert event.first_party_submission_id == latest.id
     assert event.status == "queued"
 
