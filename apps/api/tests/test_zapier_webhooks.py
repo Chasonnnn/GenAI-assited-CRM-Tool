@@ -386,6 +386,67 @@ async def test_zapier_webhook_rejects_missing_secret(client, db, test_org):
 
 
 @pytest.mark.asyncio
+async def test_zapier_mapping_review_syncs_to_google_once_without_blocking_loop(
+    client, db, test_org, test_user, monkeypatch
+):
+    import asyncio
+    import threading
+
+    from app.db.models import Task, UserIntegration
+    from app.services import google_tasks_sync_service, zapier_settings_service
+    from app.services.webhooks import zapier
+
+    db.add(
+        UserIntegration(
+            user_id=test_user.id,
+            integration_type="google_calendar",
+            access_token_encrypted="synthetic-token",
+            account_email="synthetic@example.com",
+        )
+    )
+    db.commit()
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    secret = zapier_settings_service.decrypt_webhook_secret(settings.webhook_secret_encrypted)
+    loop_thread = threading.get_ident()
+    process = zapier.process_zapier_payload
+    provider_calls = []
+
+    def process_in_worker(*args, **kwargs):
+        assert threading.get_ident() != loop_thread
+        return process(*args, **kwargs)
+
+    async def upsert(task, session):
+        await asyncio.sleep(0)
+        assert task.organization_id == test_org.id
+        assert task.owner_id == test_user.id
+        provider_calls.append(task.id)
+        return "google-review-task", "google-list", None
+
+    monkeypatch.setattr(zapier, "process_zapier_payload", process_in_worker)
+    monkeypatch.setattr(google_tasks_sync_service, "_upsert_google_task_for_platform_task", upsert)
+    payload = {
+        "lead_id": "async-review-lead",
+        "form_id": "async-review-form",
+        "form_name": "Synthetic review form",
+        "organization_id": str(uuid4()),
+        "email": "synthetic-lead@example.com",
+    }
+    for _ in range(2):
+        response = await client.post(
+            f"/webhooks/zapier/{settings.webhook_id}",
+            json=payload,
+            headers={"X-Webhook-Token": secret},
+        )
+        assert response.status_code == 200
+        assert response.json()["status"] == "awaiting_mapping"
+
+    task = db.query(Task).filter(Task.organization_id == test_org.id).one()
+    assert provider_calls == [task.id]
+    assert task.google_task_id == "google-review-task"
+    assert task.google_task_list_id == "google-list"
+
+
+@pytest.mark.asyncio
 async def test_zapier_webhook_creates_surrogate(client, db, test_org):
     from app.db.models import Surrogate
     from app.services import zapier_settings_service
@@ -663,9 +724,7 @@ async def test_zapier_test_endpoint_denies_explicit_donor_form_without_donor_acc
 
 
 @pytest.mark.asyncio
-async def test_zapier_test_endpoint_denies_donor_form_without_edit_access(
-    db, test_org, test_user
-):
+async def test_zapier_test_endpoint_denies_donor_form_without_edit_access(db, test_org, test_user):
     from app.db.models import Donor, MetaLead
 
     form = _create_mapped_meta_form(

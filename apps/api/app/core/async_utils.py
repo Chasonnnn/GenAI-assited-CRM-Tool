@@ -15,7 +15,19 @@ def run_async[T](coro: Coroutine[object, object, T], *, timeout: float | None = 
     - Raises if called from an async context in the same thread (use await instead).
     """
 
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        coro.close()
+        raise RuntimeError("run_async called from async context; use await instead")
+
+    started = False
+
     async def _runner() -> T:
+        nonlocal started
+        started = True
         if timeout is not None:
             with anyio.fail_after(timeout):
                 return await coro
@@ -23,9 +35,9 @@ def run_async[T](coro: Coroutine[object, object, T], *, timeout: float | None = 
 
     try:
         return anyio.from_thread.run(_runner)
-    except RuntimeError:
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return anyio.run(_runner)
-        raise RuntimeError("run_async called from async context; use await instead")
+    except anyio.NoEventLoopError:
+        # Only fall back when dispatch failed. Replaying a coroutine's own
+        # exception can duplicate provider effects and hide the original error.
+        if started:
+            raise
+        return anyio.run(_runner)
