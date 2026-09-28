@@ -1,5 +1,10 @@
 # syntax=docker/dockerfile:1
 
+# Cloud Build supplies an immutable reference to the previous builder image.
+# The pinned Node image is an empty cache seed for local and first builds.
+ARG NEXT_CACHE_IMAGE=node:24.18.0-bookworm-slim
+FROM ${NEXT_CACHE_IMAGE} AS next-cache
+
 FROM node:24.18.0-bookworm-slim AS builder
 
 WORKDIR /app
@@ -33,8 +38,13 @@ WORKDIR /app/apps/web
 ARG NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_DEPLOYMENT_ID
+ENV NEXT_DEPLOYMENT_ID=${NEXT_DEPLOYMENT_ID}
 
-RUN pnpm build
+RUN --mount=from=next-cache,target=/previous,ro \
+    if [ -d /previous/app/apps/web/.next/cache ]; then \
+      mkdir -p .next/cache && cp -a /previous/app/apps/web/.next/cache/. .next/cache/; \
+    fi && pnpm build
 
 
 FROM node:24.18.0-bookworm-slim AS runner
