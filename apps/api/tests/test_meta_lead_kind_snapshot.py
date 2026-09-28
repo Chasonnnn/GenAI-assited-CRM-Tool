@@ -197,9 +197,9 @@ async def test_donor_meta_mapping_rejects_surrogate_only_target_fields(
             "column_mappings": [
                 *BASE_MAPPINGS,
                 {
-                    "csv_column": "date_of_birth",
-                    "surrogate_field": "date_of_birth",
-                    "transformation": "date_flexible",
+                    "csv_column": "journey_timing",
+                    "surrogate_field": "journey_timing_preference",
+                    "transformation": None,
                     "action": "map",
                     "custom_field_key": None,
                 },
@@ -209,7 +209,7 @@ async def test_donor_meta_mapping_rejects_surrogate_only_target_fields(
 
     assert response.status_code == 400, response.text
     assert response.json()["detail"] == (
-        "Unsupported donor mapping field(s): date_of_birth"
+        "Unsupported donor mapping field(s): journey_timing_preference"
     )
     db.refresh(form)
     assert form.mapping_rules == original_rules
