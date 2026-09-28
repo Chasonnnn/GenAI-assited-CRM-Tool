@@ -44,7 +44,12 @@ def test_expected_websocket_disconnect_is_logged_at_info() -> None:
         assert collector.records[0].levelno == logging.INFO
         assert collector.records[0].levelname == "INFO"
         assert collector.records[0].event == "websocket_client_disconnect"
+        # Cloud Run detects standalone tracebacks as errors even after the
+        # originating log record has been downgraded to INFO.
+        assert collector.records[0].exc_info is None
+        assert "Traceback" not in logging.Formatter().format(collector.records[0])
         assert collector.records[1].levelno == logging.ERROR
+        assert collector.records[1].exc_info is not None
         assert not hasattr(collector.records[1], "event")
     finally:
         logger.handlers = original_handlers
