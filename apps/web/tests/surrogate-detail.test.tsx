@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { toast } from '@/components/ui/toast'
 import { SurrogateDetailLayout as SurrogateDetailLayoutClient } from '@/components/surrogates/detail/SurrogateDetailLayout'
 import { SurrogateOverviewTab } from '@/components/surrogates/detail/tabs/SurrogateOverviewTab'
 import { SurrogateDetailHeader } from '@/components/surrogates/detail/SurrogateDetailHeader'
@@ -1447,6 +1448,43 @@ describe('SurrogateDetailPage', () => {
                 data: { stage_id: 's2' },
             })
         })
+    })
+
+    it('closes the stage-change toast and undoes once when Undo is clicked', async () => {
+        mockUseSurrogate.mockReturnValueOnce({
+            data: {
+                ...baseSurrogateData,
+                status_label: 'On-Hold',
+                stage_id: 's4',
+                stage_slug: 'on_hold',
+                stage_type: 'paused',
+                paused_from_stage_id: 's2',
+                paused_from_stage_slug: 'ready_to_match',
+                paused_from_stage_label: 'Ready to Match',
+                paused_from_stage_type: 'post_approval',
+            },
+            isLoading: false,
+            error: null,
+        })
+        mockChangeStatus.mockResolvedValue({ status: 'applied' })
+        const success = vi.spyOn(toast, 'success').mockReturnValue('stage-toast')
+        const dismiss = vi.spyOn(toast, 'dismiss').mockImplementation(() => {})
+
+        render(
+            <SurrogateDetailLayoutClient>
+                <SurrogateOverviewTab />
+            </SurrogateDetailLayoutClient>
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+        await waitFor(() => expect(success).toHaveBeenCalled())
+        const undo = success.mock.calls[0]?.[1]?.action?.onClick
+        undo?.()
+        undo?.()
+
+        await waitFor(() => expect(mockChangeStatus).toHaveBeenCalledTimes(2))
+        expect(dismiss).toHaveBeenCalledWith('stage-toast')
+        success.mockRestore()
+        dismiss.mockRestore()
     })
 
     it('shows Medical & Insurance but hides Pregnancy Tracker for on-hold with intake stage', () => {
