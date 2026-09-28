@@ -329,6 +329,45 @@ async def test_ai_status_action_completes_match(authed_client, db, test_auth):
     _assert_completed(row, actor=test_auth.user.id, outcome="Delivered", recorded_after=started)
 
 
+@pytest.mark.asyncio
+async def test_undo_of_an_ai_delivered_change_does_not_depend_on_the_database_clock(
+    authed_client, db, test_auth, monkeypatch
+):
+    from app.services import ai_action_executor
+
+    class _AppClockBehindDatabase(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(tz) - timedelta(seconds=5)
+
+    delivered = _stage(db, test_auth.org.id, role="delivered")
+    matched = _stage(db, test_auth.org.id, role="matched")
+    match = await _create_accepted_match(authed_client)
+    # Keep the earlier stage history older than the skewed clock.
+    for history in db.query(SurrogateStatusHistory).filter_by(
+        surrogate_id=uuid.UUID(match["surrogate_id"])
+    ):
+        history.recorded_at -= timedelta(minutes=1)
+    db.commit()
+    monkeypatch.setattr(ai_action_executor, "datetime", _AppClockBehindDatabase)
+
+    result = ai_action_executor.UpdateStatusExecutor().execute(
+        {"stage_id": str(delivered.id)},
+        db,
+        test_auth.user.id,
+        test_auth.org.id,
+        uuid.UUID(match["surrogate_id"]),
+    )
+    db.commit()
+    assert result["success"] is True, result
+    assert _match_row(db, match["id"]).status == "completed"
+
+    response = await _move(authed_client, match["surrogate_id"], matched)
+
+    assert response.status_code == 200, response.text
+    _assert_accepted(_match_row(db, match["id"]))
+
+
 # =============================================================================
 # Undo and other moves out of Delivered
 # =============================================================================

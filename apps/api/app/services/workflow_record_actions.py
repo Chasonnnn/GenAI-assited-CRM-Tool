@@ -301,6 +301,8 @@ def update_field(
                 to_label_snapshot=stage.label,
                 changed_by_user_id=None,
                 reason="Workflow update",
+                # The undo finds the completed match by closed_at >= recorded_at; use one clock.
+                recorded_at=now,
             )
             db.add(history)
             db.commit()
