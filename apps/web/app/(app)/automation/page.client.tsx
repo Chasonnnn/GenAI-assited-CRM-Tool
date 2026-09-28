@@ -925,9 +925,10 @@ function useAutomationPageView({
     const canManageAutomation = can("manage_automation")
     const policyV2 = (policyVersion ?? 1) >= 2
     const canManageOrgWorkflows = canManageAutomation && (!policyV2 || can("manage_org_workflows"))
-    const canViewDonors = can("view_donors")
+    // Mirrors the create route: v1 also requires edit_donors for donor workflows.
+    const canCreateDonorWorkflows = can("view_donors") && (policyV2 || can("edit_donors"))
     const createWorkflowSubjectOptions = CREATE_WORKFLOW_SUBJECT_OPTIONS.filter(
-        (option) => canViewDonors || !isDonorSubject(option.value),
+        (option) => canCreateDonorWorkflows || !isDonorSubject(option.value),
     )
     const [detailsWorkflow, setDetailsWorkflow] = useState<WorkflowListItem | null>(null)
     const [activeTab] = useState(initialTab)

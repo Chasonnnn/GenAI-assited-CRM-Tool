@@ -723,10 +723,21 @@ describe('AutomationPage', () => {
     })
 
     it.each([
-        { permissions: [], labels: ['Surrogate'] },
-        { permissions: ['view_donors'], labels: ['Surrogate', 'Egg Donor', 'Sperm Donor'] },
-    ])('offers donor record types only with view_donors ($permissions)', ({ permissions, labels }) => {
-        mockUseEffectivePermissions.mockReturnValue({ data: { permissions } })
+        { policyVersion: 1, permissions: [], labels: ['Surrogate'] },
+        { policyVersion: 1, permissions: ['view_donors'], labels: ['Surrogate'] },
+        {
+            policyVersion: 1,
+            permissions: ['view_donors', 'edit_donors'],
+            labels: ['Surrogate', 'Egg Donor', 'Sperm Donor'],
+        },
+        { policyVersion: 2, permissions: ['manage_automation'], labels: ['Surrogate'] },
+        {
+            policyVersion: 2,
+            permissions: ['manage_automation', 'view_donors'],
+            labels: ['Surrogate', 'Egg Donor', 'Sperm Donor'],
+        },
+    ])('offers donor record types only with the donor create permission (v$policyVersion, $permissions)', ({ policyVersion, permissions, labels }) => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: policyVersion, permissions } })
 
         renderAutomationPage()
         fireEvent.click(
@@ -745,7 +756,7 @@ describe('AutomationPage', () => {
     })
 
     it('creates an egg donor workflow from subject-specific options', () => {
-        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors'] } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors', 'edit_donors'] } })
         mockUseWorkflowOptions.mockImplementation(
             (_scope: string, subjectType: string) => ({
                 data: subjectType === 'egg_donor'
@@ -1154,7 +1165,7 @@ describe('AutomationPage', () => {
     })
 
     it('configures the returned assign-donor action without surrogate controls', () => {
-        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors'] } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors', 'edit_donors'] } })
         mockUseWorkflowOptions.mockImplementation(
             (_scope: string, subjectType: string) => ({
                 data: {
@@ -1236,7 +1247,7 @@ describe('AutomationPage', () => {
     })
 
     it('configures a returned donor messaging action with mandatory approval', () => {
-        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors'] } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors', 'edit_donors'] } })
         mockUseWorkflowOptions.mockImplementation(
             (_scope: string, subjectType: string) => ({
                 data: {
@@ -1671,7 +1682,7 @@ describe('AutomationPage', () => {
     })
 
     it('keeps approval optional for donor email actions', () => {
-        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors'] } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors', 'edit_donors'] } })
         mockUseWorkflowOptions.mockImplementation(
             (_scope: string, subjectType: string) => ({
                 data: {
