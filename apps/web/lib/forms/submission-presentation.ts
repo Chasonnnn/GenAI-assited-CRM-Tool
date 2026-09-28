@@ -50,6 +50,7 @@ export function submissionReviewLabel(submission: FormSubmissionRead) {
 }
 
 const MATCH_REASON_LABELS: Record<string, string> = {
+    workflow_pending: "Waiting for routing workflow",
     phone_dob_name_exact: "Name, date of birth and phone match",
     email_dob_name_exact: "Name, date of birth and email match",
     phone_dob_name_ambiguous: "Several records share name, date of birth and phone",

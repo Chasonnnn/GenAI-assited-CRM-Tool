@@ -49,6 +49,7 @@ describe("matchReasonLabel", () => {
         ["donor_email_phone_match", "Email and phone match"],
         ["manually_linked", "Linked by reviewer"],
         ["phone_dob_name_ambiguous", "Several records share name, date of birth and phone"],
+        ["workflow_pending", "Waiting for routing workflow"],
     ])("labels %s", (reason, label) => {
         expect(matchReasonLabel(reason)).toBe(label)
     })
