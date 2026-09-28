@@ -28,6 +28,7 @@ const mockDownloadAttachment = vi.fn()
 const mockDeleteDonorAttachment = vi.fn()
 const mockUseAttachmentPreviewUrl = vi.fn()
 const mockUseAuth = vi.fn()
+const mockUseDonorSubmissions = vi.fn()
 const mockDetailSearchParams = new URLSearchParams()
 
 vi.mock("@/components/rich-text-editor", () => ({
@@ -111,6 +112,11 @@ vi.mock("@/lib/hooks/use-donors", () => ({
     useDeleteDonorNote: () => ({ mutateAsync: mockDeleteDonorNote, isPending: false }),
 }))
 
+vi.mock("@/lib/hooks/use-forms", async (importOriginal) => ({
+    ...await importOriginal<typeof import("@/lib/hooks/use-forms")>(),
+    useDonorSubmissions: (donorId: string | null) => mockUseDonorSubmissions(donorId),
+}))
+
 vi.mock("@/lib/hooks/use-pipelines", () => ({
     useDefaultPipeline: () => ({
         data: {
@@ -179,6 +185,20 @@ describe("DonorDetailPage", () => {
         mockUseAuth.mockReset()
         mockUseAuth.mockReturnValue({ user: { user_id: "user-1", role: "admin" } })
         mockDetailSearchParams.delete("tab")
+        mockUseDonorSubmissions.mockReset().mockReturnValue({
+            data: [{
+                id: "submission-1",
+                form_id: "form-7",
+                form_name: "Donor follow-up",
+                status: "approved",
+                submitted_at: "2026-09-20T15:00:00Z",
+                reviewed_at: "2026-09-21T15:00:00Z",
+            }],
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
         mockUseDonorProfile.mockReset().mockReturnValue({ data: donorProfileFixture, isPending: false, isError: false, refetch: vi.fn() })
         mockRevealDonor.mockReset().mockResolvedValue({ ssn: null, partner_ssn: null })
         mockUseDonor.mockReset()
@@ -357,7 +377,7 @@ describe("DonorDetailPage", () => {
 
     it("uses the surrogate overview cards and keeps notes, tasks and attachments in their tabs", () => {
         render(<DonorDetailPage />)
-        expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Overview", "Notes", "Tasks", "History"])
+        expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Overview", "Notes", "Tasks", "Applications", "History"])
         const overview = screen.getByRole("tabpanel", { name: "Overview" })
         for (const title of ["Contact Information", "Demographics", "Personal Information", "Medical & Insurance", "Activity", "Eligibility Checklist"]) {
             expect(within(overview).getByText(title)).toBeInTheDocument()
@@ -911,6 +931,27 @@ describe("DonorDetailPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
         expect(await screen.findByRole("menuitem", { name: state === "archived" ? "Restore" : "Archive" })).toBeInTheDocument()
         expect(screen.queryByRole("menuitem", { name: "Assign" })).not.toBeInTheDocument()
+    })
+
+    it("lists linked applications only when the Applications tab opens", () => {
+        render(<DonorDetailPage />)
+        expect(mockUseDonorSubmissions).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole("tab", { name: "Applications" }))
+        expect(mockUseDonorSubmissions).toHaveBeenCalledWith("donor-1")
+        const table = screen.getByRole("table", { name: "Donor applications" })
+        expect(within(table).getByText("Donor follow-up")).toBeInTheDocument()
+        expect(within(table).getByText("Approved")).toBeInTheDocument()
+        expect(within(table).queryByRole("link")).not.toBeInTheDocument()
+    })
+
+    it("links applications to the submission view for form reviewers", () => {
+        mockDetailSearchParams.set("tab", "applications")
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_donors", "view_form_submissions"] } })
+        render(<DonorDetailPage />)
+        expect(screen.getByRole("link", { name: "Donor follow-up" })).toHaveAttribute(
+            "href",
+            "/automation/form-submissions?form=form-7",
+        )
     })
 
     it("keeps donor attachment mutations behind edit permission", () => {

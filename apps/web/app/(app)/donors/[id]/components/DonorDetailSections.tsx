@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DonorApplicationsSection } from "@/components/donors/DonorApplicationsSection"
 import { DonorAssignMenu, DonorClaimMenuItem } from "@/components/donors/DonorAssignMenu"
 import { RecordCollaboratorsDialog } from "@/components/permissions/record-collaborators-dialog"
 import { DonorDocumentsSection } from "@/components/donors/DonorDocumentsSection"
@@ -83,7 +84,7 @@ export function DonorDetailSections({
     const router = useRouter()
     const searchParams = useSearchParams()
     const initialTab = searchParams.get("tab")
-    const [tab, setTab] = useState(initialTab && ["overview", "notes", "tasks", "history"].includes(initialTab) ? initialTab : "overview")
+    const [tab, setTab] = useState(initialTab && ["overview", "notes", "tasks", "applications", "history"].includes(initialTab) ? initialTab : "overview")
     const [correspondenceOpen, setCorrespondenceOpen] = useState(false)
     const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
     const canManageCollaborators = policyV2 && !!permissionsQuery.data?.capabilities?.can_manage_roles
@@ -145,6 +146,7 @@ export function DonorDetailSections({
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="notes">Notes</TabsTrigger>
                     <TabsTrigger value="tasks">Tasks</TabsTrigger>
+                    <TabsTrigger value="applications">Applications</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
                 </TabsList>
                 {tab === "overview" && <DonorOverviewTab donor={donor} canEdit={canEdit} activityPanel={activityPanel} />}
@@ -156,6 +158,9 @@ export function DonorDetailSections({
                 </TabsContent>
                 <TabsContent value="tasks" className="space-y-4">
                     {access.viewTasks ? <DonorTasksSection donor={donor} canView={access.viewTasks} canCreate={access.createTasks} /> : <p className="text-sm text-muted-foreground">You don’t have permission to view tasks.</p>}
+                </TabsContent>
+                <TabsContent value="applications">
+                    {tab === "applications" && <DonorApplicationsSection donorId={donor.id} canOpenSubmissions={hasPermission(policyV2 ? "view_form_submissions" : "manage_forms")} />}
                 </TabsContent>
                 <TabsContent value="history">
                     {tab === "history" && <EntityActivityHistory embedded entityType="donor" entityId={donor.id} backHref={returnTo} />}
