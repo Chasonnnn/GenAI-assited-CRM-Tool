@@ -276,8 +276,9 @@ def test_applied_donor_stage_queues_one_minimal_meta_payload(db, test_org, test_
     payload = job.payload["data"]
     assert "url" not in job.payload
     assert "headers" not in job.payload
-    assert event.event_id == f"zapier_donor_stage:{history.id}"
-    assert job.idempotency_key == event.event_id
+    assert event.event_id == f"zapier_donor:{donor.id}:qualified"
+    assert payload["event_id"] == event.event_id
+    assert job.idempotency_key == f"zapier_donor_stage:{history.id}"
     assert payload["lead_id"] == meta_lead.meta_lead_id
     assert payload["event_name"] == "Qualified"
     assert payload["record_type"] == "egg_donor"
@@ -731,7 +732,152 @@ def test_undo_records_history_but_does_not_queue_conversion(db, test_org, test_u
     assert db.query(DonorStatusHistory).filter_by(donor_id=donor.id).count() == 3
 
 
-def test_repeated_non_undo_stage_visits_get_distinct_occurrence_ids(db, test_org, test_user):
+def _history_event(db, history):
+    return (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.donor_status_history_id == history.id)
+        .one()
+    )
+
+
+def _add_stage(db, pipeline, *, stage_key, stage_type, order, label=None):
+    stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=pipeline.id,
+        stage_key=stage_key,
+        slug=stage_key.replace("_", "-"),
+        label=label or stage_key.replace("_", " ").title(),
+        color="#64748B",
+        stage_type=stage_type,
+        order=order,
+        is_active=True,
+        is_intake_stage=False,
+    )
+    db.add(stage)
+    db.flush()
+    return stage
+
+
+def _add_mapping(db, settings, pipeline, stage, event_name):
+    settings.donor_outbound_event_mapping = [
+        *settings.donor_outbound_event_mapping,
+        {
+            "donor_type": "egg",
+            "pipeline_id": str(pipeline.id),
+            "stage_id": str(stage.id),
+            "event_name": event_name,
+            "enabled": True,
+        },
+    ]
+    db.commit()
+
+
+@pytest.mark.asyncio
+async def test_undo_withdraws_the_undone_event_before_dispatch(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+
+    forward = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    donor_service.change_status(
+        db,
+        donor,
+        new_stage.id,
+        test_user.id,
+        reason="Undo accidental change",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    forward_event = _history_event(db, forward["history"])
+    assert forward_event.status == "skipped"
+    assert forward_event.reason == "donor_stage_undone"
+
+    class UnexpectedClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("An undone donor event must not be sent")
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", UnexpectedClient)
+    await zapier_handler.process_zapier_stage_event(db, db.get(Job, forward_event.job_id))
+    db.refresh(forward_event)
+    assert forward_event.status == "skipped"
+    assert forward_event.reason == "donor_stage_undone"
+
+    # Nothing reached Meta, so the next real entry is still the first Converted event.
+    reentry = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    reentry_event = _history_event(db, reentry["history"])
+    assert reentry_event.status == "queued"
+    assert reentry_event.event_id == forward_event.event_id
+
+
+def test_undo_keeps_an_event_already_claimed_for_delivery(db, test_org, test_user):
+    pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+    forward = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    forward_event = _history_event(db, forward["history"])
+    job = db.get(Job, forward_event.job_id)
+    job.status = JobStatus.RUNNING.value
+    db.commit()
+
+    undo = donor_service.change_status(
+        db,
+        donor,
+        new_stage.id,
+        test_user.id,
+        reason="Undo accidental change",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    assert undo["history"].is_undo is True
+    db.refresh(forward_event)
+    assert forward_event.status == "queued"
+    assert forward_event.reason is None
+
+
+def test_repeated_stage_visit_reports_the_event_once(db, test_org, test_user):
     pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
     donor = _create_donor(db, test_org.id, test_user.id)
     _attach_meta_lead(db, donor)
@@ -743,17 +889,7 @@ def test_repeated_non_undo_stage_visits_get_distinct_occurrence_ids(db, test_org
         stage=ready_stage,
         event_name="Converted",
     )
-    settings.donor_outbound_event_mapping = [
-        *settings.donor_outbound_event_mapping,
-        {
-            "donor_type": "egg",
-            "pipeline_id": str(pipeline.id),
-            "stage_id": str(new_stage.id),
-            "event_name": "Qualified",
-            "enabled": True,
-        },
-    ]
-    db.commit()
+    _add_mapping(db, settings, pipeline, new_stage, "Qualified")
 
     first = donor_service.change_status(
         db,
@@ -784,18 +920,110 @@ def test_repeated_non_undo_stage_visits_get_distinct_occurrence_ids(db, test_org
     )
 
     assert second["history"].is_undo is False
-    event_ids = {
-        row.event_id
-        for row in db.query(ZapierOutboundEvent)
-        .filter(
-            ZapierOutboundEvent.donor_status_history_id.in_(
-                [first["history"].id, second["history"].id, third["history"].id]
-            )
-        )
-        .all()
-    }
-    assert len(event_ids) == 3
-    assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 3
+    first_event = _history_event(db, first["history"])
+    second_event = _history_event(db, second["history"])
+    third_event = _history_event(db, third["history"])
+    assert first_event.status == "queued"
+    assert second_event.status == "queued"
+    assert third_event.status == "skipped"
+    assert third_event.reason == "duplicate"
+    assert third_event.event_id == first_event.event_id == f"zapier_donor:{donor.id}:converted"
+    assert third_event.job_id is None
+    assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 2
+
+
+def test_two_stages_mapped_to_one_event_report_it_once(db, test_org, test_user):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    matched_stage = _add_stage(
+        db, pipeline, stage_key="cycle_in_progress", stage_type="post_approval", order=3
+    )
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    settings = _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+    _add_mapping(db, settings, pipeline, matched_stage, "Converted")
+
+    first = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    second = donor_service.change_status(
+        db,
+        donor,
+        matched_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    assert _history_event(db, first["history"]).status == "queued"
+    second_event = _history_event(db, second["history"])
+    assert second_event.status == "skipped"
+    assert second_event.reason == "duplicate"
+    assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 1
+
+
+def test_resuming_from_on_hold_does_not_resend_the_event(db, test_org, test_user):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    on_hold_stage = _add_stage(db, pipeline, stage_key="on_hold", stage_type="paused", order=4)
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+
+    first = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    donor_service.change_status(
+        db,
+        donor,
+        on_hold_stage.id,
+        test_user.id,
+        reason="Travelling",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    db.query(DonorStatusHistory).filter_by(donor_id=donor.id).update(
+        {DonorStatusHistory.recorded_at: datetime.now(UTC) - timedelta(minutes=10)}
+    )
+    db.commit()
+    resumed = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        reason="Back from travel",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    assert resumed["history"].is_undo is False
+    assert _history_event(db, first["history"]).status == "queued"
+    resumed_event = _history_event(db, resumed["history"])
+    assert resumed_event.status == "skipped"
+    assert resumed_event.reason == "duplicate"
+    assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 1
 
 
 @pytest.mark.asyncio

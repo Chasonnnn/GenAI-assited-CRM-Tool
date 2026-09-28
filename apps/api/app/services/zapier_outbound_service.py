@@ -10,12 +10,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.stage_definitions import LABEL_OVERRIDES
-from app.db.enums import JobType, SurrogateSource
+from app.db.enums import JobStatus, JobType, SurrogateSource
 from app.db.models import (
     Donor,
     DonorStatusHistory,
     FormSubmission,
     IntakeLead,
+    Job,
     LeadAttribution,
     MetaLead,
     PipelineStage,
@@ -39,6 +40,8 @@ PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid"
 # Surrogate and donor events share one webhook URL; record_type lets one Zap branch.
 SURROGATE_RECORD_TYPE = "surrogate"
 SYNTHETIC_META_LEAD_ID_PREFIX = "zapier-"
+# A donor event in these states was sent or will be; later occurrences are duplicates.
+DONOR_REPORTED_EVENT_STATUSES = ("queued", "delivered", "failed")
 
 
 def _now_utc() -> datetime:
@@ -660,6 +663,68 @@ def build_donor_stage_event_payload(
     return payload
 
 
+def _donor_event_id(donor_id: UUID, event_name: str) -> str:
+    """Stable id per donor and event name, like the surrogate per-lead bucket key."""
+    return f"zapier_donor:{donor_id}:{event_name.strip().lower().replace(' ', '_')}"
+
+
+def _withdraw_undone_donor_event(
+    db: Session,
+    *,
+    donor: Donor,
+    undo_history: DonorStatusHistory,
+) -> None:
+    """Skip the forward event an undo reverses while its job is still unclaimed.
+
+    Surrogate undo does not withdraw events. Donors do, because each donor event is sent
+    at most once and an accidental stage change would otherwise spend that send.
+    """
+    undone_history = (
+        db.query(DonorStatusHistory)
+        .filter(
+            DonorStatusHistory.organization_id == donor.organization_id,
+            DonorStatusHistory.donor_id == donor.id,
+            DonorStatusHistory.id != undo_history.id,
+            DonorStatusHistory.old_stage_id == undo_history.new_stage_id,
+            DonorStatusHistory.new_stage_id == undo_history.old_stage_id,
+            DonorStatusHistory.is_undo.is_(False),
+        )
+        .order_by(DonorStatusHistory.recorded_at.desc())
+        .first()
+    )
+    if undone_history is None:
+        return
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter(
+            ZapierOutboundEvent.organization_id == donor.organization_id,
+            ZapierOutboundEvent.donor_status_history_id == undone_history.id,
+            ZapierOutboundEvent.status == "queued",
+        )
+        .first()
+    )
+    if event is None or event.job_id is None:
+        return
+    # Lock the unclaimed job so a worker cannot claim it until this transaction ends;
+    # a job already claimed is past withdrawal and delivers normally.
+    pending_job = (
+        db.query(Job.id)
+        .filter(
+            Job.id == event.job_id,
+            Job.organization_id == donor.organization_id,
+            Job.status == JobStatus.PENDING.value,
+        )
+        .with_for_update()
+        .first()
+    )
+    if pending_job is None:
+        return
+    event.status = "skipped"
+    event.reason = "donor_stage_undone"
+    event.updated_at = _now_utc()
+    db.flush()
+
+
 def enqueue_donor_stage_event(
     db: Session,
     *,
@@ -684,7 +749,10 @@ def enqueue_donor_stage_event(
             "event_id": existing.event_id,
         }
 
-    event_id = f"zapier_donor_stage:{history.id}"
+    # The job key stays per stage occurrence, so a skipped or withdrawn occurrence never
+    # blocks the first real send; the stable event_id below carries the dedupe.
+    occurrence_key = f"zapier_donor_stage:{history.id}"
+    event_id = occurrence_key
     pipeline_id = new_stage.pipeline_id
 
     def skip(reason: str, *, event_name: str | None = None, attribution=None):
@@ -712,6 +780,7 @@ def enqueue_donor_stage_event(
         return {"queued": False, "reason": reason, "event_id": event.event_id}
 
     if history.is_undo:
+        _withdraw_undone_donor_event(db, donor=donor, undo_history=history)
         return skip("donor_stage_undo")
 
     settings = zapier_settings_service.get_settings(db, donor.organization_id)
@@ -729,6 +798,7 @@ def enqueue_donor_stage_event(
     if mapping_item is None:
         return skip("unmapped_donor_stage")
     event_name = str(mapping_item["event_name"])
+    event_id = _donor_event_id(donor.id, event_name)
 
     attribution = _resolve_donor_attribution(db, donor)
     if attribution is None:
@@ -752,6 +822,21 @@ def enqueue_donor_stage_event(
     )
     if attribution["source"] == "website" and not (has_browser_matching or has_contact_matching):
         return skip("missing_matching_data", event_name=event_name, attribution=attribution)
+
+    # Stage changes lock the donor row before this point, so concurrent changes for one
+    # donor serialize here and the later one sees the earlier event.
+    already_reported = (
+        db.query(ZapierOutboundEvent.id)
+        .filter(
+            ZapierOutboundEvent.organization_id == donor.organization_id,
+            ZapierOutboundEvent.donor_id == donor.id,
+            ZapierOutboundEvent.event_id == event_id,
+            ZapierOutboundEvent.status.in_(DONOR_REPORTED_EVENT_STATUSES),
+        )
+        .first()
+    )
+    if already_reported is not None:
+        return skip("duplicate", event_name=event_name, attribution=attribution)
 
     fingerprint = zapier_settings_service.donor_config_fingerprint(
         webhook_url=settings.outbound_webhook_url,
@@ -801,7 +886,7 @@ def enqueue_donor_stage_event(
             "config_fingerprint": fingerprint,
             "data": payload,
         },
-        idempotency_key=event_id,
+        idempotency_key=occurrence_key,
         commit=False,
     )
     event.job_id = job.id

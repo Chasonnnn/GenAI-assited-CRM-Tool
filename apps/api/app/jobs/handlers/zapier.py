@@ -108,6 +108,9 @@ async def _process_donor_stage_event(db, job, payload: dict) -> None:
     )
     if event is None:
         raise RuntimeError("Donor Zapier event is unavailable")
+    if event.status == "skipped":
+        # Withdrawn before dispatch, e.g. by an undo within the grace period.
+        return
 
     settings = zapier_settings_service.get_settings(db, job.organization_id)
     if settings is None or not settings.donor_outbound_enabled:
