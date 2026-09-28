@@ -373,3 +373,91 @@ def test_build_default_event_mapping_uses_pipeline_semantics(db, test_org):
     assert by_stage["new_unread"]["bucket"] is None
     assert by_stage["new_unread"]["event_name"] == ""
     assert by_stage["new_unread"]["enabled"] is False
+
+
+def _meta_surrogate_with_reporting(db, test_org, test_user, *, received_at=None, lead_id=None):
+    from app.db.enums import SurrogateSource
+    from app.db.models import MetaLead
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import surrogate_service, zapier_settings_service
+
+    meta_lead = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id=lead_id or f"lead-{uuid4().hex[:8]}",
+        meta_form_id="form_1",
+        meta_page_id="page_1",
+        field_data={"email": "lead@example.com"},
+        field_data_raw={"email": "lead@example.com"},
+        received_at=received_at or datetime.now(UTC),
+    )
+    db.add(meta_lead)
+    db.commit()
+    db.refresh(meta_lead)
+
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Zapier Meta Lead",
+            email=f"lead-{uuid4().hex[:8]}@example.com",
+            phone="+1 (555) 123-4567",
+            source=SurrogateSource.META,
+        ),
+    )
+    surrogate.meta_lead_id = meta_lead.id
+    surrogate.meta_form_id = meta_lead.meta_form_id
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
+    settings.outbound_enabled = True
+    settings.outbound_send_hashed_pii = True
+    settings.outbound_event_mapping = [
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "Qualified",
+            "bucket": "qualified",
+            "enabled": True,
+        }
+    ]
+    db.commit()
+    return surrogate, meta_lead
+
+
+def test_repeated_surrogate_bucket_records_duplicate_skip(db, test_org, test_user):
+    from app.db.models import ZapierOutboundEvent
+    from app.services import zapier_outbound_service
+
+    surrogate, meta_lead = _meta_surrogate_with_reporting(db, test_org, test_user)
+
+    first = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_label="Pre Qualified",
+    )
+    second = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_label="Pre Qualified",
+    )
+
+    assert first["queued"] is True
+    assert second["queued"] is False
+    assert second["reason"] == "duplicate"
+    assert second["event_id"] == first["event_id"]
+    rows = (
+        db.query(ZapierOutboundEvent)
+        .filter(
+            ZapierOutboundEvent.organization_id == test_org.id,
+            ZapierOutboundEvent.surrogate_id == surrogate.id,
+        )
+        .all()
+    )
+    assert sorted(row.status for row in rows) == ["queued", "skipped"]
+    skipped = next(row for row in rows if row.status == "skipped")
+    assert skipped.reason == "duplicate"
+    assert skipped.lead_id == meta_lead.meta_lead_id

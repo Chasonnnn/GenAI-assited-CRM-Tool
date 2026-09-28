@@ -414,6 +414,7 @@ def enqueue_stage_event(
     )
     if existing_job:
         return _skip_event(
+            db,
             surrogate=surrogate,
             source=source,
             reason="duplicate",
