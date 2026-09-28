@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
     Dialog,
+    DialogBody,
     DialogContent,
     DialogFooter,
     DialogHeader,
@@ -14,12 +15,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { useCurrentMinuteTimestamp } from "@/components/ui/use-current-minute-timestamp"
+import { StageSelect } from "@/components/stage-select"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { BulkChangeStageInterviewTime } from "@/lib/api/surrogates"
 import { localDateTimeToIso, schedulingTimezoneLabel } from "@/lib/scheduling-time"
+import { pipelineStageOptions } from "@/lib/stage-options"
 import {
     getSurrogateStageContext,
     stageMatchesKey,
@@ -50,14 +52,6 @@ const FOLLOW_UP_OPTIONS: Array<{ value: FollowUpMonths; label: string }> = [
     { value: "3", label: "3 months" },
     { value: "6", label: "6 months" },
 ]
-
-function getStageLabel(
-    value: string | null | undefined,
-    stages: PipelineStage[],
-): string {
-    if (!value) return "Select a stage"
-    return stages.find((stage) => stage.id === value)?.label ?? "Select a stage"
-}
 
 function movesBackward(
     surrogate: BulkStageSurrogate,
@@ -131,11 +125,9 @@ function BulkChangeStageModalContent({
     const now = useCurrentMinuteTimestamp() ?? openedAt
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-    const activeStages = stages
-        .filter((stage) => stage.is_active)
-        .toSorted((a, b) => a.order - b.order)
+    const stageOptions = pipelineStageOptions(stages, { activeOnly: true })
     const stageById = new Map(stages.map((stage) => [stage.id, stage]))
-    const targetStage = activeStages.find((stage) => stage.id === targetStageId)
+    const targetStage = stages.find((stage) => stage.id === targetStageId && stage.is_active)
     const isOnHoldTarget = stageUsesPauseBehavior(targetStage)
     const isInterviewTarget = stageMatchesKey(targetStage, "interview_scheduled")
     const isOverridingAvailability = isInterviewTarget && overrideAvailability
@@ -192,42 +184,26 @@ function BulkChangeStageModalContent({
 
     return (
         <Dialog open onOpenChange={handleOpenChange}>
-            <DialogContent
-                className={cn(
-                    "flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0",
-                    isInterviewTarget ? "sm:max-w-xl" : "sm:max-w-lg",
-                )}
-            >
-                <DialogHeader className="shrink-0 border-b p-5 pr-14">
+            <DialogContent size={isInterviewTarget ? "xl" : "lg"} layout="sectioned">
+                <DialogHeader>
                     <DialogTitle>
                         Change stage for {count} surrogate{count === 1 ? "" : "s"}
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+                <DialogBody>
                     <div className="space-y-2">
                         <Label htmlFor="bulk-change-stage-target">Target stage</Label>
-                        <Select
+                        <StageSelect
+                            id="bulk-change-stage-target"
                             value={targetStageId}
-                            onValueChange={(value) => setTargetStageId(value ?? "")}
+                            onValueChange={setTargetStageId}
+                            options={stageOptions}
                             disabled={isPending}
-                        >
-                            <SelectTrigger
-                                id="bulk-change-stage-target"
-                                aria-label="Target stage"
-                            >
-                                <SelectValue placeholder="Select a stage">
-                                    {(value: string | null) => getStageLabel(value, activeStages)}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {activeStages.map((stage) => (
-                                    <SelectItem key={stage.id} value={stage.id}>
-                                        {stage.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            className="w-full"
+                            // A shorter list fits below the trigger, so it does not flip up over the title.
+                            contentClassName="max-h-[min(18rem,var(--available-height))]"
+                        />
                     </div>
 
                     {isOnHoldTarget ? (
@@ -327,9 +303,9 @@ function BulkChangeStageModalContent({
                             Select up to {BULK_STAGE_CHANGE_LIMIT} surrogates.
                         </p>
                     ) : null}
-                </div>
+                </DialogBody>
 
-                <DialogFooter className="shrink-0 border-t p-4">
+                <DialogFooter>
                     <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isPending}>
                         Cancel
                     </Button>

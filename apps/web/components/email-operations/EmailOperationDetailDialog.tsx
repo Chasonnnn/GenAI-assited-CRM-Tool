@@ -90,7 +90,7 @@ export function EmailOperationDetailDialog({
                 onOpenChange(open)
             }}
         >
-            <DialogContent className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl">
+            <DialogContent size="xl" className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 lg:max-w-2xl">
                 <DialogHeader className="border-b p-6 pr-16">
                     <div className="flex items-center gap-3">
                         <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">

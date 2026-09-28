@@ -4,7 +4,7 @@ import { getAppointmentStatusLabel } from "@/lib/appointment-status-labels"
 
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { AppointmentDetailDialog } from "@/components/appointments/AppointmentsList"
+import { AppointmentDetailDialog } from "@/components/appointments/AppointmentDetailDialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -47,7 +47,7 @@ export function RecordAppointmentsCard({ record, canView, canCreate, archived, c
             {(query.data?.pages ?? 0) > 1 && <div className="flex items-center justify-between"><Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button><span className="text-sm">{page} / {query.data?.pages}</span><Button variant="outline" size="sm" disabled={page >= (query.data?.pages ?? 0)} onClick={() => setPage(page + 1)}>Next</Button></div>}
         </CardContent>
         <AppointmentDetailDialog appointmentId={appointmentId} open={!!appointmentId} onOpenChange={open => { if (!open) setAppointmentId(null) }} />
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-2xl"><DialogHeader className="shrink-0 border-b px-5 py-4"><DialogTitle>Schedule appointment</DialogTitle></DialogHeader>{createOpen && <ScheduleForm record={record} canViewMatches={canViewMatches} onDone={() => setCreateOpen(false)} />}</DialogContent></Dialog>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}><DialogContent size="2xl" className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0"><DialogHeader className="shrink-0 border-b px-5 py-4"><DialogTitle>Schedule appointment</DialogTitle></DialogHeader>{createOpen && <ScheduleForm record={record} canViewMatches={canViewMatches} onDone={() => setCreateOpen(false)} />}</DialogContent></Dialog>
     </Card>
 }
 

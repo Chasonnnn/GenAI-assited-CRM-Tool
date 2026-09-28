@@ -5,6 +5,7 @@ import { CalendarIcon, CheckIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Checkbox } from "@/components/ui/checkbox"
+import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -34,6 +35,33 @@ interface PublicFormFieldRendererProps {
     datePickerOpen: Record<string, boolean>
     setDatePickerOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
     density?: PublicFormDensity
+    /** Inline validation message; marks the field's control aria-invalid while set. */
+    error?: string | null
+}
+
+/** Id of the inline error element for a public form field. */
+export function getPublicFieldErrorId(fieldKey: string): string {
+    return `${fieldKey}-error`
+}
+
+type InvalidControlProps = {
+    "aria-invalid"?: true
+    "aria-describedby"?: string
+}
+
+function getInvalidControlProps(fieldKey: string, error: string | null | undefined): InvalidControlProps {
+    return error ? { "aria-invalid": true, "aria-describedby": getPublicFieldErrorId(fieldKey) } : {}
+}
+
+// Groups (radio tiles, checkboxes, tables) are not focusable; tabIndex -1 lets a failed
+// submit move focus to them.
+function getInvalidGroupProps(fieldKey: string, error: string | null | undefined) {
+    return error ? { ...getInvalidControlProps(fieldKey, error), tabIndex: -1 } : {}
+}
+
+function PublicFieldError({ fieldKey, error }: { fieldKey: string; error: string | null | undefined }) {
+    if (!error) return null
+    return <FieldError id={getPublicFieldErrorId(fieldKey)}>{error}</FieldError>
 }
 
 function formatDate(value: string | null): string {
@@ -63,6 +91,7 @@ function PublicSelectControl({
     ariaLabel,
     ariaLabelledBy,
     className,
+    invalidProps,
 }: {
     id: string
     name?: string
@@ -73,6 +102,7 @@ function PublicSelectControl({
     ariaLabel?: string
     ariaLabelledBy?: string
     className?: string
+    invalidProps?: InvalidControlProps
 }) {
     return (
         <Select
@@ -85,6 +115,7 @@ function PublicSelectControl({
                 aria-label={ariaLabel}
                 aria-labelledby={ariaLabelledBy}
                 className={className}
+                {...invalidProps}
             >
                 <SelectValue placeholder={placeholder}>
                     {(selectedValue: string | null) =>
@@ -506,12 +537,15 @@ function HeightFieldInput({
     value,
     requiredMark,
     updateField,
+    error,
 }: {
     field: FormField
     value: PublicFormAnswerValue | undefined
     requiredMark: React.ReactNode
     updateField: (fieldKey: string, value: PublicFormAnswerValue) => void
+    error?: string | null
 }) {
+    const invalidProps = getInvalidControlProps(field.key, error)
     const incomingSelection = getHeightDraftSelection(value)
     const [draftSelection, setDraftSelection] = React.useState<HeightDraftSelection>(() => incomingSelection)
     const currentSelection = draftSelection.serializedValue === incomingSelection.serializedValue
@@ -551,6 +585,7 @@ function HeightFieldInput({
                         placeholder="e.g. 5 ft"
                         options={HEIGHT_FEET_OPTIONS}
                         className="h-11 border-stone-200 bg-white shadow-none"
+                        invalidProps={invalidProps}
                     />
                 </div>
                 <div className="space-y-2">
@@ -568,9 +603,11 @@ function HeightFieldInput({
                         placeholder="e.g. 6 in"
                         options={HEIGHT_INCHES_OPTIONS}
                         className="h-11 border-stone-200 bg-white shadow-none"
+                        invalidProps={invalidProps}
                     />
                 </div>
             </div>
+            <PublicFieldError fieldKey={field.key} error={error} />
             {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
         </div>
     )
@@ -630,9 +667,13 @@ export function PublicFormFieldRenderer({
     datePickerOpen,
     setDatePickerOpen,
     density = "default",
+    error = null,
 }: PublicFormFieldRendererProps) {
     const requiredMark = field.required ? <span className="text-red-500">*</span> : null
     const densityStyles = getPublicFieldDensityStyles(density)
+    const invalidProps = getInvalidControlProps(field.key, error)
+    const invalidGroupProps = getInvalidGroupProps(field.key, error)
+    const errorMessage = <PublicFieldError fieldKey={field.key} error={error} />
 
     if (field.type === "textarea") {
         return (
@@ -649,7 +690,9 @@ export function PublicFormFieldRenderer({
                         "min-h-24 rounded-md border-stone-200 bg-white shadow-none",
                         densityStyles.isCompact && "min-h-20 text-[15px]",
                     )}
+                    {...invalidProps}
                 />
+                {errorMessage}
                 {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
             </div>
         )
@@ -680,6 +723,7 @@ export function PublicFormFieldRenderer({
                                     "w-full justify-start text-left font-normal",
                                     !value && "text-stone-500",
                                 )}
+                                {...invalidProps}
                             >
                                 <CalendarIcon className="mr-2 size-4" />
                                 {typeof value === "string" ? formatDate(value) : "Select a date"}
@@ -704,6 +748,7 @@ export function PublicFormFieldRenderer({
                         />
                     </PopoverContent>
                 </Popover>
+                {errorMessage}
                 {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
             </div>
         )
@@ -716,12 +761,13 @@ export function PublicFormFieldRenderer({
                 value={value}
                 requiredMark={requiredMark}
                 updateField={updateField}
+                error={error}
             />
         )
     }
 
     if (field.type === "table" || field.type === "repeatable_table") {
-        return (
+        const table = (
             <TableFieldInput
                 field={field}
                 value={value}
@@ -729,9 +775,43 @@ export function PublicFormFieldRenderer({
                 updateField={updateField}
             />
         )
+        if (!error) return table
+        return (
+            <div key={field.key} role="group" aria-label={field.label} className="space-y-2" {...invalidGroupProps}>
+                {table}
+                {errorMessage}
+            </div>
+        )
     }
 
-    if (field.type === "select" || field.type === "radio") {
+    if (field.type === "select") {
+        const labelId = `${field.key}-label`
+        const selectOptions = (field.options || []).map((option) => ({
+            label: option.label,
+            value: option.value,
+        }))
+        return (
+            <div key={field.key} className={densityStyles.fieldShellClassName}>
+                <Label id={labelId} htmlFor={field.key} className={densityStyles.labelClassName}>
+                    {field.label} {requiredMark}
+                </Label>
+                <PublicSelectControl
+                    id={field.key}
+                    ariaLabelledBy={labelId}
+                    value={typeof value === "string" ? value : ""}
+                    onValueChange={(nextValue) => updateField(field.key, nextValue || null)}
+                    placeholder="Select an option"
+                    options={selectOptions}
+                    className={cn(densityStyles.controlClassName, "w-full")}
+                    invalidProps={invalidProps}
+                />
+                {errorMessage}
+                {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+            </div>
+        )
+    }
+
+    if (field.type === "radio") {
         const options = field.options || []
         const orderedOptions = getChoiceOptions(options)
         const gridClassName = getChoiceGridClassName(options, density)
@@ -749,6 +829,7 @@ export function PublicFormFieldRenderer({
                         role="radiogroup"
                         aria-labelledby={legendId}
                         className={gridClassName}
+                        {...invalidGroupProps}
                     >
                         {orderedOptions.map((option) => (
                             <OptionCard
@@ -761,6 +842,7 @@ export function PublicFormFieldRenderer({
                         ))}
                     </div>
                 )}
+                {errorMessage}
                 {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
             </fieldset>
         )
@@ -783,7 +865,7 @@ export function PublicFormFieldRenderer({
                 {options.length === 0 ? (
                     <p className="text-sm text-stone-500">No options configured.</p>
                 ) : (
-                    <div aria-labelledby={legendId} className={gridClassName}>
+                    <div role="group" aria-labelledby={legendId} className={gridClassName} {...invalidGroupProps}>
                         {options.map((option) => {
                             const selected = selectedValueSet.has(option.value)
                             return (
@@ -804,6 +886,7 @@ export function PublicFormFieldRenderer({
                         })}
                     </div>
                 )}
+                {errorMessage}
                 {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
             </fieldset>
         )
@@ -818,11 +901,13 @@ export function PublicFormFieldRenderer({
                         checked={value === true}
                         onCheckedChange={(next) => updateField(field.key, next === true)}
                         className="mt-0.5"
+                        {...invalidProps}
                     />
                     <div className="space-y-1">
                         <Label htmlFor={field.key} className={cn(densityStyles.labelClassName, "leading-relaxed")}>
                             {field.label} {requiredMark}
                         </Label>
+                        {errorMessage}
                         {field.help_text && <AssistantRichText content={field.help_text} className="text-xs text-stone-500" />}
                     </div>
                 </div>
@@ -854,7 +939,9 @@ export function PublicFormFieldRenderer({
                 }
                 placeholder={getFieldPlaceholder(field)}
                 className={densityStyles.controlClassName}
+                {...invalidProps}
             />
+            {errorMessage}
             {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
         </div>
     )

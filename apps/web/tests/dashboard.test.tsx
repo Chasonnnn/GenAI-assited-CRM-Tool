@@ -202,8 +202,8 @@ describe('DashboardPage', () => {
     it('renders dashboard summaries, empty trend, and accessible controls', async () => {
         render(<DashboardPage />)
 
-        // Check welcome header
-        expect(screen.getByText(/Welcome back, Test/)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument()
+        expect(screen.queryByText(/Welcome back/)).not.toBeInTheDocument()
 
         // Check stats cards
         expect(screen.getByText('Active Surrogates')).toBeInTheDocument()

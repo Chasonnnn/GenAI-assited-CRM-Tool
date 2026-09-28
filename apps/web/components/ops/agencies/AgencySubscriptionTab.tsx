@@ -1,6 +1,8 @@
 "use client"
 
-import { AlertTriangle, CalendarPlus } from "lucide-react"
+import { AlertTriangle, CalendarPlus, CreditCardIcon } from "lucide-react"
+import { EmptyState } from "@/components/empty-state"
+import { LoadErrorState } from "@/components/error-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,10 +11,21 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { UtcDate } from "@/components/ui/time-display"
 import type { OrganizationSubscription } from "@/lib/api/platform"
-import { PLAN_BADGE_VARIANTS, STATUS_BADGE_VARIANTS } from "@/components/ops/agencies/agency-constants"
+import {
+    PLAN_BADGE_VARIANTS,
+    STATUS_BADGE_VARIANTS,
+    getSubscriptionPlanLabel,
+    getSubscriptionStatusLabel,
+} from "@/components/ops/agencies/agency-constants"
+
+/** "missing" means the agency has no subscription row (the API returns 404). */
+export type SubscriptionLoadStatus = "found" | "missing" | "error"
 
 type AgencySubscriptionTabProps = {
     subscription: OrganizationSubscription | null
+    subscriptionStatus: SubscriptionLoadStatus
+    isRetrying?: boolean
+    onRetry: () => void
     notesDraft: string
     notesDirty: boolean
     notesSaving: boolean
@@ -24,6 +37,9 @@ type AgencySubscriptionTabProps = {
 
 export function AgencySubscriptionTab({
     subscription,
+    subscriptionStatus,
+    isRetrying = false,
+    onRetry,
     notesDraft,
     notesDirty,
     notesSaving,
@@ -48,7 +64,25 @@ export function AgencySubscriptionTab({
                 </div>
             </div>
 
-            {subscription && (
+            {subscriptionStatus === "error" ? (
+                <Card>
+                    <LoadErrorState
+                        title="Couldn't load subscription"
+                        onRetry={onRetry}
+                        isRetrying={isRetrying}
+                        headingLevel={2}
+                        className="min-h-0 py-10"
+                    />
+                </Card>
+            ) : !subscription ? (
+                <Card>
+                    <EmptyState
+                        icon={CreditCardIcon}
+                        title="No subscription record"
+                        headingLevel={2}
+                    />
+                </Card>
+            ) : (
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-lg">Subscription Details</CardTitle>
@@ -59,7 +93,7 @@ export function AgencySubscriptionTab({
                                 <Label className="text-muted-foreground">Plan</Label>
                                 <div className="mt-1">
                                     <Badge className={PLAN_BADGE_VARIANTS[subscription.plan_key]}>
-                                        {subscription.plan_key}
+                                        {getSubscriptionPlanLabel(subscription.plan_key)}
                                     </Badge>
                                 </div>
                             </div>
@@ -67,7 +101,7 @@ export function AgencySubscriptionTab({
                                 <Label className="text-muted-foreground">Status</Label>
                                 <div className="mt-1">
                                     <Badge className={STATUS_BADGE_VARIANTS[subscription.status]}>
-                                        {subscription.status}
+                                        {getSubscriptionStatusLabel(subscription.status)}
                                     </Badge>
                                 </div>
                             </div>

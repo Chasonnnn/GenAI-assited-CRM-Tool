@@ -1,3 +1,6 @@
+import { endOfMonth, endOfWeek, startOfMonth, startOfWeek } from "date-fns"
+import { formatLocalDate } from "@/lib/utils/date"
+
 /** Scheduling instants are UTC; calendar date keys are in the displayed timezone. */
 export function formatSchedulingDate(iso: string, timezone: string): string {
     return new Intl.DateTimeFormat(undefined, {
@@ -17,6 +20,14 @@ export function schedulingDateKey(iso: string | Date, timezone: string): string 
     }).formatToParts(typeof iso === "string" ? new Date(iso) : iso)
     const value = (type: Intl.DateTimeFormatPartTypes) => parts.find(part => part.type === type)?.value
     return `${value("year")}-${value("month")}-${value("day")}`
+}
+
+/** First and last date keys of the weeks a month calendar shows, including other months' days. */
+export function schedulingCalendarRange(month: Date): { start: string; end: string } {
+    return {
+        start: formatLocalDate(startOfWeek(startOfMonth(month))),
+        end: formatLocalDate(endOfWeek(endOfMonth(month))),
+    }
 }
 
 export function schedulingTimezoneLabel(timezone: string): string {

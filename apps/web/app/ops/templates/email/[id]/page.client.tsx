@@ -1,29 +1,42 @@
 "use client"
 
-import { useReducer, useRef, type MutableRefObject } from "react"
+import { useReducer, useRef, useState, type MutableRefObject } from "react"
 import { useParams, useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Loader2Icon, ArrowLeftIcon, EyeIcon, AlertTriangleIcon, SendIcon, Trash2Icon } from "lucide-react"
+import { ValidatedField } from "@/components/ui/field"
+import { SaveStatus, type SaveStatusState } from "@/components/ui/save-bar"
+import { EmptyState } from "@/components/empty-state"
+import { PageHeader } from "@/components/page-header"
+import {
+    Loader2Icon,
+    EyeIcon,
+    AlertTriangleIcon,
+    MoreHorizontalIcon,
+    SendIcon,
+    Trash2Icon,
+} from "lucide-react"
 import { toast } from "@/components/ui/toast"
 import { PublishDialog } from "@/components/ops/templates/PublishDialog"
+import { TestSendAgencySelect, useTestSendAgencies } from "@/components/ops/templates/TestSendAgencySelect"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import { useFormValidation } from "@/lib/forms/use-form-validation"
+import { validateEmail, validateRequired } from "@/lib/forms/validators"
 import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
@@ -39,7 +52,7 @@ import {
     useSendTestPlatformEmailTemplate,
     useUpdatePlatformEmailTemplate,
 } from "@/lib/hooks/use-platform-templates"
-import type { PlatformEmailTemplate } from "@/lib/api/platform"
+import type { OrganizationSummary, PlatformEmailTemplate } from "@/lib/api/platform"
 import type { TemplateVariableRead } from "@/lib/types/template-variable"
 
 type EditorMode = "visual" | "html"
@@ -55,6 +68,10 @@ type DialogName = "publish" | "delete"
 type TemplatePageMode = "new" | "existing"
 
 type PublicationState = "published" | "draft"
+
+type SaveResult = "idle" | "saved" | "error"
+
+const CONTENT_FIELDS: ReadonlySet<TextFieldName> = new Set(["name", "subject", "fromEmail", "category"])
 
 function createEmailTestOccurrenceId(): string {
     const cryptoApi = globalThis.crypto
@@ -96,9 +113,11 @@ interface EmailTemplateEditorState {
     testTouched: Record<string, boolean>
     isSendingTest: boolean
     activeInsertionTarget: ActiveInsertionTarget
+    saveResult: SaveResult
 }
 
 type EmailTemplateEditorAction =
+    | { type: "setSaveResult"; result: SaveResult }
     | { type: "setTextField"; field: TextFieldName; value: string }
     | { type: "setBody"; value: string; activeInsertionTarget?: ActiveInsertionTarget }
     | { type: "setEditorMode"; mode: EditorMode }
@@ -244,7 +263,13 @@ function syncTestFields(state: EmailTemplateEditorState): EmailTemplateEditorSta
     }
 }
 
-function createEditorState(templateData: PlatformEmailTemplate | null): EmailTemplateEditorState {
+function createEditorState({
+    templateData,
+    initialSaveResult,
+}: {
+    templateData: PlatformEmailTemplate | null
+    initialSaveResult: SaveResult
+}): EmailTemplateEditorState {
     const draft = templateData?.draft
     const body = draft?.body ?? ""
     const editorMode: EditorMode = body && hasComplexTemplateHtml(body) ? "html" : "visual"
@@ -268,7 +293,13 @@ function createEditorState(templateData: PlatformEmailTemplate | null): EmailTem
         testTouched: {},
         isSendingTest: false,
         activeInsertionTarget: null,
+        saveResult: initialSaveResult,
     })
+}
+
+// An edit after a successful save clears "Saved"; a failed save keeps "Not saved" until the next attempt.
+function clearSavedResult(saveResult: SaveResult): SaveResult {
+    return saveResult === "saved" ? "idle" : saveResult
 }
 
 function templateEditorReducer(
@@ -276,14 +307,21 @@ function templateEditorReducer(
     action: EmailTemplateEditorAction
 ): EmailTemplateEditorState {
     switch (action.type) {
+        case "setSaveResult":
+            return { ...state, saveResult: action.result }
         case "setTextField": {
-            const nextState = { ...state, [action.field]: action.value }
+            const nextState = {
+                ...state,
+                [action.field]: action.value,
+                saveResult: CONTENT_FIELDS.has(action.field) ? clearSavedResult(state.saveResult) : state.saveResult,
+            }
             return action.field === "subject" ? syncTestFields(nextState) : nextState
         }
         case "setBody": {
             const nextState: EmailTemplateEditorState = {
                 ...state,
                 body: action.value,
+                saveResult: clearSavedResult(state.saveResult),
                 activeInsertionTarget:
                     action.activeInsertionTarget === undefined
                         ? state.activeInsertionTarget
@@ -419,8 +457,8 @@ function buildPreviewHtml(body: string): string {
 
 function LoadingTemplate() {
     return (
-        <div className="flex h-dvh items-center justify-center bg-stone-100 dark:bg-stone-950">
-            <div className="flex items-center gap-2 text-stone-600 dark:text-stone-400">
+        <div className="flex min-h-[60vh] items-center justify-center">
+            <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2Icon className="size-5 animate-spin" />
                 <span>Loading template&hellip;</span>
             </div>
@@ -436,7 +474,7 @@ function TemplateLoadError({
     onRetry: () => void
 }) {
     return (
-        <div className="flex min-h-dvh items-center justify-center bg-stone-100 p-6 dark:bg-stone-950">
+        <div className="flex min-h-[60vh] items-center justify-center p-6">
             <Card className="w-full max-w-lg">
                 <CardHeader>
                     <CardTitle>Template unavailable</CardTitle>
@@ -487,6 +525,9 @@ export default function PlatformEmailTemplatePage() {
         refetch,
     } = usePlatformEmailTemplate(templateId)
     const { data: templateVariables = [], isLoading: variablesLoading } = usePlatformEmailTemplateVariables()
+    // A save refetches the template and remounts the editor under a new key. Keeping the saved
+    // revision here lets the remounted editor keep showing "Saved".
+    const [savedRevision, setSavedRevision] = useState<string | null>(null)
 
     if (!isNew && isLoading) {
         return <LoadingTemplate />
@@ -506,9 +547,7 @@ export default function PlatformEmailTemplatePage() {
     if (!isNew && !templateData) return null
 
     const editorTemplateData: PlatformEmailTemplate | null = isNew ? null : templateData ?? null
-    const editorKey = editorTemplateData
-        ? `${editorTemplateData.id}:${editorTemplateData.current_version}:${editorTemplateData.published_version}`
-        : "new"
+    const editorKey = editorTemplateData ? getTemplateRevisionKey(editorTemplateData) : "new"
 
     return (
         <PlatformEmailTemplateEditor
@@ -519,8 +558,14 @@ export default function PlatformEmailTemplatePage() {
             templateData={editorTemplateData}
             templateVariables={templateVariables}
             variablesLoading={variablesLoading}
+            initialSaveResult={savedRevision !== null && savedRevision === editorKey ? "saved" : "idle"}
+            onSaved={(saved) => setSavedRevision(getTemplateRevisionKey(saved))}
         />
     )
+}
+
+function getTemplateRevisionKey(template: PlatformEmailTemplate): string {
+    return `${template.id}:${template.current_version}:${template.published_version}`
 }
 
 interface PlatformEmailTemplateEditorProps {
@@ -530,50 +575,42 @@ interface PlatformEmailTemplateEditorProps {
     templateData: PlatformEmailTemplate | null
     templateVariables: TemplateVariableRead[]
     variablesLoading: boolean
+    initialSaveResult: SaveResult
+    onSaved: (saved: PlatformEmailTemplate) => void
 }
 
-function PlatformEmailTemplateEditor({
-    id,
-    isNew,
-    templateId,
-    templateData,
-    templateVariables,
-    variablesLoading,
-}: PlatformEmailTemplateEditorProps) {
-    const controller = useEmailTemplateController({
-        id,
-        isNew,
-        templateId,
-        templateData,
-        templateVariables,
-        variablesLoading,
-    })
+function PlatformEmailTemplateEditor(props: PlatformEmailTemplateEditorProps) {
+    const { isNew, templateData, templateVariables, variablesLoading } = props
+    const controller = useEmailTemplateController(props)
     const { actions, derived, refs, state } = controller
     const mode: TemplatePageMode = isNew ? "new" : "existing"
 
     return (
-        <div className="min-h-dvh bg-stone-100 dark:bg-stone-950">
+        <div>
             <TemplatePageHeader
                 mode={mode}
                 name={state.name}
                 publicationState={state.isPublished ? "published" : "draft"}
+                saveStatus={derived.saveStatus}
                 busy={{
                     deletePending: controller.deletePending,
                     saving: state.isSaving,
                     publishing: state.isPublishing,
                 }}
-                onBack={actions.navigateBack}
                 onNameChange={(value) => actions.setTextField("name", value)}
                 onRequestDelete={() => actions.setDialog("delete", true)}
+                onRequestTestSend={actions.focusTestSend}
                 onSave={actions.handleSave}
                 onPublish={actions.handlePublish}
             />
 
-            <DeleteTemplateDialog
+            <ConfirmDialog
                 open={state.showDeleteDialog}
-                name={state.name}
-                deletePending={controller.deletePending}
                 onOpenChange={(open) => actions.setDialog("delete", open)}
+                title={`Delete ${state.name.trim() || "this template"}?`}
+                description="This cannot be undone."
+                confirmLabel="Delete"
+                errorFallback="Couldn't delete template."
                 onConfirm={actions.handleDelete}
             />
 
@@ -605,17 +642,20 @@ function PlatformEmailTemplateEditor({
                     onHtmlBodySelection={actions.recordHtmlBodySelection}
                 />
 
-                <div className="space-y-6">
-                    <PreviewCard previewHtml={derived.previewHtml} />
+                <div className="min-w-0 space-y-6 lg:sticky lg:top-36 lg:max-h-[calc(100dvh-10rem)] lg:self-start lg:overflow-y-auto">
+                    <PreviewCard hasContent={Boolean(state.body.trim())} previewHtml={derived.previewHtml} />
                     <SendTestEmailCard
                         mode={mode}
+                        formRef={refs.testSendFormRef}
+                        agencies={derived.testAgencies}
                         test={{
-                            orgId: state.testOrgId,
+                            orgId: derived.effectiveTestOrgId,
                             email: state.testEmail,
                             variables: state.testVariables,
                             hasUnsubscribeUrl: derived.testHasUnsubscribeUrl,
                             editableVariableNames: derived.testEditableVariableNames,
                         }}
+                        validation={derived.testSendValidation}
                         busy={{
                             sending: state.isSendingTest,
                             saving: state.isSaving,
@@ -648,6 +688,8 @@ function useEmailTemplateController({
     templateData,
     templateVariables,
     variablesLoading,
+    initialSaveResult,
+    onSaved,
 }: PlatformEmailTemplateEditorProps) {
     const { push, replace } = useRouter()
     const createTemplate = useCreatePlatformEmailTemplate()
@@ -655,8 +697,19 @@ function useEmailTemplateController({
     const publishTemplate = usePublishPlatformEmailTemplate()
     const deleteTemplate = useDeletePlatformEmailTemplate()
     const sendTest = useSendTestPlatformEmailTemplate()
-    const [state, dispatch] = useReducer(templateEditorReducer, templateData, createEditorState)
+    const {
+        agencies: testAgencies,
+        isLoading: testAgenciesLoading,
+        isError: testAgenciesError,
+        defaultAgencyId,
+    } = useTestSendAgencies()
+    const [state, dispatch] = useReducer(
+        templateEditorReducer,
+        { templateData, initialSaveResult },
+        createEditorState,
+    )
 
+    const testSendFormRef = useRef<HTMLFormElement | null>(null)
     const subjectRef = useRef<HTMLInputElement | null>(null)
     const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null)
     const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
@@ -686,6 +739,24 @@ function useEmailTemplateController({
     const fromEmailError = getFromEmailError(state.fromEmail)
     const hasComplexHtml = hasComplexTemplateHtml(state.body)
     const previewHtml = buildPreviewHtml(state.body)
+    const saveStatus: SaveStatusState = state.isSaving || state.isPublishing ? "saving" : state.saveResult
+
+    // With exactly one agency, test sends default to it.
+    const effectiveTestOrgId = state.testOrgId || defaultAgencyId
+    const testSendValidation = useFormValidation({
+        values: { agency: effectiveTestOrgId, email: state.testEmail },
+        validate: (values) => ({
+            agency: validateRequired(values.agency, "Select an agency."),
+            email: validateEmail(values.email, { requiredMessage: "Enter a test email." }),
+        }),
+    })
+
+    const focusTestSend = () => {
+        const form = testSendFormRef.current
+        if (!form) return
+        form.scrollIntoView({ behavior: "smooth", block: "nearest" })
+        form.querySelector<HTMLElement>("button, input")?.focus({ preventScroll: true })
+    }
 
     const setTextField = (field: TextFieldName, value: string) => {
         testSendOccurrenceIdRef.current = null
@@ -712,10 +783,6 @@ function useEmailTemplateController({
     const setTestVariable = (name: string, value: string) => {
         testSendOccurrenceIdRef.current = null
         dispatch({ type: "setTestVariable", name, value })
-    }
-
-    const navigateBack = () => {
-        push("/ops/templates?tab=email")
     }
 
     const recordSubjectSelection = (el: HTMLInputElement) => {
@@ -819,10 +886,14 @@ function useEmailTemplateController({
         try {
             const saved = await persistTemplate()
             dispatch({ type: "setPublished", isPublished: (saved.published_version ?? 0) > 0 })
+            dispatch({ type: "setSaveResult", result: "saved" })
+            onSaved(saved)
             toast.success("Template saved")
             finishSaving()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to save template")
+            dispatch({ type: "setSaveResult", result: "error" })
+            const message = getActionErrorMessage(error, "Couldn't save template.")
+            if (message) toast.error(message)
             finishSaving()
         }
     }
@@ -858,26 +929,20 @@ function useEmailTemplateController({
             })
             currentVersionRef.current = published.current_version
             dispatch({ type: "setPublished", isPublished: true })
+            dispatch({ type: "setSaveResult", result: "saved" })
             dispatch({ type: "setDialog", dialog: "publish", open: false })
+            onSaved(published)
             toast.success("Template published")
             finishPublishing()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to publish template")
+            const message = getActionErrorMessage(error, "Couldn't publish template.")
+            if (message) toast.error(message)
             finishPublishing()
         }
     }
 
-    const handleSendTest = async () => {
+    const handleSendTest = async (values: { agency: string; email: string }) => {
         if (isNew) return
-
-        if (!state.testOrgId.trim()) {
-            toast.error("Organization ID is required")
-            return
-        }
-        if (!state.testEmail.trim()) {
-            toast.error("Test email is required")
-            return
-        }
 
         const overrides: Record<string, string> = {}
         for (const variableName of testEditableVariableNames) {
@@ -897,8 +962,8 @@ function useEmailTemplateController({
             const result = await sendTest.mutateAsync({
                 id: saved.id,
                 payload: {
-                    org_id: state.testOrgId.trim(),
-                    to_email: state.testEmail.trim(),
+                    org_id: values.agency,
+                    to_email: values.email.trim(),
                     variables: overrides,
                     idempotency_key: occurrenceId,
                 },
@@ -918,33 +983,31 @@ function useEmailTemplateController({
             testSendOccurrenceIdRef.current = null
             finishSendingTest()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to send test email")
+            // Send failures can carry provider text, so only API errors with a safe message are shown.
+            const message = getActionErrorMessage(error, "Couldn't send test email.")
+            if (message) toast.error(message)
             finishSendingTest()
         }
     }
 
+    // Rejections reach ConfirmDialog, which keeps the dialog open and shows the error inline.
     const handleDelete = async () => {
         if (!templateId) return
-        try {
-            await deleteTemplate.mutateAsync({ id: templateId })
-            toast.success("Template deleted")
-            dispatch({ type: "setDialog", dialog: "delete", open: false })
-            push("/ops/templates?tab=email")
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to delete template")
-        }
+        await deleteTemplate.mutateAsync({ id: templateId })
+        toast.success("Template deleted")
+        push("/ops/templates?tab=email")
     }
 
     return {
         actions: {
             confirmPublish,
+            focusTestSend,
             handleDelete,
             handlePublish,
             handleSave,
             handleSendTest,
             insertOrgLogo,
             insertVariable,
-            navigateBack,
             recordHtmlBodySelection,
             recordSubjectSelection,
             setActiveInsertionTarget,
@@ -956,17 +1019,26 @@ function useEmailTemplateController({
         },
         deletePending: deleteTemplate.isPending,
         derived: {
+            effectiveTestOrgId,
             fromEmailError,
             hasComplexHtml,
             missingRequiredVariables,
             previewHtml,
+            saveStatus,
+            testAgencies: {
+                agencies: testAgencies,
+                isLoading: testAgenciesLoading,
+                isError: testAgenciesError,
+            },
             testEditableVariableNames,
             testHasUnsubscribeUrl,
+            testSendValidation,
             unknownVariables,
         },
         refs: {
             htmlBodyRef,
             subjectRef,
+            testSendFormRef,
             visualBodyRef,
         },
         state,
@@ -977,10 +1049,11 @@ interface TemplatePageHeaderProps {
     mode: TemplatePageMode
     name: string
     publicationState: PublicationState
+    saveStatus: SaveStatusState
     busy: TemplatePageBusyState
-    onBack: () => void
     onNameChange: (value: string) => void
     onRequestDelete: () => void
+    onRequestTestSend: () => void
     onSave: () => void
     onPublish: () => void
 }
@@ -989,10 +1062,11 @@ function TemplatePageHeader({
     mode,
     name,
     publicationState,
+    saveStatus,
     busy,
-    onBack,
     onNameChange,
     onRequestDelete,
+    onRequestTestSend,
     onSave,
     onPublish,
 }: TemplatePageHeaderProps) {
@@ -1000,90 +1074,65 @@ function TemplatePageHeader({
     const actionsDisabled = busy.saving || busy.publishing
 
     return (
-        <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
-            <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" aria-label="Back to email templates" onClick={onBack}>
-                    <ArrowLeftIcon className="size-5" aria-hidden="true" />
-                </Button>
-                <Input
-                    id="template-name"
-                    aria-label="Template name"
-                    value={name}
-                    onChange={(event) => onNameChange(event.target.value)}
-                    placeholder="Template name..."
-                    className="h-9 w-64 border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0"
-                />
-                <Badge variant={isPublished ? "default" : "secondary"} className={isPublished ? "bg-teal-500" : ""}>
-                    {isPublished ? "Published" : "Draft"}
-                </Badge>
-            </div>
-            <div className="flex items-center gap-3">
-                {mode === "existing" && (
-                    <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={onRequestDelete}
-                        disabled={busy.deletePending || actionsDisabled}
-                    >
-                        {busy.deletePending ? (
-                            <Loader2Icon className="mr-2 size-4 animate-spin" />
-                        ) : (
-                            <Trash2Icon className="mr-2 size-4" />
-                        )}
-                        Delete
+        <PageHeader
+            // The padding keeps the name field's focus ring inside the truncating h1.
+            title={
+                <span className="block p-1">
+                    <Input
+                        id="template-name"
+                        aria-label="Template name"
+                        value={name}
+                        onChange={(event) => onNameChange(event.target.value)}
+                        placeholder="Template name"
+                        className="h-9 w-64 max-w-full border-transparent bg-transparent px-2 text-lg font-semibold shadow-none hover:border-input md:text-lg dark:bg-transparent"
+                    />
+                </span>
+            }
+            back={{ href: "/ops/templates?tab=email", label: "Back to email templates" }}
+            sticky
+            className="top-14"
+            meta={
+                <>
+                    <Badge variant={isPublished ? "default" : "secondary"}>
+                        {isPublished ? "Published" : "Draft"}
+                    </Badge>
+                    <SaveStatus state={saveStatus} />
+                </>
+            }
+            actions={
+                <>
+                    {mode === "existing" ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                render={<Button variant="outline" size="icon" aria-label="More actions" />}
+                                disabled={busy.deletePending || actionsDisabled}
+                            >
+                                <MoreHorizontalIcon aria-hidden="true" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={onRequestTestSend}>
+                                    <SendIcon aria-hidden="true" />
+                                    Send test
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem variant="destructive" onClick={onRequestDelete}>
+                                    <Trash2Icon aria-hidden="true" />
+                                    Delete
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : null}
+                    <Button variant="outline" onClick={onSave} disabled={actionsDisabled}>
+                        {busy.saving ? <Loader2Icon className="size-4 animate-spin" aria-hidden="true" /> : null}
+                        Save draft
                     </Button>
-                )}
-                <Button variant="outline" size="sm" onClick={onSave} disabled={actionsDisabled}>
-                    {busy.saving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                    Save Draft
-                </Button>
-                <Button size="sm" onClick={onPublish} disabled={actionsDisabled}>
-                    {busy.publishing && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                    Publish
-                </Button>
-            </div>
-        </div>
-    )
-}
-
-interface DeleteTemplateDialogProps {
-    open: boolean
-    name: string
-    deletePending: boolean
-    onOpenChange: (open: boolean) => void
-    onConfirm: () => void
-}
-
-function DeleteTemplateDialog({
-    open,
-    name,
-    deletePending,
-    onOpenChange,
-    onConfirm,
-}: DeleteTemplateDialogProps) {
-    return (
-        <AlertDialog open={open} onOpenChange={onOpenChange}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Delete template?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This permanently deletes{" "}
-                        <span className="font-medium text-foreground">{name || "this template"}</span>. This cannot be
-                        undone.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel disabled={deletePending}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                        onClick={onConfirm}
-                        disabled={deletePending}
-                        className="bg-destructive text-white hover:bg-destructive/90"
-                    >
-                        Delete
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+                    <Button onClick={onPublish} disabled={actionsDisabled}>
+                        {busy.publishing ? <Loader2Icon className="size-4 animate-spin" aria-hidden="true" /> : null}
+                        Publish
+                    </Button>
+                </>
+            }
+        />
     )
 }
 
@@ -1169,9 +1218,13 @@ function TemplateDetailsFields({
                         value={fromEmail}
                         onChange={(event) => onFromEmailChange(event.target.value)}
                         placeholder="Invites <invites@surrogacyforce.com>"
+                        aria-invalid={fromEmailError ? true : undefined}
+                        aria-describedby={fromEmailError ? "template-from-email-error" : undefined}
                     />
                     {fromEmailError ? (
-                        <p className="text-xs text-red-600">{fromEmailError}</p>
+                        <p id="template-from-email-error" className="text-xs text-destructive">
+                            {fromEmailError}
+                        </p>
                     ) : (
                         <p className="text-xs text-muted-foreground">Leave blank to use the org default sender.</p>
                     )}
@@ -1269,7 +1322,7 @@ function EmailBodyEditor({
                     onMouseUp={(event) => onHtmlBodySelection(event.currentTarget)}
                     onSelect={(event) => onHtmlBodySelection(event.currentTarget)}
                     placeholder="Paste or edit the HTML for this template..."
-                    className="min-h-[240px] font-mono text-xs leading-relaxed"
+                    className="min-h-[240px] max-h-[60vh] overflow-y-auto font-mono text-xs leading-relaxed"
                 />
             )}
             {editorMode === "visual" && hasComplexHtml && (
@@ -1328,29 +1381,45 @@ function VariableValidationAlert({
     )
 }
 
-function PreviewCard({ previewHtml }: { previewHtml: string }) {
+function PreviewCard({ hasContent, previewHtml }: { hasContent: boolean; previewHtml: string }) {
     return (
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <EyeIcon className="size-4" />
+                    <EyeIcon className="size-4" aria-hidden="true" />
                     Preview
                 </CardTitle>
-                <CardDescription>Sanitized preview of the HTML output.</CardDescription>
             </CardHeader>
             <CardContent>
-                {previewHtml ? (
-                    <TrustedSanitizedHtmlContent html={previewHtml} className="prose prose-sm max-w-none" />
+                {/* The preview always carries the unsubscribe footer, so an empty body shows a placeholder instead. */}
+                {hasContent ? (
+                    <TrustedSanitizedHtmlContent
+                        html={previewHtml}
+                        className="prose prose-sm max-w-none overflow-x-auto"
+                    />
                 ) : (
-                    <div className="text-sm text-muted-foreground">Add content to preview the template.</div>
+                    <EmptyState
+                        icon={EyeIcon}
+                        title="No content yet"
+                        headingLevel={3}
+                        className="rounded-md border border-dashed"
+                    />
                 )}
             </CardContent>
         </Card>
     )
 }
 
+type TestSendValues = { agency: string; email: string }
+
 interface SendTestEmailCardProps {
     mode: TemplatePageMode
+    formRef: MutableRefObject<HTMLFormElement | null>
+    agencies: {
+        agencies: OrganizationSummary[]
+        isLoading: boolean
+        isError: boolean
+    }
     test: {
         orgId: string
         email: string
@@ -1358,6 +1427,7 @@ interface SendTestEmailCardProps {
         hasUnsubscribeUrl: boolean
         editableVariableNames: string[]
     }
+    validation: ReturnType<typeof useFormValidation<TestSendValues>>
     busy: {
         sending: boolean
         saving: boolean
@@ -1366,12 +1436,15 @@ interface SendTestEmailCardProps {
     onTestOrgIdChange: (value: string) => void
     onTestEmailChange: (value: string) => void
     onTestVariableChange: (name: string, value: string) => void
-    onSendTest: () => void
+    onSendTest: (values: TestSendValues) => void
 }
 
 function SendTestEmailCard({
     mode,
+    formRef,
+    agencies,
     test,
+    validation,
     busy,
     onTestOrgIdChange,
     onTestEmailChange,
@@ -1384,76 +1457,92 @@ function SendTestEmailCard({
         <Card>
             <CardHeader>
                 <CardTitle>Send test email</CardTitle>
-                <CardDescription>Render this template for a specific organization and send to a test inbox.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-                <div className="space-y-2">
-                    <Label htmlFor="test-org-id">Organization ID</Label>
-                    <Input
-                        id="test-org-id"
-                        value={test.orgId}
-                        onChange={(event) => onTestOrgIdChange(event.target.value)}
-                        placeholder="UUID of an organization"
-                    />
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="test-email">Test email</Label>
-                    <Input
-                        id="test-email"
-                        type="email"
-                        value={test.email}
-                        onChange={(event) => onTestEmailChange(event.target.value)}
-                        placeholder="test@example.com"
-                    />
-                </div>
+            <CardContent>
+                <form ref={formRef} noValidate onSubmit={validation.handleSubmit(onSendTest)} className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+                        <ValidatedField id="test-agency" label="Agency" error={validation.errorFor("agency")}>
+                            {(control) => (
+                                <TestSendAgencySelect
+                                    id={control.id}
+                                    agencies={agencies.agencies}
+                                    isLoading={agencies.isLoading}
+                                    isError={agencies.isError}
+                                    value={test.orgId}
+                                    onValueChange={(value) => {
+                                        onTestOrgIdChange(value)
+                                        validation.touch("agency")
+                                    }}
+                                    invalid={control["aria-invalid"] === true}
+                                    describedBy={control["aria-describedby"]}
+                                />
+                            )}
+                        </ValidatedField>
+                        <ValidatedField id="test-email" label="Test email" error={validation.errorFor("email")}>
+                            {(control) => (
+                                <Input
+                                    {...control}
+                                    type="email"
+                                    value={test.email}
+                                    onChange={(event) => onTestEmailChange(event.target.value)}
+                                    onBlur={() => validation.touch("email")}
+                                    placeholder="test@example.com"
+                                />
+                            )}
+                        </ValidatedField>
+                    </div>
 
-                <Accordion defaultValue={[]} className="rounded-lg">
-                    <AccordionItem value="variables">
-                        <AccordionTrigger>Variables (optional)</AccordionTrigger>
-                        <AccordionContent>
-                            <div className="space-y-3">
-                                {test.hasUnsubscribeUrl && (
-                                    <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-                                        <span className="font-mono">{"{{unsubscribe_url}}"}</span> is generated
-                                        automatically for the recipient.
-                                    </div>
-                                )}
-
-                                {test.editableVariableNames.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">
-                                        No variables found in this template.
-                                    </p>
-                                ) : (
-                                    test.editableVariableNames.map((variableName) => (
-                                        <div key={variableName} className="space-y-1">
-                                            <Label htmlFor={`test-var-${variableName}`} className="font-mono text-xs">
-                                                {`{{${variableName}}}`}
-                                            </Label>
-                                            <Input
-                                                id={`test-var-${variableName}`}
-                                                value={test.variables[variableName] ?? ""}
-                                                onChange={(event) =>
-                                                    onTestVariableChange(variableName, event.target.value)
-                                                }
-                                            />
+                    <Accordion defaultValue={[]} className="rounded-lg">
+                        <AccordionItem value="variables">
+                            <AccordionTrigger>Variables (optional)</AccordionTrigger>
+                            <AccordionContent>
+                                <div className="space-y-3">
+                                    {test.hasUnsubscribeUrl && (
+                                        <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                                            <span className="font-mono">{"{{unsubscribe_url}}"}</span> is generated
+                                            automatically for the recipient.
                                         </div>
-                                    ))
-                                )}
-                            </div>
-                        </AccordionContent>
-                    </AccordionItem>
-                </Accordion>
+                                    )}
 
-                {isNew && <p className="text-xs text-muted-foreground">Save template first.</p>}
+                                    {test.editableVariableNames.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground">
+                                            No variables found in this template.
+                                        </p>
+                                    ) : (
+                                        test.editableVariableNames.map((variableName) => (
+                                            <div key={variableName} className="space-y-1">
+                                                <Label
+                                                    htmlFor={`test-var-${variableName}`}
+                                                    className="font-mono text-xs"
+                                                >
+                                                    {`{{${variableName}}}`}
+                                                </Label>
+                                                <Input
+                                                    id={`test-var-${variableName}`}
+                                                    value={test.variables[variableName] ?? ""}
+                                                    onChange={(event) =>
+                                                        onTestVariableChange(variableName, event.target.value)
+                                                    }
+                                                />
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                    </Accordion>
 
-                <Button onClick={onSendTest} disabled={isNew || busy.sending || busy.saving || busy.publishing}>
-                    {busy.sending ? (
-                        <Loader2Icon className="mr-2 size-4 animate-spin" />
-                    ) : (
-                        <SendIcon className="mr-2 size-4" />
-                    )}
-                    Send test
-                </Button>
+                    {isNew && <p className="text-xs text-muted-foreground">Save template first.</p>}
+
+                    <Button type="submit" disabled={isNew || busy.sending || busy.saving || busy.publishing}>
+                        {busy.sending ? (
+                            <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                            <SendIcon className="size-4" aria-hidden="true" />
+                        )}
+                        Send test
+                    </Button>
+                </form>
             </CardContent>
         </Card>
     )

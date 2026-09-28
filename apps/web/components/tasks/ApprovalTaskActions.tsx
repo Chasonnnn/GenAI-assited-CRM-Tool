@@ -73,8 +73,8 @@ export function ApprovalTaskActions({
             <div className="flex w-full gap-2 sm:w-auto">
                 <Button
                     size="sm"
-                    variant="default"
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 sm:flex-none"
+                    variant="success"
+                    className="flex-1 sm:flex-none"
                     onClick={handleApprove}
                     disabled={disabled || isPending}
                 >

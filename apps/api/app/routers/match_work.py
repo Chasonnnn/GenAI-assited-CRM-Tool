@@ -1,6 +1,6 @@
 """Case-scoped notes, files, tasks, and activity."""
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -49,6 +49,7 @@ class WorkTaskRead(BaseModel):
     id: UUID
     title: str
     due_date: date | None
+    due_time: time | None = None
     is_completed: bool
     source: Source = "match"
     scope: Literal["case", "record"] = "case"

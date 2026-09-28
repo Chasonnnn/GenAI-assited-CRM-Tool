@@ -34,7 +34,6 @@ function renderDialog(onSubmit = vi.fn().mockResolvedValue(undefined)) {
             onOpenChange={onOpenChange}
             onSubmit={onSubmit}
             isPending={false}
-            surrogateName="Alex Chen"
         />
     )
     return { onOpenChange, onSubmit }

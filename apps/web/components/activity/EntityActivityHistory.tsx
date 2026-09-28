@@ -10,6 +10,18 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { ActivityEntityType } from "@/lib/api/activity"
 import { useInfiniteEntityActivity } from "@/lib/hooks/use-entity-activity"
+import { QueryErrorState } from "@/components/error-state"
+
+const NOT_FOUND_TITLES: Record<ActivityEntityType, string> = {
+    intended_parent: "Intended parent not found",
+    donor: "Donor not found",
+}
+
+// A missing record has no details page to return to, so the not-found link goes to its list.
+const BACK_TO_LIST: Record<ActivityEntityType, { href: string; label: string }> = {
+    intended_parent: { href: "/intended-parents", label: "Back to Intended Parents" },
+    donor: { href: "/donors", label: "Back to Donors" },
+}
 
 export function EntityActivityHistory({
     entityType,
@@ -59,12 +71,23 @@ export function EntityActivityHistory({
                                 Loading activity…
                             </div>
                         ) : initialLoadError ? (
-                            <div className="space-y-3">
-                                <p className="text-sm text-destructive">Failed to load activity.</p>
-                                <Button variant="outline" size="sm" onClick={() => { void query.refetch() }}>
-                                    Retry
-                                </Button>
-                            </div>
+                            <QueryErrorState
+                                error={query.error}
+                                onRetry={() => { void query.refetch() }}
+                                isRetrying={query.isFetching}
+                                title="Couldn't load activity"
+                                forbidden={{
+                                    description: "Your account does not have permission to view this activity. Ask an admin to update your role.",
+                                    secondaryHref: "/dashboard",
+                                }}
+                                notFound={{
+                                    title: NOT_FOUND_TITLES[entityType],
+                                    backHref: BACK_TO_LIST[entityType].href,
+                                    backLabel: BACK_TO_LIST[entityType].label,
+                                }}
+                                headingLevel={3}
+                                className="min-h-0 p-0"
+                            />
                         ) : activities.length === 0 ? (
                             <p className="text-sm text-muted-foreground">No activity yet.</p>
                         ) : (

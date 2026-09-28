@@ -1,0 +1,7 @@
+{
+  "role": "case_manager",
+  "create_status": 201,
+  "subsequent_read_status": 403,
+  "record_id": "68cdc1d0-6757-4c88-8740-9d7c58a36766",
+  "browser_text": "Error loading surrogate: You don't have access to this surrogate\n\nBack to Surrogates"
+}

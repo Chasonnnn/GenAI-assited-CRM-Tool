@@ -19,18 +19,24 @@ vi.mock("@tanstack/react-query", () => ({
     useQuery: (options: unknown) => mockUseQuery(options),
 }))
 
+const navigationState = vi.hoisted(() => ({ search: "" }))
+
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push: vi.fn() }),
+    usePathname: () => "/search",
+    useSearchParams: () => new URLSearchParams(navigationState.search),
 }))
 
 vi.mock("@/components/app-link", () => ({
     default: ({
         children,
         href,
+        className,
     }: {
         children: ReactNode
         href: string
-    }) => <a href={href}>{children}</a>,
+        className?: string
+    }) => <a href={href} className={className}>{children}</a>,
 }))
 
 vi.mock("@/components/ui/command", () => ({
@@ -80,6 +86,7 @@ vi.mock("@/lib/api/search", () => ({
 
 describe("Search debounce and query options", () => {
     beforeEach(() => {
+        navigationState.search = ""
         mockGlobalSearch.mockReset()
         mockUseDebouncedValue.mockClear()
         mockUseQuery.mockReset()
@@ -202,5 +209,36 @@ describe("Search debounce and query options", () => {
             "href",
             "/donors/donor-1",
         )
+        // Each result is its own list row, so rows stack with separators instead of touching cards.
+        expect(screen.getAllByRole("listitem")).toHaveLength(2)
+        // accent equals card in dark mode, so keyboard focus needs a ring, not only a background.
+        expect(screen.getByRole("link", { name: /Note on Avery Searchable/ })).toHaveClass(
+            "focus-visible:ring-2",
+            "focus-visible:ring-inset",
+            "focus-visible:ring-ring",
+        )
+    })
+
+    it("seeds the query from ?q= and writes typing back to the URL", () => {
+        const replaceState = vi.spyOn(window.history, "replaceState").mockImplementation(() => undefined)
+        navigationState.search = "q=S10133"
+        render(<SearchPage />)
+
+        expect(screen.getByRole("searchbox", { name: "Search" })).toHaveValue("S10133")
+        expect(mockUseDebouncedValue).toHaveBeenCalledWith("S10133", 400)
+
+        fireEvent.change(screen.getByRole("searchbox", { name: "Search" }), { target: { value: "Avery" } })
+        expect(replaceState).toHaveBeenLastCalledWith(null, "", "/search?q=Avery")
+
+        fireEvent.click(screen.getByRole("button", { name: "Clear" }))
+        expect(replaceState).toHaveBeenLastCalledWith(null, "", "/search")
+        replaceState.mockRestore()
+    })
+
+    it("shows the page header without the search tips card", () => {
+        render(<SearchPage />)
+
+        expect(screen.getByRole("heading", { level: 1, name: "Search" })).toBeInTheDocument()
+        expect(screen.queryByText("Search Tips")).not.toBeInTheDocument()
     })
 })

@@ -1,24 +1,23 @@
 "use client"
 
-import { useState, type FormEvent } from "react"
+import { useId, useState, type FormEvent } from "react"
 import {
     AlertTriangleIcon,
-    ArrowLeftIcon,
     CheckCircle2Icon,
-    ClipboardIcon,
     Loader2Icon,
     MessageSquareTextIcon,
     RefreshCwIcon,
     ShieldCheckIcon,
 } from "lucide-react"
 
-import Link from "@/components/app-link"
 import { PermissionDeniedState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { CopyField } from "@/components/ui/copy-field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -26,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { useAuth } from "@/lib/auth-context"
 import { getErrorMessage } from "@/lib/error-utils"
 import type {
@@ -369,24 +369,12 @@ function CredentialField({
 }
 
 function WebhookValue({ label, value }: { label: string; value: string }) {
-    const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(value)
-            toast.success(`${label} copied`)
-        } catch {
-            toast.error(`Could not copy ${label.toLowerCase()}`)
-        }
-    }
+    const id = useId()
 
     return (
         <div className="space-y-1.5">
-            <Label>{label}</Label>
-            <div className="flex min-w-0 items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
-                <code className="min-w-0 flex-1 truncate text-xs">{value}</code>
-                <Button type="button" variant="ghost" size="icon-sm" onClick={handleCopy} aria-label={`Copy ${label}`}>
-                    <ClipboardIcon aria-hidden="true" />
-                </Button>
-            </div>
+            <Label htmlFor={id}>{label}</Label>
+            <CopyField id={id} value={value} copyLabel={`Copy ${label}`} />
         </div>
     )
 }
@@ -747,7 +735,7 @@ function ComplianceControlsCard({
 
 function SettingsSaveBar({ version, isPending }: { version: number; isPending: boolean }) {
     return (
-        <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/85">
+        <div ref={toastClearanceRef} className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/85">
             <p className="text-xs text-muted-foreground">Configuration version {version}</p>
             <Button type="submit" disabled={isPending}>
                 {isPending ? <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <ShieldCheckIcon aria-hidden="true" />}
@@ -953,45 +941,46 @@ export default function MessagingIntegrationPageClient() {
         void Promise.all([settingsQuery.refetch(), readinessQuery.refetch()])
     }
 
-    if (authLoading || permissionsLoading) return <LoadingState />
-
-    if (!user || !canManageIntegrations) {
+    if (authLoading || permissionsLoading || !user || !canManageIntegrations) {
+        // Same shell as SettingsPageGate: the header stays while access is checked or denied.
         return (
-            <PermissionDeniedState
-                title="Messaging settings are restricted"
-                description="Only organization administrators and developers can manage Twilio credentials, routes, and compliance settings."
-                secondaryHref="/settings/integrations"
-                secondaryLabel="Back to integrations"
-            />
+            <div className="flex min-h-dvh flex-col bg-muted/10">
+                <PageHeader
+                    title="Messaging delivery"
+                    back={{ href: "/settings/integrations", label: "Back to integrations" }}
+                />
+                {authLoading || permissionsLoading ? (
+                    <LoadingState />
+                ) : (
+                    <PermissionDeniedState
+                        title="Messaging settings are restricted"
+                        description="Only organization administrators and developers can manage Twilio credentials, routes, and compliance settings."
+                        secondaryHref="/settings/integrations"
+                        secondaryLabel="Back to integrations"
+                        headingLevel={2}
+                    />
+                )}
+            </div>
         )
     }
 
     return (
         <div className="min-h-dvh bg-muted/10">
-            <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-                <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                        <Button variant="ghost" size="icon" render={<Link href="/settings/integrations" />} aria-label="Back to integrations">
-                            <ArrowLeftIcon aria-hidden="true" />
-                        </Button>
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <h1 className="text-2xl font-semibold">Messaging delivery</h1>
-                                {readinessQuery.data ? (
-                                    <StatusBadge status={readinessQuery.data.overall_status} label={READINESS_LABELS[readinessQuery.data.overall_status]} />
-                                ) : null}
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                                Twilio SMS/MMS routes, consent disclosures, and delivery readiness for {user.org_name}.
-                            </p>
-                        </div>
-                    </div>
+            <PageHeader
+                title="Messaging delivery"
+                back={{ href: "/settings/integrations", label: "Back to integrations" }}
+                meta={
+                    readinessQuery.data ? (
+                        <StatusBadge status={readinessQuery.data.overall_status} label={READINESS_LABELS[readinessQuery.data.overall_status]} />
+                    ) : null
+                }
+                actions={
                     <Button type="button" variant="outline" size="sm" onClick={refresh} disabled={isRefreshing}>
                         <RefreshCwIcon className={isRefreshing ? "animate-spin motion-reduce:animate-none" : undefined} aria-hidden="true" />
                         Refresh
                     </Button>
-                </div>
-            </header>
+                }
+            />
 
             <main className="mx-auto max-w-7xl space-y-6 p-6">
                 {settingsQuery.isLoading && !settingsQuery.data ? <LoadingState /> : null}

@@ -285,7 +285,8 @@ export function EmailReconciliationActionDialogs({
                 }}
             >
                 <DialogContent
-                    className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-lg"
+                    size="lg"
+                    className="max-h-[calc(100svh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0"
                     showCloseButton={!linkMutation.isPending}
                 >
                     <DialogHeader className="border-b p-6 pr-16">

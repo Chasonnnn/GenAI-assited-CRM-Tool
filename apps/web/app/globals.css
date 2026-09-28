@@ -3,6 +3,9 @@
 @import "../styles/tiptap.css";
 
 @custom-variant dark (&:is(.dark *));
+/* Base UI sets data-orientation; the shadcn primitives use data-horizontal and data-vertical. */
+@custom-variant data-horizontal (&[data-orientation="horizontal"]);
+@custom-variant data-vertical (&[data-orientation="vertical"]);
 
 @theme inline {
   --color-background: var(--background);
@@ -26,6 +29,10 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -45,6 +52,7 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root {
@@ -87,6 +95,12 @@
   --accent-foreground: oklch(0.289 0 89.876);
   /* #2B2B2B */
   --destructive: oklch(0.577 0.245 27.325);
+  /* Text on a solid destructive fill (existing "bg-destructive text-destructive-foreground" call sites). */
+  --destructive-foreground: oklch(0.985 0 89.876);
+  /* Success fill keeps 4.9:1 with white text; warning is for dots and icons. */
+  --success: oklch(0.527 0.154 150.069);
+  --success-foreground: oklch(0.985 0 89.876);
+  --warning: oklch(0.555 0.163 48.998);
   --border: oklch(0.922 0 89.876);
   /* #E5E5E5 */
   --input: oklch(0.922 0 89.876);
@@ -148,7 +162,15 @@
   --accent: oklch(0.218 0 89.876);
   /* #1A1A1A */
   --accent-foreground: oklch(0.97 0 89.876);
-  --destructive: oklch(0.60 0.22 25);
+  /* Light enough for text on dark cards (6.7:1) and on the /20 badge and hover tints (4.5:1 or
+     more). Solid fills must use it at 60% (the destructive button's dark:bg-destructive/60) to keep
+     white text at 5.4:1; a full fill gives 2.6:1. */
+  --destructive: oklch(0.73 0.17 22);
+  --destructive-foreground: oklch(0.985 0 89.876);
+  /* Lighter success reads as text on dark surfaces; filled buttons use it at 60%. */
+  --success: oklch(0.72 0.17 150);
+  --success-foreground: oklch(0.985 0 89.876);
+  --warning: oklch(0.828 0.189 84.429);
   --border: oklch(0.289 0 89.876);
   /* #2B2B2B */
   --input: oklch(0.289 0 89.876);
@@ -228,64 +250,16 @@
   background: rgba(252, 252, 252, 0.9);
 }
 
-/* View Transition API for Circle Blur theme toggle */
-
-/* Keyframes for circle animation */
-@keyframes circle-in {
-  from {
-    clip-path: circle(0px at var(--x, 40px) var(--y, 40px));
-  }
-
-  to {
-    clip-path: circle(var(--r, 100%) at var(--x, 40px) var(--y, 40px));
-  }
-}
-
-@keyframes circle-out {
-  from {
-    clip-path: circle(var(--r, 100%) at var(--x, 40px) var(--y, 40px));
-  }
-
-  to {
-    clip-path: circle(0px at var(--x, 40px) var(--y, 40px));
-  }
-}
-
-/* Base styles to prevent blink */
-::view-transition-old(root),
-::view-transition-new(root) {
-  mix-blend-mode: normal;
-}
-
-/* Default: dark -> light (new view expands) */
-::view-transition-old(root) {
-  animation: none;
-  z-index: 1;
-}
-
-::view-transition-new(root) {
-  animation: circle-in 0.5s ease-out forwards;
-  z-index: 9999;
-}
-
-/* Reverse: light -> dark (old view contracts) */
-.dark-transition::view-transition-old(root) {
-  animation: circle-out 0.5s ease-out forwards;
-  z-index: 9999;
-}
-
-.dark-transition::view-transition-new(root) {
-  animation: none;
-  z-index: 1;
-}
-
-/* Disable transitions for users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
-
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation: none !important;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -331,5 +305,7 @@
   --border: oklch(0.922 0 89.876);
   --input: oklch(0.922 0 89.876);
   --ring: oklch(0.644 0.216 347.987);
+  --success: oklch(0.527 0.154 150.069);
+  --warning: oklch(0.555 0.163 48.998);
   color: oklch(0.289 0 89.876);
 }

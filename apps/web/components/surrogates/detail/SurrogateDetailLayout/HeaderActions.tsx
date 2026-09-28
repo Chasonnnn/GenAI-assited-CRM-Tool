@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -25,6 +26,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { stageHasCapability, stageUsesPauseBehavior } from "@/lib/surrogate-stage-context"
 import { toast } from "@/components/ui/toast"
 import { RecordCollaboratorsDialog } from "@/components/permissions/record-collaborators-dialog"
@@ -65,7 +67,11 @@ export function HeaderActions() {
         isReleasePending,
     } = useSurrogateDetailActions()
     const [isExporting, setIsExporting] = React.useState(false)
+    // Menu items unmount on click, so the archive confirm is rendered outside the menu.
+    const [isArchiveConfirmOpen, setIsArchiveConfirmOpen] = React.useState(false)
     const [collaboratorsOpen, setCollaboratorsOpen] = React.useState(false)
+    // Archive and restore require the same permission the API enforces, under policy v1 and v2.
+    const canArchive = usePermissionCheck().can("archive_surrogates")
 
     if (!surrogate) return null
 
@@ -87,7 +93,6 @@ export function HeaderActions() {
     const isV2 = effectivePermissions?.policy_version === 2
     const canManageCollaborators = isV2 && !!effectivePermissions.capabilities?.can_manage_roles
     const canEdit = !isV2 || (effectivePermissions.permissions.includes("edit_surrogates") && !surrogate.is_archived)
-    const canArchive = !isV2 || effectivePermissions.permissions.includes("archive_surrogates")
     const canSendEmail = !isV2 || effectivePermissions.permissions.includes("send_email")
     const canScheduleZoom = !isV2 || effectivePermissions.permissions.includes("manage_appointments")
     const isAssignee = !!(user?.user_id && surrogate.owner_id === user.user_id)
@@ -289,14 +294,36 @@ export function HeaderActions() {
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
                         )}
-                    {canArchive && (surrogate.is_archived ? (
+                    {!canArchive ? null : surrogate.is_archived ? (
                         <DropdownMenuItem onClick={restoreSurrogate}>Restore</DropdownMenuItem>
                     ) : (
-                        <DropdownMenuItem onClick={archiveSurrogate}>Archive</DropdownMenuItem>
-                    ))}
+                        <DropdownMenuItem
+                            onClick={() => setIsArchiveConfirmOpen(true)}
+                            className="text-destructive"
+                        >
+                            Archive
+                        </DropdownMenuItem>
+                    )}
                 </DropdownMenuContent>
             </DropdownMenu>
-            {collaboratorsOpen && <RecordCollaboratorsDialog kind="surrogate" recordId={surrogate.id} open={collaboratorsOpen} onOpenChange={setCollaboratorsOpen} canManage={canManageCollaborators} />}
+
+            <ConfirmDialog
+                open={isArchiveConfirmOpen}
+                onOpenChange={setIsArchiveConfirmOpen}
+                title={`Archive ${surrogate.surrogate_number}?`}
+                confirmLabel="Archive"
+                errorFallback="Couldn't archive surrogate. Try again."
+                onConfirm={archiveSurrogate}
+            />
+            {collaboratorsOpen && (
+                <RecordCollaboratorsDialog
+                    kind="surrogate"
+                    recordId={surrogate.id}
+                    open={collaboratorsOpen}
+                    onOpenChange={setCollaboratorsOpen}
+                    canManage={canManageCollaborators}
+                />
+            )}
         </>
     )
 }

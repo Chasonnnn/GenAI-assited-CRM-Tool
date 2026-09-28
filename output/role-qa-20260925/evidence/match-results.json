@@ -1,0 +1,20 @@
+[
+  {
+    "journey": "Case Manager creates match through UI",
+    "status": 201
+  },
+  {
+    "journey": "Case Manager accepts match through UI",
+    "status": 200,
+    "persisted_status": "accepted"
+  },
+  {
+    "journey": "Case Manager requests cancellation",
+    "persisted_status": "cancel_pending"
+  },
+  {
+    "journey": "Different Admin approves cancellation in Tasks",
+    "persisted_status": "cancelled",
+    "status": 200
+  }
+]

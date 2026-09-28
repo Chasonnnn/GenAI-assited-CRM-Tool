@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { Loader2Icon, SaveIcon } from "lucide-react"
 import { useProfileCardActions, useProfileCardEdits, useProfileCardMode } from "./context"
 
@@ -20,9 +21,9 @@ export function SaveBar() {
     }
 
     return (
-        <div className="sticky bottom-0 pt-4 bg-gradient-to-t from-card to-transparent">
+        <div ref={toastClearanceRef} className="sticky bottom-0 pt-4 bg-gradient-to-t from-card to-transparent">
             <Button
-                className="w-full bg-primary hover:bg-primary/90"
+                className="w-full"
                 onClick={saveChanges}
                 disabled={isSaving}
             >

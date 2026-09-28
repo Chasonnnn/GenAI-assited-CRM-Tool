@@ -31,8 +31,9 @@ export default function SurrogateNotesPage() {
         <SurrogateNotesTab
             surrogateId={id}
             notes={notesQuery.data}
-            status={notesQuery.isLoading ? "loading" : notesQuery.isError ? "error" : "ready"}
+            status={notesQuery.isLoading ? "loading" : notesQuery.isError && !notesQuery.data ? "error" : "ready"}
             onRetry={() => { void notesQuery.refetch() }}
+            isRetrying={notesQuery.isFetching}
             canCreate={canEdit}
             canDeleteNote={(note) => canEdit && (canDeleteAny || note.author_id === user?.user_id)}
             onAddNote={handleAddNote}

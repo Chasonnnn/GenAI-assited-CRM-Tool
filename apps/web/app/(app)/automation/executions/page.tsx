@@ -1,7 +1,9 @@
 "use client"
 
-import { Fragment, useState } from "react"
+import { Fragment, useState, type ReactNode } from "react"
 import Link from "@/components/app-link"
+import { LoadErrorState, PermissionDeniedState, QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -34,6 +36,7 @@ import { useQuery } from "@tanstack/react-query"
 import api, { ApiError } from "@/lib/api"
 import { parseDateInput } from "@/lib/utils/date"
 import { useRetryWorkflowExecution } from "@/lib/hooks/use-workflows"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { toast } from "@/components/ui/toast"
 import { getWorkflowExecutionStatusLabel } from "@/lib/constants/workflow-execution-status"
 
@@ -344,19 +347,8 @@ function ExecutionDetailsRow({
     )
 }
 
-function WorkflowExecutionsHeader({ totalExecutions }: { totalExecutions: number }) {
-    return (
-        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center justify-between px-6">
-                <div>
-                    <h1 className="text-2xl font-semibold">Workflow Executions</h1>
-                    <p className="text-xs text-muted-foreground">
-                        {totalExecutions.toLocaleString()} executions in last 24 hours
-                    </p>
-                </div>
-            </div>
-        </div>
-    )
+function WorkflowExecutionsHeader({ totalExecutions }: { totalExecutions: number | null }) {
+    return <PageHeader title="Executions" count={totalExecutions} countLabel="executions" />
 }
 
 function WorkflowExecutionStatsGrid({
@@ -717,21 +709,32 @@ export default function WorkflowExecutionsPage() {
     const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
     const [retryTarget, setRetryTarget] = useState<Execution | null>(null)
     const retryExecutionMutation = useRetryWorkflowExecution()
+    const permissionCheck = usePermissionCheck()
+    // GET /workflows/executions and /executions/stats require manage_automation, plus
+    // manage_org_workflows under policy v2 (workflow_access.has_manage_permission).
+    const policyV2 = (permissionCheck.policyVersion ?? 1) >= 2
+    const canViewExecutions =
+        permissionCheck.can("manage_automation") &&
+        (!policyV2 || permissionCheck.can("manage_org_workflows"))
 
     // Fetch data
-    const { data: executionsData, isLoading: executionsLoading } = useQuery({
+    const executionsQuery = useQuery({
         queryKey: ["workflow-executions", statusFilter, workflowFilter, page],
         queryFn: () => fetchExecutions({ status: statusFilter, workflow_id: workflowFilter, page }),
+        enabled: canViewExecutions,
     })
+    const { data: executionsData, isLoading: executionsLoading } = executionsQuery
 
     const { data: stats, isLoading: statsLoading } = useQuery({
         queryKey: ["workflow-execution-stats"],
         queryFn: fetchExecutionStats,
+        enabled: canViewExecutions,
     })
 
     const { data: workflows } = useQuery({
         queryKey: ["workflows-list"],
         queryFn: fetchWorkflows,
+        enabled: canViewExecutions,
     })
 
     const toggleRow = (id: string) => {
@@ -777,9 +780,55 @@ export default function WorkflowExecutionsPage() {
         }
     }
 
+    const accessDenied = {
+        title: "No access to workflow executions",
+        description: "Ask an admin to update your role.",
+        secondaryHref: "/automation",
+        secondaryLabel: "Back to Workflows",
+    }
+    let blockedState: ReactNode = null
+    if (permissionCheck.isLoading) {
+        blockedState = (
+            <div className="flex items-center justify-center py-12">
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
+            </div>
+        )
+    } else if (permissionCheck.isError) {
+        blockedState = (
+            <LoadErrorState
+                title="Couldn't load workflow executions"
+                onRetry={permissionCheck.retry}
+                isRetrying={permissionCheck.isRetrying}
+            />
+        )
+    } else if (!canViewExecutions) {
+        blockedState = <PermissionDeniedState {...accessDenied} />
+    } else if (executionsQuery.isError) {
+        blockedState = (
+            <QueryErrorState
+                error={executionsQuery.error}
+                onRetry={() => {
+                    void executionsQuery.refetch()
+                }}
+                isRetrying={executionsQuery.isFetching}
+                title="Couldn't load workflow executions"
+                forbidden={accessDenied}
+            />
+        )
+    }
+
+    if (blockedState) {
+        return (
+            <div className="flex min-h-screen flex-col">
+                <WorkflowExecutionsHeader totalExecutions={null} />
+                {blockedState}
+            </div>
+        )
+    }
+
     return (
         <div className="flex min-h-screen flex-col">
-            <WorkflowExecutionsHeader totalExecutions={totalExecutions} />
+            <WorkflowExecutionsHeader totalExecutions={executionsData ? totalExecutions : null} />
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">

@@ -76,36 +76,44 @@ export function normalizePagesForLeadKind(
     }))
 }
 
+export type DonorRequiredFieldStatus = {
+    value: string
+    label: string
+    status: "ready" | "missing" | "not_required" | "wrong_type"
+    fieldId: string | null
+}
+
+export function getDonorRequiredFieldStatuses(pages: BuilderFormPage[]): DonorRequiredFieldStatus[] {
+    const mappedFieldByTarget = new Map<string, BuilderFormField>()
+    for (const field of pages.flatMap((page) => page.fields)) {
+        if (field.surrogateFieldMapping) {
+            mappedFieldByTarget.set(field.surrogateFieldMapping, field)
+        }
+    }
+
+    return DONOR_REQUIRED_MAPPING_VALUES.map((target): DonorRequiredFieldStatus => {
+        const label = DONOR_LABEL_BY_VALUE.get(target) ?? target
+        const field = mappedFieldByTarget.get(target)
+        if (!field) return { value: target, label, status: "missing", fieldId: null }
+        if (!DONOR_FIELD_TYPES[target]?.has(field.type)) {
+            return { value: target, label, status: "wrong_type", fieldId: field.id }
+        }
+        return { value: target, label, status: field.required ? "ready" : "not_required", fieldId: field.id }
+    })
+}
+
 export function getDonorPublishValidationMessage(
     pages: BuilderFormPage[],
     leadKind: FormLeadKind,
 ): string | null {
     if (!isDonorFormLeadKind(leadKind)) return null
 
-    const fields = pages.flatMap((page) => page.fields)
-    const mappedFieldByTarget = new Map<string, BuilderFormField>()
-    for (const field of fields) {
-        if (field.surrogateFieldMapping) {
-            mappedFieldByTarget.set(field.surrogateFieldMapping, field)
-        }
-    }
-
-    const missing: string[] = []
-    const optional: string[] = []
-    const incompatible: string[] = []
-    for (const target of DONOR_REQUIRED_MAPPING_VALUES) {
-        const label = DONOR_LABEL_BY_VALUE.get(target) ?? target
-        const field = mappedFieldByTarget.get(target)
-        if (!field) {
-            missing.push(label)
-            continue
-        }
-        if (!DONOR_FIELD_TYPES[target]?.has(field.type)) {
-            incompatible.push(label)
-            continue
-        }
-        if (!field.required) optional.push(label)
-    }
+    const statuses = getDonorRequiredFieldStatuses(pages)
+    const labelsWith = (status: DonorRequiredFieldStatus["status"]) =>
+        statuses.filter((item) => item.status === status).map((item) => item.label)
+    const missing = labelsWith("missing")
+    const optional = labelsWith("not_required")
+    const incompatible = labelsWith("wrong_type")
 
     const parts: string[] = []
     if (missing.length > 0) parts.push(`map required fields: ${missing.join(", ")}`)

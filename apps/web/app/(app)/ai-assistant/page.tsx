@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { PageHeader } from "@/components/page-header"
 import { SendIcon, SparklesIcon, FileTextIcon, UserIcon, CalendarIcon, ClockIcon, BotIcon, Loader2Icon, AlertCircleIcon, CheckIcon, XIcon, StopCircleIcon, type LucideIcon } from "lucide-react"
 import { useEffect, useReducer, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react"
 import { useAIChatScrollToLatest } from "@/lib/hooks/use-ai-chat-scroll-to-latest"
@@ -11,6 +12,8 @@ import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 import { useStreamChatMessage, useAIAvailability, useApproveAction, useRejectAction } from "@/lib/hooks/use-ai"
 import { useAuth } from "@/lib/auth-context"
 import { AssistantRichText } from "@/components/ai/AssistantRichText"
+import { AiUnavailableNotice } from "@/components/ai/AiUnavailableNotice"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { getActionStatusLabel } from "@/lib/api/ai"
 
 interface Message {
@@ -750,14 +753,7 @@ type ProposedActionListProps = {
 }
 
 function AIAssistantHeader() {
-    return (
-        <div className="flex shrink-0 items-center gap-3 border-b p-4">
-            <div className="flex-1">
-                <h1 className="text-2xl font-semibold">AI Assistant</h1>
-            </div>
-            <Badge variant="outline">Global mode</Badge>
-        </div>
-    )
+    return <PageHeader title="AI Assistant" actions={<Badge variant="outline">Global mode</Badge>} />
 }
 
 function AISettingsErrorBanner({
@@ -768,7 +764,7 @@ function AISettingsErrorBanner({
     onRetry: () => void
 }) {
     return (
-        <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+        <div className="mx-6 mt-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
             <AlertCircleIcon className="size-5 text-destructive" />
             <div className="flex-1">
                 <p className="text-sm font-medium">Unable to load AI settings</p>
@@ -777,18 +773,6 @@ function AISettingsErrorBanner({
             <Button variant="outline" size="sm" onClick={onRetry}>
                 Retry
             </Button>
-        </div>
-    )
-}
-
-function AINotEnabledBanner() {
-    return (
-        <div className="mx-4 mt-4 flex items-center gap-3 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3">
-            <AlertCircleIcon className="size-5 text-yellow-500" />
-            <div className="flex-1">
-                <p className="text-sm font-medium">AI Assistant is not enabled</p>
-                <p className="text-xs text-muted-foreground">Contact your admin to enable AI features and configure an API key.</p>
-            </div>
         </div>
     )
 }
@@ -1168,6 +1152,7 @@ function AIAssistantComposer({
 
 export default function AIAssistantPage() {
     const chat = useAIAssistantChat()
+    const { can } = usePermissionCheck()
 
     return (
         <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden">
@@ -1180,9 +1165,15 @@ export default function AIAssistantPage() {
                     }}
                 />
             )}
-            {chat.showDisabledWarning && <AINotEnabledBanner />}
+            {chat.showDisabledWarning && (
+                <AiUnavailableNotice
+                    reason="org_disabled"
+                    canManageSettings={can("manage_integrations") && can("manage_ai_settings")}
+                    className="mx-6 mt-4 w-auto"
+                />
+            )}
 
-            <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-4 lg:grid-cols-[280px_1fr]">
+            <div className="grid min-h-0 flex-1 gap-4 overflow-hidden p-6 lg:grid-cols-[280px_1fr]">
                 <AIAssistantSidebar
                     activeSessionId={chat.activeSessionId}
                     chatHistory={chat.chatHistory}

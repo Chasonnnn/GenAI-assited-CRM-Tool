@@ -9,13 +9,6 @@ vi.mock('next/link', () => ({
     ),
 }))
 
-const mockUseEffectivePermissions = vi.fn()
-vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { user_id: 'user-1', role: 'case_manager' } }),
-}))
-vi.mock('@/lib/hooks/use-permissions', () => ({
-    useEffectivePermissions: () => mockUseEffectivePermissions(),
-}))
 const mockSearchParams = new URLSearchParams()
 const mockRouterReplace = vi.fn()
 const mockCreateIntendedParent = vi.fn()
@@ -38,6 +31,31 @@ vi.mock('@/components/ui/date-range-picker', () => ({
 
 const mockUseIntendedParents = vi.fn()
 const mockUseIntendedParentCreatedDates = vi.fn()
+const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
+const mockToastError = vi.fn()
+const mockToastSuccess = vi.fn()
+
+vi.mock('@/lib/auth-context', () => ({
+    useAuth: () => mockUseAuth(),
+}))
+
+vi.mock('@/lib/hooks/use-permissions', () => ({
+    useEffectivePermissions: (userId: string | null) => mockUseEffectivePermissions(userId),
+}))
+
+vi.mock('@/components/ui/toast', () => ({
+    toast: {
+        error: (...args: unknown[]) => mockToastError(...args),
+        success: (...args: unknown[]) => mockToastSuccess(...args),
+    },
+}))
+
+function setPermissions(permissions: string[]) {
+    mockUseEffectivePermissions.mockReturnValue({ data: { permissions }, isLoading: false, isError: false })
+}
+
+const emptyList = { data: { items: [], total: 0, per_page: 20, page: 1 }, isLoading: false }
 
 vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useIntendedParents: (filters: unknown) => mockUseIntendedParents(filters),
@@ -99,7 +117,6 @@ vi.mock('@/lib/hooks/use-metadata', () => ({
 
 describe('IntendedParentsPage', () => {
     beforeEach(() => {
-        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 1, permissions: ["edit_intended_parents"] } })
         mockSearchParams.delete('page')
         mockSearchParams.delete('status')
         mockSearchParams.delete('q')
@@ -109,6 +126,11 @@ describe('IntendedParentsPage', () => {
         mockRouterReplace.mockReset()
         mockCreateIntendedParent.mockReset()
         mockCreateIntendedParent.mockResolvedValue({})
+        mockToastError.mockReset()
+        mockToastSuccess.mockReset()
+        mockUseIntendedParents.mockClear()
+        mockUseAuth.mockReturnValue({ user: { user_id: 'user-1', role: 'case_manager' }, isLoading: false })
+        setPermissions(['view_intended_parents', 'edit_intended_parents'])
         mockUseIntendedParentCreatedDates.mockReturnValue({ data: [] })
         mockUseIntendedParents.mockReturnValue({
             data: {
@@ -160,14 +182,76 @@ describe('IntendedParentsPage', () => {
         expect(screen.queryByRole("button", { name: "New Intended Parent" })).not.toBeInTheDocument()
     })
 
-    it('renders stats and a list row', () => {
+    it('renders the header count, toolbar and a list row without stat cards', () => {
         render(<IntendedParentsPage />)
-        expect(screen.getByText('Intended Parents')).toBeInTheDocument()
+        expect(screen.getByRole('heading', { level: 1, name: 'Intended Parents' })).toBeInTheDocument()
+        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('1')
+        expect(screen.queryByText('Total')).not.toBeInTheDocument()
         expect(screen.getByText('Bob Parent')).toBeInTheDocument()
         expect(screen.getByText('bob@example.com')).toBeInTheDocument()
         expect(screen.getByRole('columnheader', { name: 'Stage' })).toBeInTheDocument()
         expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument()
-        expect(screen.getByRole('combobox')).toHaveTextContent('All Stages')
+        const stage = screen.getByRole('combobox', { name: 'Filter by stage' })
+        const date = screen.getByTestId('date-range-picker')
+        const search = screen.getByRole('textbox', { name: 'Search intended parents' })
+        expect(stage).toHaveTextContent('All Stages')
+        expect(stage.compareDocumentPosition(date) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(date.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('gates the page on view_intended_parents before loading the list', () => {
+        mockUseAuth.mockReturnValue({ user: { user_id: 'intake-1', role: 'intake_specialist' }, isLoading: false })
+        setPermissions(['view_surrogates'])
+        render(<IntendedParentsPage />)
+
+        expect(screen.getByRole('heading', { level: 1, name: 'Intended Parents' })).toBeInTheDocument()
+        expect(screen.getByRole('heading', { level: 2, name: 'Permission required' })).toBeInTheDocument()
+        expect(screen.getByRole('link', { name: 'Go to Dashboard' })).toHaveAttribute('href', '/dashboard')
+        expect(screen.queryByRole('button', { name: /new intended parent/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('combobox', { name: 'Filter by stage' })).not.toBeInTheDocument()
+        expect(mockUseIntendedParents).not.toHaveBeenCalled()
+    })
+
+    it('hides New Intended Parent without edit_intended_parents', () => {
+        setPermissions(['view_intended_parents'])
+        render(<IntendedParentsPage />)
+        expect(screen.getByText('Bob Parent')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /new intended parent/i })).not.toBeInTheDocument()
+    })
+
+    it('shows filter chips with stage labels and resets them', () => {
+        mockSearchParams.set('status', 'ready_to_match')
+        mockSearchParams.set('q', 'smith')
+        mockSearchParams.set('range', 'month')
+        render(<IntendedParentsPage />)
+
+        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('1')
+        expect(screen.getByRole('button', { name: 'Remove filter: Stage: Ready to Match' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Remove filter: Date: This Month' })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Remove filter: Search: smith' }))
+        expect(mockRouterReplace).toHaveBeenLastCalledWith(
+            '/intended-parents?status=ready_to_match&range=month',
+            { scroll: false },
+        )
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
+        expect(mockRouterReplace).toHaveBeenLastCalledWith('/intended-parents', { scroll: false })
+    })
+
+    it('shows the first-run empty state with a create action', () => {
+        mockUseIntendedParents.mockReturnValue(emptyList)
+        render(<IntendedParentsPage />)
+        expect(screen.getByRole('heading', { level: 2, name: 'No intended parents yet' })).toBeInTheDocument()
+        expect(screen.getAllByRole('button', { name: 'New Intended Parent' })).toHaveLength(2)
+    })
+
+    it('shows the filtered empty state with Clear filters', () => {
+        mockSearchParams.set('q', 'nobody')
+        mockUseIntendedParents.mockReturnValue(emptyList)
+        render(<IntendedParentsPage />)
+        expect(screen.getByRole('heading', { level: 2, name: 'No intended parents found' })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+        expect(mockRouterReplace).toHaveBeenLastCalledWith('/intended-parents', { scroll: false })
     })
 
     it('uses page from URL params', () => {
@@ -200,7 +284,7 @@ describe('IntendedParentsPage', () => {
 
         render(<IntendedParentsPage />)
 
-        expect(screen.getByPlaceholderText(/search name/i)).toHaveValue('smith')
+        expect(screen.getByPlaceholderText('Search intended parents')).toHaveValue('smith')
         expect(mockUseIntendedParents).toHaveBeenCalledWith(
             expect.objectContaining({
                 page: 3,
@@ -221,7 +305,7 @@ describe('IntendedParentsPage', () => {
 
         render(<IntendedParentsPage />)
 
-        fireEvent.change(screen.getByPlaceholderText(/search name/i), {
+        fireEvent.change(screen.getByPlaceholderText('Search intended parents'), {
             target: { value: 'alice' },
         })
 
@@ -249,8 +333,53 @@ describe('IntendedParentsPage', () => {
         render(<IntendedParentsPage />)
 
         expect(screen.getByText('Permission required')).toBeInTheDocument()
-        expect(screen.getByText(/account does not have permission to view intended parents/i)).toBeInTheDocument()
-        expect(screen.queryByText('Failed to load intended parents')).not.toBeInTheDocument()
+        expect(screen.getByText(/Intended Parents need the View Intended Parents permission/)).toBeInTheDocument()
+        expect(screen.queryByText("Couldn't load intended parents")).not.toBeInTheDocument()
+    })
+
+    function openCreateDialog() {
+        render(<IntendedParentsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /new intended parent/i }))
+        fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Jordan Smith' } })
+    }
+
+    it('validates email inline before calling the API', async () => {
+        openCreateDialog()
+        const email = screen.getByLabelText(/^email \*/i)
+        fireEvent.change(email, { target: { value: 'jordan-at-example' } })
+        fireEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+        expect(await screen.findByText('Enter a valid email address.')).toBeInTheDocument()
+        expect(email).toHaveAttribute('aria-invalid', 'true')
+        expect(mockCreateIntendedParent).not.toHaveBeenCalled()
+        expect(mockToastError).not.toHaveBeenCalled()
+    })
+
+    it('maps a 422 email error to the field instead of a raw toast', async () => {
+        mockCreateIntendedParent.mockRejectedValue(
+            new ApiError(422, 'Unprocessable Entity', 'email: value is not a valid email address', [
+                { path: 'email', message: 'value is not a valid email address: An email address must have an @-sign.' },
+            ]),
+        )
+        openCreateDialog()
+        fireEvent.change(screen.getByLabelText(/^email \*/i), { target: { value: 'jordan@example.test' } })
+        fireEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+        expect(await screen.findByText('Enter a valid email address.')).toBeInTheDocument()
+        expect(screen.getByLabelText(/^email \*/i)).toHaveAttribute('aria-invalid', 'true')
+        expect(mockToastError).not.toHaveBeenCalled()
+    })
+
+    it('shows a sanitized toast when create fails on the server', async () => {
+        mockCreateIntendedParent.mockRejectedValue(new ApiError(500, 'Internal Server Error'))
+        openCreateDialog()
+        fireEvent.change(screen.getByLabelText(/^email \*/i), { target: { value: 'jordan@example.com' } })
+        fireEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+        await waitFor(() => {
+            expect(mockToastError).toHaveBeenCalledWith("Couldn't create intended parent. Try again.")
+        })
+        expect(screen.getByRole('dialog', { name: 'New Intended Parent' })).toBeInTheDocument()
     })
 
     it('creates an intended parent without requiring address or IVF clinic details', async () => {

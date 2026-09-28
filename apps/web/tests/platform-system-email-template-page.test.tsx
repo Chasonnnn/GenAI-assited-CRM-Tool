@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
     state: {
         templateBody: "<table><tbody><tr><td>Hello {{org_name}}</td></tr></tbody></table>",
         templateQueryError: false,
+        isBuiltin: true,
     },
 }))
 
@@ -82,6 +83,7 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
                       is_active: true,
                       current_version: 7,
                       updated_at: new Date().toISOString(),
+                      is_builtin: mocks.state.isBuiltin,
                   },
                   error: null,
                   isError: false,
@@ -119,10 +121,24 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
     useSendPlatformSystemEmailCampaign: () => ({ mutateAsync: mocks.sendCampaign }),
 }))
 
+async function openCampaignDialog() {
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Send campaign" }))
+    return screen.findByRole("dialog")
+}
+
+async function confirmCampaignSend(dialog: HTMLElement) {
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+    const confirm = await screen.findByRole("alertdialog")
+    fireEvent.click(within(confirm).getByRole("button", { name: "Send campaign" }))
+    return confirm
+}
+
 describe("PlatformSystemEmailTemplatePage", () => {
     beforeEach(() => {
         mocks.state.templateBody = "<table><tbody><tr><td>Hello {{org_name}}</td></tr></tbody></table>"
         mocks.state.templateQueryError = false
+        mocks.state.isBuiltin = true
         mocks.push.mockReset()
         mocks.update.mockReset()
         mocks.updateBranding.mockReset()
@@ -143,7 +159,7 @@ describe("PlatformSystemEmailTemplatePage", () => {
                     id: "org-1",
                     name: "Acme Surrogacy",
                     slug: "acme",
-                    subscription_plan: "Pro",
+                    subscription_plan: "professional",
                 },
             ],
         })
@@ -188,7 +204,7 @@ describe("PlatformSystemEmailTemplatePage", () => {
         fireEvent.change(screen.getByLabelText("Subject"), {
             target: { value: "Updated invite {{org_name}}" },
         })
-        fireEvent.click(screen.getByRole("button", { name: "Save changes" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save" }))
 
         await waitFor(() =>
             expect(mocks.update).toHaveBeenCalledWith({
@@ -199,16 +215,94 @@ describe("PlatformSystemEmailTemplatePage", () => {
                 }),
             })
         )
-        expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled()
+        await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled())
+        expect(screen.getByText("Not saved")).toBeInTheDocument()
+        expect(mocks.toastError).toHaveBeenCalledWith("Couldn't save template.")
+        expect(mocks.toastError).not.toHaveBeenCalledWith("Version conflict")
     })
 
-    it("loads organizations when the campaign dialog opens", async () => {
+    it("lists organizations with plan labels in the campaign dialog", async () => {
         render(<PlatformSystemEmailTemplatePage />)
 
-        fireEvent.click(screen.getByRole("button", { name: "Send campaign" }))
-
         await waitFor(() => expect(mocks.listOrganizations).toHaveBeenCalledWith({ limit: 200 }))
-        expect(await screen.findByText("Acme Surrogacy")).toBeInTheDocument()
+        const dialog = await openCampaignDialog()
+        expect(await within(dialog).findByText("Acme Surrogacy")).toBeInTheDocument()
+        expect(within(dialog).getByText("Professional")).toBeInTheDocument()
+        expect(within(dialog).queryByText("professional")).not.toBeInTheDocument()
+    })
+
+    it("keeps Send campaign disabled until a recipient is selected", async () => {
+        mocks.listMembers.mockResolvedValue([
+            {
+                id: "member-1",
+                user_id: "user-active",
+                email: "active@example.com",
+                display_name: "Active Member",
+                role: "admin",
+                is_active: true,
+                created_at: "2026-01-01T00:00:00Z",
+            },
+        ])
+        render(<PlatformSystemEmailTemplatePage />)
+
+        const dialog = await openCampaignDialog()
+        await within(dialog).findByText("Acme Surrogacy")
+        const send = within(dialog).getByRole("button", { name: "Send campaign" })
+        expect(send).toBeDisabled()
+        expect(within(dialog).getByText("0 recipients selected")).toBeInTheDocument()
+
+        fireEvent.click(within(dialog).getByText("Acme Surrogacy"))
+        await within(dialog).findByText("Active Member")
+        await waitFor(() => expect(send).toBeEnabled())
+
+        fireEvent.click(send)
+        const confirm = await screen.findByRole("alertdialog")
+        expect(within(confirm).getByText("Send to 1 organization?")).toBeInTheDocument()
+        expect(within(confirm).getByText("Organization Invite is sent to 1 recipient.")).toBeInTheDocument()
+        expect(mocks.sendCampaign).not.toHaveBeenCalled()
+    })
+
+    it("offers Reset to default instead of Delete for a built-in template", async () => {
+        mocks.deleteTemplate.mockResolvedValue(undefined)
+        render(<PlatformSystemEmailTemplatePage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+        expect(await screen.findByRole("menuitem", { name: "Reset to default" })).toBeInTheDocument()
+        expect(screen.queryByRole("menuitem", { name: "Delete" })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("menuitem", { name: "Reset to default" }))
+        const confirm = await screen.findByRole("alertdialog")
+        expect(within(confirm).getByText("Reset Organization Invite to default?")).toBeInTheDocument()
+        const resetButton = within(confirm).getByRole("button", { name: "Reset to default" })
+        expect(resetButton).not.toHaveClass("bg-destructive")
+
+        fireEvent.click(resetButton)
+        await waitFor(() => expect(mocks.deleteTemplate).toHaveBeenCalledWith({ systemKey: "org_invite" }))
+        expect(mocks.toastSuccess).toHaveBeenCalledWith("System template reset to default")
+        expect(mocks.push).not.toHaveBeenCalled()
+        expect(mocks.refetchTemplate).toHaveBeenCalled()
+    })
+
+    it("shows Delete with a destructive confirm for a custom template", async () => {
+        mocks.state.isBuiltin = false
+        mocks.deleteTemplate.mockResolvedValue(undefined)
+        render(<PlatformSystemEmailTemplatePage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }))
+        const confirm = await screen.findByRole("alertdialog")
+        const deleteButton = within(confirm).getByRole("button", { name: "Delete" })
+        expect(deleteButton).toHaveClass("bg-destructive")
+
+        fireEvent.click(deleteButton)
+        await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/ops/templates?tab=system"))
+    })
+
+    it("shows a preview placeholder when the body is empty", () => {
+        mocks.state.templateBody = ""
+        render(<PlatformSystemEmailTemplatePage />)
+
+        expect(screen.getByRole("heading", { name: "No content yet" })).toBeInTheDocument()
     })
 
     it("sends campaign to selected active organization members", async () => {
@@ -236,16 +330,15 @@ describe("PlatformSystemEmailTemplatePage", () => {
 
         render(<PlatformSystemEmailTemplatePage />)
 
-        fireEvent.click(screen.getByRole("button", { name: "Send campaign" }))
-        await screen.findByText("Acme Surrogacy")
-        fireEvent.click(screen.getByText("Acme Surrogacy"))
+        const dialog = await openCampaignDialog()
+        await within(dialog).findByText("Acme Surrogacy")
+        fireEvent.click(within(dialog).getByText("Acme Surrogacy"))
 
         await waitFor(() => expect(mocks.listMembers).toHaveBeenCalledWith("org-1"))
         expect(await screen.findByText("Active Member")).toBeInTheDocument()
         expect(screen.getByText("Inactive Member")).toBeInTheDocument()
 
-        const dialog = screen.getByRole("dialog")
-        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+        await confirmCampaignSend(dialog)
 
         await waitFor(() =>
             expect(mocks.sendCampaign).toHaveBeenCalledWith({
@@ -299,15 +392,15 @@ describe("PlatformSystemEmailTemplatePage", () => {
 
         render(<PlatformSystemEmailTemplatePage />)
 
-        fireEvent.click(screen.getByRole("button", { name: "Send campaign" }))
-        await screen.findByText("Acme Surrogacy")
-        fireEvent.click(screen.getByText("Acme Surrogacy"))
+        const dialog = await openCampaignDialog()
+        await within(dialog).findByText("Acme Surrogacy")
+        fireEvent.click(within(dialog).getByText("Acme Surrogacy"))
         await screen.findByText("Active Member")
 
-        const dialog = screen.getByRole("dialog")
-        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+        await confirmCampaignSend(dialog)
 
         await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
         expect(screen.getByRole("dialog")).toBeInTheDocument()
         expect(within(dialog).getByRole("alert")).toHaveAttribute("data-slot", "alert")
         expect(within(dialog).getByText("Campaign needs attention")).toBeInTheDocument()
@@ -322,7 +415,7 @@ describe("PlatformSystemEmailTemplatePage", () => {
         )
         expect(mocks.toastSuccess).not.toHaveBeenCalled()
 
-        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+        await confirmCampaignSend(dialog)
         await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(2))
 
         const firstOccurrenceId =
@@ -350,16 +443,17 @@ describe("PlatformSystemEmailTemplatePage", () => {
 
         render(<PlatformSystemEmailTemplatePage />)
 
-        fireEvent.click(screen.getByRole("button", { name: "Send campaign" }))
-        await screen.findByText("Acme Surrogacy")
-        fireEvent.click(screen.getByText("Acme Surrogacy"))
+        let dialog = await openCampaignDialog()
+        await within(dialog).findByText("Acme Surrogacy")
+        fireEvent.click(within(dialog).getByText("Acme Surrogacy"))
         await screen.findByText("Active Member")
 
-        let dialog = screen.getByRole("dialog")
-        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+        await confirmCampaignSend(dialog)
         await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
+        expect(mocks.toastError).toHaveBeenCalledWith("Couldn't send campaign.")
 
-        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+        await confirmCampaignSend(dialog)
         await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(2))
         await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
 
@@ -369,10 +463,9 @@ describe("PlatformSystemEmailTemplatePage", () => {
             mocks.sendCampaign.mock.calls[1][0].payload.campaign_occurrence_id
         expect(retriedOccurrenceId).toBe(firstOccurrenceId)
 
-        fireEvent.click(screen.getByRole("button", { name: "Send campaign" }))
-        await screen.findByText("Acme Surrogacy")
-        dialog = screen.getByRole("dialog")
-        fireEvent.click(within(dialog).getByRole("button", { name: "Send campaign" }))
+        dialog = await openCampaignDialog()
+        await within(dialog).findAllByText("Acme Surrogacy")
+        await confirmCampaignSend(dialog)
         await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(3))
 
         const nextOccurrenceId =
@@ -391,9 +484,9 @@ describe("PlatformSystemEmailTemplatePage", () => {
 
         render(<PlatformSystemEmailTemplatePage />)
 
-        fireEvent.change(screen.getByLabelText("Organization ID"), {
-            target: { value: "org-1" },
-        })
+        // The only agency is selected by default, so no raw organization id is typed.
+        expect(screen.queryByLabelText("Organization ID")).not.toBeInTheDocument()
+        await waitFor(() => expect(screen.getByLabelText("Agency")).toHaveTextContent("Acme Surrogacy"))
         fireEvent.change(screen.getByLabelText("Test email"), {
             target: { value: "qa@example.com" },
         })
@@ -422,4 +515,41 @@ describe("PlatformSystemEmailTemplatePage", () => {
         expect(mocks.toastSuccess).toHaveBeenCalledWith("Test email queued")
     })
 
+    it("requires an agency pick when several agencies exist", async () => {
+        mocks.listOrganizations.mockResolvedValue({
+            items: [
+                { id: "org-1", name: "Acme Surrogacy", slug: "acme", subscription_plan: "starter" },
+                { id: "org-2", name: "Beta Family", slug: "beta", subscription_plan: "starter" },
+            ],
+        })
+        mocks.sendTest.mockResolvedValue({ queued: true, message_id: null, email_log_id: "log-1" })
+
+        render(<PlatformSystemEmailTemplatePage />)
+
+        const agency = screen.getByLabelText("Agency")
+        await waitFor(() => expect(agency).toBeEnabled())
+        expect(agency).toHaveTextContent("Select agency")
+
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        expect(await screen.findByText("Select an agency.")).toBeInTheDocument()
+        expect(screen.getByText("Enter a test email.")).toBeInTheDocument()
+        expect(agency).toHaveAttribute("aria-invalid", "true")
+        expect(mocks.sendTest).not.toHaveBeenCalled()
+
+        fireEvent.click(agency)
+        const beta = await screen.findByRole("option", { name: /Beta Family/ })
+        fireEvent.mouseMove(beta)
+        fireEvent.click(beta)
+        await waitFor(() => expect(agency).toHaveTextContent("Beta Family"))
+        expect(agency).not.toHaveTextContent("org-2")
+
+        fireEvent.change(screen.getByLabelText("Test email"), { target: { value: "qa@example.com" } })
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        await waitFor(() =>
+            expect(mocks.sendTest).toHaveBeenCalledWith({
+                systemKey: "org_invite",
+                payload: expect.objectContaining({ org_id: "org-2", to_email: "qa@example.com" }),
+            })
+        )
+    })
 })

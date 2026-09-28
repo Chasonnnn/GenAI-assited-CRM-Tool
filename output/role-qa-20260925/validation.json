@@ -1,0 +1,26 @@
+{
+  "tested_commit": "c483b0f566025bde0b65a6410499158598238ee7",
+  "patch_sha256": "ddd4b49ba8caccde4a2ce04acb945bdb89dd859014e5e5248ec2742aad608516",
+  "patch_verified_against_baseline": true,
+  "baseline_page_visits": 135,
+  "roles": [
+    "admin",
+    "developer",
+    "intake_specialist",
+    "case_manager",
+    "operations"
+  ],
+  "frontend_test_files": 292,
+  "frontend_tests": 1808,
+  "task_server_pids_stopped": [
+    20570,
+    40258
+  ],
+  "task_ports_closed": [
+    8017,
+    3047
+  ],
+  "disposable_database_dropped": "crm_scheduling_roles_20260925",
+  "shared_database_service_stopped": false,
+  "temporary_environment_removed": true
+}

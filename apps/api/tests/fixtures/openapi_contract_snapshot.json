@@ -597,6 +597,12 @@
       "422"
     ]
   },
+  "/appointments/status-counts": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/appointments/types": {
     "GET": [
       "200",
@@ -4041,6 +4047,12 @@
       "422"
     ],
     "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/interview-appointment/open-days": {
+    "GET": [
       "200",
       "422"
     ]

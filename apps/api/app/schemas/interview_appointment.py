@@ -1,6 +1,6 @@
 """Contracts for managing a surrogate's initial interview appointment."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -44,6 +44,11 @@ class InterviewSlotRead(BaseModel):
 class InterviewSlotsRead(BaseModel):
     timezone: str
     slots: list[InterviewSlotRead]
+
+
+class InterviewOpenDaysRead(BaseModel):
+    timezone: str
+    dates: list[date]
 
 
 class InterviewGoogleSyncCheck(BaseModel):

@@ -20,6 +20,7 @@ export default function SurrogateHistoryPage() {
                 formatDateTime={formatDateTime}
                 status={activityQuery.isLoading ? "loading" : initialLoadError ? "error" : "ready"}
                 onRetry={() => { void activityQuery.refetch() }}
+                isRetrying={activityQuery.isFetching}
                 hasMore={activityQuery.hasNextPage}
                 isLoadingMore={activityQuery.isFetchingNextPage}
                 loadMoreError={activityQuery.isFetchNextPageError}

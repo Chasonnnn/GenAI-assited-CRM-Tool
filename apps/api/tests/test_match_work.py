@@ -527,3 +527,60 @@ async def test_owned_case_note_delete_requires_current_source_permission(
     deleted = await authed_client.delete(f"/matches/{current.id}/notes/{created.json()['id']}")
     assert deleted.status_code == 403
     assert len((await authed_client.get(f"/matches/{current.id}/work")).json()["notes"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_work_activity_omits_phi_access_audits(authed_client, db, test_auth, cases):
+    from app.db.enums import AuditEventType
+    from app.services import audit_service
+
+    _old, current, _attempt = cases
+    viewed = audit_service.log_phi_access(
+        db, test_auth.org.id, test_auth.user.id, "match", current.id
+    )
+    accepted = audit_service.log_event(
+        db,
+        test_auth.org.id,
+        AuditEventType.MATCH_ACCEPTED,
+        actor_user_id=test_auth.user.id,
+        target_type="match",
+        target_id=current.id,
+    )
+    db.flush()
+
+    await authed_client.get(f"/matches/{current.id}")
+    result = await authed_client.get(f"/matches/{current.id}/work")
+
+    assert result.status_code == 200, result.text
+    activity = result.json()["activity"]
+    assert str(accepted.id) in {a["id"] for a in activity}
+    assert str(viewed.id) not in {a["id"] for a in activity}
+    assert all(a["event_type"] != "Phi Viewed" for a in activity)
+
+
+@pytest.mark.asyncio
+async def test_work_tasks_include_due_time(authed_client, db, test_auth, cases):
+    from datetime import date, time
+
+    _old, current, _attempt = cases
+    task = Task(
+        organization_id=test_auth.org.id,
+        created_by_user_id=test_auth.user.id,
+        owner_type="user",
+        owner_id=test_auth.user.id,
+        title="Timed case task",
+        surrogate_id=current.surrogate_id,
+        intended_parent_id=current.intended_parent_id,
+        match_id=current.id,
+        due_date=date(2026, 10, 2),
+        due_time=time(14, 30),
+    )
+    db.add(task)
+    db.flush()
+
+    result = await authed_client.get(f"/matches/{current.id}/work")
+
+    assert result.status_code == 200, result.text
+    item = next(t for t in result.json()["tasks"] if t["id"] == str(task.id))
+    assert item["due_date"] == "2026-10-02"
+    assert item["due_time"] == "14:30:00"

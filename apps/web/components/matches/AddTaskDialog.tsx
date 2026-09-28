@@ -132,7 +132,7 @@ export function AddTaskDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle>Add Task</DialogTitle>
                     <DialogDescription>

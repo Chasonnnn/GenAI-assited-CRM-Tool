@@ -81,7 +81,7 @@ async def test_accept_eligibility_warning_names_ineligible_party_and_stage(
             target = _stage(db, record, stage)
             match = await _case(authed_client, ip, **{"donor" if donor else "surrogate": party})
             label = "Intended parent" if blocked == "ip" else "Donor" if donor else "Surrogate"
-            expected = f"{label} at {target.label} ({stage}) is not eligible to accept"
+            expected = f"{label} at {target.label} is not eligible to accept"
             assert match["status"] == "under_review"
             assert match["accept_eligibility_warnings"] == [expected]
             assert "accept" not in match["allowed_actions"]
@@ -451,7 +451,7 @@ async def test_donor_complete_keeps_participant_stages(authed_client, db, subtes
             later = await _case(
                 authed_client, await _create_intended_parent(authed_client), donor=donor
             )
-            assert "Donor at Matched (matched)" in later["accept_eligibility_warnings"][0]
+            assert "Donor at Matched is not" in later["accept_eligibility_warnings"][0]
 
 
 @pytest.mark.asyncio

@@ -40,7 +40,8 @@ apps/web/.vitest/
 *.local
 .turbo
 cookies.txt
-/docs/
+/docs/*
+!/docs/adr/
 apps/api/.attachments/
 report_json.json
 report_md.md

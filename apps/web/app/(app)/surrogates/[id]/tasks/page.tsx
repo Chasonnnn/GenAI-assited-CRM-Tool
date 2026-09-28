@@ -6,7 +6,6 @@ import { AddSurrogateTaskDialog, type SurrogateTaskFormData } from "@/components
 import { SurrogateTasksTab } from "@/components/surrogates/tabs/SurrogateTasksTab"
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog"
 import { useTasks } from "@/lib/hooks/use-tasks"
-import { useSurrogate } from "@/lib/hooks/use-surrogates"
 import type { TaskListItem } from "@/lib/types/task"
 import type { TaskUpdatePayload } from "@/lib/api/tasks"
 import { useTaskActions } from "@/lib/hooks/use-task-actions"
@@ -16,11 +15,19 @@ import { useSurrogateDetailData } from "@/components/surrogates/detail/Surrogate
 export default function SurrogateTasksPage() {
     const params = useParams<{ id: string }>()
     const id = params.id
-    const { data: surrogateData } = useSurrogate(id)
-    const { data: tasksData, isLoading: tasksLoading } = useTasks({
+    const tasksQuery = useTasks({
         surrogate_id: id,
         exclude_approvals: true,
     })
+    const tasksData = tasksQuery.data
+    // A failed background refetch keeps the loaded list; only a failed first load shows the error.
+    const tasksLoadError = tasksQuery.isError && !tasksData
+        ? {
+            error: tasksQuery.error,
+            onRetry: () => { void tasksQuery.refetch() },
+            isRetrying: tasksQuery.isFetching,
+        }
+        : null
     const taskActions = useTaskActions()
     const { user } = useAuth()
     const { effectivePermissions } = useSurrogateDetailData()
@@ -66,7 +73,8 @@ export default function SurrogateTasksPage() {
             <SurrogateTasksTab
                 surrogateId={id}
                 tasks={tasksData?.items || []}
-                isLoading={tasksLoading}
+                isLoading={tasksQuery.isLoading}
+                loadError={tasksLoadError}
                 canCreateTask={canCreateTask}
                 canToggleTask={canToggleTask}
                 onTaskToggle={handleTaskToggle}
@@ -78,7 +86,6 @@ export default function SurrogateTasksPage() {
                 onOpenChange={setAddTaskDialogOpen}
                 onSubmit={handleAddTask}
                 isPending={taskActions.isCreating}
-                surrogateName={surrogateData?.full_name || "this surrogate"}
             />
             {editingTaskId ? <TaskDetailDialog
                 taskId={editingTaskId}

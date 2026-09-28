@@ -18,11 +18,16 @@ import {
 } from "lucide-react"
 import { useAlerts, useAlertsSummary, useResolveAlert, useAcknowledgeAlert, useSnoozeAlert } from "@/lib/hooks/use-ops"
 import { formatRelativeTime } from "@/lib/formatters"
+import { QueryErrorState } from "@/components/error-state"
+import { EmptyValue } from "@/components/ui/empty-value"
+import { PageHeader } from "@/components/page-header"
+import { SettingsPageGate } from "../settings-page-gate"
 
 const severityConfig = {
-    critical: { icon: XCircleIcon, color: "text-red-600 bg-red-100 dark:bg-red-900/30", badge: "destructive" },
-    error: { icon: AlertCircleIcon, color: "text-orange-600 bg-orange-100 dark:bg-orange-900/30", badge: "destructive" },
-    warn: { icon: AlertTriangleIcon, color: "text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30", badge: "warning" },
+    // Dark tints stay at 950/30 so the destructive "open" badge on top keeps 4.5:1.
+    critical: { icon: XCircleIcon, color: "text-red-600 bg-red-100 dark:bg-red-950/30 dark:text-red-400", badge: "destructive" },
+    error: { icon: AlertCircleIcon, color: "text-orange-600 bg-orange-100 dark:bg-orange-950/30 dark:text-orange-400", badge: "destructive" },
+    warn: { icon: AlertTriangleIcon, color: "text-yellow-600 bg-yellow-100 dark:bg-yellow-950/30", badge: "warning" },
 } as const
 
 const isSeverityKey = (value: string): value is keyof typeof severityConfig =>
@@ -39,12 +44,33 @@ const alertTypeLabels: Record<string, string> = {
 }
 
 export default function AlertsPage() {
+    return (
+        <SettingsPageGate
+            title="System Alerts"
+            permission="manage_ops"
+            deniedDescription="System Alerts need the Manage ops permission. Ask an admin to update your role."
+        >
+            <AlertsContent />
+        </SettingsPageGate>
+    )
+}
+
+function AlertsContent() {
     const [statusFilter, setStatusFilter] = useState<string>("open")
 
-    const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useAlertsSummary()
-    const { data: alertsData, isLoading: alertsLoading, refetch: refetchAlerts } = useAlerts(
-        statusFilter !== "all" ? { status: statusFilter } : {}
-    )
+    const {
+        data: summary,
+        isLoading: summaryLoading,
+        refetch: refetchSummary,
+    } = useAlertsSummary()
+    const {
+        data: alertsData,
+        isLoading: alertsLoading,
+        isError: alertsError,
+        error: alertsQueryError,
+        isFetching: alertsFetching,
+        refetch: refetchAlerts,
+    } = useAlerts(statusFilter !== "all" ? { status: statusFilter } : {})
 
     const resolveAlert = useResolveAlert()
     const acknowledgeAlert = useAcknowledgeAlert()
@@ -59,21 +85,16 @@ export default function AlertsPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            {/* Page Header */}
-            <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <div className="flex h-16 items-center justify-between px-6">
-                    <div className="flex items-center gap-3">
-                        <h1 className="text-2xl font-semibold">System Alerts</h1>
-                        {totalOpen > 0 && (
-                            <Badge variant="destructive">{totalOpen} open</Badge>
-                        )}
-                    </div>
+            <PageHeader
+                title="System Alerts"
+                meta={totalOpen > 0 ? <Badge variant="destructive">{totalOpen} open</Badge> : null}
+                actions={
                     <Button variant="outline" size="sm" onClick={handleRefresh}>
                         <RefreshCwIcon className="mr-2 size-4" aria-hidden="true" />
                         Refresh
                     </Button>
-                </div>
-            </div>
+                }
+            />
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">
@@ -88,7 +109,7 @@ export default function AlertsPage() {
                             {summaryLoading ? (
                                 <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <div className="text-2xl font-bold text-red-600">{summary?.critical ?? 0}</div>
+                                <div className="text-2xl font-bold text-red-600">{summary ? summary.critical : <EmptyValue label="Unavailable" />}</div>
                             )}
                         </CardContent>
                     </Card>
@@ -102,7 +123,7 @@ export default function AlertsPage() {
                             {summaryLoading ? (
                                 <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <div className="text-2xl font-bold text-orange-600">{summary?.error ?? 0}</div>
+                                <div className="text-2xl font-bold text-orange-600">{summary ? summary.error : <EmptyValue label="Unavailable" />}</div>
                             )}
                         </CardContent>
                     </Card>
@@ -116,7 +137,7 @@ export default function AlertsPage() {
                             {summaryLoading ? (
                                 <Loader2Icon className="size-6 animate-spin motion-reduce:animate-none" aria-hidden="true" />
                             ) : (
-                                <div className="text-2xl font-bold text-yellow-600">{summary?.warn ?? 0}</div>
+                                <div className="text-2xl font-bold text-yellow-600">{summary ? summary.warn : <EmptyValue label="Unavailable" />}</div>
                             )}
                         </CardContent>
                     </Card>
@@ -160,6 +181,14 @@ export default function AlertsPage() {
                             <div className="flex items-center justify-center py-12">
                                 <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
                             </div>
+                        ) : alertsError ? (
+                            <QueryErrorState
+                                error={alertsQueryError}
+                                onRetry={() => void refetchAlerts()}
+                                isRetrying={alertsFetching}
+                                title="Couldn't load alerts"
+                                className="min-h-0 py-10"
+                            />
                         ) : (alertsData?.items?.length ?? 0) === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                                 <CheckCircleIcon className="mb-2 size-12 text-green-500" aria-hidden="true" />
@@ -180,9 +209,9 @@ export default function AlertsPage() {
                                             className={`flex items-start gap-4 rounded-lg border p-4 ${config.color}`}
                                         >
                                             <Icon className="mt-0.5 size-5 flex-shrink-0" aria-hidden="true" />
-                                            <div className="flex-1 space-y-1">
+                                            <div className="min-w-0 flex-1 space-y-1">
                                                 <div className="flex items-start justify-between gap-2">
-                                                    <div>
+                                                    <div className="min-w-0 break-words">
                                                         <p className="font-medium">{alert.title}</p>
                                                         <p className="text-sm opacity-80">
                                                             {alertTypeLabels[alert.alert_type] || alert.alert_type}
@@ -193,9 +222,9 @@ export default function AlertsPage() {
                                                     </Badge>
                                                 </div>
                                                 {alert.message && (
-                                                    <p className="text-sm opacity-70">{alert.message}</p>
+                                                    <p className="break-words text-sm opacity-70">{alert.message}</p>
                                                 )}
-                                                <div className="flex items-center gap-4 text-xs opacity-60">
+                                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs opacity-60">
                                                     <span>
                                                         First seen: {formatRelativeTime(alert.first_seen_at, "Unknown")}
                                                     </span>
@@ -206,7 +235,7 @@ export default function AlertsPage() {
 
                                                 {/* Actions */}
                                                 {alert.status === "open" && (
-                                                    <div className="flex gap-2 pt-2">
+                                                    <div className="flex flex-wrap gap-2 pt-2">
                                                         <Button
                                                             size="sm"
                                                             variant="secondary"

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react"
 import type { ImgHTMLAttributes } from "react"
 
 import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
+import { ApiError } from "@/lib/api"
 import type {
     FormRead,
     FormSubmissionRead,
@@ -27,6 +28,11 @@ const { toastError, toastSuccess, useFormMappingOptionsMock } = vi.hoisted(() =>
 }))
 const navigationState = vi.hoisted(() => ({
     formId: "new",
+}))
+const permissionState = vi.hoisted(() => ({
+    isLoading: false,
+    isError: false,
+    permissions: ["manage_forms"] as string[],
 }))
 
 vi.mock("next/navigation", () => ({
@@ -67,6 +73,16 @@ vi.mock("@/lib/auth-context", () => ({
     }),
 }))
 
+vi.mock("@/lib/hooks/use-permission-check", () => ({
+    usePermissionCheck: () => ({
+        isLoading: permissionState.isLoading,
+        isError: permissionState.isError,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => permissionState.permissions.includes(permission),
+    }),
+}))
+
 vi.mock("@/lib/hooks/use-form-mapping-options", () => ({
     useFormMappingOptions: (leadKind: string) => useFormMappingOptionsMock(leadKind),
 }))
@@ -103,6 +119,9 @@ vi.mock("@/lib/hooks/use-forms", () => ({
 describe("FormBuilderPage", () => {
     beforeEach(() => {
         navigationState.formId = "new"
+        permissionState.isLoading = false
+        permissionState.isError = false
+        permissionState.permissions = ["manage_forms"]
         mockPush.mockReset()
         mockReplace.mockReset()
         mockUseForm.mockReset()
@@ -178,6 +197,133 @@ describe("FormBuilderPage", () => {
                 },
             ],
         })
+    })
+
+    it.each(["new", "form-1"])(
+        "shows the Form Builder denied state and sends no form requests without manage_forms (%s)",
+        (formId) => {
+            navigationState.formId = formId
+            permissionState.permissions = ["view_surrogates"]
+
+            render(<FormBuilderPage />)
+
+            expect(screen.getByRole("heading", { level: 1, name: "Form Builder" })).toBeInTheDocument()
+            expect(
+                screen.getByRole("heading", { level: 2, name: "No access to Form Builder" }),
+            ).toBeInTheDocument()
+            // The forms list requires the same permission, so the way out is the dashboard.
+            expect(screen.queryByRole("link", { name: "Back to forms" })).not.toBeInTheDocument()
+            expect(screen.getByRole("link", { name: "Go to Dashboard" })).toHaveAttribute(
+                "href",
+                "/dashboard",
+            )
+            expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument()
+            expect(mockUseForm).not.toHaveBeenCalled()
+            expect(mockFormMappings).not.toHaveBeenCalled()
+            expect(mockFormSubmissions).not.toHaveBeenCalled()
+            expect(useFormMappingOptionsMock).not.toHaveBeenCalled()
+        },
+    )
+
+    it("shows a load error with retry, not a blank page, when the form request fails", () => {
+        navigationState.formId = "form-1"
+        const refetch = vi.fn()
+        mockUseForm.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, "Internal Server Error", "database exploded"),
+            refetch,
+        })
+
+        render(<FormBuilderPage />)
+
+        expect(screen.getByRole("heading", { level: 2, name: "Couldn't load form" })).toBeInTheDocument()
+        expect(screen.queryByText(/database exploded/)).not.toBeInTheDocument()
+        expect(screen.queryByText("Loading form…")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
+    it("shows the not-found state when the form does not exist", () => {
+        navigationState.formId = "form-1"
+        mockUseForm.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(404, "Not Found", "Form not found"),
+            refetch: vi.fn(),
+        })
+
+        render(<FormBuilderPage />)
+
+        expect(screen.getByRole("heading", { level: 2, name: "Form not found" })).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to forms" })).toHaveAttribute(
+            "href",
+            "/automation/forms",
+        )
+    })
+
+    it("shows the denied state with a way back when the form request is forbidden", () => {
+        navigationState.formId = "form-1"
+        mockUseForm.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(403, "Forbidden", "Missing permission: manage_forms"),
+            refetch: vi.fn(),
+        })
+
+        render(<FormBuilderPage />)
+
+        expect(
+            screen.getByRole("heading", { level: 2, name: "No access to Form Builder" }),
+        ).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to forms" })).toHaveAttribute(
+            "href",
+            "/automation/forms",
+        )
+        expect(screen.queryByText(/Missing permission/)).not.toBeInTheDocument()
+    })
+
+    it("blocks the builder when the field mappings fail to load", () => {
+        navigationState.formId = "form-1"
+        mockUseForm.mockReturnValue({
+            data: {
+                id: "form-1",
+                name: "Mapped Form",
+                status: "draft",
+                purpose: "surrogate_application",
+                lead_kind: "surrogate",
+                created_at: "2026-07-16T00:00:00Z",
+                updated_at: "2026-07-16T00:00:00Z",
+                description: null,
+                form_schema: { pages: [{ title: "Page 1", fields: [] }] },
+                published_schema: null,
+                max_file_size_bytes: 10 * 1024 * 1024,
+                max_file_count: 10,
+                allowed_mime_types: null,
+                default_application_email_template_id: null,
+            } satisfies FormRead,
+            isLoading: false,
+        })
+        mockFormMappings.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, "Internal Server Error"),
+            refetch: vi.fn(),
+        })
+
+        render(<FormBuilderPage />)
+
+        expect(screen.getByRole("heading", { level: 2, name: "Couldn't load form" })).toBeInTheDocument()
+        expect(screen.queryByLabelText("Form name")).not.toBeInTheDocument()
     })
 
     it("uses design-system tab controls for workspace sections and a dedicated settings tab", () => {
@@ -265,12 +411,37 @@ describe("FormBuilderPage", () => {
         })
         fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
         fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
-        fireEvent.click(screen.getByRole("button", { name: /^publish$/i }))
 
-        expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Date of Birth"))
-        expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Phone"))
-        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+        const publishButton = screen.getByRole("button", { name: /^publish$/i })
+        expect(publishButton).toHaveAttribute("aria-disabled", "true")
+        expect(publishButton).toHaveAccessibleDescription(expect.stringContaining("Date of Birth"))
+        expect(publishButton).toHaveAccessibleDescription(expect.stringContaining("Phone"))
+        fireEvent.click(publishButton)
+        expect(toastError).not.toHaveBeenCalled()
         expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument()
+
+        const readiness = screen.getByRole("region", { name: "Required to publish" })
+        expect(within(readiness).getByText("Date of Birth")).toBeInTheDocument()
+        expect(within(readiness).getByText("Phone")).toBeInTheDocument()
+    })
+
+    it("adds missing identity fields from the readiness list and then allows publishing", async () => {
+        render(<FormBuilderPage />)
+
+        fireEvent.change(screen.getByLabelText("Form name"), {
+            target: { value: "Ready Intake" },
+        })
+        for (const label of ["Full Name", "Date of Birth", "Phone", "Email"]) {
+            // Adding a field selects it, which remounts the settings panel.
+            const readiness = screen.getByRole("region", { name: "Required to publish" })
+            fireEvent.click(within(readiness).getByRole("button", { name: `Add ${label} to form` }))
+        }
+
+        expect(screen.queryByRole("region", { name: "Required to publish" })).not.toBeInTheDocument()
+        const publishButton = screen.getByRole("button", { name: /^publish$/i })
+        expect(publishButton).not.toHaveAttribute("aria-disabled")
+        fireEvent.click(publishButton)
+        expect(await screen.findByRole("alertdialog", { name: /publish form/i })).toBeInTheDocument()
     })
 
     it("opens sharing from the link returned by a successful publish", async () => {
@@ -441,13 +612,20 @@ describe("FormBuilderPage", () => {
         expect(screen.queryByRole("option", { name: "Date of Birth" })).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole("option", { name: "Education" }))
 
-        fireEvent.click(screen.getByRole("button", { name: /^publish$/i }))
-
-        const error = await screen.findByRole("alert")
-        expect(error).toHaveTextContent("Full Name")
-        expect(error).toHaveTextContent("Email")
-        expect(error).toHaveTextContent("Profile Photo")
-        expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument()
+        const publishButton = screen.getByRole("button", { name: /^publish$/i })
+        expect(publishButton).toHaveAttribute("aria-disabled", "true")
+        expect(publishButton).toHaveAccessibleDescription(
+            "To publish, add Full Name, Email, Profile Photo.",
+        )
+        const readiness = screen.getByRole("region", { name: "Required to publish" })
+        expect(within(readiness).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+            "Full NameMissingAdd",
+            "EmailMissingAdd",
+            "Profile PhotoMissingAdd",
+        ])
+        fireEvent.click(within(readiness).getByRole("button", { name: "Add Profile Photo to form" }))
+        const updatedReadiness = screen.getByRole("region", { name: "Required to publish" })
+        expect(within(updatedReadiness).getByText("Profile Photo").closest("li")).toHaveTextContent("Added")
     })
 
     it("promotes a donor intake lead through the shared promotion route behavior", async () => {

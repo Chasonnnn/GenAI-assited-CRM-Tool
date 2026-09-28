@@ -1,0 +1,88 @@
+[
+  {
+    "role": "intake_specialist",
+    "route": "/reports",
+    "state": "denied",
+    "failed_requests": 0
+  },
+  {
+    "role": "intake_specialist",
+    "route": "/settings/team",
+    "state": "denied",
+    "failed_requests": 0
+  },
+  {
+    "role": "case_manager",
+    "route": "/settings/team",
+    "state": "denied",
+    "failed_requests": 0
+  },
+  {
+    "role": "operations",
+    "route": "/settings/team",
+    "state": "denied",
+    "failed_requests": 0
+  },
+  {
+    "role": "operations",
+    "route": "/appointments",
+    "state": "denied",
+    "failed_requests": 0
+  },
+  {
+    "role": "operations",
+    "route": "/settings/appointments",
+    "state": "denied",
+    "failed_requests": 0
+  },
+  {
+    "role": "operations",
+    "route": "/tasks",
+    "state": "allowed",
+    "failed_requests": 0
+  },
+  {
+    "role": "admin",
+    "route": "/reports",
+    "state": "allowed",
+    "failed_requests": 0
+  },
+  {
+    "role": "admin",
+    "route": "/settings/team",
+    "state": "allowed",
+    "failed_requests": 0
+  },
+  {
+    "role": "admin",
+    "route": "/appointments",
+    "state": "allowed",
+    "failed_requests": 0
+  },
+  {
+    "role": "admin",
+    "route": "/settings/appointments",
+    "state": "allowed",
+    "failed_requests": 0
+  },
+  {
+    "role": "developer",
+    "route": "/reports",
+    "state": "allowed",
+    "failed_requests": 0
+  },
+  {
+    "role": "developer",
+    "route": "/settings/team",
+    "state": "allowed",
+    "failed_requests": 0
+  },
+  {
+    "journey": "Permission loading, request error, and retry",
+    "pass": true
+  },
+  {
+    "journey": "Mobile role editor and protected Admin baseline",
+    "pass": true
+  }
+]

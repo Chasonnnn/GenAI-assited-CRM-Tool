@@ -1,35 +1,54 @@
+import type { ReactNode } from "react"
 import { ActivityIcon, PlusIcon } from "lucide-react"
 
+import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 
 export function AutomationPageHeader({
     activeTab,
     onOpenExecutions,
     onCreateTemplate,
+    canViewExecutions = true,
+    onCreateWorkflow,
 }: {
     activeTab: string
     onOpenExecutions: () => void
     onCreateTemplate: () => void
+    /**
+     * Pass the org workflow management check: the executions API requires manage_automation,
+     * plus manage_org_workflows under policy v2.
+     */
+    canViewExecutions?: boolean
+    /** Set on the Workflow Templates tab, which has no create action of its own. */
+    onCreateWorkflow?: (() => void) | undefined
 }) {
-    return (
-        <div className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center justify-between px-6">
-                <h1 className="text-2xl font-semibold">Workflows</h1>
-                <div className="flex gap-3">
-                    {activeTab === "workflows" && (
+    let actions: ReactNode = null
+    if (activeTab === "workflows") {
+        actions =
+            canViewExecutions || onCreateWorkflow ? (
+                <>
+                    {canViewExecutions ? (
                         <Button variant="outline" onClick={onOpenExecutions}>
                             <ActivityIcon className="mr-2 size-4" />
                             Execution History
                         </Button>
-                    )}
-                    {activeTab === "email-templates" && (
-                        <Button onClick={onCreateTemplate}>
+                    ) : null}
+                    {onCreateWorkflow ? (
+                        <Button onClick={onCreateWorkflow}>
                             <PlusIcon className="mr-2 size-4" />
-                            New Template
+                            Create Workflow
                         </Button>
-                    )}
-                </div>
-            </div>
-        </div>
-    )
+                    ) : null}
+                </>
+            ) : null
+    } else if (activeTab === "email-templates") {
+        actions = (
+            <Button onClick={onCreateTemplate}>
+                <PlusIcon className="mr-2 size-4" />
+                New Template
+            </Button>
+        )
+    }
+
+    return <PageHeader title="Workflows" actions={actions} />
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
 import { useQuery } from "@tanstack/react-query"
+import { ApiError } from "@/lib/api"
 
 vi.mock("@tanstack/react-query", async (importOriginal) => {
     const actual = await importOriginal<typeof import("@tanstack/react-query")>()
@@ -12,7 +13,10 @@ import CampaignDetailPage from "../app/(app)/automation/campaigns/[id]/page.clie
 const mockPush = vi.fn()
 const mockUseRunRecipients = vi.fn()
 const mockUpdateCampaign = vi.fn()
+const mockDeleteCampaign = vi.fn()
+const mockSendCampaign = vi.fn()
 const mockPublishCampaign = vi.fn()
+let mockCampaignError: Error | null = null
 let mockSearchParams = new URLSearchParams()
 let mockPreviewData: {
     total_count: number
@@ -68,8 +72,11 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/hooks/use-campaigns", () => ({
     useCampaign: () => ({
-        data: mockCampaignData,
+        data: mockCampaignError ? undefined : mockCampaignData,
         isLoading: false,
+        error: mockCampaignError,
+        isFetching: false,
+        refetch: vi.fn(),
     }),
     useCampaignRuns: () => ({
         data: [
@@ -96,11 +103,11 @@ vi.mock("@/lib/hooks/use-campaigns", () => ({
     }),
     useRunRecipients: (campaignId: string, runId: string, params?: { status?: string; limit?: number }) =>
         mockUseRunRecipients(campaignId, runId, params),
-    useDeleteCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDeleteCampaign: () => ({ mutateAsync: mockDeleteCampaign, isPending: false }),
     usePublishCampaign: () => ({ mutate: mockPublishCampaign, isPending: false }),
     useDuplicateCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useCancelCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useSendCampaign: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useSendCampaign: () => ({ mutateAsync: mockSendCampaign, isPending: false }),
     useUpdateCampaign: () => ({ mutateAsync: mockUpdateCampaign, isPending: false }),
     useRetryFailedCampaignRun: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
@@ -204,6 +211,11 @@ describe("CampaignDetailPage", () => {
         mockPublishCampaign.mockReset()
         mockUpdateCampaign.mockReset()
         mockUpdateCampaign.mockResolvedValue({})
+        mockDeleteCampaign.mockReset()
+        mockDeleteCampaign.mockResolvedValue({})
+        mockSendCampaign.mockReset()
+        mockSendCampaign.mockResolvedValue({ run_id: "run2" })
+        mockCampaignError = null
         mockUseRunRecipients.mockReturnValue({ data: [] })
         mockPreviewData = { total_count: 0, sample_recipients: [] }
     })
@@ -422,10 +434,93 @@ describe("CampaignDetailPage", () => {
             }))
         })
     })
-    it("uses separate edit and send capabilities", () => {
+
+    it("keeps Duplicate and Delete in the kebab and confirms delete by name", async () => {
+        mockCampaignData = { ...mockCampaignData, status: "draft" }
+        render(<CampaignDetailPage />)
+
+        expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "More campaign actions" }))
+        expect(await screen.findByRole("menuitem", { name: "Duplicate" })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }))
+
+        const confirm = await screen.findByRole("alertdialog")
+        expect(within(confirm).getByText("Delete Test Campaign?")).toBeInTheDocument()
+        fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }))
+
+        await waitFor(() => expect(mockDeleteCampaign).toHaveBeenCalledWith("camp1"))
+        await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/automation/campaigns"))
+    })
+
+    it("wraps the header actions below a long name at narrow widths", () => {
+        mockCampaignData = { ...mockCampaignData, status: "draft" }
+        render(<CampaignDetailPage />)
+
+        const title = screen.getByRole("heading", { level: 1, name: "Test Campaign" })
+        expect(title).toHaveClass("min-w-0", "break-words")
+        const actions = screen.getByRole("button", { name: "Send Now" }).parentElement
+        expect(actions).toHaveClass("flex-wrap")
+        const row = actions?.parentElement
+        expect(row).toHaveClass("flex-wrap")
+        expect(row).toContainElement(title)
+        expect(actions).toContainElement(screen.getByRole("button", { name: "More campaign actions" }))
+    })
+
+    it("names the recipient count in the Send Now confirmation", async () => {
+        mockCampaignData = { ...mockCampaignData, status: "draft" }
+        mockPreviewData = { total_count: 12, sample_recipients: [] }
+        render(<CampaignDetailPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Send Now" }))
+
+        const confirm = await screen.findByRole("alertdialog")
+        expect(within(confirm).getByText("Send to 12 recipients now?")).toBeInTheDocument()
+        fireEvent.click(within(confirm).getByRole("button", { name: "Send now" }))
+        await waitFor(() =>
+            expect(mockSendCampaign).toHaveBeenCalledWith({ id: "camp1", sendNow: true }),
+        )
+    })
+
+    it("hides manage actions and the recipient preview without campaign access", () => {
         mockCampaignData = { ...mockCampaignData, status: "draft", can_edit: false, can_send: false }
         render(<CampaignDetailPage />)
-        for (const name of ["Edit", "Send Now", "Duplicate", "Delete"]) expect(screen.getByRole("button", { name })).toBeDisabled()
+
+        expect(screen.queryByRole("button", { name: /^edit$/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Send Now" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "More campaign actions" })).not.toBeInTheDocument()
+        expect(screen.getByText("Recipient preview requires campaign access")).toBeInTheDocument()
+    })
+
+    it("shows a not-found state for a missing campaign", () => {
+        mockCampaignError = new ApiError(404, "Not Found", "Campaign not found")
+        render(<CampaignDetailPage />)
+
+        expect(screen.getByRole("heading", { level: 1, name: "Campaign not found" })).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Back to Campaigns" })).toHaveAttribute(
+            "href",
+            "/automation/campaigns",
+        )
+    })
+
+    it("shows one empty message for a campaign that has no recipients in its run", () => {
+        render(<CampaignDetailPage />)
+
+        expect(screen.getAllByText("No recipients in this run")).toHaveLength(1)
+    })
+
+    it("uses separate edit and send capabilities", () => {
+        mockCampaignData = { ...mockCampaignData, status: "draft", can_edit: false, can_send: true }
+        const view = render(<CampaignDetailPage />)
+        expect(screen.getByRole("button", { name: "Send Now" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /^edit$/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "More campaign actions" })).not.toBeInTheDocument()
+        view.unmount()
+
+        mockCampaignData = { ...mockCampaignData, status: "draft", can_edit: true, can_send: false }
+        render(<CampaignDetailPage />)
+        expect(screen.getByRole("button", { name: /^edit$/i })).toBeEnabled()
+        expect(screen.getByRole("button", { name: "More campaign actions" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Send Now" })).not.toBeInTheDocument()
     })
 
     it("shows proposer credit in Details and publishes a separate organization campaign", () => {

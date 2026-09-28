@@ -112,4 +112,47 @@ describe("MatchDetailOverviewTabs", () => {
         expect(screen.getByRole("button", { name: "Download agreement.pdf" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Delete agreement.pdf" })).toBeInTheDocument()
     })
+
+    it("renders case work sections as a scrollable line tab list", () => {
+        const onTabChange = vi.fn()
+        render(<MatchDetailOverviewTabs {...historyProps} onTabChange={onTabChange} />)
+
+        const tabList = screen.getByRole("tablist", { name: "Case work" })
+        expect(tabList).toHaveAttribute("data-variant", "line")
+        expect(tabList).toHaveClass("w-full", "overflow-x-auto")
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Notes", "Files", "Tasks", "Activity"])
+        expect(screen.getByRole("tab", { name: "Notes" })).toHaveAttribute("aria-selected", "true")
+        expect(screen.getByRole("tabpanel")).toHaveTextContent("Retained participant history")
+        for (const icon of tabList.querySelectorAll("svg")) {
+            // Icons only from 2xl: with icons the four tabs overflow the column up to 1440px.
+            expect(icon).toHaveClass("hidden", "2xl:inline")
+            expect(icon).not.toHaveClass("xl:inline")
+        }
+
+        fireEvent.click(screen.getByRole("tab", { name: "Files" }))
+        expect(onTabChange).toHaveBeenCalledWith("files")
+    })
+
+    it("labels the default source filter All Sources", () => {
+        render(<MatchDetailOverviewTabs {...historyProps} />)
+        // Trigger value and the first option share the label.
+        expect(screen.getAllByText("All Sources")).toHaveLength(2)
+        expect(screen.queryByText(/^All$/)).not.toBeInTheDocument()
+    })
+
+    it("shows the due time next to the due date on case tasks", () => {
+        render(
+            <MatchDetailOverviewTabs
+                {...historyProps}
+                activeTab="tasks"
+                filteredNotes={[]}
+                filteredTasks={[
+                    { id: "timed", title: "Call clinic", due_date: "2026-01-01", due_time: "14:30:00", is_completed: false, source: "match" },
+                    { id: "untimed", title: "Send packet", due_date: "2026-01-01", due_time: null, is_completed: false, source: "match" },
+                ]}
+            />,
+        )
+        expect(screen.getByText("Due: Jan 1, 2026 · 2:30 PM")).toBeInTheDocument()
+        expect(screen.getByText("Due: Jan 1, 2026")).toBeInTheDocument()
+    })
 })

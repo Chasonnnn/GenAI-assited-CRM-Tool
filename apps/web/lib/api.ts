@@ -9,11 +9,18 @@ import { toast } from '@/components/ui/toast';
 
 const API_BASE = getApiBase();
 
+/** One FastAPI/Pydantic validation item: `path` is `loc` without its source segment ("body"). */
+export type ApiValidationIssue = {
+    path: string;
+    message: string;
+};
+
 export class ApiError extends Error {
     constructor(
         public status: number,
         public statusText: string,
-        message?: string
+        message?: string,
+        public issues: ApiValidationIssue[] = []
     ) {
         super(message || `${status} ${statusText}`);
         this.name = 'ApiError';
@@ -47,6 +54,28 @@ export function parseApiErrorPayload(payload: unknown): string | undefined {
     if (typeof detail === 'string') return detail;
     if (typeof message === 'string') return message;
     return undefined;
+}
+
+export function parseApiValidationIssues(payload: unknown): ApiValidationIssue[] {
+    if (!payload || typeof payload !== 'object') return [];
+
+    const { detail } = payload as { detail?: unknown };
+    if (!Array.isArray(detail)) return [];
+
+    const issues: ApiValidationIssue[] = [];
+    for (const item of detail) {
+        if (!item || typeof item !== 'object') continue;
+        const { loc, msg } = item as { loc?: unknown; msg?: unknown };
+        if (typeof msg !== 'string') continue;
+        const path = Array.isArray(loc)
+            ? loc
+                .slice(1)
+                .filter((part): part is string | number => typeof part === 'string' || typeof part === 'number')
+                .join('.')
+            : '';
+        issues.push({ path, message: msg });
+    }
+    return issues;
 }
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
@@ -110,14 +139,16 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
     if (!response.ok) {
         let message: string | undefined;
+        let issues: ApiValidationIssue[] = [];
         try {
             const err = await response.json();
             message = parseApiErrorPayload(err);
+            issues = parseApiValidationIssues(err);
         } catch {
             // Ignore JSON parse errors
         }
 
-        throw new ApiError(response.status, response.statusText, message);
+        throw new ApiError(response.status, response.statusText, message, issues);
     }
 
     // Handle 204 No Content

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ShieldCheck, UserPlus, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react"
 import api from "@/lib/api"
+import { isNotFoundError } from "@/lib/error-utils"
 
 interface InviteDetails {
     id: string
@@ -44,11 +45,14 @@ export default function InviteAcceptPageClient() {
     })
     const invite = inviteQuery.data ?? null
     const isLoading = inviteQuery.isLoading
-    const error = inviteQuery.error instanceof Error
-        ? inviteQuery.error.message
-        : inviteQuery.error
-          ? "Invite not found"
-          : null
+    // Never show the API message: a malformed id returns raw validation text (422).
+    const inviteInvalid = isNotFoundError(inviteQuery.error, { includeInvalidId: true })
+    const error = inviteQuery.error
+        ? inviteInvalid
+            ? "This invitation is invalid or has expired."
+            : "Refresh the page to try again."
+        : null
+    const errorTitle = inviteInvalid ? "Invitation not found" : "Couldn't load invitation"
     const currentOrgId = currentUserQuery.data?.org_id ?? null
 
     const handleSignIn = () => {
@@ -111,9 +115,11 @@ export default function InviteAcceptPageClient() {
                         <CardTitle className="text-3xl font-bold text-zinc-900">
                             {isLoading
                                 ? "Loading..."
-                                : invite?.status === "accepted"
-                                    ? "Welcome!"
-                                    : "You're Invited"}
+                                : error && !invite
+                                    ? errorTitle
+                                    : invite?.status === "accepted"
+                                        ? "Welcome!"
+                                        : "You're Invited"}
                         </CardTitle>
                     </div>
                 </CardHeader>

@@ -68,6 +68,9 @@ def list_tasks(
     attempt_id: UUID | None = None,
     include_record_history: bool = False,
     donor_type: Literal["egg", "sperm"] | None = None,
+    linked_type: Annotated[
+        Literal["surrogate", "intended_parent", "donor", "none"] | None, "fastapi_param"
+    ] = Query(None, description="Filter by linked record kind"),
     pipeline_id: Annotated[UUID | None, "fastapi_param"] = Query(
         None, description="Filter tasks by pipeline UUID"
     ),
@@ -106,6 +109,7 @@ def list_tasks(
         attempt_id=attempt_id,
         include_record_history=include_record_history,
         donor_type=donor_type,
+        linked_type=linked_type,
         pipeline_id=pipeline_id,
         is_completed=is_completed,
         task_type=task_type,

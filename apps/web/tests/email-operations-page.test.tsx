@@ -961,6 +961,50 @@ describe("EmailOperationsDashboard", () => {
         ).toBeInTheDocument()
     })
 
+    it.each([
+        { name: "integration manager", permissions: ["manage_integrations"], action: true },
+        { name: "viewer", permissions: [], action: false },
+    ])("replaces repeated readiness checks with one empty state when no provider is set ($name)", ({ permissions, action }) => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions } })
+        mockUseReadiness.mockReturnValue({
+            data: {
+                ...readiness,
+                overall: "not_configured",
+                can_send: false,
+                can_track: false,
+                checks: Array.from({ length: 7 }, (_, index) => ({
+                    key: `check_${index}`,
+                    status: "fail",
+                    detail: "No email provider configuration is persisted.",
+                    observed_at: null,
+                })),
+            },
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            refetch: mockRefetchReadiness,
+        })
+
+        render(<EmailOperationsDashboard />)
+        fireEvent.click(screen.getByRole("button", { name: /Diagnostics/i }))
+
+        expect(screen.getByRole("heading", { name: "No email provider configured" })).toBeInTheDocument()
+        expect(screen.queryByText("No email provider configuration is persisted.")).not.toBeInTheDocument()
+        const configure = screen.queryByRole("link", { name: "Configure email" })
+        if (action) {
+            expect(configure).toHaveAttribute("href", "/settings/integrations")
+            // The Diagnostics accordion styles descendant links as underlined text links.
+            expect(configure).toHaveClass("no-underline!", "hover:text-primary-foreground!")
+        } else {
+            expect(configure).not.toBeInTheDocument()
+        }
+    })
+
+    it("renders one main landmark from the app shell, not a nested one", () => {
+        render(<EmailOperationsDashboard />)
+        expect(screen.queryByRole("main")).not.toBeInTheDocument()
+    })
+
     it("paginates messages and opens a sanitized attempt and provider-event dialog", () => {
         render(<EmailOperationsDashboard />)
 

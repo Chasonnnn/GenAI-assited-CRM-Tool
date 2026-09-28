@@ -134,7 +134,8 @@ export function SurrogateJourneyTab({ surrogateId, editPermission }: SurrogateJo
 
             {/* Document-style header */}
             <div className="relative border-b border-stone-200/80 px-6 py-8 dark:border-stone-700/50 print:py-6">
-                <div className="absolute right-6 top-6 print:hidden">
+                {/* In the flow on phones so it cannot cover the centered title. */}
+                <div className="mb-4 flex justify-end print:hidden sm:absolute sm:right-6 sm:top-6 sm:mb-0">
                     <DropdownMenu>
                         <DropdownMenuTrigger
                             disabled={isExporting}

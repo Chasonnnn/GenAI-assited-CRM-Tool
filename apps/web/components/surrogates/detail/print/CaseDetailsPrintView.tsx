@@ -1,7 +1,9 @@
 import { format, isBefore, parseISO, startOfToday } from "date-fns"
 import type { ReactNode } from "react"
 import { computeBmi, formatDate, formatHeight } from "@/components/surrogates/detail/surrogate-detail-utils"
+import { EMPTY_VALUE_TEXT } from "@/components/ui/empty-value"
 import { formatRace } from "@/lib/formatters"
+import { getSurrogateSourceLabel } from "@/lib/surrogate-source-labels"
 import type { SurrogateCaseDetailsExportView } from "@/lib/api/surrogates"
 import type { TaskListItem } from "@/lib/api/tasks"
 
@@ -9,13 +11,13 @@ interface CaseDetailsPrintViewProps {
     data: SurrogateCaseDetailsExportView
 }
 
-function display(value: string | number | null | undefined, fallback: string = "-"): string {
+function display(value: string | number | null | undefined, fallback: string = EMPTY_VALUE_TEXT): string {
     if (value === null || value === undefined || value === "") return fallback
     return String(value)
 }
 
 function formatDateOrDash(value: string | null | undefined): string {
-    if (!value) return "-"
+    if (!value) return EMPTY_VALUE_TEXT
     return formatDate(value)
 }
 
@@ -24,7 +26,7 @@ function formatAddress(parts: Array<string | null | undefined>): string {
         const token = (part || "").trim()
         return token ? [token] : []
     })
-    return tokens.length > 0 ? tokens.join(", ") : "-"
+    return tokens.length > 0 ? tokens.join(", ") : EMPTY_VALUE_TEXT
 }
 
 function humanizeActivityType(value: string): string {
@@ -58,7 +60,7 @@ function taskGroups(tasks: TaskListItem[]) {
 }
 
 function dueLabel(task: TaskListItem): string {
-    if (!task.due_date) return "-"
+    if (!task.due_date) return EMPTY_VALUE_TEXT
     return format(parseISO(task.due_date), "MMM d, yyyy")
 }
 
@@ -99,9 +101,6 @@ export function CaseDetailsPrintView({ data }: CaseDetailsPrintViewProps) {
                 <header className="rounded-lg border bg-card p-4">
                     <h1 className="text-2xl font-semibold tracking-tight">Case Details</h1>
                     <p className="mt-1 text-base">{display(surrogate.full_name)}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                        Generated from current case data
-                    </p>
                 </header>
 
                 <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
@@ -111,7 +110,7 @@ export function CaseDetailsPrintView({ data }: CaseDetailsPrintViewProps) {
                             <Row label="Email" value={display(surrogate.email)} />
                             <Row label="Phone" value={display(surrogate.phone)} />
                             <Row label="State" value={display(surrogate.state)} />
-                            <Row label="Source" value={display(surrogate.source)} />
+                            <Row label="Source" value={getSurrogateSourceLabel(surrogate.source)} />
                             <Row label="Created" value={formatDateOrDash(surrogate.created_at)} />
                         </Section>
 
@@ -121,9 +120,9 @@ export function CaseDetailsPrintView({ data }: CaseDetailsPrintViewProps) {
                             <Row label="Height" value={formatHeight(surrogate.height_ft)} />
                             <Row
                                 label="Weight"
-                                value={surrogate.weight_lb ? `${surrogate.weight_lb} lb` : "-"}
+                                value={surrogate.weight_lb ? `${surrogate.weight_lb} lb` : EMPTY_VALUE_TEXT}
                             />
-                            <Row label="BMI" value={bmi !== null ? String(bmi) : "-"} />
+                            <Row label="BMI" value={bmi !== null ? String(bmi) : EMPTY_VALUE_TEXT} />
                         </Section>
 
                         <Section title="Insurance Information">

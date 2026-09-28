@@ -36,4 +36,20 @@ describe("IntendedParentFormFields", () => {
         expect(onChange).toHaveBeenCalledWith("pronouns", "They/Them")
         expect(onChange).toHaveBeenCalledWith("state", "CA")
     })
+
+    it("gives State the widest City / State / ZIP column so full state names fit", () => {
+        render(
+            <IntendedParentFormFields
+                values={{ ...EMPTY_INTENDED_PARENT_FORM_VALUES }}
+                onChange={vi.fn()}
+                idPrefix="test_"
+                showClinicSection={false}
+                showInternalNotes={false}
+            />,
+        )
+
+        const cityRow = screen.getByLabelText("City").closest(".grid")
+        expect(cityRow).toHaveClass("md:grid-cols-[1fr_1.4fr_0.8fr]")
+        expect(cityRow).not.toHaveClass("md:grid-cols-3")
+    })
 })

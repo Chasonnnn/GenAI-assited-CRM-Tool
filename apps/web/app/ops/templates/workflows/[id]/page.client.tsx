@@ -1,7 +1,15 @@
 "use client"
 
 import { FORM_LEAD_KIND_OPTIONS } from "@/lib/forms/form-lead-kind"
-import { useEffect, useReducer, useRef, useState, type Dispatch, type SetStateAction } from "react"
+import {
+    useEffect,
+    useReducer,
+    useRef,
+    useState,
+    type Dispatch,
+    type RefObject,
+    type SetStateAction,
+} from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,16 +19,16 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { SaveStatus, type SaveStatusState } from "@/components/ui/save-bar"
+import { PageHeader } from "@/components/page-header"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import { useWorkflowOptions } from "@/lib/hooks/use-workflows"
 import {
     useCreatePlatformWorkflowTemplate,
@@ -36,8 +44,8 @@ import { PublishDialog } from "@/components/ops/templates/PublishDialog"
 import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
 import { US_STATES } from "@/lib/constants/us-states"
 import {
-    ArrowLeftIcon,
     Loader2Icon,
+    MoreHorizontalIcon,
     PlusIcon,
     Trash2Icon,
     XIcon,
@@ -169,14 +177,7 @@ function getWorkflowSubjectValidationError(subjectType: string | null, triggerTy
     return null
 }
 
-function getWorkflowDetailsValidationError(
-    name: string,
-    subjectType: string | null,
-    triggerType: string
-): string | null {
-    if (!name.trim()) return "Template name is required."
-    return getWorkflowSubjectValidationError(subjectType, triggerType)
-}
+const WORKFLOW_NAME_REQUIRED_MESSAGE = "Enter a template name."
 
 const ICON_OPTIONS = ["template", "mail", "clock", "bell", "activity", "alert-circle"]
 const ICON_LABELS: Record<string, string> = {
@@ -822,53 +823,16 @@ type TemplateQueueOption = {
 type UpdateConditionHandler = (index: number, updates: Partial<Condition>) => void
 type UpdateActionHandler = (index: number, updates: Partial<ActionConfig>) => void
 
-type WorkflowTemplateDeleteDialogProps = {
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    onDelete: () => void
-    isDeleting: boolean
-    name: string
-}
-
-function WorkflowTemplateDeleteDialog({
-    open,
-    onOpenChange,
-    onDelete,
-    isDeleting,
-    name,
-}: WorkflowTemplateDeleteDialogProps) {
-    return (
-        <AlertDialog open={open} onOpenChange={onOpenChange}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Delete template?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This permanently deletes{" "}
-                        <span className="font-medium text-foreground">{name || "this template"}</span>. This cannot be undone.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                        onClick={onDelete}
-                        disabled={isDeleting}
-                        className="bg-destructive text-white hover:bg-destructive/90"
-                    >
-                        Delete
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-    )
-}
-
 type WorkflowTemplateHeaderProps = {
     name: string
     setName: (value: string) => void
+    nameInputRef: RefObject<HTMLInputElement | null>
+    nameError: string | null
+    onNameBlur: () => void
     mode: "new" | "existing"
     publicationStatus: "published" | "draft"
+    saveStatus: SaveStatusState
     busyAction: "delete" | "save" | "publish" | null
-    onBack: () => void
     onDelete: () => void
     onSave: () => void
     onPublish: () => void
@@ -877,61 +841,87 @@ type WorkflowTemplateHeaderProps = {
 function WorkflowTemplateHeader({
     name,
     setName,
+    nameInputRef,
+    nameError,
+    onNameBlur,
     mode,
     publicationStatus,
+    saveStatus,
     busyAction,
-    onBack,
     onDelete,
     onSave,
     onPublish,
 }: WorkflowTemplateHeaderProps) {
     const isPublished = publicationStatus === "published"
     const isNewTemplate = mode === "new"
-    const isDeleting = busyAction === "delete"
     const isSaving = busyAction === "save"
     const isPublishing = busyAction === "publish"
     const isBusy = busyAction !== null
 
     return (
-        <div className="flex h-16 items-center justify-between border-b border-stone-200 bg-white px-6 dark:border-stone-800 dark:bg-stone-900">
-            <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" aria-label="Back to workflow templates" onClick={onBack}>
-                    <ArrowLeftIcon className="size-5" aria-hidden="true" />
-                </Button>
-                <Input
-                    id="workflow-name"
-                    aria-label="Workflow template name"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Workflow template name…"
-                    className="h-9 w-72 border-none bg-transparent px-0 text-lg font-semibold focus-visible:ring-0"
-                />
-                <Badge variant={isPublished ? "default" : "secondary"} className={isPublished ? "bg-teal-500" : ""}>
-                    {isPublished ? "Published" : "Draft"}
-                </Badge>
-            </div>
-            <div className="flex items-center gap-3">
-                {!isNewTemplate && (
-                    <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={onDelete}
-                        disabled={isBusy}
-                    >
-                        {isDeleting ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : <Trash2Icon className="mr-2 size-4" />}
-                        Delete
+        <PageHeader
+            // The padding keeps the name field's focus and error rings inside the truncating h1.
+            title={
+                <span className="block p-1">
+                    <Input
+                        ref={nameInputRef}
+                        id="workflow-name"
+                        aria-label="Workflow template name"
+                        aria-invalid={nameError ? true : undefined}
+                        aria-describedby={nameError ? "workflow-name-error" : undefined}
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        onBlur={onNameBlur}
+                        placeholder="Workflow template name"
+                        className="h-9 w-[36rem] max-w-full min-w-48 field-sizing-content supports-[field-sizing:content]:w-auto border-transparent bg-transparent px-2 text-lg font-semibold shadow-none hover:border-input md:text-lg dark:bg-transparent"
+                    />
+                </span>
+            }
+            back={{ href: "/ops/templates?tab=workflows", label: "Back to workflow templates" }}
+            sticky
+            className="top-14"
+            meta={
+                <>
+                    <Badge variant={isPublished ? "default" : "secondary"}>
+                        {isPublished ? "Published" : "Draft"}
+                    </Badge>
+                    <SaveStatus state={saveStatus} />
+                    {nameError ? (
+                        <span id="workflow-name-error" role="alert" className="text-sm text-destructive">
+                            {nameError}
+                        </span>
+                    ) : null}
+                </>
+            }
+            actions={
+                <>
+                    {!isNewTemplate ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                render={<Button variant="outline" size="icon" aria-label="More actions" />}
+                                disabled={isBusy}
+                            >
+                                <MoreHorizontalIcon aria-hidden="true" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                                    <Trash2Icon aria-hidden="true" />
+                                    Delete
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : null}
+                    <Button variant="outline" onClick={onSave} disabled={isSaving || isPublishing}>
+                        {isSaving ? <Loader2Icon className="size-4 animate-spin" aria-hidden="true" /> : null}
+                        Save draft
                     </Button>
-                )}
-                <Button variant="outline" size="sm" onClick={onSave} disabled={isSaving || isPublishing}>
-                    {isSaving && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                    Save Draft
-                </Button>
-                <Button size="sm" onClick={onPublish} disabled={isSaving || isPublishing}>
-                    {isPublishing && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                    Publish
-                </Button>
-            </div>
-        </div>
+                    <Button onClick={onPublish} disabled={isSaving || isPublishing}>
+                        {isPublishing ? <Loader2Icon className="size-4 animate-spin" aria-hidden="true" /> : null}
+                        Publish
+                    </Button>
+                </>
+            }
+        />
     )
 }
 
@@ -944,6 +934,8 @@ type WorkflowTemplateDetailsSectionProps = {
     setIcon: (value: string) => void
     subjectType: string | null
     setSubjectType: (value: WorkflowSubjectType) => void
+    /** Samples replace the whole draft, so they are offered only on a new, empty workflow. */
+    showSampleLoaders: boolean
     onLoadSharedIntakeSample: () => void
     onLoadZapierSample: () => void
 }
@@ -957,6 +949,7 @@ function WorkflowTemplateDetailsSection({
     setIcon,
     subjectType,
     setSubjectType,
+    showSampleLoaders,
     onLoadSharedIntakeSample,
     onLoadZapierSample,
 }: WorkflowTemplateDetailsSectionProps) {
@@ -967,16 +960,18 @@ function WorkflowTemplateDetailsSection({
                 <CardDescription>Define name, category, and icon for the template.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
-                <div className="md:col-span-2">
-                    <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={onLoadSharedIntakeSample}>
-                            Load Shared Intake Sample
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={onLoadZapierSample}>
-                            Load Zapier Conversion Sample
-                        </Button>
+                {showSampleLoaders ? (
+                    <div className="md:col-span-2">
+                        <div className="flex flex-wrap gap-2">
+                            <Button type="button" variant="outline" size="sm" onClick={onLoadSharedIntakeSample}>
+                                Load Shared Intake Sample
+                            </Button>
+                            <Button type="button" variant="outline" size="sm" onClick={onLoadZapierSample}>
+                                Load Zapier Conversion Sample
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                ) : null}
                 <div className="space-y-2 md:col-span-2">
                     <Label>Description</Label>
                     <Textarea
@@ -2485,6 +2480,9 @@ function useWorkflowTemplatePageState() {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isPublishing, setIsPublishing] = useState(false)
+    const [saveResult, setSaveResult] = useState<"idle" | "saved" | "error">("idle")
+    const [nameTouched, setNameTouched] = useState(false)
+    const nameInputRef = useRef<HTMLInputElement | null>(null)
     const revisionRef = useRef<{ id: string; version: number } | null>(null)
 
     useEffect(() => {
@@ -2531,18 +2529,24 @@ function useWorkflowTemplatePageState() {
             value: normalizedTriggerConfig,
         })
     }
-    const setName = (value: string) => dispatchEditor({ type: "setName", value })
-    const setDescription = (value: string) => dispatchEditor({ type: "setDescription", value })
-    const setIcon = (value: string) => dispatchEditor({ type: "setIcon", value })
-    const setCategory = (value: string) => dispatchEditor({ type: "setCategory", value })
+    // User edits clear "Saved"; hydration and trigger normalization dispatch directly and keep it.
+    // A failed save keeps "Not saved" until the next attempt.
+    const editDraft = (action: WorkflowTemplateEditorAction) => {
+        setSaveResult((current) => (current === "saved" ? "idle" : current))
+        dispatchEditor(action)
+    }
+    const setName = (value: string) => editDraft({ type: "setName", value })
+    const setDescription = (value: string) => editDraft({ type: "setDescription", value })
+    const setIcon = (value: string) => editDraft({ type: "setIcon", value })
+    const setCategory = (value: string) => editDraft({ type: "setCategory", value })
     const setSubjectType = (value: WorkflowSubjectType) =>
-        dispatchEditor({ type: "setSubjectType", value })
-    const setTriggerType = (value: string) => dispatchEditor({ type: "setTriggerType", value })
+        editDraft({ type: "setSubjectType", value })
+    const setTriggerType = (value: string) => editDraft({ type: "setTriggerType", value })
     const setTriggerConfig: TriggerConfigSetter = (value) => {
-        dispatchEditor({ type: "setTriggerConfig", value })
+        editDraft({ type: "setTriggerConfig", value })
     }
     const setConditionLogic = (value: "AND" | "OR") =>
-        dispatchEditor({ type: "setConditionLogic", value })
+        editDraft({ type: "setConditionLogic", value })
     const setIsPublished = (value: boolean) => dispatchEditor({ type: "setIsPublished", value })
 
     const isDonorSubject = isDonorSubjectType(subjectType)
@@ -2582,36 +2586,36 @@ function useWorkflowTemplatePageState() {
     const stateOptions: SelectOption[] = US_STATES.map((state) => ({ value: state.value, label: state.label }))
 
     const applyZapierConversionSample = () => {
-        dispatchEditor({ type: "loadZapierSample" })
+        editDraft({ type: "loadZapierSample" })
         toast.success("Loaded Zapier conversion sample workflow")
     }
 
     const addCondition = () => {
-        dispatchEditor({ type: "addCondition" })
+        editDraft({ type: "addCondition" })
     }
 
     const removeCondition = (index: number) => {
-        dispatchEditor({ type: "removeCondition", index })
+        editDraft({ type: "removeCondition", index })
     }
 
     const updateCondition = (index: number, updates: Partial<Condition>) => {
-        dispatchEditor({ type: "updateCondition", index, updates })
+        editDraft({ type: "updateCondition", index, updates })
     }
 
     const addAction = () => {
-        dispatchEditor({ type: "addAction" })
+        editDraft({ type: "addAction" })
     }
 
     const removeAction = (index: number) => {
-        dispatchEditor({ type: "removeAction", index })
+        editDraft({ type: "removeAction", index })
     }
 
     const updateAction = (index: number, updates: Partial<ActionConfig>) => {
-        dispatchEditor({ type: "updateAction", index, updates })
+        editDraft({ type: "updateAction", index, updates })
     }
 
     const applySharedIntakeSample = () => {
-        dispatchEditor({ type: "loadSharedIntakeSample" })
+        editDraft({ type: "loadSharedIntakeSample" })
         toast.success("Loaded sample workflow template")
     }
 
@@ -2653,9 +2657,10 @@ function useWorkflowTemplatePageState() {
         return null
     }
 
-    const getWorkflowValidationError = (): string | null => {
-        const detailsError = getWorkflowDetailsValidationError(name, subjectType, triggerType)
-        if (detailsError) return detailsError
+    // The name error is shown on the name field, so the summary panel only lists the other rules.
+    const getWorkflowRulesValidationError = (): string | null => {
+        const subjectError = getWorkflowSubjectValidationError(subjectType, triggerType)
+        if (subjectError) return subjectError
         const triggerError = getTriggerValidationError()
         if (triggerError) return triggerError
         const stageConditionError = getWorkflowStageConditionValidationError(conditions)
@@ -2679,7 +2684,27 @@ function useWorkflowTemplatePageState() {
         return null
     }
 
-    const workflowValidationError = getWorkflowValidationError()
+    const workflowValidationError = getWorkflowRulesValidationError()
+    const nameMissing = !name.trim()
+    const nameError = nameMissing && nameTouched ? WORKFLOW_NAME_REQUIRED_MESSAGE : null
+    const showSampleLoaders =
+        isNew && !triggerType && conditions.length === 0 && actions.length === 0
+    const saveStatus: SaveStatusState = isSaving || isPublishing ? "saving" : saveResult
+
+    // Returns false and moves focus to the first problem. A missing name is marked on the field;
+    // other rule errors keep the toast and the summary panel note.
+    const validateBeforeSave = (): boolean => {
+        if (nameMissing) {
+            setNameTouched(true)
+            nameInputRef.current?.focus()
+            return false
+        }
+        if (workflowValidationError) {
+            toast.error(workflowValidationError)
+            return false
+        }
+        return true
+    }
 
     const buildTriggerConfig = (): JsonObject => {
         const next: JsonObject = { ...triggerConfig }
@@ -2755,36 +2780,30 @@ function useWorkflowTemplatePageState() {
     }
 
     const handleSave = async () => {
-        const error = getWorkflowValidationError()
-        if (error) {
-            toast.error(error)
-            return
-        }
+        if (!validateBeforeSave()) return
         setIsSaving(true)
         const result = await persistTemplate().then((saved) => ({
             status: "success" as const,
             saved,
         })).catch((err: unknown) => ({
             status: "error" as const,
-            message: err instanceof Error ? err.message : "Failed to save template",
+            message: getActionErrorMessage(err, "Couldn't save template."),
         }))
 
         if (result.status === "success") {
             const saved = result.saved
             setIsPublished((saved.published_version ?? 0) > 0)
+            setSaveResult("saved")
             toast.success("Template saved")
         } else {
-            toast.error(result.message)
+            setSaveResult("error")
+            if (result.message) toast.error(result.message)
         }
         setIsSaving(false)
     }
 
     const handlePublish = () => {
-        const error = getWorkflowValidationError()
-        if (error) {
-            toast.error(error)
-            return
-        }
+        if (!validateBeforeSave()) return
         setShowPublishDialog(true)
     }
 
@@ -2804,29 +2823,26 @@ function useWorkflowTemplatePageState() {
             })
         ).catch((err: unknown) => ({
             status: "error" as const,
-            message: err instanceof Error ? err.message : "Failed to publish template",
+            message: getActionErrorMessage(err, "Couldn't publish template."),
         }))
 
         if (result.status === "success") {
             setIsPublished(true)
+            setSaveResult("saved")
             setShowPublishDialog(false)
             toast.success("Template published")
-        } else {
+        } else if (result.message) {
             toast.error(result.message)
         }
         setIsPublishing(false)
     }
 
+    // Rejections reach ConfirmDialog, which keeps the dialog open and shows the error inline.
     const handleDelete = async () => {
         if (isNew || deleteTemplate.isPending) return
-        try {
-            await deleteTemplate.mutateAsync({ id })
-            toast.success("Template deleted")
-            setShowDeleteDialog(false)
-            push("/ops/templates?tab=workflows")
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Failed to delete template")
-        }
+        await deleteTemplate.mutateAsync({ id })
+        toast.success("Template deleted")
+        push("/ops/templates?tab=workflows")
     }
 
     return {
@@ -2869,6 +2885,11 @@ function useWorkflowTemplatePageState() {
         showDeleteDialog,
         setShowDeleteDialog,
         workflowValidationError,
+        nameError,
+        nameInputRef,
+        markNameTouched: () => setNameTouched(true),
+        saveStatus,
+        showSampleLoaders,
         getConditionOptions,
         addCondition,
         updateCondition,
@@ -2882,7 +2903,6 @@ function useWorkflowTemplatePageState() {
         handlePublish,
         confirmPublish,
         handleDelete,
-        handleBack: () => push("/ops/templates?tab=workflows"),
         openDeleteDialog: () => setShowDeleteDialog(true),
     }
 }
@@ -2928,6 +2948,11 @@ export default function PlatformWorkflowTemplatePage() {
         showDeleteDialog,
         setShowDeleteDialog,
         workflowValidationError,
+        nameError,
+        nameInputRef,
+        markNameTouched,
+        saveStatus,
+        showSampleLoaders,
         getConditionOptions,
         addCondition,
         updateCondition,
@@ -2941,14 +2966,13 @@ export default function PlatformWorkflowTemplatePage() {
         handlePublish,
         confirmPublish,
         handleDelete,
-        handleBack,
         openDeleteDialog,
     } = useWorkflowTemplatePageState()
 
     if (!isNew && isLoading) {
         return (
-            <div className="flex h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
-                <div className="flex items-center gap-2 text-stone-600 dark:text-stone-400">
+            <div className="flex min-h-[60vh] items-center justify-center">
+                <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2Icon className="size-5 animate-spin" />
                     <span>Loading template…</span>
                 </div>
@@ -2959,22 +2983,28 @@ export default function PlatformWorkflowTemplatePage() {
     if (!isNew && !templateData) return null
 
     return (
-        <div className="min-h-screen bg-stone-100 dark:bg-stone-950">
-            <WorkflowTemplateDeleteDialog
+        <div>
+            <ConfirmDialog
                 open={showDeleteDialog}
                 onOpenChange={setShowDeleteDialog}
-                onDelete={handleDelete}
-                isDeleting={isDeleting}
-                name={name}
+                title={`Delete ${name.trim() || "this template"}?`}
+                description="This cannot be undone."
+                confirmLabel="Delete"
+                confirmDisabled={isDeleting}
+                errorFallback="Couldn't delete template."
+                onConfirm={handleDelete}
             />
 
             <WorkflowTemplateHeader
                 name={name}
                 setName={setName}
+                nameInputRef={nameInputRef}
+                nameError={nameError}
+                onNameBlur={markNameTouched}
                 mode={isNew ? "new" : "existing"}
                 publicationStatus={isPublished ? "published" : "draft"}
+                saveStatus={saveStatus}
                 busyAction={isDeleting ? "delete" : isSaving ? "save" : isPublishing ? "publish" : null}
-                onBack={handleBack}
                 onDelete={openDeleteDialog}
                 onSave={handleSave}
                 onPublish={handlePublish}
@@ -2991,6 +3021,7 @@ export default function PlatformWorkflowTemplatePage() {
                         setIcon={setIcon}
                         subjectType={subjectType}
                         setSubjectType={setSubjectType}
+                        showSampleLoaders={showSampleLoaders}
                         onLoadSharedIntakeSample={applySharedIntakeSample}
                         onLoadZapierSample={applyZapierConversionSample}
                     />

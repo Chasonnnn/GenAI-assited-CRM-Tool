@@ -74,7 +74,11 @@ describe("PregnancyTrackerCard", () => {
         renderTracker({ embryo_stage: "unknown" })
 
         expect(screen.getByText("Gestational Age")).toBeInTheDocument()
-        expect(screen.getByText("—")).toBeInTheDocument()
+        // Empty inline fields (the missing delivery date) render their own EmptyValue dash.
+        const gestationalAgeDash = screen
+            .getAllByText("—")
+            .filter((element) => !element.closest("[data-slot=empty-value]"))
+        expect(gestationalAgeDash).toHaveLength(1)
         expect(
             screen.getByText("Unavailable until embryo stage is set")
         ).toBeInTheDocument()
@@ -99,6 +103,50 @@ describe("PregnancyTrackerCard", () => {
         ).toBeInTheDocument()
         expect(screen.queryByText("calculated")).not.toBeInTheDocument()
         expect(screen.queryByText(/days remaining/)).not.toBeInTheDocument()
+    })
+
+    it("stops counting after delivery and shows the gestational age at delivery", () => {
+        vi.setSystemTime(new Date("2027-01-20T12:00:00-05:00"))
+        renderTracker({ actual_delivery_date: "2026-12-10" })
+
+        expect(screen.getByText("Delivered at 39w 5d")).toBeInTheDocument()
+        expect(screen.queryByText(/post transfer/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/days remaining/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/Trimester/)).not.toBeInTheDocument()
+    })
+
+    it("hides the embryo-stage notice and manual due-date countdown once delivered", () => {
+        vi.setSystemTime(new Date("2027-01-20T12:00:00-05:00"))
+        renderTracker({ embryo_stage: "unknown", actual_delivery_date: "2026-12-10" })
+
+        expect(screen.queryByText("Unavailable until embryo stage is set")).not.toBeInTheDocument()
+        expect(screen.queryByText(/days remaining/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/post transfer/)).not.toBeInTheDocument()
+    })
+
+    it("derives the age at delivery from the manual due date when the embryo stage is unknown", () => {
+        vi.setSystemTime(new Date("2027-01-20T12:00:00-05:00"))
+        // Due Aug 18, delivered Aug 11: 7 days before 40w 0d.
+        renderTracker({
+            embryo_stage: "unknown",
+            pregnancy_start_date: "2025-11-11",
+            pregnancy_due_date: "2026-08-18",
+            actual_delivery_date: "2026-08-11",
+        })
+
+        expect(screen.getByText("Delivered at 39w 0d")).toBeInTheDocument()
+    })
+
+    it("shows no age at delivery when neither the embryo stage nor a due date is known", () => {
+        vi.setSystemTime(new Date("2027-01-20T12:00:00-05:00"))
+        renderTracker({
+            embryo_stage: "unknown",
+            pregnancy_due_date: null,
+            actual_delivery_date: "2026-12-10",
+        })
+
+        expect(screen.queryByText(/Delivered at/)).not.toBeInTheDocument()
+        expect(screen.queryByText("Unavailable until embryo stage is set")).not.toBeInTheDocument()
     })
 
     it("retains the existing warning for a future transfer date", () => {

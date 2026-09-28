@@ -110,7 +110,7 @@ export function EmailTemplateHistoryDialog({
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="max-h-[min(48rem,calc(100dvh-2rem))] w-[calc(100%-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-lg">
+                <DialogContent size="lg" className="max-h-[min(48rem,calc(100dvh-2rem))] w-[calc(100%-2rem)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0">
                     <DialogHeader className="border-b px-6 py-5 pr-14">
                         <div className="flex items-center gap-2">
                             <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">

@@ -4,20 +4,30 @@ import { useState } from "react"
 import { redirect, useRouter } from "next/navigation"
 import Link from "@/components/app-link"
 import { toast } from "@/components/ui/toast"
-import { Loader2Icon, UserPlusIcon } from "lucide-react"
+import { InboxIcon, Loader2Icon, UserPlusIcon } from "lucide-react"
 
 import { useAuth } from "@/lib/auth-context"
 import { useUnassignedQueue } from "@/lib/hooks/use-surrogates"
 import { useClaimSurrogate } from "@/lib/hooks/use-queues"
+import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useTrackUnassignedQueueView } from "@/lib/hooks/use-track-unassigned-queue-view"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import { readableForeground } from "@/lib/stage-colors"
+import { getSurrogateSourceLabel } from "@/lib/surrogate-source-labels"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { EmptyValue } from "@/components/ui/empty-value"
 import { PaginationJump } from "@/components/ui/pagination-jump"
+import { PageHeader } from "@/components/page-header"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
 
 const DEFAULT_PER_PAGE = 20
+// Same fallback grey the /surrogates list uses when a stage has no colour.
+const DEFAULT_STAGE_COLOR = "#6B7280"
 
 function parsePageParam(value: string | null): number {
     const parsed = Number(value)
@@ -80,13 +90,15 @@ function UnassignedSurrogatesContent({
 
     useTrackUnassignedQueueView(authLoaded && canViewUnassignedQueue)
 
-    const { data, isLoading, error, refetch } = useUnassignedQueue(
+    const { data, isLoading, isRefetching, error, refetch } = useUnassignedQueue(
         {
             page,
             per_page: DEFAULT_PER_PAGE,
         },
         { enabled: canViewUnassignedQueue }
     )
+    const { data: defaultPipeline } = useDefaultPipeline()
+    const stageById = new Map((defaultPipeline?.stages ?? []).map((stage) => [stage.id, stage]))
     const claimMutation = useClaimSurrogate()
     const [claimingId, setClaimingId] = useState<string | null>(null)
 
@@ -114,74 +126,67 @@ function UnassignedSurrogatesContent({
             status: "success" as const,
         })).catch((error: unknown) => ({
             status: "error" as const,
-            message: error instanceof Error ? error.message : "Failed to claim surrogate",
+            message: getActionErrorMessage(error, "Couldn't claim surrogate. Try again."),
         }))
 
         if (result.status === "success") {
             toast.success("Surrogate claimed")
             push(`/surrogates/${surrogateId}`)
-        } else {
+        } else if (result.message) {
             toast.error(result.message)
         }
         setClaimingId(null)
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Unassigned Queue</h1>
-                    <p className="text-muted-foreground">
-                        Claim a surrogate to start working the case.
-                    </p>
-                </div>
-                <Button
-                    variant="outline"
-                    onClick={() => void refetch()}
-                    disabled={isLoading}
-                >
-                    Refresh
-                </Button>
-            </div>
+        <div className="flex h-full flex-col overflow-hidden">
+            <PageHeader
+                title="Unassigned Queue"
+                count={total}
+                countLabel="surrogates"
+                actions={
+                    <Button
+                        variant="outline"
+                        onClick={() => void refetch()}
+                        disabled={isLoading || isRefetching}
+                    >
+                        Refresh
+                    </Button>
+                }
+            />
 
-            <Card>
-                <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between gap-4 flex-wrap">
-                        <CardTitle className="text-lg">Available Cases</CardTitle>
-                        <div className="text-sm text-muted-foreground">
-                            {total !== null ? `${total} total` : " "}
-                        </div>
-                    </div>
-                </CardHeader>
-
-                <CardContent className="px-0">
-                    {!authLoaded || isLoading ? (
-                        <div className="flex items-center justify-center py-12 text-muted-foreground">
-                            <Loader2Icon className="mr-2 size-4 animate-spin" />
-                            Loading unassigned cases…
-                        </div>
-                    ) : error ? (
-                        <div className="px-6 py-10">
-                            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
-                                <div className="font-medium text-destructive">Failed to load unassigned cases</div>
-                                <div className="mt-1 text-sm text-muted-foreground">
-                                    {error instanceof Error ? error.message : "Unknown error"}
-                                </div>
-                            </div>
-                        </div>
-                    ) : items.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                            <div className="text-lg font-medium">No unassigned cases</div>
-                            <div className="mt-1 text-sm text-muted-foreground">
-                                When new leads arrive, they will show up here for you to claim.
-                            </div>
-                            <Button className="mt-4" onClick={() => setPageAndUrl(1)}>
-                                Back to first page
-                            </Button>
-                        </div>
-                    ) : (
-                        <>
-                            <Table>
+            <div className="flex-1 overflow-auto p-6">
+                {!authLoaded || isLoading ? (
+                    <Card className="flex items-center justify-center p-12" aria-busy="true">
+                        <Loader2Icon className="size-8 animate-spin text-muted-foreground" aria-hidden="true" />
+                        <span className="sr-only">Loading unassigned surrogates</span>
+                    </Card>
+                ) : error ? (
+                    <Card>
+                        <QueryErrorState
+                            error={error}
+                            onRetry={() => void refetch()}
+                            isRetrying={isRefetching}
+                            title="Couldn't load unassigned surrogates"
+                        />
+                    </Card>
+                ) : items.length === 0 ? (
+                    <Card>
+                        <EmptyState
+                            icon={InboxIcon}
+                            title="No unassigned surrogates"
+                            action={
+                                page > 1 ? (
+                                    <Button variant="outline" onClick={() => setPageAndUrl(1)}>
+                                        First page
+                                    </Button>
+                                ) : undefined
+                            }
+                        />
+                    </Card>
+                ) : (
+                    <Card className="overflow-hidden py-0">
+                            <Table className="[&_td:first-child]:pl-6 [&_td:last-child]:pr-6 [&_th:first-child]:pl-6 [&_th:last-child]:pr-6">
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Surrogate</TableHead>
@@ -193,7 +198,10 @@ function UnassignedSurrogatesContent({
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {items.map((s) => (
+                                    {items.map((s) => {
+                                        const stage = stageById.get(s.stage_id)
+                                        const stageColor = stage?.color || DEFAULT_STAGE_COLOR
+                                        return (
                                         <TableRow key={s.id}>
                                             <TableCell className="font-medium">
                                                 <div className="flex flex-col">
@@ -204,21 +212,26 @@ function UnassignedSurrogatesContent({
                                                         {s.full_name}
                                                     </Link>
                                                     <span className="text-xs text-muted-foreground">
-                                                        {s.surrogate_number}
+                                                        #{s.surrogate_number}
                                                     </span>
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                <Badge variant="secondary">
-                                                    {s.status_label}
+                                                <Badge
+                                                    style={{
+                                                        backgroundColor: stageColor,
+                                                        color: readableForeground(stageColor),
+                                                    }}
+                                                >
+                                                    {s.status_label || stage?.label || "Unknown stage"}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell>
-                                                <Badge variant="outline" className="capitalize">
-                                                    {s.source}
+                                                <Badge variant="outline">
+                                                    {getSurrogateSourceLabel(s.source)}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell>{s.state || "—"}</TableCell>
+                                            <TableCell>{s.state || <EmptyValue />}</TableCell>
                                             <TableCell className="text-muted-foreground">
                                                 {formatDate(s.created_at)}
                                             </TableCell>
@@ -242,17 +255,18 @@ function UnassignedSurrogatesContent({
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
-                                    ))}
+                                        )
+                                    })}
                                 </TableBody>
                             </Table>
 
                             {totalPages > 1 && (
-                                <div className="flex items-center justify-between border-t border-border px-6 py-4">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-6 py-4">
                                     <div className="text-sm text-muted-foreground">
                                         {total !== null ? (
-                                            <>Showing {pageStart}-{Math.min(pageEnd, total)} of {total} cases</>
+                                            <>Showing {pageStart}-{Math.min(pageEnd, total)} of {total} surrogates</>
                                         ) : (
-                                            <>Showing {pageStart}-{pageEnd} cases</>
+                                            <>Showing {pageStart}-{pageEnd} surrogates</>
                                         )}
                                     </div>
                                     <div className="flex items-center gap-2 flex-wrap">
@@ -280,10 +294,9 @@ function UnassignedSurrogatesContent({
                                     </div>
                                 </div>
                             )}
-                        </>
-                    )}
-                </CardContent>
-            </Card>
+                    </Card>
+                )}
+            </div>
         </div>
     )
 }

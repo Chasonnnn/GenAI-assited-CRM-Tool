@@ -69,7 +69,7 @@ export function SurrogateDetailHeader({
                 )}
                 {isArchived && <Badge variant="secondary">Archived</Badge>}
             </div>
-            <div className="ml-auto flex items-center gap-2">{children}</div>
+            <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">{children}</div>
         </header>
     )
 }

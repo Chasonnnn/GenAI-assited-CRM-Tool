@@ -70,8 +70,8 @@ vi.mock("@/components/ui/select", () => {
         return <span>{value}</span>
     }
 
-    function SelectContent({ children }: { children: React.ReactNode }) {
-        return <div id="mock-select-listbox" role="listbox">{children}</div>
+    function SelectContent({ children, className }: { children: React.ReactNode; className?: string }) {
+        return <div id="mock-select-listbox" role="listbox" className={className}>{children}</div>
     }
 
     function SelectItem({
@@ -94,12 +94,28 @@ vi.mock("@/components/ui/select", () => {
         )
     }
 
+    // StageSelect groups options under headings with separators.
+    function SelectGroup({ children }: { children: React.ReactNode }) {
+        return <div role="group">{children}</div>
+    }
+
+    function SelectLabel({ children }: { children: React.ReactNode }) {
+        return <div>{children}</div>
+    }
+
+    function SelectSeparator() {
+        return <hr />
+    }
+
     return {
         Select,
         SelectTrigger,
         SelectValue,
         SelectContent,
         SelectItem,
+        SelectGroup,
+        SelectLabel,
+        SelectSeparator,
     }
 })
 
@@ -120,7 +136,7 @@ function stage(id: string, key: string, label: string, order: number, overrides:
 const stages: PipelineStage[] = [
     stage("s-delivered", "delivered", "Delivered", 20, { stage_type: "post_approval" }),
     stage("s-new", "new_unread", "New Unread", 1),
-    stage("s-contacted", "contacted", "Contacted", 2),
+    stage("s-contacted", "contacted", "Contacted", 2, { color: "#0ea5e9" }),
     stage("s-interview", "interview_scheduled", "Interview Scheduled", 4),
     stage("s-approved", "approved", "Approved", 8),
     stage("s-on-hold", "on_hold", "On-Hold", 22, { stage_type: "paused" }),
@@ -183,6 +199,18 @@ describe("BulkChangeStageModal", () => {
         ])
         expect(screen.queryByText(/immediate/i)).not.toBeInTheDocument()
         expect(screen.queryByText(/per-surrogate review/i)).not.toBeInTheDocument()
+        // Shared StageSelect rendering: a colour dot per option.
+        expect(
+            screen.getByRole("option", { name: "Contacted" }).querySelector('[data-slot="stage-dot"]'),
+        ).toHaveStyle({ backgroundColor: "#0ea5e9" })
+    })
+
+    it("caps the stage list height so it opens below the trigger inside the dialog", () => {
+        renderModal()
+
+        const listbox = screen.getByRole("listbox")
+        expect(listbox).toHaveClass("max-h-[min(18rem,var(--available-height))]")
+        expect(listbox).not.toHaveClass("max-h-[min(28rem,var(--available-height))]")
     })
 
     it("submits a forward move without a reason field", async () => {
@@ -324,6 +352,18 @@ describe("BulkChangeStageModal", () => {
                 interview_times: [{ surrogate_id: "a", scheduled_at: new Date(avaTime).toISOString() }],
             }),
         )
+    })
+
+    it("widens the dialog through its size prop for per-surrogate interview times", () => {
+        renderModal()
+
+        const dialog = screen.getByRole("dialog")
+        expect(dialog).toHaveAttribute("data-size", "lg")
+        expect(dialog).toHaveAttribute("data-layout", "sectioned")
+
+        chooseStage("Interview Scheduled")
+
+        expect(dialog).toHaveAttribute("data-size", "xl")
     })
 
     it("leaves rows already in the target stage out of the interview time list", async () => {

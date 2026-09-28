@@ -1,6 +1,8 @@
-from datetime import UTC, datetime, timedelta
+from contextlib import asynccontextmanager
+from datetime import UTC, date, datetime, time, timedelta
 from unittest.mock import Mock
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -20,6 +22,7 @@ from app.db.models import (
     RoleRecordScope,
     SurrogateActivityLog,
     SurrogateStatusHistory,
+    User,
     UserIntegration,
 )
 from app.schemas.interview_appointment import SurrogateInterviewAppointmentAction
@@ -160,18 +163,28 @@ async def test_interview_slot_preview_uses_appointment_owner_and_hides_cross_ten
     assert (await authed_client.get(path)).status_code == 404
 
 
+PREVIEW_ROUTES = ["slots?date=2026-09-28", "open-days?date_start=2026-09-27&date_end=2026-10-31"]
+
+
 @pytest.mark.asyncio
-async def test_interview_slot_preview_denies_unmodifiable_surrogate(
-    authed_client, db, interview, monkeypatch
+@pytest.mark.parametrize("denial", ["unmodifiable", "archived"])
+@pytest.mark.parametrize("route", PREVIEW_ROUTES)
+async def test_interview_availability_previews_deny_unmodifiable_surrogate(
+    authed_client, db, interview, monkeypatch, denial, route
 ):
     from app.routers import surrogates_interview_appointment as interview_router
 
     surrogate, _ = interview
-    monkeypatch.setattr(interview_router, "can_modify_surrogate", lambda *_args, **_kwargs: False)
-    response = await authed_client.get(
-        f"/surrogates/{surrogate.id}/interview-appointment/slots?date=2026-09-25"
-    )
+    if denial == "archived":
+        surrogate.is_archived = True
+        db.commit()
+    else:
+        monkeypatch.setattr(
+            interview_router, "can_modify_surrogate", lambda *_args, **_kwargs: False
+        )
+    response = await authed_client.get(f"/surrogates/{surrogate.id}/interview-appointment/{route}")
     assert response.status_code == 403
+    assert response.json()["detail"] == "You cannot manage this interview"
 
 
 @pytest.mark.asyncio
@@ -206,6 +219,311 @@ async def test_initial_stage_interview_preview_does_not_create_appointment_type(
         .count()
         == 0
     )
+
+
+def _open_days_path(surrogate, start, end, timezone="America/New_York"):
+    return (
+        f"/surrogates/{surrogate.id}/interview-appointment/open-days"
+        f"?date_start={start}&date_end={end}&client_timezone={timezone}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_interview_open_days_group_slots_by_viewer_date_and_hide_cross_tenant(
+    authed_client, db, interview, monkeypatch
+):
+    from app.services import appointment_service
+
+    surrogate, _ = interview
+    appointment = service.get_latest(db, surrogate.organization_id, surrogate.id)
+    seen = {}
+
+    def slot(start):
+        return appointment_service.TimeSlot(start, start + timedelta(minutes=30))
+
+    def available(_db, query, **kwargs):
+        seen["query"] = query
+        seen["exclude"] = kwargs.get("exclude_appointment_id")
+        return [
+            # 11:30 PM on Oct 1 in New York is already Oct 2 in UTC.
+            slot(datetime(2026, 10, 2, 3, 30, tzinfo=UTC)),
+            slot(datetime(2026, 10, 1, 14, 0, tzinfo=UTC)),
+            slot(datetime(2026, 10, 5, 13, 0, tzinfo=UTC)),
+        ]
+
+    monkeypatch.setattr(appointment_service, "get_available_slots", available)
+    path = _open_days_path(surrogate, "2026-09-27", "2026-10-31")
+    response = await authed_client.get(path)
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "timezone": "America/New_York",
+        "dates": ["2026-10-01", "2026-10-05"],
+    }
+    assert seen["query"].date_start == date(2026, 9, 27)
+    assert seen["query"].date_end == date(2026, 10, 31)
+    assert seen["query"].client_timezone == "America/New_York"
+    assert seen["query"].user_id == appointment.user_id
+    assert seen["query"].appointment_type_id == appointment.appointment_type_id
+    assert seen["exclude"] == appointment.id
+
+    other_org = Organization(id=uuid4(), name="Other Open Day Org", slug=f"other-{uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    surrogate.organization_id = other_org.id
+    db.commit()
+    assert (await authed_client.get(path)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_interview_open_days_bound_the_range(authed_client, db, interview, monkeypatch):
+    from app.services import appointment_service
+
+    surrogate, _ = interview
+    monkeypatch.setattr(appointment_service, "get_available_slots", lambda *_a, **_k: [])
+
+    six_weeks = await authed_client.get(_open_days_path(surrogate, "2026-09-27", "2026-11-07"))
+    assert six_weeks.status_code == 200, six_weeks.text
+    too_long = await authed_client.get(_open_days_path(surrogate, "2026-09-27", "2026-11-08"))
+    assert too_long.status_code == 400
+    assert too_long.json()["detail"] == "Date range cannot exceed 42 days"
+    reversed_range = await authed_client.get(_open_days_path(surrogate, "2026-10-02", "2026-10-01"))
+    assert reversed_range.status_code == 400
+    missing_end = await authed_client.get(
+        f"/surrogates/{surrogate.id}/interview-appointment/open-days?date_start=2026-09-27"
+    )
+    assert missing_end.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("client_timezone", "owner_timezone"),
+    [("Etc/GMT+12", "Pacific/Kiritimati"), ("Pacific/Kiritimati", "Etc/GMT+12")],
+)
+async def test_interview_availability_previews_reject_dates_at_the_calendar_limits(
+    authed_client, db, interview, client_timezone, owner_timezone
+):
+    from app.services import appointment_service
+
+    surrogate, user = interview
+    appointment_service.set_availability_rules(
+        db,
+        user.id,
+        surrogate.organization_id,
+        [{"day_of_week": day, "start_time": "09:00", "end_time": "17:00"} for day in range(7)],
+        owner_timezone,
+    )
+    db.commit()
+    base = f"/surrogates/{surrogate.id}/interview-appointment"
+    first, last = service.FIRST_PREVIEW_DATE, service.LAST_PREVIEW_DATE
+
+    async def slots(day):
+        return await authed_client.get(
+            f"{base}/slots", params={"date": day.isoformat(), "client_timezone": client_timezone}
+        )
+
+    async def open_days(start, end):
+        return await authed_client.get(
+            f"{base}/open-days",
+            params={
+                "date_start": start.isoformat(),
+                "date_end": end.isoformat(),
+                "client_timezone": client_timezone,
+            },
+        )
+
+    # The owner's day furthest from the viewer's day still computes at the supported limits.
+    edge_days = await open_days(last - timedelta(days=41), last)
+    assert edge_days.status_code == 200, edge_days.text
+    assert edge_days.json()["dates"][-1] == last.isoformat()
+    for response in (await slots(first), await slots(last)):
+        assert response.status_code == 200, response.text
+
+    for response in (
+        await slots(first - timedelta(days=1)),
+        await slots(last + timedelta(days=1)),
+        await slots(date.max),
+        await open_days(date.max - timedelta(days=30), date.max),
+        await open_days(date.min, date.min + timedelta(days=1)),
+    ):
+        assert response.status_code == 400, response.text
+        assert response.json()["detail"] == "Date is out of range"
+
+
+def _open_week_for(db, surrogate, user):
+    from app.services import appointment_service
+
+    appointment_service.set_availability_rules(
+        db,
+        user.id,
+        surrogate.organization_id,
+        [{"day_of_week": day, "start_time": "09:00", "end_time": "17:00"} for day in range(7)],
+        "America/New_York",
+    )
+    # Start after the fixture's interview so it does not take any of these times.
+    start = datetime.now(ZoneInfo("America/New_York")).date() + timedelta(days=7)
+    return start, start + timedelta(days=41)
+
+
+@pytest.mark.asyncio
+async def test_interview_open_days_read_calendar_busy_once_for_the_whole_range(
+    authed_client, db, interview, monkeypatch
+):
+    from app.core.config import settings
+    from app.services import calendar_binding_service
+
+    surrogate, user = interview
+    monkeypatch.setattr(settings, "SCHEDULING_V2_ENABLED", True)
+    start, end = _open_week_for(db, surrogate, user)
+    zone = ZoneInfo("America/New_York")
+    blocked = start + timedelta(days=3)
+    calls = []
+
+    def busy(_db, org_id, user_id, range_start, range_end, exclude_appointment=None):
+        calls.append((org_id, user_id, range_start, range_end))
+        blocked_start = datetime.combine(blocked, time.min, tzinfo=zone)
+        blocked_end = datetime.combine(blocked + timedelta(days=1), time.min, tzinfo=zone)
+        return [(blocked_start, blocked_end)]
+
+    monkeypatch.setattr(calendar_binding_service, "busy_intervals", busy)
+    response = await authed_client.get(_open_days_path(surrogate, start, end))
+
+    assert response.status_code == 200, response.text
+    assert len(calls) == 1
+    org_id, user_id, range_start, range_end = calls[0]
+    assert (org_id, user_id) == (surrogate.organization_id, user.id)
+    assert range_start.astimezone(zone).date() == start
+    assert range_end.astimezone(zone).date() == end
+    expected = [start + timedelta(days=offset) for offset in range(42)]
+    assert response.json()["dates"] == [day.isoformat() for day in expected if day != blocked]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["slots", "open-days"])
+async def test_interview_availability_previews_hide_calendar_failure_detail(
+    authed_client, db, interview, monkeypatch, route
+):
+    from app.core.config import settings
+    from app.services import calendar_binding_service
+
+    surrogate, user = interview
+    monkeypatch.setattr(settings, "SCHEDULING_V2_ENABLED", True)
+    start, end = _open_week_for(db, surrogate, user)
+
+    def unavailable(*_args, **_kwargs):
+        raise calendar_binding_service.CalendarAvailabilityUnavailable(
+            "upstream said token=secret-provider-token"
+        )
+
+    monkeypatch.setattr(calendar_binding_service, "busy_intervals", unavailable)
+    path = (
+        f"/surrogates/{surrogate.id}/interview-appointment/slots?date={start}"
+        if route == "slots"
+        else _open_days_path(surrogate, start, end)
+    )
+    response = await authed_client.get(path)
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Required Google Calendar availability is unavailable"}
+    assert "secret-provider-token" not in response.text
+
+
+@asynccontextmanager
+async def _role_client(db, org, role):
+    from httpx import ASGITransport, AsyncClient
+
+    from app.core.csrf import CSRF_COOKIE_NAME, generate_csrf_token
+    from app.core.deps import COOKIE_NAME, get_db
+    from app.core.security import create_session_token
+    from app.main import app
+    from app.services import session_service
+
+    user = User(
+        id=uuid4(),
+        email=f"interview-role-{uuid4().hex[:8]}@test.com",
+        display_name="Interview Role User",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    db.add(Membership(id=uuid4(), user_id=user.id, organization_id=org.id, role=role.value))
+    db.commit()
+    token = create_session_token(
+        user_id=user.id,
+        org_id=org.id,
+        role=role.value,
+        token_version=user.token_version,
+        mfa_verified=True,
+        mfa_required=True,
+    )
+    session_service.create_session(db=db, user_id=user.id, org_id=org.id, token=token, request=None)
+    app.dependency_overrides[get_db] = lambda: db
+    csrf_token = generate_csrf_token()
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="https://test",
+            cookies={COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf_token},
+            headers={CSRF_HEADER: csrf_token},
+        ) as role_client:
+            yield role_client, user
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", PREVIEW_ROUTES)
+async def test_interview_availability_previews_are_limited_to_the_appointment_owner(
+    db, test_org, interview, monkeypatch, route
+):
+    from app.services import appointment_service
+
+    surrogate, admin = interview
+    appointment = service.get_latest(db, surrogate.organization_id, surrogate.id)
+    assert appointment.user_id == admin.id
+    monkeypatch.setattr(appointment_service, "get_available_slots", lambda *_a, **_k: [])
+
+    async with _role_client(db, test_org, Role.INTAKE_SPECIALIST) as (intake_client, intake):
+        surrogate.owner_type = "user"
+        surrogate.owner_id = intake.id
+        db.commit()
+        path = f"/surrogates/{surrogate.id}/interview-appointment/{route}"
+        denied = await intake_client.get(path)
+        assert denied.status_code == 403
+        assert denied.json()["detail"] == "Only the appointment owner can manage this interview"
+
+        # The same intake user may preview once the active interview is theirs.
+        appointment.user_id = intake.id
+        db.commit()
+        allowed = await intake_client.get(path)
+        assert allowed.status_code == 200, allowed.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("permission", ["manage_appointments", "change_surrogate_status"])
+@pytest.mark.parametrize("route", PREVIEW_ROUTES)
+async def test_interview_availability_previews_deny_roles_without_permission(
+    db, test_org, interview, permission, route
+):
+    surrogate, _ = interview
+    db.add(
+        RolePermission(
+            id=uuid4(),
+            organization_id=test_org.id,
+            role=Role.INTAKE_SPECIALIST.value,
+            permission=permission,
+            is_granted=False,
+        )
+    )
+    db.commit()
+
+    async with _role_client(db, test_org, Role.INTAKE_SPECIALIST) as (intake_client, _intake):
+        response = await intake_client.get(
+            f"/surrogates/{surrogate.id}/interview-appointment/{route}"
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == f"Missing permission: {permission}"
 
 
 def test_cancel_keep_stage_then_book_again(db, interview):

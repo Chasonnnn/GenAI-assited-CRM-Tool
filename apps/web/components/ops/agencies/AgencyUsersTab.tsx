@@ -1,6 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -22,9 +23,10 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Loader2, ShieldOff, UserMinus } from "lucide-react"
+import { Loader2, ShieldOff, UserCheck, UserMinus } from "lucide-react"
 import { RelativeTime } from "@/components/ui/time-display"
 import type { OrgMember } from "@/lib/api/platform"
+import { getAgencyRoleLabel } from "@/components/ops/agencies/agency-constants"
 
 type AgencyUsersTabProps = {
     members: OrgMember[]
@@ -32,6 +34,8 @@ type AgencyUsersTabProps = {
     mfaResetting: string | null
     onResetMfa: (member: OrgMember) => void
     onDeactivateMember: (memberId: string) => void
+    onReactivateMember: (memberId: string) => void
+    reactivating: string | null
 }
 
 export function AgencyUsersTab({
@@ -40,6 +44,8 @@ export function AgencyUsersTab({
     mfaResetting,
     onResetMfa,
     onDeactivateMember,
+    onReactivateMember,
+    reactivating,
 }: AgencyUsersTabProps) {
     return (
         <Card>
@@ -57,7 +63,7 @@ export function AgencyUsersTab({
                                 <TableHead>Role</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Last Login</TableHead>
-                                <TableHead className="w-24 text-right">Actions</TableHead>
+                                <TableHead className="w-32 text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -72,7 +78,7 @@ export function AgencyUsersTab({
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant="outline">{member.role}</Badge>
+                                        <Badge variant="outline">{getAgencyRoleLabel(member.role)}</Badge>
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant={member.is_active ? "default" : "secondary"}>
@@ -124,39 +130,57 @@ export function AgencyUsersTab({
                                                     </AlertDialogFooter>
                                                 </AlertDialogContent>
                                             </AlertDialog>
-                                            {member.is_active && (
+                                            {member.is_active ? (
                                                 <AlertDialog>
                                                     <AlertDialogTrigger
                                                         className={buttonVariants({
-                                                            variant: "ghost",
+                                                            variant: "destructive-ghost",
                                                             size: "sm",
-                                                            className: "text-destructive",
+                                                            className: "text-muted-foreground",
                                                         })}
+                                                        aria-label={`Deactivate ${member.email}`}
                                                     >
-                                                        <UserMinus className="size-4" />
+                                                        <UserMinus className="size-4" aria-hidden="true" />
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
-                                                            <AlertDialogTitle>Deactivate User?</AlertDialogTitle>
+                                                            <AlertDialogTitle>
+                                                                Deactivate {member.display_name || member.email}?
+                                                            </AlertDialogTitle>
                                                             <AlertDialogDescription>
-                                                                <strong>{member.display_name}</strong> (
-                                                                {member.email}) will no longer be able to
-                                                                access {orgName}. This action can be reversed.
+                                                                <strong>{member.display_name || member.email}</strong> (
+                                                                {member.email}) loses access to {orgName}. You can
+                                                                reactivate them from the Members list.
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
                                                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                                                             <AlertDialogAction
+                                                                variant="destructive"
                                                                 onClick={() =>
                                                                     onDeactivateMember(member.id)
                                                                 }
-                                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                                             >
                                                                 Deactivate
                                                             </AlertDialogAction>
                                                         </AlertDialogFooter>
                                                     </AlertDialogContent>
                                                 </AlertDialog>
+                                            ) : (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => onReactivateMember(member.id)}
+                                                    disabled={reactivating === member.id}
+                                                    aria-label={`Reactivate ${member.email}`}
+                                                >
+                                                    {reactivating === member.id ? (
+                                                        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                                                    ) : (
+                                                        <UserCheck className="size-4" aria-hidden="true" />
+                                                    )}
+                                                    Reactivate
+                                                </Button>
                                             )}
                                         </div>
                                     </TableCell>

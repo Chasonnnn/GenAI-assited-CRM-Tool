@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { act, render, screen, fireEvent, waitFor } from "@testing-library/react"
 import * as React from "react"
 import PlatformSystemEmailTemplateNewPage from "../app/ops/templates/system/new/page"
+import { toast } from "@/components/ui/toast"
+import { ApiError } from "@/lib/api"
 
 const mockPush = vi.fn()
 const richTextEditorSpy = vi.fn()
@@ -18,6 +20,14 @@ vi.mock("@/components/ui/toast", () => ({
         success: vi.fn(),
         error: vi.fn(),
     },
+}))
+
+vi.mock("@/components/app-link", () => ({
+    default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
+        <a href={href} {...props}>
+            {children}
+        </a>
+    ),
 }))
 
 vi.mock("@/components/rich-text-editor", () => ({
@@ -156,6 +166,85 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Create" }))
 
         await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(screen.getByRole("button", { name: "Create" })).toBeEnabled())
+        expect(toast.error).toHaveBeenCalledWith("Couldn't create system email.")
+    })
+
+    it("shows a preview placeholder until the body has content", async () => {
+        render(<PlatformSystemEmailTemplateNewPage />)
+
+        expect(screen.getByRole("heading", { name: "No content yet" })).toBeInTheDocument()
+
+        const latestEditorProps = richTextEditorSpy.mock.calls.at(-1)?.[0] as {
+            onChange?: (html: string) => void
+        }
+        act(() => {
+            latestEditorProps.onChange?.("<p>Hello preview</p>")
+        })
+
+        await waitFor(() =>
+            expect(screen.queryByRole("heading", { name: "No content yet" })).not.toBeInTheDocument(),
+        )
+        expect(screen.getByText("Hello preview")).toBeInTheDocument()
+    })
+
+    it("hides required errors on an untouched form and keeps Create enabled", () => {
+        render(<PlatformSystemEmailTemplateNewPage />)
+
         expect(screen.getByRole("button", { name: "Create" })).toBeEnabled()
+        expect(screen.queryByText("System key is required.")).not.toBeInTheDocument()
+        expect(screen.queryByText("Name is required.")).not.toBeInTheDocument()
+        expect(screen.queryByText("Subject is required.")).not.toBeInTheDocument()
+        expect(screen.queryByText("Body is required.")).not.toBeInTheDocument()
+        expect(screen.getByLabelText("Subject")).not.toHaveAttribute("aria-invalid")
+    })
+
+    it("shows a field error after blur and all errors after a blocked create", async () => {
+        render(<PlatformSystemEmailTemplateNewPage />)
+
+        // Leaving an unedited field shows nothing; leaving it after an edit shows its error.
+        const name = screen.getByLabelText("Name")
+        fireEvent.blur(name)
+        expect(screen.queryByText("Name is required.")).not.toBeInTheDocument()
+        fireEvent.change(name, { target: { value: "W" } })
+        fireEvent.change(name, { target: { value: "" } })
+        fireEvent.blur(name)
+        expect(screen.getByText("Name is required.")).toBeInTheDocument()
+        expect(screen.queryByText("Subject is required.")).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "Create" }))
+
+        const subject = screen.getByLabelText("Subject")
+        expect(screen.getByText("System key is required.")).toBeInTheDocument()
+        expect(screen.getByText("Subject is required.")).toBeInTheDocument()
+        expect(screen.getByText("Body is required.")).toBeInTheDocument()
+        expect(subject).toHaveAttribute("aria-invalid", "true")
+        expect(subject).toHaveAttribute("aria-describedby", "subject-error")
+        // The subject error sits directly under its input, not under Insert Variable.
+        expect(subject.nextElementSibling).toHaveTextContent("Subject is required.")
+        await waitFor(() => expect(screen.getByLabelText("System key")).toHaveFocus())
+        expect(mockCreate).not.toHaveBeenCalled()
+
+        fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Welcome" } })
+        expect(screen.queryByText("Name is required.")).not.toBeInTheDocument()
+        expect(screen.queryByText("System key is required.")).not.toBeInTheDocument()
+    })
+
+    it("attaches a duplicate system key to the system key field", async () => {
+        mockCreate.mockRejectedValueOnce(new ApiError(409, "Conflict", "System template already exists"))
+
+        render(<PlatformSystemEmailTemplateNewPage />)
+
+        fireEvent.change(screen.getByLabelText("System key"), { target: { value: "org_invite" } })
+        fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Invite" } })
+        fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "Hi" } })
+        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
+        fireEvent.change(screen.getByPlaceholderText("Paste or edit the HTML for this template..."), {
+            target: { value: "<p>Hello</p>" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Create" }))
+
+        expect(await screen.findByText("A template with this system key already exists.")).toBeInTheDocument()
+        expect(screen.getByLabelText("System key")).toHaveAttribute("aria-invalid", "true")
     })
 })

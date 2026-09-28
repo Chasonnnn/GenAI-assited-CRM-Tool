@@ -1,0 +1,5 @@
+{
+  "role": "operations",
+  "template_response": 403,
+  "dialog": "Create Campaign\n\nStep 2 of 7\n\n1\n2\n3\n4\n5\n6\n7\nSelect Promotional Message Template\nTemplate *\nChoose a template\nCancel\nBack\nNext"
+}

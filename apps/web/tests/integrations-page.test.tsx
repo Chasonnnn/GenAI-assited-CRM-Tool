@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, within, act } from '@testing-library/react'
+import { render, screen, fireEvent, within, act, waitFor } from '@testing-library/react'
 import IntegrationsPage from '../app/(app)/settings/integrations/page'
+import { ApiError } from '../lib/api'
 import type { ResendSettings } from '../lib/api/resend'
 
 const mockUseAuth = vi.fn()
@@ -373,27 +374,99 @@ vi.mock('next/navigation', () => ({
     }),
 }))
 
-vi.mock('@/components/ui/dialog', () => ({
-    Dialog: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
-        open ? <div data-testid="dialog-root">{children}</div> : null,
-    DialogContent: ({ children, className }: { children?: ReactNode; className?: string }) => (
-        <dialog open aria-label="Integration settings" className={className}>
-            {children}
-        </dialog>
-    ),
-    DialogHeader: ({ children, className }: { children?: ReactNode; className?: string }) => (
-        <div className={className}>{children}</div>
-    ),
-    DialogFooter: ({ children, className }: { children?: ReactNode; className?: string }) => (
-        <div className={className}>{children}</div>
-    ),
-    DialogTitle: ({ children, className }: { children?: ReactNode; className?: string }) => (
-        <div className={className}>{children}</div>
-    ),
-    DialogDescription: ({ children, className }: { children?: ReactNode; className?: string }) => (
-        <div className={className}>{children}</div>
-    ),
-}))
+vi.mock('@/components/ui/dialog', async () => {
+    const React = await import('react')
+    // DialogClose calls the nearest Dialog's onOpenChange(false), as the real primitive does.
+    const DialogCloseContext = React.createContext<(() => void) | null>(null)
+    type SlotProps = { children?: ReactNode; className?: string }
+    return {
+        Dialog: ({
+            open,
+            onOpenChange,
+            children,
+        }: {
+            open?: boolean
+            onOpenChange?: (open: boolean) => void
+            children?: ReactNode
+        }) =>
+            open ? (
+                <DialogCloseContext.Provider value={() => onOpenChange?.(false)}>
+                    <div data-testid="dialog-root">{children}</div>
+                </DialogCloseContext.Provider>
+            ) : null,
+        DialogContent: ({
+            children,
+            className,
+            size,
+            layout,
+            ref,
+            initialFocus,
+        }: SlotProps & {
+            size?: string
+            layout?: string
+            ref?: React.Ref<HTMLDialogElement>
+            initialFocus?: React.RefObject<HTMLElement | null>
+        }) => {
+            // Mirrors Base UI: a ref passed as initialFocus receives focus when the dialog opens.
+            React.useEffect(() => {
+                initialFocus?.current?.focus()
+            }, [initialFocus])
+            return (
+                <dialog
+                    ref={ref}
+                    open
+                    tabIndex={-1}
+                    aria-label="Integration settings"
+                    className={className}
+                    data-size={size ?? 'md'}
+                    data-layout={layout ?? 'default'}
+                >
+                    {children}
+                </dialog>
+            )
+        },
+        DialogHeader: ({
+            children,
+            className,
+            icon,
+            status,
+        }: SlotProps & { icon?: ReactNode; status?: ReactNode }) => (
+            <div data-slot="dialog-header" className={className}>
+                {icon ? <span data-slot="dialog-header-icon">{icon}</span> : null}
+                <div>{children}</div>
+                {status ? <div data-slot="dialog-header-status">{status}</div> : null}
+            </div>
+        ),
+        DialogBody: ({ children, className, ...props }: SlotProps & Record<string, unknown>) => (
+            <div data-slot="dialog-body" className={className} {...props}>
+                {children}
+            </div>
+        ),
+        DialogStatusBar: ({ children, className }: SlotProps) => (
+            <div data-slot="dialog-status-bar" className={className}>{children}</div>
+        ),
+        DialogFooter: ({ children, className, start }: SlotProps & { start?: ReactNode }) => (
+            <div data-slot="dialog-footer" className={className}>
+                {start ? <div data-slot="dialog-footer-start">{start}</div> : null}
+                {children}
+            </div>
+        ),
+        DialogClose: ({ render, children }: { render?: React.ReactElement; children?: ReactNode }) => {
+            const close = React.useContext(DialogCloseContext)
+            return React.cloneElement(
+                render ?? <button type="button" />,
+                { onClick: () => close?.() } as Record<string, unknown>,
+                children,
+            )
+        },
+        DialogTitle: ({ children, className }: SlotProps) => (
+            <div className={className}>{children}</div>
+        ),
+        DialogDescription: ({ children, className }: SlotProps) => (
+            <div className={className}>{children}</div>
+        ),
+    }
+})
 
 vi.mock('@/lib/hooks/use-user-integrations', () => ({
     useUserIntegrations: (enabled?: boolean) => mockUseUserIntegrations(enabled),
@@ -407,7 +480,11 @@ vi.mock('@/lib/hooks/use-user-integrations', () => ({
     useConnectGoogleCalendar: () => ({ mutate: mockConnectGoogleCalendar, isPending: false }),
     useSyncGoogleCalendarNow: () => ({ mutate: mockSyncGoogleCalendarNow, isPending: false }),
     useConnectGcp: () => ({ mutate: mockConnectGcp, isPending: false }),
-    useDisconnectIntegration: () => ({ mutate: mockDisconnectIntegration, isPending: false }),
+    useDisconnectIntegration: () => ({
+        mutate: mockDisconnectIntegration,
+        mutateAsync: mockDisconnectIntegration,
+        isPending: false,
+    }),
 }))
 
 vi.mock('@/lib/hooks/use-ai', () => ({
@@ -705,13 +782,21 @@ describe('IntegrationsPage', () => {
         render(<IntegrationsPage />)
 
         expect(screen.getByText('Integrations')).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: 'System health' })).toBeInTheDocument()
         expect(screen.getAllByText('Meta Lead Ads').length).toBeGreaterThan(0)
-        expect(screen.getByText('AI Assistant')).toBeInTheDocument()
-        expect(screen.getByText('Email Delivery')).toBeInTheDocument()
-        expect(
-            screen.getByRole('link', { name: /view email operations/i })
-        ).toHaveAttribute('href', '/settings/integrations/email')
-        expect(screen.getByText('Messaging Delivery')).toBeInTheDocument()
+        const organizationList = screen.getByTestId('organization-integrations-list')
+        const rowTitles = within(organizationList)
+            .getAllByRole('heading', { level: 3 })
+            .map((heading) => heading.textContent)
+        expect(rowTitles).toEqual([
+            'AI Assistant',
+            'Email delivery',
+            'Messaging (Twilio)',
+            'Zapier',
+            'Meta Lead Ads',
+        ])
+        // Email operations moved into the Email dialog footer.
+        expect(screen.queryByRole('link', { name: /view email operations/i })).not.toBeInTheDocument()
         expect(screen.getByText('Needs attention')).toBeInTheDocument()
         expect(screen.queryByText('degraded')).not.toBeInTheDocument()
         expect(
@@ -730,32 +815,39 @@ describe('IntegrationsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /configure ai/i }))
 
         const dialog = screen.getByRole('dialog')
-        expect(dialog.className).toContain('sm:max-w-4xl')
+        expect(dialog).toHaveAttribute('data-size', '4xl')
+        expect(dialog).toHaveAttribute('data-layout', 'sectioned')
         expect(within(dialog).getByText('AI Configuration')).toBeInTheDocument()
-        expect(within(dialog).getByText('Enabled', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
+        const status = within(dialog).getByText('Enabled', { selector: '[data-slot="badge"]' })
+        expect(status.closest('[data-slot="dialog-header-status"]')).not.toBeNull()
+        // Save lives in the footer, so it stays visible while the body scrolls.
+        const footer = dialog.querySelector('[data-slot="dialog-footer"]') as HTMLElement
+        expect(within(footer).getByRole('button', { name: 'Save AI Configuration' })).toBeInTheDocument()
+        expect(within(footer).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
         expect(within(dialog).getByText('gemini-3.8-flash')).toBeInTheDocument()
         expect(within(dialog).queryByText('gemini-3-flash-preview')).not.toBeInTheDocument()
     })
 
-    it('keeps the email status clear of the close control on narrow dialogs', () => {
+    it('puts the email status in the header slot and email operations in the footer', () => {
         render(<IntegrationsPage />)
 
         fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
 
         const dialog = screen.getByRole('dialog')
-        expect(dialog.className).toContain('sm:max-w-4xl')
-        const title = within(dialog).getByText('Email Configuration')
+        expect(dialog).toHaveAttribute('data-size', '4xl')
+        expect(dialog).toHaveAttribute('data-layout', 'sectioned')
+        expect(within(dialog).getByText('Email Configuration')).toBeInTheDocument()
         const status = within(dialog).getByText('Configured', {
             selector: '[data-slot="badge"]',
         })
-        const header = title.parentElement?.parentElement?.parentElement
-
-        expect(header).toHaveClass('pr-10')
-        expect(status.parentElement).toHaveClass(
-            'flex-col',
-            'items-start',
-            'sm:flex-row'
-        )
+        // The sectioned header reserves space for the close control around its status slot.
+        expect(status.closest('[data-slot="dialog-header-status"]')).not.toBeNull()
+        const footerStart = dialog.querySelector('[data-slot="dialog-footer-start"]') as HTMLElement
+        expect(
+            within(footerStart).getByRole('link', { name: /view email operations/i })
+        ).toHaveAttribute('href', '/settings/integrations/email')
+        const footer = dialog.querySelector('[data-slot="dialog-footer"]') as HTMLElement
+        expect(within(footer).getByRole('button', { name: 'Save Email Configuration' })).toBeInTheDocument()
     })
 
     it('preserves an in-progress AI key edit when equivalent settings rerender', () => {
@@ -1613,18 +1705,20 @@ describe('IntegrationsPage', () => {
         render(<IntegrationsPage />)
         fireEvent.click(screen.getByRole('button', { name: /configure meta/i }))
 
-        expect(screen.getByRole('dialog').className).toContain('sm:max-w-4xl')
-        expect(
-            within(screen.getByRole('dialog')).getByText(/Meta Lead Ads \+ CRM Dataset/)
-        ).toBeInTheDocument()
+        const dialog = screen.getByRole('dialog')
+        expect(dialog).toHaveAttribute('data-size', '4xl')
+        expect(dialog).toHaveAttribute('data-layout', 'sectioned')
+        expect(within(dialog).getByText(/Meta Lead Ads \+ CRM Dataset/)).toBeInTheDocument()
+        const footer = dialog.querySelector('[data-slot="dialog-footer"]') as HTMLElement
+        expect(within(footer).getByRole('button', { name: 'Save CRM Dataset Settings' })).toBeInTheDocument()
     })
 
-    it('shows status badges on organization integration cards', () => {
+    it('shows status badges on organization integration rows', () => {
         render(<IntegrationsPage />)
 
-        const aiCard = screen.getByText('AI Assistant').closest('[data-slot="card"]')
-        const emailCard = screen.getByText('Email Delivery').closest('[data-slot="card"]')
-        const zapierCard = screen.getByText('Zapier').closest('[data-slot="card"]')
+        const aiCard = screen.getByText('AI Assistant').closest('[data-slot="integration-row"]')
+        const emailCard = screen.getByText('Email delivery').closest('[data-slot="integration-row"]')
+        const zapierCard = screen.getByText('Zapier').closest('[data-slot="integration-row"]')
 
         expect(aiCard).not.toBeNull()
         expect(emailCard).not.toBeNull()
@@ -1634,6 +1728,62 @@ describe('IntegrationsPage', () => {
         expect(within(emailCard as HTMLElement).getByText('Configured', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
         expect(within(zapierCard as HTMLElement).getByText('Active', { selector: '[data-slot="badge"]' })).toBeInTheDocument()
         expect(within(zapierCard as HTMLElement).getByTestId('zapier-mapping-health-card-badge')).toHaveTextContent('Reporting disabled')
+        // One action per row, with a visible verb and a name that says which integration it opens.
+        expect(within(aiCard as HTMLElement).getByRole('button', { name: 'Configure AI Assistant' })).toHaveTextContent('Configure')
+        expect(within(zapierCard as HTMLElement).getByRole('button', { name: 'Configure Zapier' })).toBeInTheDocument()
+    })
+
+    it('shows status details instead of setup prompts on organization rows', () => {
+        mockUseTwilioSettingsQuery.mockImplementation(() => ({ data: { enabled: false }, isLoading: false }))
+        mockUseTwilioReadinessQuery.mockImplementation(() => ({
+            data: {
+                overall_status: 'not_configured',
+                issues: [
+                    { code: 'disabled', severity: 'error', message: 'Messaging is disabled.', route: null },
+                    { code: 'credentials', severity: 'error', message: 'Credentials are missing.', route: null },
+                ],
+            },
+            isLoading: false,
+        }))
+        mockUseMetaFormsQuery.mockImplementation(() => ({ data: [], isLoading: false }))
+        mockUseMetaConnectionsQuery.mockImplementation(() => ({ data: [], isLoading: false }))
+
+        render(<IntegrationsPage />)
+
+        const row = (title: string) =>
+            screen.getByText(title, { selector: 'h3' }).closest('[data-slot="integration-row"]') as HTMLElement
+        expect(row('Messaging (Twilio)')).toHaveTextContent('2 setup steps remaining')
+        expect(row('Meta Lead Ads')).toHaveTextContent('0 lead forms · 0 connections')
+        // Reporting is off, so the Zapier row keeps its one summary line and adds no prompt.
+        expect(row('Zapier').querySelectorAll('p')).toHaveLength(1)
+        expect(screen.queryByText(/to get started|Configure SMS|Enable stage reporting/)).not.toBeInTheDocument()
+    })
+
+    it('shows admin access required instead of configure actions for read-only viewers', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'u2' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: [] } })
+
+        render(<IntegrationsPage />)
+
+        expect(screen.getByTestId('personal-integrations-list')).toBeInTheDocument()
+        expect(screen.queryByTestId('organization-integrations-list')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /configure/i })).not.toBeInTheDocument()
+    })
+
+    it('hides System health when no health rows exist and shows no CLI help card', () => {
+        mockUseIntegrationHealth.mockReturnValue({
+            data: [],
+            isLoading: false,
+            refetch: mockRefetch,
+            isFetching: false,
+        })
+
+        render(<IntegrationsPage />)
+
+        expect(screen.queryByRole('heading', { name: 'System health' })).not.toBeInTheDocument()
+        expect(screen.queryByTestId('system-integrations-grid')).not.toBeInTheDocument()
+        expect(screen.queryByText(/No integrations configured/i)).not.toBeInTheDocument()
+        expect(screen.queryByText(/scripts\//)).not.toBeInTheDocument()
     })
 
     it('reports surrogate and donor delivery separately in Zapier system health', () => {
@@ -1669,17 +1819,18 @@ describe('IntegrationsPage', () => {
         )).toBeInTheDocument()
     })
 
-    it('keeps personal and organization integration grids in separate views', () => {
+    it('keeps personal and organization integration lists in separate views', () => {
         render(<IntegrationsPage />)
 
-        expect(screen.queryByTestId('personal-integrations-grid')).not.toBeInTheDocument()
-        expect(screen.getByTestId('organization-integrations-grid')).toHaveClass('md:grid-cols-2', 'xl:grid-cols-3')
+        expect(screen.queryByTestId('personal-integrations-list')).not.toBeInTheDocument()
+        expect(screen.getByTestId('organization-integrations-list').tagName).toBe('UL')
         expect(screen.getByTestId('system-integrations-grid')).toHaveClass('md:grid-cols-2', 'xl:grid-cols-3')
 
         fireEvent.click(screen.getByRole('button', { name: 'Personal' }))
 
-        expect(screen.getByTestId('personal-integrations-grid')).toHaveClass('md:grid-cols-2', 'xl:grid-cols-3')
-        expect(screen.queryByTestId('organization-integrations-grid')).not.toBeInTheDocument()
+        const personalList = screen.getByTestId('personal-integrations-list')
+        expect(within(personalList).getAllByRole('listitem')).toHaveLength(3)
+        expect(screen.queryByTestId('organization-integrations-list')).not.toBeInTheDocument()
         expect(screen.queryByTestId('system-integrations-grid')).not.toBeInTheDocument()
         expect(mockUseUserIntegrations).toHaveBeenLastCalledWith(true)
         expect(mockUseGoogleCalendarStatus).toHaveBeenLastCalledWith(true)
@@ -1695,7 +1846,7 @@ describe('IntegrationsPage', () => {
 
         render(<IntegrationsPage />)
 
-        const zapierCard = screen.getByText('Zapier').closest('[data-slot="card"]')
+        const zapierCard = screen.getByText('Zapier').closest('[data-slot="integration-row"]')
         expect(zapierCard).not.toBeNull()
         expect(within(zapierCard as HTMLElement).getByTestId('zapier-mapping-health-card-badge')).toHaveTextContent('Mapping Healthy')
     })
@@ -1717,7 +1868,7 @@ describe('IntegrationsPage', () => {
 
         render(<IntegrationsPage />)
 
-        const zapierCard = screen.getByText('Zapier').closest('[data-slot="card"]')
+        const zapierCard = screen.getByText('Zapier').closest('[data-slot="integration-row"]')
         expect(zapierCard).not.toBeNull()
         expect(within(zapierCard as HTMLElement).getByTestId('zapier-mapping-health-card-badge')).toHaveTextContent('Mapping Healthy')
         expect(within(zapierCard as HTMLElement).getByText('Donor mapping configured')).toBeInTheDocument()
@@ -1743,7 +1894,7 @@ describe('IntegrationsPage', () => {
 
         render(<IntegrationsPage />)
 
-        const zapierCard = screen.getByText('Zapier').closest('[data-slot="card"]')
+        const zapierCard = screen.getByText('Zapier').closest('[data-slot="integration-row"]')
         expect(zapierCard).not.toBeNull()
         expect(within(zapierCard as HTMLElement).getByTestId('zapier-mapping-health-card-badge')).toHaveTextContent('Mapping Needs Review')
     })
@@ -1755,18 +1906,24 @@ describe('IntegrationsPage', () => {
 
         const dialog = screen.getByRole('dialog')
         expect(dialog.className).toContain('max-w-[1240px]')
-        expect(within(dialog).getByTestId('zapier-dialog-body').className).toContain('overflow-y-auto')
-        expect(within(dialog).getByTestId('zapier-dialog-body').className).toContain('min-h-0')
-        expect(within(dialog).getByTestId('zapier-mapping-health-dialog-badge')).toHaveTextContent('Reporting disabled')
+        expect(dialog).toHaveAttribute('data-layout', 'sectioned')
+        // DialogBody owns vertical scrolling in the sectioned layout; the Zapier body only clips x.
+        expect(within(dialog).getByTestId('zapier-dialog-body')).toHaveAttribute('data-slot', 'dialog-body')
+        expect(within(dialog).getByTestId('zapier-dialog-body').className).toContain('overflow-x-hidden')
+        const mappingBadge = within(dialog).getByTestId('zapier-mapping-health-dialog-badge')
+        expect(mappingBadge).toHaveTextContent('Reporting disabled')
+        // One status badge in the header; mapping health sits in the status bar below it.
+        expect(mappingBadge.closest('[data-slot="dialog-status-bar"]')).toHaveTextContent('Stage reporting')
+        expect(mappingBadge.closest('[data-slot="dialog-header-status"]')).toBeNull()
         expect(within(dialog).getByRole('tab', { name: 'Incoming leads' })).toBeInTheDocument()
         expect(within(dialog).getByRole('tab', { name: 'Form routing' })).toBeInTheDocument()
         expect(within(dialog).getByRole('tab', { name: 'Stage reporting' })).toBeInTheDocument()
         expect(within(dialog).getByRole('tab', { name: 'Activity' })).toBeInTheDocument()
-        expect(within(dialog).getByRole('button', { name: 'Save configuration' })).toBeInTheDocument()
         const inboundHeader = within(dialog).getByTestId('zapier-inbound-header')
         expect(inboundHeader.className).not.toContain('md:flex-row')
 
         fireEvent.click(within(dialog).getByRole('tab', { name: 'Stage reporting' }))
+        expect(within(dialog).getByRole('button', { name: 'Save configuration' })).toBeInTheDocument()
         const mappingTabsList = within(dialog).getByRole('tab', { name: 'Surrogates' }).parentElement
         expect(mappingTabsList?.parentElement).toHaveClass('overflow-x-auto')
         const applyMappingButton = within(dialog).getByRole('button', {
@@ -1782,6 +1939,130 @@ describe('IntegrationsPage', () => {
 
         const dialog = screen.getByRole('dialog')
         expect(within(dialog).getByText('Recent delivery health')).toBeInTheDocument()
+    })
+
+    it('shows Save only on the Stage reporting tab and a single Close elsewhere', () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        const footer = () => dialog.querySelector('[data-slot="dialog-footer"]') as HTMLElement
+
+        for (const tab of ['Incoming leads', 'Form routing', 'Activity']) {
+            fireEvent.click(within(dialog).getByRole('tab', { name: tab }))
+            expect(within(footer()).queryByRole('button', { name: 'Save configuration' })).not.toBeInTheDocument()
+            expect(within(footer()).getByRole('button', { name: 'Close' })).toBeInTheDocument()
+        }
+
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Stage reporting' }))
+        expect(within(footer()).getByRole('button', { name: 'Save configuration' })).toBeInTheDocument()
+        expect(within(footer()).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+
+        fireEvent.click(within(footer()).getByRole('button', { name: 'Cancel' }))
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('returns the Zapier dialog body to the top when the tab changes', () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        const body = within(dialog).getByTestId('zapier-dialog-body')
+
+        body.scrollTop = 480
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Stage reporting' }))
+
+        expect(body.scrollTop).toBe(0)
+    })
+
+    it('rotates the Zapier webhook secret only after confirmation', async () => {
+        mockZapierInboundRotate.mockResolvedValue({ webhook_id: 'abc', webhook_secret: 'new-secret-value' })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Rotate Webhook Secret' }))
+        expect(mockZapierInboundRotate).not.toHaveBeenCalled()
+
+        const confirm = await screen.findByRole('alertdialog', { name: 'Rotate webhook secret?' })
+        await act(async () => {
+            fireEvent.click(within(confirm).getByRole('button', { name: 'Rotate secret' }))
+        })
+
+        expect(mockZapierInboundRotate).toHaveBeenCalledWith({ webhookId: 'abc' })
+        expect(within(dialog).getByText('new-secret-value')).toBeInTheDocument()
+        expect(within(dialog).getByRole('button', { name: 'Copy webhook secret' })).toBeInTheDocument()
+    })
+
+    it('keeps a failed Zapier secret rotation open with a sanitized inline error', async () => {
+        mockZapierInboundRotate.mockRejectedValue(new ApiError(500, 'Internal Server Error', 'KeyError: webhook'))
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Rotate Webhook Secret' }))
+
+        const confirm = await screen.findByRole('alertdialog', { name: 'Rotate webhook secret?' })
+        await act(async () => {
+            fireEvent.click(within(confirm).getByRole('button', { name: 'Rotate secret' }))
+        })
+
+        expect(within(confirm).getByText("Couldn't rotate the webhook secret. Try again.")).toBeInTheDocument()
+        expect(within(confirm).queryByText(/KeyError/)).not.toBeInTheDocument()
+    })
+
+    it('marks an inline webhook label save as saved', async () => {
+        mockZapierInboundUpdate.mockResolvedValue({})
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        const label = within(dialog).getByLabelText('Label')
+
+        fireEvent.change(label, { target: { value: 'Website form' } })
+        await act(async () => {
+            fireEvent.blur(label)
+        })
+
+        expect(mockZapierInboundUpdate).toHaveBeenCalledWith({
+            webhookId: 'abc',
+            payload: { label: 'Website form' },
+        })
+        expect(within(dialog).getByText('Saved')).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Webhook URL')).toHaveValue('https://api.test/webhooks/zapier/abc')
+    })
+
+    it('shows an inline error for an empty Zapier field paste instead of a toast', () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Form routing' }))
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /extract fields/i }))
+
+        expect(mockZapierFieldPaste).not.toHaveBeenCalled()
+        expect(within(dialog).getByText('Paste the Zapier field list first.')).toBeInTheDocument()
+        const textarea = within(dialog).getByLabelText('Paste Zapier Field List')
+        expect(textarea).toHaveAttribute('aria-invalid', 'true')
+
+        fireEvent.change(textarea, { target: { value: 'Full Name: Jane Doe' } })
+        expect(within(dialog).queryByText('Paste the Zapier field list first.')).not.toBeInTheDocument()
+    })
+
+    it('rotates the Resend webhook URL only after confirmation', async () => {
+        mockRotateWebhook.mockResolvedValue({ webhook_url: 'https://api.test/webhooks/resend/new' })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure email/i }))
+        const dialog = screen.getByRole('dialog')
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Rotate webhook URL' }))
+        expect(mockRotateWebhook).not.toHaveBeenCalled()
+
+        const confirm = await screen.findByRole('alertdialog', { name: 'Rotate webhook URL?' })
+        await act(async () => {
+            fireEvent.click(within(confirm).getByRole('button', { name: 'Rotate URL' }))
+        })
+
+        expect(mockRotateWebhook).toHaveBeenCalled()
     })
 
     it('shows real surrogate, egg donor, and sperm donor form routes', () => {
@@ -1927,12 +2208,12 @@ describe('IntegrationsPage', () => {
         render(<IntegrationsPage />)
         fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
         const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
         await act(async () => {
             fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
         })
         expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_event_mapping')
         mockZapierOutboundUpdate.mockClear()
-        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
         fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
         fireEvent.click(within(dialog).getAllByRole('button', { name: 'Remove unavailable mappings' })[0])
         await act(async () => {
@@ -1994,7 +2275,7 @@ describe('IntegrationsPage', () => {
 
         render(<IntegrationsPage />)
 
-        const zapierCard = screen.getByText('Zapier').closest('[data-slot="card"]')
+        const zapierCard = screen.getByText('Zapier').closest('[data-slot="integration-row"]')
         expect(zapierCard).not.toBeNull()
         expect(within(zapierCard as HTMLElement).getByTestId('zapier-mapping-health-card-badge')).toHaveTextContent('Mapping unavailable')
 
@@ -2108,9 +2389,18 @@ describe('IntegrationsPage', () => {
 
         const dialog = screen.getByRole('dialog')
         fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
-        expect(within(dialog).getByLabelText(/enable new_unread event/i)).toBeInTheDocument()
-        expect(within(dialog).getByLabelText(/enable contacted event/i)).toBeInTheDocument()
-        expect(within(dialog).getByLabelText(/enable pre_qualified event/i)).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Send New Unread event')).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Send Contacted event')).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Send Pre Qualified event')).toBeInTheDocument()
+        // One shared table: Stage | Event bucket | Event name | Send.
+        const table = within(dialog).getByLabelText('Send New Unread event').closest('table') as HTMLElement
+        expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual([
+            'Stage',
+            'Event bucket',
+            'Event name',
+            'Send',
+        ])
+        expect(within(dialog).getByText('Map each stage to the event sent to Zapier.')).toBeInTheDocument()
     })
 
     it('uses the active zapier form when sending a test lead', async () => {
@@ -2239,7 +2529,8 @@ describe('IntegrationsPage', () => {
                 updated_at: '2026-01-01T00:00:00Z',
             },
         ]
-        mockUpdateMetaAdAccount.mockRejectedValueOnce(new Error('Meta rejected pixel'))
+        // A 4xx API detail is shown; other failures show a fixed message (see getActionErrorMessage).
+        mockUpdateMetaAdAccount.mockRejectedValueOnce(new ApiError(400, 'Bad Request', 'Meta rejected pixel'))
 
         render(<IntegrationsPage />)
 
@@ -2341,9 +2632,9 @@ describe('IntegrationsPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /configure meta/i }))
 
         const dialog = screen.getByRole('dialog')
-        expect(within(dialog).getByLabelText(/enable new_unread meta crm dataset event/i)).toBeInTheDocument()
-        expect(within(dialog).getByLabelText(/enable contacted meta crm dataset event/i)).toBeInTheDocument()
-        expect(within(dialog).getByLabelText(/enable pre_qualified meta crm dataset event/i)).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Send New Unread to Meta CRM dataset')).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Send Contacted to Meta CRM dataset')).toBeInTheDocument()
+        expect(within(dialog).getByLabelText('Send Pre Qualified to Meta CRM dataset')).toBeInTheDocument()
     })
 
     it('shows friendly bucket and stage labels in the Zapier dialog and hides redundant tracked event fields', () => {
@@ -2355,10 +2646,12 @@ describe('IntegrationsPage', () => {
         fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
         const disqualifiedRow = within(dialog)
             .getByText('Disqualified')
-            .closest('div.rounded-md.border.p-3')
+            .closest('tr')
 
         expect(disqualifiedRow).not.toBeNull()
-        expect(within(disqualifiedRow as HTMLElement).getByRole('combobox')).toHaveTextContent('Not Qualified')
+        expect(
+            within(disqualifiedRow as HTMLElement).getByRole('combobox', { name: 'Event bucket for Disqualified' }),
+        ).toHaveTextContent('Not Qualified')
         expect(within(disqualifiedRow as HTMLElement).queryByRole('textbox')).not.toBeInTheDocument()
         fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
         expect(
@@ -2367,11 +2660,13 @@ describe('IntegrationsPage', () => {
         fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
 
         const newUnreadRow = within(dialog)
-            .getByLabelText(/enable new_unread event/i)
-            .closest('div.rounded-md.border.p-3')
+            .getByLabelText('Send New Unread event')
+            .closest('tr')
 
         expect(newUnreadRow).not.toBeNull()
-        expect(within(newUnreadRow as HTMLElement).getByRole('textbox')).toBeInTheDocument()
+        expect(
+            within(newUnreadRow as HTMLElement).getByRole('textbox', { name: 'Event name for New Unread' }),
+        ).toBeInTheDocument()
     })
 
     it('shows friendly bucket and stage labels in the Meta CRM dialog and hides redundant tracked event fields', () => {
@@ -2382,21 +2677,25 @@ describe('IntegrationsPage', () => {
         const dialog = screen.getByRole('dialog')
         const disqualifiedRow = within(dialog)
             .getByText('Disqualified')
-            .closest('div.rounded-md.border.p-3')
+            .closest('tr')
 
         expect(disqualifiedRow).not.toBeNull()
-        expect(within(disqualifiedRow as HTMLElement).getByRole('combobox')).toHaveTextContent('Not Qualified')
+        expect(
+            within(disqualifiedRow as HTMLElement).getByRole('combobox', { name: 'Event bucket for Disqualified' }),
+        ).toHaveTextContent('Not Qualified')
         expect(within(disqualifiedRow as HTMLElement).queryByRole('textbox')).not.toBeInTheDocument()
         expect(
             within(dialog).getByRole('combobox', { name: /select meta crm dataset stage/i }),
         ).toHaveTextContent('New Unread')
 
         const newUnreadRow = within(dialog)
-            .getByLabelText(/enable new_unread meta crm dataset event/i)
-            .closest('div.rounded-md.border.p-3')
+            .getByLabelText('Send New Unread to Meta CRM dataset')
+            .closest('tr')
 
         expect(newUnreadRow).not.toBeNull()
-        expect(within(newUnreadRow as HTMLElement).getByRole('textbox')).toBeInTheDocument()
+        expect(
+            within(newUnreadRow as HTMLElement).getByRole('textbox', { name: 'Event name for New Unread' }),
+        ).toBeInTheDocument()
     })
 
     it('sends Meta CRM dataset tests and retries failed monitoring events', async () => {
@@ -2442,7 +2741,7 @@ describe('IntegrationsPage', () => {
         expect(mockRetryMetaCrmDatasetEvent).toHaveBeenCalledWith({ eventId: 'meta-event-1' })
     })
 
-    it('shows last sync and keeps one sync action for connected Google Calendar', () => {
+    it('shows last sync and keeps one sync action for connected Google Calendar', async () => {
         const lastSyncAt = '2026-02-21T02:30:00Z'
         mockUseUserIntegrations.mockReturnValue({
             data: [
@@ -2472,17 +2771,115 @@ describe('IntegrationsPage', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Personal' }))
 
-        const googleCard = screen.getByText('Google Calendar + Meeting').closest('[data-slot="card"]')
-        expect(googleCard).not.toBeNull()
-        expect((googleCard as HTMLElement).className).not.toContain('col-span')
-        expect(within(googleCard as HTMLElement).queryByText(/last sync/i)).not.toBeInTheDocument()
-        fireEvent.click(within(googleCard as HTMLElement).getByRole('button', { name: 'Manage' }))
+        const googleRow = screen.getByText('Google Calendar & Meet').closest('[data-slot="integration-row"]')
+        expect(googleRow).not.toBeNull()
+        expect(googleRow).toHaveTextContent(/calendaruser@test\.com · Last sync \S/)
+        fireEvent.click(within(googleRow as HTMLElement).getByRole('button', { name: 'Manage Google Calendar & Meet' }))
         const dialog = screen.getByRole('dialog')
-        expect(within(dialog).getByText(/last sync/i)).toBeInTheDocument()
+        expect(dialog).toHaveAttribute('data-size', '2xl')
+        expect(dialog).toHaveAttribute('data-layout', 'sectioned')
+        const statusBar = dialog.querySelector('[data-slot="dialog-status-bar"]') as HTMLElement
+        expect(statusBar).toHaveTextContent('Last sync')
+        expect(within(dialog).getByText('Connected', { selector: '[data-slot="badge"]' })
+            .closest('[data-slot="dialog-header-status"]')).not.toBeNull()
+        expect(within(dialog).getByRole('heading', { name: 'Google Meet' })).toBeInTheDocument()
 
-        expect(within(dialog).getAllByRole('button', { name: /^sync$/i })).toHaveLength(1)
-        fireEvent.click(within(dialog).getByRole('button', { name: /^sync$/i }))
+        // Focus starts on the dialog, not on the first link inside it.
+        await waitFor(() => expect(dialog).toHaveFocus())
+        expect(within(dialog).getAllByRole('button', { name: /^sync now$/i })).toHaveLength(1)
+        fireEvent.click(within(statusBar).getByRole('button', { name: /^sync now$/i }))
         expect(mockSyncGoogleCalendarNow).toHaveBeenCalled()
+        // tasks_accessible is true, so the Google Tasks warning stays hidden.
+        expect(within(dialog).queryByText('Google Tasks sync unavailable')).not.toBeInTheDocument()
+    })
+
+    it('disconnects Google Calendar only after confirmation and closes the dialog', async () => {
+        mockDisconnectIntegration.mockResolvedValue(undefined)
+        mockUseUserIntegrations.mockReturnValue({
+            data: [{
+                integration_type: 'google_calendar',
+                connected: true,
+                account_email: 'calendaruser@test.com',
+                expires_at: null,
+                last_sync_at: null,
+            }],
+            isLoading: false,
+        })
+        mockUseGoogleCalendarStatus.mockReturnValue({
+            data: {
+                connected: true,
+                account_email: 'calendaruser@test.com',
+                expires_at: null,
+                tasks_accessible: false,
+                tasks_error: 'insufficientPermissions: Request had insufficient authentication scopes.',
+                last_sync_at: null,
+            },
+            isLoading: false,
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Personal' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Manage Google Calendar & Meet' }))
+
+        const dialog = screen.getByRole('dialog')
+        // The raw provider error is never shown.
+        expect(within(dialog).getByText('Google Tasks sync unavailable')).toBeInTheDocument()
+        expect(within(dialog).queryByText(/insufficientPermissions/)).not.toBeInTheDocument()
+
+        const footerStart = dialog.querySelector('[data-slot="dialog-footer-start"]') as HTMLElement
+        fireEvent.click(within(footerStart).getByRole('button', { name: 'Disconnect…' }))
+        expect(mockDisconnectIntegration).not.toHaveBeenCalled()
+
+        const confirm = await screen.findByRole('alertdialog', { name: 'Disconnect Google Calendar?' })
+        await act(async () => {
+            fireEvent.click(within(confirm).getByRole('button', { name: 'Disconnect' }))
+        })
+
+        expect(mockDisconnectIntegration).toHaveBeenCalledWith('google_calendar')
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('disconnects Gmail from the list only after confirmation', async () => {
+        mockDisconnectIntegration.mockResolvedValue(undefined)
+        mockUseUserIntegrations.mockReturnValue({
+            data: [{
+                integration_type: 'gmail',
+                connected: true,
+                account_email: 'sender@test.com',
+                expires_at: null,
+                last_sync_at: null,
+            }],
+            isLoading: false,
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Personal' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Disconnect Gmail' }))
+        expect(mockDisconnectIntegration).not.toHaveBeenCalled()
+
+        const confirm = await screen.findByRole('alertdialog', { name: 'Disconnect Gmail?' })
+        await act(async () => {
+            fireEvent.click(within(confirm).getByRole('button', { name: 'Disconnect' }))
+        })
+        expect(mockDisconnectIntegration).toHaveBeenCalledWith('gmail')
+    })
+
+    it('links a connected Zoom account to its management page', () => {
+        mockUseUserIntegrations.mockReturnValue({
+            data: [{
+                integration_type: 'zoom',
+                connected: true,
+                account_email: 'zoom@test.com',
+                expires_at: null,
+                last_sync_at: null,
+            }],
+            isLoading: false,
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Personal' }))
+
+        expect(screen.getByRole('link', { name: 'Manage Zoom' })).toHaveAttribute('href', '/settings/integrations/zoom')
     })
 
     it('keeps a loaded null Google status timestamp as not synced yet', () => {
@@ -2511,9 +2908,13 @@ describe('IntegrationsPage', () => {
         render(<IntegrationsPage />)
         fireEvent.click(screen.getByRole('button', { name: 'Personal' }))
 
-        const googleCard = screen.getByText('Google Calendar + Meeting').closest('[data-slot="card"]')
-        fireEvent.click(within(googleCard as HTMLElement).getByRole('button', { name: 'Manage' }))
-        expect(within(screen.getByRole('dialog')).getByText('Last sync: Not synced yet')).toBeInTheDocument()
+        const googleRow = screen.getByText('Google Calendar & Meet').closest('[data-slot="integration-row"]')
+        expect(googleRow).toHaveTextContent('calendaruser@test.com · Not synced yet')
+        expect(googleRow).not.toHaveTextContent('Last sync')
+        fireEvent.click(within(googleRow as HTMLElement).getByRole('button', { name: /^Manage/ }))
+        const statusBar = screen.getByRole('dialog').querySelector('[data-slot="dialog-status-bar"]') as HTMLElement
+        expect(statusBar).toHaveTextContent('Last sync')
+        expect(statusBar).toHaveTextContent('Not synced yet')
     })
 
     it('keeps personal integrations accessible and hides organization integrations without manage_integrations', () => {

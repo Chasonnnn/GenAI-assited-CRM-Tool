@@ -7,9 +7,28 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { Loader2Icon, CheckIcon, PlusIcon, TrashIcon } from "lucide-react"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { EmptyState } from "@/components/empty-state"
+import { LoadErrorState } from "@/components/error-state"
+import { LightbulbIcon, Loader2Icon, MoreVerticalIcon, PencilIcon, PlusIcon, TrashIcon } from "lucide-react"
 import { toast } from "@/components/ui/toast"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
+import { createSelectLabelGetter } from "@/lib/select-labels"
 import { usePipelines } from "@/lib/hooks/use-pipelines"
 import {
   createIntelligentSuggestionRule,
@@ -48,7 +67,6 @@ type IntelligentSuggestionsState = {
   editingRuleDraft: IntelligentSuggestionRuleDraft | null
   saving: boolean
   ruleSaving: boolean
-  saved: boolean
   error: string | null
 }
 
@@ -58,6 +76,7 @@ type PipelineStageLike = {
   stage_key?: string
   label?: string
   is_active?: boolean
+  order?: number
 }
 
 type PipelineLike = {
@@ -75,11 +94,31 @@ function resolveStateUpdate<T>(updater: React.SetStateAction<T>, current: T): T 
     : updater
 }
 
+const DUPLICATE_RULE_MESSAGE = "A rule with this template, stage and threshold already exists."
+
+const DIGEST_HOUR_LABELS: Record<string, string> = Object.fromEntries(
+  Array.from({ length: 24 }, (_, hour) => {
+    const suffix = hour < 12 ? "AM" : "PM"
+    const displayHour = hour % 12 === 0 ? 12 : hour % 12
+    return [String(hour), `${displayHour}:00 ${suffix}`]
+  }),
+)
+const getDigestHourLabel = createSelectLabelGetter(DIGEST_HOUR_LABELS, {
+  emptyLabel: "Select hour",
+  unknownLabel: "Unknown hour",
+})
+
+/** Stages in pipeline order (the order the pipeline editor shows), first pipeline first. */
 function buildStageOptions(pipelines: ReadonlyArray<PipelineLike> | null | undefined): StageOption[] {
   const byValue = new Map<string, StageOption>()
   for (const pipeline of pipelines ?? []) {
-    for (const rawStage of pipeline.stages ?? []) {
-      const stage = rawStage as PipelineStageLike
+    const orderedStages = [...(pipeline.stages ?? [])]
+      .map((rawStage, index) => ({ stage: rawStage as PipelineStageLike, index }))
+      .sort(
+        (left, right) =>
+          (left.stage.order ?? left.index) - (right.stage.order ?? right.index) || left.index - right.index,
+      )
+    for (const { stage } of orderedStages) {
       const slug = stage.slug ?? stage.status
       const stageKey = stage.stage_key ?? slug
       if (!slug || !stageKey || stage.is_active === false) continue
@@ -93,7 +132,35 @@ function buildStageOptions(pipelines: ReadonlyArray<PipelineLike> | null | undef
       }
     }
   }
-  return Array.from(byValue.values()).sort((left, right) => left.label.localeCompare(right.label))
+  return Array.from(byValue.values())
+}
+
+/** The stage a rule targets, as a stage key, so key and slug references compare equal. */
+function resolveRuleStageKey(
+  stageRef: string | null | undefined,
+  stageOptions: StageOption[],
+): string | null {
+  const normalized = (stageRef ?? "").trim()
+  if (!normalized) return null
+  const option = stageOptions.find((candidate) => candidate.value === normalized || candidate.slug === normalized)
+  return option?.stageKey ?? normalized
+}
+
+/** Mirrors the API check: one rule per template, stage and business-day threshold. */
+function findDuplicateRule(
+  rules: IntelligentSuggestionRule[],
+  draft: IntelligentSuggestionRuleDraft,
+  stageOptions: StageOption[],
+  excludeRuleId?: string,
+): IntelligentSuggestionRule | undefined {
+  const draftStage = resolveRuleStageKey(draft.stage_slug, stageOptions)
+  return rules.find(
+    (rule) =>
+      rule.id !== excludeRuleId &&
+      rule.template_key === draft.template_key &&
+      rule.business_days === draft.business_days &&
+      resolveRuleStageKey(rule.stage_key ?? rule.stage_slug, stageOptions) === draftStage,
+  )
 }
 
 function buildStageLabelByRef(stageOptions: StageOption[]): Map<string, string> {
@@ -228,6 +295,7 @@ function WorkflowRuleComposer({
   newRuleTemplate,
   newRuleNeedsStage,
   ruleSaving,
+  duplicateError,
   stageOptions,
   stageLabelByRef,
   onTemplateChange,
@@ -240,25 +308,42 @@ function WorkflowRuleComposer({
   newRuleTemplate: IntelligentSuggestionTemplate | undefined
   newRuleNeedsStage: boolean
   ruleSaving: boolean
+  duplicateError: string | null
   stageOptions: StageOption[]
   stageLabelByRef: Map<string, string>
   onTemplateChange: (templateKey: string | null) => void
   onAddRule: () => Promise<void>
   onDraftChange: (updater: React.SetStateAction<IntelligentSuggestionRuleDraft | null>) => void
 }) {
+  // The default draft often matches an existing rule (on load and right after an add), so the
+  // duplicate error waits until the user edits the draft or clicks Add Rule.
+  const [duplicateVisible, setDuplicateVisible] = useState(false)
+  const visibleDuplicateError = duplicateVisible ? duplicateError : null
+  const handleTemplateChange = (templateKey: string | null) => {
+    setDuplicateVisible(true)
+    onTemplateChange(templateKey)
+  }
+  const handleDraftChange = (updater: React.SetStateAction<IntelligentSuggestionRuleDraft | null>) => {
+    setDuplicateVisible(true)
+    onDraftChange(updater)
+  }
+  const handleAddRule = async () => {
+    if (duplicateError) {
+      setDuplicateVisible(true)
+      return
+    }
+    await onAddRule()
+    setDuplicateVisible(false)
+  }
+
   return (
     <div className="rounded-lg border border-border p-4 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="font-medium">Add Workflow Rule</p>
-          <p className="text-sm text-muted-foreground">
-            Build rules like "stuck on stage X for Y business days" or "follow up after Y days."
-          </p>
-        </div>
+        <p className="font-medium">Add Workflow Rule</p>
         <Button
           variant="outline"
-          onClick={onAddRule}
-          disabled={ruleSaving || !newRuleDraft || templates.length === 0}
+          onClick={() => void handleAddRule()}
+          disabled={ruleSaving || !newRuleDraft || templates.length === 0 || visibleDuplicateError !== null}
         >
           <PlusIcon className="mr-2 size-4" aria-hidden="true" />
           Add Rule
@@ -271,7 +356,7 @@ function WorkflowRuleComposer({
             <Label htmlFor="new-rule-template">Template</Label>
             <Select
               value={newRuleDraft.template_key}
-              onValueChange={onTemplateChange}
+              onValueChange={handleTemplateChange}
               disabled={ruleSaving || templates.length === 0}
             >
               <SelectTrigger id="new-rule-template">
@@ -302,7 +387,7 @@ function WorkflowRuleComposer({
               value={newRuleDraft.name}
               disabled={ruleSaving}
               onChange={(event) =>
-                onDraftChange((previous) => (previous ? { ...previous, name: event.target.value } : previous))
+                handleDraftChange((previous) => (previous ? { ...previous, name: event.target.value } : previous))
               }
             />
           </div>
@@ -314,7 +399,7 @@ function WorkflowRuleComposer({
                 id="new-rule-stage"
                 value={newRuleDraft.stage_slug}
                 onChange={(nextStage) =>
-                  onDraftChange((previous) =>
+                  handleDraftChange((previous) =>
                     nextStage && previous ? { ...previous, stage_slug: nextStage } : previous,
                   )
                 }
@@ -337,12 +422,18 @@ function WorkflowRuleComposer({
               onChange={(event) => {
                 const parsed = Number.parseInt(event.target.value, 10)
                 const normalized = Number.isFinite(parsed) ? parsed : newRuleDraft.business_days
-                onDraftChange((previous) =>
+                handleDraftChange((previous) =>
                   previous ? { ...previous, business_days: Math.max(1, Math.min(60, normalized)) } : previous,
                 )
               }}
             />
           </div>
+
+          {visibleDuplicateError ? (
+            <p role="alert" className="text-sm text-destructive md:col-span-2">
+              {visibleDuplicateError}
+            </p>
+          ) : null}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">No templates available. Reload to retry.</p>
@@ -351,89 +442,126 @@ function WorkflowRuleComposer({
   )
 }
 
-function WorkflowRuleCard({
+function WorkflowRulesTable({
+  rules,
+  templateByKey,
+  ruleSaving,
+  getRuleStageLabel,
+  onToggleEnabled,
+  onStartEdit,
+  onRequestDelete,
+}: {
+  rules: IntelligentSuggestionRule[]
+  templateByKey: Map<string, IntelligentSuggestionTemplate>
+  ruleSaving: boolean
+  getRuleStageLabel: (rule: IntelligentSuggestionRule) => string
+  onToggleEnabled: (rule: IntelligentSuggestionRule) => Promise<void>
+  onStartEdit: (rule: IntelligentSuggestionRule) => void
+  onRequestDelete: (rule: IntelligentSuggestionRule) => void
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Rule</TableHead>
+          <TableHead>Template</TableHead>
+          <TableHead>Stage</TableHead>
+          <TableHead className="text-right">Business days</TableHead>
+          <TableHead className="text-right">Priority</TableHead>
+          <TableHead>Enabled</TableHead>
+          <TableHead className="w-12">
+            <span className="sr-only">Actions</span>
+          </TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rules.map((rule) => (
+          <TableRow key={rule.id}>
+            <TableCell className="font-medium">{rule.name}</TableCell>
+            <TableCell>{templateByKey.get(rule.template_key)?.name ?? "Unknown template"}</TableCell>
+            <TableCell>{getRuleStageLabel(rule)}</TableCell>
+            <TableCell className="text-right tabular-nums">{rule.business_days}</TableCell>
+            <TableCell className="text-right tabular-nums">{rule.sort_order}</TableCell>
+            <TableCell>
+              <Switch
+                checked={rule.enabled}
+                disabled={ruleSaving}
+                onCheckedChange={() => void onToggleEnabled(rule)}
+                aria-label={`Enable ${rule.name}`}
+              />
+            </TableCell>
+            <TableCell>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="ghost" size="icon-sm" disabled={ruleSaving} />}
+                  aria-label={`Actions for ${rule.name}`}
+                >
+                  <MoreVerticalIcon aria-hidden="true" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onStartEdit(rule)}>
+                    <PencilIcon aria-hidden="true" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onClick={() => onRequestDelete(rule)}>
+                    <TrashIcon aria-hidden="true" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+function EditRuleDialog({
   rule,
-  template,
-  isEditing,
   editingRuleDraft,
   editingNeedsStage,
-  ruleDescription,
-  ruleStageLabel,
+  duplicateError,
   ruleSaving,
   stageOptions,
   stageLabelByRef,
-  onToggleEnabled,
-  onStartEdit,
-  onDelete,
   onEditingDraftChange,
   onSaveEdit,
   onCancelEdit,
 }: {
-  rule: IntelligentSuggestionRule
-  template: IntelligentSuggestionTemplate | undefined
-  isEditing: boolean
+  rule: IntelligentSuggestionRule | undefined
   editingRuleDraft: IntelligentSuggestionRuleDraft | null
   editingNeedsStage: boolean
-  ruleDescription: string
-  ruleStageLabel: string
+  duplicateError: string | null
   ruleSaving: boolean
   stageOptions: StageOption[]
   stageLabelByRef: Map<string, string>
-  onToggleEnabled: (rule: IntelligentSuggestionRule) => Promise<void>
-  onStartEdit: (rule: IntelligentSuggestionRule) => void
-  onDelete: (rule: IntelligentSuggestionRule) => Promise<void>
   onEditingDraftChange: (updater: React.SetStateAction<IntelligentSuggestionRuleDraft | null>) => void
   onSaveEdit: () => Promise<void>
   onCancelEdit: () => void
 }) {
+  const open = Boolean(rule && editingRuleDraft)
   return (
-    <div className="rounded-lg border border-border p-4 space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="font-medium">{rule.name}</p>
-          <p className="text-sm text-muted-foreground">{ruleDescription}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={rule.enabled ? "default" : "secondary"}>
-            {rule.enabled ? "Enabled" : "Disabled"}
-          </Badge>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={ruleSaving}
-            onClick={() => void onToggleEnabled(rule)}
-          >
-            {rule.enabled ? "Disable" : "Enable"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={ruleSaving}
-            onClick={() => onStartEdit(rule)}
-          >
-            Edit
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={ruleSaving}
-            onClick={() => void onDelete(rule)}
-          >
-            <TrashIcon className="mr-1 size-4" aria-hidden="true" />
-            Delete
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-3 text-sm md:grid-cols-3">
-        <p><span className="font-medium">Template:</span> {template?.name ?? rule.template_key}</p>
-        <p><span className="font-medium">Stage:</span> {ruleStageLabel}</p>
-        <p><span className="font-medium">Priority:</span> {rule.sort_order}</p>
-      </div>
-
-      {isEditing && editingRuleDraft && (
-        <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3">
-          <div className="grid gap-3 md:grid-cols-2">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !ruleSaving) onCancelEdit()
+      }}
+    >
+      <DialogContent>
+      {rule && editingRuleDraft ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            void onSaveEdit()
+          }}
+          noValidate
+        >
+          <DialogHeader>
+            <DialogTitle>Edit {rule.name}</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+          <div className="grid gap-3 py-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor={`edit-rule-name-${rule.id}`}>Rule name</Label>
               <Input
@@ -505,73 +633,80 @@ function WorkflowRuleCard({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor={`edit-rule-enabled-${rule.id}`}>Enabled</Label>
-              <div className="flex h-10 items-center rounded-md border border-input px-3">
-                <Switch
-                  id={`edit-rule-enabled-${rule.id}`}
-                  checked={editingRuleDraft.enabled}
-                  disabled={ruleSaving}
-                  onCheckedChange={(checked) =>
-                    onEditingDraftChange((previous) =>
-                      previous ? { ...previous, enabled: checked } : previous,
-                    )
-                  }
-                />
-              </div>
-            </div>
+            {duplicateError ? (
+              <p role="alert" className="text-sm text-destructive md:col-span-2">
+                {duplicateError}
+              </p>
+            ) : null}
           </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" disabled={ruleSaving} onClick={() => void onSaveEdit()}>
-              Save Rule
-            </Button>
-            <Button size="sm" variant="outline" disabled={ruleSaving} onClick={onCancelEdit}>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={ruleSaving} onClick={onCancelEdit}>
               Cancel
             </Button>
-          </div>
-        </div>
-      )}
-    </div>
+            <Button type="submit" disabled={ruleSaving || duplicateError !== null}>
+              {ruleSaving ? (
+                <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              ) : null}
+              Save Rule
+            </Button>
+          </DialogFooter>
+        </form>
+      ) : null}
+      </DialogContent>
+    </Dialog>
   )
 }
 
 function DailyDigestSettingsCard({
   settings,
-  onSettingsChange,
-  onDigestHourChange,
+  saving,
+  onSettingsPatch,
 }: {
   settings: IntelligentSuggestionSettings
-  onSettingsChange: (updater: React.SetStateAction<IntelligentSuggestionSettings | null>) => void
-  onDigestHourChange: (rawValue: string) => void
+  saving: boolean
+  onSettingsPatch: (patch: Partial<IntelligentSuggestionSettings>, successMessage: string) => Promise<void>
 }) {
   return (
     <div className="rounded-lg border border-border p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="font-medium">Daily digest notifications</p>
+        <Label htmlFor="daily-digest-enabled" className="font-medium">Daily digest notifications</Label>
         <Switch
-          disabled={!settings.enabled}
+          id="daily-digest-enabled"
+          disabled={!settings.enabled || saving}
           checked={settings.daily_digest_enabled}
           onCheckedChange={(checked) =>
-            onSettingsChange((previous) =>
-              previous ? { ...previous, daily_digest_enabled: checked } : previous,
+            void onSettingsPatch(
+              { daily_digest_enabled: checked },
+              checked ? "Daily digest turned on" : "Daily digest turned off",
             )
           }
         />
       </div>
-      <p className="text-sm text-muted-foreground">
-        Send a daily digest to users when suggestions are available.
-      </p>
       <div className="space-y-2 max-w-xs">
-        <Label htmlFor="digest-hour">Digest hour (local org time, 0-23)</Label>
-        <Input
-          id="digest-hour"
-          type="number"
-          min={0}
-          max={23}
-          disabled={!settings.enabled || !settings.daily_digest_enabled}
-          value={settings.digest_hour_local}
-          onChange={(event) => onDigestHourChange(event.target.value)}
-        />
+        <Label htmlFor="digest-hour">Digest hour (organization time)</Label>
+        <Select
+          value={String(settings.digest_hour_local)}
+          onValueChange={(value) => {
+            if (value === null || value === String(settings.digest_hour_local)) return
+            void onSettingsPatch(
+              { digest_hour_local: Number(value) },
+              `Digest time set to ${getDigestHourLabel(value)}`,
+            )
+          }}
+          disabled={!settings.enabled || !settings.daily_digest_enabled || saving}
+        >
+          <SelectTrigger id="digest-hour" className="w-40">
+            <SelectValue placeholder="Select hour">{getDigestHourLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(DIGEST_HOUR_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   )
@@ -586,9 +721,10 @@ function useIntelligentSuggestionsController() {
     editingRuleDraft: null,
     saving: false,
     ruleSaving: false,
-    saved: false,
     error: null,
   })
+  const [pendingDeleteRule, setPendingDeleteRule] = useState<IntelligentSuggestionRule | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const { data: pipelines } = usePipelines()
   const queryClient = useQueryClient()
   const settingsQuery = useQuery({
@@ -614,7 +750,6 @@ function useIntelligentSuggestionsController() {
     editingRuleDraft,
     saving,
     ruleSaving,
-    saved,
     error: localError,
   } = suggestionState
 
@@ -698,13 +833,6 @@ function useIntelligentSuggestionsController() {
     }))
   }
 
-  const setSaved = (updater: React.SetStateAction<boolean>) => {
-    setSuggestionState((current) => ({
-      ...current,
-      saved: resolveStateUpdate(updater, current.saved),
-    }))
-  }
-
   const setError = (updater: React.SetStateAction<string | null>) => {
     setSuggestionState((current) => ({
       ...current,
@@ -736,34 +864,36 @@ function useIntelligentSuggestionsController() {
     return newRuleDraft
   })()
 
-  const setDigestField = (rawValue: string) => {
-    const parsed = Number.parseInt(rawValue, 10)
-    const normalized = Number.isFinite(parsed) ? parsed : settings?.digest_hour_local ?? 0
-    setSettings((previous) =>
-      previous ? { ...previous, digest_hour_local: Math.max(0, Math.min(23, normalized)) } : previous,
-    )
-  }
+  const newRuleDuplicateError =
+    normalizedNewRuleDraft && findDuplicateRule(rules, normalizedNewRuleDraft, stageOptions)
+      ? DUPLICATE_RULE_MESSAGE
+      : null
+  const editingDuplicateError =
+    editingRuleId && editingRuleDraft && findDuplicateRule(rules, editingRuleDraft, stageOptions, editingRuleId)
+      ? DUPLICATE_RULE_MESSAGE
+      : null
 
-  const handleSave = async () => {
+  /** Toggles and single selects save at once and roll back when the request fails. */
+  const saveSettingsPatch = async (
+    patch: Partial<IntelligentSuggestionSettings>,
+    successMessage: string,
+  ) => {
     if (!settings) return
+    const previous = settings
+    setSettings({ ...settings, ...patch })
     setSaving(true)
-    setError(null)
     try {
-      const updated = await updateIntelligentSuggestionSettings(settings)
+      const updated = await updateIntelligentSuggestionSettings(patch)
       setSettings(updated)
-      queryClient.setQueryData(
-        INTELLIGENT_SUGGESTION_SETTINGS_QUERY_KEY,
-        updated,
-      )
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-      toast.success("Intelligent suggestion settings updated")
+      queryClient.setQueryData(INTELLIGENT_SUGGESTION_SETTINGS_QUERY_KEY, updated)
+      toast.success(successMessage)
     } catch (saveError) {
-      console.error("Failed to save intelligent suggestion settings:", saveError)
-      setError("Unable to save settings. Please try again.")
-      toast.error("Failed to save intelligent suggestion settings")
+      setSettings(previous)
+      const message = getActionErrorMessage(saveError, "Couldn't save this setting. Try again.")
+      if (message) toast.error(message)
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const handleNewRuleTemplateChange = (templateKey: string | null) => {
@@ -778,7 +908,7 @@ function useIntelligentSuggestionsController() {
   }
 
   const handleCreateRule = async () => {
-    if (!normalizedNewRuleDraft) return
+    if (!normalizedNewRuleDraft || newRuleDuplicateError) return
     const template = templateByKey.get(normalizedNewRuleDraft.template_key)
     if (!template) {
       toast.error("Select a valid rule template")
@@ -810,8 +940,8 @@ function useIntelligentSuggestionsController() {
       if (resetDraft) setNewRuleDraft(resetDraft)
       toast.success("Workflow rule created")
     } catch (ruleError) {
-      console.error("Failed to create intelligent suggestion rule:", ruleError)
-      toast.error("Failed to create workflow rule")
+      const message = getActionErrorMessage(ruleError, "Couldn't create the rule. Try again.")
+      if (message) toast.error(message)
     }
     setRuleSaving(false)
   }
@@ -830,8 +960,8 @@ function useIntelligentSuggestionsController() {
       }
       toast.success(`Rule ${updatedRule.enabled ? "enabled" : "disabled"}`)
     } catch (ruleError) {
-      console.error("Failed to toggle intelligent suggestion rule:", ruleError)
-      toast.error("Failed to update rule status")
+      const message = getActionErrorMessage(ruleError, "Couldn't update the rule. Try again.")
+      if (message) toast.error(message)
     }
     setRuleSaving(false)
   }
@@ -856,7 +986,7 @@ function useIntelligentSuggestionsController() {
   }
 
   const handleSaveEditingRule = async () => {
-    if (!editingRuleId || !editingRuleDraft) return
+    if (!editingRuleId || !editingRuleDraft || editingDuplicateError) return
     const template = templateByKey.get(editingRuleDraft.template_key)
     if (!template) {
       toast.error("Unknown template for rule")
@@ -889,32 +1019,25 @@ function useIntelligentSuggestionsController() {
       cancelEditingRule()
       toast.success("Workflow rule updated")
     } catch (ruleError) {
-      console.error("Failed to update intelligent suggestion rule:", ruleError)
-      toast.error("Failed to update workflow rule")
+      const message = getActionErrorMessage(ruleError, "Couldn't update the rule. Try again.")
+      if (message) toast.error(message)
     }
     setRuleSaving(false)
   }
 
-  const handleDeleteRule = async (rule: IntelligentSuggestionRule) => {
-    if (!confirm(`Delete rule "${rule.name}"?`)) return
-    setRuleSaving(true)
-    try {
-      await deleteIntelligentSuggestionRule(rule.id)
-      setRules((previous) => previous.filter((current) => current.id !== rule.id))
-      if (editingRuleId === rule.id) cancelEditingRule()
-      toast.success("Workflow rule deleted")
-    } catch (ruleError) {
-      console.error("Failed to delete intelligent suggestion rule:", ruleError)
-      toast.error("Failed to delete workflow rule")
-    }
-    setRuleSaving(false)
+  const requestDeleteRule = (rule: IntelligentSuggestionRule) => {
+    setPendingDeleteRule(rule)
+    setDeleteOpen(true)
   }
 
-  const describeRule = (rule: IntelligentSuggestionRule) => {
-    if (rule.template_key === "preapproval_stuck") {
-      return `No updates in intake pre-approval stages for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
-    }
-    return `${rule.stage_label ?? formatStageLabel(stageLabelByRef, rule.stage_key ?? rule.stage_slug)} has no updates for ${rule.business_days} business day${rule.business_days === 1 ? "" : "s"}`
+  // ConfirmDialog stays open while this runs and shows a rejection inline.
+  const confirmDeleteRule = async () => {
+    if (!pendingDeleteRule) return
+    const rule = pendingDeleteRule
+    await deleteIntelligentSuggestionRule(rule.id)
+    setRules((previous) => previous.filter((current) => current.id !== rule.id))
+    if (editingRuleId === rule.id) cancelEditingRule()
+    toast.success("Workflow rule deleted")
   }
 
   const getRuleStageLabel = (rule: IntelligentSuggestionRule) => {
@@ -932,10 +1055,15 @@ function useIntelligentSuggestionsController() {
     editingRuleId,
     editingRuleDraft,
     loading,
+    hasLoadError,
     saving,
     ruleSaving,
-    saved,
     error,
+    newRuleDuplicateError,
+    editingDuplicateError,
+    pendingDeleteRule,
+    deleteOpen,
+    setDeleteOpen,
     stageOptions,
     stageLabelByRef,
     templateByKey,
@@ -945,11 +1073,9 @@ function useIntelligentSuggestionsController() {
     ),
     rulesPaused: settings ? !settings.enabled : false,
     requiresStageSelection,
-    setSettings,
     setNewRuleDraft,
     setEditingRuleDraft,
-    setDigestField,
-    handleSave,
+    saveSettingsPatch,
     loadSettings,
     handleNewRuleTemplateChange,
     handleCreateRule,
@@ -957,8 +1083,8 @@ function useIntelligentSuggestionsController() {
     startEditingRule,
     cancelEditingRule,
     handleSaveEditingRule,
-    handleDeleteRule,
-    describeRule,
+    requestDeleteRule,
+    confirmDeleteRule,
     getRuleStageLabel,
   }
 }
@@ -976,35 +1102,38 @@ export function IntelligentSuggestionsSection() {
 
   if (!controller.settings) {
     return (
-      <div className="space-y-4">
-        <p className="text-sm text-destructive">{controller.error ?? "Unable to load settings."}</p>
-        <Button variant="outline" onClick={() => void controller.loadSettings()}>
-          Retry
-        </Button>
-      </div>
+      <LoadErrorState
+        title="Couldn't load intelligent suggestions"
+        onRetry={() => void controller.loadSettings()}
+        className="min-h-0 py-10"
+      />
     )
   }
 
+  const settings = controller.settings
+  const editingRule = controller.editingRuleId
+    ? controller.rules.find((rule) => rule.id === controller.editingRuleId)
+    : undefined
+  const editingTemplate = controller.editingRuleDraft
+    ? controller.templateByKey.get(controller.editingRuleDraft.template_key)
+    : undefined
+
   return (
     <div className="space-y-6">
-      {controller.error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {controller.error}
-        </div>
-      )}
-
       <div className="space-y-4">
         <div className="flex items-center justify-between rounded-lg border border-border p-4">
-          <div>
-            <p className="font-medium">Enable Intelligent Suggestions</p>
-            <p className="text-sm text-muted-foreground">
-              Turn all intelligent suggestion workflows on or off for your organization.
-            </p>
-          </div>
+          <Label htmlFor="intelligent-suggestions-enabled" className="font-medium">
+            Enable Intelligent Suggestions
+          </Label>
           <Switch
-            checked={controller.settings.enabled}
+            id="intelligent-suggestions-enabled"
+            checked={settings.enabled}
+            disabled={controller.saving}
             onCheckedChange={(checked) =>
-              controller.setSettings((previous) => (previous ? { ...previous, enabled: checked } : previous))
+              void controller.saveSettingsPatch(
+                { enabled: checked },
+                checked ? "Intelligent suggestions turned on" : "Intelligent suggestions turned off",
+              )
             }
           />
         </div>
@@ -1022,6 +1151,7 @@ export function IntelligentSuggestionsSection() {
           newRuleTemplate={controller.newRuleTemplate}
           newRuleNeedsStage={controller.newRuleNeedsStage}
           ruleSaving={controller.ruleSaving}
+          duplicateError={controller.newRuleDuplicateError}
           stageOptions={controller.stageOptions}
           stageLabelByRef={controller.stageLabelByRef}
           onTemplateChange={controller.handleNewRuleTemplateChange}
@@ -1030,72 +1160,52 @@ export function IntelligentSuggestionsSection() {
         />
 
         <div className="space-y-3">
-          <div>
-            <p className="font-medium">Configured Workflow Rules</p>
-            <p className="text-sm text-muted-foreground">
-              Edit thresholds, target stages, priority, and enabled status.
-            </p>
-          </div>
+          <p className="font-medium">Configured Workflow Rules</p>
 
-          {controller.rules.length === 0 && (
-            <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
-              No intelligent suggestion rules configured.
-            </div>
+          {controller.rules.length === 0 ? (
+            <EmptyState icon={LightbulbIcon} title="No workflow rules" />
+          ) : (
+            <WorkflowRulesTable
+              rules={controller.rules}
+              templateByKey={controller.templateByKey}
+              ruleSaving={controller.ruleSaving}
+              getRuleStageLabel={controller.getRuleStageLabel}
+              onToggleEnabled={controller.handleToggleRuleEnabled}
+              onStartEdit={controller.startEditingRule}
+              onRequestDelete={controller.requestDeleteRule}
+            />
           )}
-
-          {controller.rules.map((rule) => {
-            const template = controller.templateByKey.get(rule.template_key)
-            const isEditing = controller.editingRuleId === rule.id && controller.editingRuleDraft !== null
-            const editingTemplate = isEditing && controller.editingRuleDraft
-              ? controller.templateByKey.get(controller.editingRuleDraft.template_key)
-              : undefined
-
-            return (
-              <WorkflowRuleCard
-                key={rule.id}
-                rule={rule}
-                template={template}
-                isEditing={isEditing}
-                editingRuleDraft={controller.editingRuleDraft}
-                editingNeedsStage={controller.requiresStageSelection(editingTemplate)}
-                ruleDescription={controller.describeRule(rule)}
-                ruleStageLabel={controller.getRuleStageLabel(rule)}
-                ruleSaving={controller.ruleSaving}
-                stageOptions={controller.stageOptions}
-                stageLabelByRef={controller.stageLabelByRef}
-                onToggleEnabled={controller.handleToggleRuleEnabled}
-                onStartEdit={controller.startEditingRule}
-                onDelete={controller.handleDeleteRule}
-                onEditingDraftChange={controller.setEditingRuleDraft}
-                onSaveEdit={controller.handleSaveEditingRule}
-                onCancelEdit={controller.cancelEditingRule}
-              />
-            )
-          })}
         </div>
 
         <DailyDigestSettingsCard
-          settings={controller.settings}
-          onSettingsChange={controller.setSettings}
-          onDigestHourChange={controller.setDigestField}
+          settings={settings}
+          saving={controller.saving}
+          onSettingsPatch={controller.saveSettingsPatch}
         />
       </div>
 
-      <Button onClick={() => void controller.handleSave()} disabled={controller.saving}>
-        {controller.saving ? (
-          <>
-            <Loader2Icon className="mr-2 size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            Saving…
-          </>
-        ) : controller.saved ? (
-          <>
-            <CheckIcon className="mr-2 size-4" aria-hidden="true" />
-            Saved!
-          </>
-        ) : (
-          "Save Intelligent Suggestion Rules"
-        )}
-      </Button>
+      <EditRuleDialog
+        rule={editingRule}
+        editingRuleDraft={controller.editingRuleDraft}
+        editingNeedsStage={controller.requiresStageSelection(editingTemplate)}
+        duplicateError={controller.editingDuplicateError}
+        ruleSaving={controller.ruleSaving}
+        stageOptions={controller.stageOptions}
+        stageLabelByRef={controller.stageLabelByRef}
+        onEditingDraftChange={controller.setEditingRuleDraft}
+        onSaveEdit={controller.handleSaveEditingRule}
+        onCancelEdit={controller.cancelEditingRule}
+      />
+
+      <ConfirmDialog
+        open={controller.deleteOpen}
+        onOpenChange={controller.setDeleteOpen}
+        title={`Delete ${controller.pendingDeleteRule?.name ?? "this rule"}?`}
+        description="Suggestions from this rule stop."
+        confirmLabel="Delete rule"
+        errorFallback="Couldn't delete the rule. Try again."
+        onConfirm={controller.confirmDeleteRule}
+      />
     </div>
   )
 }

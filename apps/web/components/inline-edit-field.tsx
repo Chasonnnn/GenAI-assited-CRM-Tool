@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { CheckIcon, XIcon, PencilIcon, Loader2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { EmptyValue } from "@/components/ui/empty-value"
 import { useFocusWhen } from "@/lib/hooks/use-focus-when"
 
 import { useRecordEditing } from "@/components/records/RecordEditingContext"
@@ -12,11 +13,13 @@ import { useRecordEditing } from "@/components/records/RecordEditingContext"
 interface InlineEditFieldProps {
     value: string | null | undefined
     onSave: (value: string) => Promise<void>
+    /** Input hint shown only while editing. Empty values display as EmptyValue. */
     placeholder?: string
     type?: "text" | "email" | "tel" | "url"
     className?: string
     displayClassName?: string
     validate?: (value: string) => string | null
+    /** Names the field for the edit, save and cancel controls ("Edit Fax"). */
     label?: string
     readOnly?: boolean
 }
@@ -72,7 +75,7 @@ function inlineEditFieldReducer(
 export function InlineEditField({
     value,
     onSave,
-    placeholder = "-",
+    placeholder,
     type = "text",
     className,
     displayClassName,
@@ -141,9 +144,12 @@ export function InlineEditField({
         }
     }
 
-    const fieldLabel = label?.trim() || (placeholder && placeholder !== "-" ? placeholder : "field")
+    // "-" was the old display-only empty token, not an input hint.
+    const inputPlaceholder = placeholder && placeholder !== "-" ? placeholder : undefined
+    const fieldLabel = label?.trim() || inputPlaceholder || "field"
+    const displayValue = value || <EmptyValue />
 
-    if (!canEdit) return <span className={cn("text-sm", !value && "text-muted-foreground", className, displayClassName)}>{value || placeholder}</span>
+    if (!canEdit) return <span className={cn("text-sm", className, displayClassName)}>{displayValue}</span>
 
     if (!isEditing) {
         return (
@@ -156,9 +162,7 @@ export function InlineEditField({
                 onClick={handleStartEdit}
                 aria-label={`Edit ${fieldLabel}`}
             >
-                <span className={cn("text-sm", !value && "text-muted-foreground", className)}>
-                    {value || placeholder}
-                </span>
+                <span className={cn("text-sm", className)}>{displayValue}</span>
                 <PencilIcon
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
@@ -184,6 +188,7 @@ export function InlineEditField({
                     className={cn("h-7 text-sm", error && "border-destructive")}
                     disabled={isSaving}
                     aria-label={fieldLabel}
+                    {...(inputPlaceholder ? { placeholder: inputPlaceholder } : {})}
                 />
                 {error && (
                     <p className="text-xs text-destructive mt-1">{error}</p>

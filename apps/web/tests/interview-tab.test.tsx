@@ -36,10 +36,14 @@ function deferred<T>(): Deferred<T> {
     return { promise, resolve }
 }
 
+// The role comes from permissionState; authState carries the organization AI flag.
+const authState: { user: { user_id: string; ai_enabled?: boolean } } = {
+    user: { user_id: 'u1', ai_enabled: true },
+}
+
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({ user: { role: permissionState.role, user_id: 'u1' } }),
+    useAuth: () => ({ user: { ...authState.user, role: permissionState.role } }),
 }))
-vi.mock('next/navigation', () => ({ useParams: () => ({ id: 'c1' }) }))
 vi.mock('@/components/ui/tabs', () => ({ TabsContent: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
 vi.mock('@/components/surrogates/detail/SurrogateDetailLayout/context', () => ({
     useSurrogateDetailData: () => ({
@@ -47,6 +51,22 @@ vi.mock('@/components/surrogates/detail/SurrogateDetailLayout/context', () => ({
         canEditSurrogate: permissionState.version !== 2 || permissionState.permissions.includes('edit_surrogates'),
     }),
 }))
+
+const searchParamsState = { value: new URLSearchParams() }
+
+vi.mock('next/navigation', () => ({
+    useParams: () => ({ id: 'c1' }),
+    useSearchParams: () => searchParamsState.value,
+}))
+
+function stubDesktopViewport(isDesktop: boolean) {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: isDesktop && query === '(min-width: 1024px)',
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+    }))
+}
 
 vi.mock('@/components/rich-text-editor', () => ({
     RichTextEditor: ({ onSubmit }: { onSubmit?: (value: string) => void }) => (
@@ -99,7 +119,12 @@ vi.mock('@/components/ui/dialog', () => ({
     Dialog: ({ open, children }: { open?: boolean; children?: ReactNode }) =>
         open ? <div>{children}</div> : null,
     DialogContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-    DialogHeader: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    DialogHeader: ({ children, status }: { children?: ReactNode; status?: ReactNode }) => (
+        <div>
+            {children}
+            {status}
+        </div>
+    ),
     DialogTitle: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
     DialogFooter: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }))
@@ -195,6 +220,66 @@ describe('SurrogateInterviewTab', () => {
             data: interviewId ? attachments : [],
         }))
         mockRequestTranscription.mockResolvedValue({})
+        authState.user = { user_id: 'u1', ai_enabled: true }
+        searchParamsState.value = new URLSearchParams()
+        vi.unstubAllGlobals()
+    })
+
+    it('opens the interview named in ?interview= even on mobile', async () => {
+        stubDesktopViewport(false)
+        searchParamsState.value = new URLSearchParams('interview=i1')
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(await screen.findByText('Phone Interview')).toBeDefined()
+        expect(mockUseInterview).toHaveBeenCalledWith('i1')
+    })
+
+    it('ignores an ?interview= id that is not in the list', () => {
+        stubDesktopViewport(false)
+        searchParamsState.value = new URLSearchParams('interview=other-surrogates-interview')
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(screen.queryByText('Phone Interview')).toBeNull()
+        expect(mockUseInterview).not.toHaveBeenCalledWith('other-surrogates-interview')
+    })
+
+    it('selects the first interview on load on desktop', async () => {
+        stubDesktopViewport(true)
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(await screen.findByText('Phone Interview')).toBeDefined()
+        expect(screen.queryByText('Select an interview to view details')).toBeNull()
+    })
+
+    it('does not auto-select on mobile, where the list is the first view', () => {
+        stubDesktopViewport(false)
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(screen.queryByText('Phone Interview')).toBeNull()
+    })
+
+    it('hides the AI Summary action when AI is off for the organization', async () => {
+        stubDesktopViewport(true)
+        authState.user = { user_id: 'u1', ai_enabled: false }
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        await screen.findByText('Phone Interview')
+        expect(screen.queryByText('AI Summary')).toBeNull()
+    })
+
+    it('offers the AI Summary action when AI is on', async () => {
+        stubDesktopViewport(true)
+        authState.user = { user_id: 'u1', ai_enabled: true }
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        await screen.findByText('Phone Interview')
+        expect(screen.getAllByText('AI Summary').length).toBeGreaterThan(0)
     })
 
     it('keeps Operations interviews and attachments readable without write actions', async () => {
@@ -244,7 +329,7 @@ describe('SurrogateInterviewTab', () => {
         permissionState.version = 2
         mockUseInterviews.mockReturnValue({ data: [], isLoading: false })
         render(<SurrogateInterviewsPage />)
-        expect(screen.getByText('No Interviews')).toBeInTheDocument()
+        expect(screen.getByRole('heading', { level: 3, name: 'No interviews' })).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /add interview/i })).not.toBeInTheDocument()
     })
 
@@ -268,8 +353,41 @@ describe('SurrogateInterviewTab', () => {
 
         render(<SurrogateInterviewTab surrogateId="c1" />)
 
-        expect(screen.getByText('No Interviews')).toBeDefined()
+        expect(screen.getByRole('heading', { level: 3, name: 'No interviews' })).toBeInTheDocument()
+        expect(screen.queryByText(/document phone calls/i)).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: /add interview/i })).toBeDefined()
+    })
+
+    it('omits the empty-state create action for roles that cannot edit interviews', () => {
+        permissionState.role = 'intake_specialist'
+        mockUseInterviews.mockReturnValue({ data: [], isLoading: false })
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(screen.getByRole('heading', { level: 3, name: 'No interviews' })).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /add interview/i })).not.toBeInTheDocument()
+    })
+
+    it('shows a load error instead of the empty state when interviews fail to load', async () => {
+        const { ApiError } = await import('@/lib/api')
+        const refetch = vi.fn()
+        mockUseInterviews.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            error: new ApiError(500, 'Internal Server Error', 'boom'),
+            refetch,
+        })
+
+        render(<SurrogateInterviewTab surrogateId="c1" />)
+
+        expect(screen.getByText("Couldn't load interviews")).toBeInTheDocument()
+        expect(screen.queryByText('No interviews')).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /add interview/i })).not.toBeInTheDocument()
+        expect(screen.queryByText('boom')).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
     })
 
     it('labels the add interview button when interviews already exist', async () => {

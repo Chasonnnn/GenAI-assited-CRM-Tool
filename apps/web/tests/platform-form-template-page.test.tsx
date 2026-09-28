@@ -371,6 +371,29 @@ describe("PlatformFormTemplatePage", () => {
         expect(within(columnsSection as HTMLElement).getAllByRole("combobox")[0]).not.toHaveTextContent("textarea")
     })
 
+    it("separates template delete in the overflow menu from the page toolbar's Delete page", async () => {
+        mockDelete.mockRejectedValueOnce(new Error("foreign key violation on form_submissions"))
+        render(<PlatformFormTemplatePage />)
+
+        const deletePage = await screen.findByRole("button", { name: /^Delete page/ })
+        expect(deletePage).toHaveTextContent("Delete page")
+        expect(deletePage).not.toHaveClass("border")
+        expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }))
+        const confirm = await screen.findByRole("alertdialog")
+        expect(within(confirm).getByText("Delete Surrogate Application Form?")).toBeInTheDocument()
+        const confirmButton = within(confirm).getByRole("button", { name: "Delete" })
+        expect(confirmButton).toHaveClass("bg-destructive")
+        expect(confirmButton.className).not.toMatch(/linear-gradient/)
+
+        fireEvent.click(confirmButton)
+        expect(await within(confirm).findByText("Couldn't delete template.")).toBeInTheDocument()
+        expect(screen.queryByText(/foreign key/)).not.toBeInTheDocument()
+        expect(mockDelete).toHaveBeenCalledWith({ id: "tpl_form_1" })
+    })
+
     it("uses a simple global publish confirmation for form templates", async () => {
         render(<PlatformFormTemplatePage />)
 
@@ -381,6 +404,8 @@ describe("PlatformFormTemplatePage", () => {
         expect(screen.getByText(/every organization library/i)).toBeInTheDocument()
         expect(screen.queryByText("Publish to all organizations")).not.toBeInTheDocument()
         expect(screen.queryByText("Publish to selected organizations")).not.toBeInTheDocument()
+        // The description already says it goes to every library; no second box restates it.
+        expect(screen.queryByText(/does not need org targeting/i)).not.toBeInTheDocument()
     })
 
     it("can republish saved edits to an already published template", async () => {

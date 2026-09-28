@@ -1,0 +1,18 @@
+[
+  {
+    "journey": "Case Manager claims approved record",
+    "pass": true
+  },
+  {
+    "journey": "Intake retains access after handoff",
+    "pass": true
+  },
+  {
+    "journey": "Admin revokes collaborator; Intake reload loses access",
+    "pass": true
+  },
+  {
+    "journey": "Other organization Admin denied record",
+    "pass": true
+  }
+]

@@ -47,6 +47,8 @@ import Link from "@/components/app-link"
 import { RelativeTime } from "@/components/ui/time-display"
 import { ResendCompactReadinessSummary } from "@/components/email-operations/ResendLiveReadinessCard"
 import {
+    getAgencyRoleLabel,
+    getInviteStatusLabel,
     INVITE_ROLE_LABELS,
     INVITE_ROLE_OPTIONS,
     INVITE_STATUS_VARIANTS,
@@ -235,14 +237,14 @@ export function AgencyInvitesTab({
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant="outline">{invite.role}</Badge>
+                                        <Badge variant="outline">{getAgencyRoleLabel(invite.role)}</Badge>
                                     </TableCell>
                                     <TableCell>
                                         <Badge
                                             variant="outline"
                                             className={INVITE_STATUS_VARIANTS[invite.status]}
                                         >
-                                            {invite.status}
+                                            {getInviteStatusLabel(invite.status)}
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">
@@ -310,12 +312,13 @@ export function AgencyInvitesTab({
                                                 <AlertDialog>
                                                     <AlertDialogTrigger
                                                         className={buttonVariants({
-                                                            variant: "ghost",
+                                                            variant: "destructive-ghost",
                                                             size: "sm",
-                                                            className: "text-destructive",
+                                                            className: "text-muted-foreground",
                                                         })}
+                                                        aria-label={`Revoke invite for ${invite.email}`}
                                                     >
-                                                        <Ban className="size-4" />
+                                                        <Ban className="size-4" aria-hidden="true" />
                                                     </AlertDialogTrigger>
                                                     <AlertDialogContent>
                                                         <AlertDialogHeader>
@@ -328,8 +331,8 @@ export function AgencyInvitesTab({
                                                         <AlertDialogFooter>
                                                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                                                             <AlertDialogAction
+                                                                variant="destructive"
                                                                 onClick={() => onRevokeInvite(invite.id)}
-                                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                                             >
                                                                 Revoke
                                                             </AlertDialogAction>

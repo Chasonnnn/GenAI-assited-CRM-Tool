@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { describe, expect, it, vi, beforeEach } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 
 import { ReleaseQueueDialog } from "@/components/surrogates/detail/SurrogateDetailLayout/dialogs/ReleaseQueueDialog"
 import { ZoomMeetingDialog } from "@/components/surrogates/detail/SurrogateDetailLayout/dialogs/ZoomMeetingDialog"
@@ -78,9 +78,26 @@ describe("surrogate detail dialog pickers", () => {
 
         render(<ReleaseQueueDialog />)
 
-        expect(
-            screen.getByRole("combobox", { name: /select queue/i }),
-        ).toHaveAttribute("data-slot", "select-trigger")
+        const trigger = screen.getByRole("combobox", { name: /select queue/i })
+        expect(trigger).toHaveAttribute("data-slot", "select-trigger")
+        expect(trigger).toHaveTextContent("Select a queue…")
+    })
+
+    it("does not offer the queue placeholder as a pickable option", async () => {
+        mockUseSurrogateDetailDialogs.mockReturnValue({
+            activeDialog: { type: "release_queue" },
+            closeDialog: vi.fn(),
+        })
+
+        render(<ReleaseQueueDialog />)
+
+        fireEvent.click(screen.getByRole("combobox", { name: /select queue/i }))
+        const listbox = await screen.findByRole("listbox")
+        expect(within(listbox).getAllByRole("option").map((option) => option.textContent)).toEqual([
+            "Primary Queue",
+            "Backup Queue",
+        ])
+        expect(screen.getByRole("button", { name: "Release" })).toBeDisabled()
     })
 
     it("uses a shadcn select for Zoom appointment duration", () => {

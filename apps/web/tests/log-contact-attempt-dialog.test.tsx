@@ -23,12 +23,13 @@ vi.mock("@/components/ui/select", () => ({
         onValueChange,
         children,
     }: {
-        value?: string
+        value?: string | null
         onValueChange?: (value: string) => void
         children: ReactNode
     }) => (
         <select
             data-testid="contact-outcome-select"
+            data-raw-value={value === null ? "null" : value}
             value={value ?? ""}
             onChange={(event) => onValueChange?.(event.target.value)}
         >
@@ -90,7 +91,6 @@ function renderDialog(onOpenChange = vi.fn()) {
             open
             onOpenChange={onOpenChange}
             surrogateId="surrogate-1"
-            surrogateName="Alex Chen"
         />
     )
     return { ...view, onOpenChange }
@@ -99,6 +99,15 @@ function renderDialog(onOpenChange = vi.fn()) {
 describe("LogContactAttemptDialog", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+    })
+
+    it("shows the title without descriptive copy and passes no outcome as null", () => {
+        renderDialog()
+
+        expect(screen.getByRole("heading", { name: "Log Contact Attempt" })).toBeInTheDocument()
+        expect(screen.queryByText(/record your attempt to contact/i)).not.toBeInTheDocument()
+        // null (not "") lets SelectValue render the "Select outcome" placeholder.
+        expect(screen.getByTestId("contact-outcome-select")).toHaveAttribute("data-raw-value", "null")
     })
 
     it("requires at least one method and an outcome before submit", () => {
@@ -215,7 +224,9 @@ describe("LogContactAttemptDialog", () => {
         })
         fireEvent.click(screen.getByRole("button", { name: "Log Attempt" }))
 
-        await waitFor(() => expect(toast.error).toHaveBeenCalledWith("API unavailable"))
+        await waitFor(() =>
+            expect(toast.error).toHaveBeenCalledWith("Couldn't log contact attempt. Try again.")
+        )
         expect(onOpenChange).not.toHaveBeenCalled()
         expect(screen.getByRole("checkbox", { name: "Phone" })).toBeChecked()
         expect(screen.getByLabelText(/notes/i)).toHaveValue("  Still trying.  ")

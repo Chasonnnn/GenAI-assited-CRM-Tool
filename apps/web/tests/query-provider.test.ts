@@ -10,6 +10,11 @@ describe('shouldRetryQuery', () => {
         expect(shouldRetryQuery(0, new ApiError(429, 'Too Many Requests'))).toBe(false)
     })
 
+    it('does not retry missing or malformed record ids', () => {
+        expect(shouldRetryQuery(0, new ApiError(404, 'Not Found'))).toBe(false)
+        expect(shouldRetryQuery(0, new ApiError(422, 'Unprocessable Entity'))).toBe(false)
+    })
+
     it('retries other failures up to the second failure', () => {
         expect(shouldRetryQuery(0, new Error('boom'))).toBe(true)
         expect(shouldRetryQuery(1, new ApiError(500, 'Internal Server Error'))).toBe(true)

@@ -374,13 +374,13 @@ export function IntendedParentClinicCard({
                                             variant="outline"
                                             size="sm"
                                             aria-label="Edit Info"
-                                            className="group h-8 rounded-full border-border/70 bg-background/90 px-3.5 text-xs font-medium shadow-none transition-colors hover:bg-accent/70 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+                                            className="group h-8 rounded-full border-border/70 bg-background/90 px-3.5 text-xs font-medium shadow-none transition-colors hover:bg-accent/70 data-popup-open:bg-accent data-popup-open:text-accent-foreground"
                                         />
                                     }
                                 >
-                                    <PencilIcon className="size-3.5 text-muted-foreground transition-colors group-data-[state=open]:text-current" />
+                                    <PencilIcon className="size-3.5 text-muted-foreground transition-colors group-data-popup-open:text-current" />
                                     Edit Info
-                                    <ChevronDownIcon className="ml-0.5 size-3.5 text-muted-foreground transition-all group-data-[state=open]:translate-y-px group-data-[state=open]:text-current" />
+                                    <ChevronDownIcon className="ml-0.5 size-3.5 text-muted-foreground transition-all group-data-popup-open:translate-y-px group-data-popup-open:text-current" />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
                                     align="end"

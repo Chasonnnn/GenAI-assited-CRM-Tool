@@ -82,12 +82,29 @@ describe("AIStudioPage", () => {
 
         render(<AIStudioPage />)
 
-        expect(screen.getByRole("heading", { name: "AI Studio Preview" })).toBeInTheDocument()
-        expect(screen.getByText("Connect OpenAI")).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: /studio settings/i })).toBeInTheDocument()
+        const heading = screen.getByRole("heading", { level: 1, name: "AI Studio" })
+        expect(heading.closest('[data-slot="page-header"]')).not.toBeNull()
+        expect(screen.queryByText("Copy: gpt-5.5")).not.toBeInTheDocument()
+        expect(screen.getByRole("status")).toHaveTextContent("AI needs an API key before it can generate.")
+        expect(screen.queryByText("Connect OpenAI")).not.toBeInTheDocument()
+        expect(screen.queryByText("Key required")).not.toBeInTheDocument()
+        // Header action plus the notice action.
+        expect(screen.getAllByRole("button", { name: /studio settings/i })).toHaveLength(2)
+        expect(screen.getByLabelText("Brief")).toBeDisabled()
         expect(screen.getByRole("button", { name: /generate draft/i })).toBeDisabled()
         expect(screen.getByText("Size")).toBeInTheDocument()
         expect(screen.getByText("Quality")).toBeInTheDocument()
+    })
+
+    it("uses the shared notice and disables inputs when the role lacks AI access", () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: [] } })
+
+        render(<AIStudioPage />)
+
+        expect(screen.getByRole("status")).toHaveTextContent("Your role does not include AI access.")
+        expect(screen.getByLabelText("Brief")).toBeDisabled()
+        expect(screen.getByLabelText("Audience")).toBeDisabled()
+        expect(screen.getByRole("button", { name: /generate draft/i })).toBeDisabled()
     })
 
     it("generates a preview and saves the draft", async () => {

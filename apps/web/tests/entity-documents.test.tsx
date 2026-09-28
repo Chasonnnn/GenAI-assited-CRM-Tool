@@ -40,6 +40,17 @@ describe("shared record documents", () => {
         expect(callbacks.onDelete).toHaveBeenNthCalledWith(2, attachment.id)
     })
 
+    it("uses the muted destructive-ghost row delete and a destructive confirm action", () => {
+        render(<EntityDocuments {...props()} />)
+        const rowDelete = screen.getByRole("button", { name: "Delete record.pdf" })
+        expect(rowDelete).toHaveClass("text-muted-foreground", "hover:text-destructive")
+        expect(rowDelete).not.toHaveClass("text-destructive")
+        fireEvent.click(rowDelete)
+        const confirm = within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" })
+        expect(confirm).toHaveClass("bg-destructive")
+        expect(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancel" })).toBeInTheDocument()
+    })
+
     it.each(["infected", "error"])("blocks downloads for %s files even without quarantine", (scan_status) => {
         render(<EntityDocuments {...props()} attachments={[{ ...attachment, scan_status }]} />)
         expect(screen.getByRole("button", { name: "Download record.pdf" })).toBeDisabled()

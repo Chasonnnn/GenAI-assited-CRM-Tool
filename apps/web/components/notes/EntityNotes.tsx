@@ -6,9 +6,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { LoadErrorState } from "@/components/error-state"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { RichTextPreview } from "@/components/rich-text-preview"
 import { formatDateTime as defaultFormatDateTime } from "@/lib/formatters"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 
 export interface EntityNoteItem {
     id: string
@@ -22,6 +24,8 @@ export interface EntityNotesProps {
     notes?: EntityNoteItem[] | undefined
     status?: "loading" | "error" | "ready"
     onRetry?: (() => void) | undefined
+    /** Pass query.isFetching so the retry button shows progress while the failed list refetches. */
+    isRetrying?: boolean | undefined
     onAddNote: (html: string) => Promise<void> | void
     isSubmitting: boolean
     onDeleteNote: (noteId: string) => Promise<void> | void
@@ -37,6 +41,7 @@ export function EntityNotes({
     notes,
     status = "ready",
     onRetry,
+    isRetrying = false,
     onAddNote,
     isSubmitting,
     onDeleteNote,
@@ -63,7 +68,7 @@ export function EntityNotes({
             await onAddNote(draft.trim())
             setDraft("")
         } catch (error) {
-            setError(error instanceof Error ? error.message : "Failed to add note")
+            setError(getActionErrorMessage(error, "Couldn't add note. Try again."))
         }
     }
 
@@ -75,7 +80,7 @@ export function EntityNotes({
             await onDeleteNote(deletingNote.id)
             setDeletingNote(null)
         } catch (error) {
-            setError(error instanceof Error ? error.message : "Failed to delete note")
+            setError(getActionErrorMessage(error, "Couldn't delete note. Try again."))
         } finally {
             setIsDeleting(false)
         }
@@ -84,7 +89,8 @@ export function EntityNotes({
     return (
         <div className="min-w-0 space-y-4">
             <div className="flex items-center gap-2"><h3 className="text-lg font-semibold">Notes</h3>{notes?.length ? <Badge variant="secondary">{notes.length}</Badge> : null}</div>
-            {canCreate ? (
+            {/* No editor while the list failed to load, so a note is never added blind to existing ones. */}
+            {canCreate && status !== "error" ? (
                 <div className="min-w-0 space-y-3 rounded-lg border border-border bg-muted/30 p-4">
                     <RichTextEditor content={draft} onChange={setDraft} placeholder="Add a note..." ariaLabel={editorLabel} enableEmojiPicker />
                     <Button onClick={() => { void handleAdd() }} disabled={!hasContent || isSubmitting}>{isSubmitting ? <Loader2Icon className="size-4 animate-spin" /> : null}Add Note</Button>
@@ -92,7 +98,7 @@ export function EntityNotes({
             ) : null}
             {error && !deletingNote ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
             {status === "loading" ? <p role="status" className="text-sm text-muted-foreground">Loading notes…</p>
-                : status === "error" ? <div className="space-y-3"><p className="text-sm text-destructive">Failed to load notes.</p><Button variant="outline" size="sm" aria-label="Retry notes" onClick={onRetry}>Retry</Button></div>
+                : status === "error" ? <LoadErrorState title="Couldn't load notes" onRetry={() => onRetry?.()} isRetrying={isRetrying} className="min-h-0 py-10" />
                 : !notes?.length ? <p className="text-sm text-muted-foreground">No notes yet.</p>
                 : <ul className="space-y-3" aria-label={listLabel}>
                     {notes.map((note) => {
@@ -103,7 +109,7 @@ export function EntityNotes({
                                 <div className="min-w-0 flex-1">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex flex-wrap items-center gap-2"><span className="text-sm font-medium">{name}</span><time className="text-xs text-muted-foreground" dateTime={note.created_at}>{formatDateTime(note.created_at)}</time></div>
-                                        {canDeleteNote(note) ? <Button variant="ghost" size="icon-sm" aria-label={`Delete note by ${name}`} onClick={() => { setError(null); setDeletingNote(note) }}><TrashIcon className="size-3.5 text-muted-foreground" /></Button> : null}
+                                        {canDeleteNote(note) ? <Button variant="destructive-ghost" size="icon-sm" className="text-muted-foreground" aria-label={`Delete note by ${name}`} onClick={() => { setError(null); setDeletingNote(note) }}><TrashIcon className="size-3.5" aria-hidden="true" /></Button> : null}
                                     </div>
                                     <RichTextPreview html={note.body} className="mt-2 [overflow-wrap:anywhere] text-sm" />
                                 </div>

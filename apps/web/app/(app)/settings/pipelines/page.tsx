@@ -1,6 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useRef, useState } from "react"
+import { EmptyState } from "@/components/empty-state"
+import { QueryErrorState } from "@/components/error-state"
+import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,7 +25,10 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SaveBar } from "@/components/ui/save-bar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
     ChevronDownIcon,
     ChevronUpIcon,
@@ -34,14 +40,17 @@ import {
     Loader2Icon,
     PlusIcon,
     RotateCcwIcon,
-    SaveIcon,
     SparklesIcon,
     TriangleAlertIcon,
     Trash2Icon,
+    WorkflowIcon,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { focusFirstInvalid } from "@/lib/forms/use-form-validation"
 import { formatRelativeTime } from "@/lib/formatters"
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
+import { createSelectLabelGetter, getSelectLabel, humanizeSelectKey } from "@/lib/select-labels"
+import { SettingsPageGate } from "../settings-page-gate"
 import {
     CUSTOM_STAGE_COLOR_PRESETS,
     resolveStageColor,
@@ -135,6 +144,19 @@ const STAGE_CATEGORIES: StageType[] = [
 ]
 
 const CUSTOM_STAGE_CATEGORIES: StageType[] = ["intake", "post_approval"]
+const STAGE_CATEGORY_LABELS: Record<StageType, string> = {
+    intake: "Intake",
+    post_approval: "Post-approval",
+    paused: "Paused",
+    terminal: "Terminal",
+}
+const getStageCategoryLabel = createSelectLabelGetter(STAGE_CATEGORY_LABELS, {
+    emptyLabel: "Select category",
+    unknownLabel: "Unknown category",
+})
+const STAGE_LABEL_MAX_LENGTH = 100
+const STAGE_SLUG_MAX_LENGTH = 50
+const IMPACT_PREVIEW_ID = "pipeline-impact-preview"
 const DEFAULT_CUSTOM_STAGE_COLOR = "#6b7280"
 const RESERVED_CAPABILITY_KEYS = new Set<StageCapabilityKey>([
     "eligible_for_matching",
@@ -183,28 +205,11 @@ const CAPABILITY_LABELS: Array<{
 const PIPELINE_ENTITY_OPTIONS: Array<{
     value: PipelineEntityType
     label: string
-    description: string
 }> = [
-    {
-        value: "surrogate",
-        label: "Surrogates",
-        description: "Full journey, analytics, and role-aware pipeline configuration.",
-    },
-    {
-        value: "intended_parent",
-        label: "Intended Parents",
-        description: "Stage behavior and matching semantics for intended parents.",
-    },
-    {
-        value: "egg_donor",
-        label: "Egg Donors",
-        description: "Screening, matching, cycle, and retrieval stages for egg donors.",
-    },
-    {
-        value: "sperm_donor",
-        label: "Sperm Donors",
-        description: "Screening, availability, collection, and donation stages for sperm donors.",
-    },
+    { value: "surrogate", label: "Surrogates" },
+    { value: "intended_parent", label: "Intended Parents" },
+    { value: "egg_donor", label: "Egg Donors" },
+    { value: "sperm_donor", label: "Sperm Donors" },
 ]
 
 const IMPACT_LABELS: Record<ImpactArea, string> = {
@@ -331,25 +336,8 @@ function getEntityRecordLabel(entityType: PipelineEntityType, count: number) {
     return `${count} active surrogate${count === 1 ? "" : "s"}`
 }
 
-function getEntityLabel(entityType: string | null | undefined) {
-    return PIPELINE_ENTITY_OPTIONS.find((option) => option.value === entityType)?.label ?? "Select entity"
-}
-
-function getEntityDescription(entityType: PipelineEntityType) {
-    return PIPELINE_ENTITY_OPTIONS.find((option) => option.value === entityType)?.description
-}
-
-function getPipelineIntroDescription(entityType: PipelineEntityType) {
-    if (entityType === "surrogate") {
-        return "Configure per-org stage identity, category, behavior, journey mappings, and analytics funnel from one versioned draft."
-    }
-    if (entityType === "egg_donor") {
-        return "Configure egg-donor stage identity, category, and stage semantics from one versioned draft."
-    }
-    if (entityType === "sperm_donor") {
-        return "Configure sperm-donor stage identity, category, and stage semantics from one versioned draft."
-    }
-    return "Configure intended-parent stage identity, category, and stage semantics from one versioned draft."
+function isPipelineEntityType(value: unknown): value is PipelineEntityType {
+    return PIPELINE_ENTITY_OPTIONS.some((option) => option.value === value)
 }
 
 function getIntendedParentStageSemantics(stage: StageSemanticInput | null | undefined): StageSemantics {
@@ -475,6 +463,93 @@ function buildApiDraft(draft: PipelineDraftState): PipelineDraft {
 
 function stringifyDraft(draft: PipelineDraftState): string {
     return JSON.stringify(buildApiDraft(draft))
+}
+
+/**
+ * The recommended draft carries no lock metadata, so system stages keep the lock state of the
+ * current stage with the same stage_key. Without this, Reset to Default unlocks them.
+ */
+function withCurrentLockMetadata(stages: PipelineStage[], currentStages: PipelineStage[]): PipelineStage[] {
+    const currentByKey = new Map(currentStages.map((stage) => [stage.stage_key, stage]))
+    return stages.map((stage) => {
+        const current = currentByKey.get(stage.stage_key)
+        if (!current) return stage
+        const merged: PipelineStage = { ...stage }
+        const isLocked = stage.is_locked ?? current.is_locked
+        const systemRole = stage.system_role ?? current.system_role
+        const lockReason = stage.lock_reason ?? current.lock_reason
+        const lockedFields = stage.locked_fields ?? current.locked_fields
+        if (isLocked !== undefined) merged.is_locked = isLocked
+        if (systemRole !== undefined) merged.system_role = systemRole
+        if (lockReason !== undefined) merged.lock_reason = lockReason
+        if (lockedFields !== undefined) merged.locked_fields = lockedFields
+        return merged
+    })
+}
+
+type StageFieldErrors = { label?: string; slug?: string }
+
+/** Client checks for the fields the API rejects with a 422, keyed by stage id. */
+function getDraftStageErrors(stages: EditableStage[]): Record<string, StageFieldErrors> {
+    const slugCounts = new Map<string, number>()
+    for (const stage of stages) {
+        if (stage.slug) slugCounts.set(stage.slug, (slugCounts.get(stage.slug) ?? 0) + 1)
+    }
+    const errors: Record<string, StageFieldErrors> = {}
+    for (const stage of stages) {
+        if (stage.is_locked) continue
+        const stageErrors: StageFieldErrors = {}
+        if (!stage.label.trim()) stageErrors.label = "Enter a stage label."
+        if (!stage.slug) {
+            stageErrors.slug = "Enter a slug."
+        } else if ((slugCounts.get(stage.slug) ?? 0) > 1) {
+            stageErrors.slug = "Another stage uses this slug."
+        }
+        if (stageErrors.label || stageErrors.slug) errors[stage.id] = stageErrors
+    }
+    return errors
+}
+
+function countStageErrors(errors: Record<string, StageFieldErrors>): number {
+    return Object.values(errors).reduce(
+        (total, stageErrors) => total + (stageErrors.label ? 1 : 0) + (stageErrors.slug ? 1 : 0),
+        0,
+    )
+}
+
+function getStageEditFingerprint(stage: EditableStage): string {
+    return JSON.stringify([
+        stage.slug,
+        stage.label,
+        stage.color,
+        stage.category,
+        stage.is_active,
+        stage.semantics,
+    ])
+}
+
+/** Added, removed and edited stages, plus one each for stage order, journey/analytics config and name. */
+function countDraftChanges(baseline: PipelineDraftState | null, draft: PipelineDraftState | null): number {
+    if (!baseline || !draft) return 0
+    const baselineByKey = new Map(baseline.stages.map((stage) => [stage.stage_key, stage]))
+    const draftKeys = new Set(draft.stages.map((stage) => stage.stage_key))
+    let count = 0
+    for (const stage of draft.stages) {
+        const baselineStage = baselineByKey.get(stage.stage_key)
+        if (!baselineStage || getStageEditFingerprint(baselineStage) !== getStageEditFingerprint(stage)) {
+            count += 1
+        }
+    }
+    for (const stage of baseline.stages) {
+        if (!draftKeys.has(stage.stage_key)) count += 1
+    }
+    const sharedOrder = (stages: EditableStage[], keys: Set<string>) =>
+        stages.filter((stage) => keys.has(stage.stage_key)).map((stage) => stage.stage_key).join("|")
+    const baselineKeys = new Set(baselineByKey.keys())
+    if (sharedOrder(baseline.stages, draftKeys) !== sharedOrder(draft.stages, baselineKeys)) count += 1
+    if (JSON.stringify(baseline.featureConfig) !== JSON.stringify(draft.featureConfig)) count += 1
+    if (baseline.name !== draft.name) count += 1
+    return count
 }
 
 function getBehaviorPreset(
@@ -954,21 +1029,28 @@ function getDefaultRemapTargetStageKey(stages: EditableStage[], stageKey: string
 }
 
 function VersionHistory({
-    pipelineId,
+    pipeline,
     entityType,
     onRollback,
     canRollback,
 }: {
-    pipelineId: string
+    pipeline: { id: string; current_version: number; created_at: string; updated_at: string }
     entityType: PipelineEntityType
     onRollback: (version: number) => void
     canRollback: boolean
 }) {
-    const { data: versions, isLoading, isError } = usePipelineVersions(pipelineId, entityType)
+    const {
+        data: versions,
+        isLoading,
+        isError,
+        error,
+        refetch,
+        isFetching,
+    } = usePipelineVersions(pipeline.id, entityType)
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center py-8" role="status" aria-label="Loading">
                 <Loader2Icon className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
             </div>
         )
@@ -976,14 +1058,30 @@ function VersionHistory({
 
     if (isError) {
         return (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-                Version history requires Developer role
-            </div>
+            <QueryErrorState
+                error={error}
+                onRetry={() => void refetch()}
+                isRetrying={isFetching}
+                title="Couldn't load version history"
+                headingLevel={3}
+            />
         )
     }
 
     if (!versions?.length) {
-        return <div className="py-8 text-center text-sm text-muted-foreground">No version history</div>
+        // Pipelines created before snapshots existed have no stored versions; list the current one.
+        const isInitial = pipeline.current_version <= 1
+        return (
+            <div className="rounded-lg border bg-accent/30 p-3">
+                <div className="mb-1 flex items-center gap-2">
+                    <Badge className="text-xs">v{pipeline.current_version}</Badge>
+                    <span className="text-xs font-medium">{isInitial ? "Initial version" : "Current"}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    {formatRelativeTime(isInitial ? pipeline.created_at : pipeline.updated_at, "Unknown")}
+                </p>
+            </div>
+        )
     }
 
     return (
@@ -999,7 +1097,7 @@ function VersionHistory({
                                 v{version.version}
                             </Badge>
                             {index === 0 ? (
-                                <span className="flex items-center gap-1 text-xs text-green-600">
+                                <span className="flex items-center gap-1 text-xs text-success">
                                     <CheckIcon className="size-3" aria-hidden="true" />
                                     Current
                                 </span>
@@ -1031,6 +1129,7 @@ type StageChangeHandler = (updater: (stage: EditableStage) => EditableStage) => 
 type PipelineSelectOption = {
     value: string
     label: string
+    disabled?: boolean
 }
 
 const EMPTY_SELECT_SENTINEL = "__empty_select_value__"
@@ -1043,12 +1142,11 @@ function denormalizeSelectValue(value: string | null | undefined): string {
     return !value || value === EMPTY_SELECT_SENTINEL ? "" : value
 }
 
-function getSelectOptionLabel(options: PipelineSelectOption[], value: string | null): string {
-    const normalizedValue = normalizeSelectValue(value)
-    return (
-        options.find((option) => normalizeSelectValue(option.value) === normalizedValue)?.label
-        ?? ""
-    )
+function getPipelineSelectLabel(options: PipelineSelectOption[], value: string | null, fieldLabel: string): string {
+    return getSelectLabel(denormalizeSelectValue(value), options, {
+        emptyLabel: options.find((option) => option.value === "")?.label ?? fieldLabel,
+        unknownLabel: "Unknown option",
+    })
 }
 
 function PipelineSelectField({
@@ -1071,7 +1169,7 @@ function PipelineSelectField({
     srOnlyLabel?: boolean
 }) {
     return (
-        <div className="space-y-2 text-sm">
+        <div className={srOnlyLabel ? "text-sm" : "space-y-2 text-sm"}>
             <Label htmlFor={id} className={srOnlyLabel ? "sr-only" : "font-medium"}>
                 {label}
             </Label>
@@ -1082,7 +1180,7 @@ function PipelineSelectField({
             >
                 <SelectTrigger id={id} aria-label={ariaLabel ?? label} className="h-9 w-full">
                     <SelectValue placeholder={label}>
-                        {(nextValue: string | null) => getSelectOptionLabel(options, nextValue)}
+                        {(nextValue: string | null) => getPipelineSelectLabel(options, nextValue, label)}
                     </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -1090,6 +1188,7 @@ function PipelineSelectField({
                         <SelectItem
                             key={normalizeSelectValue(option.value)}
                             value={normalizeSelectValue(option.value)}
+                            disabled={option.disabled}
                         >
                             {option.label}
                         </SelectItem>
@@ -1137,10 +1236,25 @@ function StageDependencyBadges({
     )
 }
 
+/** Every selectable category plus the stage's current one, so the trigger never renders blank. */
+function getStageCategoryOptions(stage: EditableStage): PipelineSelectOption[] {
+    const selectable = stage.is_locked ? STAGE_CATEGORIES : CUSTOM_STAGE_CATEGORIES
+    const categories = STAGE_CATEGORIES.filter(
+        (category) => selectable.includes(category) || category === stage.category,
+    )
+    return categories.map((category) => ({
+        value: category,
+        label: getStageCategoryLabel(category),
+        disabled: !selectable.includes(category),
+    }))
+}
+
 function StageSummaryFields({
     stage,
     index,
+    errors,
     isExpanded,
+    autoFocusLabel,
     onStageChange,
     onToggleDetails,
     onDuplicateStage,
@@ -1148,131 +1262,189 @@ function StageSummaryFields({
 }: {
     stage: EditableStage
     index: number
+    errors: StageFieldErrors | undefined
     isExpanded: boolean
+    autoFocusLabel: boolean
     onStageChange: StageChangeHandler
     onToggleDetails: () => void
     onDuplicateStage: () => void
     onRequestDeleteStage: () => void
 }) {
-    const stageCategoryOptions = (stage.is_locked ? STAGE_CATEGORIES : CUSTOM_STAGE_CATEGORIES).map(
-        (category) => ({
-            value: category,
-            label: category.replaceAll("_", " "),
-        }),
-    )
+    const labelErrorId = `stage-label-error-${stage.id}`
+    const slugErrorId = `stage-slug-error-${stage.id}`
+    const focusNewStageLabel = useCallback((node: HTMLInputElement | null) => {
+        if (!node) return
+        node.scrollIntoView?.({ block: "center" })
+        node.focus({ preventScroll: true })
+        node.select()
+    }, [])
 
     return (
-        <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1.1fr)_152px_168px]">
-            <Input
-                value={stage.label}
-                disabled={stage.is_locked}
-                onChange={(event) =>
-                    onStageChange((current) =>
-                        withAutoStageColor(current, {
-                            ...current,
-                            label: event.target.value,
-                        }),
-                    )
-                }
-                placeholder="Label"
-                className="h-9 truncate"
-            />
-            <Input
-                value={stage.slug}
-                disabled={stage.is_locked}
-                onChange={(event) =>
-                    onStageChange((current) => {
-                        const slug = normalizeIdentifier(event.target.value)
-                        return withAutoStageColor(current, {
-                            ...current,
-                            slug,
-                            stage_key: isUuidLike(current.id) ? current.stage_key : slug || current.stage_key,
-                        })
-                    })
-                }
-                className="h-9 truncate font-mono text-sm"
-                aria-label="Stage slug"
-            />
-            <PipelineSelectField
-                id={`stage-category-${stage.id}`}
-                label="Stage category"
-                ariaLabel="Stage category"
-                value={stage.category}
-                options={stageCategoryOptions}
-                disabled={Boolean(stage.is_locked)}
-                srOnlyLabel
-                onValueChange={(value) =>
-                    onStageChange((current) =>
-                        withAutoStageColor(current, {
-                            ...current,
-                            category: value as StageType,
-                            stage_type: value as StageType,
-                        }),
-                    )
-                }
-            />
-            <div className="grid min-h-9 w-full grid-cols-[44px_92px] items-center justify-end gap-2 overflow-hidden rounded-md border bg-muted/30 px-2 py-1 text-xs sm:grid-cols-[44px_108px]">
-                <div
-                    data-testid={`stage-order-slot-${stage.id}`}
-                    className="flex items-center justify-center"
-                >
-                    <Badge variant="outline" className="shrink-0 tabular-nums">
-                        #{index + 1}
-                    </Badge>
-                </div>
-                <div
-                    data-testid={`stage-action-rail-${stage.id}`}
-                    className="grid grid-cols-[28px_28px_28px] items-center justify-items-center gap-1 sm:grid-cols-[32px_32px_32px]"
-                >
+        <div className="flex flex-col gap-3 md:flex-row md:items-start">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+                <div className="flex h-9 shrink-0 items-center gap-3">
                     {stage.is_locked ? (
-                        <Badge
-                            variant="secondary"
-                            className="col-span-2 w-full shrink-0"
-                            aria-label="System stage"
-                        >
-                            Locked
-                        </Badge>
+                        <div className="size-4" aria-hidden="true" />
                     ) : (
-                        <>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                className="size-7 shrink-0 sm:size-8"
-                                onClick={onDuplicateStage}
-                                aria-label={`Duplicate ${stage.label}`}
-                            >
-                                <CopyIcon className="size-4" aria-hidden="true" />
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-sm"
-                                className="size-7 shrink-0 sm:size-8"
-                                onClick={onRequestDeleteStage}
-                                aria-label={`Remove ${stage.label}`}
-                            >
-                                <Trash2Icon className="size-4" aria-hidden="true" />
-                            </Button>
-                        </>
+                        <GripVerticalIcon
+                            className="size-4 cursor-grab text-muted-foreground"
+                            aria-hidden="true"
+                        />
                     )}
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="col-start-3 size-7 shrink-0 sm:size-8"
-                        onClick={onToggleDetails}
-                        aria-expanded={isExpanded}
-                        aria-controls={`stage-details-${stage.id}`}
-                        aria-label={`${isExpanded ? "Hide" : "Edit"} details for ${stage.label}`}
-                        title={isExpanded ? "Hide details" : "Edit details"}
+                    <input
+                        id={`stage-color-${stage.id}`}
+                        name={`stage-color-${stage.id}`}
+                        type="color"
+                        value={stage.color}
+                        disabled={stage.is_locked}
+                        onChange={(event) =>
+                            onStageChange((current) => ({
+                                ...current,
+                                color: event.target.value,
+                            }))
+                        }
+                        className="size-9 cursor-pointer rounded border disabled:cursor-not-allowed"
+                        aria-label={`Stage ${index + 1} color`}
+                    />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                    <Input
+                        id={`stage-label-${stage.id}`}
+                        ref={autoFocusLabel ? focusNewStageLabel : undefined}
+                        value={stage.label}
+                        disabled={stage.is_locked}
+                        maxLength={STAGE_LABEL_MAX_LENGTH}
+                        onChange={(event) =>
+                            onStageChange((current) =>
+                                withAutoStageColor(current, {
+                                    ...current,
+                                    label: event.target.value,
+                                }),
+                            )
+                        }
+                        placeholder="Label"
+                        aria-label={`Stage ${index + 1} label`}
+                        aria-invalid={errors?.label ? true : undefined}
+                        aria-describedby={errors?.label ? labelErrorId : undefined}
+                        className="h-9"
+                    />
+                    {errors?.label ? (
+                        <p id={labelErrorId} className="text-xs text-destructive">
+                            {errors.label}
+                        </p>
+                    ) : null}
+                    <Input
+                        value={stage.slug}
+                        disabled={stage.is_locked}
+                        maxLength={STAGE_SLUG_MAX_LENGTH}
+                        onChange={(event) =>
+                            onStageChange((current) => {
+                                const slug = normalizeIdentifier(event.target.value)
+                                return withAutoStageColor(current, {
+                                    ...current,
+                                    slug,
+                                    stage_key: isUuidLike(current.id) ? current.stage_key : slug || current.stage_key,
+                                })
+                            })
+                        }
+                        placeholder="slug"
+                        aria-label="Stage slug"
+                        aria-invalid={errors?.slug ? true : undefined}
+                        aria-describedby={errors?.slug ? slugErrorId : undefined}
+                        className="h-7 border-transparent bg-transparent px-2 font-mono text-xs text-muted-foreground shadow-none hover:border-input focus-visible:border-ring focus-visible:text-foreground aria-invalid:border-destructive disabled:opacity-100 dark:bg-transparent"
+                    />
+                    {errors?.slug ? (
+                        <p id={slugErrorId} className="text-xs text-destructive">
+                            {errors.slug}
+                        </p>
+                    ) : null}
+                </div>
+            </div>
+            <div className="flex items-center gap-2 md:shrink-0">
+                <div className="min-w-0 flex-1 md:w-44 md:flex-none">
+                    <PipelineSelectField
+                        id={`stage-category-${stage.id}`}
+                        label="Stage category"
+                        ariaLabel="Stage category"
+                        value={stage.category}
+                        options={getStageCategoryOptions(stage)}
+                        disabled={Boolean(stage.is_locked)}
+                        srOnlyLabel
+                        onValueChange={(value) =>
+                            onStageChange((current) =>
+                                withAutoStageColor(current, {
+                                    ...current,
+                                    category: value as StageType,
+                                    stage_type: value as StageType,
+                                }),
+                            )
+                        }
+                    />
+                </div>
+                {/* Below sm the order badge hides (list position shows order) so the category keeps its width. */}
+                <div className="grid min-h-9 shrink-0 grid-cols-[92px] items-center justify-end gap-2 overflow-hidden rounded-md border bg-muted/30 px-2 py-1 text-xs sm:grid-cols-[44px_108px]">
+                    <div
+                        data-testid={`stage-order-slot-${stage.id}`}
+                        className="hidden items-center justify-center sm:flex"
                     >
-                        {isExpanded ? (
-                            <ChevronUpIcon className="size-4" aria-hidden="true" />
+                        <Badge variant="outline" className="shrink-0 tabular-nums">
+                            #{index + 1}
+                        </Badge>
+                    </div>
+                    <div
+                        data-testid={`stage-action-rail-${stage.id}`}
+                        className="grid grid-cols-[28px_28px_28px] items-center justify-items-center gap-1 sm:grid-cols-[32px_32px_32px]"
+                    >
+                        {stage.is_locked ? (
+                            <Badge
+                                variant="secondary"
+                                className="col-span-2 w-full shrink-0"
+                                aria-label="System stage"
+                            >
+                                Locked
+                            </Badge>
                         ) : (
-                            <ChevronDownIcon className="size-4" aria-hidden="true" />
+                            <>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="size-7 shrink-0 sm:size-8"
+                                    onClick={onDuplicateStage}
+                                    aria-label={`Duplicate ${stage.label}`}
+                                >
+                                    <CopyIcon className="size-4" aria-hidden="true" />
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="size-7 shrink-0 sm:size-8"
+                                    onClick={onRequestDeleteStage}
+                                    aria-label={`Remove ${stage.label}`}
+                                >
+                                    <Trash2Icon className="size-4" aria-hidden="true" />
+                                </Button>
+                            </>
                         )}
-                    </Button>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="col-start-3 size-7 shrink-0 sm:size-8"
+                            onClick={onToggleDetails}
+                            aria-expanded={isExpanded}
+                            aria-controls={`stage-details-${stage.id}`}
+                            aria-label={`${isExpanded ? "Hide" : "Edit"} details for ${stage.label}`}
+                            title={isExpanded ? "Hide details" : "Edit details"}
+                        >
+                            {isExpanded ? (
+                                <ChevronUpIcon className="size-4" aria-hidden="true" />
+                            ) : (
+                                <ChevronDownIcon className="size-4" aria-hidden="true" />
+                            )}
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1314,7 +1486,7 @@ function StageSemanticsFields({
     ]
     const suggestionProfileOptions: PipelineSelectOption[] = SUGGESTION_PROFILE_OPTIONS.map((option) => ({
         value: option,
-        label: option || "None",
+        label: option ? humanizeSelectKey(option) ?? "Unknown profile" : "None",
     }))
 
     return (
@@ -1534,9 +1706,11 @@ function StageCard({
     entityType,
     stage,
     index,
+    errors,
     dependency,
     isExpanded,
     isDragging,
+    autoFocusLabel,
     onStageChange,
     onToggleDetails,
     onDuplicateStage,
@@ -1548,9 +1722,11 @@ function StageCard({
     entityType: PipelineEntityType
     stage: EditableStage
     index: number
+    errors: StageFieldErrors | undefined
     dependency: PipelineStageDependency | undefined
     isExpanded: boolean
     isDragging: boolean
+    autoFocusLabel: boolean
     onStageChange: StageChangeHandler
     onToggleDetails: () => void
     onDuplicateStage: () => void
@@ -1565,44 +1741,19 @@ function StageCard({
             onDragStart={() => !stage.is_locked && onDragStart()}
             onDragOver={onDragOver}
             onDragEnd={onDragEnd}
-            className={`rounded-xl border bg-card p-4 ${isDragging ? "opacity-60" : ""}`}
+            className={`rounded-xl border bg-card p-4 ${errors ? "border-destructive/50" : ""} ${isDragging ? "opacity-60" : ""}`}
         >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-                <div className="flex items-center gap-3">
-                    {stage.is_locked ? (
-                        <div className="size-4" aria-hidden="true" />
-                    ) : (
-                        <GripVerticalIcon
-                            className="size-4 cursor-grab text-muted-foreground"
-                            aria-hidden="true"
-                        />
-                    )}
-                    <input
-                        id={`stage-color-${stage.id}`}
-                        name={`stage-color-${stage.id}`}
-                        type="color"
-                        value={stage.color}
-                        disabled={stage.is_locked}
-                        onChange={(event) =>
-                            onStageChange((current) => ({
-                                ...current,
-                                color: event.target.value,
-                            }))
-                        }
-                        className="size-9 cursor-pointer rounded border disabled:cursor-not-allowed"
-                        aria-label={`Stage ${index + 1} color`}
-                    />
-                </div>
-                <StageSummaryFields
-                    stage={stage}
-                    index={index}
-                    isExpanded={isExpanded}
-                    onStageChange={onStageChange}
-                    onToggleDetails={onToggleDetails}
-                    onDuplicateStage={onDuplicateStage}
-                    onRequestDeleteStage={onRequestDeleteStage}
-                />
-            </div>
+            <StageSummaryFields
+                stage={stage}
+                index={index}
+                errors={errors}
+                isExpanded={isExpanded}
+                autoFocusLabel={autoFocusLabel}
+                onStageChange={onStageChange}
+                onToggleDetails={onToggleDetails}
+                onDuplicateStage={onDuplicateStage}
+                onRequestDeleteStage={onRequestDeleteStage}
+            />
             {dependency && isExpanded ? (
                 <StageDependencyBadges dependency={dependency} entityType={entityType} />
             ) : null}
@@ -1620,6 +1771,8 @@ function StageCard({
 function StageEditor({
     entityType,
     stages,
+    stageErrors,
+    focusStageId,
     dependencyGraph,
     onChange,
     onDuplicateStage,
@@ -1627,6 +1780,8 @@ function StageEditor({
 }: {
     entityType: PipelineEntityType
     stages: EditableStage[]
+    stageErrors: Record<string, StageFieldErrors>
+    focusStageId: string | null
     dependencyGraph: PipelineDependencyGraph | null | undefined
     onChange: (stages: EditableStage[]) => void
     onDuplicateStage: (stageKey: string) => void
@@ -1681,9 +1836,11 @@ function StageEditor({
                         entityType={entityType}
                         stage={stage}
                         index={index}
+                        errors={stageErrors[stage.id]}
                         dependency={dependency}
                         isExpanded={isExpanded}
                         isDragging={dragIndex === index}
+                        autoFocusLabel={stage.id === focusStageId}
                         onStageChange={(updater) => updateStage(index, updater)}
                         onToggleDetails={() => toggleStageDetails(stage.stage_key)}
                         onDuplicateStage={() => onDuplicateStage(stage.stage_key)}
@@ -1742,15 +1899,15 @@ function JourneyMilestonesEditor({
                             <p className="text-sm text-muted-foreground">{milestone.description}</p>
                         </div>
                         <div className="mt-3 flex items-center justify-between gap-3">
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex min-w-0 flex-wrap gap-2">
                                 <Badge variant="outline">
                                     {milestone.mapped_stage_keys.length} mapped stage
                                     {milestone.mapped_stage_keys.length === 1 ? "" : "s"}
                                 </Badge>
                                 {mappedLabels.length > 0 ? (
-                                    <Badge variant="outline">
-                                        {mappedLabels.slice(0, 2).join(", ")}
-                                        {mappedLabels.length > 2 ? ` +${mappedLabels.length - 2}` : ""}
+                                    <Badge variant="outline" className="max-w-full">
+                                        <span className="truncate">{mappedLabels.slice(0, 2).join(", ")}</span>
+                                        {mappedLabels.length > 2 ? <span>+{mappedLabels.length - 2}</span> : null}
                                     </Badge>
                                 ) : (
                                     <Badge variant="outline">No stages selected</Badge>
@@ -1952,7 +2109,7 @@ function DeleteStageDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent size="lg">
                 <DialogHeader>
                     <DialogTitle>Remove {stage.label}?</DialogTitle>
                     <DialogDescription>
@@ -2024,26 +2181,13 @@ function DeleteStageDialog({
     )
 }
 
-function PipelinePageIntro({ entityType }: { entityType: PipelineEntityType }) {
-    return (
-        <div className="max-w-3xl">
-            <h1 className="text-2xl font-semibold">Pipeline Settings</h1>
-            <p className="text-sm text-muted-foreground">
-                {getPipelineIntroDescription(entityType)}
-            </p>
-        </div>
-    )
-}
-
 function PipelineEditorCard({
     entityType,
     pipelineName,
-    pipelineVersion,
-    entityLabel,
-    showSurrogateEditors,
-    hasChanges,
     isResetPending,
     stages,
+    stageErrors,
+    focusStageId,
     dependencyGraph,
     onResetToRecommended,
     onStagesChange,
@@ -2053,12 +2197,10 @@ function PipelineEditorCard({
 }: {
     entityType: PipelineEntityType
     pipelineName: string
-    pipelineVersion: number
-    entityLabel: string
-    showSurrogateEditors: boolean
-    hasChanges: boolean
     isResetPending: boolean
     stages: EditableStage[]
+    stageErrors: Record<string, StageFieldErrors>
+    focusStageId: string | null
     dependencyGraph: PipelineDependencyGraph | null
     onResetToRecommended: () => void
     onStagesChange: (stages: EditableStage[]) => void
@@ -2069,19 +2211,8 @@ function PipelineEditorCard({
     return (
         <Card>
             <CardHeader>
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="space-y-2">
-                        <CardTitle className="flex items-center gap-2 text-lg">
-                            {pipelineName}
-                            <Badge variant="outline">v{pipelineVersion}</Badge>
-                            {entityLabel ? <Badge variant="secondary">{entityLabel}</Badge> : null}
-                        </CardTitle>
-                        <CardDescription>
-                            {showSurrogateEditors
-                                ? "Stage keys are immutable. Slugs, category, order, and semantics stay org-configurable, and downstream features refresh from the pipeline snapshot."
-                                : "Stage keys are immutable. Slugs, category, order, and stage semantics stay org-configurable, and downstream match and campaign behavior refresh from the pipeline snapshot."}
-                        </CardDescription>
-                    </div>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <CardTitle className="text-lg">{pipelineName}</CardTitle>
                     <div className="flex flex-wrap gap-2">
                         <Button type="button" onClick={onAddStage}>
                             <PlusIcon className="mr-2 size-4" aria-hidden="true" />
@@ -2100,11 +2231,6 @@ function PipelineEditorCard({
                             )}
                             Reset to Default
                         </Button>
-                        {hasChanges ? (
-                            <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                                Unsaved changes
-                            </Badge>
-                        ) : null}
                     </div>
                 </div>
             </CardHeader>
@@ -2112,6 +2238,8 @@ function PipelineEditorCard({
                 <StageEditor
                     entityType={entityType}
                     stages={stages}
+                    stageErrors={stageErrors}
+                    focusStageId={focusStageId}
                     dependencyGraph={dependencyGraph}
                     onChange={onStagesChange}
                     onDuplicateStage={onDuplicateStage}
@@ -2186,7 +2314,7 @@ function ImpactPreviewCard({
     blockingIssues: string[]
 }) {
     return (
-        <Card>
+        <Card id={IMPACT_PREVIEW_ID} tabIndex={-1} className="outline-none">
             <CardHeader>
                 <CardTitle className="text-base">Impact Preview</CardTitle>
                 <CardDescription>
@@ -2260,101 +2388,73 @@ function ImpactPreviewCard({
     )
 }
 
-type DraftSaveState = "ready" | "saving" | "preview_loading" | "validation_errors" | "blocking_issues"
-
-function DraftActionsCard({
-    saveState,
-    onSave,
-    onDiscard,
-}: {
-    saveState: DraftSaveState
-    onSave: () => void
-    onDiscard: () => void
-}) {
-    const savePending = saveState === "saving"
-
-    return (
-        <Card>
-            <CardContent className="pt-6">
-                <div className="flex flex-col gap-3 sm:flex-row">
-                    <Button
-                        onClick={onSave}
-                        disabled={saveState !== "ready"}
-                        className="flex-1"
-                    >
-                        {savePending ? (
-                            <Loader2Icon className="mr-2 size-4 animate-spin" aria-hidden="true" />
-                        ) : (
-                            <SaveIcon className="mr-2 size-4" aria-hidden="true" />
-                        )}
-                        Save Changes
-                    </Button>
-                    <Button variant="outline" onClick={onDiscard}>
-                        Discard
-                    </Button>
-                </div>
-            </CardContent>
-        </Card>
-    )
-}
-
-function PipelineSidebar({
+function PipelineEntityToggle({
     entityType,
     onEntityTypeChange,
-    pipelineId,
-    onRollback,
-    canRollback,
 }: {
     entityType: PipelineEntityType
     onEntityTypeChange: (entityType: PipelineEntityType) => void
-    pipelineId: string | null
+}) {
+    return (
+        // The explicit viewport cap (not max-w-full) keeps the header actions from growing past a
+        // 390px screen; the segments scroll instead.
+        <div className="max-w-[calc(100vw-3rem)] overflow-x-auto p-0.5">
+            <ToggleGroup
+                aria-label="Entity"
+                variant="outline"
+                spacing={0}
+                value={[entityType]}
+                onValueChange={(next) => {
+                    const nextValue = Array.isArray(next) ? next[0] : next
+                    if (isPipelineEntityType(nextValue)) onEntityTypeChange(nextValue)
+                }}
+            >
+                {PIPELINE_ENTITY_OPTIONS.map((option) => (
+                    <ToggleGroupItem
+                        key={option.value}
+                        value={option.value}
+                        className="h-9 bg-background text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground"
+                    >
+                        {option.label}
+                    </ToggleGroupItem>
+                ))}
+            </ToggleGroup>
+        </div>
+    )
+}
+
+function VersionHistorySheet({
+    open,
+    onOpenChange,
+    pipeline,
+    entityType,
+    onRollback,
+    canRollback,
+}: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+    pipeline: { id: string; current_version: number; created_at: string; updated_at: string }
+    entityType: PipelineEntityType
     onRollback: (version: number) => void
     canRollback: boolean
 }) {
-    const entityDescription = getEntityDescription(entityType)
-
     return (
-        <div className="space-y-6" data-testid="pipelines-sidebar">
-            <div className="space-y-2">
-                <Label htmlFor="pipeline-entity">Entity</Label>
-                <Select value={entityType} onValueChange={(value) => value && onEntityTypeChange(value as PipelineEntityType)}>
-                    <SelectTrigger id="pipeline-entity" className="w-full">
-                        <SelectValue placeholder="Select entity">
-                            {(value: string | null) => getEntityLabel(value)}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        {PIPELINE_ENTITY_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                {entityDescription ? (
-                    <p className="text-xs text-muted-foreground">{entityDescription}</p>
-                ) : null}
-            </div>
-
-            <Card>
-                <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                        <HistoryIcon className="size-4" aria-hidden="true" />
-                        Version History
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {pipelineId ? (
-                        <VersionHistory
-                            pipelineId={pipelineId}
-                            entityType={entityType}
-                            onRollback={onRollback}
-                            canRollback={canRollback}
-                        />
-                    ) : null}
-                </CardContent>
-            </Card>
-        </div>
+        <Sheet open={open} onOpenChange={onOpenChange}>
+            <SheetContent side="right" className="w-full sm:max-w-md">
+                <SheetHeader className="border-b pr-14">
+                    <SheetTitle>Version history</SheetTitle>
+                </SheetHeader>
+                {/* The popup mounts only while open, so versions load when the sheet opens. */}
+                <div className="flex-1 overflow-y-auto p-6">
+                    <VersionHistory
+                        pipeline={pipeline}
+                        entityType={entityType}
+                        onRollback={onRollback}
+                        canRollback={canRollback}
+                    />
+                </div>
+            </SheetContent>
+        </Sheet>
     )
 }
 
@@ -2363,12 +2463,20 @@ function usePipelineSettingsEditor() {
     const isDeveloper = user?.role === "developer"
     const [entityType, setEntityType] = useState<PipelineEntityType>("surrogate")
 
-    const { data: pipelines, isLoading: pipelinesLoading } = usePipelines(entityType)
+    const pipelinesQuery = usePipelines(entityType)
+    const { data: pipelines, isLoading: pipelinesLoading } = pipelinesQuery
     const defaultPipeline = pipelines?.find((pipeline) => pipeline.is_default)
-    const { data: pipeline, isLoading: pipelineLoading } = usePipeline(
+    const pipelineQuery = usePipeline(
         defaultPipeline?.id || null,
         entityType,
     )
+    const { data: pipeline, isLoading: pipelineLoading } = pipelineQuery
+    const loadErrorQuery = pipelinesQuery.isError
+        ? pipelinesQuery
+        : pipelineQuery.isError
+            ? pipelineQuery
+            : null
+    const [focusStageId, setFocusStageId] = useState<string | null>(null)
     const dependencyGraphQuery = usePipelineDependencyGraph(defaultPipeline?.id || null, entityType)
     const applyDraft = useApplyPipelineDraft()
     const rollbackPipeline = useRollbackPipeline()
@@ -2393,7 +2501,16 @@ function usePipelineSettingsEditor() {
     const hasChanges = scopedDraft
         ? !draftIsDebounced || debouncedDraftFingerprint !== baselineDraftFingerprint
         : false
-    const previewDraftPayload = !debouncedDraft || debouncedDraftFingerprint === baselineDraftFingerprint
+    const changeCount = countDraftChanges(baselineDraft, draft)
+    const stageErrors = draft ? getDraftStageErrors(draft.stages) : {}
+    const stageErrorCount = countStageErrors(stageErrors)
+    // Drafts that fail the API's field rules would only return a 422; show inline errors instead.
+    const debouncedDraftHasErrors = debouncedDraft
+        ? countStageErrors(getDraftStageErrors(debouncedDraft.stages)) > 0
+        : false
+    const previewDraftPayload = !debouncedDraft
+        || debouncedDraftFingerprint === baselineDraftFingerprint
+        || debouncedDraftHasErrors
         ? null
         : {
             ...buildApiDraft(debouncedDraft),
@@ -2455,15 +2572,18 @@ function usePipelineSettingsEditor() {
 
     const handleAddStage = () => {
         if (!currentDraft) return
+        const insertIndex = getDefaultStageInsertIndex(currentDraft.stages)
+        const newStage = buildNewStage(currentDraft, entityType, insertIndex)
         updateDraft((current) => {
-            const insertIndex = getDefaultStageInsertIndex(current.stages)
             const nextStages = [...current.stages]
-            nextStages.splice(insertIndex, 0, buildNewStage(current, entityType, insertIndex))
+            nextStages.splice(insertIndex, 0, newStage)
             return {
                 ...current,
                 stages: nextStages.map((stage, index) => ({ ...stage, order: index + 1 })),
             }
         })
+        // The new row's label input scrolls into view and takes focus when it mounts.
+        setFocusStageId(newStage.id)
     }
 
     const handleDuplicateStage = (stageKey: string) => {
@@ -2545,7 +2665,7 @@ function usePipelineSettingsEditor() {
         const nextDraft = buildDraft(
             {
                 name: recommended.name,
-                stages: recommended.stages as PipelineStage[],
+                stages: withCurrentLockMetadata(recommended.stages as PipelineStage[], pipeline.stages),
                 feature_config: recommended.feature_config,
             },
             entityType,
@@ -2557,6 +2677,7 @@ function usePipelineSettingsEditor() {
 
     const handleSave = async () => {
         if (!pipeline || !currentDraft) return
+        if (stageErrorCount > 0) return
         if (previewQuery.isLoading) return
         if (preview && (preview.validation_errors.length > 0 || preview.blocking_issues.length > 0)) {
             return
@@ -2597,7 +2718,6 @@ function usePipelineSettingsEditor() {
     const validationErrors = preview?.validation_errors ?? []
     const blockingIssues = preview?.blocking_issues ?? []
     const requiredRemaps = preview?.required_remaps ?? []
-    const entityLabel = getEntityLabel(entityType)
     const showSurrogateEditors = entityType === "surrogate"
 
     return {
@@ -2605,6 +2725,7 @@ function usePipelineSettingsEditor() {
         setEntityType,
         isDeveloper,
         isLoading,
+        loadErrorQuery,
         pipeline,
         currentStages,
         currentFeatureConfig,
@@ -2616,9 +2737,12 @@ function usePipelineSettingsEditor() {
         blockingIssues,
         requiredRemaps,
         safeAutoFixes: preview?.safe_auto_fixes ?? [],
-        entityLabel,
         showSurrogateEditors,
         hasChanges,
+        changeCount,
+        stageErrors,
+        stageErrorCount,
+        focusStageId,
         isResetPending: recommendedDraft.isFetching,
         isSaving: applyDraft.isPending,
         isPreviewLoading: previewQuery.isLoading,
@@ -2640,11 +2764,24 @@ function usePipelineSettingsEditor() {
 }
 
 export default function PipelinesSettingsPage() {
+    return (
+        <SettingsPageGate
+            title="Pipelines"
+            permission="manage_pipelines"
+            deniedDescription="Pipeline settings need the Manage pipelines permission. Ask an admin to update your role."
+        >
+            <PipelinesSettingsContent />
+        </SettingsPageGate>
+    )
+}
+
+function PipelinesSettingsContent() {
     const {
         entityType,
         setEntityType,
         isDeveloper,
         isLoading,
+        loadErrorQuery,
         pipeline,
         currentStages,
         currentFeatureConfig,
@@ -2656,9 +2793,12 @@ export default function PipelinesSettingsPage() {
         blockingIssues,
         requiredRemaps,
         safeAutoFixes,
-        entityLabel,
         showSurrogateEditors,
         hasChanges,
+        changeCount,
+        stageErrors,
+        stageErrorCount,
+        focusStageId,
         isResetPending,
         isSaving,
         isPreviewLoading,
@@ -2675,18 +2815,101 @@ export default function PipelinesSettingsPage() {
         updateDraftFeatureConfig,
         updateDraftStages,
     } = usePipelineSettingsEditor()
+    const [versionHistoryOpen, setVersionHistoryOpen] = useState(false)
+    const contentRef = useRef<HTMLDivElement>(null)
+    const serverErrorCount = validationErrors.length + blockingIssues.length
 
-    if (isLoading) {
+    const handleErrorsClick = () => {
+        if (focusFirstInvalid(contentRef.current)) return
+        const impactPreview = document.getElementById(IMPACT_PREVIEW_ID)
+        impactPreview?.scrollIntoView?.({ block: "center" })
+        impactPreview?.focus({ preventScroll: true })
+    }
+
+    const header = (
+        <PageHeader
+            title="Pipelines"
+            meta={pipeline ? <Badge variant="outline">v{pipeline.current_version}</Badge> : null}
+            actions={
+                <>
+                    <PipelineEntityToggle entityType={entityType} onEntityTypeChange={setEntityType} />
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setVersionHistoryOpen(true)}
+                        disabled={!pipeline}
+                    >
+                        <HistoryIcon className="mr-2 size-4" aria-hidden="true" />
+                        Version history
+                    </Button>
+                </>
+            }
+        />
+    )
+
+    if (isLoading || loadErrorQuery || !pipeline) {
         return (
-            <div className="flex flex-1 items-center justify-center p-6">
-                <Loader2Icon className="size-8 animate-spin text-muted-foreground" aria-hidden="true" />
+            <div className="flex flex-1 flex-col">
+                {header}
+                <div className="p-6">
+                    {isLoading ? (
+                        <div className="flex items-center justify-center p-6" role="status" aria-label="Loading">
+                            <Loader2Icon className="size-8 animate-spin text-muted-foreground" aria-hidden="true" />
+                        </div>
+                    ) : loadErrorQuery ? (
+                        <QueryErrorState
+                            error={loadErrorQuery.error}
+                            onRetry={() => void loadErrorQuery.refetch()}
+                            isRetrying={loadErrorQuery.isFetching}
+                            title="Couldn't load the pipeline"
+                            headingLevel={2}
+                        />
+                    ) : (
+                        <EmptyState icon={WorkflowIcon} title="No default pipeline" headingLevel={2} />
+                    )}
+                </div>
             </div>
         )
     }
 
     return (
-        <div className="mx-auto flex max-w-6xl flex-1 flex-col gap-6 p-6">
-            <PipelinePageIntro entityType={entityType} />
+        <div className="flex flex-1 flex-col">
+            {header}
+            <div ref={contentRef} className="flex flex-1 flex-col gap-6 p-6">
+                <PipelineEditorCard
+                    entityType={entityType}
+                    pipelineName={pipeline.name || "Default Pipeline"}
+                    isResetPending={isResetPending}
+                    stages={currentStages}
+                    stageErrors={stageErrors}
+                    focusStageId={focusStageId}
+                    dependencyGraph={dependencyGraph}
+                    onResetToRecommended={handleResetToRecommended}
+                    onStagesChange={updateDraftStages}
+                    onAddStage={handleAddStage}
+                    onDuplicateStage={handleDuplicateStage}
+                    onRequestDeleteStage={handleRequestDeleteStage}
+                />
+
+                {showSurrogateEditors && currentFeatureConfig ? (
+                    <SurrogatePipelineSections
+                        stages={currentStages}
+                        featureConfig={currentFeatureConfig}
+                        onFeatureConfigChange={updateDraftFeatureConfig}
+                    />
+                ) : null}
+
+                {hasChanges ? (
+                    <ImpactPreviewCard
+                        isLoading={isPreviewLoading}
+                        impactAreas={impactAreas}
+                        safeAutoFixes={safeAutoFixes}
+                        requiredRemaps={requiredRemaps}
+                        validationErrors={validationErrors}
+                        blockingIssues={blockingIssues}
+                    />
+                ) : null}
+            </div>
 
             <DeleteStageDialog
                 entityType={entityType}
@@ -2700,71 +2923,25 @@ export default function PipelinesSettingsPage() {
                 onConfirm={handleConfirmDeleteStage}
             />
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-                <div className="space-y-6">
-                    <PipelineEditorCard
-                        entityType={entityType}
-                        pipelineName={pipeline?.name || "Default Pipeline"}
-                        pipelineVersion={pipeline?.current_version || 1}
-                        entityLabel={entityLabel}
-                        showSurrogateEditors={showSurrogateEditors}
-                        hasChanges={hasChanges}
-                        isResetPending={isResetPending}
-                        stages={currentStages}
-                        dependencyGraph={dependencyGraph}
-                        onResetToRecommended={handleResetToRecommended}
-                        onStagesChange={updateDraftStages}
-                        onAddStage={handleAddStage}
-                        onDuplicateStage={handleDuplicateStage}
-                        onRequestDeleteStage={handleRequestDeleteStage}
-                    />
+            <VersionHistorySheet
+                open={versionHistoryOpen}
+                onOpenChange={setVersionHistoryOpen}
+                pipeline={pipeline}
+                entityType={entityType}
+                onRollback={handleRollback}
+                canRollback={isDeveloper}
+            />
 
-                    {showSurrogateEditors && currentFeatureConfig ? (
-                        <SurrogatePipelineSections
-                            stages={currentStages}
-                            featureConfig={currentFeatureConfig}
-                            onFeatureConfigChange={updateDraftFeatureConfig}
-                        />
-                    ) : null}
-
-                    {hasChanges ? (
-                        <ImpactPreviewCard
-                            isLoading={isPreviewLoading}
-                            impactAreas={impactAreas}
-                            safeAutoFixes={safeAutoFixes}
-                            requiredRemaps={requiredRemaps}
-                            validationErrors={validationErrors}
-                            blockingIssues={blockingIssues}
-                        />
-                    ) : null}
-
-                    {hasChanges ? (
-                        <DraftActionsCard
-                            saveState={
-                                isSaving
-                                    ? "saving"
-                                    : isPreviewLoading
-                                        ? "preview_loading"
-                                        : validationErrors.length > 0
-                                            ? "validation_errors"
-                                            : blockingIssues.length > 0
-                                                ? "blocking_issues"
-                                                : "ready"
-                            }
-                            onSave={handleSave}
-                            onDiscard={handleReset}
-                        />
-                    ) : null}
-                </div>
-
-                <PipelineSidebar
-                    entityType={entityType}
-                    onEntityTypeChange={setEntityType}
-                    pipelineId={pipeline?.id ?? null}
-                    onRollback={handleRollback}
-                    canRollback={isDeveloper}
-                />
-            </div>
+            <SaveBar
+                dirty={changeCount > 0}
+                changeCount={changeCount}
+                errorCount={stageErrorCount + serverErrorCount}
+                onErrorsClick={handleErrorsClick}
+                saving={isSaving}
+                saveDisabled={isPreviewLoading}
+                onSave={() => void handleSave()}
+                onDiscard={handleReset}
+            />
         </div>
     )
 }

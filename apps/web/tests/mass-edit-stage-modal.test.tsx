@@ -102,8 +102,12 @@ describe("MassEditStageModal", () => {
     it("renders friendly labels for tri-state filter triggers", () => {
         renderModal()
 
-        expect(screen.getAllByText("Any")).toHaveLength(4)
+        // Four tri-state filters plus the Age and BMI operators all read "Any" when unset.
+        expect(screen.getAllByText("Any")).toHaveLength(6)
         expect(screen.queryByText("any")).not.toBeInTheDocument()
+        expect(screen.queryByText("Op")).not.toBeInTheDocument()
+        expect(screen.getByRole("combobox", { name: "Age operator" })).toHaveTextContent("Any")
+        expect(screen.getByRole("combobox", { name: "BMI operator" })).toHaveTextContent("Any")
     })
 
     it("sends modal created date filters in preview request and shows override badge", async () => {

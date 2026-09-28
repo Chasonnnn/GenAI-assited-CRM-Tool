@@ -1,5 +1,6 @@
 """Matches router - API endpoints for matching surrogates with intended parents."""
 
+from datetime import date as date_type
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -126,6 +127,12 @@ def list_matches(
     q: Annotated[str | None, "fastapi_param"] = Query(
         None, max_length=100, description="Search surrogate/IP names"
     ),
+    proposed_from: Annotated[date_type | None, "fastapi_param"] = Query(
+        None, description="Proposed on or after this date (YYYY-MM-DD, UTC)"
+    ),
+    proposed_to: Annotated[date_type | None, "fastapi_param"] = Query(
+        None, description="Proposed on or before this date (YYYY-MM-DD, UTC)"
+    ),
     page: Annotated[int, "fastapi_param"] = Query(1, ge=1),
     per_page: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100),
     sort_by: Annotated[str | None, "fastapi_param"] = Query(None, description="Column to sort by"),
@@ -150,6 +157,8 @@ def list_matches(
         donor_id=donor_id,
         match_kind=match_kind,
         q=q,
+        proposed_from=proposed_from,
+        proposed_to=proposed_to,
         page=page,
         per_page=per_page,
         sort_by=sort_by,

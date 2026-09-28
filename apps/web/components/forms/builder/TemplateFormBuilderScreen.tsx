@@ -1,15 +1,6 @@
 "use client"
 
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import type { TemplateFormBuilderPageController } from "@/lib/forms/use-template-form-builder-page"
 
 import { DeletePageDialog } from "@/components/forms/builder/DeletePageDialog"
@@ -45,35 +36,15 @@ export function TemplateFormBuilderScreen({
 
     return (
         <div className="flex min-h-screen flex-col bg-background">
-            <AlertDialog
+            <ConfirmDialog
                 open={controller.state.showDeleteTemplateDialog}
                 onOpenChange={controller.onDeleteTemplateDialogOpenChange}
-            >
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete template?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This permanently deletes{" "}
-                            <span className="font-medium text-foreground">
-                                {controller.state.formName.trim() || "this template"}
-                            </span>
-                            . This cannot be undone.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={controller.deleteTemplateMutation.isPending}>
-                            Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={controller.handleDeleteTemplate}
-                            disabled={controller.deleteTemplateMutation.isPending}
-                            className="bg-destructive text-white hover:bg-destructive/90"
-                        >
-                            Delete
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                title={`Delete ${controller.state.formName.trim() || "this template"}?`}
+                description="This cannot be undone."
+                confirmLabel="Delete"
+                errorFallback="Couldn't delete template."
+                onConfirm={controller.handleDeleteTemplate}
+            />
 
             <FormBuilderHeader
                 backAriaLabel="Back to form templates"

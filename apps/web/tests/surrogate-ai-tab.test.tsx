@@ -3,13 +3,22 @@ import { render, screen, fireEvent } from "@testing-library/react"
 import type { ComponentProps } from "react"
 import { SurrogateAiTab } from "@/components/surrogates/detail/SurrogateAiTab"
 
+vi.mock("@/components/app-link", () => ({
+    default: ({ href, children, ...props }: ComponentProps<"a">) => (
+        <a href={href} {...props}>
+            {children}
+        </a>
+    ),
+}))
+
 describe("SurrogateAiTab", () => {
     function renderEnabledTab(
         overrides: Partial<ComponentProps<typeof SurrogateAiTab>> = {}
     ) {
         return render(
             <SurrogateAiTab
-                aiSettings={{ is_enabled: true }}
+                aiEnabled
+                canManageAI={false}
                 aiSummary={null}
                 aiDraftEmail={null}
                 selectedEmailType={null}
@@ -23,22 +32,23 @@ describe("SurrogateAiTab", () => {
         )
     }
 
-    it("renders disabled state when AI is not enabled", () => {
-        render(
-            <SurrogateAiTab
-                aiSettings={{ is_enabled: false }}
-                aiSummary={null}
-                aiDraftEmail={null}
-                selectedEmailType={null}
-                onSelectEmailType={() => {}}
-                onGenerateSummary={() => {}}
-                onDraftEmail={() => {}}
-                summaryStatus="idle"
-                draftEmailStatus="idle"
-            />
-        )
+    it("sends admins to the AI settings when AI is off", () => {
+        renderEnabledTab({ aiEnabled: false, canManageAI: true })
 
-        expect(screen.getByText("AI Assistant Not Enabled")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { name: "AI is turned off for this organization." })).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "AI settings" })).toHaveAttribute(
+            "href",
+            "/settings/integrations",
+        )
+        expect(screen.queryByText(/contact your admin/i)).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: /generate summary/i })).not.toBeInTheDocument()
+    })
+
+    it("tells other roles AI is off for the organization without a settings link", () => {
+        renderEnabledTab({ aiEnabled: false, canManageAI: false })
+
+        expect(screen.getByRole("heading", { name: "AI is turned off for this organization." })).toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "AI settings" })).not.toBeInTheDocument()
     })
 
     it("triggers summary generation when enabled", () => {

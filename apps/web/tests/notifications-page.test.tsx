@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import NotificationsPage from '../app/(app)/notifications/page'
 
 const mockPush = vi.fn()
@@ -91,8 +91,11 @@ describe('NotificationsPage', () => {
     })
 
     it('renders notification counts, overdue tasks, and default filters', () => {
-        render(<NotificationsPage />)
-        expect(screen.getByText('Notifications')).toBeInTheDocument()
+        const { container } = render(<NotificationsPage />)
+        const heading = screen.getByRole('heading', { level: 1, name: 'Notifications' })
+        expect(heading.closest('[data-slot="page-header"]')).not.toBeNull()
+        expect(heading.querySelector('svg')).toBeNull()
+        expect(container.querySelector('.text-teal-500.bg-teal-500\\/10')).toBeNull()
         expect(screen.getByText('2 unread')).toBeInTheDocument()
         expect(screen.getByText('Overdue Tasks')).toBeInTheDocument()
         expect(screen.getByText('Overdue task')).toBeInTheDocument()
@@ -190,7 +193,80 @@ describe('NotificationsPage', () => {
         mockUseTasks.mockReturnValue({ data: { items: [] }, isLoading: false })
 
         render(<NotificationsPage />)
-        expect(screen.getByText("You're all caught up!")).toBeInTheDocument()
+        expect(screen.getByRole('heading', { level: 3, name: 'No notifications' })).toBeInTheDocument()
+        expect(screen.queryByText("You're all caught up!")).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+    })
+
+    it('offers Clear filters when a type filter has no notifications', async () => {
+        mockUseNotifications.mockReturnValue({
+            data: { unread_count: 0, items: [] },
+            isLoading: false,
+        })
+        mockUseTasks.mockReturnValue({ data: { items: [] }, isLoading: false })
+
+        render(<NotificationsPage />)
+        fireEvent.click(screen.getAllByRole('combobox')[0]!)
+        const option = await screen.findByRole('option', { name: 'Appointments' })
+        fireEvent.mouseMove(option)
+        fireEvent.click(option)
+
+        expect(await screen.findByRole('heading', { level: 3, name: 'No matching notifications' })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+        expect(screen.getByRole('heading', { level: 3, name: 'No notifications' })).toBeInTheDocument()
+    })
+
+    it('shows a retryable load error without the raw server message', () => {
+        const refetch = vi.fn()
+        mockUseNotifications.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new Error('boom'),
+            refetch,
+            isFetching: false,
+        })
+
+        render(<NotificationsPage />)
+
+        expect(screen.getByRole('heading', { level: 2, name: "Couldn't load notifications" })).toBeInTheDocument()
+        expect(screen.queryByText(/boom|Please try again/)).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('disables Try again while the notifications retry runs', () => {
+        mockUseNotifications.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new Error('boom'),
+            refetch: vi.fn(),
+            isFetching: true,
+        })
+
+        render(<NotificationsPage />)
+
+        expect(screen.getByRole('button', { name: 'Try again' })).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('shows a retryable error for overdue tasks and keeps the notifications list', () => {
+        const refetch = vi.fn()
+        mockUseTasks.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            error: new Error('boom'),
+            refetch,
+            isFetching: false,
+        })
+
+        render(<NotificationsPage />)
+
+        expect(screen.getByRole('heading', { level: 2, name: "Couldn't load overdue tasks" })).toBeInTheDocument()
+        expect(screen.getByText('Surrogate assigned')).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+        expect(refetch).toHaveBeenCalledTimes(1)
     })
 
     it("shows progress and prevents duplicate mark-all requests until the mutation settles", () => {
@@ -222,9 +298,11 @@ describe('NotificationsPage', () => {
         fireEvent.mouseMove(option)
         fireEvent.click(option)
         expect(mockUseNotifications).toHaveBeenLastCalledWith(
-            expect.objectContaining({ notification_types: ['match_conflict'] })
+            expect.objectContaining({ limit: 50, notification_types: ['match_conflict'] })
         )
         expect(screen.getByRole('combobox')).toHaveTextContent('Match Updates')
+        // Reopening before the previous popup unmounts lets the click hit a stale option under load.
+        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
 
         fireEvent.click(screen.getByRole('combobox'))
         const appointments = await screen.findByRole('option', { name: 'Appointments' })
@@ -233,6 +311,7 @@ describe('NotificationsPage', () => {
         expect(screen.getByRole('combobox')).toHaveTextContent('Appointments')
         expect(mockUseNotifications).toHaveBeenLastCalledWith(
             expect.objectContaining({
+                limit: 50,
                 notification_types: [
                     'appointment_requested',
                     'appointment_confirmed',
@@ -241,6 +320,7 @@ describe('NotificationsPage', () => {
                 ],
             })
         )
+        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
 
         fireEvent.click(screen.getByRole('combobox'))
         const all = await screen.findByRole('option', { name: 'All', exact: true })

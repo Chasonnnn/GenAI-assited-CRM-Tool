@@ -28,6 +28,11 @@ export function getEligibleForMatchingStageLabel(stages: PipelineStage[] | undef
     return getEligibleForMatchingStages(stages)[0]?.label ?? "Ready to Match"
 }
 
+/** The candidate pickers load surrogates in this stage from the API instead of filtering one page. */
+export function getEligibleForMatchingStageId(stages: PipelineStage[] | undefined | null): string | undefined {
+    return getEligibleForMatchingStages(stages).find((stage) => stage.is_active)?.id
+}
+
 export function isEligibleForMatchingCandidate(
     candidate: MatchCandidateStageRef,
     stages: PipelineStage[] | undefined | null,

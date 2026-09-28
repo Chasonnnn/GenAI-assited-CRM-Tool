@@ -63,6 +63,7 @@ from app.services import (
     job_service,
     meta_capi,
     meta_crm_dataset_service,
+    org_service,
     surrogate_input_normalization_service,
 )
 from app.services.attachment_service import (
@@ -108,6 +109,24 @@ FORM_SUBMISSION_WORKFLOW_JOB_KEY_PREFIX = "form_submission_workflow"
 FORM_SUBMISSION_WORKFLOW_MANUAL_REVIEW_ERROR = (
     "Workflow is no longer eligible for automatic recovery; manual review required"
 )
+
+
+def get_public_agency_branding(
+    db: Session,
+    organization_id: uuid.UUID,
+) -> tuple[str | None, str | None]:
+    """Return the agency display name and public logo path for a hosted intake page.
+
+    The logo path is the anonymous signature-logo route, so the stored media URL never
+    leaves the API. A soft-deleted org gets no branding, matching the public booking page.
+    """
+    org = org_service.get_org_by_id(db, organization_id)
+    if not org:
+        return None, None
+    agency_name = org_service.get_org_display_name(org)
+    if not org.signature_logo_url:
+        return agency_name, None
+    return agency_name, f"/forms/public/{org.id}/signature-logo"
 
 
 def get_messaging_consent_options(

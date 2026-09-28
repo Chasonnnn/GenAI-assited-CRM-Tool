@@ -8,12 +8,14 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 })
 
 import WorkflowTemplatesPanel from '../components/automation/workflow-templates-panel'
+import { ApiError } from '@/lib/api'
 
 const { mockApiPost } = vi.hoisted(() => ({
     mockApiPost: vi.fn(),
 }))
 
-vi.mock('@/lib/api', () => ({
+vi.mock('@/lib/api', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/api')>()),
     default: {
         get: vi.fn(),
         post: mockApiPost,
@@ -23,6 +25,17 @@ vi.mock('@/lib/api', () => ({
 const mockUseAuth = vi.fn()
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => mockUseAuth(),
+}))
+
+let mockPermissions = new Set(['manage_automation'])
+vi.mock('@/lib/hooks/use-permission-check', () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockPermissions.has(permission),
+    }),
 }))
 
 // Mock Next.js navigation
@@ -143,6 +156,7 @@ function getModalCreateButton() {
 describe('WorkflowTemplatesPanel', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mockPermissions = new Set(['manage_automation'])
         mockUseAuth.mockReturnValue({ user: { role: 'admin' } })
         mockForms = baseForms
         mockApiPost.mockResolvedValue({ id: 'workflow-1' })
@@ -203,6 +217,73 @@ describe('WorkflowTemplatesPanel', () => {
         expect(
             screen.getByRole('button', { name: /use template task reminder/i })
         ).toBeInTheDocument()
+    })
+
+    it('leaves the heading and Create Workflow to the /automation page header when embedded', () => {
+        render(<WorkflowTemplatesPanel embedded />)
+
+        expect(screen.queryByRole('heading', { name: 'Workflow Templates' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Create Workflow' })).not.toBeInTheDocument()
+        expect(screen.getByText('Welcome New Lead')).toBeInTheDocument()
+    })
+
+    it('shows "No workflow templates" without a filter hint when no category is selected', () => {
+        ; (useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+            if (queryKey[0] === 'template-categories') {
+                return { data: { categories: mockCategories }, isLoading: false, isError: false, error: null }
+            }
+            return { data: [], isLoading: false, isError: false, error: null }
+        })
+
+        render(<WorkflowTemplatesPanel embedded />)
+
+        expect(screen.getByRole('heading', { name: 'No workflow templates' })).toBeInTheDocument()
+        expect(screen.queryByText(/adjusting your filters/i)).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Onboarding' }))
+
+        expect(
+            screen.getByRole('heading', { name: 'No templates in this category' }),
+        ).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+        expect(screen.getByRole('heading', { name: 'No workflow templates' })).toBeInTheDocument()
+    })
+
+    it('shows a denied state and sends no template requests without manage_automation', () => {
+        mockPermissions = new Set()
+
+        render(<WorkflowTemplatesPanel embedded />)
+
+        expect(screen.getByText('No access to workflow templates')).toBeInTheDocument()
+        expect(screen.queryByText('No workflow templates')).not.toBeInTheDocument()
+        const templateQueries = (useQuery as ReturnType<typeof vi.fn>).mock.calls
+            .map(([options]) => options)
+            .filter((options) => options.queryKey[0] === 'templates' || options.queryKey[0] === 'template-categories')
+        expect(templateQueries.length).toBeGreaterThan(0)
+        expect(templateQueries.every((options) => options.enabled === false)).toBe(true)
+    })
+
+    it('renders a 403 from the templates request as the denied state, not an empty list', () => {
+        ; (useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+            if (queryKey[0] === 'templates') {
+                return {
+                    data: undefined,
+                    isLoading: false,
+                    isError: true,
+                    isFetching: false,
+                    error: new ApiError(403, 'Forbidden', 'Missing permission: manage_automation'),
+                    refetch: vi.fn(),
+                }
+            }
+            return { data: undefined, isLoading: false, isError: false, error: null }
+        })
+
+        render(<WorkflowTemplatesPanel embedded />)
+
+        expect(screen.getByText('No access to workflow templates')).toBeInTheDocument()
+        expect(screen.queryByText(/manage_automation/)).not.toBeInTheDocument()
+        expect(screen.queryByText('No workflow templates')).not.toBeInTheDocument()
     })
 
     it.each([

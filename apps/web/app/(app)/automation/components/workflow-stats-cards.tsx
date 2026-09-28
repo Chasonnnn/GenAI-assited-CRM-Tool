@@ -43,7 +43,7 @@ export function WorkflowStatsCards({
                         <div className="text-2xl font-bold">
                             {isLoading ? "-" : `${stats?.success_rate_24h?.toFixed(1) ?? 0}%`}
                         </div>
-                        {stats?.success_rate_24h && stats.success_rate_24h > 95 && (
+                        {(stats?.success_rate_24h ?? 0) > 95 && (
                             <div className="flex items-center text-xs font-medium text-green-600">
                                 <TrendingUpIcon className="mr-1 size-3" />
                                 Good

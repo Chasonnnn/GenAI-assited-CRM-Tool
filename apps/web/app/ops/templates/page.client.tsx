@@ -39,7 +39,7 @@ const TABS = ["email", "forms", "workflows", "system"] as const
 type TemplatesTab = (typeof TABS)[number]
 
 const STATUS_STYLES: Record<string, string> = {
-    draft: "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300",
+    draft: "bg-muted text-muted-foreground",
     published: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
     archived: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
 }
@@ -54,7 +54,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function PublishScopeBadge({ isGlobal }: { isGlobal: boolean }) {
     return (
-        <Badge variant="secondary" className={isGlobal ? "bg-teal-500/10 text-teal-600" : ""}>
+        <Badge variant="secondary" className={isGlobal ? "bg-primary/10 text-primary" : ""}>
             {isGlobal ? "All orgs" : "Selected orgs"}
         </Badge>
     )
@@ -76,11 +76,11 @@ function QueryErrorState({
     onRetry: () => void
 }) {
     return (
-        <div className="rounded-lg border border-dashed bg-white p-10 text-center dark:bg-stone-900">
+        <div className="rounded-lg border border-dashed bg-card p-10 text-center">
             <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
                 <TriangleAlertIcon className="size-6" />
             </div>
-            <h3 className="text-lg font-semibold text-stone-900 dark:text-stone-100">{title}</h3>
+            <h3 className="text-lg font-semibold text-foreground">{title}</h3>
             <p className="mt-2 text-sm text-muted-foreground">
                 {resolveErrorMessage(error, "Failed to load templates.")}
             </p>
@@ -103,8 +103,8 @@ function EmptyState({
     ctaLabel: string
 }) {
     return (
-        <div className="rounded-lg border border-dashed bg-white p-10 text-center dark:bg-stone-900">
-            <h3 className="text-lg font-semibold text-stone-900 dark:text-stone-100">{title}</h3>
+        <div className="rounded-lg border border-dashed bg-card p-10 text-center">
+            <h3 className="text-lg font-semibold text-foreground">{title}</h3>
             <p className="mt-2 text-sm text-muted-foreground">{description}</p>
             <Link href={ctaHref} className={buttonVariants({ className: "mt-4" })}>
                 <PlusIcon className="mr-2 size-4" />
@@ -142,7 +142,7 @@ function TemplateTableFrame({
     showScope?: boolean
 }) {
     return (
-        <div className="border rounded-lg bg-white dark:bg-stone-900">
+        <div className="border rounded-lg bg-card">
             <Table>
                 <TableHeader>
                     <TableRow>
@@ -225,11 +225,11 @@ function TemplateListSection<TTemplate extends PublishedTemplateListItem>({
             {rows.map((template) => (
                 <TableRow
                     key={template.id}
-                    className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                    className="cursor-pointer hover:bg-muted/50"
                     onClick={() => onOpen(template)}
                 >
                     <TableCell>
-                        <div className="font-medium text-stone-900 dark:text-stone-100">
+                        <div className="font-medium text-foreground">
                             {template.draft.name}
                         </div>
                         <div className="text-xs text-muted-foreground truncate">
@@ -299,11 +299,11 @@ function SystemTemplatesSection({
             {rows.map((template) => (
                 <TableRow
                     key={template.system_key}
-                    className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                    className="cursor-pointer hover:bg-muted/50"
                     onClick={() => onOpen(template)}
                 >
                     <TableCell>
-                        <div className="font-medium text-stone-900 dark:text-stone-100">
+                        <div className="font-medium text-foreground">
                             {template.name}
                         </div>
                         <div className="text-xs text-muted-foreground">
@@ -316,7 +316,7 @@ function SystemTemplatesSection({
                             className={
                                 template.is_active
                                     ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                    : "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300"
+                                    : "bg-muted text-muted-foreground"
                             }
                         >
                             {template.is_active ? "Active" : "Inactive"}
@@ -410,10 +410,10 @@ export default function TemplatesPage() {
         <div className="p-6 space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
+                    <h1 className="text-2xl font-semibold text-foreground">
                         Templates Studio
                     </h1>
-                    <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+                    <p className="text-sm text-muted-foreground mt-1">
                         Design shared templates and manage platform system emails. Published templates sync to org libraries.
                     </p>
                 </div>

@@ -22,6 +22,7 @@ from app.core.deps import (
     require_permission,
 )
 from app.core.policies import POLICIES
+from app.db.enums import MeetingMode
 from app.schemas.appointment import (
     AppointmentCancel,
     AppointmentComplete,
@@ -30,6 +31,7 @@ from app.schemas.appointment import (
     AppointmentMutation,
     AppointmentRead,
     AppointmentReschedule,
+    AppointmentStatusCounts,
     AppointmentSyncResolve,
     AppointmentTypeCreate,
     AppointmentTypeRead,
@@ -582,6 +584,11 @@ def list_appointments(
     match_id: UUID | None = None,
     attempt_id: UUID | None = None,
     include_record_history: bool = False,
+    q: Annotated[str | None, "fastapi_param"] = Query(
+        None, max_length=200, description="Search client name or email"
+    ),
+    appointment_type_id: UUID | None = None,
+    meeting_mode: MeetingMode | None = None,
 ):
     """List appointments for the current user.
 
@@ -615,6 +622,9 @@ def list_appointments(
         match_id=match_id,
         attempt_id=attempt_id,
         include_record_history=include_record_history,
+        q=q,
+        appointment_type_id=appointment_type_id,
+        meeting_mode=meeting_mode.value if meeting_mode else None,
         limit=per_page,
         offset=offset,
         session=session,
@@ -635,6 +645,10 @@ def list_appointments(
             "count": len(appointments),
             "surrogate_id": str(surrogate_id) if surrogate_id else None,
             "intended_parent_id": str(intended_parent_id) if intended_parent_id else None,
+            "appointment_type_id": str(appointment_type_id) if appointment_type_id else None,
+            "meeting_mode": meeting_mode.value if meeting_mode else None,
+            # The search text can hold a client name, so only its presence is logged.
+            "searched": bool(q and q.strip()),
         },
     )
     db.commit()
@@ -657,6 +671,34 @@ def list_appointments(
         per_page=per_page,
         pages=pages,
     )
+
+
+# Declared before /{appointment_id} so the literal path is not parsed as an id.
+@router.get("/status-counts", response_model=AppointmentStatusCounts)
+def get_appointment_status_counts(
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    date_start: date | None = None,
+    date_end: date | None = None,
+    q: Annotated[str | None, "fastapi_param"] = Query(
+        None, max_length=200, description="Search client name or email"
+    ),
+    appointment_type_id: UUID | None = None,
+    meeting_mode: MeetingMode | None = None,
+) -> AppointmentStatusCounts:
+    """Count the current user's appointments per status with the list filters."""
+    counts = appointment_service.count_appointments_by_status(
+        db,
+        user_id=session.user_id,
+        org_id=session.org_id,
+        date_start=date_start,
+        date_end=date_end,
+        q=q,
+        appointment_type_id=appointment_type_id,
+        meeting_mode=meeting_mode.value if meeting_mode else None,
+        session=session,
+    )
+    return AppointmentStatusCounts(**counts)
 
 
 @router.get("/{appointment_id}", response_model=AppointmentRead)

@@ -11,8 +11,10 @@
  */
 
 import { useState } from "react"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { CopyButton } from "@/components/ui/copy-button"
 import { Badge } from "@/components/ui/badge"
 import {
     Dialog,
@@ -29,8 +31,6 @@ import {
 } from "@/components/ui/alert"
 import {
     AlertTriangleIcon,
-    CheckIcon,
-    CopyIcon,
     KeyIcon,
     Loader2Icon,
     RefreshCwIcon,
@@ -50,17 +50,9 @@ import {
 // =============================================================================
 
 function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: () => void }) {
-    const [copied, setCopied] = useState(false)
-
-    const handleCopy = () => {
-        void navigator.clipboard.writeText(codes.join("\n"))
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-    }
-
     return (
         <Dialog open={true} onOpenChange={onClose}>
-            <DialogContent className="max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <KeyIcon className="size-5" aria-hidden="true" />
@@ -88,19 +80,9 @@ function RecoveryCodesDisplay({ codes, onClose }: { codes: string[]; onClose: ()
                 </div>
 
                 <DialogFooter className="gap-2">
-                    <Button variant="outline" onClick={handleCopy}>
-                        {copied ? (
-                            <>
-                                <CheckIcon className="size-4 mr-2" aria-hidden="true" />
-                                Copied!
-                            </>
-                        ) : (
-                            <>
-                                <CopyIcon className="size-4 mr-2" aria-hidden="true" />
-                                Copy All
-                            </>
-                        )}
-                    </Button>
+                    <CopyButton variant="outline" value={codes.join("\n")} iconClassName="size-4 mr-2">
+                        Copy All
+                    </CopyButton>
                     <Button onClick={onClose}>I've Saved These Codes</Button>
                 </DialogFooter>
             </DialogContent>
@@ -155,8 +137,11 @@ export default function SecuritySettingsPage() {
 
     if (statusLoading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+            <div className="flex flex-col">
+                <PageHeader title="Security" />
+                <div className="flex h-64 items-center justify-center">
+                    <Loader2Icon className="size-8 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                </div>
             </div>
         )
     }
@@ -167,10 +152,9 @@ export default function SecuritySettingsPage() {
     const duoEnrolled = duoStatus?.enrolled || false
 
     return (
-        <div className="container max-w-2xl py-8 space-y-6">
-            <div>
-                <h1 className="text-2xl font-semibold">Security Settings</h1>
-            </div>
+        <div className="flex flex-col">
+            <PageHeader title="Security" />
+            <div className="max-w-2xl space-y-6 p-6">
 
             {/* MFA Status Card */}
             <Card>
@@ -339,6 +323,7 @@ export default function SecuritySettingsPage() {
                     onClose={() => setShowRecoveryCodes(null)}
                 />
             )}
+            </div>
         </div>
     )
 }

@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
     access: vi.fn(), forms: vi.fn(), submissions: vi.fn(), candidates: vi.fn(),
     resolve: vi.fn(), retry: vi.fn(), promote: vi.fn(), refetch: vi.fn(),
 }))
+vi.mock("@/components/app-link", () => ({
+    default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => <a href={href} {...props}>{children}</a>,
+}))
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ user: { user_id: "reviewer" } }) }))
 vi.mock("@/lib/hooks/use-permissions", () => ({ useEffectivePermissions: () => mocks.access() }))
 vi.mock("@tanstack/react-query", () => ({ useQuery: () => mocks.forms() }))
@@ -44,7 +47,9 @@ describe("standalone form submission access", () => {
         expect(mocks.forms).not.toHaveBeenCalled()
         mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["review_form_submissions"] } })
         view.rerender(<FormSubmissionsPage />)
-        expect(screen.getByText("Form submissions unavailable")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { level: 1, name: "Form Submissions" })).toBeInTheDocument()
+        expect(screen.getByText("No access to Form Submissions")).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Go to Dashboard" })).toHaveAttribute("href", "/dashboard")
         expect(mocks.forms).not.toHaveBeenCalled()
     })
 
@@ -52,8 +57,9 @@ describe("standalone form submission access", () => {
         const target = surface === "permissions" ? mocks.access : surface === "forms" ? mocks.forms : mocks.submissions
         target.mockReturnValue({ isError: true, refetch: mocks.refetch })
         render(<FormSubmissionsPage />)
-        expect(screen.getByRole("alert")).toHaveTextContent("Unable to load")
-        fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+        expect(screen.getByRole("heading", { level: 1, name: "Form Submissions" })).toBeInTheDocument()
+        expect(screen.getByText(/^Couldn't load/)).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
         expect(mocks.refetch).toHaveBeenCalledTimes(1)
     })
 

@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { EMPTY_VALUE_TEXT } from "@/components/ui/empty-value"
 import { useAuth } from "@/lib/auth-context"
 import { serializeHeightSelection, splitHeightFt } from "@/lib/height"
 import { formatRace } from "@/lib/formatters"
@@ -62,37 +64,40 @@ function formatFormSelectValue(
     return options.find((option) => option.value === value)?.label ?? value
 }
 
+/** Label of the explicit item that clears an optional field. It is a real choice, not a placeholder. */
+const CLEAR_VALUE_LABEL = "Not provided"
+
 function FormSelect({
     id,
     name,
     defaultValue,
     options,
     placeholder,
-    className = "w-full",
+    clearable = false,
 }: {
     id: string
     name: string
     defaultValue: string | null | undefined
     options: readonly FormSelectOption[]
     placeholder: string
-    className?: string
+    clearable?: boolean
 }) {
     const [value, setValue] = React.useState(defaultValue ?? "")
 
     return (
         <>
             <input type="hidden" name={name} value={value} />
-            <Select value={value} onValueChange={(nextValue) => setValue(nextValue ?? "")}>
-                <SelectTrigger id={id} className={className}>
-                    <SelectValue>
+            <Select value={value || null} onValueChange={(nextValue) => setValue(nextValue ?? "")}>
+                <SelectTrigger id={id} className="w-full">
+                    <SelectValue placeholder={placeholder}>
                         {(selectedValue: string | null) =>
                             formatFormSelectValue(selectedValue, options, placeholder)
                         }
                     </SelectValue>
                 </SelectTrigger>
-                <SelectContent className={className}>
+                <SelectContent>
                     <SelectGroup>
-                        <SelectItem value="">{placeholder}</SelectItem>
+                        {clearable ? <SelectItem value="">{CLEAR_VALUE_LABEL}</SelectItem> : null}
                         {options.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                                 {option.label}
@@ -102,6 +107,79 @@ function FormSelect({
                 </SelectContent>
             </Select>
         </>
+    )
+}
+
+const HEIGHT_FEET_OPTIONS = Array.from({ length: 9 }, (_, value) => ({
+    value: String(value),
+    label: String(value),
+}))
+
+const HEIGHT_INCH_OPTIONS = Array.from({ length: 12 }, (_, value) => ({
+    value: String(value),
+    label: String(value),
+}))
+
+/** One "Height" field: two compact selects with ft / in suffixes. Clearing feet clears the height. */
+function HeightField({ defaultFeet, defaultInches }: { defaultFeet: string; defaultInches: string }) {
+    const [feet, setFeet] = React.useState(defaultFeet)
+    const [inches, setInches] = React.useState(defaultInches)
+
+    return (
+        <div className="space-y-2">
+            <Label htmlFor="height_feet">Height</Label>
+            <div className="flex items-center gap-2">
+                <Select
+                    name="height_feet"
+                    value={feet || null}
+                    onValueChange={(nextValue) => {
+                        const next = nextValue ?? ""
+                        setFeet(next)
+                        if (!next) setInches("")
+                    }}
+                >
+                    <SelectTrigger id="height_feet" aria-label="Height feet" className="w-20">
+                        <SelectValue placeholder={EMPTY_VALUE_TEXT} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="">{CLEAR_VALUE_LABEL}</SelectItem>
+                        {HEIGHT_FEET_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground" aria-hidden="true">ft</span>
+                <Select
+                    name="height_inches"
+                    value={inches || null}
+                    onValueChange={(nextValue) => setInches(nextValue ?? "")}
+                    disabled={!feet}
+                >
+                    <SelectTrigger aria-label="Height inches" className="w-20">
+                        <SelectValue placeholder={EMPTY_VALUE_TEXT} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {HEIGHT_INCH_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <span className="text-sm text-muted-foreground" aria-hidden="true">in</span>
+            </div>
+        </div>
+    )
+}
+
+function PriorityField({ defaultChecked }: { defaultChecked: boolean }) {
+    return (
+        <div className="flex items-center justify-between gap-4 rounded-lg border px-3 py-2">
+            <Label htmlFor="is_priority">Priority</Label>
+            <Switch id="is_priority" name="is_priority" defaultChecked={defaultChecked} />
+        </div>
     )
 }
 
@@ -203,7 +281,7 @@ export function EditDialog() {
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && closeDialog()}>
-            <DialogContent key={surrogate.id} className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogContent key={surrogate.id} size="2xl">
                 <DialogHeader>
                     <DialogTitle>Edit Surrogate: #{surrogate.surrogate_number}</DialogTitle>
                 </DialogHeader>
@@ -219,6 +297,7 @@ export function EditDialog() {
                                 <Input id="email" name="email" type="email" defaultValue={surrogate.email} required />
                             </div>
                         </div>
+                        {canManagePriority && <PriorityField defaultChecked={surrogate.is_priority} />}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="phone">Phone</Label>
@@ -240,7 +319,8 @@ export function EditDialog() {
                                     id="race"
                                     name="race"
                                     defaultValue={normalizeRaceOptionKey(surrogate.race)}
-                                    placeholder="Not provided"
+                                    placeholder={EMPTY_VALUE_TEXT}
+                                    clearable
                                     options={RACE_OPTIONS.map((raceKey) => ({
                                         value: raceKey,
                                         label: formatRace(raceKey),
@@ -249,36 +329,10 @@ export function EditDialog() {
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="height_feet">Height Feet</Label>
-                                    <FormSelect
-                                        id="height_feet"
-                                        name="height_feet"
-                                        defaultValue={heightSelection.feet}
-                                        placeholder="ft"
-                                        options={Array.from({ length: 9 }, (_, value) => ({
-                                            value: String(value),
-                                            label: `${value} ft`,
-                                        }))}
-                                        className="w-full"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="height_inches">Height Inches</Label>
-                                    <FormSelect
-                                        id="height_inches"
-                                        name="height_inches"
-                                        defaultValue={heightSelection.inches}
-                                        placeholder="in"
-                                        options={Array.from({ length: 12 }, (_, value) => ({
-                                            value: String(value),
-                                            label: `${value} in`,
-                                        }))}
-                                        className="w-full"
-                                    />
-                                </div>
-                            </div>
+                            <HeightField
+                                defaultFeet={heightSelection.feet}
+                                defaultInches={heightSelection.inches}
+                            />
                             <div className="space-y-2">
                                 <Label htmlFor="weight_lb">Weight (lb)</Label>
                                 <Input id="weight_lb" name="weight_lb" type="number" defaultValue={surrogate.weight_lb ?? ""} />
@@ -287,12 +341,6 @@ export function EditDialog() {
                         <div className="space-y-3 pt-2">
                             <div className="text-sm font-medium text-foreground">Eligibility Checklist</div>
                             <div className="grid grid-cols-2 gap-4">
-                                {canManagePriority && (
-                                    <div className="flex items-center gap-2">
-                                        <Checkbox id="is_priority" name="is_priority" defaultChecked={surrogate.is_priority} />
-                                        <Label htmlFor="is_priority">Priority Surrogate</Label>
-                                    </div>
-                                )}
                                 {editableChecklistItems.map((item) => {
                                     if (item.key === "journey_timing_preference") {
                                         return (
@@ -302,9 +350,9 @@ export function EditDialog() {
                                                     id={item.key}
                                                     name={item.key}
                                                     defaultValue={surrogate.journey_timing_preference ?? ""}
-                                                    placeholder="Not provided"
+                                                    placeholder={EMPTY_VALUE_TEXT}
+                                                    clearable
                                                     options={JOURNEY_TIMING_OPTIONS}
-                                                    className="w-full"
                                                 />
                                             </div>
                                         )

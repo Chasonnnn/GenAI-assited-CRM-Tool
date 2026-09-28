@@ -4,7 +4,6 @@ import { useState, type FormEvent } from "react"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -37,6 +36,7 @@ import { format, parseISO } from "date-fns"
 import { cn } from "@/lib/utils"
 import type { TaskListItem, TaskUpdatePayload } from "@/lib/api/tasks"
 import { TaskRelatedRecordPicker } from "@/components/tasks/TaskRelatedRecordPicker"
+import { getTaskTypeLabel, isEditableTaskType, TASK_TYPE_OPTIONS } from "@/lib/task-labels"
 import {
     getTaskRelatedRecordSelection,
     toTaskRelatedRecordPayload,
@@ -75,17 +75,6 @@ type TaskEditDraft = {
     dueTime: string
     relatedRecord: TaskRelatedRecordSelection
 }
-
-const TASK_TYPES = [
-    { value: "meeting", label: "Meeting" },
-    { value: "follow_up", label: "Follow Up" },
-    { value: "contact", label: "Contact" },
-    { value: "review", label: "Review" },
-    { value: "medication", label: "Medication" },
-    { value: "exam", label: "Exam" },
-    { value: "appointment", label: "Appointment" },
-    { value: "other", label: "Other" },
-]
 
 function createTaskEditDraft(task: Task | null): TaskEditDraft {
     if (!task) {
@@ -180,9 +169,6 @@ export function TaskEditModal({
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>Edit Task</DialogTitle>
-                        <DialogDescription>
-                            Update task details and schedule.
-                        </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4 py-4">
@@ -215,17 +201,12 @@ export function TaskEditModal({
                         {/* Task Type */}
                         <div className="space-y-2">
                             <Label htmlFor="task-type">Type</Label>
-                            <Select value={draft.taskType} onValueChange={(v) => v && updateDraft({ taskType: v })}>
+                            <Select value={draft.taskType} onValueChange={(v) => { if (isEditableTaskType(v)) updateDraft({ taskType: v }) }}>
                                 <SelectTrigger id="task-type">
-                                    <SelectValue>
-                                        {(value: string | null) => {
-                                            const type = TASK_TYPES.find(t => t.value === value)
-                                            return type?.label ?? "Select type"
-                                        }}
-                                    </SelectValue>
+                                    <SelectValue>{getTaskTypeLabel}</SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {TASK_TYPES.map((type) => (
+                                    {TASK_TYPE_OPTIONS.map((type) => (
                                         <SelectItem key={type.value} value={type.value}>
                                             {type.label}
                                         </SelectItem>
@@ -283,24 +264,25 @@ export function TaskEditModal({
                     </div>
 
                     {error && !deleteDialogOpen ? <p role="alert" className="mb-3 text-sm text-destructive">{error}</p> : null}
-                    <DialogFooter>
-                        {onDelete && (
+                    <DialogFooter
+                        start={onDelete ? (
                             <Button
                                 type="button"
-                                variant="destructive"
+                                variant="destructive-ghost"
                                 onClick={handleDelete}
                                 disabled={isSaving || isDeleting}
                             >
                                 {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
-                                Delete Task
+                                Delete task
                             </Button>
-                        )}
+                        ) : undefined}
+                    >
                         <Button type="button" variant="outline" onClick={onClose} disabled={isSaving || isDeleting}>
                             Cancel
                         </Button>
                         <Button type="submit" disabled={isSaving || isDeleting || !draft.title.trim()}>
                             {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
-                            Save Changes
+                            Save changes
                         </Button>
                     </DialogFooter>
                 </form>
@@ -309,7 +291,7 @@ export function TaskEditModal({
                 <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
                     <AlertDialogContent>
                         <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Task</AlertDialogTitle>
+                            <AlertDialogTitle>Delete task?</AlertDialogTitle>
                             <AlertDialogDescription>
                                 This action cannot be undone. This will permanently delete the task.
                             </AlertDialogDescription>
@@ -320,10 +302,10 @@ export function TaskEditModal({
                             <AlertDialogAction
                                 onClick={(event) => { event.preventDefault(); void confirmDelete() }}
                                 disabled={isDeleting}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                variant="destructive"
                             >
                                 {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
-                                Delete
+                                Delete task
                             </AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>

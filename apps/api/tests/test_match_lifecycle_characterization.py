@@ -778,7 +778,7 @@ async def test_accept_when_ip_beyond_matched_is_blocked(authed_client, db, test_
     response = await authed_client.put(f"/matches/{created['id']}/accept", json={})
 
     assert response.status_code == 400
-    assert "Intended parent at Delivered (delivered)" in response.json()["detail"]
+    assert "Intended parent at Delivered is not eligible to accept" in response.json()["detail"]
     assert _match_row(db, created["id"]).status == "under_review"
     assert _ip_stage_key(db, ip["id"]) == "delivered"
     assert _stage_slug(db, Surrogate, surrogate["id"]) == "ready_to_match"

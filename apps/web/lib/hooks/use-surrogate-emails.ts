@@ -11,19 +11,19 @@ const surrogateEmailKeys = {
     contacts: (surrogateId: string) => [...surrogateEmailKeys.all, surrogateId, 'contacts'] as const,
 }
 
-export function useSurrogateEmails(surrogateId: string) {
+export function useSurrogateEmails(surrogateId: string, options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: surrogateEmailKeys.ticketList(surrogateId),
         queryFn: () => surrogateEmailsApi.getSurrogateEmails(surrogateId),
-        enabled: !!surrogateId,
+        enabled: !!surrogateId && (options.enabled ?? true),
     })
 }
 
-export function useSurrogateEmailContacts(surrogateId: string) {
+export function useSurrogateEmailContacts(surrogateId: string, options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: surrogateEmailKeys.contacts(surrogateId),
         queryFn: () => surrogateEmailsApi.getSurrogateEmailContacts(surrogateId),
-        enabled: !!surrogateId,
+        enabled: !!surrogateId && (options.enabled ?? true),
     })
 }
 

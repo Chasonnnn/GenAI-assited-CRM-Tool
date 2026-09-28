@@ -9,6 +9,21 @@ const mockUseAuth = vi.fn()
 const mockAvailability = vi.fn()
 
 let mockUser: { user_id: string } | null = { user_id: 'u1' }
+let mockPermissions = new Set<string>()
+
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+}))
+
+vi.mock('@/lib/hooks/use-permission-check', () => ({
+    usePermissionCheck: () => ({
+        isLoading: false,
+        isError: false,
+        retry: vi.fn(),
+        isRetrying: false,
+        can: (permission: string) => mockPermissions.has(permission),
+    }),
+}))
 
 vi.mock('@/lib/hooks/use-ai', () => ({
     useAIAvailability: () => mockAvailability(),
@@ -25,6 +40,7 @@ describe('AIAssistantPage', () => {
     beforeEach(() => {
         mockAvailability.mockReturnValue({ data: { is_enabled: true }, refetch: vi.fn() })
         mockUser = { user_id: 'u1' }
+        mockPermissions = new Set()
         mockUseAuth.mockReturnValue({ user: mockUser, isLoading: false, error: null, refetch: vi.fn() })
 
         mockStreamMessage.mockImplementation(async (_request, onEvent) => {
@@ -53,6 +69,27 @@ describe('AIAssistantPage', () => {
         mockApproveAction.mockClear()
         mockRejectAction.mockClear()
         sessionStorage.clear()
+    })
+
+    it('shows the shared AI-unavailable notice and disables the input when AI is off', () => {
+        mockAvailability.mockReturnValue({ data: { is_enabled: false }, refetch: vi.fn() })
+        mockPermissions = new Set(['manage_integrations', 'manage_ai_settings'])
+
+        render(<AIAssistantPage />)
+
+        expect(screen.getByRole('status')).toHaveTextContent('AI is turned off for this organization.')
+        expect(screen.getByRole('link', { name: 'AI settings' })).toHaveAttribute('href', '/settings/integrations')
+        expect(screen.getByRole('textbox')).toBeDisabled()
+    })
+
+    it('omits the AI settings link without manage_ai_settings, which the AI settings API requires', () => {
+        mockAvailability.mockReturnValue({ data: { is_enabled: false }, refetch: vi.fn() })
+        mockPermissions = new Set(['manage_integrations'])
+
+        render(<AIAssistantPage />)
+
+        expect(screen.getByRole('status')).toHaveTextContent('AI is turned off for this organization.')
+        expect(screen.queryByRole('link', { name: 'AI settings' })).not.toBeInTheDocument()
     })
 
     it('sends a message and can approve a proposed action in global mode', async () => {

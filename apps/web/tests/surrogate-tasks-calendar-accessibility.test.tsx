@@ -76,10 +76,11 @@ describe("SurrogateTasksCalendar accessibility", () => {
         expect(open).toHaveBeenCalled()
     })
 
-    it('disables the empty-state create action without create permission', () => {
+    it('disables the create action on an empty list without create permission', () => {
         installTaskViewStorage()
         render(<SurrogateTasksCalendar surrogateId="s1" tasks={[]} onAddTask={vi.fn()} onTaskToggle={vi.fn()} canCreateTask={false} />)
-        expect(screen.getByRole('button', { name: 'Add First Task' })).toBeDisabled()
+        expect(screen.getByText('No tasks yet')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Add Task' })).toBeDisabled()
     })
 
     it("renders task titles as buttons and provides checkbox aria-labels", async () => {
@@ -166,5 +167,47 @@ describe("SurrogateTasksCalendar accessibility", () => {
         expect(
             await screen.findByRole("button", { name: /Initial Consultation/ })
         ).toBeInTheDocument()
+    })
+})
+
+describe("SurrogateTasksCalendar load states", () => {
+    it("shows a load error with retry instead of the empty state", async () => {
+        const { ApiError } = await import("@/lib/api")
+        const onRetry = vi.fn()
+
+        render(
+            <SurrogateTasksCalendar
+                surrogateId="s1"
+                tasks={[]}
+                loadError={{
+                    error: new ApiError(500, "Internal Server Error", "boom"),
+                    onRetry,
+                    isRetrying: false,
+                }}
+                onTaskToggle={vi.fn()}
+                onAddTask={vi.fn()}
+            />
+        )
+
+        expect(screen.getByText("Couldn't load tasks")).toBeInTheDocument()
+        expect(screen.queryByText("No tasks yet")).not.toBeInTheDocument()
+        expect(screen.queryByText("boom")).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(onRetry).toHaveBeenCalledTimes(1)
+    })
+
+    it("shows a first-run empty state without helper copy or a second create action", () => {
+        render(
+            <SurrogateTasksCalendar
+                surrogateId="s1"
+                tasks={[]}
+                onTaskToggle={vi.fn()}
+                onAddTask={vi.fn()}
+            />
+        )
+
+        expect(screen.getByText("No tasks yet")).toBeInTheDocument()
+        expect(screen.queryByText(/track work for this surrogate/i)).not.toBeInTheDocument()
+        expect(screen.getAllByRole("button", { name: /add .*task/i })).toHaveLength(1)
     })
 })

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Button } from "@/components/ui/button"
+import { EMPTY_VALUE_LABEL, EmptyValue } from "@/components/ui/empty-value"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckIcon, EyeIcon, PencilIcon, XIcon } from "lucide-react"
@@ -9,6 +10,7 @@ import { formatHeight } from "@/components/surrogates/detail/surrogate-detail-ut
 import { serializeHeightSelection, splitHeightFt } from "@/lib/height"
 import { formatRace } from "@/lib/formatters"
 import { useRecordEditing } from "@/components/records/RecordEditingContext"
+import { getSelectLabel, humanizeSelectKey } from "@/lib/select-labels"
 
 const RACE_OPTIONS = [
     "american_indian_or_alaska_native",
@@ -41,13 +43,21 @@ type SelectOption = {
     label: string
 }
 
+/** One label helper for the display, the trigger and the read-only name; never the raw key. */
 function formatSelectValue(
     value: string | null | undefined,
     options: readonly SelectOption[],
     placeholder: string
 ) {
-    if (!value) return placeholder
-    return options.find((option) => option.value === value)?.label ?? value
+    return getSelectLabel(value, options, {
+        emptyLabel: placeholder,
+        unknownLabel: humanizeSelectKey(value) ?? "Unknown",
+    })
+}
+
+/** Read-only fields render a disabled button; its name carries the value so it is not hidden. */
+function readOnlyFieldName(label: string, valueText: string | null | undefined) {
+    return `${label}: ${valueText || EMPTY_VALUE_LABEL}`
 }
 
 export function PersonalInfoRow({
@@ -88,8 +98,8 @@ export function InlineSelectField({
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
 
-    const displayValue = formatSelectValue(value, options, placeholder)
-    const isPlaceholder = !value
+    const displayText = value ? formatSelectValue(value, options, placeholder) : null
+    const displayValue = displayText ?? <EmptyValue />
 
     const handleStartEdit = () => {
         setEditValue(value ?? "")
@@ -131,11 +141,9 @@ export function InlineSelectField({
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 disabled={!canEdit}
                 onClick={handleStartEdit}
-                aria-label={`Edit ${label}`}
+                aria-label={canEdit ? `Edit ${label}` : readOnlyFieldName(label, displayText)}
             >
-                <span className={isPlaceholder ? "text-muted-foreground" : undefined}>
-                    {displayValue}
-                </span>
+                <span>{displayValue}</span>
                 <PencilIcon
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
@@ -257,7 +265,10 @@ export function InlineHeightField({
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
 
-    const displayValue = value != null ? formatHeight(value) : "-"
+    // formatHeight returns "-" for unparseable or non-positive heights.
+    const formattedHeight = value != null ? formatHeight(value) : null
+    const displayText = formattedHeight && formattedHeight !== "-" ? formattedHeight : null
+    const displayValue = displayText ?? <EmptyValue />
 
     const handleStartEdit = () => {
         const selection = splitHeightFt(value)
@@ -303,11 +314,9 @@ export function InlineHeightField({
                 className="group -mx-1 flex cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 disabled={!canEdit}
                 onClick={handleStartEdit}
-                aria-label="Edit Height"
+                aria-label={canEdit ? "Edit Height" : readOnlyFieldName("Height", displayText)}
             >
-                <span className={value == null ? "text-muted-foreground" : undefined}>
-                    {displayValue}
-                </span>
+                <span>{displayValue}</span>
                 <PencilIcon
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
@@ -319,7 +328,16 @@ export function InlineHeightField({
     return (
         <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-1">
-                <Select value={feet} onValueChange={(value) => setFeet(value ?? "")} disabled={isSaving}>
+                <Select
+                    value={feet}
+                    onValueChange={(value) => {
+                        const next = value ?? ""
+                        setFeet(next)
+                        // Clearing feet clears the height, matching the Edit dialog.
+                        if (!next) setInches("")
+                    }}
+                    disabled={isSaving}
+                >
                     <SelectTrigger aria-label="Height feet" size="sm" className="w-20">
                         <SelectValue>
                             {(value: string | null) => (value ? `${value} ft` : "ft")}
@@ -327,7 +345,8 @@ export function InlineHeightField({
                     </SelectTrigger>
                     <SelectContent className="w-24">
                         <SelectGroup>
-                            <SelectItem value="">ft</SelectItem>
+                            {/* An explicit clear choice, not a placeholder row. */}
+                            <SelectItem value="">{EMPTY_VALUE_LABEL}</SelectItem>
                             {Array.from({ length: 9 }, (_, option) => option).map((option) => (
                                 <SelectItem key={`inline-height-feet-${option}`} value={String(option)}>
                                     {option} ft
@@ -336,7 +355,11 @@ export function InlineHeightField({
                         </SelectGroup>
                     </SelectContent>
                 </Select>
-                <Select value={inches} onValueChange={(value) => setInches(value ?? "")} disabled={isSaving}>
+                <Select
+                    value={inches || null}
+                    onValueChange={(value) => setInches(value ?? "")}
+                    disabled={isSaving || !feet}
+                >
                     <SelectTrigger aria-label="Height inches" size="sm" className="w-20">
                         <SelectValue>
                             {(value: string | null) => (value ? `${value} in` : "in")}
@@ -344,7 +367,6 @@ export function InlineHeightField({
                     </SelectTrigger>
                     <SelectContent className="w-24">
                         <SelectGroup>
-                            <SelectItem value="">in</SelectItem>
                             {Array.from({ length: 12 }, (_, option) => option).map((option) => (
                                 <SelectItem key={`inline-height-inches-${option}`} value={String(option)}>
                                     {option} in
@@ -437,11 +459,9 @@ export function InlineRaceField({
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 disabled={!canEdit}
                 onClick={handleStartEdit}
-                aria-label={`Edit ${fieldLabel}`}
+                aria-label={canEdit ? `Edit ${fieldLabel}` : readOnlyFieldName(fieldLabel, displayValue)}
             >
-                <span className={displayValue ? undefined : "text-muted-foreground"}>
-                    {displayValue || "-"}
-                </span>
+                <span>{displayValue || <EmptyValue />}</span>
                 <PencilIcon
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
@@ -570,11 +590,11 @@ export function InlineWeightField({
                 className="group -mx-1 flex w-fit cursor-pointer items-center gap-1 rounded px-1 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 disabled={!canEdit}
                 onClick={handleStartEdit}
-                aria-label="Edit Weight"
+                aria-label={
+                    canEdit ? "Edit Weight" : readOnlyFieldName("Weight", value != null ? `${value} lb` : null)
+                }
             >
-                <span className={value == null ? "text-muted-foreground" : undefined}>
-                    {value != null ? `${value} lb` : "-"}
-                </span>
+                <span>{value != null ? `${value} lb` : <EmptyValue />}</span>
                 <PencilIcon
                     className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
@@ -706,7 +726,7 @@ export function SsnField({
     const [editValue, setEditValue] = React.useState("")
     const [isSaving, setIsSaving] = React.useState(false)
     const [error, setError] = React.useState<string | null>(null)
-    const displayValue = (canEdit && revealedValue) || maskedValue || "-"
+    const displayValue = (canEdit && revealedValue) || maskedValue || <EmptyValue />
 
     const save = async () => {
         if (!canEdit || isSaving) return

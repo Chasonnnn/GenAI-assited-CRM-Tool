@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 
+import { LoadErrorState } from "@/components/error-state"
 import { OutcomeBadge } from "@/components/surrogates/OutcomeBadge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,6 +26,8 @@ type SurrogateHistoryTabProps = {
     formatDateTime: (dateString: string) => string
     status?: "loading" | "error" | "ready"
     onRetry?: () => void
+    /** Pass the query's refetch state so Try again shows progress. */
+    isRetrying?: boolean
     hasMore?: boolean
     isLoadingMore?: boolean
     loadMoreError?: boolean
@@ -383,6 +386,7 @@ export function SurrogateHistoryTab({
     formatDateTime,
     status = "ready",
     onRetry,
+    isRetrying = false,
     hasMore = false,
     isLoadingMore = false,
     loadMoreError = false,
@@ -399,10 +403,12 @@ export function SurrogateHistoryTab({
                         Loading activity…
                     </p>
                 ) : status === "error" ? (
-                    <div className="space-y-3 py-4 text-center">
-                        <p className="text-sm text-destructive">Failed to load activity.</p>
-                        {onRetry ? <Button variant="outline" size="sm" onClick={onRetry}>Retry</Button> : null}
-                    </div>
+                    <LoadErrorState
+                        title="Couldn't load activity"
+                        onRetry={() => onRetry?.()}
+                        isRetrying={isRetrying}
+                        className="min-h-0 py-10"
+                    />
                 ) : activities.length > 0 ? (
                     activities.map((entry, idx) => {
                         const isLast = idx === activities.length - 1

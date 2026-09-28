@@ -116,7 +116,7 @@ export function MilestoneImageSelector({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="max-w-2xl">
+            <DialogContent size="2xl">
                 <DialogHeader>
                     <DialogTitle>Select Featured Image</DialogTitle>
                     <DialogDescription>

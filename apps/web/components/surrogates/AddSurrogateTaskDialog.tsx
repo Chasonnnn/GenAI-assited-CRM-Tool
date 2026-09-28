@@ -8,7 +8,6 @@ import { useReducer } from "react"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -41,7 +40,6 @@ interface AddSurrogateTaskDialogProps {
     onOpenChange: (open: boolean) => void
     onSubmit: (data: SurrogateTaskFormData) => Promise<void>
     isPending: boolean
-    surrogateName: string
 }
 
 const TASK_TYPES = [
@@ -115,7 +113,6 @@ export function AddSurrogateTaskDialog({
     onOpenChange,
     onSubmit,
     isPending,
-    surrogateName,
 }: AddSurrogateTaskDialogProps) {
     const [formState, dispatchForm] = useReducer(
         surrogateTaskFormReducer,
@@ -176,12 +173,9 @@ export function AddSurrogateTaskDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle>Add Task</DialogTitle>
-                    <DialogDescription>
-                        Create a new task for {surrogateName}.
-                    </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">

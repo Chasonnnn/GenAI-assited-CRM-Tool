@@ -56,6 +56,47 @@ function formatPostTransferDuration(daysSinceTransfer: number) {
     return `(${weeks}w ${days}d post transfer)`
 }
 
+/**
+ * Gestational age on the delivery date. It uses the transfer date and embryo stage, or, when the
+ * stage is unknown, the manual due date (40w 0d). Null when neither is available.
+ */
+function getGestationalAgeAtDelivery(
+    startDate: string | null | undefined,
+    deliveryDate: string | null | undefined,
+    embryoStage: EmbryoStage | null | undefined,
+    dueDateOverride: string | null | undefined
+): { weeks: number; days: number } | null {
+    if (!deliveryDate) return null
+    const delivered = parseISO(deliveryDate)
+    if (!isValid(delivered)) return null
+
+    let gestationalDays: number | null = null
+    const embryoAgeDays = getEmbryoAgeDays(embryoStage)
+    const start = startDate ? parseISO(startDate) : null
+    if (start && isValid(start) && embryoAgeDays != null) {
+        gestationalDays = differenceInDays(delivered, start) + 14 + embryoAgeDays
+    } else if (dueDateOverride) {
+        const dueDate = parseISO(dueDateOverride)
+        if (isValid(dueDate)) gestationalDays = 280 - differenceInDays(dueDate, delivered)
+    }
+
+    if (gestationalDays == null || gestationalDays < 0) return null
+    return { weeks: Math.floor(gestationalDays / 7), days: gestationalDays % 7 }
+}
+
+function DeliverySummary({ age }: { age: { weeks: number; days: number } }) {
+    return (
+        <div className="space-y-2">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Gestational Age
+            </div>
+            <div className="text-lg font-semibold">
+                Delivered at {age.weeks}w {age.days}d
+            </div>
+        </div>
+    )
+}
+
 function PregnancySummary({ pregnancy }: { pregnancy: PregnancyData }) {
     if (pregnancy.daysSinceTransfer < 0) return null
 
@@ -106,11 +147,13 @@ function DueDateDisplay({
     readOnly,
     pregnancy,
     hasManualDueDate,
+    isDelivered,
     onEdit,
 }: {
     readOnly: boolean
     pregnancy: PregnancyData | null
     hasManualDueDate: boolean
+    isDelivered: boolean
     onEdit: () => void
 }) {
     if (!pregnancy?.dueDate) {
@@ -150,7 +193,7 @@ function DueDateDisplay({
                     {hasManualDueDate ? "manual" : "calculated"}
                 </Badge>
             </div>
-            {pregnancy.status === "unknown" && pregnancy.daysRemaining != null && (
+            {!isDelivered && pregnancy.status === "unknown" && pregnancy.daysRemaining != null && (
                 <div className="text-xs text-muted-foreground">
                     {pregnancy.daysRemaining} days remaining · based on manual due date
                 </div>
@@ -253,6 +296,14 @@ export function PregnancyTrackerCard({
     )
 
     const hasManualDueDate = !!surrogateData.pregnancy_due_date
+    // After delivery the tracker stops counting: it shows the age at delivery instead.
+    const isDelivered = !!surrogateData.actual_delivery_date
+    const ageAtDelivery = getGestationalAgeAtDelivery(
+        surrogateData.pregnancy_start_date,
+        surrogateData.actual_delivery_date,
+        surrogateData.embryo_stage,
+        surrogateData.pregnancy_due_date
+    )
     const [isEditingDueDate, setIsEditingDueDate] = useState(false)
     const [isEditingEmbryoStage, setIsEditingEmbryoStage] = useState(false)
     const [isSavingEmbryoStage, setIsSavingEmbryoStage] = useState(false)
@@ -303,7 +354,9 @@ export function PregnancyTrackerCard({
                 </CardTitle>
             </CardHeader>
             <CardContent className="px-4 space-y-3">
-                {pregnancy && <PregnancySummary pregnancy={pregnancy} />}
+                {isDelivered
+                    ? ageAtDelivery && <DeliverySummary age={ageAtDelivery} />
+                    : pregnancy && <PregnancySummary pregnancy={pregnancy} />}
 
                 {/* Future date warning */}
                 {pregnancy && pregnancy.daysSinceTransfer < 0 && (
@@ -398,9 +451,8 @@ export function PregnancyTrackerCard({
                                     await onUpdate({ pregnancy_start_date: v })
                                 }}
                                 label="Transferred date"
-                                placeholder="Set transferred date"
                             />
-                            {pregnancy && pregnancy.daysSinceTransfer >= 0 && (
+                            {!isDelivered && pregnancy && pregnancy.daysSinceTransfer >= 0 && (
                                 <span className="text-xs text-muted-foreground">
                                     {formatPostTransferDuration(pregnancy.daysSinceTransfer)}
                                 </span>
@@ -422,13 +474,13 @@ export function PregnancyTrackerCard({
                                         setIsEditingDueDate(false)
                                     }}
                                     label="Pregnancy due date"
-                                    placeholder="Set due date"
                                 />
                             ) : (
                                 <DueDateDisplay
                                     readOnly={readOnly}
                                     pregnancy={pregnancy}
                                     hasManualDueDate={hasManualDueDate}
+                                    isDelivered={isDelivered}
                                     onEdit={handleEditDueDate}
                                 />
                             )}
@@ -446,7 +498,6 @@ export function PregnancyTrackerCard({
                                     await onUpdate({ actual_delivery_date: v })
                                 }}
                                 label="Actual delivery date"
-                                placeholder="Set when delivered"
                             />
                             {surrogateData.actual_delivery_date && (
                                 <Badge variant="default" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">
@@ -466,7 +517,6 @@ export function PregnancyTrackerCard({
                                     onSave={async (v) => {
                                         await onUpdate({ delivery_baby_gender: v || null })
                                     }}
-                                    placeholder="Set gender"
                                     label="Delivery gender"
                                 />
                             </div>
@@ -478,7 +528,6 @@ export function PregnancyTrackerCard({
                                     onSave={async (v) => {
                                         await onUpdate({ delivery_baby_weight: v || null })
                                     }}
-                                    placeholder="Set weight"
                                     label="Delivery weight"
                                 />
                             </div>
@@ -487,7 +536,7 @@ export function PregnancyTrackerCard({
                 </div>
 
                 {/* Trimester Badge */}
-                {pregnancy && pregnancy.daysSinceTransfer >= 0 && pregnancy.status === "known" && (
+                {!isDelivered && pregnancy && pregnancy.daysSinceTransfer >= 0 && pregnancy.status === "known" && (
                     <Badge variant="secondary" className="mt-2">
                         {pregnancy.trimester} Trimester
                     </Badge>

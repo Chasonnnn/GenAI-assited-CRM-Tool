@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -52,12 +53,34 @@ const workflowOptionsMocks = vi.hoisted(() => ({
     use: vi.fn(),
 }))
 
+const routeState = vi.hoisted(() => ({
+    id: "workflow-template-1",
+    push: vi.fn(),
+    toastError: vi.fn(),
+    toastSuccess: vi.fn(),
+}))
+
 vi.mock("next/navigation", () => ({
-    useParams: () => ({ id: "workflow-template-1" }),
+    useParams: () => ({ id: routeState.id }),
     useRouter: () => ({
-        push: vi.fn(),
+        push: routeState.push,
         replace: vi.fn(),
     }),
+}))
+
+vi.mock("@/components/app-link", () => ({
+    default: ({ href, children, ...props }: { href: string; children: ReactNode }) => (
+        <a href={href} {...props}>
+            {children}
+        </a>
+    ),
+}))
+
+vi.mock("@/components/ui/toast", () => ({
+    toast: {
+        success: routeState.toastSuccess,
+        error: routeState.toastError,
+    },
 }))
 
 vi.mock("@/lib/hooks/use-platform-templates", () => ({
@@ -99,6 +122,10 @@ vi.mock("@/components/ops/templates/PublishDialog", () => ({
 
 describe("platform workflow template draft ownership", () => {
     beforeEach(() => {
+        routeState.id = "workflow-template-1"
+        routeState.push.mockReset()
+        routeState.toastError.mockReset()
+        routeState.toastSuccess.mockReset()
         mutationMocks.create.mockReset()
         mutationMocks.update.mockReset()
         mutationMocks.publish.mockReset()
@@ -140,7 +167,7 @@ describe("platform workflow template draft ownership", () => {
         const automaticCreation = screen.getByRole("switch", { name: "Create donor after photo scan" })
         expect(automaticCreation).not.toBeChecked()
         fireEvent.click(automaticCreation)
-        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
         await waitFor(() => expect(mutationMocks.update).toHaveBeenCalledWith({
             id: "workflow-template-1",
             payload: expect.objectContaining({
@@ -181,7 +208,7 @@ describe("platform workflow template draft ownership", () => {
             expect(workflowOptionsMocks.use).toHaveBeenCalledWith("org", "sperm_donor")
         })
 
-        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
 
         await waitFor(() => {
             expect(mutationMocks.update).toHaveBeenCalledWith({
@@ -229,7 +256,7 @@ describe("platform workflow template draft ownership", () => {
         const recipientLabel = screen.getByText("Recipient")
         expect(recipientLabel.parentElement?.querySelector("button")).toHaveTextContent("Donor")
 
-        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
 
         await waitFor(() => {
             expect(mutationMocks.update).toHaveBeenCalledWith({
@@ -304,7 +331,7 @@ describe("platform workflow template draft ownership", () => {
         expect(screen.getAllByRole("button", { name: "Remove condition" })).toHaveLength(2)
         expect(screen.queryByText("egg-stage-to")).not.toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
         expect(mutationMocks.update).not.toHaveBeenCalled()
         expect(screen.getByText("Trigger type is required.")).toBeInTheDocument()
 
@@ -328,7 +355,7 @@ describe("platform workflow template draft ownership", () => {
         const spermActionStage = screen.getAllByRole("option", { name: "Sperm Ready" }).at(-1) as HTMLElement
         fireEvent.mouseMove(spermActionStage)
         fireEvent.click(spermActionStage)
-        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
 
         await waitFor(() => expect(mutationMocks.update).toHaveBeenCalled())
         const savedPayload = mutationMocks.update.mock.calls.at(-1)?.[0].payload
@@ -373,7 +400,7 @@ describe("platform workflow template draft ownership", () => {
         const surrogateCreatedOption = screen.getByRole("option", { name: "Surrogate Created" })
         fireEvent.mouseMove(surrogateCreatedOption)
         fireEvent.click(surrogateCreatedOption)
-        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
 
         await waitFor(() => {
             expect(mutationMocks.update).toHaveBeenCalledWith({
@@ -402,11 +429,105 @@ describe("platform workflow template draft ownership", () => {
             id: "workflow-template-1",
             payload: { publish_all: true, org_ids: null, expected_version: 5 },
         })
-        await waitFor(() => expect(screen.getByRole("button", { name: "Save Draft" })).toBeEnabled())
-        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        await waitFor(() => expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled())
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
         await waitFor(() => expect(mutationMocks.update).toHaveBeenLastCalledWith({
             id: "workflow-template-1", payload: expect.objectContaining({ expected_version: 6 }),
         }))
+    })
+
+    it("marks the name field instead of toasting when the name is missing", async () => {
+        templateState.data = {
+            ...templateState.data,
+            draft: {
+                ...templateState.data.draft,
+                actions: [{ action_type: "add_note", content: "Hello" }],
+            },
+        }
+        render(<PlatformWorkflowTemplatePage />)
+        const nameInput = screen.getByRole("textbox", { name: "Workflow template name" })
+
+        fireEvent.change(nameInput, { target: { value: "  " } })
+        expect(nameInput).not.toHaveAttribute("aria-invalid")
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+        expect(await screen.findByText("Enter a template name.")).toBeInTheDocument()
+        expect(nameInput).toHaveAttribute("aria-invalid", "true")
+        expect(nameInput).toHaveAttribute("aria-describedby", "workflow-name-error")
+        expect(nameInput).toHaveFocus()
+        expect(routeState.toastError).not.toHaveBeenCalled()
+        expect(mutationMocks.update).not.toHaveBeenCalled()
+        expect(screen.getAllByText("Enter a template name.")).toHaveLength(1)
+
+        fireEvent.change(nameInput, { target: { value: "Welcome flow" } })
+        expect(nameInput).not.toHaveAttribute("aria-invalid")
+        expect(screen.queryByText("Enter a template name.")).not.toBeInTheDocument()
+    })
+
+    it("sizes the header name field for full template names at the header font size", () => {
+        render(<PlatformWorkflowTemplatePage />)
+        const nameInput = screen.getByRole("textbox", { name: "Workflow template name" })
+
+        // At text-lg, w-72 cut seeded names such as "New Surrogate Intake Follow-up". The field grows
+        // with its content where field-sizing is supported and falls back to a fixed wide field.
+        expect(nameInput).toHaveClass(
+            "md:text-lg",
+            "field-sizing-content",
+            "supports-[field-sizing:content]:w-auto",
+            "w-[36rem]",
+            "max-w-full",
+        )
+        expect(nameInput).not.toHaveClass("w-72")
+    })
+
+    it("shows the save state and a safe message when saving fails", async () => {
+        templateState.data = {
+            ...templateState.data,
+            draft: {
+                ...templateState.data.draft,
+                actions: [{ action_type: "add_note", content: "Hello" }],
+            },
+        }
+        mutationMocks.update.mockRejectedValueOnce(new Error("duplicate key value violates unique constraint"))
+        render(<PlatformWorkflowTemplatePage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+        expect(await screen.findByText("Not saved")).toBeInTheDocument()
+        expect(routeState.toastError).toHaveBeenCalledWith("Couldn't save template.")
+
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+        expect(await screen.findByText("Saved")).toBeInTheDocument()
+    })
+
+    it("offers sample loaders only on a new, empty workflow", () => {
+        const { unmount } = render(<PlatformWorkflowTemplatePage />)
+        expect(screen.queryByRole("button", { name: "Load Shared Intake Sample" })).not.toBeInTheDocument()
+        unmount()
+
+        routeState.id = "new"
+        render(<PlatformWorkflowTemplatePage />)
+        expect(screen.getByRole("button", { name: "Load Shared Intake Sample" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Load Zapier Conversion Sample" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument()
+    })
+
+    it("deletes from the overflow menu with a destructive confirm", async () => {
+        mutationMocks.remove.mockResolvedValue(undefined)
+        render(<PlatformWorkflowTemplatePage />)
+
+        expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "More actions" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }))
+
+        const confirm = await screen.findByRole("alertdialog")
+        expect(within(confirm).getByText("Delete Server workflow?")).toBeInTheDocument()
+        const deleteButton = within(confirm).getByRole("button", { name: "Delete" })
+        expect(deleteButton).toHaveClass("bg-destructive")
+        expect(deleteButton.className).not.toMatch(/linear-gradient/)
+
+        fireEvent.click(deleteButton)
+        await waitFor(() => expect(mutationMocks.remove).toHaveBeenCalledWith({ id: "workflow-template-1" }))
+        expect(routeState.push).toHaveBeenCalledWith("/ops/templates?tab=workflows")
     })
 
     it("preserves an in-progress name edit across an equivalent query rerender", () => {
@@ -460,7 +581,7 @@ describe("platform workflow template draft ownership", () => {
             },
         ]
         rerender(<PlatformWorkflowTemplatePage />)
-        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
 
         await waitFor(() => {
             expect(mutationMocks.update).toHaveBeenCalledWith({
@@ -514,7 +635,7 @@ describe("platform workflow template draft ownership", () => {
         fireEvent.mouseMove(statusChangedOption)
         fireEvent.click(statusChangedOption)
         expect(triggerSelect).toHaveTextContent("Status Changed")
-        fireEvent.click(screen.getByRole("button", { name: "Save Draft" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
 
         await waitFor(() => {
             expect(mutationMocks.update).toHaveBeenCalledWith({

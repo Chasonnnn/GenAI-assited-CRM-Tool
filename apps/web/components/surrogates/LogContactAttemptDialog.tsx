@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -26,12 +25,12 @@ import { useCreateContactAttempt } from "@/lib/hooks/use-surrogates"
 import { toast } from "@/components/ui/toast"
 import type { ContactMethod, ContactOutcome } from "@/lib/api/surrogates"
 import { trackFirstContactLogged } from "@/lib/workflow-metrics"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 
 interface LogContactAttemptDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     surrogateId: string
-    surrogateName?: string
 }
 
 const CONTACT_METHODS: { value: ContactMethod; label: string; icon: React.ReactNode }[] = [
@@ -111,7 +110,6 @@ export function LogContactAttemptDialog({
     open,
     onOpenChange,
     surrogateId,
-    surrogateName = "Surrogate",
 }: LogContactAttemptDialogProps) {
     const [formState, dispatchForm] = React.useReducer(
         contactAttemptFormReducer,
@@ -159,9 +157,8 @@ export function LogContactAttemptDialog({
             resetForm()
             onOpenChange(false)
         } catch (error) {
-            toast.error(
-                error instanceof Error ? error.message : "Failed to log contact attempt"
-            )
+            const message = getActionErrorMessage(error, "Couldn't log contact attempt. Try again.")
+            if (message) toast.error(message)
         }
     }
 
@@ -184,9 +181,6 @@ export function LogContactAttemptDialog({
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                     <DialogTitle>Log Contact Attempt</DialogTitle>
-                    <DialogDescription>
-                        Record your attempt to contact {surrogateName}.
-                    </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                     {/* Contact Methods - Multi-select checkboxes */}
@@ -216,10 +210,10 @@ export function LogContactAttemptDialog({
                     <div className="grid gap-2">
                         <Label htmlFor="outcome">Outcome</Label>
                         <Select
-                            value={outcome}
-                            onValueChange={(v) =>
-                                dispatchForm({ type: "outcome", value: v as ContactOutcome })
-                            }
+                            value={outcome || null}
+                            onValueChange={(v) => {
+                                if (v) dispatchForm({ type: "outcome", value: v as ContactOutcome })
+                            }}
                         >
                             <SelectTrigger id="outcome">
                                 <SelectValue placeholder="Select outcome" />

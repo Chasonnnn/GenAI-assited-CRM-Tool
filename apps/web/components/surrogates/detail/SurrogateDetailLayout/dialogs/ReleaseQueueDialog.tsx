@@ -11,9 +11,11 @@ import {
     useSurrogateDetailQueue,
 } from "../context"
 
+const QUEUE_PLACEHOLDER = "Select a queue\u2026"
+
 function formatQueueLabel(value: string | null, queues: { id: string; name: string }[]) {
-    if (!value) return "Select a queue\u2026"
-    return queues.find((queue) => queue.id === value)?.name ?? value
+    if (!value) return QUEUE_PLACEHOLDER
+    return queues.find((queue) => queue.id === value)?.name ?? "Unknown queue"
 }
 
 export function ReleaseQueueDialog() {
@@ -42,17 +44,16 @@ export function ReleaseQueueDialog() {
                 <div className="py-4">
                     <Label htmlFor="queue-select">Select Queue</Label>
                     <Select
-                        value={selectedQueueId}
+                        value={selectedQueueId || null}
                         onValueChange={(value) => setSelectedQueueId(value ?? "")}
                     >
                         <SelectTrigger id="queue-select" className="mt-2">
-                            <SelectValue>
+                            <SelectValue placeholder={QUEUE_PLACEHOLDER}>
                                 {(value: string | null) => formatQueueLabel(value, queues)}
                             </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             <SelectGroup>
-                                <SelectItem value="">Select a queue&hellip;</SelectItem>
                                 {queues.map((queue) => (
                                     <SelectItem key={queue.id} value={queue.id}>
                                         {queue.name}

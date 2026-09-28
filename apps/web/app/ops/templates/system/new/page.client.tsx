@@ -4,13 +4,17 @@ import { useRef, useState, type Dispatch, type MutableRefObject, type SetStateAc
 import { useRouter } from "next/navigation"
 import DOMPurify from "dompurify"
 import { toast } from "@/components/ui/toast"
-import { ArrowLeftIcon, EyeIcon, Loader2Icon, PlusIcon } from "lucide-react"
+import { EyeIcon, Loader2Icon, PlusIcon } from "lucide-react"
 import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
+import { EmptyState } from "@/components/empty-state"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldError, FieldLabel, ValidatedField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { PageHeader } from "@/components/page-header"
+import { ApiError } from "@/lib/api"
+import { useFormValidation, type FormFieldErrors } from "@/lib/forms/use-form-validation"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -84,6 +88,26 @@ function getBodyError(body: string): string | null {
     if (!body.trim()) return "Body is required."
     return null
 }
+
+type NewSystemTemplateValues = {
+    system_key: string
+    name: string
+    subject: string
+    from_email: string
+    body: string
+}
+
+function validateNewSystemTemplate(values: NewSystemTemplateValues): FormFieldErrors<NewSystemTemplateValues> {
+    return {
+        system_key: getSystemKeyError(values.system_key) ?? undefined,
+        name: getNameError(values.name) ?? undefined,
+        subject: getSubjectError(values.subject) ?? undefined,
+        from_email: getFromEmailError(values.from_email) ?? undefined,
+        body: getBodyError(values.body) ?? undefined,
+    }
+}
+
+type NewSystemTemplateField = keyof NewSystemTemplateValues
 
 function hasComplexEmailHtml(body: string): boolean {
     return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body)
@@ -215,11 +239,10 @@ export default function PlatformSystemEmailTemplateNewPage() {
 
     const systemKey = manualSystemKey ?? buildSystemKeyFromName(name)
 
-    const fromEmailError = getFromEmailError(fromEmail)
-    const systemKeyError = getSystemKeyError(systemKey)
-    const nameError = getNameError(name)
-    const subjectError = getSubjectError(subject)
-    const bodyError = getBodyError(body)
+    const validation = useFormValidation({
+        values: { system_key: systemKey, name, subject, from_email: fromEmail, body },
+        validate: validateNewSystemTemplate,
+    })
     const hasComplexHtml = hasComplexEmailHtml(body)
 
     const effectiveEditorMode: EditorMode =
@@ -280,56 +303,67 @@ export default function PlatformSystemEmailTemplateNewPage() {
         setActiveInsertionTarget("body_html")
     }
 
-    const canSubmit =
-        !saving &&
-        !systemKeyError &&
-        !nameError &&
-        !subjectError &&
-        !fromEmailError &&
-        !bodyError
-
-    const handleCreate = async () => {
-        if (!canSubmit) return
+    const handleCreate = async (values: NewSystemTemplateValues) => {
+        if (saving) return
         setSaving(true)
         const finishSaving = () => setSaving(false)
         try {
             const created = await createTemplate.mutateAsync({
-                system_key: systemKey.trim(),
-                name: name.trim(),
-                subject: subject.trim(),
-                from_email: fromEmail.trim() ? fromEmail.trim() : null,
-                body,
+                system_key: values.system_key.trim(),
+                name: values.name.trim(),
+                subject: values.subject.trim(),
+                from_email: values.from_email.trim() ? values.from_email.trim() : null,
+                body: values.body,
                 is_active: isActive,
             })
             toast.success("System email template created")
             push(`/ops/templates/system/${created.system_key}`)
             finishSaving()
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Failed to create system template")
             finishSaving()
+            if (error instanceof ApiError && error.status === 409) {
+                validation.setServerErrors({ system_key: "A template with this system key already exists." })
+                return
+            }
+            const message = validation.applyApiError(error, {
+                fields: ["system_key", "name", "subject", "from_email", "body"],
+                fallback: "Couldn't create system email.",
+            })
+            if (message) toast.error(message)
         }
     }
 
     return (
-        <div className="p-6 space-y-6">
-            <TemplateCreateHeader
-                saving={saving}
-                canSubmit={canSubmit}
-                onBack={() => push("/ops/templates?tab=system")}
-                onCreate={handleCreate}
+        <div>
+            <PageHeader
+                title="New System Email"
+                back={{ href: "/ops/templates?tab=system", label: "Back to templates" }}
+                sticky
+                className="top-14"
+                actions={
+                    <Button onClick={validation.handleSubmit(handleCreate)} disabled={saving}>
+                        {saving ? (
+                            <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                            <PlusIcon className="size-4" aria-hidden="true" />
+                        )}
+                        Create
+                    </Button>
+                }
             />
 
-            <div className="grid gap-6 lg:grid-cols-3">
+            <div className="grid gap-6 p-6 lg:grid-cols-3">
                 <div className="space-y-6 lg:col-span-2">
                     <TemplateSettingsCard
                         systemKey={systemKey}
-                        systemKeyError={systemKeyError}
+                        systemKeyError={validation.errorFor("system_key")}
                         name={name}
-                        nameError={nameError}
+                        nameError={validation.errorFor("name")}
                         subject={subject}
-                        subjectError={subjectError}
+                        subjectError={validation.errorFor("subject")}
                         fromEmail={fromEmail}
-                        fromEmailError={fromEmailError}
+                        fromEmailError={validation.errorFor("from_email")}
+                        onFieldBlur={validation.touch}
                         isActive={isActive}
                         templateVariables={templateVariables}
                         variablesLoading={variablesLoading}
@@ -348,7 +382,8 @@ export default function PlatformSystemEmailTemplateNewPage() {
                         effectiveEditorMode={effectiveEditorMode}
                         hasComplexHtml={hasComplexHtml}
                         body={body}
-                        bodyError={bodyError}
+                        bodyError={validation.errorFor("body")}
+                        onBodyBlur={() => validation.touch("body")}
                         templateVariables={templateVariables}
                         variablesLoading={variablesLoading}
                         visualBodyRef={visualBodyRef}
@@ -367,45 +402,8 @@ export default function PlatformSystemEmailTemplateNewPage() {
                     />
                 </div>
 
-                <TemplatePreviewCard previewHtml={previewHtml} />
+                <TemplatePreviewCard hasContent={Boolean(body.trim())} previewHtml={previewHtml} />
             </div>
-        </div>
-    )
-}
-
-function TemplateCreateHeader({
-    saving,
-    canSubmit,
-    onBack,
-    onCreate,
-}: {
-    saving: boolean
-    canSubmit: boolean
-    onBack: () => void
-    onCreate: () => void
-}) {
-    return (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-                <Button variant="ghost" onClick={onBack}>
-                    <ArrowLeftIcon className="mr-2 size-4" />
-                    Back to templates
-                </Button>
-                <h1 className="text-2xl font-semibold text-stone-900 dark:text-stone-100">
-                    New System Email
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    Create a new platform system email template. Use a stable system key for future sends.
-                </p>
-            </div>
-            <Button onClick={onCreate} disabled={!canSubmit}>
-                {saving ? (
-                    <Loader2Icon className="mr-2 size-4 animate-spin" />
-                ) : (
-                    <PlusIcon className="mr-2 size-4" />
-                )}
-                Create
-            </Button>
         </div>
     )
 }
@@ -424,6 +422,7 @@ function TemplateSettingsCard({
     variablesLoading,
     subjectRef,
     subjectSelectionRef,
+    onFieldBlur,
     onSystemKeyChange,
     onNameChange,
     onSubjectChange,
@@ -433,13 +432,14 @@ function TemplateSettingsCard({
     onActiveInsertionTargetChange,
 }: {
     systemKey: string
-    systemKeyError: string | null
+    systemKeyError: string | undefined
     name: string
-    nameError: string | null
+    nameError: string | undefined
     subject: string
-    subjectError: string | null
+    subjectError: string | undefined
     fromEmail: string
-    fromEmailError: string | null
+    fromEmailError: string | undefined
+    onFieldBlur: (field: NewSystemTemplateField) => void
     isActive: boolean
     templateVariables: TemplateVariable[]
     variablesLoading: boolean
@@ -457,62 +457,40 @@ function TemplateSettingsCard({
         <Card>
             <CardHeader>
                 <CardTitle>Template settings</CardTitle>
-                <CardDescription>
-                    System keys must be unique and cannot be changed later.
-                </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                    <Label htmlFor="system-key">System key</Label>
-                    <Input
-                        id="system-key"
-                        value={systemKey}
-                        onChange={(event) => {
-                            onSystemKeyChange(event.target.value)
-                        }}
-                        placeholder="e.g. password_reset"
-                        className={systemKeyError ? "border-red-500" : ""}
-                    />
-                    {systemKeyError ? (
-                        <p className="text-xs text-red-600">{systemKeyError}</p>
-                    ) : (
-                        <p className="text-xs text-muted-foreground">
-                            Lowercase letters, numbers, and underscores only.
-                        </p>
-                    )}
-                </div>
-                <div className="space-y-2">
-                    <Label htmlFor="name">Name</Label>
-                    <Input
-                        id="name"
-                        value={name}
-                        onChange={(event) => onNameChange(event.target.value)}
-                        placeholder="Human-friendly label"
-                        className={nameError ? "border-red-500" : ""}
-                    />
-                    {nameError && <p className="text-xs text-red-600">{nameError}</p>}
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="subject">Subject</Label>
-                    <div className="flex flex-wrap items-center gap-2">
+                <ValidatedField
+                    id="system-key"
+                    label="System key"
+                    description="Lowercase letters, numbers, and underscores. Cannot be changed later."
+                    error={systemKeyError}
+                >
+                    {(control) => (
                         <Input
-                            ref={subjectRef}
-                            id="subject"
-                            value={subject}
-                            onChange={(event) => onSubjectChange(event.target.value)}
-                            onFocus={() => onActiveInsertionTargetChange("subject")}
-                            onKeyUp={(event) =>
-                                recordSelection(event.currentTarget, subjectSelectionRef)
-                            }
-                            onMouseUp={(event) =>
-                                recordSelection(event.currentTarget, subjectSelectionRef)
-                            }
-                            onSelect={(event) =>
-                                recordSelection(event.currentTarget, subjectSelectionRef)
-                            }
-                            placeholder="Email subject..."
-                            className={subjectError ? "border-red-500" : ""}
+                            {...control}
+                            value={systemKey}
+                            onChange={(event) => {
+                                onSystemKeyChange(event.target.value)
+                            }}
+                            onBlur={() => onFieldBlur("system_key")}
+                            placeholder="e.g. password_reset"
                         />
+                    )}
+                </ValidatedField>
+                <ValidatedField id="name" label="Name" error={nameError}>
+                    {(control) => (
+                        <Input
+                            {...control}
+                            value={name}
+                            onChange={(event) => onNameChange(event.target.value)}
+                            onBlur={() => onFieldBlur("name")}
+                            placeholder="Human-friendly label"
+                        />
+                    )}
+                </ValidatedField>
+                <Field data-invalid={subjectError ? true : undefined} className="sm:col-span-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <FieldLabel htmlFor="subject">Subject</FieldLabel>
                         <TemplateVariablePicker
                             variables={templateVariables}
                             disabled={variablesLoading || templateVariables.length === 0}
@@ -520,19 +498,44 @@ function TemplateSettingsCard({
                             onSelect={(variable) => onInsertToken(`{{${variable.name}}}`)}
                         />
                     </div>
-                    {subjectError && <p className="text-xs text-red-600">{subjectError}</p>}
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="from-email">From email (optional)</Label>
                     <Input
-                        id="from-email"
-                        value={fromEmail}
-                        onChange={(event) => onFromEmailChange(event.target.value)}
-                        placeholder="e.g. Surrogacy Force <no-reply@surrogacyforce.com>"
-                        className={fromEmailError ? "border-red-500" : ""}
+                        ref={subjectRef}
+                        id="subject"
+                        value={subject}
+                        aria-invalid={subjectError ? true : undefined}
+                        aria-describedby={subjectError ? "subject-error" : undefined}
+                        onChange={(event) => onSubjectChange(event.target.value)}
+                        onFocus={() => onActiveInsertionTargetChange("subject")}
+                        onBlur={() => onFieldBlur("subject")}
+                        onKeyUp={(event) =>
+                            recordSelection(event.currentTarget, subjectSelectionRef)
+                        }
+                        onMouseUp={(event) =>
+                            recordSelection(event.currentTarget, subjectSelectionRef)
+                        }
+                        onSelect={(event) =>
+                            recordSelection(event.currentTarget, subjectSelectionRef)
+                        }
+                        placeholder="Email subject..."
                     />
-                    {fromEmailError && <p className="text-xs text-red-600">{fromEmailError}</p>}
-                </div>
+                    {subjectError ? <FieldError id="subject-error">{subjectError}</FieldError> : null}
+                </Field>
+                <ValidatedField
+                    id="from-email"
+                    label="From email (optional)"
+                    error={fromEmailError}
+                    className="sm:col-span-2"
+                >
+                    {(control) => (
+                        <Input
+                            {...control}
+                            value={fromEmail}
+                            onChange={(event) => onFromEmailChange(event.target.value)}
+                            onBlur={() => onFieldBlur("from_email")}
+                            placeholder="e.g. Surrogacy Force <no-reply@surrogacyforce.com>"
+                        />
+                    )}
+                </ValidatedField>
                 <div className="flex items-center justify-between gap-3 rounded-lg border p-3 sm:col-span-2">
                     <div>
                         <p className="text-sm font-medium">Active</p>
@@ -552,6 +555,7 @@ function TemplateContentCard({
     hasComplexHtml,
     body,
     bodyError,
+    onBodyBlur,
     templateVariables,
     variablesLoading,
     visualBodyRef,
@@ -571,7 +575,8 @@ function TemplateContentCard({
     effectiveEditorMode: EditorMode
     hasComplexHtml: boolean
     body: string
-    bodyError: string | null
+    bodyError: string | undefined
+    onBodyBlur: () => void
     templateVariables: TemplateVariable[]
     variablesLoading: boolean
     visualBodyRef: MutableRefObject<RichTextEditorHandle | null>
@@ -592,9 +597,6 @@ function TemplateContentCard({
         <Card>
             <CardHeader>
                 <CardTitle>Template content</CardTitle>
-                <CardDescription>
-                    Write the HTML body for this system email. Variables render at send time.
-                </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -634,7 +636,6 @@ function TemplateContentCard({
                             Insert Logo
                         </Button>
                     </div>
-                    {bodyError && <p className="text-xs text-red-600">{bodyError}</p>}
                 </div>
 
                 {effectiveEditorMode === "visual" ? (
@@ -661,10 +662,16 @@ function TemplateContentCard({
                         onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
                         onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
                         onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
+                        onBlur={onBodyBlur}
+                        aria-label="HTML body"
+                        aria-invalid={bodyError ? true : undefined}
+                        aria-describedby={bodyError ? "body-error" : undefined}
                         placeholder="Paste or edit the HTML for this template..."
-                        className="min-h-[280px] font-mono text-xs leading-relaxed"
+                        className="min-h-[280px] max-h-[60vh] font-mono text-xs leading-relaxed"
                     />
                 )}
+
+                {bodyError ? <FieldError id="body-error">{bodyError}</FieldError> : null}
 
                 {effectiveEditorMode === "visual" && hasComplexHtml && (
                     <p className="text-xs text-amber-600">
@@ -720,7 +727,7 @@ function TemplateVariableWarnings({
     )
 }
 
-function TemplatePreviewCard({ previewHtml }: { previewHtml: string }) {
+function TemplatePreviewCard({ hasContent, previewHtml }: { hasContent: boolean; previewHtml: string }) {
     return (
         <Card className="h-fit">
             <CardHeader>
@@ -731,12 +738,22 @@ function TemplatePreviewCard({ previewHtml }: { previewHtml: string }) {
                 <CardDescription>Rendered using sample values.</CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="rounded-md border border-stone-200 bg-white shadow-sm">
-                    <TrustedSanitizedHtmlContent
-                        html={previewHtml}
-                        className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
+                {hasContent ? (
+                    // Email preview surface: stays white in dark mode; fixed-width tables scroll inside it.
+                    <div className="overflow-x-auto rounded-md border border-stone-200 bg-white shadow-sm">
+                        <TrustedSanitizedHtmlContent
+                            html={previewHtml}
+                            className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
+                        />
+                    </div>
+                ) : (
+                    <EmptyState
+                        icon={EyeIcon}
+                        title="No content yet"
+                        headingLevel={3}
+                        className="rounded-md border border-dashed"
                     />
-                </div>
+                )}
             </CardContent>
         </Card>
     )

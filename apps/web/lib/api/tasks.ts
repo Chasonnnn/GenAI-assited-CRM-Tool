@@ -100,7 +100,10 @@ export interface TaskListParams {
     due_after?: string;
     my_tasks?: boolean;
     exclude_approvals?: boolean;
+    linked_type?: TaskLinkedType;
 }
+
+export type TaskLinkedType = 'surrogate' | 'intended_parent' | 'donor' | 'none';
 
 // Create task payload
 export interface TaskCreatePayload {
@@ -162,6 +165,7 @@ export function getTasks(params: TaskListParams = {}): Promise<TaskListResponse>
     if (params.due_after) searchParams.set('due_after', params.due_after);
     if (params.my_tasks) searchParams.set('my_tasks', 'true');
     if (params.exclude_approvals) searchParams.set('exclude_approvals', 'true');
+    if (params.linked_type) searchParams.set('linked_type', params.linked_type);
 
     const query = searchParams.toString();
     return api.get<TaskListResponse>(`/tasks${query ? `?${query}` : ''}`);
