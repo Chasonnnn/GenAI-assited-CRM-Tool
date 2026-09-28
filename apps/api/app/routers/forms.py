@@ -1911,6 +1911,7 @@ def upload_submission_file(
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     _check_submission_subject_access(db, submission, session, require_write=True)
+    _require_subject_edit_permission(db, session, submission.lead_kind)
 
     try:
         file_record = form_submission_service.add_submission_file(
@@ -2025,6 +2026,7 @@ def delete_submission_file(
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     _check_submission_subject_access(db, submission, session, require_write=True)
+    _require_subject_edit_permission(db, session, submission.lead_kind)
 
     file_record = form_submission_service.get_submission_file(
         db, session.org_id, submission_id, file_id
