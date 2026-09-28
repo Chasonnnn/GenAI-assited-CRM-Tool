@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.75](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.74...surrogacy-crm-platform-v0.91.75) (2026-09-28)
+
+
+### Bug Fixes
+
+* Configure Error Reporting for runtime services ([9114aad](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9114aad23087468e716ee636812c47a77dbb3c0f))
+* Remove error tracebacks from expected WebSocket disconnects ([e221077](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e22107753eadece62b74eecfd5dff160b36f7dc0))
+* Repair runtime sync failures and persist web build caches ([b1bbc7a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b1bbc7ae00d63920a8047e328917f4699c41f8fa))
+* Run Zapier task synchronization outside the request loop ([d107eed](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d107eed5673132128008c79b2d5096c267799c8c))
+
+
+### Maintenance
+
+* Merge main before runtime fixes CI ([539359e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/539359efe0619076e0cb346e7029c1c99597e410))
+* Persist web dependency and Next.js build caches ([6e16335](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6e163357d84181c5fcd73eb10d5c9fe588587ea5))
+
 ## [0.91.74](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.73...surrogacy-crm-platform-v0.91.74) (2026-09-28)
 
 
