@@ -30,6 +30,7 @@ from app.services import (
     donor_service,
     surrogate_input_normalization_service,
     surrogate_service,
+    zapier_outbound_service,
 )
 from app.services.import_transformers import (
     get_suggested_transformer,
@@ -608,6 +609,7 @@ def convert_to_donor_with_mapping(
         meta_lead.converted_at = datetime.now(UTC)
         meta_lead.conversion_error = None
         meta_lead.unmapped_fields = unmapped_fields or None
+        zapier_outbound_service.enqueue_donor_created_event(db, donor=donor)
         db.commit()
         db.refresh(donor)
     except Exception as exc:

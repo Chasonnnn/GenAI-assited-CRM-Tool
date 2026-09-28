@@ -65,6 +65,7 @@ from app.services import (
     meta_crm_dataset_service,
     org_service,
     surrogate_input_normalization_service,
+    zapier_outbound_service,
 )
 from app.services.attachment_service import (
     load_file_bytes,
@@ -3680,6 +3681,7 @@ def _promote_donor_intake_lead(
                 synchronize_session=False,
             )
         )
+        zapier_outbound_service.enqueue_donor_created_event(db, donor=donor)
         db.commit()
     except Exception:
         db.rollback()

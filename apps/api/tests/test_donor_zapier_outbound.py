@@ -1399,3 +1399,210 @@ def test_delivery_job_failure_rolls_back_stage_history_and_audit(
     )
     assert db.query(AuditLog).filter_by(target_id=donor_id).count() == initial_audit_count
     assert db.query(ZapierOutboundEvent).filter_by(donor_id=donor_id).count() == 0
+
+
+META_DONOR_MAPPING_RULES = [
+    {
+        "csv_column": column,
+        "surrogate_field": field,
+        "transformation": None,
+        "action": "map",
+        "custom_field_key": None,
+    }
+    for column, field in (
+        ("full_name", "full_name"),
+        ("email", "email"),
+        ("phone_number", "phone"),
+    )
+]
+
+
+@pytest.fixture
+def donor_storage(monkeypatch, tmp_path):
+    from app.core.config import settings
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local")
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path))
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
+
+
+def _creation_events(db, org_id):
+    return (
+        db.query(ZapierOutboundEvent)
+        .join(
+            DonorStatusHistory,
+            DonorStatusHistory.id == ZapierOutboundEvent.donor_status_history_id,
+        )
+        .filter(
+            ZapierOutboundEvent.organization_id == org_id,
+            DonorStatusHistory.old_stage_id.is_(None),
+        )
+        .all()
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("donor_type", ["egg", "sperm"])
+async def test_website_donor_creation_reports_mapped_entry_stage(
+    authed_client, db, test_org, donor_storage, donor_type
+):
+    from app.jobs.handlers.form_submissions import process_donor_intake_promote
+    from app.services import form_intake_service
+    from tests.test_hosted_donor_forms import _create_donor_form, _submit_donor_form
+
+    pipeline, new_stage, _ready_stage = _seed_donor_pipeline(db, test_org.id, donor_type)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type=donor_type,
+        pipeline=pipeline,
+        stage=new_stage,
+        event_name="Lead",
+    )
+    _, slug = await _create_donor_form(authed_client, lead_kind=f"{donor_type}_donor")
+    response = await _submit_donor_form(
+        authed_client, slug=slug, email=f"website-{donor_type}@example.com"
+    )
+    assert response.status_code == 200, response.text
+    submission = db.query(FormSubmission).filter_by(id=uuid.UUID(response.json()["id"])).one()
+    db.add(
+        LeadAttribution(
+            organization_id=test_org.id,
+            form_submission_id=submission.id,
+            intake_link_id=submission.intake_link_id,
+            source_surface="hosted_intake",
+            source="meta",
+            fbc="fb.1.1772942400.website-click",
+        )
+    )
+    db.commit()
+    form_intake_service.auto_match_submission(db, submission=submission)
+    form_intake_service.create_intake_lead_for_submission(
+        db, submission=submission, user_id=None, source="website", auto_promote=True
+    )
+    promote_job = (
+        db.query(Job).filter_by(organization_id=test_org.id, job_type="donor_intake_promote").one()
+    )
+
+    await process_donor_intake_promote(db, promote_job)
+
+    db.refresh(submission)
+    assert submission.donor_id is not None
+    events = _creation_events(db, test_org.id)
+    assert len(events) == 1
+    event = events[0]
+    assert event.status == "queued"
+    assert event.donor_id == submission.donor_id
+    assert event.stage_id == new_stage.id
+    assert event.event_name == "Lead"
+    assert event.attribution_source == "website"
+    assert event.first_party_submission_id == submission.id
+    payload = db.get(Job, event.job_id).payload["data"]
+    assert payload["event_name"] == "Lead"
+    assert payload["record_type"] == f"{donor_type}_donor"
+    assert payload["fbc"] == "fb.1.1772942400.website-click"
+
+
+@pytest.mark.parametrize("donor_type", ["egg", "sperm"])
+def test_meta_donor_conversion_reports_mapped_entry_stage(db, test_org, donor_type):
+    from app.services import meta_lead_service
+
+    pipeline, new_stage, _ready_stage = _seed_donor_pipeline(db, test_org.id, donor_type)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type=donor_type,
+        pipeline=pipeline,
+        stage=new_stage,
+        event_name="Lead",
+    )
+    lead = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id=f"{donor_type}-lead-1001",
+        meta_form_id="meta-form-1",
+        meta_page_id="meta-page-1",
+        field_data_raw={
+            "full_name": "Meta Donor",
+            "email": f"meta-{donor_type}@example.com",
+            "phone_number": "+1 607 555 0198",
+        },
+        meta_created_time=datetime.now(UTC),
+    )
+    db.add(lead)
+    db.commit()
+
+    donor, error = meta_lead_service.convert_to_donor_with_mapping(
+        db, lead, META_DONOR_MAPPING_RULES, donor_type=donor_type
+    )
+
+    assert error is None
+    events = _creation_events(db, test_org.id)
+    assert len(events) == 1
+    event = events[0]
+    assert (event.status, event.reason) == ("queued", None)
+    assert event.donor_id == donor.id
+    assert event.event_name == "Lead"
+    assert event.attribution_source == "meta"
+    assert event.lead_id == f"{donor_type}-lead-1001"
+    payload = db.get(Job, event.job_id).payload["data"]
+    assert payload["lead_id"] == f"{donor_type}-lead-1001"
+    assert payload["record_type"] == f"{donor_type}_donor"
+
+
+@pytest.mark.parametrize("mapping_state", ["unmapped", "disabled"])
+def test_donor_creation_skips_when_entry_stage_is_not_reported(db, test_org, mapping_state):
+    from app.services import meta_lead_service
+
+    pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    settings = _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage if mapping_state == "unmapped" else new_stage,
+        event_name="Lead",
+    )
+    if mapping_state == "disabled":
+        settings.donor_outbound_event_mapping = [
+            {**settings.donor_outbound_event_mapping[0], "enabled": False}
+        ]
+        db.commit()
+    lead = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id="egg-lead-2002",
+        meta_form_id="meta-form-1",
+        meta_page_id="meta-page-1",
+        field_data_raw={"full_name": "Meta Donor", "email": "meta-unmapped@example.com"},
+        meta_created_time=datetime.now(UTC),
+    )
+    db.add(lead)
+    db.commit()
+
+    donor, error = meta_lead_service.convert_to_donor_with_mapping(
+        db, lead, META_DONOR_MAPPING_RULES, donor_type="egg"
+    )
+
+    assert error is None
+    assert donor is not None
+    events = _creation_events(db, test_org.id)
+    assert [(event.status, event.reason, event.job_id) for event in events] == [
+        ("skipped", "unmapped_donor_stage", None)
+    ]
+
+
+def test_manual_donor_creation_sends_nothing(db, test_org, test_user):
+    pipeline, new_stage, _ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=new_stage,
+        event_name="Lead",
+    )
+
+    _create_donor(db, test_org.id, test_user.id)
+
+    assert db.query(ZapierOutboundEvent).filter_by(organization_id=test_org.id).count() == 0

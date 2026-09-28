@@ -20,6 +20,7 @@ from app.db.models import (
     Job,
     LeadAttribution,
     MetaLead,
+    Pipeline,
     PipelineStage,
     Surrogate,
     ZapierOutboundEvent,
@@ -903,6 +904,40 @@ def enqueue_donor_stage_event(
         "event_name": event_name,
         "job_id": str(job.id),
     }
+
+
+def enqueue_donor_created_event(db: Session, *, donor: Donor) -> dict[str, object] | None:
+    """Report a new donor's entry stage when its mapping has an event, e.g. Lead.
+
+    Meta conversion and hosted-intake promotion call this in their creation transaction,
+    after the lead or submission is linked. Manual creation has no attribution and does not.
+    """
+    # Sessions do not autoflush; the attribution link must be visible to the queries below.
+    db.flush()
+    history = (
+        db.query(DonorStatusHistory)
+        .filter(
+            DonorStatusHistory.organization_id == donor.organization_id,
+            DonorStatusHistory.donor_id == donor.id,
+            DonorStatusHistory.old_stage_id.is_(None),
+        )
+        .order_by(DonorStatusHistory.recorded_at.asc())
+        .first()
+    )
+    if history is None or history.new_stage_id is None:
+        return None
+    stage = (
+        db.query(PipelineStage)
+        .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+        .filter(
+            Pipeline.organization_id == donor.organization_id,
+            PipelineStage.id == history.new_stage_id,
+        )
+        .first()
+    )
+    if stage is None:
+        return None
+    return enqueue_donor_stage_event(db, donor=donor, history=history, new_stage=stage)
 
 
 def enqueue_test_event(
