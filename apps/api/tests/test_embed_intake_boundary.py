@@ -133,6 +133,9 @@ async def test_embed_allows_an_optional_file_field(authed_client):
     assert checks["file_uploads"]["status"] == "pass"
 
 
+DONOR_EMBED_BLOCK = (
+    "Donor forms need a profile photo upload and cannot be embedded. Share the hosted link instead."
+)
 FILE_EMBED_BLOCK = (
     "Embedded forms cannot collect file uploads: Supporting Documents. "
     "Share the hosted link instead."
@@ -144,6 +147,47 @@ FILE_FIELD = {
     "required": True,
     "sensitivity": "file",
 }
+
+
+def _link_slug(db, link_id: str) -> str:
+    return db.get(FormIntakeLink, uuid.UUID(link_id)).slug
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["donor", "required_file"])
+async def test_embed_link_enabled_before_the_upload_rule_is_not_served(
+    authed_client, client, db, kind
+):
+    if kind == "donor":
+        form_id, _slug = await _create_donor_form(authed_client)
+        link_id = await _first_link_id(authed_client, form_id)
+        expected = DONOR_EMBED_BLOCK
+    else:
+        link_id = await _create_lead_capture_form_with_file(authed_client, required=True)
+        expected = FILE_EMBED_BLOCK
+    _enable_embed_directly(db, link_id)
+    slug = _link_slug(db, link_id)
+    origin = EMBED_SETTINGS["allowed_embed_origins"][0]
+
+    read = await client.get(f"/forms/public/embed/{slug}", headers={"origin": origin})
+    session = await client.post(
+        f"/forms/public/embed/{slug}/session",
+        json={"parent_origin": origin, "attribution": {}},
+    )
+    submit = await client.post(
+        f"/forms/public/embed/{slug}/submit",
+        json={
+            "embed_session_token": "unused-session-token",
+            "idempotency_key": "blocked-embed-1",
+            "published_version_id": str(uuid.uuid4()),
+            "answers": {"full_name": "Blocked Applicant", "email": "blocked@example.com"},
+            "attribution": {},
+        },
+    )
+
+    for response in (read, session, submit):
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"] == expected
 
 
 @pytest.mark.asyncio

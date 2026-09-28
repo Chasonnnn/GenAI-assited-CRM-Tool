@@ -472,6 +472,25 @@ def _embed_file_upload_blocker(
     )
 
 
+class EmbedUnavailableError(ValueError):
+    """The link has embed enabled, but the embed cannot submit its form."""
+
+
+def ensure_embed_can_submit(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    form: Form,
+    version: PublishedIntakeVersion | None = None,
+) -> None:
+    """Refuse every public embed request, so links enabled before the upload rule stop serving."""
+    blocker = _embed_file_upload_blocker(
+        form, version if version is not None else _published_version_for_link(db, link=link)
+    )
+    if blocker:
+        raise EmbedUnavailableError(blocker)
+
+
 def _validate_link_embed_policy(*, db: Session, form: Form, link: FormIntakeLink) -> None:
     if link.embed_enabled:
         file_upload_blocker = _embed_file_upload_blocker(form)
@@ -2434,6 +2453,9 @@ def create_embed_session(
 ):
     if not link.embed_enabled:
         raise PermissionError("Embed is not enabled")
+    form = form_service.get_form(db, link.organization_id, link.form_id)
+    if form is not None:
+        ensure_embed_can_submit(db, link=link, form=form)
     sanitized_attribution = sanitize_embed_attribution(attribution)
     return embed_policy_service.create_embed_session(
         db,
@@ -2462,6 +2484,7 @@ def submit_lead_capture_embed(
 ) -> tuple[FormSubmission, str]:
     if not link.embed_enabled:
         raise PermissionError("Embed is not enabled")
+    ensure_embed_can_submit(db, link=link, form=form)
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form is not published")
     if form.purpose != FormPurpose.LEAD_CAPTURE.value:

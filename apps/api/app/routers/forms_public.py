@@ -287,6 +287,12 @@ def get_embed_public_form(
         form=form,
         link=intake_link,
     )
+    try:
+        form_intake_service.ensure_embed_can_submit(
+            db, link=intake_link, form=form, version=version
+        )
+    except form_intake_service.EmbedUnavailableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     schema = _public_schema_for_version(form, version)
     if not schema:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -359,6 +365,8 @@ def create_embed_session(
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except form_intake_service.EmbedUnavailableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FormEmbedSessionRead(
@@ -399,6 +407,8 @@ def submit_embed_public_form(
     except LookupError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except form_intake_service.DuplicateApplicantSubmissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except form_intake_service.EmbedUnavailableError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
