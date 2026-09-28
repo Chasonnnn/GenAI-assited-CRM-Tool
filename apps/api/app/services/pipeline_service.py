@@ -1813,19 +1813,34 @@ def build_pipeline_draft_preview(
 
 def get_stage_reference_workflows(db: Session, pipeline: Pipeline) -> list[AutomationWorkflow]:
     """Return the org workflows whose stage references belong to this pipeline."""
+    from app.services import workflow_service
+
     workflow_query = db.query(AutomationWorkflow).filter(
         AutomationWorkflow.organization_id == pipeline.organization_id
     )
+    if pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+        return workflow_query.filter(AutomationWorkflow.subject_type == pipeline.entity_type).all()
     if pipeline.entity_type == SURROGATE_PIPELINE_ENTITY:
         # Other non-donor subjects (match, appointment, form, intake) share surrogate stages.
-        return workflow_query.filter(
+        candidates = workflow_query.filter(
             AutomationWorkflow.subject_type.notin_(
                 {INTENDED_PARENT_PIPELINE_ENTITY, *DONOR_PIPELINE_ENTITY_TYPES}
             )
         ).all()
-    if pipeline.entity_type in {INTENDED_PARENT_PIPELINE_ENTITY, *DONOR_PIPELINE_ENTITY_TYPES}:
-        return workflow_query.filter(AutomationWorkflow.subject_type == pipeline.entity_type).all()
-    return []
+    elif pipeline.entity_type in DONOR_PIPELINE_ENTITY_TYPES:
+        candidates = workflow_query.filter(
+            AutomationWorkflow.subject_type.in_(
+                {pipeline.entity_type, *workflow_service.INTAKE_SUBJECT_TYPES}
+            )
+        ).all()
+    else:
+        return []
+    # Form and intake workflows reference the pipeline of their trigger form's lead kind.
+    return [
+        workflow
+        for workflow in candidates
+        if workflow_service.get_workflow_record_type(db, workflow) == pipeline.entity_type
+    ]
 
 
 def _remap_donor_zapier_mapping(

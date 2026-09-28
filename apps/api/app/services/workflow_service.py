@@ -223,6 +223,109 @@ def get_workflow_effective_subject_type(
     )
 
 
+INTAKE_SUBJECT_TYPES = frozenset({"form_submission", "intake_lead"})
+STAGE_PIPELINE_RECORD_TYPES = frozenset({"surrogate", *DONOR_SUBJECT_TYPES})
+DONOR_RECORD_TYPES = frozenset({*DONOR_SUBJECT_TYPES, DONOR_PERMISSION_CONTEXT})
+SHARED_DONOR_STAGE_ERROR = "Stage references need a form for one donor type"
+
+
+def resolve_workflow_record_type(
+    db: Session,
+    org_id: UUID,
+    *,
+    subject_type: str | None,
+    trigger_type: WorkflowTriggerType | str,
+    trigger_config: dict[str, object] | None,
+) -> str:
+    """Return the record type whose update fields and stages a workflow references.
+
+    Form submission and intake lead workflows act on the linked surrogate or donor, so
+    they follow the trigger form's lead kind. A form shared by both donor types, or a form
+    reference that no longer resolves, returns DONOR_PERMISSION_CONTEXT: donor field rules
+    apply, but stage references have no single pipeline.
+    """
+    if subject_type in DONOR_SUBJECT_TYPES:
+        return subject_type
+    if subject_type not in INTAKE_SUBJECT_TYPES:
+        return "surrogate"
+
+    trigger_value = (
+        trigger_type.value if isinstance(trigger_type, WorkflowTriggerType) else trigger_type
+    )
+    context_key = INTAKE_CONTEXT_KEYS.get(trigger_value)
+    config = trigger_config or {}
+    configured_kind = config.get(context_key) if context_key else None
+    if configured_kind in STAGE_PIPELINE_RECORD_TYPES:
+        return str(configured_kind)
+    form_id = config.get("form_id")
+    if not form_id:
+        # Unscoped intake workflows keep the surrogate rules they used before fixed subjects.
+        return "surrogate"
+    try:
+        parsed_form_id = UUID(str(form_id))
+    except TypeError, ValueError:
+        return DONOR_PERMISSION_CONTEXT
+    form = (
+        db.query(Form)
+        .filter(
+            Form.id == parsed_form_id,
+            Form.organization_id == org_id,
+        )
+        .first()
+    )
+    if form is None:
+        return DONOR_PERMISSION_CONTEXT
+    if form.lead_kind not in DONOR_SUBJECT_TYPES:
+        return "surrogate"
+    return (
+        form.lead_kind if len(form_intake_lead_kinds(db, form)) == 1 else DONOR_PERMISSION_CONTEXT
+    )
+
+
+def get_workflow_record_type(db: Session, workflow: AutomationWorkflow) -> str:
+    return resolve_workflow_record_type(
+        db,
+        workflow.organization_id,
+        subject_type=workflow.subject_type,
+        trigger_type=workflow.trigger_type,
+        trigger_config=workflow.trigger_config,
+    )
+
+
+def _stage_pipeline_entity_type(record_type: str) -> str:
+    if record_type not in STAGE_PIPELINE_RECORD_TYPES:
+        raise ValueError(SHARED_DONOR_STAGE_ERROR)
+    return record_type
+
+
+def _has_stage_references(
+    conditions: list[Condition] | list[dict] | None,
+    actions: list[dict] | None,
+) -> bool:
+    for condition in conditions or []:
+        field = condition.field if isinstance(condition, Condition) else condition.get("field")
+        if field == "stage_id":
+            return True
+    return any(
+        action.get("action_type") == "update_status"
+        or (action.get("action_type") == "update_field" and action.get("field") == "stage_id")
+        for action in actions or []
+    )
+
+
+def _stage_reference_entity_type(
+    record_type: str,
+    conditions: list[Condition] | list[dict] | None,
+    actions: list[dict] | None,
+) -> str | None:
+    """Return the pipeline stage references resolve in; None when a workflow has none."""
+    if record_type in STAGE_PIPELINE_RECORD_TYPES:
+        return record_type
+    if _has_stage_references(conditions, actions):
+        raise ValueError(SHARED_DONOR_STAGE_ERROR)
+    return None
+
+
 def _workflow_is_donor_related():
     """Match workflows that directly or indirectly can consume donor records."""
     scoped_form = (
@@ -832,18 +935,24 @@ def create_workflow(
         trigger_type=data.trigger_type,
         trigger_config=trigger_config,
     )
-    conditions = _canonicalize_conditions(db, org_id, data.conditions, entity_type=entity_type)
+    record_type = resolve_workflow_record_type(
+        db,
+        org_id,
+        subject_type=subject_type,
+        trigger_type=data.trigger_type,
+        trigger_config=trigger_config,
+    )
+    raw_actions = _normalize_actions_for_trigger(data.trigger_type, data.actions)
+    stage_entity_type = _stage_reference_entity_type(record_type, data.conditions, raw_actions)
+    conditions = _canonicalize_conditions(
+        db, org_id, data.conditions, entity_type=stage_entity_type
+    )
     _validate_subject_conditions(subject_type, conditions)
 
     # Validate trigger config
     _validate_trigger_config(data.trigger_type, trigger_config)
 
-    actions = _canonicalize_actions(
-        db,
-        org_id,
-        _normalize_actions_for_trigger(data.trigger_type, data.actions),
-        entity_type=entity_type,
-    )
+    actions = _canonicalize_actions(db, org_id, raw_actions, entity_type=stage_entity_type)
 
     # Validate actions
     for action in actions:
@@ -856,6 +965,7 @@ def create_workflow(
             data.trigger_type,
             subject_type=subject_type,
             effective_subject_type=effective_subject_type,
+            record_type=record_type,
         )
 
     # Determine owner_user_id based on scope
@@ -941,19 +1051,37 @@ def update_workflow(
         trigger_type=trigger_type,
         trigger_config=trigger_config,
     )
+    record_type = resolve_workflow_record_type(
+        db,
+        workflow.organization_id,
+        subject_type=subject_type,
+        trigger_type=trigger_type,
+        trigger_config=trigger_config,
+    )
+    effective_trigger_type = trigger_type
+    raw_actions = (
+        _normalize_actions_for_trigger(effective_trigger_type, data.actions)
+        if data.actions is not None
+        else None
+    )
+    stage_entity_type = _stage_reference_entity_type(
+        record_type,
+        data.conditions if data.conditions is not None else workflow.conditions,
+        raw_actions if raw_actions is not None else workflow.actions,
+    )
     normalized_conditions = (
         _canonicalize_conditions(
             db,
             workflow.organization_id,
             data.conditions,
-            entity_type=entity_type,
+            entity_type=stage_entity_type,
         )
         if data.conditions is not None
         else _canonicalize_conditions(
             db,
             workflow.organization_id,
             workflow.conditions,
-            entity_type=entity_type,
+            entity_type=stage_entity_type,
         )
     )
     _validate_subject_conditions(subject_type, normalized_conditions)
@@ -962,13 +1090,12 @@ def update_workflow(
         _validate_trigger_config(trigger_type, trigger_config)
 
     normalized_actions = data.actions
-    effective_trigger_type = trigger_type
-    if data.actions is not None:
+    if raw_actions is not None:
         normalized_actions = _canonicalize_actions(
             db,
             workflow.organization_id,
-            _normalize_actions_for_trigger(effective_trigger_type, data.actions),
-            entity_type=entity_type,
+            raw_actions,
+            entity_type=stage_entity_type,
         )
         for action in normalized_actions:
             _validate_action_config(
@@ -980,6 +1107,7 @@ def update_workflow(
                 effective_trigger_type,
                 subject_type=subject_type,
                 effective_subject_type=effective_subject_type,
+                record_type=record_type,
             )
         if _has_send_email_action(normalized_actions):
             is_valid, error = validate_email_provider(
@@ -1001,6 +1129,7 @@ def update_workflow(
                 effective_trigger_type,
                 subject_type=subject_type,
                 effective_subject_type=effective_subject_type,
+                record_type=record_type,
             )
 
     # Update fields
@@ -2314,10 +2443,16 @@ def _validate_action_config(
     trigger_type: WorkflowTriggerType | None = None,
     subject_type: str = "surrogate",
     effective_subject_type: str | None = None,
+    record_type: str | None = None,
 ) -> None:
-    """Validate action config and referenced entities exist in org."""
+    """Validate action config and referenced entities exist in org.
+
+    record_type is the record Update Field acts on (see resolve_workflow_record_type).
+    """
     action_type = action.get("action_type")
     is_donor_subject = subject_type in DONOR_SUBJECT_TYPES
+    if record_type is None:
+        record_type = subject_type if is_donor_subject else "surrogate"
     _validate_action_subject_compatibility(
         action,
         subject_type=subject_type,
@@ -2476,21 +2611,23 @@ def _validate_action_config(
 
     elif action_type == "update_field":
         config = UpdateFieldActionConfig.model_validate(action)
+        is_donor_record = record_type in DONOR_RECORD_TYPES
         allowed_fields = (
-            DONOR_ALLOWED_UPDATE_FIELDS if is_donor_subject else SURROGATE_ALLOWED_UPDATE_FIELDS
+            DONOR_ALLOWED_UPDATE_FIELDS if is_donor_record else SURROGATE_ALLOWED_UPDATE_FIELDS
         )
         if config.field not in allowed_fields:
-            raise ValueError(f"Field '{config.field}' is not allowed for {subject_type}")
+            raise ValueError(f"Field '{config.field}' is not allowed for {record_type}")
         if config.field == "stage_id":
+            stage_entity_type = _stage_pipeline_entity_type(record_type)
             resolved = _resolve_stage_ref(
                 db,
                 org_id,
                 action.get("value_stage_key") or config.value,
-                entity_type=subject_type,
+                entity_type=stage_entity_type,
             )
             if not resolved:
-                raise ValueError(f"Stage {config.value} not found in {subject_type} pipeline")
-        if config.field == "source" and is_donor_subject:
+                raise ValueError(f"Stage {config.value} not found in {stage_entity_type} pipeline")
+        if config.field == "source" and is_donor_record:
             # Donor updates accept only canonical sources, so store the canonical value.
             source = normalize_donor_source(config.value)
             if source is None:

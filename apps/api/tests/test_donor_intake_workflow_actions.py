@@ -162,7 +162,7 @@ def test_linked_donor_form_submission_runs_donor_actions(db, test_org, test_user
     form = _donor_form(db, test_org.id, test_user.id)
     submission = _submission(db, test_org.id, form, donor_id=donor.id)
     template = _template(db, test_org.id, test_user.id)
-    _form_workflow(
+    workflow = _form_workflow(
         db,
         test_org.id,
         test_user.id,
@@ -176,7 +176,7 @@ def test_linked_donor_form_submission_runs_donor_actions(db, test_org, test_user
             {"action_type": "create_task", "title": "Call donor applicant", "assignee": "owner"},
             {"action_type": "add_note", "content": "Returning donor applied"},
             {"action_type": "send_notification", "title": "Donor applied", "recipients": "owner"},
-            {"action_type": "update_field", "field": "is_priority", "value": True},
+            {"action_type": "update_field", "field": "education", "value": "Graduate degree"},
             {
                 "action_type": "assign_surrogate",
                 "owner_type": "user",
@@ -184,18 +184,26 @@ def test_linked_donor_form_submission_runs_donor_actions(db, test_org, test_user
             },
         ],
     )
+    # Saved before donor form workflows validated update fields against donor rules.
+    workflow.actions = [
+        *workflow.actions,
+        {"action_type": "update_field", "field": "is_priority", "value": True},
+    ]
+    db.flush()
 
     execution = _submit(db, test_org.id, form, submission)
 
     results = execution.actions_executed
-    assert [result["success"] for result in results[:4]] == [True, True, True, True], results
-    assert results[4] == {
+    assert [result["success"] for result in results[:5]] == [True] * 5, results
+    assert results[5]["skipped"] is True
+    assert results[5]["error"] == "Action 'assign_surrogate' does not support donor subjects"
+    assert results[6] == {
         "action_type": "update_field",
         "success": False,
         "error": "Field is_priority not allowed for donor update",
     }
-    assert results[5]["skipped"] is True
-    assert results[5]["error"] == "Action 'assign_surrogate' does not support donor subjects"
+    db.refresh(donor)
+    assert donor.education == "Graduate degree"
 
     job = (
         db.query(Job)

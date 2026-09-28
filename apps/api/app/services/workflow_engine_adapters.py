@@ -466,10 +466,15 @@ class DefaultWorkflowDomainAdapter:
                         }
                     )
 
-        # Validate entity type for Surrogate-only actions, map tasks to surrogates when possible
+        # Validate entity type for Surrogate-only actions; map tasks, submissions and
+        # promoted intake leads to their surrogate when possible.
         if action_type in self.SURROGATE_ONLY_ACTIONS and not isinstance(action_entity, Donor):
-            if entity_type in {"task", "form_submission"}:
-                surrogate_id = getattr(entity, "surrogate_id", None)
+            if entity_type in {"task", "form_submission", "intake_lead"}:
+                surrogate_id = getattr(
+                    entity,
+                    "promoted_surrogate_id" if entity_type == "intake_lead" else "surrogate_id",
+                    None,
+                )
                 if not surrogate_id:
                     return _with_action_type(
                         {
