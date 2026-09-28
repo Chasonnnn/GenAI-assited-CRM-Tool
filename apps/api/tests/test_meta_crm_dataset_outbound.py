@@ -1251,3 +1251,114 @@ async def test_meta_crm_dataset_job_skips_when_moved_time_makes_the_lead_stale(
     monitor_event = db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job.id).one()
     assert monitor_event.status == "skipped"
     assert monitor_event.reason == "stale_meta_lead"
+
+
+def test_enqueue_meta_crm_dataset_stage_event_skips_synthetic_meta_lead_ids(
+    db, test_org, test_user
+):
+    from app.db.enums import JobType, SurrogateSource
+    from app.db.models import Job, MetaCrmDatasetEvent, MetaLead
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import meta_crm_dataset_service, surrogate_service
+
+    settings = _configure_meta_dataset(db, test_org.id)
+    settings.event_mapping = [
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "Qualified",
+            "bucket": "qualified",
+            "enabled": True,
+        }
+    ]
+    meta_lead = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id=f"zapier-{uuid4()}",
+        meta_form_id="form_1",
+        meta_page_id="page_1",
+        field_data={},
+        field_data_raw={},
+        received_at=datetime.now(UTC),
+    )
+    db.add(meta_lead)
+    db.commit()
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Synthetic Lead",
+            email="synthetic-lead@example.com",
+            source=SurrogateSource.META,
+        ),
+    )
+    surrogate.meta_lead_id = meta_lead.id
+    db.commit()
+
+    result = meta_crm_dataset_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_label="Pre Qualified",
+    )
+
+    assert result["queued"] is False
+    assert result["reason"] == "synthetic_meta_lead_id"
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.META_CRM_DATASET_EVENT.value,
+        )
+        .count()
+        == 0
+    )
+    skipped = (
+        db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.surrogate_id == surrogate.id).one()
+    )
+    assert skipped.status == "skipped"
+    assert skipped.reason == "synthetic_meta_lead_id"
+    assert skipped.lead_id == meta_lead.meta_lead_id
+
+
+@pytest.mark.asyncio
+async def test_meta_crm_dataset_job_with_synthetic_lead_id_is_skipped(monkeypatch, db, test_org):
+    from app.db.models import MetaCrmDatasetEvent
+    from app.jobs.handlers import meta
+
+    settings = _configure_meta_dataset(db, test_org.id)
+    job = _queue_stage_dataset_job(
+        db,
+        test_org.id,
+        settings,
+        lead_id="zapier-generated-lead",
+        event_time=datetime.now(UTC),
+    )
+    captured = _capture_dataset_post(monkeypatch)
+
+    await meta.process_meta_crm_dataset_event(db, job)
+
+    assert captured == {}
+    monitor_event = db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job.id).one()
+    assert monitor_event.status == "skipped"
+    assert monitor_event.reason == "synthetic_meta_lead_id"
+
+
+@pytest.mark.asyncio
+async def test_meta_crm_dataset_test_job_still_sends_a_synthetic_lead_id(monkeypatch, db, test_org):
+    from app.jobs.handlers import meta
+
+    settings = _configure_meta_dataset(db, test_org.id)
+    job = _queue_stage_dataset_job(
+        db,
+        test_org.id,
+        settings,
+        lead_id=f"zapier-test-{test_org.id}",
+        event_time=datetime.now(UTC),
+        source="test",
+    )
+    captured = _capture_dataset_post(monkeypatch)
+
+    await meta.process_meta_crm_dataset_event(db, job)
+
+    assert captured["json"]["data"][0]["user_data"]["lead_id"] == f"zapier-test-{test_org.id}"

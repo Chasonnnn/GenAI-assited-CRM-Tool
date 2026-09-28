@@ -26,6 +26,7 @@ from app.services import (
     meta_capi,
     meta_crm_dataset_monitor_service,
     meta_crm_dataset_settings_service,
+    meta_lead_service,
     meta_outbound_service,
     zapier_settings_service,
 )
@@ -640,6 +641,18 @@ def enqueue_stage_event(
             stage_label=stage_label,
             event_name=event_name,
         )
+    if meta_lead_service.is_synthetic_meta_lead_id(meta_lead.meta_lead_id):
+        return _skip_event(
+            db,
+            surrogate=surrogate,
+            source=source,
+            reason="synthetic_meta_lead_id",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+            event_name=event_name,
+            lead_id=meta_lead.meta_lead_id,
+        )
 
     event_time = effective_at or _now_utc()
     if not _is_meta_lead_within_reporting_window(meta_lead, event_time=event_time):
@@ -881,6 +894,13 @@ async def process_job(db: Session, job) -> None:
         and event_data[0].get("action_source") in ALLOWED_ACTION_SOURCES
     ):
         _skip_job_delivery(db, job=job, reason="invalid_event")
+        return
+    # Also covers jobs queued before enqueue skipped synthetic ids, and their retries.
+    user_data = event_data[0].get("user_data")
+    lead_id = user_data.get("lead_id") if isinstance(user_data, dict) else None
+    is_test_event = monitor_event is not None and monitor_event.source == "test"
+    if not is_test_event and meta_lead_service.is_synthetic_meta_lead_id(lead_id):
+        _skip_job_delivery(db, job=job, reason="synthetic_meta_lead_id")
         return
     is_website_event = event_data[0]["action_source"] == "website"
     if is_website_event:
