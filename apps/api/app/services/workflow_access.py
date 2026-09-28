@@ -71,6 +71,19 @@ def can_edit_subject(db: Session, session: UserSession, subject_type: str | None
     )
 
 
+def can_configure_subject(db: Session, session: UserSession, subject_type: str | None) -> bool:
+    """Check that a workflow for this subject can be saved.
+
+    Permission v2 authorizes workflow actions separately, so viewing the subject is
+    enough; v1 also requires subject edit access. Builder options use the same rule.
+    """
+    if not can_view_subject(db, session, subject_type):
+        return False
+    return permission_policy_service.is_enabled(db, session.org_id) or can_edit_subject(
+        db, session, subject_type
+    )
+
+
 def can_create(db: Session, session: UserSession, scope: str) -> bool:
     """
     Check if user can create a workflow with the given scope.
