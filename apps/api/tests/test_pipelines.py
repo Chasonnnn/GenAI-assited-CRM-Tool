@@ -29,6 +29,7 @@ from app.db.models import (
     EmailTemplate,
     IntendedParent,
     Membership,
+    Organization,
     OrgIntelligentSuggestionRule,
     Pipeline,
     PipelineStage,
@@ -291,14 +292,19 @@ async def test_pipeline_api_returns_distinct_donor_defaults(authed_client: Async
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "entity_type",
-    [EGG_DONOR_PIPELINE_ENTITY, SPERM_DONOR_PIPELINE_ENTITY],
+    "entity_type,permission",
+    [
+        (EGG_DONOR_PIPELINE_ENTITY, P.DONORS_VIEW),
+        (SPERM_DONOR_PIPELINE_ENTITY, P.DONORS_VIEW),
+        (INTENDED_PARENT_PIPELINE_ENTITY, P.INTENDED_PARENTS_VIEW),
+    ],
 )
-async def test_donor_pipeline_reads_require_donor_view_after_resolving_actual_type(
+async def test_record_pipeline_reads_require_record_view_after_resolving_actual_type(
     db,
     test_org,
     test_user,
     entity_type,
+    permission,
 ):
     pipeline = pipeline_service.get_or_create_default_pipeline(
         db,
@@ -309,7 +315,7 @@ async def test_donor_pipeline_reads_require_donor_view_after_resolving_actual_ty
     user = _admin_with_revoked_pipeline_permissions(
         db,
         org_id=test_org.id,
-        permissions=[P.DONORS_VIEW],
+        permissions=[permission],
     )
     stages = pipeline_service.get_stages(db, pipeline.id)
     draft_payload = {
@@ -472,6 +478,200 @@ async def test_donor_pipeline_record_remaps_require_donor_change_status(
 
     assert remap.status_code == 403
     assert config_only.status_code == 201, config_only.text
+
+
+@pytest.mark.asyncio
+async def test_intended_parent_pipeline_configuration_mutations_require_ip_edit(
+    db,
+    test_org,
+    test_user,
+):
+    ip_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
+    )
+    surrogate_pipeline = pipeline_service.create_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        "Surrogate mutation control",
+    )
+    user = _admin_with_revoked_pipeline_permissions(
+        db,
+        org_id=test_org.id,
+        permissions=[P.INTENDED_PARENTS_EDIT],
+    )
+
+    async with _pipeline_client_for(db, org_id=test_org.id, user=user) as client:
+        detail = await client.get(f"/settings/pipelines/{ip_pipeline.id}")
+        ip_update = await client.patch(
+            f"/settings/pipelines/{ip_pipeline.id}",
+            json={"name": "Forbidden intended parent pipeline update"},
+        )
+        ip_stage = await client.post(
+            f"/settings/pipelines/{ip_pipeline.id}/stages",
+            json={
+                "slug": "forbidden_review",
+                "label": "Forbidden Review",
+                "color": "#64748B",
+                "stage_type": "intake",
+            },
+        )
+        ip_create = await client.post(
+            "/settings/pipelines",
+            json={
+                "name": "Forbidden intended parent pipeline",
+                "entity_type": INTENDED_PARENT_PIPELINE_ENTITY,
+            },
+        )
+        surrogate_update = await client.patch(
+            f"/settings/pipelines/{surrogate_pipeline.id}",
+            json={"name": "Allowed surrogate pipeline update"},
+        )
+
+    assert detail.status_code == 200, detail.text
+    assert ip_update.status_code == 403
+    assert ip_update.json()["detail"] == f"Missing permission: {P.INTENDED_PARENTS_EDIT.value}"
+    assert ip_stage.status_code == 403
+    assert ip_create.status_code == 403
+    assert surrogate_update.status_code == 200, surrogate_update.text
+
+
+@pytest.mark.asyncio
+async def test_intended_parent_pipeline_record_remaps_require_ip_change_status(
+    db,
+    test_org,
+    test_user,
+):
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
+    )
+    custom_stage = pipeline_service.create_stage(
+        db,
+        pipeline.id,
+        slug="permission_review",
+        label="Permission Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    target_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "new")
+    assert target_stage is not None
+    intended_parent = _create_intended_parent_for_stage(db, org_id=test_org.id, stage=custom_stage)
+    db.commit()
+    user = _admin_with_revoked_pipeline_permissions(
+        db,
+        org_id=test_org.id,
+        permissions=[P.INTENDED_PARENTS_CHANGE_STATUS],
+    )
+
+    async with _pipeline_client_for(db, org_id=test_org.id, user=user) as client:
+        detail = await client.get(f"/settings/pipelines/{pipeline.id}")
+        assert detail.status_code == 200, detail.text
+        payload = detail.json()
+        remap = await client.put(
+            f"/settings/pipelines/{pipeline.id}/apply-draft",
+            json={
+                "name": payload["name"],
+                "stages": [
+                    _draft_stage_payload(stage, index + 1)
+                    for index, stage in enumerate(
+                        stage for stage in payload["stages"] if stage["id"] != str(custom_stage.id)
+                    )
+                ],
+                "feature_config": payload["feature_config"],
+                "expected_version": payload["current_version"],
+                "remaps": [
+                    {
+                        "removed_stage_key": custom_stage.stage_key,
+                        "target_stage_key": target_stage.stage_key,
+                    }
+                ],
+            },
+        )
+        delete = await client.request(
+            "DELETE",
+            f"/settings/pipelines/{pipeline.id}/stages/{custom_stage.id}",
+            json={"migrate_to_stage_id": str(target_stage.id)},
+        )
+        config_only = await client.post(
+            f"/settings/pipelines/{pipeline.id}/stages",
+            json={
+                "slug": "configuration_only",
+                "label": "Configuration Only",
+                "color": "#64748B",
+                "stage_type": "intake",
+            },
+        )
+
+    assert remap.status_code == 403
+    assert remap.json()["detail"] == (
+        f"Missing permission: {P.INTENDED_PARENTS_CHANGE_STATUS.value}"
+    )
+    assert delete.status_code == 403
+    assert config_only.status_code == 201, config_only.text
+    db.expire_all()
+    assert db.get(IntendedParent, intended_parent.id).stage_id == custom_stage.id
+
+
+@pytest.mark.asyncio
+async def test_intended_parent_pipeline_of_another_org_is_not_found(
+    db,
+    test_org,
+    authed_client: AsyncClient,
+):
+    other_org = Organization(
+        id=uuid.uuid4(),
+        name="Other Pipeline Org",
+        slug=f"other-pipeline-{uuid.uuid4().hex[:8]}",
+    )
+    db.add(other_org)
+    db.flush()
+    foreign = pipeline_service.get_or_create_default_pipeline(
+        db,
+        other_org.id,
+        entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
+    )
+    foreign_stage = pipeline_service.get_stage_by_key(db, foreign.id, "new")
+    name = foreign.name
+    params = {"entity_type": INTENDED_PARENT_PIPELINE_ENTITY}
+
+    responses = [
+        await authed_client.get(f"/settings/pipelines/{foreign.id}", params=params),
+        await authed_client.get(
+            f"/settings/pipelines/{foreign.id}/dependency-graph", params=params
+        ),
+        await authed_client.get(f"/settings/pipelines/{foreign.id}/versions", params=params),
+        await authed_client.patch(
+            f"/settings/pipelines/{foreign.id}", params=params, json={"name": "Taken over"}
+        ),
+        await authed_client.post(
+            f"/settings/pipelines/{foreign.id}/stages",
+            params=params,
+            json={
+                "slug": "cross_org",
+                "label": "Cross Org",
+                "color": "#64748B",
+                "stage_type": "intake",
+            },
+        ),
+        await authed_client.request(
+            "DELETE",
+            f"/settings/pipelines/{foreign.id}/stages/{foreign_stage.id}",
+            params=params,
+            json={"migrate_to_stage_id": str(foreign_stage.id)},
+        ),
+    ]
+
+    assert [response.status_code for response in responses] == [404] * len(responses)
+    db.expire_all()
+    assert db.get(Pipeline, foreign.id).name == name
+    assert pipeline_service.get_stage_by_key(db, foreign.id, "cross_org") is None
 
 
 def test_donor_pipeline_rollback_rejects_snapshot_that_would_strand_active_donor(
