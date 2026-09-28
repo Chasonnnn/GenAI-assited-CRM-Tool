@@ -1913,7 +1913,7 @@ def get_workflow_options(
     elif not include_donor_forms:
         forms_query = forms_query.filter(Form.lead_kind == "surrogate")
     published_forms = forms_query.order_by(Form.name.asc()).all()
-    forms = [{"id": str(f.id), "name": f.name} for f in published_forms]
+    forms = [{"id": str(f.id), "name": f.name, "lead_kind": f.lead_kind} for f in published_forms]
 
     return WorkflowOptions(
         trigger_types=trigger_types,

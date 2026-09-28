@@ -651,7 +651,18 @@ class DefaultWorkflowDomainAdapter:
                 return _with_action_type(result)
 
             if action_type == "promote_intake_lead":
-                result = workflow_intake_actions.promote_intake_lead(db, action, entity)
+                promote_action = action
+                if isinstance(entity, IntakeLead) and entity.lead_type in {
+                    "egg_donor",
+                    "sperm_donor",
+                }:
+                    # Priority and owner assignment are surrogate-only promotion options.
+                    promote_action = {
+                        key: value
+                        for key, value in action.items()
+                        if key not in {"is_priority", "assign_to_user"}
+                    }
+                result = workflow_intake_actions.promote_intake_lead(db, promote_action, entity)
                 return _with_action_type(result)
 
             if action_type == WorkflowActionType.AUTO_MATCH_SUBMISSION.value:

@@ -1274,6 +1274,97 @@ describe('AutomationPage', () => {
         )
     })
 
+    it('drops surrogate-only promotion options for donor intake forms', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                trigger_types: [
+                    { value: 'intake_lead_created', label: 'Intake Lead Created', description: '' },
+                ],
+                action_types: [
+                    { value: 'promote_intake_lead', label: 'Promote Intake Lead', description: '' },
+                ],
+                action_types_by_trigger: { intake_lead_created: ['promote_intake_lead'] },
+                trigger_entity_types: { intake_lead_created: 'intake_lead' },
+                condition_fields: [],
+                condition_operators: [],
+                update_fields: [],
+                email_variables: [],
+                email_templates: [],
+                users: [],
+                queues: [],
+                statuses: [],
+                forms: [
+                    { id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' },
+                    { id: 'form-egg-donor', name: 'Egg Donor Application', lead_kind: 'egg_donor' },
+                ],
+            },
+            isLoading: false,
+        })
+        const selectForm = (formId: string) => {
+            const formSelect = getFirstElement(
+                screen.getAllByTestId('select').filter((select) =>
+                    select.querySelector(`option[value="${formId}"]`),
+                ),
+                'Expected a form select',
+            )
+            fireEvent.change(formSelect, { target: { value: formId } })
+        }
+        const promotionSwitch = (label: string) => {
+            const promotionSwitchElement = screen.getByText(label).parentElement?.querySelector('[role="switch"]')
+            if (!promotionSwitchElement) throw new Error(`Expected the ${label} switch`)
+            return promotionSwitchElement
+        }
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+            target: { value: 'Promote leads' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'intake_lead_created' },
+        })
+        selectForm('form-surrogate')
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'promote_intake_lead' },
+        })
+        fireEvent.click(promotionSwitch('Mark as priority'))
+        fireEvent.click(promotionSwitch('Assign to workflow owner if available'))
+
+        fireEvent.click(screen.getByRole('button', { name: /back/i }))
+        fireEvent.click(screen.getByRole('button', { name: /back/i }))
+        selectForm('form-egg-donor')
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        expect(screen.queryByText('Mark as priority')).not.toBeInTheDocument()
+        expect(screen.queryByText('Assign to workflow owner if available')).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+
+        const payload = mockCreateWorkflow.mutate.mock.calls.at(-1)?.[0]
+        expect(payload).toMatchObject({
+            subject_type: 'intake_lead',
+            trigger_type: 'intake_lead_created',
+            trigger_config: { form_id: 'form-egg-donor' },
+        })
+        expect(payload.actions).toHaveLength(1)
+        expect(payload.actions[0].action_type).toBe('promote_intake_lead')
+        expect(payload.actions[0]).not.toHaveProperty('is_priority')
+        expect(payload.actions[0]).not.toHaveProperty('assign_to_user')
+    })
+
     it('keeps approval optional for donor email actions', () => {
         mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors'] } })
         mockUseWorkflowOptions.mockImplementation(

@@ -223,6 +223,10 @@ function isDonorSubject(
     return subjectType === "egg_donor" || subjectType === "sperm_donor"
 }
 
+function isDonorLeadKind(value: unknown): boolean {
+    return value === "egg_donor" || value === "sperm_donor"
+}
+
 function getDonorExecutionLink(execution: WorkflowExecution): string | null {
     if (
         execution.subject_type &&
@@ -1050,6 +1054,9 @@ function useAutomationPageView({
         ]
         : EMAIL_RECIPIENT_OPTIONS
     const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
+    const triggerForm = options?.forms?.find((form) => form.id === triggerConfig.form_id)
+    const isDonorIntakeTrigger =
+        isDonorLeadKind(triggerForm?.lead_kind) || isDonorLeadKind(triggerConfig.lead_type)
     const updateFields = options?.update_fields ?? []
     const conditionOperators = options?.condition_operators ?? []
     const { data: executions } = useWorkflowExecutions(selectedWorkflowId || "", { limit: 20 })
@@ -1351,6 +1358,13 @@ function useAutomationPageView({
                 (action.recipients === undefined || action.recipients === "surrogate")
             ) {
                 return { ...action, recipients: "donor" }
+            }
+            if (isDonorIntakeTrigger && action.action_type === "promote_intake_lead") {
+                // Priority and owner assignment are surrogate-only promotion options.
+                const donorAction = { ...action }
+                delete donorAction.is_priority
+                delete donorAction.assign_to_user
+                return donorAction
             }
             return action
         })
@@ -2682,24 +2696,28 @@ function useAutomationPageView({
                                                             value={typeof action.source === "string" ? action.source : ""}
                                                             onChange={(e) => updateAction(index, { source: e.target.value })}
                                                         />
-                                                        <div className="flex items-center justify-between rounded-md border p-3">
-                                                            <div className="text-sm">Mark as priority</div>
-                                                            <Switch
-                                                                checked={typeof action.is_priority === "boolean" ? action.is_priority : false}
-                                                                onCheckedChange={(checked) =>
-                                                                    updateAction(index, { is_priority: checked })
-                                                                }
-                                                            />
-                                                        </div>
-                                                        <div className="flex items-center justify-between rounded-md border p-3">
-                                                            <div className="text-sm">Assign to workflow owner if available</div>
-                                                            <Switch
-                                                                checked={typeof action.assign_to_user === "boolean" ? action.assign_to_user : false}
-                                                                onCheckedChange={(checked) =>
-                                                                    updateAction(index, { assign_to_user: checked })
-                                                                }
-                                                            />
-                                                        </div>
+                                                        {!isDonorIntakeTrigger && (
+                                                            <>
+                                                                <div className="flex items-center justify-between rounded-md border p-3">
+                                                                    <div className="text-sm">Mark as priority</div>
+                                                                    <Switch
+                                                                        checked={typeof action.is_priority === "boolean" ? action.is_priority : false}
+                                                                        onCheckedChange={(checked) =>
+                                                                            updateAction(index, { is_priority: checked })
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                                <div className="flex items-center justify-between rounded-md border p-3">
+                                                                    <div className="text-sm">Assign to workflow owner if available</div>
+                                                                    <Switch
+                                                                        checked={typeof action.assign_to_user === "boolean" ? action.assign_to_user : false}
+                                                                        onCheckedChange={(checked) =>
+                                                                            updateAction(index, { assign_to_user: checked })
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 )}
                                                 {/* Requires Approval Toggle */}
