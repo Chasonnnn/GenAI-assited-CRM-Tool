@@ -722,7 +722,30 @@ describe('AutomationPage', () => {
         expect(screen.getByText('Task ID')).toBeInTheDocument()
     })
 
+    it.each([
+        { permissions: [], labels: ['Surrogate'] },
+        { permissions: ['view_donors'], labels: ['Surrogate', 'Egg Donor', 'Sperm Donor'] },
+    ])('offers donor record types only with view_donors ($permissions)', ({ permissions, labels }) => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions } })
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+
+        const recordTypeOptions = Array.from(
+            screen.getByRole('combobox', { name: 'Record type' }).querySelectorAll('option'),
+        )
+            .filter((option) => option.value)
+            .map((option) => option.textContent)
+        expect(recordTypeOptions).toEqual(labels)
+    })
+
     it('creates an egg donor workflow from subject-specific options', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors'] } })
         mockUseWorkflowOptions.mockImplementation(
             (_scope: string, subjectType: string) => ({
                 data: subjectType === 'egg_donor'
@@ -1041,6 +1064,7 @@ describe('AutomationPage', () => {
     })
 
     it('configures the returned assign-donor action without surrogate controls', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors'] } })
         mockUseWorkflowOptions.mockImplementation(
             (_scope: string, subjectType: string) => ({
                 data: {
@@ -1122,6 +1146,7 @@ describe('AutomationPage', () => {
     })
 
     it('configures a returned donor messaging action with mandatory approval', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors'] } })
         mockUseWorkflowOptions.mockImplementation(
             (_scope: string, subjectType: string) => ({
                 data: {

@@ -911,6 +911,10 @@ function useAutomationPageView({
     const canManageAutomation = can("manage_automation")
     const policyV2 = (policyVersion ?? 1) >= 2
     const canManageOrgWorkflows = canManageAutomation && (!policyV2 || can("manage_org_workflows"))
+    const canViewDonors = can("view_donors")
+    const createWorkflowSubjectOptions = CREATE_WORKFLOW_SUBJECT_OPTIONS.filter(
+        (option) => canViewDonors || !isDonorSubject(option.value),
+    )
     const [detailsWorkflow, setDetailsWorkflow] = useState<WorkflowListItem | null>(null)
     const [activeTab] = useState(initialTab)
 
@@ -1765,7 +1769,7 @@ function useAutomationPageView({
                                                 </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {CREATE_WORKFLOW_SUBJECT_OPTIONS.map((option) => (
+                                                {createWorkflowSubjectOptions.map((option) => (
                                                     <SelectItem key={option.value} value={option.value}>
                                                         {option.label}
                                                     </SelectItem>
