@@ -355,19 +355,29 @@ async def test_donor_approve_and_reject_cannot_reach_another_org(authed_client, 
 
 
 @pytest.mark.asyncio
-async def test_linked_follow_up_fills_empty_details_and_applies_clean_photo(
-    authed_client, db, test_org
+async def test_auto_linked_follow_up_waits_for_staff_approval_before_changing_the_donor(
+    authed_client, client, db, test_org
 ):
     donor = _donor(db, test_org.id, email="followup@example.com", state="CA")
     _, slug = await _create_donor_form(authed_client)
 
-    response = await _submit_donor_form(authed_client, slug=slug, email="followup@example.com")
+    response = await _submit_donor_form(client, slug=slug, email="followup@example.com")
 
     assert response.status_code == 200, response.text
     submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
     db.refresh(submission)
     assert submission.donor_id == donor.id
-    assert submission.status == "approved"
+    assert submission.match_status == "linked"
+    assert submission.status == "pending_review"
+    assert submission.reviewed_by_user_id is None
+    db.refresh(donor)
+    assert donor.phone is None
+    assert donor.education is None
+    assert donor.profile_photo_attachment_id is None
+
+    approved = await authed_client.post(f"/forms/submissions/{submission.id}/approve", json={})
+
+    assert approved.status_code == 200, approved.text
     db.refresh(donor)
     assert donor.state == "CA"
     assert donor.education == "Master's degree"
@@ -376,7 +386,31 @@ async def test_linked_follow_up_fills_empty_details_and_applies_clean_photo(
 
 
 @pytest.mark.asyncio
-async def test_linked_follow_up_applies_photo_once_scan_is_clean(
+async def test_clean_scan_does_not_apply_photo_from_an_unreviewed_auto_link(
+    authed_client, client, db, test_org, monkeypatch
+):
+    from app.services import form_submission_service
+
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", True, raising=False)
+    donor = _donor(db, test_org.id, email="unreviewed@example.com")
+    _, slug = await _create_donor_form(authed_client)
+    response = await _submit_donor_form(client, slug=slug, email="unreviewed@example.com")
+    assert response.status_code == 200, response.text
+    submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
+    db.refresh(submission)
+    assert submission.donor_id == donor.id
+
+    form_submission_service.mark_submission_file_scanned(db, _photo(db, submission).id, "clean")
+    db.commit()
+
+    db.refresh(donor)
+    db.refresh(submission)
+    assert donor.profile_photo_attachment_id is None
+    assert submission.status == "pending_review"
+
+
+@pytest.mark.asyncio
+async def test_staff_approved_follow_up_applies_photo_once_scan_is_clean(
     authed_client, db, test_org, monkeypatch
 ):
     from app.services import form_submission_service
@@ -388,8 +422,10 @@ async def test_linked_follow_up_applies_photo_once_scan_is_clean(
     assert response.status_code == 200, response.text
     submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
     db.refresh(submission)
-    db.refresh(donor)
     assert submission.donor_id == donor.id
+    approved = await authed_client.post(f"/forms/submissions/{submission.id}/approve", json={})
+    assert approved.status_code == 200, approved.text
+    db.refresh(donor)
     assert donor.profile_photo_attachment_id is None
 
     photo = _photo(db, submission)

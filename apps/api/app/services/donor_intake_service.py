@@ -205,7 +205,7 @@ def mark_submission_linked(
     donor: Donor,
     reviewer_id: UUID | None,
 ) -> None:
-    """A donor link is the donor equivalent of approving a linked surrogate submission."""
+    """A staff donor link approves and applies the application, like surrogate approval."""
     if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
         return
     mark_submission_approved(submission, reviewer_id=reviewer_id)
@@ -213,11 +213,12 @@ def mark_submission_linked(
 
 
 def apply_linked_photo_after_scan(db: Session, submission: FormSubmission) -> None:
-    """Apply a newly clean photo to the linked donor without failing the scan result."""
+    """Apply a newly clean photo from a staff-approved link without failing the scan result."""
     if (
         submission.lead_kind not in {"egg_donor", "sperm_donor"}
         or not submission.donor_id
         or submission.status != FormSubmissionStatus.APPROVED.value
+        or submission.reviewed_by_user_id is None
     ):
         return
     try:
@@ -317,7 +318,10 @@ def list_match_candidates(
 
 
 def match_submission(db: Session, submission: FormSubmission, *, session=None) -> str:
-    """Caller owns the submission lock and transaction; never overwrite donor details."""
+    """Link only, like surrogate auto-match; staff approval applies the answers.
+
+    Caller owns the submission lock and transaction.
+    """
     from app.services import audit_service, form_intake_service
 
     if submission.donor_id:
@@ -381,7 +385,6 @@ def match_submission(db: Session, submission: FormSubmission, *, session=None) -
         submission.match_status = "linked"
         submission.match_reason = "donor_email_name_type_exact"
         submission.matched_at = datetime.now(UTC)
-        mark_submission_linked(db, submission=submission, donor=matched, reviewer_id=None)
         audit_service.log_event(
             db,
             org_id=submission.organization_id,
