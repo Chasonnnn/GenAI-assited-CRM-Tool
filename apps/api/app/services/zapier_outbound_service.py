@@ -940,6 +940,101 @@ def enqueue_donor_created_event(db: Session, *, donor: Donor) -> dict[str, objec
     return enqueue_donor_stage_event(db, donor=donor, history=history, new_stage=stage)
 
 
+TEST_META_FIELDS = {
+    "meta_form_id": "test_form",
+    "meta_campaign_id": "test_campaign",
+    "meta_ad_id": "test_ad",
+    "meta_platform": "facebook",
+}
+TEST_FBC = "fb.1.1772952996.test-click-id"
+TEST_FBP = "fb.1.1772952996.1234567890"
+TEST_EMAIL = "zapier-test@example.com"
+TEST_PHONE = "+15551234567"
+# Stands in for a hosted-form submission id in website samples; no submission row exists.
+TEST_SUBMISSION_ID = UUID(int=0)
+
+
+def enqueue_donor_test_event(
+    db: Session,
+    organization_id: UUID,
+    *,
+    donor_type: str,
+    event_name: str,
+    attribution_source: str,
+    lead_id: str | None = None,
+) -> dict[str, object]:
+    """Queue a donor sample event through the donor delivery path, like the surrogate test."""
+    settings = zapier_settings_service.get_settings(db, organization_id)
+    if not settings or not settings.outbound_webhook_url:
+        raise ValueError("Outbound webhook URL not configured.")
+    if not settings.donor_outbound_enabled:
+        raise ValueError("Donor stage events are disabled.")
+    if donor_type not in zapier_settings_service.DONOR_TYPES:
+        raise ValueError("Donor type must be egg or sperm.")
+    if event_name not in zapier_settings_service.SUPPORTED_DONOR_EVENT_NAMES:
+        raise ValueError("Unsupported donor event name.")
+
+    event_time = _now_utc()
+    event_slug = event_name.strip().lower().replace(" ", "_")
+    event_id = f"zapier_donor_test:{donor_type}:{event_slug}:{event_time.timestamp()}"
+    if attribution_source == "meta":
+        lead_id = (lead_id or "").strip() or f"zapier-test-{organization_id}"
+        attribution: dict[str, object] = {
+            "source": "meta",
+            "lead_id": lead_id,
+            "fields": {**TEST_META_FIELDS, "fbc": TEST_FBC, "facebook_click_id": TEST_FBC},
+        }
+    elif attribution_source == "website":
+        lead_id = None
+        attribution = {
+            "source": "website",
+            "first_party_submission_id": TEST_SUBMISSION_ID,
+            "fields": {"fbc": TEST_FBC, "fbp": TEST_FBP},
+        }
+    else:
+        raise ValueError("Attribution source must be meta or website.")
+
+    payload = build_donor_stage_event_payload(
+        event_id=event_id,
+        event_name=event_name,
+        event_time=event_time,
+        attribution=attribution,
+        donor_type=donor_type,
+        include_hashed_pii=settings.outbound_send_hashed_pii,
+        email=TEST_EMAIL,
+        phone=TEST_PHONE,
+        test_mode=True,
+    )
+    try:
+        event = zapier_monitor_service.create_donor_test_event(
+            db,
+            org_id=organization_id,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=lead_id,
+            donor_type=donor_type,
+            attribution_source=attribution_source,
+        )
+        job = job_service.enqueue_job(
+            db,
+            org_id=organization_id,
+            job_type=JobType.ZAPIER_STAGE_EVENT,
+            payload={
+                "delivery_kind": "donor_test",
+                "event_record_id": str(event.id),
+                "data": payload,
+            },
+            idempotency_key=event_id,
+            commit=False,
+        )
+        event.job_id = job.id
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"event_id": event_id, "event_name": event_name, "lead_id": lead_id}
+
+
 def enqueue_test_event(
     db: Session,
     organization_id: UUID,
@@ -965,15 +1060,10 @@ def enqueue_test_event(
         stage_label=LABEL_OVERRIDES.get(stage_key, humanize_identifier(stage_key)),
         surrogate_id=None,
         include_hashed_pii=include_hashed_pii,
-        email="zapier-test@example.com" if include_hashed_pii else None,
-        phone="+15551234567" if include_hashed_pii else None,
-        meta_fields={
-            "meta_form_id": "test_form",
-            "meta_campaign_id": "test_campaign",
-            "meta_ad_id": "test_ad",
-            "meta_platform": "facebook",
-        },
-        fbc="fb.1.1772952996.test-click-id",
+        email=TEST_EMAIL if include_hashed_pii else None,
+        phone=TEST_PHONE if include_hashed_pii else None,
+        meta_fields=dict(TEST_META_FIELDS),
+        fbc=TEST_FBC,
         event_id=event_id,
         test_mode=True,
     )

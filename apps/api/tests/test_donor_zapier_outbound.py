@@ -1646,3 +1646,198 @@ def test_manual_donor_creation_sends_nothing(db, test_org, test_user):
     _create_donor(db, test_org.id, test_user.id)
 
     assert db.query(ZapierOutboundEvent).filter_by(organization_id=test_org.id).count() == 0
+
+
+def _capture_webhook(monkeypatch, zapier_handler):
+    sent: dict[str, object] = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, *, json, headers):
+            sent.update({"url": url, "json": json, "headers": headers})
+            return Response()
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", Client)
+    return sent
+
+
+@pytest.mark.asyncio
+async def test_donor_test_event_sends_a_meta_sample_through_the_donor_worker(
+    authed_client, db, test_org, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "sperm")
+    settings = _configure_reporting(
+        db, test_org.id, donor_type="sperm", pipeline=pipeline, stage=ready_stage
+    )
+    settings.outbound_webhook_secret_encrypted = zapier_settings_service.encrypt_secret(
+        "donor-test-secret"
+    )
+    db.commit()
+
+    response = await authed_client.post(
+        "/integrations/zapier/test-outbound/donor",
+        json={
+            "donor_type": "sperm",
+            "event_name": "Qualified",
+            "attribution_source": "meta",
+            "lead_id": "real-meta-lead-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "queued"
+    assert body["event_name"] == "Qualified"
+    assert body["lead_id"] == "real-meta-lead-1"
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter_by(organization_id=test_org.id, event_id=body["event_id"])
+        .one()
+    )
+    assert (event.source, event.status, event.donor_type) == ("test", "queued", "sperm")
+    assert event.attribution_source == "meta"
+    job = db.get(Job, event.job_id)
+    assert job.organization_id == test_org.id
+    assert job.payload["delivery_kind"] == "donor_test"
+    assert "headers" not in job.payload
+    assert "url" not in job.payload
+
+    sent = _capture_webhook(monkeypatch, zapier_handler)
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    payload = sent["json"]
+    assert sent["url"] == settings.outbound_webhook_url
+    assert sent["headers"] == {"X-Webhook-Token": "donor-test-secret"}
+    assert payload["test_mode"] is True
+    assert payload["record_type"] == "sperm_donor"
+    assert payload["event_name"] == "Qualified"
+    assert payload["attribution_source"] == "meta"
+    assert payload["lead_id"] == "real-meta-lead-1"
+    assert payload["fbc"]
+    assert set(payload["user_data"]) == {"email_hash", "phone_hash"}
+
+
+@pytest.mark.asyncio
+async def test_donor_test_event_sends_a_website_sample_without_a_lead_id(
+    authed_client, db, test_org, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    settings = _configure_reporting(
+        db, test_org.id, donor_type="egg", pipeline=pipeline, stage=ready_stage
+    )
+    settings.outbound_send_hashed_pii = False
+    db.commit()
+
+    response = await authed_client.post(
+        "/integrations/zapier/test-outbound/donor",
+        json={"donor_type": "egg", "event_name": "Lead", "attribution_source": "website"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["lead_id"] is None
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter_by(organization_id=test_org.id, event_id=response.json()["event_id"])
+        .one()
+    )
+    sent = _capture_webhook(monkeypatch, zapier_handler)
+    await zapier_handler.process_zapier_stage_event(db, db.get(Job, event.job_id))
+
+    payload = sent["json"]
+    assert payload["attribution_source"] == "website"
+    assert payload["record_type"] == "egg_donor"
+    assert payload["first_party_submission_id"]
+    assert payload["fbc"]
+    for absent in ("lead_id", "facebook_lead_id", "customer_email", "user_data"):
+        assert absent not in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("configure", "detail"),
+    [
+        ("no_webhook", "Outbound webhook URL not configured."),
+        ("donor_disabled", "Donor stage events are disabled."),
+    ],
+)
+async def test_donor_test_event_requires_donor_reporting_setup(
+    authed_client, db, test_org, configure, detail
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    settings = _configure_reporting(
+        db, test_org.id, donor_type="egg", pipeline=pipeline, stage=ready_stage
+    )
+    if configure == "no_webhook":
+        settings.outbound_webhook_url = None
+    else:
+        settings.donor_outbound_enabled = False
+    db.commit()
+
+    response = await authed_client.post(
+        "/integrations/zapier/test-outbound/donor",
+        json={"donor_type": "egg", "event_name": "Lead", "attribution_source": "meta"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == detail
+    assert db.query(ZapierOutboundEvent).filter_by(organization_id=test_org.id).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_donor_test_event_rejects_unsupported_event_names(authed_client, db, test_org):
+    response = await authed_client.post(
+        "/integrations/zapier/test-outbound/donor",
+        json={"donor_type": "egg", "event_name": "Purchase", "attribution_source": "meta"},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_donor_test_job_skips_when_donor_reporting_is_disabled_before_dispatch(
+    authed_client, db, test_org, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    settings = _configure_reporting(
+        db, test_org.id, donor_type="egg", pipeline=pipeline, stage=ready_stage
+    )
+    response = await authed_client.post(
+        "/integrations/zapier/test-outbound/donor",
+        json={"donor_type": "egg", "event_name": "Lead", "attribution_source": "meta"},
+    )
+    assert response.status_code == 200, response.text
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter_by(organization_id=test_org.id, event_id=response.json()["event_id"])
+        .one()
+    )
+    settings.donor_outbound_enabled = False
+    db.commit()
+
+    class UnexpectedClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("A disabled donor test must not be sent")
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", UnexpectedClient)
+    await zapier_handler.process_zapier_stage_event(db, db.get(Job, event.job_id))
+
+    db.refresh(event)
+    assert (event.status, event.reason) == ("skipped", "donor_dispatch_disabled")

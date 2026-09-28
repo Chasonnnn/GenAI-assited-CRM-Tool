@@ -170,6 +170,30 @@ def create_donor_event(
     )
 
 
+def create_donor_test_event(
+    db: Session,
+    *,
+    org_id: UUID,
+    event_id: str,
+    event_name: str,
+    lead_id: str | None,
+    donor_type: str,
+    attribution_source: str,
+) -> ZapierOutboundEvent:
+    """Create a donor sample-event record inside the caller-owned transaction."""
+    return _create_event_record(
+        db,
+        org_id=org_id,
+        source="test",
+        status="queued",
+        event_id=event_id,
+        event_name=event_name,
+        lead_id=lead_id,
+        donor_type=donor_type,
+        attribution_source=attribution_source,
+    )
+
+
 def record_skipped_event(
     *,
     org_id: UUID,

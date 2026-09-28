@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_csrf_header, require_permission
@@ -123,6 +123,20 @@ class ZapierOutboundTestResponse(BaseModel):
     event_name: str
     event_id: str
     lead_id: str
+
+
+class ZapierDonorOutboundTestRequest(BaseModel):
+    donor_type: Literal["egg", "sperm"]
+    event_name: Literal["Lead", "Qualified", "Converted", "Lost", "Not Qualified"]
+    attribution_source: Literal["meta", "website"] = "meta"
+    lead_id: str | None = Field(default=None, max_length=255)
+
+
+class ZapierDonorOutboundTestResponse(BaseModel):
+    status: str
+    event_name: str
+    event_id: str
+    lead_id: str | None = None
 
 
 class ZapierOutboundEventResponse(BaseModel):
@@ -611,6 +625,31 @@ def send_outbound_test(
         include_hashed_pii=settings.outbound_send_hashed_pii,
     )
     return ZapierOutboundTestResponse(status="queued", **result)
+
+
+@router.post("/test-outbound/donor", response_model=ZapierDonorOutboundTestResponse)
+def send_donor_outbound_test(
+    data: ZapierDonorOutboundTestRequest,
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
+):
+    _require_donor_view(db, session)
+    _require_donor_edit(db, session)
+    try:
+        result = zapier_outbound_service.enqueue_donor_test_event(
+            db,
+            session.org_id,
+            donor_type=data.donor_type,
+            event_name=data.event_name,
+            attribution_source=data.attribution_source,
+            lead_id=data.lead_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ZapierDonorOutboundTestResponse(status="queued", **result)
 
 
 @router.get("/events", response_model=ZapierOutboundEventsResponse)

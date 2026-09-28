@@ -89,7 +89,7 @@ def _filter_donor_payload(webhook_data: object, *, settings) -> dict:
     return filtered
 
 
-async def _process_donor_stage_event(db, job, payload: dict) -> None:
+def _load_donor_event(db, job, payload: dict) -> ZapierOutboundEvent:
     try:
         event_record_id = UUID(str(payload.get("event_record_id") or ""))
     except ValueError as exc:
@@ -108,16 +108,63 @@ async def _process_donor_stage_event(db, job, payload: dict) -> None:
     )
     if event is None:
         raise RuntimeError("Donor Zapier event is unavailable")
+    return event
+
+
+def _donor_delivery_settings(db, job):
+    """Return current delivery settings, or None after recording why delivery is skipped."""
+    settings = zapier_settings_service.get_settings(db, job.organization_id)
+    if settings is None or not settings.donor_outbound_enabled:
+        _skip_donor_delivery(db, job, "donor_dispatch_disabled")
+        return None
+    if not settings.outbound_webhook_url:
+        _skip_donor_delivery(db, job, "donor_dispatch_url_missing")
+        return None
+    return settings
+
+
+async def _post_donor_payload(settings, webhook_data: dict) -> None:
+    webhook_url = validate_outbound_webhook_url(settings.outbound_webhook_url)
+    headers: dict[str, str] = {}
+    secret = zapier_settings_service.decrypt_webhook_secret(
+        settings.outbound_webhook_secret_encrypted
+    )
+    if secret:
+        headers["X-Webhook-Token"] = secret
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(webhook_url, json=webhook_data, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(f"Zapier webhook returned HTTP {exc.response.status_code}") from exc
+    except httpx.RequestError as exc:
+        raise RuntimeError("Zapier webhook request failed") from exc
+
+
+async def _process_donor_test_event(db, job, payload: dict) -> None:
+    event = _load_donor_event(db, job, payload)
+    if event.source != "test" or event.donor_type is None:
+        raise RuntimeError("Donor Zapier test event is unavailable")
+    if event.status == "skipped":
+        return
+    settings = _donor_delivery_settings(db, job)
+    if settings is None:
+        return
+    await _post_donor_payload(
+        settings, _filter_donor_payload(payload.get("data"), settings=settings)
+    )
+    logger.info("Donor Zapier test event delivered for job %s", job.id)
+
+
+async def _process_donor_stage_event(db, job, payload: dict) -> None:
+    event = _load_donor_event(db, job, payload)
     if event.status == "skipped":
         # Withdrawn before dispatch, e.g. by an undo within the grace period.
         return
 
-    settings = zapier_settings_service.get_settings(db, job.organization_id)
-    if settings is None or not settings.donor_outbound_enabled:
-        _skip_donor_delivery(db, job, "donor_dispatch_disabled")
-        return
-    if not settings.outbound_webhook_url:
-        _skip_donor_delivery(db, job, "donor_dispatch_url_missing")
+    settings = _donor_delivery_settings(db, job)
+    if settings is None:
         return
     if (
         not event.donor_type
@@ -235,22 +282,7 @@ async def _process_donor_stage_event(db, job, payload: dict) -> None:
         _skip_donor_delivery(db, job, "missing_matching_data")
         return
 
-    webhook_url = validate_outbound_webhook_url(settings.outbound_webhook_url)
-    headers: dict[str, str] = {}
-    secret = zapier_settings_service.decrypt_webhook_secret(
-        settings.outbound_webhook_secret_encrypted
-    )
-    if secret:
-        headers["X-Webhook-Token"] = secret
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(webhook_url, json=webhook_data, headers=headers)
-            response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        raise RuntimeError(f"Zapier webhook returned HTTP {exc.response.status_code}") from exc
-    except httpx.RequestError as exc:
-        raise RuntimeError("Zapier webhook request failed") from exc
+    await _post_donor_payload(settings, webhook_data)
     logger.info("Donor Zapier stage event delivered for job %s", job.id)
 
 
@@ -261,6 +293,9 @@ async def process_zapier_stage_event(db, job) -> None:
 
     if payload.get("delivery_kind") == "donor_stage":
         await _process_donor_stage_event(db, job, payload)
+        return
+    if payload.get("delivery_kind") == "donor_test":
+        await _process_donor_test_event(db, job, payload)
         return
 
     webhook_url = payload.get("url")
