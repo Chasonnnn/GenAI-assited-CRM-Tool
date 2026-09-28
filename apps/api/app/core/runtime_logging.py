@@ -16,6 +16,10 @@ class _ExpectedWebSocketDisconnectFilter(logging.Filter):
             record.levelno = logging.INFO
             record.levelname = "INFO"
             record.event = "websocket_client_disconnect"
+            # Cloud Run recognizes standalone tracebacks as ERROR regardless
+            # of the preceding INFO line. Keep the event without its traceback.
+            record.exc_info = None
+            record.exc_text = None
         return True
 
 

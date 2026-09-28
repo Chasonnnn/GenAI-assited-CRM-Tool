@@ -6,6 +6,7 @@ locals {
     "artifactregistry.googleapis.com",
     "cloudbuild.googleapis.com",
     "logging.googleapis.com",
+    "clouderrorreporting.googleapis.com",
     "monitoring.googleapis.com",
     "iam.googleapis.com",
     "compute.googleapis.com",

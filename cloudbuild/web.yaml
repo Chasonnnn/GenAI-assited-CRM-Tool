@@ -1,24 +1,14 @@
 steps:
   - name: gcr.io/cloud-builders/docker
-    entrypoint: sh
-    args: ["-c", "docker pull $_IMAGE_WEB || true"]
-  - name: gcr.io/cloud-builders/docker
-    env: ["DOCKER_BUILDKIT=1"]
-    args:
-      - "build"
-      - "--build-arg"
-      - "BUILDKIT_INLINE_CACHE=1"
-      - "--build-arg"
+    id: build-web
+    entrypoint: bash
+    env:
+      - "DOCKER_BUILDKIT=1"
+      - "IMAGE_WEB=$_IMAGE_WEB"
       - "CACHE_BUST=$_CACHE_BUST"
-      - "--cache-from"
-      - "$_IMAGE_WEB"
-      - "-f"
-      - "apps/web/Dockerfile"
-      - "-t"
-      - "$_IMAGE_WEB"
-      - "--build-arg"
       - "NEXT_PUBLIC_API_BASE_URL=$_API_BASE_URL"
-      - "."
+      - "NEXT_DEPLOYMENT_ID=$BUILD_ID"
+    args: ["scripts/build_web_image.sh"]
   - name: gcr.io/cloud-builders/docker
     args: ["push", "$_IMAGE_WEB"]
   - name: gcr.io/cloud-builders/gcloud

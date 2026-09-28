@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.db.models import Donor, MetaLead, Organization, Surrogate
@@ -646,22 +647,26 @@ def process_zapier_payload(
 
 
 class ZapierWebhookHandler:
-    async def handle(self, request: Request, db: Session, **kwargs) -> dict:
-        webhook_id = kwargs.get("webhook_id")
-        if not webhook_id:
-            raise HTTPException(status_code=400, detail="Missing webhook_id")
-
+    def _authenticate(self, db: Session, webhook_id: str, token: str | None) -> uuid.UUID:
         inbound = zapier_settings_service.get_inbound_webhook_by_id(db, webhook_id)
         if not inbound or not inbound.is_active:
             raise HTTPException(status_code=404, detail="Webhook not found")
 
-        token = request.headers.get("X-Webhook-Token") or request.query_params.get("token")
         if not token:
             raise HTTPException(status_code=401, detail="Missing webhook token")
 
         secret = zapier_settings_service.decrypt_webhook_secret(inbound.webhook_secret_encrypted)
         if not secret or not hmac.compare_digest(token, secret):
             raise HTTPException(status_code=401, detail="Invalid webhook token")
+        return inbound.organization_id
+
+    async def handle(self, request: Request, db: Session, **kwargs) -> dict:
+        webhook_id = kwargs.get("webhook_id")
+        if not webhook_id:
+            raise HTTPException(status_code=400, detail="Missing webhook_id")
+
+        token = request.headers.get("X-Webhook-Token") or request.query_params.get("token")
+        org_id = await run_in_threadpool(self._authenticate, db, webhook_id, token)
 
         content_length = request.headers.get("content-length")
         if content_length:
@@ -695,6 +700,13 @@ class ZapierWebhookHandler:
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid payload")
 
+        # Processing can create a Google-synced review task. Keep synchronous
+        # SQL and the sync-to-async provider bridge off the request event loop.
+        return await run_in_threadpool(self._process_payload, db, org_id, webhook_id, payload)
+
+    def _process_payload(
+        self, db: Session, org_id: uuid.UUID, webhook_id: str, payload: Any
+    ) -> dict:
         if isinstance(payload, dict) and isinstance(payload.get("data"), list):
             payload = payload["data"]
         elif isinstance(payload, dict) and isinstance(payload.get("lead"), list):
@@ -716,7 +728,7 @@ class ZapierWebhookHandler:
                 results.append(
                     process_zapier_payload(
                         db,
-                        inbound.organization_id,
+                        org_id,
                         normalized,
                         raw_payload=item if isinstance(item, (dict, list)) else payload,
                     )
@@ -729,11 +741,11 @@ class ZapierWebhookHandler:
             normalized = _normalize_payload(payload)
             result = process_zapier_payload(
                 db,
-                inbound.organization_id,
+                org_id,
                 normalized,
                 raw_payload=payload if isinstance(payload, (dict, list)) else None,
             )
 
-        logger.info("Zapier lead ingested for org=%s", inbound.organization_id)
+        logger.info("Zapier lead ingested for org=%s", org_id)
 
         return result

@@ -28,6 +28,18 @@ resource "google_project_iam_member" "worker_logging" {
   member  = "serviceAccount:${google_service_account.worker.email}"
 }
 
+resource "google_project_iam_member" "api_error_reporting" {
+  project = var.project_id
+  role    = "roles/errorreporting.writer"
+  member  = "serviceAccount:${google_service_account.api.email}"
+}
+
+resource "google_project_iam_member" "worker_error_reporting" {
+  project = var.project_id
+  role    = "roles/errorreporting.writer"
+  member  = "serviceAccount:${google_service_account.worker.email}"
+}
+
 resource "google_project_iam_member" "cloudbuild_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
