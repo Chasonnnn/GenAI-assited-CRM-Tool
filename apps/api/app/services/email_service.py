@@ -1077,7 +1077,7 @@ def build_intended_parent_template_variables(
     return {
         **_build_record_contact_template_variables(db, intended_parent, org),
         "intended_parent_number": intended_parent.intended_parent_number or "",
-        "status_label": humanize_identifier(intended_parent.status),
+        "status_label": intended_parent.status_label,
     }
 
 
