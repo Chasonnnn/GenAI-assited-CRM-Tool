@@ -35,6 +35,7 @@ export interface MetaFormMappingPreview {
     sample_rows: Array<Record<string, string>>
     has_live_leads: boolean
     available_fields: string[]
+    available_fields_by_lead_kind: Record<MetaLeadKind, string[]>
     ai_available: boolean
     unsupported_mapped_fields?: string[]
     mapping_rules: ColumnMappingItem[] | null
@@ -60,6 +61,7 @@ export interface MetaFormUnconvertedLead {
     is_converted: boolean
     reprocess_eligible: boolean
     reprocess_block_reason: string | null
+    lead_kind: MetaLeadKind | null
 }
 
 export interface MetaFormUnconvertedLeadsResponse {
@@ -75,6 +77,14 @@ export interface MetaFormReconvertResponse {
     blocked_count: number
     blocked_reasons: Record<string, number>
     message?: string
+}
+
+export interface MetaLeadRerouteResponse {
+    success: boolean
+    lead_kind: MetaLeadKind
+    queued: boolean
+    reprocess_block_reason: string | null
+    message: string
 }
 
 export async function listMetaForms(): Promise<MetaFormSummary[]> {
@@ -111,6 +121,17 @@ export async function reconvertMetaFormLeads(
     formId: string
 ): Promise<MetaFormReconvertResponse> {
     return api.post<MetaFormReconvertResponse>(`/integrations/meta/forms/${formId}/reconvert`, {})
+}
+
+export async function rerouteMetaFormLead(
+    formId: string,
+    leadId: string,
+    leadKind: MetaLeadKind
+): Promise<MetaLeadRerouteResponse> {
+    return api.post<MetaLeadRerouteResponse>(
+        `/integrations/meta/forms/${formId}/leads/${leadId}/reroute`,
+        { lead_kind: leadKind }
+    )
 }
 
 export async function deleteMetaForm(formId: string): Promise<void> {
