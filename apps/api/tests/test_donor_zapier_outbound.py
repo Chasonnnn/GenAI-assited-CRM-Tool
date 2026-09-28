@@ -791,6 +791,34 @@ def test_website_donor_prefers_an_earlier_ad_click_over_a_later_plain_visit(
         assert payload["fbc"] == "fb.1.1.ad-click"
 
 
+@pytest.mark.parametrize(
+    "later_fields",
+    [
+        {"source": "google", "medium": "cpc", "campaign": "donors"},
+        {"campaign_id": "campaign-1"},
+        {"ad_id": "ad-1", "adset_id": "adset-1"},
+        {"fbclid": "later-click"},
+    ],
+    ids=lambda fields: next(iter(fields)),
+)
+def test_website_donor_prefers_an_earlier_matchable_click_over_a_later_tagged_visit(
+    db, test_org, test_user, later_fields
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    now = datetime.now(UTC)
+    clicked = _hosted_submission(
+        db, test_org.id, donor, submitted_at=now - timedelta(days=2), fbc="fb.1.1.ad-click"
+    )
+    _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=1), **later_fields)
+
+    event = _website_stage_event(db, test_org, test_user, donor, pipeline, ready_stage)
+
+    assert event.first_party_submission_id == clicked.id
+    payload = db.get(Job, event.job_id).payload["data"]
+    assert payload["fbc"] == "fb.1.1.ad-click"
+
+
 def test_website_donor_without_attribution_uses_latest_submission(db, test_org, test_user):
     pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
     donor = _create_donor(db, test_org.id, test_user.id)

@@ -44,10 +44,11 @@ PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid"
 SURROGATE_RECORD_TYPE = "surrogate"
 # A donor event in these states was sent or will be; later occurrences are duplicates.
 DONOR_REPORTED_EVENT_STATUSES = ("queued", "delivered", "failed")
+# Browser ids that let Meta match a website event; they rank above other ad fields.
+MATCHABLE_ATTRIBUTION_COLUMNS = (LeadAttribution.fbc, LeadAttribution.fbp)
 # Click and campaign fields; source, medium and campaign hold the utm_* values.
 AD_ATTRIBUTION_COLUMNS = (
-    LeadAttribution.fbc,
-    LeadAttribution.fbp,
+    *MATCHABLE_ATTRIBUTION_COLUMNS,
     LeadAttribution.fbclid,
     LeadAttribution.ad_id,
     LeadAttribution.adset_id,
@@ -574,13 +575,25 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
         IntakeLead.promoted_donor_id == donor.id,
     )
     # The hosted page records landing_url on every submit, so a row alone is not ad data.
+    has_matchable_data = or_(*(column != "" for column in MATCHABLE_ATTRIBUTION_COLUMNS))
     has_ad_data = or_(*(column != "" for column in AD_ATTRIBUTION_COLUMNS))
-    has_ad_attribution = exists().where(
-        LeadAttribution.organization_id == donor.organization_id,
-        LeadAttribution.form_submission_id == FormSubmission.id,
-        has_ad_data,
+
+    def submission_has(condition):
+        return exists().where(
+            LeadAttribution.organization_id == donor.organization_id,
+            LeadAttribution.form_submission_id == FormSubmission.id,
+            condition,
+        )
+
+    # Only fbc or fbp can satisfy website matching, so a later UTM-only visit must not hide
+    # an earlier click. Prefer the latest submission with fbc or fbp, then with other ad
+    # data, then the latest submission.
+    submission_rank = case(
+        (submission_has(has_matchable_data), 0),
+        (submission_has(has_ad_data), 1),
+        else_=2,
     )
-    # Prefer the latest submission that carries ad attribution; else the latest submission.
+    attribution_rank = case((has_matchable_data, 0), (has_ad_data, 1), else_=2)
     submission = (
         db.query(FormSubmission)
         .filter(
@@ -591,7 +604,7 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
             ),
         )
         .order_by(
-            case((has_ad_attribution, 0), else_=1),
+            submission_rank,
             FormSubmission.submitted_at.desc(),
             FormSubmission.id.desc(),
         )
@@ -606,7 +619,7 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
             LeadAttribution.organization_id == donor.organization_id,
             LeadAttribution.form_submission_id == submission.id,
         )
-        .order_by(case((has_ad_data, 0), else_=1), LeadAttribution.created_at.desc())
+        .order_by(attribution_rank, LeadAttribution.created_at.desc())
         .first()
     )
     fields: dict[str, str | None] = {}
