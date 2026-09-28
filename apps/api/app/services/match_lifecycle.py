@@ -130,9 +130,10 @@ def require_expansion() -> None:
     """Fence new match data until all application readers support it.
 
     Gated while disabled: donor proposals, repeat surrogate/IP proposals, donor
-    accept, complete, attempt writes, match work writes, and donor or match
-    links on appointments. Surrogate propose, accept, decline,
-    cancellation requests and their resolution, notes, and reads stay open.
+    accept, complete, attempt writes, and donor links on appointments.
+    Surrogate propose, accept, decline, cancellation requests and their
+    resolution, match notes, files and tasks, match links on appointments,
+    and reads stay open.
     """
     if not expansion_enabled():
         raise HTTPException(

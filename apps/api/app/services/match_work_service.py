@@ -49,7 +49,6 @@ def validate_context(
     if write:
         from app.services import match_lifecycle
 
-        match_lifecycle.require_expansion()
         match = match_lifecycle.lock_match(db, match)
     if write and match.status in {"completed", "cancelled", "declined", "cancellation_pending"}:
         raise HTTPException(status_code=409, detail="This match is not open for new work")

@@ -2451,7 +2451,7 @@ def update_record_links(
 
 
 def _validate_new_record_context(db, org_id, links):
-    if links.get("donor_id") or links.get("match_id") or links.get("attempt_id"):
+    if links.get("donor_id"):
         from app.services import match_lifecycle
 
         match_lifecycle.require_expansion()
