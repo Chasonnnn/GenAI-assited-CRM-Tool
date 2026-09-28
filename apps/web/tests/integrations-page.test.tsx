@@ -75,7 +75,8 @@ const createZapierSettingsData = () => ({
         { stage_key: 'matched', event_name: 'ConvertedLead', enabled: true, bucket: null },
     ],
     donor_outbound_enabled: false,
-    donor_event_mapping: [],
+    // Null until the first donor mapping save.
+    donor_event_mapping: null,
 })
 
 const recommendedZapierMapping = [
@@ -2519,6 +2520,56 @@ describe('IntegrationsPage', () => {
         })
 
         expect(mockZapierOutboundUpdate.mock.calls[0]?.[0].donor_event_mapping).toEqual([savedItem])
+    })
+
+    it('keeps every donor stage Not Tracked after that mapping is saved and reloaded', async () => {
+        const donorStages = [
+            ['Egg donors', 'Egg donor', 'Egg Donor Pipeline', 'New inquiry'],
+            ['Egg donors', 'Egg donor', 'Egg Donor Pipeline', 'Ready to match'],
+            ['Sperm donors', 'Sperm donor', 'Sperm Donor Pipeline', 'New inquiry'],
+        ] as const
+        mockZapierOutboundUpdate.mockResolvedValue({})
+        const { rerender } = render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        let dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
+        fireEvent.click(within(dialog).getByLabelText('Enable donor stage events'))
+        for (const [tab, donorLabel, , stageLabel] of donorStages) {
+            fireEvent.click(within(dialog).getByRole('tab', { name: tab }))
+            fireEvent.click(within(dialog).getByLabelText(`Zapier event for ${donorLabel} ${stageLabel}`))
+            // Closed popups can stay mounted; the open one is the latest.
+            const notTracked = screen.getAllByRole('option', { name: 'Not Tracked' }).at(-1)!
+            fireEvent.mouseMove(notTracked)
+            fireEvent.click(notTracked)
+        }
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+        expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).toMatchObject({
+            donor_outbound_enabled: true,
+            donor_event_mapping: [],
+        })
+
+        zapierSettingsData = {
+            ...zapierSettingsData,
+            donor_outbound_enabled: true,
+            donor_event_mapping: [],
+        }
+        rerender(<IntegrationsPage />)
+        dialog = screen.getByRole('dialog')
+        for (const [tab, donorLabel, pipelineName, stageLabel] of donorStages) {
+            fireEvent.click(within(dialog).getByRole('tab', { name: tab }))
+            expect(
+                within(dialog).getByLabelText(`Zapier event for ${donorLabel} ${stageLabel}`),
+            ).toHaveTextContent('Not Tracked')
+            expect(
+                within(dialog).getByLabelText(`Enable ${donorLabel} ${pipelineName} ${stageLabel}`),
+            ).not.toBeChecked()
+        }
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+        expect(mockZapierOutboundUpdate.mock.calls[1]?.[0].donor_event_mapping).toEqual([])
     })
 
     it('passes a real lead id to the outbound zapier test action', async () => {

@@ -166,7 +166,7 @@ async def test_donor_reporting_defaults_off_and_validates_exact_pipeline_mapping
     initial = await authed_client.get("/integrations/zapier/settings")
     assert initial.status_code == 200
     assert initial.json()["donor_outbound_enabled"] is False
-    assert initial.json()["donor_event_mapping"] == []
+    assert initial.json()["donor_event_mapping"] is None
 
     payload = {
         "donor_outbound_enabled": True,
@@ -211,6 +211,30 @@ async def test_donor_reporting_defaults_off_and_validates_exact_pipeline_mapping
         },
     )
     assert unsupported.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_saved_mapping_without_tracked_donor_stages_stays_saved(authed_client, db, test_org):
+    _seed_donor_pipeline(db, test_org.id, "egg")
+    db.commit()
+    settings_url = "/integrations/zapier/settings"
+
+    never_saved = await authed_client.get(settings_url)
+    saved = await authed_client.post(
+        f"{settings_url}/outbound",
+        json={"donor_outbound_enabled": True, "donor_event_mapping": []},
+    )
+    unrelated = await authed_client.post(f"{settings_url}/outbound", json={"send_hashed_pii": True})
+    reloaded = await authed_client.get(settings_url)
+
+    assert never_saved.json()["donor_event_mapping"] is None
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["donor_event_mapping"] == []
+    assert unrelated.status_code == 200, unrelated.text
+    assert reloaded.json()["donor_event_mapping"] == []
+    settings = zapier_settings_service.get_settings(db, test_org.id)
+    db.refresh(settings)
+    assert settings.donor_outbound_event_mapping == []
 
 
 @pytest.mark.asyncio

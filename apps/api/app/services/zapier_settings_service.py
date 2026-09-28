@@ -373,7 +373,8 @@ def get_or_create_settings(
             outbound_send_hashed_pii=False,
             outbound_event_mapping=build_default_event_mapping(db, organization_id),
             donor_outbound_enabled=False,
-            donor_outbound_event_mapping=[],
+            # None until the first donor mapping save; a saved mapping may be empty.
+            donor_outbound_event_mapping=None,
         )
         db.add(settings_row)
         db.commit()

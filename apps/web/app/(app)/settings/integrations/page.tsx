@@ -411,8 +411,9 @@ function buildDonorEventMapping(
         ]),
     )
     const result: ZapierDonorMappingDraftItem[] = []
-    // Unsaved stages start from the suggestion only before any donor mapping is saved.
-    const suggest = !savedMapping?.length
+    // Unsaved stages start from the suggestion only before the first donor mapping save.
+    // A saved mapping can be empty when every stage is Not Tracked.
+    const suggest = savedMapping == null
 
     for (const donorType of DONOR_TYPES) {
         for (const pipeline of pipelinesByType[donorType] ?? []) {
@@ -1073,7 +1074,7 @@ function createZapierOutboundDraftKey(
         settings?.send_hashed_pii ? "1" : "0",
         JSON.stringify(settings?.event_mapping ?? []),
         settings?.donor_outbound_enabled ? "1" : "0",
-        JSON.stringify(settings?.donor_event_mapping ?? []),
+        JSON.stringify(settings?.donor_event_mapping ?? null),
         stageKey,
         ...DONOR_TYPES.map((donorType) =>
             (donorPipelinesByType[donorType] ?? [])

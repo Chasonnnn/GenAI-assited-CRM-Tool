@@ -32,7 +32,8 @@ interface ZapierSettings {
     send_hashed_pii: boolean;
     event_mapping: ZapierEventMappingItem[];
     donor_outbound_enabled?: boolean;
-    donor_event_mapping?: ZapierDonorEventMappingItem[];
+    // Null until the first donor mapping save.
+    donor_event_mapping?: ZapierDonorEventMappingItem[] | null;
 }
 
 interface ZapierInboundWebhook {

@@ -771,7 +771,11 @@ def _serialize_settings(
     if include_donor_settings:
         response_data.update(
             donor_outbound_enabled=bool(settings.donor_outbound_enabled),
-            donor_event_mapping=list(settings.donor_outbound_event_mapping or []),
+            donor_event_mapping=(
+                None
+                if settings.donor_outbound_event_mapping is None
+                else list(settings.donor_outbound_event_mapping)
+            ),
         )
     return ZapierSettingsResponse(**response_data)
 
