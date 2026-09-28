@@ -59,6 +59,11 @@ def generate_synthetic_meta_lead_id() -> str:
     return f"{GENERATED_META_LEAD_ID_PREFIX}{uuid4()}"
 
 
+def _is_zapier_test_lead(meta_lead: MetaLead) -> bool:
+    """True for leads from the Zapier "Send test lead" action; they must not reach staff queues."""
+    return (meta_lead.field_data_raw or {}).get("zapier_test") is True
+
+
 def _safe_conversion_error(error: Exception) -> str:
     """Return diagnostic context that cannot serialize lead or SQL parameters."""
     error_class = type(error).__name__
@@ -460,6 +465,7 @@ def convert_to_surrogate_with_mapping(
     organization_id = meta_lead.organization_id
     external_meta_lead_id = meta_lead.meta_lead_id
     meta_form_id = meta_lead.meta_form_id
+    is_test_lead = _is_zapier_test_lead(meta_lead)
 
     try:
         surrogate_data, dropped_invalid_fields = _validate_surrogate_row_lenient(row_data)
@@ -519,7 +525,7 @@ def convert_to_surrogate_with_mapping(
             organization_id=organization_id,
             external_meta_lead_id=external_meta_lead_id,
             unmapped_fields=unmapped_fields,
-            emit_alert=True,
+            emit_alert=not is_test_lead,
         )
         _ensure_review_task_for_mapping_conversion_failure(db, organization_id, meta_form_id, e)
         return None, f"Conversion failed: {_safe_conversion_error(e)}"
@@ -555,18 +561,21 @@ def convert_to_donor_with_mapping(
     if not email or "@" not in email:
         email = f"meta-{meta_lead.meta_lead_id[:16]}@placeholder.invalid"
 
+    is_test_lead = _is_zapier_test_lead(meta_lead)
     existing_donor = donor_service.get_active_donor_by_email(db, meta_lead.organization_id, email)
     if existing_donor:
         error = donor_service.DonorConflictError("An active donor with this email already exists")
         meta_lead.conversion_error = str(error)
         meta_lead.unmapped_fields = unmapped_fields or None
         # Surrogate conversion failures raise an alert; a duplicate donor also needs a
-        # person to decide whether the lead is a returning donor.
-        _record_conversion_failure_alert_in_session(
-            db, meta_lead, error, reason="active_donor_email"
-        )
+        # person to decide whether the lead is a returning donor. Test leads need neither.
+        if not is_test_lead:
+            _record_conversion_failure_alert_in_session(
+                db, meta_lead, error, reason="active_donor_email"
+            )
         db.commit()
-        _ensure_duplicate_donor_review_task(db, meta_lead, existing_donor)
+        if not is_test_lead:
+            _ensure_duplicate_donor_review_task(db, meta_lead, existing_donor)
         return None, f"Conversion failed: {error}"
 
     identity = sa_inspect(meta_lead).identity
@@ -609,7 +618,8 @@ def convert_to_donor_with_mapping(
         meta_lead.converted_at = datetime.now(UTC)
         meta_lead.conversion_error = None
         meta_lead.unmapped_fields = unmapped_fields or None
-        zapier_outbound_service.enqueue_donor_created_event(db, donor=donor)
+        if not is_test_lead:
+            zapier_outbound_service.enqueue_donor_created_event(db, donor=donor)
         db.commit()
         db.refresh(donor)
     except Exception as exc:
@@ -620,7 +630,7 @@ def convert_to_donor_with_mapping(
             organization_id=organization_id,
             external_meta_lead_id=external_meta_lead_id,
             unmapped_fields=unmapped_fields,
-            emit_alert=True,
+            emit_alert=not is_test_lead,
         )
         _ensure_review_task_for_mapping_conversion_failure(db, organization_id, meta_form_id, exc)
         return None, f"Conversion failed: {_safe_conversion_error(exc)}"

@@ -529,7 +529,8 @@ def build_test_payload(form_id: str | None, fields: dict[str, Any] | None = None
     created_time = datetime.now(UTC).isoformat()
     base_fields: dict[str, Any] = {
         "full_name": "Zapier Test Lead",
-        "email": "zapier-test@example.com",
+        # A fresh address per run keeps repeat tests from colliding with the last test record.
+        "email": f"zapier-test+{uuid.uuid4().hex[:8]}@example.com",
         "phone_number": "+15551234567",
         "state": "CA",
         "created_time": created_time,

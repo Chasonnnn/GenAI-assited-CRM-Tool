@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -671,6 +671,167 @@ async def test_zapier_test_endpoint_creates_test_lead(authed_client, db, test_or
     surrogate = db.get(Surrogate, body["surrogate_id"])
     assert surrogate is not None
     assert surrogate.import_metadata.get("zapier_test") is True
+
+
+def _zapier_test_side_effects(db, org_id):
+    from app.db.enums import AlertType
+    from app.db.models import SystemAlert, Task, ZapierOutboundEvent
+
+    alerts = (
+        db.query(SystemAlert)
+        .filter(
+            SystemAlert.organization_id == org_id,
+            SystemAlert.alert_type == AlertType.META_CONVERT_FAILED.value,
+        )
+        .count()
+    )
+    tasks = db.query(Task).filter(Task.organization_id == org_id).count()
+    outbound = (
+        db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.organization_id == org_id).count()
+    )
+    return alerts, tasks, outbound
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lead_kind", ["surrogate", "egg_donor"])
+async def test_zapier_test_lead_converts_on_every_run(
+    authed_client, db, test_org, test_user, monkeypatch, lead_kind
+):
+    from app.db.models import Donor, Surrogate
+    from app.services import zapier_outbound_service
+
+    outbound_calls = []
+    monkeypatch.setattr(
+        zapier_outbound_service,
+        "enqueue_donor_created_event",
+        lambda _db, *, donor: outbound_calls.append(donor.id),
+    )
+    _create_mapped_meta_form(
+        db, test_org.id, test_user.id, form_external_id="form_repeat", lead_kind=lead_kind
+    )
+
+    bodies = []
+    for _ in range(2):
+        res = await authed_client.post(
+            "/integrations/zapier/test-lead", json={"form_id": "form_repeat"}
+        )
+        assert res.status_code == 200, res.text
+        bodies.append(res.json())
+
+    assert [body["status"] for body in bodies] == ["converted", "converted"]
+    if lead_kind == "surrogate":
+        emails = [db.get(Surrogate, body["surrogate_id"]).email for body in bodies]
+    else:
+        emails = [db.get(Donor, body["donor_id"]).email for body in bodies]
+    assert len(set(emails)) == 2
+    assert all(
+        email.startswith("zapier-test+") and email.endswith("@example.com") for email in emails
+    )
+    assert outbound_calls == []
+    assert _zapier_test_side_effects(db, test_org.id) == (0, 0, 0)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_donor_zapier_test_lead_raises_no_alert_or_review_task(
+    authed_client, db, test_org, test_user
+):
+    from app.schemas.donor import DonorCreate
+    from app.services import donor_service
+
+    email = "taken-by-test@example.com"
+    donor_service.create_donor(
+        db,
+        test_org.id,
+        test_user.id,
+        DonorCreate(donor_type="egg", full_name="Existing Donor", email=email),
+    )
+    _create_mapped_meta_form(
+        db, test_org.id, test_user.id, form_external_id="form_taken", lead_kind="egg_donor"
+    )
+
+    res = await authed_client.post(
+        "/integrations/zapier/test-lead",
+        json={"form_id": "form_taken", "fields": {"email": email}},
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "convert_failed"
+    assert _zapier_test_side_effects(db, test_org.id) == (0, 0, 0)
+
+
+@pytest.mark.parametrize("zapier_test", [True, False], ids=["test-lead", "real-lead"])
+def test_surrogate_conversion_failure_alerts_only_for_real_leads(
+    db, test_org, monkeypatch, zapier_test
+):
+    from app.services import meta_lead_service, surrogate_service
+    from tests.test_meta_donor_routing import _lead, _mapped_form
+
+    form = _mapped_form(db, test_org.id, external_id=f"fail-{zapier_test}")
+    lead = _lead(
+        db,
+        test_org.id,
+        external_id=f"zapier-test-{uuid4()}" if zapier_test else "987654321",
+        form_external_id=form.form_external_id,
+        email="fails@example.com",
+    )
+    lead.field_data_raw = {**lead.field_data_raw, "zapier_test": zapier_test}
+    db.commit()
+    failures = []
+
+    def _create_fails(*_args, **_kwargs):
+        raise RuntimeError("create failed")
+
+    monkeypatch.setattr(surrogate_service, "create_surrogate", _create_fails)
+    # Record the failure instead of rolling back, which would discard the test transaction.
+    monkeypatch.setattr(
+        meta_lead_service,
+        "_mark_conversion_failed",
+        lambda _db, _error, **kwargs: failures.append(kwargs["emit_alert"]),
+    )
+
+    surrogate, error = meta_lead_service.convert_to_surrogate_with_mapping(
+        db, lead, form.mapping_rules
+    )
+
+    assert surrogate is None
+    assert error
+    assert failures == [not zapier_test]
+
+
+@pytest.mark.asyncio
+async def test_real_zapier_donor_lead_still_queues_the_donor_created_event(
+    client, db, test_org, test_user, monkeypatch
+):
+    from app.services import zapier_outbound_service, zapier_settings_service
+
+    outbound_calls = []
+    monkeypatch.setattr(
+        zapier_outbound_service,
+        "enqueue_donor_created_event",
+        lambda _db, *, donor: outbound_calls.append(donor.id),
+    )
+    _create_mapped_meta_form(
+        db, test_org.id, test_user.id, form_external_id="form_real_donor", lead_kind="egg_donor"
+    )
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    secret = zapier_settings_service.decrypt_webhook_secret(settings.webhook_secret_encrypted)
+
+    res = await client.post(
+        f"/webhooks/zapier/{settings.webhook_id}",
+        json={
+            "lead_id": "123456789",
+            "form_id": "form_real_donor",
+            "field_data": [
+                {"name": "full_name", "values": ["Real Donor"]},
+                {"name": "email", "values": ["real-donor@example.com"]},
+            ],
+        },
+        headers={"X-Webhook-Token": secret},
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["donor_id"]
+    assert outbound_calls == [UUID(res.json()["donor_id"])]
 
 
 @pytest.mark.asyncio
