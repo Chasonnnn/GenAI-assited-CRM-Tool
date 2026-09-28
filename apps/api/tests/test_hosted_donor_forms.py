@@ -215,9 +215,7 @@ async def test_deleting_donor_form_schedules_durable_uploaded_photo_erasure(
     assert submit.status_code == 200, submit.text
     submission_id = uuid.UUID(submit.json()["id"])
     uploaded_file = (
-        db.query(FormSubmissionFile)
-        .filter(FormSubmissionFile.submission_id == submission_id)
-        .one()
+        db.query(FormSubmissionFile).filter(FormSubmissionFile.submission_id == submission_id).one()
     )
     uploaded_file_id = uploaded_file.id
     storage_key = uploaded_file.storage_key
@@ -396,9 +394,7 @@ async def test_hosted_donor_form_promotes_exact_subtype_with_clean_profile_photo
 
     submissions = await authed_client.get(f"/forms/{form_id}/submissions")
     assert submissions.status_code == 200, submissions.text
-    linked_submission = next(
-        item for item in submissions.json() if item["id"] == submission_id
-    )
+    linked_submission = next(item for item in submissions.json() if item["id"] == submission_id)
     assert linked_submission["donor_id"] == donor_id
     assert linked_submission["donor_number"] == donor.donor_number
 
@@ -443,9 +439,7 @@ async def test_republishing_donor_form_advances_link_version_and_subtype(
     )
     assert second_link_create.status_code == 200, second_link_create.text
     second_slug = second_link_create.json()["slug"]
-    second_link_first_version_id = uuid.UUID(
-        second_link_create.json()["published_version_id"]
-    )
+    second_link_first_version_id = uuid.UUID(second_link_create.json()["published_version_id"])
 
     sperm_schema = {
         "pages": [
@@ -519,8 +513,7 @@ async def test_republishing_donor_form_advances_link_version_and_subtype(
     assert second_version.lead_kind_snapshot == "sperm_donor"
     assert second_version.version == first_version_number + 1
     assert {
-        item["surrogate_field"]: item["field_key"]
-        for item in second_version.mapping_snapshot_json
+        item["surrogate_field"]: item["field_key"] for item in second_version.mapping_snapshot_json
     } == {
         "full_name": "sperm_name",
         "email": "sperm_email",
