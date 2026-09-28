@@ -371,6 +371,54 @@ describe("FormBuilderPage autosave", () => {
         expect(screen.getByText(/^Saved /)).toBeInTheDocument()
     })
 
+    it("autosaves a failed draft again after it is edited away and back", async () => {
+        render(<FormBuilderPage />)
+        await advance(10)
+        editTitle("Apply now")
+        await advance(1200)
+        await advance(10)
+        updates[0].fail()
+        await advance(10)
+
+        editTitle("Apply now!")
+        await advance(500)
+        editTitle("Apply now")
+        await advance(1200)
+        await advance(10)
+
+        expect(updates.map((update) => update.title)).toEqual(["Apply now", "Apply now"])
+    })
+
+    it("keeps a form created while the builder is hidden and redirects when it is shown", async () => {
+        navigationState.formId = "new"
+        const view = render(renderBuilder())
+        await advance(10)
+        fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Published Intake" } })
+        fireEvent.click(saveButton())
+        await advance(10)
+        expect(creates).toHaveLength(1)
+
+        view.rerender(renderBuilder("hidden"))
+        await advance(10)
+        creates[0].finish()
+        await advance(10)
+        expect(routerReplace).not.toHaveBeenCalled()
+
+        view.rerender(renderBuilder())
+        await advance(10)
+        expect(routerReplace.mock.calls).toEqual([["/automation/forms/form-new"]])
+
+        fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Published Intake v2" } })
+        fireEvent.click(saveButton())
+        await advance(10)
+        await settleStartedUpdates()
+        await advance(10)
+
+        expect(api.createForm).toHaveBeenCalledTimes(1)
+        expect(updates.map((update) => update.formId)).toEqual(["form-new"])
+        expect(routerReplace).toHaveBeenCalledTimes(1)
+    })
+
     it("clears Save when the builder is hidden and shown again during the save", async () => {
         const view = render(renderBuilder())
         await advance(10)

@@ -581,6 +581,80 @@ describe("PlatformFormTemplatePage", () => {
             ])
         })
 
+        it("autosaves a failed draft again after it is edited away and back", async () => {
+            mockUpdate.mockImplementation(() =>
+                new Promise((_resolve, reject) => {
+                    setTimeout(() => reject(new Error("Template changed since it was loaded")), 300)
+                }))
+            render(<PlatformFormTemplatePage />)
+            fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed once" } })
+            await advance(1200)
+            await advance(400)
+            expect(mockUpdate).toHaveBeenCalledTimes(1)
+
+            fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed twice" } })
+            await advance(500)
+            fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed once" } })
+            await advance(1200)
+            await advance(400)
+
+            expect(mockUpdate.mock.calls.map(([{ payload }]) => payload.name)).toEqual([
+                "Renamed once",
+                "Renamed once",
+            ])
+        })
+
+        it("keeps a template created while the builder is hidden and redirects when it is shown", async () => {
+            navigationState.templateId = "new"
+            mockTemplateData = undefined as unknown as typeof mockTemplateData
+            const creates: Array<{ finish: () => void }> = []
+            mockCreate.mockImplementation((payload: { name: string }) =>
+                new Promise((resolve) => {
+                    creates.push({
+                        finish: () =>
+                            resolve({
+                                ...buildTemplateData("tpl-form-new", payload.name),
+                                current_version: 1,
+                            }),
+                    })
+                }))
+            mockUpdate.mockImplementation(async ({ id, payload }: { id: string; payload: { name: string } }) => ({
+                ...buildTemplateData(id, payload.name),
+                current_version: 2,
+            }))
+            const renderBuilder = (mode: "visible" | "hidden") => (
+                <Activity mode={mode}>
+                    <PlatformFormTemplatePage />
+                </Activity>
+            )
+            const view = render(renderBuilder("visible"))
+            fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "New intake" } })
+            fireEvent.click(saveButton())
+            await advance(10)
+            expect(creates).toHaveLength(1)
+
+            view.rerender(renderBuilder("hidden"))
+            await advance(10)
+            creates[0].finish()
+            await advance(10)
+            expect(routerReplace).not.toHaveBeenCalled()
+
+            view.rerender(renderBuilder("visible"))
+            await advance(10)
+            expect(routerReplace.mock.calls).toEqual([["/ops/templates/forms/tpl-form-new"]])
+
+            fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "New intake v2" } })
+            fireEvent.click(saveButton())
+            await advance(10)
+
+            expect(mockCreate).toHaveBeenCalledTimes(1)
+            expect(mockUpdate).toHaveBeenCalledWith({
+                id: "tpl-form-new",
+                payload: expect.objectContaining({ name: "New intake v2", expected_version: 1 }),
+            })
+            expect(routerReplace).toHaveBeenCalledTimes(1)
+        })
+
         it("clears Save when the builder is hidden and shown again during the save", async () => {
             const saves = deferred(mockUpdate)
             const renderBuilder = (mode: "visible" | "hidden") => (

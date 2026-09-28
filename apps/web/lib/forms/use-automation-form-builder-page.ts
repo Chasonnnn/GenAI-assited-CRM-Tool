@@ -183,9 +183,9 @@ type AutomationDraft = {
     schemaFingerprint: string
 }
 
-// Returns the saved form and leaves builder state to the save queue's handlers. Only the
-// redirect to a newly created form happens here, right after create, and only while the builder
-// is still showing that draft.
+// Returns the saved form and leaves builder state to the save queue's handlers. A create is
+// recorded on the ticket right away, so later saves of the draft update that form, and the
+// redirect to it waits until the builder is visible.
 async function persistAutomationDraft({
     draft,
     ticket,
@@ -206,12 +206,14 @@ async function persistAutomationDraft({
     router: AutomationRouter
 }): Promise<FormRead> {
     let savedForm: FormRead
-    if (isNewForm) {
+    const formId = isNewForm ? ticket.createdId() : id
+    if (!formId) {
         savedForm = await createFormMutation.mutateAsync(draft.payload)
-        if (ticket.isCurrent() && ticket.isActive()) router.replace(`/automation/forms/${savedForm.id}`)
+        const createdId = savedForm.id
+        ticket.recordCreated(createdId, () => router.replace(`/automation/forms/${createdId}`))
     } else {
         savedForm = await updateFormMutation.mutateAsync({
-            formId: id,
+            formId,
             payload: draft.payload,
         })
     }
@@ -543,6 +545,7 @@ export function useAutomationFormBuilderPage() {
         fingerprint: draftFingerprint,
         savedFingerprint: state.lastSavedFingerprint,
         failedFingerprint: state.lastFailedFingerprint,
+        clearFailedFingerprint: () => patchState({ lastFailedFingerprint: "" }),
         save: () => {
             const draft = captureDraft()
             patchState({ autoSaveStatus: "saving" })

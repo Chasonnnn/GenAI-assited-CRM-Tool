@@ -56,6 +56,7 @@ function renderBuilder() {
                 fingerprint,
                 savedFingerprint,
                 failedFingerprint,
+                clearFailedFingerprint: () => setFailedFingerprint(""),
                 save: () => {
                     void save()
                 },

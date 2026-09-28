@@ -27,6 +27,7 @@ describe("useFormBuilderAutosave", () => {
                 fingerprint: "draft-1",
                 savedFingerprint: "draft-0",
                 failedFingerprint: "",
+                clearFailedFingerprint: vi.fn(),
                 save,
             }),
         )
@@ -43,7 +44,14 @@ describe("useFormBuilderAutosave", () => {
         type Props = { enabled: boolean; savedFingerprint: string; failedFingerprint: string }
         const { rerender } = renderHook(
             ({ enabled, savedFingerprint, failedFingerprint }: Props) =>
-                useFormBuilderAutosave({ enabled, fingerprint: "draft-1", savedFingerprint, failedFingerprint, save }),
+                useFormBuilderAutosave({
+                    enabled,
+                    fingerprint: "draft-1",
+                    savedFingerprint,
+                    failedFingerprint,
+                    clearFailedFingerprint: vi.fn(),
+                    save,
+                }),
             { initialProps: { enabled: false, savedFingerprint: "draft-0", failedFingerprint: "" } },
         )
 

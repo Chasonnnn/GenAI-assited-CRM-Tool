@@ -132,9 +132,9 @@ const buildSavedState = (draft: TemplateDraft, savedTemplate: PlatformFormTempla
 })
 
 // Returns the saved template and leaves builder state to the save queue's handlers. The
-// redirect to a newly created template happens right after create, and only while the builder
-// is still showing that draft. The revision is recorded for every result, keyed by route, so the next
-// save of that template sends the current expected_version.
+// redirect to a newly created template waits until the builder is visible. The template id and
+// revision are recorded for every result, keyed by route, so the next save of that template
+// updates it with the current expected_version.
 const persistTemplateDraft = async ({
     draft,
     ticket,
@@ -164,7 +164,8 @@ const persistTemplateDraft = async ({
     const templateId = trackedIdentity?.templateId ?? routeTemplateId
     if (!templateId) {
         savedTemplate = await createTemplateMutation.mutateAsync(draft.payload)
-        if (ticket.isCurrent() && ticket.isActive()) router.replace(`/ops/templates/forms/${savedTemplate.id}`)
+        const createdId = savedTemplate.id
+        ticket.recordCreated(createdId, () => router.replace(`/ops/templates/forms/${createdId}`))
     } else {
         const expectedVersion = trackedIdentity?.currentVersion ?? templateCurrentVersion
         if (typeof expectedVersion !== "number") {
@@ -414,6 +415,7 @@ export function useTemplateFormBuilderPage() {
         fingerprint: draftFingerprint,
         savedFingerprint: state.lastSavedFingerprint,
         failedFingerprint: state.lastFailedFingerprint,
+        clearFailedFingerprint: () => patchState({ lastFailedFingerprint: "" }),
         save: () => {
             const draft = captureDraft()
             patchState({ autoSaveStatus: "saving" })

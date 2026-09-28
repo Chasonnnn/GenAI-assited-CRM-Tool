@@ -7,6 +7,11 @@ export type SaveTicket = {
     isCurrent: () => boolean
     // False while the builder is hidden or after it unmounts. Navigation and toasts wait for it.
     isActive: () => boolean
+    // The id a create saved this builder's draft as, so later saves update that record.
+    createdId: () => string | null
+    // Records a created id for the current form and redirects to it now, or when the hidden
+    // builder is shown again. Ignored once the builder opened another form.
+    recordCreated: (id: string, redirect: () => void) => void
 }
 
 type SaveHandlers<Result> = {
@@ -26,19 +31,27 @@ export function useFormBuilderSaveQueue(scopeKey: string) {
     const sequenceRef = useRef(0)
     const settledSequenceRef = useRef(0)
     const pendingRef = useRef(0)
+    const createdIdRef = useRef<string | null>(null)
+    const pendingRedirectRef = useRef<(() => void) | null>(null)
     const tailRef = useRef<Promise<void>>(Promise.resolve())
     const [pendingCount, setPendingCount] = useState(0)
 
     // The layout effect runs in the commit that shows another form, so a request that finishes
     // afterwards cannot write into that form's state. Hiding the builder (Activity) or unmounting
     // it runs only the cleanup and keeps the generation, so results still clear pending flags;
-    // React ignores state writes after unmount.
+    // React ignores state writes after unmount. A redirect held while hidden runs when the builder
+    // is shown again.
     useLayoutEffect(() => {
         if (boundKeyRef.current !== scopeKey) {
             boundKeyRef.current = scopeKey
             generationRef.current += 1
+            createdIdRef.current = null
+            pendingRedirectRef.current = null
         }
         activeRef.current = true
+        const redirect = pendingRedirectRef.current
+        pendingRedirectRef.current = null
+        redirect?.()
         return () => {
             activeRef.current = false
         }
@@ -53,6 +66,13 @@ export function useFormBuilderSaveQueue(scopeKey: string) {
                     isCurrent: () =>
                         generationRef.current === generation && settledSequenceRef.current < sequence,
                     isActive: () => activeRef.current,
+                    createdId: () => (generationRef.current === generation ? createdIdRef.current : null),
+                    recordCreated: (id, redirect) => {
+                        if (generationRef.current !== generation) return
+                        createdIdRef.current = id
+                        if (activeRef.current) redirect()
+                        else pendingRedirectRef.current = redirect
+                    },
                 }
                 const settle = (apply: () => void) => {
                     if (!ticket.isCurrent()) return
