@@ -36,6 +36,7 @@ from app.db.models import (
     OrgCounter,
     Pipeline,
     PipelineStage,
+    Queue,
     Surrogate,
     User,
     UserNotificationSettings,
@@ -1422,6 +1423,9 @@ class TestAdminImports:
             db.query(Pipeline).filter(Pipeline.organization_id == source_org.id).all()
         ):
             db.delete(source_pipeline)
+        # The donor was created without an owner, so it sits in the source org's default queue.
+        for source_queue in db.query(Queue).filter(Queue.organization_id == source_org.id).all():
+            db.delete(source_queue)
         db.commit()
 
         response = await authed_client.post(
