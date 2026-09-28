@@ -1465,7 +1465,7 @@ async def test_donor_form_bound_workflow_crud_and_options_fail_closed(
         test_user.id,
         WorkflowCreate(
             name=f"Donor form bound workflow {uuid.uuid4()}",
-            subject_type="surrogate",
+            subject_type="form_submission",
             trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
             trigger_config={"form_id": str(egg_form.id)},
             actions=[_notification_action()],
@@ -1477,7 +1477,7 @@ async def test_donor_form_bound_workflow_crud_and_options_fail_closed(
         test_user.id,
         WorkflowCreate(
             name=f"Surrogate form bound workflow {uuid.uuid4()}",
-            subject_type="surrogate",
+            subject_type="form_submission",
             trigger_type=WorkflowTriggerType.FORM_SUBMITTED,
             trigger_config={"form_id": str(surrogate_form.id)},
             actions=[_notification_action()],
@@ -1519,7 +1519,7 @@ async def test_donor_form_bound_workflow_crud_and_options_fail_closed(
         json={
             "name": "Forbidden donor form workflow",
             "scope": "personal",
-            "subject_type": "surrogate",
+            "subject_type": "form_submission",
             "trigger_type": "form_submitted",
             "trigger_config": {"form_id": str(egg_form.id)},
             "actions": [_notification_action()],

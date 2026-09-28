@@ -83,7 +83,7 @@ async def test_shared_donor_form_workflows_match_both_subtypes(
             test_user.id,
             WorkflowCreate(
                 name="Invalid surrogate filter",
-                subject_type="form_submission",
+                subject_type="form_submission" if context_key == "lead_kind" else "intake_lead",
                 trigger_type=trigger_type,
                 trigger_config={"form_id": form_id, context_key: "surrogate"},
                 actions=[

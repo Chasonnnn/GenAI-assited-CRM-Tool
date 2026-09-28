@@ -351,6 +351,19 @@ LEGACY_TRIGGER_SUBJECT_TYPES = {
     WorkflowTriggerType.APPOINTMENT_SCHEDULED.value: "appointment",
     WorkflowTriggerType.APPOINTMENT_COMPLETED.value: "appointment",
 }
+FIXED_TRIGGER_SUBJECT_TYPES = frozenset(LEGACY_TRIGGER_SUBJECT_TYPES.values())
+
+
+def _subject_type_for_trigger(trigger_type: WorkflowTriggerType, subject_type: str) -> str:
+    """Return the subject a trigger executes against; donor subjects stay explicit."""
+    if subject_type in DONOR_SUBJECT_TYPES:
+        return subject_type
+    fixed_subject = LEGACY_TRIGGER_SUBJECT_TYPES.get(trigger_type.value)
+    if fixed_subject is not None:
+        return fixed_subject
+    if subject_type in FIXED_TRIGGER_SUBJECT_TYPES:
+        return "surrogate"
+    return subject_type
 
 
 def _validate_subject_trigger(
@@ -370,6 +383,12 @@ def _validate_subject_trigger(
         WorkflowTriggerType.DONOR_UPDATED,
     }:
         raise ValueError(f"Trigger {trigger_type.value} requires a donor subject")
+    # The engine matches workflows on subject_type, so a mismatched pair never runs.
+    fixed_subject = LEGACY_TRIGGER_SUBJECT_TYPES.get(trigger_type.value)
+    if fixed_subject is not None and subject_type != fixed_subject:
+        raise ValueError(f"Trigger {trigger_type.value} requires the {fixed_subject} subject")
+    if fixed_subject is None and subject_type in FIXED_TRIGGER_SUBJECT_TYPES:
+        raise ValueError(f"Subject {subject_type} does not support trigger {trigger_type.value}")
 
 
 def _validate_subject_conditions(subject_type: str, conditions: list[dict]) -> None:
@@ -896,7 +915,7 @@ def update_workflow(
 
     permission_policy_service.lock_configuration(db, workflow.organization_id)
     trigger_type = data.trigger_type or WorkflowTriggerType(workflow.trigger_type)
-    subject_type = workflow.subject_type
+    subject_type = _subject_type_for_trigger(trigger_type, workflow.subject_type)
     _validate_subject_trigger(subject_type, trigger_type)
     entity_type = subject_type
     trigger_config = (
@@ -994,6 +1013,7 @@ def update_workflow(
         workflow.icon = data.icon
     if data.trigger_type is not None:
         workflow.trigger_type = data.trigger_type.value
+    workflow.subject_type = subject_type
     if data.trigger_config is not None:
         workflow.trigger_config = trigger_config
     if data.conditions is not None:
