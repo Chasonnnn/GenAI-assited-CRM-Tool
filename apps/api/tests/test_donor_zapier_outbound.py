@@ -1031,6 +1031,45 @@ def test_undo_keeps_an_event_already_claimed_for_delivery(db, test_org, test_use
     assert forward_event.reason is None
 
 
+def test_undo_does_not_count_toward_the_actionable_skip_rate(db, test_org, test_user):
+    from app.services import zapier_monitor_service
+
+    pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+    donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    donor_service.change_status(
+        db,
+        donor,
+        new_stage.id,
+        test_user.id,
+        reason="Undo accidental change",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    summary = zapier_monitor_service.get_summary(db, org_id=test_org.id)
+
+    assert summary["skipped_count"] == 2
+    assert summary["actionable_skipped_count"] == 0
+    assert summary["skipped_rate"] == 0.0
+
+
 def test_repeated_stage_visit_reports_the_event_once(db, test_org, test_user):
     pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
     donor = _create_donor(db, test_org.id, test_user.id)

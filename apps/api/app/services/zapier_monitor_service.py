@@ -30,6 +30,7 @@ NON_ACTIONABLE_SKIP_REASONS = {
     "donor_outbound_disabled",
     "donor_stage_inactive",
     "donor_stage_undo",
+    "donor_stage_undone",
     "unmapped_donor_stage",
 }
 
