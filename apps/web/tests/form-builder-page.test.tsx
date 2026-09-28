@@ -6,6 +6,7 @@ import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
 import { ApiError } from "@/lib/api"
 import type {
     FormRead,
+    FormSchema,
     FormSubmissionRead,
     ListFormSubmissionsParams,
 } from "@/lib/api/forms"
@@ -1007,5 +1008,130 @@ describe("FormBuilderPage", () => {
 
         fireEvent.click(screen.getByRole("tab", { name: /^edit$/i }))
         expect(screen.getByRole("button", { name: /select name field/i })).toBeInTheDocument()
+    })
+
+    describe("publish state", () => {
+        const liveSchema: FormSchema = {
+            pages: [
+                {
+                    title: "Application",
+                    fields: [
+                        { key: "full_name", label: "Full Name", type: "text", required: true },
+                        { key: "date_of_birth", label: "Date of Birth", type: "date", required: true },
+                        { key: "phone", label: "Phone", type: "phone", required: true },
+                        { key: "email", label: "Email", type: "email", required: true },
+                    ],
+                },
+            ],
+            public_title: "Apply today",
+            privacy_notice: "We keep your answers private.",
+        }
+        // Same content as liveSchema, with every object's keys in a different order.
+        const reorderedLiveSchema: FormSchema = {
+            privacy_notice: "We keep your answers private.",
+            public_title: "Apply today",
+            pages: liveSchema.pages.map((page) => ({
+                fields: page.fields.map((field) => ({
+                    required: field.required,
+                    type: field.type,
+                    label: field.label,
+                    key: field.key,
+                })),
+                title: page.title,
+            })),
+        }
+        const buildPublishedForm = (overrides: Partial<FormRead> = {}): FormRead => ({
+            id: "form-1",
+            name: "Surrogate Application",
+            status: "published",
+            purpose: "surrogate_application",
+            lead_kind: "surrogate",
+            created_at: "2026-09-20T00:00:00Z",
+            updated_at: "2026-09-20T00:00:00Z",
+            description: null,
+            form_schema: reorderedLiveSchema,
+            published_schema: liveSchema,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            max_file_count: 10,
+            allowed_mime_types: null,
+            default_application_email_template_id: null,
+            ...overrides,
+        })
+        const renderForm = (form: FormRead) => {
+            navigationState.formId = form.id
+            mockUseForm.mockReturnValue({ data: form, isLoading: false })
+            mockUpdateForm.mockResolvedValue(form)
+            return render(<FormBuilderPage />)
+        }
+        const header = () => within(screen.getByLabelText("Form name").parentElement as HTMLElement)
+        const publishButton = () => screen.getByRole("button", { name: /^publish$/i })
+
+        it("keeps Publish disabled for a published form with nothing new to publish", () => {
+            renderForm(buildPublishedForm())
+
+            expect(header().getByText("Published")).toBeInTheDocument()
+            expect(publishButton()).toBeDisabled()
+        })
+
+        it("enables Publish when the saved draft differs from the live form", () => {
+            renderForm(buildPublishedForm({ form_schema: { ...liveSchema, public_title: "Apply now" } }))
+
+            expect(header().getByText("Unpublished changes")).toBeInTheDocument()
+            expect(header().queryByText("Published")).not.toBeInTheDocument()
+            expect(publishButton()).toBeEnabled()
+        })
+
+        it("enables Publish for an unsaved edit to a published form", () => {
+            renderForm(buildPublishedForm())
+
+            fireEvent.click(screen.getByRole("tab", { name: /^settings$/i }))
+            fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Apply now" } })
+
+            expect(header().getByText("Unpublished changes")).toBeInTheDocument()
+            expect(publishButton()).toBeEnabled()
+        })
+
+        it("keeps Publish disabled when only live form columns change", () => {
+            renderForm(buildPublishedForm())
+
+            fireEvent.change(screen.getByLabelText("Form name"), {
+                target: { value: "Renamed Application" },
+            })
+
+            expect(header().getByText("Published")).toBeInTheDocument()
+            expect(publishButton()).toBeDisabled()
+        })
+
+        it("enables Publish for a draft form", () => {
+            renderForm(buildPublishedForm({ status: "draft", published_schema: null }))
+
+            expect(header().getByText("Draft")).toBeInTheDocument()
+            expect(publishButton()).toBeEnabled()
+        })
+
+        it("returns to Published after publishing saved changes", async () => {
+            const form = buildPublishedForm({ form_schema: { ...liveSchema, public_title: "Apply now" } })
+            renderForm(form)
+            mockRefetchIntakeLinks.mockResolvedValue({ data: [] })
+            mockPublishForm.mockImplementation(async (formId: string) => {
+                mockUseForm.mockReturnValue({
+                    data: { ...form, published_schema: form.form_schema },
+                    isLoading: false,
+                })
+                return { id: formId, status: "published", published_at: "2026-09-27T00:00:00Z" }
+            })
+
+            fireEvent.click(publishButton())
+            const dialog = await screen.findByRole("alertdialog", { name: /publish form/i })
+            fireEvent.click(within(dialog).getByRole("button", { name: /^publish$/i }))
+
+            await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Form published"))
+            await vi.waitFor(() =>
+                expect(screen.queryByRole("alertdialog", { name: /publish form/i })).not.toBeInTheDocument(),
+            )
+            expect(mockPublishForm).toHaveBeenCalledWith("form-1")
+            expect(header().getByText("Published")).toBeInTheDocument()
+            expect(publishButton()).toBeDisabled()
+        })
     })
 })

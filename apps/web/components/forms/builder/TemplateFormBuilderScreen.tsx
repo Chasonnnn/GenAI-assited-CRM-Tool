@@ -49,7 +49,7 @@ export function TemplateFormBuilderScreen({
             <FormBuilderHeader
                 backAriaLabel="Back to form templates"
                 formName={controller.state.formName}
-                isPublished={controller.state.isPublished}
+                publicationStatus={controller.publicationStatus}
                 isPublishing={controller.state.isPublishing}
                 isSaving={controller.state.isSaving}
                 autoSaveLabel={controller.autoSaveLabel}
@@ -58,6 +58,8 @@ export function TemplateFormBuilderScreen({
                 onFormNameChange={controller.onFormNameChange}
                 onSave={controller.handleSave}
                 onPublish={controller.handlePublish}
+                saveDisabled={controller.hasPendingSave}
+                publishDisabled={controller.hasPendingSave}
                 {...(!controller.isNewForm
                     ? {
                         deleteAction: {
@@ -104,6 +106,7 @@ export function TemplateFormBuilderScreen({
                 onOpenChange={controller.onPublishDialogOpenChange}
                 onPublish={controller.confirmPublish}
                 isLoading={controller.state.isPublishing}
+                disabled={controller.hasPendingSave}
             />
 
             <DeletePageDialog

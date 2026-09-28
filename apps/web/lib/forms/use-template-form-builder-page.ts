@@ -14,7 +14,9 @@ import {
     schemaToPages,
 } from "@/lib/forms/form-builder-document"
 import { normalizePagesForLeadKind, getDonorPublishValidationMessage } from "@/lib/forms/form-lead-kind"
+import { getFormPublicationStatus, hasSameContent } from "@/lib/forms/form-publication-status"
 import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
+import { useFormBuilderSaveQueue, type SaveTicket } from "@/lib/forms/use-form-builder-save-queue"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
 import { useTemplateFormBuilderState } from "@/lib/forms/use-template-form-builder-state"
 import type { TemplateBuilderState } from "@/lib/forms/use-template-form-builder-state"
@@ -46,10 +48,6 @@ type TemplateDraftPayload = {
     description: string | null
     schema_json: FormSchema
     settings_json: Record<string, unknown>
-}
-
-type SaveQueueRef = {
-    current: Promise<void> | null
 }
 
 type TemplateSaveIdentityRef = {
@@ -118,38 +116,44 @@ const buildTemplateDraftPayload = (
     }
 }
 
-const buildSavedState = (fingerprint: string, savedForm?: PlatformFormTemplate): Partial<TemplateBuilderState> => ({
-    autoSaveStatus: "saved",
-    lastSavedAt: savedForm?.updated_at ? new Date(savedForm.updated_at) : new Date(),
-    lastSavedFingerprint: fingerprint,
-})
-
-const queueTemplateSave = <T>(saveQueueRef: SaveQueueRef, run: () => Promise<T>): Promise<T> => {
-    const currentQueue = saveQueueRef.current ?? Promise.resolve()
-    const chained = currentQueue.then(run, run)
-    saveQueueRef.current = chained.then(() => {}, () => {})
-    return chained
+// The draft exactly as submitted. The saved fingerprint comes from it, not from the latest
+// edits, so edits made while the request is in flight stay dirty.
+type TemplateDraft = {
+    payload: TemplateDraftPayload
+    fingerprint: string
 }
 
-const persistTemplatePayload = async ({
-    payload,
+const buildSavedState = (draft: TemplateDraft, savedTemplate: PlatformFormTemplate): Partial<TemplateBuilderState> => ({
+    autoSaveStatus: "saved",
+    isPublished: (savedTemplate.published_version ?? 0) > 0,
+    lastSavedAt: savedTemplate.updated_at ? new Date(savedTemplate.updated_at) : new Date(),
+    lastSavedFingerprint: draft.fingerprint,
+    lastFailedFingerprint: "",
+})
+
+// Returns the saved template and leaves builder state to the save queue's handlers. The
+// redirect to a newly created template waits until the builder is visible. The template id and
+// revision are recorded for every result, keyed by route, so the next save of that template
+// updates it with the current expected_version.
+const persistTemplateDraft = async ({
+    draft,
+    ticket,
     templateIdentityRef,
     templateKey,
     routeTemplateId,
     createTemplateMutation,
     updateTemplateMutation,
     router,
-    patchState,
     templateCurrentVersion,
 }: {
-    payload: TemplateDraftPayload
+    draft: TemplateDraft
+    ticket: SaveTicket
     templateIdentityRef: TemplateSaveIdentityRef
     templateKey: string
     routeTemplateId: string | null
     createTemplateMutation: TemplateCreateMutation
     updateTemplateMutation: TemplateUpdateMutation
     router: TemplateRouter
-    patchState: (payload: Partial<TemplateBuilderState>) => void
     templateCurrentVersion: number | null | undefined
 }): Promise<PlatformFormTemplate> => {
     let savedTemplate: PlatformFormTemplate
@@ -159,8 +163,9 @@ const persistTemplatePayload = async ({
             : null
     const templateId = trackedIdentity?.templateId ?? routeTemplateId
     if (!templateId) {
-        savedTemplate = await createTemplateMutation.mutateAsync(payload)
-        router.replace(`/ops/templates/forms/${savedTemplate.id}`)
+        savedTemplate = await createTemplateMutation.mutateAsync(draft.payload)
+        const createdId = savedTemplate.id
+        ticket.recordCreated(createdId, () => router.replace(`/ops/templates/forms/${createdId}`))
     } else {
         const expectedVersion = trackedIdentity?.currentVersion ?? templateCurrentVersion
         if (typeof expectedVersion !== "number") {
@@ -169,13 +174,12 @@ const persistTemplatePayload = async ({
         savedTemplate = await updateTemplateMutation.mutateAsync({
             id: templateId,
             payload: {
-                ...payload,
+                ...draft.payload,
                 expected_version: expectedVersion,
             },
         })
     }
 
-    patchState({ isPublished: (savedTemplate.published_version ?? 0) > 0 })
     templateIdentityRef.current = {
         currentVersion:
             typeof savedTemplate.current_version === "number"
@@ -219,7 +223,6 @@ export function useTemplateFormBuilderPage() {
     const publishTemplateMutation = usePublishPlatformFormTemplate()
     const deleteTemplateMutation = useDeletePlatformFormTemplate()
     const templateIdentityRef = useRef<TemplateSaveIdentityRef["current"]>(null)
-    const saveQueueRef = useRef<Promise<void> | null>(null)
 
     useEffect(() => {
         if (!templateData || templateIdentityRef.current?.routeKey === templateKey) return
@@ -232,6 +235,7 @@ export function useTemplateFormBuilderPage() {
 
     const { state, patchState, resetForForm, hydrateFromTemplate } =
         useTemplateFormBuilderState(templateKey, isNewForm)
+    const saveQueue = useFormBuilderSaveQueue(templateKey)
     const {
         pages,
         activePage,
@@ -314,8 +318,20 @@ export function useTemplateFormBuilderPage() {
     const draftPayload = buildTemplateDraftPayload(pages, state)
     const draftFingerprint = JSON.stringify(draftPayload)
     const isDirty = draftFingerprint !== state.lastSavedFingerprint
+    // Template publish copies the whole draft (name, description, schema, settings), so any
+    // unsaved or saved draft difference is unpublished.
+    const publicationStatus = getFormPublicationStatus(
+        state.isPublished,
+        isDirty || !hasSameContent(templateData?.draft, templateData?.published),
+    )
 
-    if (state.hasHydrated && state.baselineTemplateKey !== templateKey) {
+    // The render that resets for another template still sees the previous template's state and
+    // pages, so record the baseline only once the state belongs to this template.
+    if (
+        state.templateKey === templateKey &&
+        state.hasHydrated &&
+        state.baselineTemplateKey !== templateKey
+    ) {
         if (!isNewForm && templateData?.updated_at) {
             patchState({
                 autoSaveStatus: "saved",
@@ -351,35 +367,42 @@ export function useTemplateFormBuilderPage() {
         })
     }
 
-    const handleSave = async () => {
+    const captureDraft = (): TemplateDraft => ({
+        payload: draftPayload,
+        fingerprint: draftFingerprint,
+    })
+
+    const persistDraft = (draft: TemplateDraft, ticket: SaveTicket) =>
+        persistTemplateDraft({
+            draft,
+            ticket,
+            templateIdentityRef,
+            templateKey,
+            routeTemplateId: formId,
+            createTemplateMutation,
+            updateTemplateMutation,
+            router,
+            templateCurrentVersion: templateData?.current_version,
+        })
+
+    const handleSave = () => {
+        if (!saveQueue.isIdle()) return
         if (!state.formName.trim()) {
             toast.error("Form name is required")
             return
         }
+        const draft = captureDraft()
         patchState({ isSaving: true })
-        const finishSaving = () => patchState({ isSaving: false })
-        try {
-            const savedTemplate = await queueTemplateSave(saveQueueRef, () =>
-                persistTemplatePayload({
-                    payload: draftPayload,
-                    templateIdentityRef,
-                    templateKey,
-                    routeTemplateId: formId,
-                    createTemplateMutation,
-                    updateTemplateMutation,
-                    router,
-                    patchState,
-                    templateCurrentVersion: templateData?.current_version,
-                }),
-            )
-            patchState(buildSavedState(draftFingerprint, savedTemplate))
-            toast.success("Template saved")
-            finishSaving()
-        } catch {
-            patchState({ autoSaveStatus: "error" })
-            toast.error("Failed to save template")
-            finishSaving()
-        }
+        return saveQueue.enqueue((ticket) => persistDraft(draft, ticket), {
+            onSuccess: (savedTemplate, ticket) => {
+                patchState({ ...buildSavedState(draft, savedTemplate), isSaving: false })
+                if (ticket.isActive()) toast.success("Template saved")
+            },
+            onError: (_error, ticket) => {
+                patchState({ autoSaveStatus: "error", isSaving: false, lastFailedFingerprint: draft.fingerprint })
+                if (ticket.isActive()) toast.error("Failed to save template")
+            },
+        })
     }
 
     useFormBuilderAutosave({
@@ -387,40 +410,20 @@ export function useTemplateFormBuilderPage() {
             state.hasHydrated &&
             Boolean(state.formName.trim()) &&
             !state.isSaving &&
-            !state.isPublishing,
+            !state.isPublishing &&
+            !saveQueue.isBusy,
         fingerprint: draftFingerprint,
         savedFingerprint: state.lastSavedFingerprint,
+        failedFingerprint: state.lastFailedFingerprint,
+        clearFailedFingerprint: () => patchState({ lastFailedFingerprint: "" }),
         save: () => {
-            const payload = buildTemplateDraftPayload(pages, {
-                allowedMimeTypesText: state.allowedMimeTypesText,
-                formDescription: state.formDescription,
-                formName: state.formName,
-                logoUrl: state.logoUrl,
-                maxFileCount: state.maxFileCount,
-                maxFileSizeMb: state.maxFileSizeMb,
-                privacyNotice: state.privacyNotice,
-                publicEyebrow: state.publicEyebrow,
-                publicSubtitle: state.publicSubtitle,
-                publicTitle: state.publicTitle,
-                templateSettings: state.templateSettings,
+            const draft = captureDraft()
+            patchState({ autoSaveStatus: "saving" })
+            void saveQueue.enqueue((ticket) => persistDraft(draft, ticket), {
+                onSuccess: (savedTemplate) => patchState(buildSavedState(draft, savedTemplate)),
+                onError: () => patchState({ autoSaveStatus: "error", lastFailedFingerprint: draft.fingerprint }),
             })
-            return queueTemplateSave(saveQueueRef, () =>
-                persistTemplatePayload({
-                    payload,
-                    templateIdentityRef,
-                    templateKey,
-                    routeTemplateId: formId,
-                    createTemplateMutation,
-                    updateTemplateMutation,
-                    router,
-                    patchState,
-                    templateCurrentVersion: templateData?.current_version,
-                }),
-            )
         },
-        onSaving: () => patchState({ autoSaveStatus: "saving" }),
-        onSaved: (savedForm) => patchState(buildSavedState(draftFingerprint, savedForm)),
-        onError: () => patchState({ autoSaveStatus: "error" }),
     })
 
     const handlePreview = () => {
@@ -459,48 +462,52 @@ export function useTemplateFormBuilderPage() {
         patchState({ showPublishDialog: true })
     }
 
-    const confirmPublish = async () => {
+    const confirmPublish = () => {
+        if (!saveQueue.isIdle()) return
+        const draft = captureDraft()
         patchState({ isPublishing: true })
-        const finishPublishing = () => patchState({ isPublishing: false })
-        try {
-            const savedTemplate = await queueTemplateSave(saveQueueRef, () =>
-                persistTemplatePayload({
-                    payload: draftPayload,
-                    templateIdentityRef,
-                    templateKey,
-                    routeTemplateId: formId,
-                    createTemplateMutation,
-                    updateTemplateMutation,
-                    router,
-                    patchState,
-                    templateCurrentVersion: templateData?.current_version,
-                }),
-            )
-            patchState(buildSavedState(draftFingerprint, savedTemplate))
-            const publishedTemplate = await publishTemplateMutation.mutateAsync({
-                id: savedTemplate.id,
-                payload: {
-                    publish_all: true,
-                    org_ids: null,
-                    expected_version: savedTemplate.current_version,
+        return saveQueue.enqueue(
+            async (ticket) => {
+                const savedTemplate = await persistDraft(draft, ticket)
+                try {
+                    const publishedTemplate = await publishTemplateMutation.mutateAsync({
+                        id: savedTemplate.id,
+                        payload: {
+                            publish_all: true,
+                            org_ids: null,
+                            expected_version: savedTemplate.current_version,
+                        },
+                    })
+                    templateIdentityRef.current = {
+                        currentVersion: publishedTemplate.current_version,
+                        routeKey: templateKey,
+                        templateId: publishedTemplate.id,
+                    }
+                } catch {
+                    return { savedTemplate, published: false }
+                }
+                return { savedTemplate, published: true }
+            },
+            {
+                onSuccess: ({ savedTemplate, published }, ticket) => {
+                    patchState({ ...buildSavedState(draft, savedTemplate), isPublishing: false })
+                    if (!published) {
+                        patchState({ autoSaveStatus: "error" })
+                        if (ticket.isActive()) toast.error("Failed to publish template")
+                        return
+                    }
+                    patchState({
+                        isPublished: true,
+                        showPublishDialog: false,
+                    })
+                    if (ticket.isActive()) toast.success("Template published")
                 },
-            })
-            templateIdentityRef.current = {
-                currentVersion: publishedTemplate.current_version,
-                routeKey: templateKey,
-                templateId: publishedTemplate.id,
-            }
-            patchState({
-                isPublished: true,
-                showPublishDialog: false,
-            })
-            toast.success("Template published")
-            finishPublishing()
-        } catch {
-            patchState({ autoSaveStatus: "error" })
-            toast.error("Failed to publish template")
-            finishPublishing()
-        }
+                onError: (_error, ticket) => {
+                    patchState({ autoSaveStatus: "error", isPublishing: false, lastFailedFingerprint: draft.fingerprint })
+                    if (ticket.isActive()) toast.error("Failed to publish template")
+                },
+            },
+        )
     }
 
     // Rejections reach ConfirmDialog, which keeps the dialog open and shows a safe message inline.
@@ -562,6 +569,8 @@ export function useTemplateFormBuilderPage() {
         templateData,
         state,
         patchState,
+        publicationStatus,
+        hasPendingSave: saveQueue.isBusy,
         resolvedLogoUrl,
         surrogateFieldMappings,
         workspaceDocument,

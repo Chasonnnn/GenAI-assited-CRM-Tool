@@ -65,7 +65,7 @@ export function AutomationFormBuilderScreen({
             <FormBuilderHeader
                 backAriaLabel="Back to forms"
                 formName={controller.state.formName}
-                isPublished={controller.state.isPublished}
+                publicationStatus={controller.publicationStatus}
                 isPublishing={controller.state.isPublishing}
                 isSaving={controller.state.isSaving}
                 autoSaveLabel={controller.autoSaveLabel}
@@ -75,7 +75,8 @@ export function AutomationFormBuilderScreen({
                 onFormNameChange={controller.onFormNameChange}
                 onSave={controller.handleSave}
                 onPublish={controller.handlePublish}
-                publishDisabled={controller.state.isPublished}
+                saveDisabled={controller.hasPendingSave}
+                publishDisabled={controller.publishDisabled}
                 publishDisabledReason={controller.publishBlockedReason}
             />
 
@@ -159,7 +160,7 @@ export function AutomationFormBuilderScreen({
                         <AlertDialogCancel disabled={controller.state.isPublishing}>Cancel</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={controller.confirmPublish}
-                            disabled={controller.state.isPublishing}
+                            disabled={controller.state.isPublishing || controller.hasPendingSave}
                         >
                             {controller.state.isPublishing ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
                             Publish

@@ -13,6 +13,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+    FORM_PUBLICATION_STATUS_LABELS,
+    type FormPublicationStatus,
+} from "@/lib/forms/form-publication-status"
 
 type DeleteAction = {
     disabled?: boolean
@@ -24,7 +28,7 @@ type DeleteAction = {
 type FormBuilderHeaderProps = {
     backAriaLabel: string
     formName: string
-    isPublished: boolean
+    publicationStatus: FormPublicationStatus
     isPublishing: boolean
     isSaving: boolean
     autoSaveLabel: string | null
@@ -34,6 +38,7 @@ type FormBuilderHeaderProps = {
     onFormNameChange: (value: string) => void
     onSave: () => void
     onPublish: () => void
+    saveDisabled?: boolean
     publishDisabled?: boolean
     /** Disables Publish and explains why in a tooltip and to screen readers. */
     publishDisabledReason?: string | null
@@ -43,7 +48,7 @@ type FormBuilderHeaderProps = {
 export function FormBuilderHeader({
     backAriaLabel,
     formName,
-    isPublished,
+    publicationStatus,
     isPublishing,
     isSaving,
     autoSaveLabel,
@@ -53,12 +58,15 @@ export function FormBuilderHeader({
     onFormNameChange,
     onSave,
     onPublish,
+    saveDisabled = false,
     publishDisabled = false,
     publishDisabledReason = null,
     deleteAction,
 }: FormBuilderHeaderProps) {
     const publishReasonId = React.useId()
-    const publishBlocked = Boolean(publishDisabledReason) && !publishDisabled
+    // A published form with nothing new has nothing to explain. The reason ignores
+    // publishDisabled so it stays in place while a save runs instead of flickering.
+    const publishBlocked = Boolean(publishDisabledReason) && publicationStatus !== "published"
     return (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6 lg:h-14 lg:flex-nowrap lg:py-0">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5 sm:gap-3">
@@ -77,8 +85,11 @@ export function FormBuilderHeader({
                     placeholder="Form name..."
                     className="h-8 min-w-0 flex-1 border-none bg-transparent px-0 text-base font-medium focus-visible:ring-0 sm:max-w-xs lg:w-72 lg:flex-none"
                 />
-                <Badge variant={isPublished ? "default" : "secondary"} className="h-5 rounded-full px-2 text-[11px]">
-                    {isPublished ? "Published" : "Draft"}
+                <Badge
+                    variant={publicationStatus === "published" ? "default" : "secondary"}
+                    className="h-5 rounded-full px-2 text-[11px]"
+                >
+                    {FORM_PUBLICATION_STATUS_LABELS[publicationStatus]}
                 </Badge>
                 {contextBadgeLabel ? (
                     <Badge variant="outline" className="h-5 rounded-full px-2 text-[11px]">
@@ -119,7 +130,7 @@ export function FormBuilderHeader({
                         {autoSaveLabel}
                     </span>
                 ) : null}
-                <Button variant="secondary" size="sm" onClick={onSave} disabled={isSaving}>
+                <Button variant="secondary" size="sm" onClick={onSave} disabled={saveDisabled || isSaving}>
                     {isSaving ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
                     Save
                 </Button>
