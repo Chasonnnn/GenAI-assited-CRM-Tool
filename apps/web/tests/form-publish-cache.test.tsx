@@ -5,7 +5,13 @@ import { describe, expect, it, vi } from "vitest"
 
 import type { FormRead, FormSchema } from "@/lib/api/forms"
 import type { PlatformFormTemplate } from "@/lib/api/platform"
-import { formKeys, useForm, usePublishForm, useUpdateForm } from "@/lib/hooks/use-forms"
+import {
+    formKeys,
+    useForm,
+    usePublishForm,
+    useSetDefaultSurrogateApplicationForm,
+    useUpdateForm,
+} from "@/lib/hooks/use-forms"
 import {
     usePlatformFormTemplate,
     usePublishPlatformFormTemplate,
@@ -17,6 +23,7 @@ const {
     getPlatformFormTemplate,
     publishForm,
     publishPlatformFormTemplate,
+    setDefaultSurrogateApplicationForm,
     updateForm,
     updatePlatformFormTemplate,
 } = vi.hoisted(() => ({
@@ -24,6 +31,7 @@ const {
     getPlatformFormTemplate: vi.fn(),
     publishForm: vi.fn(),
     publishPlatformFormTemplate: vi.fn(),
+    setDefaultSurrogateApplicationForm: vi.fn(),
     updateForm: vi.fn(),
     updatePlatformFormTemplate: vi.fn(),
 }))
@@ -32,6 +40,7 @@ vi.mock("@/lib/api/forms", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/api/forms")>()),
     getForm,
     publishForm,
+    setDefaultSurrogateApplicationForm,
     updateForm,
 }))
 
@@ -167,58 +176,125 @@ describe("form publish cache", () => {
         client.clear()
     })
 
-    it("keeps the published copy when an older form detail request resolves after publishing", async () => {
-        const client = buildClient()
-        client.setQueryData(formKeys.detail("form-1"), buildForm({ form_schema: draftSchema }))
-        const releaseStaleGet = deferStaleResponse(getForm, buildForm({ form_schema: draftSchema }))
-        getForm.mockResolvedValue(buildForm({ form_schema: draftSchema, published_schema: draftSchema }))
-        publishForm.mockResolvedValue({ id: "form-1", status: "published", published_at: "2026-09-27T00:00:00Z" })
-        const { result } = renderHook(
-            () => ({ form: useForm("form-1"), publish: usePublishForm() }),
-            { wrapper: buildWrapper(client) },
-        )
-        await waitFor(() => expect(getForm).toHaveBeenCalledTimes(1))
+    describe("after the detail observer unmounts", () => {
+        // The observer starts a detail request and unmounts while it is still open, so
+        // invalidation after the mutation neither refetches nor cancels that request.
+        async function startUnobservedDetailRequest<T>(
+            client: QueryClient,
+            useDetail: () => unknown,
+            fetchDetail: ReturnType<typeof vi.fn>,
+            staleValue: T,
+        ) {
+            const releaseStaleGet = deferStaleResponse(fetchDetail, staleValue)
+            const observer = renderHook(useDetail, { wrapper: buildWrapper(client) })
+            await waitFor(() => expect(fetchDetail).toHaveBeenCalledTimes(1))
+            observer.unmount()
+            return releaseStaleGet
+        }
 
-        await act(async () => {
-            await result.current.publish.mutateAsync("form-1")
-        })
-        await releaseStaleGet()
-
-        expect(client.getQueryData<FormRead>(formKeys.detail("form-1"))?.published_schema).toEqual(draftSchema)
-        client.clear()
-    })
-
-    it("keeps a saved template draft when an older template request resolves after the save", async () => {
-        const client = buildClient()
-        const draft = { name: "Intake", description: null, schema_json: { pages: [] }, settings_json: {} }
+        const templateDraft = { name: "Intake", description: null, schema_json: { pages: [] }, settings_json: {} }
         const baseTemplate: PlatformFormTemplate = {
             id: "tpl_form_1",
             status: "published",
             current_version: 1,
             published_version: 1,
             is_published_globally: true,
-            draft,
-            published: draft,
+            draft: templateDraft,
+            published: templateDraft,
             updated_at: "2026-09-26T00:00:00Z",
             created_at: "2026-09-20T00:00:00Z",
         }
-        const savedTemplate = { ...baseTemplate, status: "draft" as const, current_version: 2, draft: { ...draft, name: "Renamed" } }
-        client.setQueryData(["platform-templates", "forms", "tpl_form_1"], baseTemplate)
-        const releaseStaleGet = deferStaleResponse(getPlatformFormTemplate, baseTemplate)
-        getPlatformFormTemplate.mockResolvedValue(savedTemplate)
-        updatePlatformFormTemplate.mockResolvedValue(savedTemplate)
-        const { result } = renderHook(
-            () => ({ template: usePlatformFormTemplate("tpl_form_1"), update: useUpdatePlatformFormTemplate() }),
-            { wrapper: buildWrapper(client) },
-        )
-        await waitFor(() => expect(getPlatformFormTemplate).toHaveBeenCalledTimes(1))
+        const savedTemplate: PlatformFormTemplate = {
+            ...baseTemplate,
+            status: "draft",
+            current_version: 2,
+            draft: { ...templateDraft, name: "Renamed" },
+        }
+        const publishedTemplate: PlatformFormTemplate = {
+            ...savedTemplate,
+            status: "published",
+            current_version: 3,
+            published_version: 2,
+            published: savedTemplate.draft,
+        }
+        const templateDetailKey = ["platform-templates", "forms", "tpl_form_1"]
 
-        await act(async () => {
-            await result.current.update.mutateAsync({ id: "tpl_form_1", payload: { name: "Renamed", expected_version: 1 } })
+        it("keeps a published form", async () => {
+            const client = buildClient()
+            const savedForm = buildForm({ form_schema: draftSchema })
+            client.setQueryData(formKeys.detail("form-1"), savedForm)
+            const releaseStaleGet = await startUnobservedDetailRequest(client, () => useForm("form-1"), getForm, savedForm)
+            publishForm.mockResolvedValue({ id: "form-1", status: "published", published_at: "2026-09-27T00:00:00Z" })
+            const { result } = renderHook(() => usePublishForm(), { wrapper: buildWrapper(client) })
+
+            await act(async () => {
+                await result.current.mutateAsync("form-1")
+            })
+            await releaseStaleGet()
+
+            expect(client.getQueryData<FormRead>(formKeys.detail("form-1"))?.published_schema).toEqual(draftSchema)
+            client.clear()
         })
-        await releaseStaleGet()
 
-        expect(client.getQueryData(["platform-templates", "forms", "tpl_form_1"])).toEqual(savedTemplate)
-        client.clear()
+        it("keeps the default application form flag", async () => {
+            const client = buildClient()
+            client.setQueryData(formKeys.detail("form-1"), buildForm())
+            const releaseStaleGet = await startUnobservedDetailRequest(client, () => useForm("form-1"), getForm, buildForm())
+            setDefaultSurrogateApplicationForm.mockResolvedValue(buildForm({ is_default_surrogate_application: true }))
+            const { result } = renderHook(() => useSetDefaultSurrogateApplicationForm(), { wrapper: buildWrapper(client) })
+
+            await act(async () => {
+                await result.current.mutateAsync("form-1")
+            })
+            await releaseStaleGet()
+
+            expect(client.getQueryData<FormRead>(formKeys.detail("form-1"))?.is_default_surrogate_application).toBe(true)
+            client.clear()
+        })
+
+        it("keeps a saved template", async () => {
+            const client = buildClient()
+            client.setQueryData(templateDetailKey, baseTemplate)
+            const releaseStaleGet = await startUnobservedDetailRequest(
+                client,
+                () => usePlatformFormTemplate("tpl_form_1"),
+                getPlatformFormTemplate,
+                baseTemplate,
+            )
+            updatePlatformFormTemplate.mockResolvedValue(savedTemplate)
+            const { result } = renderHook(() => useUpdatePlatformFormTemplate(), { wrapper: buildWrapper(client) })
+
+            await act(async () => {
+                await result.current.mutateAsync({ id: "tpl_form_1", payload: { name: "Renamed", expected_version: 1 } })
+            })
+            await releaseStaleGet()
+
+            expect(client.getQueryData(templateDetailKey)).toEqual(savedTemplate)
+            client.clear()
+        })
+
+        it("keeps a published template", async () => {
+            const client = buildClient()
+            client.setQueryData(templateDetailKey, savedTemplate)
+            const releaseStaleGet = await startUnobservedDetailRequest(
+                client,
+                () => usePlatformFormTemplate("tpl_form_1"),
+                getPlatformFormTemplate,
+                savedTemplate,
+            )
+            publishPlatformFormTemplate.mockResolvedValue(publishedTemplate)
+            const { result } = renderHook(() => usePublishPlatformFormTemplate(), { wrapper: buildWrapper(client) })
+
+            await act(async () => {
+                await result.current.mutateAsync({
+                    id: "tpl_form_1",
+                    payload: { publish_all: true, org_ids: null, expected_version: 2 },
+                })
+            })
+            await releaseStaleGet()
+
+            expect(client.getQueryData(templateDetailKey)).toEqual(publishedTemplate)
+            client.clear()
+        })
     })
 })

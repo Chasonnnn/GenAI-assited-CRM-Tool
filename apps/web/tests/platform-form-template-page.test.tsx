@@ -180,6 +180,28 @@ describe("PlatformFormTemplatePage", () => {
         expect(await screen.findByPlaceholderText("Form name...")).toHaveValue("Template B")
     })
 
+    it("does not autosave a template opened from another template without edits", async () => {
+        vi.useFakeTimers()
+        const templateA = buildTemplateData("tpl-form-a", "Template A")
+        const templateB = buildTemplateData("tpl-form-b", "Template B")
+
+        navigationState.templateId = templateA.id
+        mockTemplateData = templateA
+        const view = render(<PlatformFormTemplatePage />)
+        expect(screen.getByPlaceholderText("Form name...")).toHaveValue("Template A")
+
+        navigationState.templateId = templateB.id
+        mockTemplateData = templateB
+        view.rerender(<PlatformFormTemplatePage />)
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5_000)
+        })
+
+        expect(screen.getByPlaceholderText("Form name...")).toHaveValue("Template B")
+        expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument()
+        expect(mockUpdate).not.toHaveBeenCalled()
+    })
+
     it("does not autosave stale default schema during initial hydration", async () => {
         vi.useFakeTimers()
         mockTemplateData = {
@@ -412,25 +434,36 @@ describe("PlatformFormTemplatePage", () => {
         }))
     })
 
-    it("autosaves a rename made during an in-flight autosave after that save finishes", async () => {
+    it("sends a rename made during an in-flight autosave exactly once", async () => {
         vi.useFakeTimers()
-        const saves: Array<{ name: string; finish: () => void }> = []
+        const saves: Array<{ name: string; settled: boolean; finish: () => void }> = []
         mockUpdate.mockImplementation(({ payload }: { payload: { name: string } }) =>
             new Promise((resolve) => {
                 const version = saves.length + 2
-                saves.push({
+                const save = {
                     name: payload.name,
-                    finish: () => resolve({
-                        ...mockTemplateData,
-                        current_version: version,
-                        draft: { ...mockTemplateData.draft, name: payload.name },
-                    }),
-                })
+                    settled: false,
+                    finish: () => {
+                        save.settled = true
+                        resolve({
+                            ...mockTemplateData,
+                            current_version: version,
+                            draft: { ...mockTemplateData.draft, name: payload.name },
+                        })
+                    },
+                }
+                saves.push(save)
             }))
         const advance = async (ms: number) => {
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(ms)
             })
+        }
+        const settleStartedSaves = async () => {
+            for (const save of saves) {
+                if (!save.settled) save.finish()
+            }
+            await advance(10)
         }
 
         render(<PlatformFormTemplatePage />)
@@ -439,16 +472,15 @@ describe("PlatformFormTemplatePage", () => {
         expect(saves.map((save) => save.name)).toEqual(["Renamed once"])
 
         fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed twice" } })
-        await advance(10)
+        await advance(3000)
         saves[0].finish()
         await advance(10)
-        await advance(1200)
-        expect(saves.map((save) => save.name)).toEqual(["Renamed once", "Renamed twice"])
-
-        saves[1].finish()
-        await advance(10)
+        await advance(3000)
+        await settleStartedSaves()
+        await settleStartedSaves()
         await advance(5000)
-        expect(saves).toHaveLength(2)
+
+        expect(saves.map((save) => save.name)).toEqual(["Renamed once", "Renamed twice"])
         expect(screen.getByText(/^Saved /)).toBeInTheDocument()
     })
 

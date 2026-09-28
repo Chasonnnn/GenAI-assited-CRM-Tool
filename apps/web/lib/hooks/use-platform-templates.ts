@@ -2,7 +2,7 @@
  * React Query hooks for platform template studio (ops console).
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import {
     listPlatformEmailTemplates,
     getPlatformEmailTemplate,
@@ -39,6 +39,7 @@ import {
     type PlatformEmailTemplateCreate,
     type PlatformEmailTemplateTestSendRequest,
     type PlatformEmailTemplateUpdate,
+    type PlatformFormTemplate,
     type PlatformFormTemplateCreate,
     type PlatformFormTemplateUpdate,
     type PlatformWorkflowTemplateCreate,
@@ -63,6 +64,14 @@ const platformTemplateKeys = {
     systemDetail: (systemKey: string) => [...platformTemplateKeys.system(), systemKey] as const,
     systemVariables: (systemKey: string) => [...platformTemplateKeys.systemDetail(systemKey), 'variables'] as const,
     branding: () => [...platformTemplateKeys.all, 'branding'] as const,
+}
+
+// Writes a mutation response into the form template detail cache. A detail request still in
+// flight started before the write and would land after it, and invalidation cancels only
+// requests of observed queries, so cancel it first.
+async function writeFormTemplateDetail(queryClient: QueryClient, id: string, template: PlatformFormTemplate) {
+    await queryClient.cancelQueries({ queryKey: platformTemplateKeys.formDetail(id), exact: true })
+    queryClient.setQueryData(platformTemplateKeys.formDetail(id), template)
 }
 
 export function usePlatformEmailTemplates() {
@@ -180,10 +189,10 @@ export function useUpdatePlatformFormTemplate() {
     return useMutation({
         mutationFn: ({ id, payload }: { id: string; payload: PlatformFormTemplateUpdate }) =>
             updatePlatformFormTemplate(id, payload),
-        onSuccess: (data, { id }) => {
+        onSuccess: async (data, { id }) => {
             // The response is the full template read. Store it so the builder's draft and
             // published comparison is current before the refetch lands.
-            queryClient.setQueryData(platformTemplateKeys.formDetail(id), data)
+            await writeFormTemplateDetail(queryClient, id, data)
             void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
             void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.formDetail(id) })
         },
@@ -195,8 +204,8 @@ export function usePublishPlatformFormTemplate() {
     return useMutation({
         mutationFn: ({ id, payload }: { id: string; payload: TemplatePublishRequest }) =>
             publishPlatformFormTemplate(id, payload),
-        onSuccess: (data, { id }) => {
-            queryClient.setQueryData(platformTemplateKeys.formDetail(id), data)
+        onSuccess: async (data, { id }) => {
+            await writeFormTemplateDetail(queryClient, id, data)
             void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.forms() })
             void queryClient.invalidateQueries({ queryKey: platformTemplateKeys.formDetail(id) })
         },

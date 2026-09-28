@@ -39,6 +39,7 @@ import {
 } from "@/lib/forms/form-builder-document"
 import { getFormPublicationStatus, hasSameContent } from "@/lib/forms/form-publication-status"
 import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
+import { useFormBuilderSaveQueue, type SaveTicket } from "@/lib/forms/use-form-builder-save-queue"
 import { useAutomationFormBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import type { AutomationBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
@@ -173,58 +174,62 @@ function buildAutomationDraftPayload(pages: BuilderPages, state: AutomationDraft
     }
 }
 
-async function persistAutomationFormPayload({
-    payload,
+// The draft exactly as submitted. Saved fingerprints come from it, not from the latest edits,
+// so edits made while the request is in flight stay dirty.
+type AutomationDraft = {
+    payload: FormCreatePayload
+    mappings: ReturnType<typeof buildMappings>
+    fingerprint: string
+    schemaFingerprint: string
+}
+
+// Returns the saved form and leaves builder state to the save queue's handlers. Only the
+// redirect to a newly created form happens here, right after create, and only for the current
+// builder generation.
+async function persistAutomationDraft({
+    draft,
+    ticket,
     isNewForm,
     id,
-    pages,
     createFormMutation,
     updateFormMutation,
     setMappingsMutation,
     router,
-    patchState,
 }: {
-    payload: FormCreatePayload
+    draft: AutomationDraft
+    ticket: SaveTicket
     isNewForm: boolean
     id: string
-    pages: BuilderPages
     createFormMutation: ReturnType<typeof useCreateForm>
     updateFormMutation: ReturnType<typeof useUpdateForm>
     setMappingsMutation: ReturnType<typeof useSetFormMappings>
     router: AutomationRouter
-    patchState: (payload: Partial<AutomationBuilderState>) => void
 }): Promise<FormRead> {
     let savedForm: FormRead
     if (isNewForm) {
-        savedForm = await createFormMutation.mutateAsync(payload)
-        router.replace(`/automation/forms/${savedForm.id}`)
+        savedForm = await createFormMutation.mutateAsync(draft.payload)
+        if (ticket.isCurrent()) router.replace(`/automation/forms/${savedForm.id}`)
     } else {
         savedForm = await updateFormMutation.mutateAsync({
             formId: id,
-            payload,
+            payload: draft.payload,
         })
     }
 
-    const mappings = buildMappings(pages)
     await setMappingsMutation.mutateAsync({
         formId: savedForm.id,
-        mappings,
+        mappings: draft.mappings,
     })
-
-    patchState({ isPublished: savedForm.status === "published" })
     return savedForm
 }
 
-function buildSavedState(
-    fingerprint: string,
-    schemaFingerprint: string,
-    savedForm?: FormRead,
-): Partial<AutomationBuilderState> {
+function buildSavedState(draft: AutomationDraft, savedForm: FormRead): Partial<AutomationBuilderState> {
     return {
         autoSaveStatus: "saved",
-        lastSavedAt: savedForm?.updated_at ? new Date(savedForm.updated_at) : new Date(),
-        lastSavedFingerprint: fingerprint,
-        lastSavedSchemaFingerprint: schemaFingerprint,
+        isPublished: savedForm.status === "published",
+        lastSavedAt: savedForm.updated_at ? new Date(savedForm.updated_at) : new Date(),
+        lastSavedFingerprint: draft.fingerprint,
+        lastSavedSchemaFingerprint: draft.schemaFingerprint,
     }
 }
 
@@ -305,6 +310,7 @@ export function useAutomationFormBuilderPage() {
     const formKey = formId ?? "new"
     const { state, patchState, resetForForm, hydrateFromForm } =
         useAutomationFormBuilderState(formKey, isNewForm)
+    const saveQueue = useFormBuilderSaveQueue(formKey)
 
     const { data: formData, isLoading: isFormLoading } = useForm(formId)
     const { data: mappingData, isLoading: isMappingsLoading } = useFormMappings(formId)
@@ -446,7 +452,9 @@ export function useAutomationFormBuilderPage() {
         !hasSameContent(formData?.form_schema, formData?.published_schema)
     const publicationStatus = getFormPublicationStatus(state.isPublished, hasUnpublishedChanges)
 
-    if (state.hasHydrated && state.baselineFormKey !== formKey) {
+    // The render that resets for another form still sees the previous form's state and pages, so
+    // record the baseline only once the state belongs to this form.
+    if (state.formKey === formKey && state.hasHydrated && state.baselineFormKey !== formKey) {
         if (!isNewForm && formData?.updated_at) {
             patchState({
                 autoSaveStatus: "saved",
@@ -485,33 +493,42 @@ export function useAutomationFormBuilderPage() {
         })
     }
 
-    const handleSave = async () => {
+    const captureDraft = (): AutomationDraft => ({
+        payload: draftPayload,
+        mappings: buildMappings(pages),
+        fingerprint: draftFingerprint,
+        schemaFingerprint: draftSchemaFingerprint,
+    })
+
+    const persistDraft = (draft: AutomationDraft, ticket: SaveTicket) =>
+        persistAutomationDraft({
+            draft,
+            ticket,
+            isNewForm,
+            id,
+            createFormMutation,
+            updateFormMutation,
+            setMappingsMutation,
+            router,
+        })
+
+    const handleSave = () => {
         if (!state.formName.trim()) {
             toast.error("Form name is required")
             return
         }
+        const draft = captureDraft()
         patchState({ isSaving: true })
-        const finishSaving = () => patchState({ isSaving: false })
-        try {
-            const savedForm = await persistAutomationFormPayload({
-                payload: draftPayload,
-                isNewForm,
-                id,
-                pages,
-                createFormMutation,
-                updateFormMutation,
-                setMappingsMutation,
-                router,
-                patchState,
-            })
-            patchState(buildSavedState(draftFingerprint, draftSchemaFingerprint, savedForm))
-            toast.success("Form saved")
-            finishSaving()
-        } catch {
-            patchState({ autoSaveStatus: "error" })
-            toast.error("Failed to save form")
-            finishSaving()
-        }
+        return saveQueue.enqueue((ticket) => persistDraft(draft, ticket), {
+            onSuccess: (savedForm) => {
+                patchState({ ...buildSavedState(draft, savedForm), isSaving: false })
+                toast.success("Form saved")
+            },
+            onError: () => {
+                patchState({ autoSaveStatus: "error", isSaving: false })
+                toast.error("Failed to save form")
+            },
+        })
     }
 
     useFormBuilderAutosave({
@@ -520,44 +537,17 @@ export function useAutomationFormBuilderPage() {
             Boolean(state.formName.trim()) &&
             !state.isSaving &&
             !state.isPublishing &&
-            !createFormMutation.isPending &&
-            !updateFormMutation.isPending &&
-            !setMappingsMutation.isPending,
-        scopeKey: formKey,
+            !saveQueue.isBusy,
         fingerprint: draftFingerprint,
         savedFingerprint: state.lastSavedFingerprint,
-        save: async () => {
-            const payload = buildAutomationDraftPayload(pages, {
-                allowedMimeTypesText: state.allowedMimeTypesText,
-                defaultTemplateId: state.defaultTemplateId,
-                formDescription: state.formDescription,
-                formLeadKind: state.formLeadKind,
-                formName: state.formName,
-                formPurpose: state.formPurpose,
-                logoUrl: state.logoUrl,
-                maxFileCount: state.maxFileCount,
-                maxFileSizeMb: state.maxFileSizeMb,
-                privacyNotice: state.privacyNotice,
-                publicEyebrow: state.publicEyebrow,
-                publicSubtitle: state.publicSubtitle,
-                publicTitle: state.publicTitle,
+        save: () => {
+            const draft = captureDraft()
+            patchState({ autoSaveStatus: "saving" })
+            void saveQueue.enqueue((ticket) => persistDraft(draft, ticket), {
+                onSuccess: (savedForm) => patchState(buildSavedState(draft, savedForm)),
+                onError: () => patchState({ autoSaveStatus: "error" }),
             })
-            const savedForm = await persistAutomationFormPayload({
-                payload,
-                isNewForm,
-                id,
-                pages,
-                createFormMutation,
-                updateFormMutation,
-                setMappingsMutation,
-                router,
-                patchState,
-            })
-            return buildSavedState(JSON.stringify(payload), JSON.stringify(payload.form_schema), savedForm)
         },
-        onSaving: () => patchState({ autoSaveStatus: "saving" }),
-        onSaved: patchState,
-        onError: () => patchState({ autoSaveStatus: "error" }),
     })
 
     const handleLogoUploadClick = () => {
@@ -713,41 +703,46 @@ export function useAutomationFormBuilderPage() {
         handleWorkspaceTabChange("preview")
     }
 
-    const confirmPublish = async () => {
+    const confirmPublish = () => {
         if (hasMissingCriticalMappings()) {
             return
         }
 
+        const draft = captureDraft()
         patchState({ isPublishing: true })
-        const finishPublishing = () => patchState({ isPublishing: false })
-        try {
-            const savedForm = await persistAutomationFormPayload({
-                payload: draftPayload,
-                isNewForm,
-                id,
-                pages,
-                createFormMutation,
-                updateFormMutation,
-                setMappingsMutation,
-                router,
-                patchState,
-            })
-            patchState(buildSavedState(draftFingerprint, draftSchemaFingerprint, savedForm))
-            await publishFormMutation.mutateAsync(savedForm.id)
-            patchState({ isPublished: true })
-            const intakeLinkResult = await refetchIntakeLinks()
-            patchState({
-                showPublishDialog: false,
-                showSharePrompt: (intakeLinkResult.data || []).length > 0,
-                publishValidationAttempted: false,
-            })
-            toast.success("Form published")
-            finishPublishing()
-        } catch {
-            patchState({ autoSaveStatus: "error" })
-            toast.error("Failed to publish form")
-            finishPublishing()
-        }
+        return saveQueue.enqueue(
+            async (ticket) => {
+                const savedForm = await persistDraft(draft, ticket)
+                try {
+                    await publishFormMutation.mutateAsync(savedForm.id)
+                } catch {
+                    return { savedForm, published: false, intakeLinkCount: 0 }
+                }
+                const intakeLinkResult = await refetchIntakeLinks()
+                return { savedForm, published: true, intakeLinkCount: (intakeLinkResult.data || []).length }
+            },
+            {
+                onSuccess: ({ savedForm, published, intakeLinkCount }) => {
+                    patchState({ ...buildSavedState(draft, savedForm), isPublishing: false })
+                    if (!published) {
+                        patchState({ autoSaveStatus: "error" })
+                        toast.error("Failed to publish form")
+                        return
+                    }
+                    patchState({
+                        isPublished: true,
+                        showPublishDialog: false,
+                        showSharePrompt: intakeLinkCount > 0,
+                        publishValidationAttempted: false,
+                    })
+                    toast.success("Form published")
+                },
+                onError: () => {
+                    patchState({ autoSaveStatus: "error", isPublishing: false })
+                    toast.error("Failed to publish form")
+                },
+            },
+        )
     }
 
     const sortedIntakeLinks = intakeLinks.toSorted((a, b) => {
