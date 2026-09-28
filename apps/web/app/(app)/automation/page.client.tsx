@@ -97,6 +97,8 @@ import { completeWorkflowSetup, startWorkflowSetup } from "@/lib/workflow-metric
 import {
     areJsonObjectsEqual,
     ConditionValueInput,
+    APPLICANT_TYPE_BOTH,
+    APPLICANT_TYPE_OPTIONS,
     EMAIL_RECIPIENT_OPTIONS,
     FORM_MATCH_STATUS_OPTIONS,
     FORM_SOURCE_MODE_OPTIONS,
@@ -108,6 +110,7 @@ import {
     VALUELESS_OPERATORS,
     createClientRowId,
     getEmailRecipientKind,
+    getApplicantTypeLabel,
     getEmailRecipientUserId,
     isDonorIntakeWorkflow,
     isDonorLeadKind,
@@ -1071,12 +1074,20 @@ function useAutomationPageView({
         intakeLeadKindKey && !isDonorSubject(subjectType) && isDonorLeadKind(intakeLeadKind)
             ? intakeLeadKind
             : subjectType
+    const isSharedDonorTriggerForm =
+        Boolean(intakeLeadKindKey) && (triggerForm?.lead_kinds?.filter(isDonorLeadKind).length ?? 0) > 1
     // A form shared by both donor types has no single pipeline, so its workflows cannot
     // reference stages unless the trigger names one donor type.
-    const hasSharedDonorRecord =
-        Boolean(intakeLeadKindKey) &&
-        !isDonorLeadKind(configuredIntakeLeadKind) &&
-        (triggerForm?.lead_kinds?.filter(isDonorLeadKind).length ?? 0) > 1
+    const hasSharedDonorRecord = isSharedDonorTriggerForm && !isDonorLeadKind(configuredIntakeLeadKind)
+    const setIntakeApplicantType = (value: string | null) => {
+        if (!intakeLeadKindKey) return
+        setTriggerConfig((currentConfig) => {
+            const nextConfig: JsonObject = { ...currentConfig }
+            if (isDonorLeadKind(value)) nextConfig[intakeLeadKindKey] = value
+            else delete nextConfig[intakeLeadKindKey]
+            return nextConfig
+        })
+    }
     const { data: recordOptions } = useWorkflowOptions(workflowScope, recordSubjectType)
     const statusOptions = recordOptions?.statuses ?? EMPTY_STATUS_OPTIONS
     const activeStatusOptions = statusOptions.filter((status) => status.is_active !== false)
@@ -2071,6 +2082,31 @@ function useAutomationPageView({
                                                 Publish a form to use this trigger.
                                             </p>
                                         )}
+                                    </div>
+                                )}
+                                {isSharedDonorTriggerForm && (
+                                    <div>
+                                        <Label>Applicant Type</Label>
+                                        <Select
+                                            aria-label="Applicant Type"
+                                            value={
+                                                isDonorLeadKind(configuredIntakeLeadKind)
+                                                    ? configuredIntakeLeadKind
+                                                    : APPLICANT_TYPE_BOTH
+                                            }
+                                            onValueChange={setIntakeApplicantType}
+                                        >
+                                            <SelectTrigger aria-label="Applicant Type" className="mt-1.5">
+                                                <SelectValue>{getApplicantTypeLabel}</SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {APPLICANT_TYPE_OPTIONS.map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                        {getApplicantTypeLabel(option.value)}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 )}
                                 {triggerType === "task_due" && (
