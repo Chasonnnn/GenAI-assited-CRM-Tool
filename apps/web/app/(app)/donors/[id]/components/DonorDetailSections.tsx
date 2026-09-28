@@ -19,6 +19,7 @@ import { DonorDocumentsSection } from "@/components/donors/DonorDocumentsSection
 import { DonorNotesSection } from "@/components/donors/DonorNotesSection"
 import { DonorTasksSection } from "@/components/donors/DonorTasksSection"
 import { DonorOverviewTab } from "@/components/donors/DonorOverviewTab"
+import { DonorMetaLeadCard } from "./DonorMetaLeadCard"
 import { SurrogateDetailHeader } from "@/components/surrogates/detail/SurrogateDetailHeader"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { EntityActivity } from "@/lib/api/activity"
@@ -97,7 +98,10 @@ export function DonorDetailSections({
         const query = params.toString()
         window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`)
     }
-    const activityPanel = <EntityActivityTimeline
+    // The overview side column renders this slot, so the Meta lead card sits above the timeline.
+    const activityPanel = <>
+    <DonorMetaLeadCard donorId={donor.id} enabled={donor.source === "meta"} />
+    <EntityActivityTimeline
         currentStageId={donor.stage_id}
         stages={stages}
         stageHistory={normalizeDonorHistory(history)}
@@ -110,6 +114,7 @@ export function DonorDetailSections({
         historyHref={`/donors/${donor.id}?tab=history&return_to=${encodeURIComponent(returnTo)}`}
         onViewHistory={() => changeTab("history")}
     />
+    </>
     return <div className="flex flex-1 flex-col">
         <SurrogateDetailHeader
             recordLabel="Donor"

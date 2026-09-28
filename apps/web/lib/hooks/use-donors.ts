@@ -7,6 +7,7 @@ import {
     createDonor,
     deleteDonorNote,
     getDonor,
+    getDonorMetaLead,
     getDonorProfile,
     revealDonorSensitiveInfo,
     getDonorOwnerOptions,
@@ -35,6 +36,7 @@ export const donorKeys = {
     profile: (id: string) => [...donorKeys.all, "profile", id] as const,
     history: (id: string) => [...donorKeys.all, "history", id] as const,
     notes: (id: string) => [...donorKeys.all, "notes", id] as const,
+    metaLead: (id: string) => [...donorKeys.all, "meta-lead", id] as const,
 }
 
 export function useDonor(id: string | null) {
@@ -50,6 +52,14 @@ export function useDonors(filters: DonorFilters, options: { enabled?: boolean } 
         queryKey: donorKeys.list(filters),
         queryFn: () => listDonors(filters),
         enabled: options.enabled ?? true,
+    })
+}
+
+export function useDonorMetaLead(id: string | null) {
+    return useQuery({
+        queryKey: donorKeys.metaLead(id ?? ""),
+        queryFn: () => getDonorMetaLead(id!),
+        enabled: Boolean(id),
     })
 }
 

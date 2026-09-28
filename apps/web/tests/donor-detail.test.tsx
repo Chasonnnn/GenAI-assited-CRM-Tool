@@ -9,6 +9,7 @@ const mockUseDonorProfile = vi.fn()
 const mockRevealDonor = vi.fn()
 const mockUseDonor = vi.fn()
 const mockUseDonorNotes = vi.fn()
+const mockUseDonorMetaLead = vi.fn()
 const mockCreateDonorNote = vi.fn()
 const mockDeleteDonorNote = vi.fn()
 const mockUpdateDonor = vi.fn()
@@ -80,6 +81,7 @@ vi.mock("@/lib/hooks/use-donors", () => ({
     useDonorOwnerOptions: () => ({ data: { users: [], queues: [] }, isLoading: false, isError: false }),
     useDonor: (id: string) => mockUseDonor(id),
     useDonorNotes: () => mockUseDonorNotes(),
+    useDonorMetaLead: (id: string | null) => mockUseDonorMetaLead(id),
     useDonorHistory: () => ({
         data: [
             {
@@ -180,6 +182,7 @@ describe("DonorDetailPage", () => {
         mockUseDonorProfile.mockReset().mockReturnValue({ data: donorProfileFixture, isPending: false, isError: false, refetch: vi.fn() })
         mockRevealDonor.mockReset().mockResolvedValue({ ssn: null, partner_ssn: null })
         mockUseDonor.mockReset()
+        mockUseDonorMetaLead.mockReset().mockReturnValue({ data: undefined, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() })
         mockUseDonorNotes.mockReset()
         mockUseDonorNotes.mockReturnValue({
             data: [{
@@ -389,6 +392,65 @@ describe("DonorDetailPage", () => {
         const row = screen.getByText("Source:").parentElement as HTMLElement
         expect(within(row).getByText(label)).toHaveAttribute("data-slot", "badge")
         expect(row).not.toHaveTextContent(source)
+    })
+
+    it("shows the source Meta lead answers only for Meta donors", () => {
+        const query = mockUseDonor("donor-1")
+        const manual = render(<DonorDetailPage />)
+        expect(mockUseDonorMetaLead).toHaveBeenLastCalledWith(null)
+        expect(screen.queryByText("Meta Lead")).not.toBeInTheDocument()
+        manual.unmount()
+
+        mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, source: "meta" } })
+        mockUseDonorMetaLead.mockReturnValue({
+            data: {
+                id: "lead-1",
+                form_name: "Egg donor intake",
+                meta_created_time: null,
+                received_at: "2026-09-20T15:30:00Z",
+                answers: [
+                    { key: "why_donate", label: "Why do you want to donate?", value: "To help a family" },
+                    { key: "preferred_contact_time", label: null, value: "Evenings" },
+                ],
+                dropped_fields: ["date_of_birth"],
+            },
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+        render(<DonorDetailPage />)
+
+        expect(mockUseDonorMetaLead).toHaveBeenLastCalledWith("donor-1")
+        const overview = screen.getByRole("tabpanel", { name: "Overview" })
+        expect(within(overview).getByText("Meta Lead")).toBeInTheDocument()
+        expect(within(overview).getByText("Egg donor intake")).toBeInTheDocument()
+        expect(within(overview).getByText("Not saved (invalid value)").nextElementSibling).toHaveTextContent("Date of Birth")
+        const answers = within(overview).getByLabelText("Meta lead answers")
+        expect(within(answers).getByText("Why do you want to donate?").nextElementSibling).toHaveTextContent("To help a family")
+        expect(within(answers).getByText("Preferred contact time").nextElementSibling).toHaveTextContent("Evenings")
+    })
+
+    it("renders Meta lead loading, error/retry, and missing states", () => {
+        const query = mockUseDonor("donor-1")
+        mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, source: "meta" } })
+        mockUseDonorMetaLead.mockReturnValue({ data: undefined, isLoading: true, isError: false, isFetching: true, refetch: vi.fn() })
+        const loading = render(<DonorDetailPage />)
+        const loadingCard = screen.getByText("Meta Lead").closest("[data-slot=card]") as HTMLElement
+        expect(within(loadingCard).getByRole("status")).toHaveTextContent("Loading")
+        loading.unmount()
+
+        const refetch = vi.fn()
+        mockUseDonorMetaLead.mockReturnValue({ data: undefined, isLoading: false, isError: true, isFetching: false, refetch })
+        const errored = render(<DonorDetailPage />)
+        expect(screen.getByText("Couldn't load the Meta lead.")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+        errored.unmount()
+
+        mockUseDonorMetaLead.mockReturnValue({ data: null, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() })
+        render(<DonorDetailPage />)
+        expect(screen.queryByText("Meta Lead")).not.toBeInTheDocument()
     })
 
     it.each([null, "", "  "])("shows the empty token for a %j source", (source) => {

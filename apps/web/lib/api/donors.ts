@@ -124,3 +124,23 @@ export async function getDonorProfile(id: string): Promise<DonorProfile> {
 export async function revealDonorSensitiveInfo(id: string): Promise<{ ssn: string | null; partner_ssn: string | null }> {
     return api.post(`/donors/${id}/sensitive-info/reveal`, {})
 }
+
+export interface DonorMetaLeadAnswer {
+    key: string
+    label: string | null
+    value: string
+}
+
+/** Answers of the Meta lead a donor was converted from; null for other donors. */
+export interface DonorMetaLead {
+    id: string
+    form_name: string | null
+    meta_created_time: string | null
+    received_at: string
+    answers: DonorMetaLeadAnswer[]
+    dropped_fields: string[]
+}
+
+export async function getDonorMetaLead(id: string): Promise<DonorMetaLead | null> {
+    return api.get<DonorMetaLead | null>(`/donors/${id}/meta-lead`)
+}
