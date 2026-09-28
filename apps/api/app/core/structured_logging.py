@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import re
 import uuid
 from typing import Any
 
@@ -33,6 +34,27 @@ def _header_value(request: Any, name: str) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+# Capitalized words allowed in a logged error message. Any other capitalized word after the
+# first may be a person's name or a stage label, so the message is not logged.
+_ERROR_MESSAGE_PROPER_NOUNS = frozenset({"CRM", "Google", "Calendar", "Zoom", "Meet", "API"})
+_ERROR_MESSAGE_ALLOWED = re.compile(r"^[A-Za-z' ,;:.()/-]{1,120}$")
+
+
+def static_error_code(message: object) -> str | None:
+    """Return a log-safe code for a fixed client error message, or None.
+
+    Only messages made of plain words qualify: no digits, emails, quotes around user
+    input, or capitalized words other than the first and a few product names.
+    """
+    if not isinstance(message, str) or not _ERROR_MESSAGE_ALLOWED.match(message.strip()):
+        return None
+    words = re.findall(r"[A-Za-z']+", message)
+    if any(w[0].isupper() and w not in _ERROR_MESSAGE_PROPER_NOUNS for w in words[1:]):
+        return None
+    code = re.sub(r"[^a-z]+", "_", message.lower()).strip("_")
+    return code or None
 
 
 def hash_email_for_log(email: str | None) -> str | None:

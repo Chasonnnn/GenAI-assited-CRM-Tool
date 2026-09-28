@@ -136,3 +136,43 @@ async def test_permission_denied_log_includes_missing_permission_and_request_con
     assert request_logs[-1].status == 403
     assert request_logs[-1].error_code == "permission_denied"
     assert request_logs[-1].permission == "view_intended_parents"
+
+
+@pytest.mark.parametrize(
+    "message,expected",
+    [
+        (
+            "Google event changed; review before editing",
+            "google_event_changed_review_before_editing",
+        ),
+        (
+            "Reconnect the appointment owner's Google Calendar",
+            "reconnect_the_appointment_owner_s_google_calendar",
+        ),
+        (
+            "Cannot cancel appointment with status cancelled",
+            "cannot_cancel_appointment_with_status_cancelled",
+        ),
+        ("Reason required when moving to Ready to Match", None),
+        ("Invalid email jane.doe@example.com", None),
+        ("Slot 3 is taken", None),
+        ("Surrogate Jane Doe is already matched", None),
+        ({"field": "value"}, None),
+    ],
+)
+def test_static_error_code_logs_only_fixed_messages(message, expected):
+    from app.core.structured_logging import static_error_code
+
+    assert static_error_code(message) == expected
+
+
+@pytest.mark.asyncio
+async def test_client_error_log_records_the_error_code(authed_client, caplog):
+    with caplog.at_level(logging.INFO, logger="app.ops"):
+        response = await authed_client.post(f"/appointments/{uuid.uuid4()}/cancel", json={})
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Appointment not found"}
+    record = _records(caplog, "api_request_completed")[-1]
+    assert record.status == 404
+    assert record.error_code == "appointment_not_found"
