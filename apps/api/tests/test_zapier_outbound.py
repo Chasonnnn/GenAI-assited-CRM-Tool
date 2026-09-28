@@ -452,6 +452,53 @@ def _meta_surrogate_with_reporting(db, test_org, test_user, *, received_at=None,
     return surrogate, meta_lead
 
 
+def test_synthetic_meta_lead_id_detection():
+    from app.services import zapier_outbound_service
+
+    assert zapier_outbound_service._is_synthetic_meta_lead_id(f"zapier-{uuid4()}") is True
+    assert zapier_outbound_service._is_synthetic_meta_lead_id("1559954882011881") is False
+    assert zapier_outbound_service._is_synthetic_meta_lead_id(f"zapier-test-{uuid4()}") is False
+    assert zapier_outbound_service._is_synthetic_meta_lead_id(None) is False
+
+
+def test_surrogate_event_with_synthetic_meta_lead_id_is_skipped(db, test_org, test_user):
+    from app.db.enums import JobType
+    from app.db.models import Job, ZapierOutboundEvent
+    from app.services import zapier_outbound_service
+
+    synthetic_id = f"zapier-{uuid4()}"
+    surrogate, _meta_lead = _meta_surrogate_with_reporting(
+        db, test_org, test_user, lead_id=synthetic_id
+    )
+
+    result = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_label="Pre Qualified",
+    )
+
+    assert result["queued"] is False
+    assert result["reason"] == "synthetic_meta_lead_id"
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ZAPIER_STAGE_EVENT.value,
+        )
+        .count()
+        == 0
+    )
+    skipped = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.surrogate_id == surrogate.id)
+        .one()
+    )
+    assert skipped.status == "skipped"
+    assert skipped.reason == "synthetic_meta_lead_id"
+
+
 def test_repeated_surrogate_bucket_records_duplicate_skip(db, test_org, test_user):
     from app.db.models import ZapierOutboundEvent
     from app.services import zapier_outbound_service

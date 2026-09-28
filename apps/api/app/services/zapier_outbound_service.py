@@ -38,6 +38,7 @@ FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
 PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid"
 # Surrogate and donor events share one webhook URL; record_type lets one Zap branch.
 SURROGATE_RECORD_TYPE = "surrogate"
+SYNTHETIC_META_LEAD_ID_PREFIX = "zapier-"
 
 
 def _now_utc() -> datetime:
@@ -61,6 +62,21 @@ def _is_meta_lead_within_reporting_window(meta_lead: MetaLead, *, event_time: da
     if lead_timestamp is None:
         return True
     return (event_time - lead_timestamp) <= MAX_META_LEAD_AGE
+
+
+def _is_synthetic_meta_lead_id(value: str | None) -> bool:
+    """True for the 'zapier-<uuid>' id stored when an inbound Zapier lead had no Meta lead id.
+
+    Same rule as meta_lead_service.is_synthetic_meta_lead_id, kept private here so outbound
+    does not depend on the inbound change landing first. Remove when the two are unified.
+    """
+    if not value or not value.startswith(SYNTHETIC_META_LEAD_ID_PREFIX):
+        return False
+    try:
+        UUID(value.removeprefix(SYNTHETIC_META_LEAD_ID_PREFIX))
+    except ValueError:
+        return False
+    return True
 
 
 def resolve_mapping_item(mapping: list[dict], stage_key: str) -> dict | None:
@@ -380,6 +396,18 @@ def enqueue_stage_event(
             stage_label=stage_label,
             event_name=event_name,
         )
+    if _is_synthetic_meta_lead_id(meta_lead.meta_lead_id):
+        return _skip_event(
+            db,
+            surrogate=surrogate,
+            source=source,
+            reason="synthetic_meta_lead_id",
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+            event_name=event_name,
+            lead_id=meta_lead.meta_lead_id,
+        )
 
     event_time = effective_at or _now_utc()
     if not _is_meta_lead_within_reporting_window(meta_lead, event_time=event_time):
@@ -534,6 +562,7 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
         return {
             "source": "meta",
             "lead_id": meta_lead.meta_lead_id or None,
+            "lead_timestamp": _resolve_meta_lead_timestamp(meta_lead),
             "first_party_submission_id": None,
             "fields": fields,
         }
@@ -704,8 +733,16 @@ def enqueue_donor_stage_event(
     attribution = _resolve_donor_attribution(db, donor)
     if attribution is None:
         return skip("missing_donor_attribution", event_name=event_name)
-    if attribution["source"] == "meta" and not attribution.get("lead_id"):
-        return skip("missing_meta_lead_id", event_name=event_name, attribution=attribution)
+    if attribution["source"] == "meta":
+        lead_id = attribution.get("lead_id")
+        if not lead_id:
+            return skip("missing_meta_lead_id", event_name=event_name, attribution=attribution)
+        if _is_synthetic_meta_lead_id(str(lead_id)):
+            return skip("synthetic_meta_lead_id", event_name=event_name, attribution=attribution)
+        lead_timestamp = attribution.get("lead_timestamp")
+        event_time = _coerce_utc(history.effective_at) or _now_utc()
+        if isinstance(lead_timestamp, datetime) and event_time - lead_timestamp > MAX_META_LEAD_AGE:
+            return skip("stale_meta_lead", event_name=event_name, attribution=attribution)
     attribution_fields = attribution.get("fields")
     has_browser_matching = isinstance(attribution_fields, dict) and bool(
         attribution_fields.get("fbc") or attribution_fields.get("fbp")

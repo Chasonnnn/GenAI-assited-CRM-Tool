@@ -120,10 +120,11 @@ def _configure_reporting(db, org_id, *, donor_type, pipeline, stage, event_name=
     return settings
 
 
-def _attach_meta_lead(db, donor, *, org_id=None):
+def _attach_meta_lead(db, donor, *, org_id=None, meta_lead_id=None, meta_created_time=None):
     lead = MetaLead(
         organization_id=org_id or donor.organization_id,
-        meta_lead_id=f"meta-{uuid.uuid4().hex}",
+        meta_lead_id=meta_lead_id or f"meta-{uuid.uuid4().hex}",
+        meta_created_time=meta_created_time,
         meta_form_id="meta-form-1",
         meta_page_id="meta-page-1",
         field_data_raw={
@@ -361,6 +362,51 @@ def test_donor_payload_hashes_meta_normalized_phone_and_skips_placeholder_email(
         "phone_hash": "7515397f91001442b8a497e2562bc8e7ee3c914396f7da402a59cc40f66dd0d1"
     }
     assert "placeholder" not in str(payload)
+
+
+@pytest.mark.parametrize(
+    ("lead_kwargs", "reason"),
+    [
+        ({"meta_lead_id": f"zapier-{uuid.uuid4()}"}, "synthetic_meta_lead_id"),
+        (
+            {"meta_created_time": datetime.now(UTC) - timedelta(days=91)},
+            "stale_meta_lead",
+        ),
+    ],
+    ids=["synthetic-lead-id", "older-than-90-days"],
+)
+def test_meta_donor_events_skip_unreportable_leads_like_surrogates(
+    db, test_org, test_user, lead_kwargs, reason
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor, **lead_kwargs)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+
+    result = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.donor_status_history_id == result["history"].id)
+        .one()
+    )
+    assert event.status == "skipped"
+    assert event.reason == reason
+    assert event.job_id is None
+    assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 0
 
 
 @pytest.mark.asyncio
