@@ -9,10 +9,16 @@ from httpx import ASGITransport, AsyncClient
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
-from app.db.enums import Role
-from app.db.models import IntendedParentStatusHistory, Membership, StatusChangeRequest, User
+from app.db.enums import AuditEventType, Role
+from app.db.models import (
+    AuditLog,
+    IntendedParentStatusHistory,
+    Membership,
+    StatusChangeRequest,
+    User,
+)
 from app.main import app
-from app.services import pipeline_service, session_service
+from app.services import audit_service, pipeline_service, session_service
 
 
 def _get_stage(db, org_id, slug: str):
@@ -87,6 +93,35 @@ async def _create_intended_parent(client: AsyncClient) -> dict:
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def _fail_status_change_audit(monkeypatch) -> None:
+    log_event = audit_service.log_event
+
+    def fail(*args, **kwargs):
+        if kwargs.get("event_type") == AuditEventType.INTENDED_PARENT_STATUS_CHANGED:
+            raise RuntimeError("Synthetic audit failure")
+        return log_event(*args, **kwargs)
+
+    monkeypatch.setattr(audit_service, "log_event", fail)
+
+
+async def _apply_then_age_last_change(db, client: AsyncClient, ip_id: str, stage_id) -> None:
+    response = await client.patch(
+        f"/intended-parents/{ip_id}/status",
+        json={"stage_id": str(stage_id)},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "applied"
+    history = (
+        db.query(IntendedParentStatusHistory)
+        .filter(IntendedParentStatusHistory.intended_parent_id == UUID(ip_id))
+        .order_by(IntendedParentStatusHistory.recorded_at.desc())
+        .first()
+    )
+    assert history is not None
+    history.recorded_at = datetime.now(UTC) - timedelta(minutes=10)
+    db.commit()
 
 
 @pytest.mark.asyncio
@@ -199,3 +234,85 @@ async def test_intended_parent_status_regression_self_approves_for_admin_or_deve
     assert regression_history.changed_by_user_id == user.id
     assert regression_history.approved_by_user_id == user.id
     assert regression_history.approved_at is not None
+
+
+@pytest.mark.asyncio
+async def test_intended_parent_stage_change_does_not_commit_when_audit_fails(
+    db, test_org, monkeypatch
+):
+    ready_stage = _get_stage(db, test_org.id, "ready_to_match")
+
+    async with _client_for_role(db, test_org.id, Role.ADMIN) as (_, client):
+        intended_parent = await _create_intended_parent(client)
+        commits: list[str] = []
+        monkeypatch.setattr(db, "commit", lambda: commits.append("commit"))
+        _fail_status_change_audit(monkeypatch)
+
+        with pytest.raises(RuntimeError, match="Synthetic audit failure"):
+            await client.patch(
+                f"/intended-parents/{intended_parent['id']}/status",
+                json={"stage_id": str(ready_stage.id)},
+            )
+
+    assert commits == []
+
+
+@pytest.mark.asyncio
+async def test_intended_parent_stage_change_request_does_not_commit_when_audit_fails(
+    db, test_org, monkeypatch
+):
+    new_stage = _get_stage(db, test_org.id, "new")
+    ready_stage = _get_stage(db, test_org.id, "ready_to_match")
+
+    async with _client_for_role(db, test_org.id, Role.CASE_MANAGER) as (_, client):
+        intended_parent = await _create_intended_parent(client)
+        await _apply_then_age_last_change(db, client, intended_parent["id"], ready_stage.id)
+        commits: list[str] = []
+        monkeypatch.setattr(db, "commit", lambda: commits.append("commit"))
+        _fail_status_change_audit(monkeypatch)
+
+        with pytest.raises(RuntimeError, match="Synthetic audit failure"):
+            await client.patch(
+                f"/intended-parents/{intended_parent['id']}/status",
+                json={"stage_id": str(new_stage.id), "reason": "Requested correction"},
+            )
+
+    assert commits == []
+
+
+@pytest.mark.asyncio
+async def test_intended_parent_stage_change_request_audit_records_request(db, test_org):
+    new_stage = _get_stage(db, test_org.id, "new")
+    ready_stage = _get_stage(db, test_org.id, "ready_to_match")
+
+    async with _client_for_role(db, test_org.id, Role.CASE_MANAGER) as (user, client):
+        intended_parent = await _create_intended_parent(client)
+        await _apply_then_age_last_change(db, client, intended_parent["id"], ready_stage.id)
+
+        response = await client.patch(
+            f"/intended-parents/{intended_parent['id']}/status",
+            json={"stage_id": str(new_stage.id), "reason": "Requested correction"},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "pending_approval"
+        request_id = response.json()["request_id"]
+
+    audit = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.organization_id == test_org.id,
+            AuditLog.event_type == AuditEventType.INTENDED_PARENT_STATUS_CHANGED.value,
+            AuditLog.target_id == UUID(intended_parent["id"]),
+        )
+        .order_by(AuditLog.created_at.desc())
+        .first()
+    )
+    assert audit is not None
+    assert audit.actor_user_id == user.id
+    assert audit.details == {
+        "from_status": "ready_to_match",
+        "requested_stage_id": str(new_stage.id),
+        "requested_stage_key": "new",
+        "result": "pending_approval",
+        "request_id": request_id,
+    }

@@ -390,7 +390,6 @@ def update_status(
                 detail="Cannot set to Matched without an accepted Match.",
             )
 
-    previous_status = ip.status
     try:
         result = ip_service.change_status(
             db=db,
@@ -400,27 +399,10 @@ def update_status(
             user_role=session.role,
             reason=data.reason,
             effective_at=data.effective_at,
+            request=request,
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
-
-    audit_service.log_event(
-        db=db,
-        org_id=session.org_id,
-        event_type=AuditEventType.INTENDED_PARENT_STATUS_CHANGED,
-        actor_user_id=session.user_id,
-        target_type="intended_parent",
-        target_id=ip.id,
-        details={
-            "from_status": previous_status,
-            "requested_stage_id": str(target_stage.id),
-            "requested_stage_key": target_stage.stage_key,
-            "result": result["status"],
-            "request_id": str(result.get("request_id")) if result.get("request_id") else None,
-        },
-        request=request,
-    )
-    db.commit()
 
     ip_read = (
         IntendedParentRead.model_validate(result["intended_parent"])

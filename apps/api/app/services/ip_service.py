@@ -787,6 +787,7 @@ def change_status(
     user_role: Role | str | None,
     reason: str | None = None,
     effective_at: datetime | None = None,
+    request: Request | None = None,
 ) -> StatusChangeResult:
     """
     Change intended parent status with backdating and regression support.
@@ -805,6 +806,7 @@ def change_status(
         user_role=user_role,
         reason=reason,
         effective_at=effective_at,
+        request=request,
     )
 
 
