@@ -232,8 +232,20 @@ class IntendedParentParty(Party):
         return match.intended_parent_id
 
     def accept_warning(self, db: Session, match: Match) -> str | None:
+        from app.services import pipeline_semantics_service, pipeline_service
+
         ip = match_queries.get_intended_parent(db, match.intended_parent_id, match.organization_id)
-        return _stage_warning(ip, "Intended parent", {"ready_to_match", "matched"})
+        stage = ip.stage if ip else None
+        eligible = stage is not None and (
+            pipeline_semantics_service.stage_has_capability(stage, "eligible_for_matching")
+            or any(
+                pipeline_service.stage_matches_system_role(
+                    stage, role, INTENDED_PARENT_PIPELINE_ENTITY
+                )
+                for role in ("handoff", "matched")
+            )
+        )
+        return _eligibility_warning(stage, "Intended parent", eligible)
 
     def on_accept(
         self, db: Session, match: Match, *, actor_user_id: UUID, actor_role, now: datetime
@@ -332,7 +344,11 @@ def parties(match: Match) -> list[Party]:
 
 def _stage_warning(record, label: str, eligible: set[str]) -> str | None:
     stage = record.stage if record else None
-    if stage and stage.stage_key in eligible and stage.is_active and not stage.deleted_at:
+    return _eligibility_warning(stage, label, bool(stage and stage.stage_key in eligible))
+
+
+def _eligibility_warning(stage, label: str, eligible: bool) -> str | None:
+    if stage and eligible and stage.is_active and not stage.deleted_at:
         return None
     current = stage.label if stage else "an unknown stage"
     return f"{label} at {current} is not eligible to accept"

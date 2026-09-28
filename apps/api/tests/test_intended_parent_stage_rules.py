@@ -323,3 +323,27 @@ async def test_match_accept_follows_intended_parent_role_mutation_rule(db, test_
     db.expire_all()
     assert db.get(Surrogate, UUID(surrogate["id"])).stage_id == surrogate_stage
     assert _stage_id(db, ip["id"]) == ip_stage
+
+
+@pytest.mark.asyncio
+async def test_match_accept_allows_intended_parent_on_stage_eligible_for_matching(
+    db, test_org, authed_client
+):
+    new = _get_stage(db, test_org.id, "new")
+    semantics = dict(new.semantics or {})
+    semantics["capabilities"] = {
+        **semantics.get("capabilities", {}),
+        "eligible_for_matching": True,
+    }
+    new.semantics = semantics
+    db.commit()
+    surrogate = await _create_surrogate(authed_client)
+    ip = await _create_intended_parent(authed_client)
+    assert _stage_id(db, ip["id"]) == new.id
+
+    match = await _case(authed_client, ip, surrogate=surrogate)
+    assert match["accept_eligibility_warnings"] == []
+    response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
+
+    assert response.status_code == 200, response.text
+    assert _stage_id(db, ip["id"]) == _get_stage(db, test_org.id, "matched").id
