@@ -27,6 +27,7 @@ from app.db.models import (
     UserWorkflowPreference,
     WorkflowExecution,
 )
+from app.schemas.donor import normalize_donor_source
 from app.schemas.workflow import (
     ALLOWED_CONDITION_FIELDS,
     ALLOWED_EMAIL_VARIABLES,
@@ -2489,6 +2490,12 @@ def _validate_action_config(
             )
             if not resolved:
                 raise ValueError(f"Stage {config.value} not found in {subject_type} pipeline")
+        if config.field == "source" and is_donor_subject:
+            # Donor updates accept only canonical sources, so store the canonical value.
+            source = normalize_donor_source(config.value)
+            if source is None:
+                raise ValueError("Donor source is required")
+            action["value"] = source
 
     elif action_type == "add_note":
         AddNoteActionConfig.model_validate(action)
