@@ -385,8 +385,8 @@ function getStageSemanticsForEntity(
             ...(stage?.semantics?.capabilities ?? {}),
         },
     }
+    // Donor and intended parent stage changes never resume a paused-from stage.
     if (
-        (entityType === "egg_donor" || entityType === "sperm_donor") &&
         normalizeStageKey(stage?.stage_key ?? stage?.slug ?? null) === "on_hold" &&
         stage?.semantics?.pause_behavior == null
     ) {
@@ -559,8 +559,10 @@ function getBehaviorPreset(
     entityType: PipelineEntityType,
 ): BehaviorPreset {
     const semantics = stage.semantics
-    if (semantics.pause_behavior === "resume_previous_stage") return "pause"
-    if (stage.category === "paused" && semantics.requires_reason_on_enter) return "pause"
+    if (entityType !== "intended_parent") {
+        if (semantics.pause_behavior === "resume_previous_stage") return "pause"
+        if (stage.category === "paused" && semantics.requires_reason_on_enter) return "pause"
+    }
     if (semantics.terminal_outcome === "lost") return "terminal_lost"
     if (semantics.terminal_outcome === "disqualified") return "terminal_disqualified"
     if (semantics.capabilities.requires_delivery_details) return "delivery"
@@ -640,10 +642,6 @@ function buildPresetSemantics(
             case "pause":
                 return {
                     ...reset,
-                    pause_behavior:
-                        entityType === "egg_donor" || entityType === "sperm_donor"
-                            ? "none"
-                            : "resume_previous_stage",
                     requires_reason_on_enter: true,
                 }
             case "terminal_lost":
@@ -761,6 +759,7 @@ function getPresetOptions(
         return [{ value: "custom", label: "Custom" }]
     }
     if (stage.category === "paused") {
+        if (entityType === "intended_parent") return [{ value: "custom", label: "Custom" }]
         return [
             { value: "pause", label: "Pause" },
             { value: "custom", label: "Custom" },
@@ -1524,20 +1523,22 @@ function StageSemanticsFields({
                     }
                 />
             ) : null}
-            <PipelineSelectField
-                id={`pause-behavior-${stage.id}`}
-                label="Pause behavior"
-                ariaLabel={`Pause behavior for ${stage.label}`}
-                value={stage.semantics.pause_behavior}
-                options={pauseBehaviorOptions}
-                disabled
-                onValueChange={(value) =>
-                    updateSemantics((semantics) => ({
-                        ...semantics,
-                        pause_behavior: value as StageSemantics["pause_behavior"],
-                    }))
-                }
-            />
+            {entityType === "intended_parent" ? null : (
+                <PipelineSelectField
+                    id={`pause-behavior-${stage.id}`}
+                    label="Pause behavior"
+                    ariaLabel={`Pause behavior for ${stage.label}`}
+                    value={stage.semantics.pause_behavior}
+                    options={pauseBehaviorOptions}
+                    disabled
+                    onValueChange={(value) =>
+                        updateSemantics((semantics) => ({
+                            ...semantics,
+                            pause_behavior: value as StageSemantics["pause_behavior"],
+                        }))
+                    }
+                />
+            )}
             <PipelineSelectField
                 id={`terminal-outcome-${stage.id}`}
                 label="Terminal outcome"

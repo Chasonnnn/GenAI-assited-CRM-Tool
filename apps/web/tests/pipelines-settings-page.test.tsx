@@ -1718,6 +1718,21 @@ describe("PipelinesSettingsPage", () => {
         expect(screen.getByRole("button", { name: /hide details for ready to match/i })).toBeInTheDocument()
     })
 
+    it("offers no pause behavior for intended parent stages and keeps the reason requirement", () => {
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: /edit details for contacted/i }))
+        expect(screen.getByText("Pause behavior")).toBeInTheDocument()
+
+        const entityGroup = screen.getByRole("group", { name: "Entity" })
+        fireEvent.click(within(entityGroup).getByRole("button", { name: "Intended Parents" }))
+        fireEvent.click(screen.getByRole("button", { name: /edit details for ready to match/i }))
+
+        expect(screen.queryByText("Pause behavior")).not.toBeInTheDocument()
+        expect(screen.queryByRole("combobox", { name: /pause behavior/i })).not.toBeInTheDocument()
+        expect(screen.getByRole("checkbox", { name: /require reason on enter/i })).toBeInTheDocument()
+    })
+
     it("exposes separately configurable egg- and sperm-donor pipelines", async () => {
         render(<PipelinesSettingsPage />)
 
