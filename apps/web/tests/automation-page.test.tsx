@@ -1413,7 +1413,7 @@ describe('AutomationPage', () => {
                     ],
                     action_types_by_trigger: { form_submitted: ['update_field'] },
                     trigger_entity_types: { form_submitted: 'form_submission' },
-                    condition_fields: ['stage_id'],
+                    condition_fields: ['stage_id', 'lead_kind'],
                     condition_operators: [{ value: 'in', label: 'Is one of' }],
                     update_fields: isEggDonor
                         ? ['stage_id', 'education', 'source']
@@ -1428,6 +1428,12 @@ describe('AutomationPage', () => {
                     forms: [
                         { id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' },
                         { id: 'form-egg-donor', name: 'Egg Donor Application', lead_kind: 'egg_donor' },
+                        {
+                            id: 'form-shared-donor',
+                            name: 'Donor Application',
+                            lead_kind: 'egg_donor',
+                            lead_kinds: ['egg_donor', 'sperm_donor'],
+                        },
                     ],
                 },
                 isLoading: false,
@@ -1521,6 +1527,96 @@ describe('AutomationPage', () => {
                 }),
                 expect.any(Object),
             )
+        })
+
+        it('offers no stage references for a form shared by both donor types', () => {
+            renderAutomationPage()
+            fireEvent.click(
+                getLastElement(
+                    screen.getAllByRole('button', { name: /create workflow/i }),
+                    'Expected a create workflow button',
+                ),
+            )
+            fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+                target: { value: 'Donor applicants' },
+            })
+            fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+                target: { value: 'form_submitted' },
+            })
+            const formSelect = getFirstElement(
+                screen.getAllByTestId('select').filter((select) =>
+                    select.querySelector('option[value="form-shared-donor"]'),
+                ),
+                'Expected a form select',
+            )
+            fireEvent.change(formSelect, { target: { value: 'form-shared-donor' } })
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /add condition/i }))
+
+            const conditionFieldSelect = getFirstElement(
+                screen.getAllByTestId('select').filter((select) =>
+                    select.querySelector('option[value="lead_kind"]'),
+                ),
+                'Expected a condition field select',
+            )
+            expect(optionLabels(conditionFieldSelect)).toEqual(['Applicant Type'])
+
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+            fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+                target: { value: 'update_field' },
+            })
+
+            expect(optionLabels(screen.getByRole('combobox', { name: 'Field to update 1' }))).toEqual([
+                'Education',
+                'Source',
+            ])
+        })
+
+        it('blocks saving an existing shared donor form workflow that references a stage', () => {
+            mockUseWorkflows.mockReturnValue({
+                data: [{
+                    id: 'workflow-shared-application',
+                    name: 'Shared donor applications',
+                    description: null,
+                    icon: 'activity',
+                    subject_type: 'form_submission',
+                    trigger_type: 'form_submitted',
+                    is_enabled: true,
+                    run_count: 0,
+                    last_run_at: null,
+                    last_error: null,
+                    created_at: '2026-09-28T00:00:00Z',
+                    can_edit: true,
+                }],
+                isLoading: false,
+            })
+            mockUseWorkflow.mockReturnValue({
+                data: {
+                    id: 'workflow-shared-application',
+                    name: 'Shared donor applications',
+                    description: null,
+                    scope: 'personal',
+                    subject_type: 'form_submission',
+                    trigger_type: 'form_submitted',
+                    trigger_config: { form_id: 'form-shared-donor' },
+                    conditions: [{ field: 'stage_id', operator: 'in', value: [] }],
+                    condition_logic: 'AND',
+                    actions: [{ action_type: 'add_note', content: 'Review' }],
+                },
+                isLoading: false,
+            })
+
+            renderAutomationPage()
+            fireEvent.click(
+                screen.getByRole('button', { name: 'Actions for workflow Shared donor applications' }),
+            )
+            fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+            expect(screen.getByText('Stage references need a form for one donor type.')).toBeInTheDocument()
+            expect(mockUpdateWorkflow.mutate).not.toHaveBeenCalled()
         })
 
         it('keeps stage conditions when an existing donor application workflow is saved', () => {

@@ -236,6 +236,9 @@ function isDonorLeadKind(value: unknown): value is Extract<WorkflowSubjectType, 
     return value === "egg_donor" || value === "sperm_donor"
 }
 
+// Mirrors workflow_service.SHARED_DONOR_STAGE_ERROR.
+const SHARED_DONOR_STAGE_ERROR = "Stage references need a form for one donor type."
+
 const INTAKE_LEAD_KIND_CONFIG_KEYS: Partial<Record<string, string>> = {
     form_submitted: "lead_kind",
     intake_lead_created: "lead_type",
@@ -1064,10 +1067,19 @@ function useAutomationPageView({
         intakeLeadKindKey && !isDonorSubject(subjectType) && isDonorLeadKind(intakeLeadKind)
             ? intakeLeadKind
             : subjectType
+    // A form shared by both donor types has no single pipeline, so its workflows cannot
+    // reference stages unless the trigger names one donor type.
+    const hasSharedDonorRecord =
+        Boolean(intakeLeadKindKey) &&
+        !isDonorLeadKind(configuredIntakeLeadKind) &&
+        (triggerForm?.lead_kinds?.filter(isDonorLeadKind).length ?? 0) > 1
     const { data: recordOptions } = useWorkflowOptions(workflowScope, recordSubjectType)
     const statusOptions = recordOptions?.statuses ?? EMPTY_STATUS_OPTIONS
     const activeStatusOptions = statusOptions.filter((status) => status.is_active !== false)
-    const updateFields = recordOptions?.update_fields ?? []
+    const recordUpdateFields = recordOptions?.update_fields ?? []
+    const updateFields = hasSharedDonorRecord
+        ? recordUpdateFields.filter((field) => field !== "stage_id")
+        : recordUpdateFields
     const actionTypeOptions = options?.action_types ?? []
     const actionTypeValuesForTrigger = triggerType && options?.action_types_by_trigger?.[triggerType]
         ? new Set(options.action_types_by_trigger[triggerType])
@@ -1155,7 +1167,10 @@ function useAutomationPageView({
     const selectedTriggerFields = Array.isArray(triggerConfig.fields)
         ? triggerConfig.fields.filter((field): field is string => typeof field === "string")
         : []
-    const availableConditionFields = options?.condition_fields ?? []
+    const optionConditionFields = options?.condition_fields ?? []
+    const availableConditionFields = hasSharedDonorRecord
+        ? optionConditionFields.filter((field) => field !== "stage_id")
+        : optionConditionFields
 
     const getActionsValidationError = (): string | null => {
         if (actions.length === 0) return "Add at least one action."
@@ -1238,7 +1253,16 @@ function useAutomationPageView({
             const triggerError = getTriggerConfigValidationError()
             if (triggerError) return triggerError
         }
+        if (step === 2 && hasSharedDonorRecord && conditions.some((condition) => condition.field === "stage_id")) {
+            return SHARED_DONOR_STAGE_ERROR
+        }
         if (step === 3) {
+            if (
+                hasSharedDonorRecord &&
+                actions.some((action) => action.action_type === "update_field" && action.field === "stage_id")
+            ) {
+                return SHARED_DONOR_STAGE_ERROR
+            }
             return getActionsValidationError()
         }
         return null
