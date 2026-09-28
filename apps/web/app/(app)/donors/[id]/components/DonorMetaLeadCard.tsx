@@ -47,7 +47,7 @@ export function DonorMetaLeadCard({ donorId, enabled }: { donorId: string; enabl
     const lead = metaLeadQuery.data
     if (!lead) return null
     const droppedLabels = lead.dropped_fields.map(
-        (field) => getSurrogateFieldLabel(field) ?? humanizeSelectKey(field) ?? field,
+        (field) => getSurrogateFieldLabel(field) ?? humanizeSelectKey(field) ?? "Unknown field",
     )
     return card(
         <>
