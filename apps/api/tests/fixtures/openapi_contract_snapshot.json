@@ -1998,6 +1998,12 @@
       "422"
     ]
   },
+  "/integrations/zapier/test-outbound/donor": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/integrations/zapier/webhooks": {
     "POST": [
       "200",
