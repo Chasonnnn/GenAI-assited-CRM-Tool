@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from urllib.parse import quote
 from uuid import UUID
 
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 META_GRAPH_BASE_URL = "https://graph.facebook.com"
 HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
-MAX_META_LEAD_AGE = timedelta(days=90)
+MAX_META_LEAD_AGE = meta_outbound_service.MAX_META_LEAD_AGE
 FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
 DEFAULT_WEBSITE_EVENT_SOURCE_URL = "https://ewi-surrogacy.com"
 DONOR_FORM_LEAD_KINDS = frozenset({FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value})
@@ -815,6 +815,42 @@ def enqueue_test_event(
     return {"event_id": event_id, "event_name": event_name, "lead_id": lead_id}
 
 
+def _body_with_send_event_time(db: Session, *, organization_id: UUID, body: dict) -> dict | None:
+    """Return the body to send, or None when the lead is too old for the sent time.
+
+    Meta rejects events older than 7 days, so older event times move to 6 days ago at send
+    time. The 90-day lead-age rule then applies to the time that is sent.
+    """
+    event_data = dict(body["data"][0])
+    raw_event_time = event_data.get("event_time")
+    if isinstance(raw_event_time, bool) or not isinstance(raw_event_time, int | float):
+        return body
+    event_time = datetime.fromtimestamp(raw_event_time, UTC)
+    sent_time = meta_outbound_service.clamp_meta_event_time(event_time)
+    user_data = event_data.get("user_data")
+    lead_id = user_data.get("lead_id") if isinstance(user_data, dict) else None
+    if lead_id:
+        meta_lead = (
+            db.query(MetaLead.meta_created_time, MetaLead.received_at)
+            .filter(
+                MetaLead.organization_id == organization_id,
+                MetaLead.meta_lead_id == str(lead_id),
+            )
+            .first()
+        )
+        lead_timestamp = (
+            (meta_lead.meta_created_time or meta_lead.received_at) if meta_lead else None
+        )
+        if not meta_outbound_service.is_meta_lead_within_reporting_window(
+            lead_timestamp, event_time=sent_time
+        ):
+            return None
+    if sent_time == event_time:
+        return body
+    event_data["event_time"] = int(sent_time.timestamp())
+    return {**body, "data": [event_data, *body["data"][1:]]}
+
+
 async def process_job(db: Session, job) -> None:
     payload = job.payload or {}
     dataset_id = str(payload.get("dataset_id") or "").strip()
@@ -910,6 +946,11 @@ async def process_job(db: Session, job) -> None:
     )
     if not access_token:
         _skip_job_delivery(db, job=job, reason="missing_access_token")
+        return
+
+    body = _body_with_send_event_time(db, organization_id=organization_id, body=body)
+    if body is None:
+        _skip_job_delivery(db, job=job, reason="stale_meta_lead")
         return
 
     url = (

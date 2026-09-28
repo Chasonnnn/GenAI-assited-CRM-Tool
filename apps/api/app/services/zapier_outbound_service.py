@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import case, exists, or_, select
@@ -36,7 +36,7 @@ from app.services import (
 from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
-MAX_META_LEAD_AGE = timedelta(days=90)
+MAX_META_LEAD_AGE = meta_outbound_service.MAX_META_LEAD_AGE
 FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
 # Meta leads without an email get this generated address; it must never reach Meta.
 PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid"

@@ -1105,3 +1105,149 @@ async def test_meta_crm_dataset_job_handler_posts_dataset_payload(monkeypatch, d
     assert monitor_event.provider_response_json["status_code"] == 200
     assert monitor_event.provider_response_json["body"] == {"events_received": 1}
     assert "access_token" not in str(monitor_event.provider_response_json)
+
+
+def _queue_stage_dataset_job(db, org_id, settings, *, lead_id, event_time, source="automatic"):
+    from app.db.enums import JobType
+    from app.db.models import MetaCrmDatasetEvent
+    from app.services import job_service
+
+    job = job_service.schedule_job(
+        db=db,
+        org_id=org_id,
+        job_type=JobType.META_CRM_DATASET_EVENT,
+        payload={
+            "settings_id": str(settings.id),
+            "dataset_id": settings.dataset_id,
+            "body": {
+                "data": [
+                    {
+                        "event_name": "Qualified",
+                        "event_time": int(event_time.timestamp()),
+                        "action_source": "system_generated",
+                        "custom_data": {"event_source": "crm"},
+                        "user_data": {"lead_id": lead_id},
+                    }
+                ]
+            },
+        },
+    )
+    db.add(
+        MetaCrmDatasetEvent(
+            organization_id=org_id,
+            job_id=job.id,
+            source=source,
+            status="queued",
+            event_id=f"meta-crm-event-{job.id}",
+            event_name="Qualified",
+            lead_id=lead_id,
+            stage_key="pre_qualified",
+            attempts=0,
+        )
+    )
+    db.commit()
+    return job
+
+
+def _dataset_meta_lead(db, org_id, *, created_days_ago):
+    from app.db.models import MetaLead
+
+    meta_lead = MetaLead(
+        organization_id=org_id,
+        meta_lead_id=f"lead-{uuid4().hex[:8]}",
+        meta_form_id="form_1",
+        meta_page_id="page_1",
+        field_data={},
+        field_data_raw={},
+        meta_created_time=datetime.now(UTC) - timedelta(days=created_days_ago),
+        received_at=datetime.now(UTC) - timedelta(days=created_days_ago),
+    )
+    db.add(meta_lead)
+    db.commit()
+    return meta_lead
+
+
+def _capture_dataset_post(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, json):
+            captured["json"] = json
+            return SimpleNamespace(status_code=200, json=lambda: {"events_received": 1}, text="ok")
+
+    monkeypatch.setattr("app.services.meta_crm_dataset_service.httpx.AsyncClient", FakeClient)
+    return captured
+
+
+@pytest.mark.asyncio
+async def test_meta_crm_dataset_job_sends_event_older_than_meta_window_as_six_days_ago(
+    monkeypatch, db, test_org
+):
+    from app.jobs.handlers import meta
+
+    settings = _configure_meta_dataset(db, test_org.id)
+    meta_lead = _dataset_meta_lead(db, test_org.id, created_days_ago=20)
+    event_time = datetime.now(UTC) - timedelta(days=10)
+    job = _queue_stage_dataset_job(
+        db, test_org.id, settings, lead_id=meta_lead.meta_lead_id, event_time=event_time
+    )
+    captured = _capture_dataset_post(monkeypatch)
+
+    await meta.process_meta_crm_dataset_event(db, job)
+
+    sent_time = datetime.fromtimestamp(captured["json"]["data"][0]["event_time"], UTC)
+    assert abs(sent_time - (datetime.now(UTC) - timedelta(days=6))) < timedelta(minutes=1)
+    db.refresh(job)
+    assert job.payload["body"]["data"][0]["event_time"] == int(event_time.timestamp())
+
+
+@pytest.mark.asyncio
+async def test_meta_crm_dataset_job_keeps_event_time_inside_meta_window(monkeypatch, db, test_org):
+    from app.jobs.handlers import meta
+
+    settings = _configure_meta_dataset(db, test_org.id)
+    meta_lead = _dataset_meta_lead(db, test_org.id, created_days_ago=20)
+    event_time = datetime.now(UTC) - timedelta(days=2)
+    job = _queue_stage_dataset_job(
+        db, test_org.id, settings, lead_id=meta_lead.meta_lead_id, event_time=event_time
+    )
+    captured = _capture_dataset_post(monkeypatch)
+
+    await meta.process_meta_crm_dataset_event(db, job)
+
+    assert captured["json"]["data"][0]["event_time"] == int(event_time.timestamp())
+
+
+@pytest.mark.asyncio
+async def test_meta_crm_dataset_job_skips_when_moved_time_makes_the_lead_stale(
+    monkeypatch, db, test_org
+):
+    from app.db.models import MetaCrmDatasetEvent
+    from app.jobs.handlers import meta
+
+    settings = _configure_meta_dataset(db, test_org.id)
+    meta_lead = _dataset_meta_lead(db, test_org.id, created_days_ago=97)
+    job = _queue_stage_dataset_job(
+        db,
+        test_org.id,
+        settings,
+        lead_id=meta_lead.meta_lead_id,
+        event_time=datetime.now(UTC) - timedelta(days=10),
+    )
+    captured = _capture_dataset_post(monkeypatch)
+
+    await meta.process_meta_crm_dataset_event(db, job)
+
+    assert captured == {}
+    monitor_event = db.query(MetaCrmDatasetEvent).filter(MetaCrmDatasetEvent.job_id == job.id).one()
+    assert monitor_event.status == "skipped"
+    assert monitor_event.reason == "stale_meta_lead"

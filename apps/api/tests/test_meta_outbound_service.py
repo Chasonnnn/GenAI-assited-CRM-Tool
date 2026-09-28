@@ -84,3 +84,31 @@ def test_map_stage_key_to_meta_status_for_org(db, test_org):
         meta_outbound_service.map_stage_key_to_meta_status_for_org(db, test_org.id, "disqualified")
         == "Not qualified/Lost"
     )
+
+
+def test_clamp_meta_event_time_moves_only_events_older_than_six_days():
+    from datetime import UTC, datetime, timedelta
+
+    now = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
+    recent = now - timedelta(days=5)
+    old = now - timedelta(days=10)
+
+    assert meta_outbound_service.clamp_meta_event_time(recent, now=now) == recent
+    assert meta_outbound_service.clamp_meta_event_time(old, now=now) == now - timedelta(days=6)
+    assert meta_outbound_service.clamp_meta_event_time(
+        old.replace(tzinfo=None), now=now
+    ) == now - timedelta(days=6)
+
+
+def test_meta_lead_reporting_window_uses_the_sent_event_time():
+    from datetime import UTC, datetime, timedelta
+
+    event_time = datetime(2026, 9, 22, tzinfo=UTC)
+
+    assert meta_outbound_service.is_meta_lead_within_reporting_window(
+        event_time - timedelta(days=90), event_time=event_time
+    )
+    assert not meta_outbound_service.is_meta_lead_within_reporting_window(
+        event_time - timedelta(days=91), event_time=event_time
+    )
+    assert meta_outbound_service.is_meta_lead_within_reporting_window(None, event_time=event_time)

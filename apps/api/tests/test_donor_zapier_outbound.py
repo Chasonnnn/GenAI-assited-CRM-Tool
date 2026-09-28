@@ -637,14 +637,13 @@ def test_website_donor_uses_first_party_submission_not_meta_lead_id(db, test_org
     assert "medical_answer" not in str(payload)
 
 
-def test_backdated_donor_change_reports_its_effective_time(db, test_org, test_user):
-    # Surrogate stage events send the backdated effective time unchanged; donors match.
+def _backdated_donor_job(db, test_org, test_user, *, effective_days_ago, lead_days_ago):
     pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
     donor = _create_donor(db, test_org.id, test_user.id)
     now = datetime.now(UTC)
-    donor.created_at = now - timedelta(days=5)
+    donor.created_at = now - timedelta(days=lead_days_ago)
     db.commit()
-    _attach_meta_lead(db, donor, meta_created_time=now - timedelta(days=5))
+    _attach_meta_lead(db, donor, meta_created_time=now - timedelta(days=lead_days_ago))
     _configure_reporting(
         db,
         test_org.id,
@@ -652,7 +651,9 @@ def test_backdated_donor_change_reports_its_effective_time(db, test_org, test_us
         pipeline=pipeline,
         stage=ready_stage,
     )
-    effective_at = (now - timedelta(days=2)).replace(hour=15, minute=30, second=0, microsecond=0)
+    effective_at = (now - timedelta(days=effective_days_ago)).replace(
+        hour=15, minute=30, second=0, microsecond=0
+    )
 
     result = donor_service.change_status(
         db,
@@ -673,8 +674,65 @@ def test_backdated_donor_change_reports_its_effective_time(db, test_org, test_us
         .one()
     )
     assert event.status == "queued"
-    payload = db.get(Job, event.job_id).payload["data"]
-    assert payload["event_time"] == effective_at.isoformat()
+    job = db.get(Job, event.job_id)
+    assert job.payload["data"]["event_time"] == effective_at.isoformat()
+    return job, event, effective_at
+
+
+@pytest.mark.asyncio
+async def test_backdated_donor_change_reports_its_effective_time(
+    db, test_org, test_user, monkeypatch
+):
+    # Inside Meta's event window the backdated effective time is sent unchanged.
+    from app.jobs.handlers import zapier as zapier_handler
+
+    job, _event, effective_at = _backdated_donor_job(
+        db, test_org, test_user, effective_days_ago=2, lead_days_ago=5
+    )
+    sent = _capture_webhook(monkeypatch, zapier_handler)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    assert sent["json"]["event_time"] == effective_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_donor_event_older_than_meta_window_is_sent_as_six_days_ago(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    job, _event, effective_at = _backdated_donor_job(
+        db, test_org, test_user, effective_days_ago=10, lead_days_ago=20
+    )
+    sent = _capture_webhook(monkeypatch, zapier_handler)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    sent_time = datetime.fromisoformat(sent["json"]["event_time"])
+    assert abs(sent_time - (datetime.now(UTC) - timedelta(days=6))) < timedelta(minutes=1)
+    db.refresh(job)
+    assert job.payload["data"]["event_time"] == effective_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_donor_event_is_skipped_when_the_moved_time_makes_the_lead_stale(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    # 87-88 days after the lead at enqueue; more than 90 days once moved to six days ago.
+    job, event, _effective_at = _backdated_donor_job(
+        db, test_org, test_user, effective_days_ago=10, lead_days_ago=97
+    )
+    sent = _capture_webhook(monkeypatch, zapier_handler)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    assert sent == {}
+    db.refresh(event)
+    assert event.status == "skipped"
+    assert event.reason == "stale_meta_lead"
 
 
 def _hosted_submission(db, org_id, donor, *, submitted_at, **ad_fields):

@@ -530,3 +530,114 @@ def test_repeated_surrogate_bucket_records_duplicate_skip(db, test_org, test_use
     skipped = next(row for row in rows if row.status == "skipped")
     assert skipped.reason == "duplicate"
     assert skipped.lead_id == meta_lead.meta_lead_id
+
+
+def _capture_zapier_webhook(monkeypatch):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    sent: dict[str, object] = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, *, json, headers):
+            sent.update({"url": url, "json": json, "headers": headers})
+            return Response()
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", Client)
+    return sent
+
+
+def _queued_surrogate_job(db, test_org, surrogate, *, effective_at):
+    from app.db.models import Job
+    from app.services import zapier_outbound_service
+
+    result = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_label="Pre Qualified",
+        effective_at=effective_at,
+    )
+    assert result["queued"] is True
+    return (
+        db.query(Job)
+        .filter(Job.organization_id == test_org.id, Job.idempotency_key == result["event_id"])
+        .one()
+    )
+
+
+@pytest.mark.asyncio
+async def test_dispatch_moves_surrogate_event_older_than_meta_window_to_six_days_ago(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    now = datetime.now(UTC)
+    surrogate, _meta_lead = _meta_surrogate_with_reporting(
+        db, test_org, test_user, received_at=now - timedelta(days=20)
+    )
+    effective_at = now - timedelta(days=10)
+    job = _queued_surrogate_job(db, test_org, surrogate, effective_at=effective_at)
+    sent = _capture_zapier_webhook(monkeypatch)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    sent_time = datetime.fromisoformat(sent["json"]["event_time"])
+    assert abs(sent_time - (now - timedelta(days=6))) < timedelta(minutes=1)
+    db.refresh(job)
+    assert job.payload["data"]["event_time"] == effective_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_keeps_surrogate_event_time_inside_meta_window(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    now = datetime.now(UTC)
+    surrogate, _meta_lead = _meta_surrogate_with_reporting(
+        db, test_org, test_user, received_at=now - timedelta(days=20)
+    )
+    effective_at = now - timedelta(days=2)
+    job = _queued_surrogate_job(db, test_org, surrogate, effective_at=effective_at)
+    sent = _capture_zapier_webhook(monkeypatch)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    assert sent["json"]["event_time"] == effective_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_skips_surrogate_event_when_moved_time_makes_the_lead_stale(
+    db, test_org, test_user, monkeypatch
+):
+    from app.db.models import ZapierOutboundEvent
+    from app.jobs.handlers import zapier as zapier_handler
+
+    now = datetime.now(UTC)
+    surrogate, _meta_lead = _meta_surrogate_with_reporting(
+        db, test_org, test_user, received_at=now - timedelta(days=97)
+    )
+    # 87 days after the lead at enqueue; 91 days once moved to six days ago.
+    job = _queued_surrogate_job(db, test_org, surrogate, effective_at=now - timedelta(days=10))
+    sent = _capture_zapier_webhook(monkeypatch)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    assert sent == {}
+    event = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.job_id == job.id).one()
+    assert event.status == "skipped"
+    assert event.reason == "stale_meta_lead"

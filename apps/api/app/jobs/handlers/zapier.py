@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from uuid import UUID
 
 import httpx
@@ -19,7 +20,7 @@ from app.db.models import (
     ZapierOutboundEvent,
 )
 from app.jobs.utils import safe_url
-from app.services import zapier_monitor_service, zapier_settings_service
+from app.services import meta_outbound_service, zapier_monitor_service, zapier_settings_service
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,40 @@ def _filter_donor_payload(webhook_data: object, *, settings) -> dict:
         for key in DONOR_CONTACT_KEYS:
             filtered.pop(key, None)
     return filtered
+
+
+def _parse_event_time(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _meta_lead_timestamp(meta_lead_row) -> datetime | None:
+    if meta_lead_row is None:
+        return None
+    return meta_lead_row.meta_created_time or meta_lead_row.received_at
+
+
+def _apply_send_event_time(webhook_data: dict, *, lead_timestamp: datetime | None) -> bool:
+    """Set the event_time to send; False when the lead is too old for that time.
+
+    Meta rejects events older than 7 days, so older event times move to 6 days ago at send
+    time. The 90-day lead-age rule then applies to the time that is sent.
+    """
+    event_time = _parse_event_time(webhook_data.get("event_time"))
+    if event_time is None:
+        return True
+    sent_time = meta_outbound_service.clamp_meta_event_time(event_time)
+    if not meta_outbound_service.is_meta_lead_within_reporting_window(
+        lead_timestamp, event_time=sent_time
+    ):
+        return False
+    if sent_time != event_time:
+        webhook_data["event_time"] = sent_time.isoformat()
+    return True
 
 
 def _load_donor_event(db, job, payload: dict) -> ZapierOutboundEvent:
@@ -192,19 +227,21 @@ async def _process_donor_stage_event(db, job, payload: dict) -> None:
         _skip_donor_delivery(db, job, "donor_subject_missing")
         return
 
+    lead_timestamp = None
     if event.attribution_source == "meta":
-        meta_lead_id = (
-            db.query(MetaLead.id)
+        meta_lead_row = (
+            db.query(MetaLead.id, MetaLead.meta_created_time, MetaLead.received_at)
             .filter(
                 MetaLead.organization_id == job.organization_id,
                 MetaLead.converted_donor_id == event.donor_id,
                 MetaLead.meta_lead_id == event.lead_id,
             )
-            .scalar()
+            .first()
         )
-        if meta_lead_id is None:
+        if meta_lead_row is None:
             _skip_donor_delivery(db, job, "donor_attribution_missing")
             return
+        lead_timestamp = _meta_lead_timestamp(meta_lead_row)
     elif event.attribution_source == "website":
         if event.first_party_submission_id is None:
             _skip_donor_delivery(db, job, "donor_attribution_missing")
@@ -281,6 +318,9 @@ async def _process_donor_stage_event(db, job, payload: dict) -> None:
     ):
         _skip_donor_delivery(db, job, "missing_matching_data")
         return
+    if not _apply_send_event_time(webhook_data, lead_timestamp=lead_timestamp):
+        _skip_donor_delivery(db, job, "stale_meta_lead")
+        return
 
     await _post_donor_payload(settings, webhook_data)
     logger.info("Donor Zapier stage event delivered for job %s", job.id)
@@ -315,6 +355,23 @@ async def process_zapier_stage_event(db, job) -> None:
             str(exc),
         )
         return
+
+    if isinstance(webhook_data, dict):
+        webhook_data = dict(webhook_data)
+        lead_timestamp = None
+        lead_id = webhook_data.get("lead_id")
+        if not webhook_data.get("test_mode") and job.organization_id and lead_id:
+            lead_timestamp = _meta_lead_timestamp(
+                db.query(MetaLead.meta_created_time, MetaLead.received_at)
+                .filter(
+                    MetaLead.organization_id == job.organization_id,
+                    MetaLead.meta_lead_id == str(lead_id),
+                )
+                .first()
+            )
+        if not _apply_send_event_time(webhook_data, lead_timestamp=lead_timestamp):
+            zapier_monitor_service.mark_job_skipped(db=db, job_id=job.id, reason="stale_meta_lead")
+            return
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(webhook_url, json=webhook_data, headers=webhook_headers)
