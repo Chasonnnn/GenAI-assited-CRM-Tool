@@ -491,9 +491,7 @@ def test_surrogate_event_with_synthetic_meta_lead_id_is_skipped(db, test_org, te
         == 0
     )
     skipped = (
-        db.query(ZapierOutboundEvent)
-        .filter(ZapierOutboundEvent.surrogate_id == surrogate.id)
-        .one()
+        db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.surrogate_id == surrogate.id).one()
     )
     assert skipped.status == "skipped"
     assert skipped.reason == "synthetic_meta_lead_id"

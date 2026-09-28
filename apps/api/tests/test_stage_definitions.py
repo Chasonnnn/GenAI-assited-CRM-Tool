@@ -249,9 +249,7 @@ def test_donor_default_semantics_are_target_specific_and_not_surrogate_fallbacks
     assert sperm_available["suggestion_profile_key"] is None
 
 
-@pytest.mark.parametrize(
-    "entity_type", [EGG_DONOR_PIPELINE_ENTITY, SPERM_DONOR_PIPELINE_ENTITY]
-)
+@pytest.mark.parametrize("entity_type", [EGG_DONOR_PIPELINE_ENTITY, SPERM_DONOR_PIPELINE_ENTITY])
 def test_closed_donor_stage_has_no_default_reporting_bucket(entity_type) -> None:
     # Closed is terminal and says nothing about conversion, so it must not suggest Converted.
     closed = default_stage_semantics("closed", "terminal", entity_type)
