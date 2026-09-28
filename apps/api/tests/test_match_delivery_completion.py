@@ -671,3 +671,60 @@ def test_cancel_request_waiting_on_delivered_is_refused_after_completion(db_engi
         with Session(db_engine) as verify:
             assert verify.get(Match, match_id).status == "completed"
             assert verify.get(Surrogate, surrogate_id).stage.stage_key == "delivered"
+
+
+def _committed_pending_cancellation(db_engine, org_id, user_id):
+    match_id, surrogate_id = _committed_accepted_match(db_engine, org_id, user_id)
+    with Session(db_engine) as setup:
+        now = datetime.now(UTC)
+        setup.get(Match, match_id).status = "cancellation_pending"
+        request = StatusChangeRequest(
+            organization_id=org_id,
+            entity_type="match",
+            entity_id=match_id,
+            target_status="cancelled",
+            effective_at=now,
+            reason="Ended",
+            requested_by_user_id=user_id,
+            requested_at=now,
+            status="pending",
+        )
+        setup.add(request)
+        setup.commit()
+        return match_id, surrogate_id, request.id
+
+
+def _reject_cancel(user_id, match_id, request_id):
+    def run(session):
+        match_lifecycle.transition(
+            session,
+            session.get(Match, match_id),
+            "reject_cancel",
+            actor_user_id=user_id,
+            request=session.get(StatusChangeRequest, request_id),
+        )
+
+    return run
+
+
+@pytest.mark.parametrize("delivered_first", [False, True])
+def test_delivered_racing_a_rejected_cancellation_completes_the_match(
+    db_engine, monkeypatch, delivered_first
+):
+    with _committed_org(db_engine, monkeypatch) as (org_id, user_id):
+        match_id, surrogate_id, request_id = _committed_pending_cancellation(
+            db_engine, org_id, user_id
+        )
+        deliver = _deliver(user_id, surrogate_id)
+        reject = _reject_cancel(user_id, match_id, request_id)
+        if delivered_first:
+            args = (match_lifecycle, "_lock_surrogate_matches", deliver, reject)
+        else:
+            args = (match_lifecycle, "_lock", reject, deliver)
+
+        results = _run_holding(db_engine, monkeypatch, *args)
+
+        assert results == ["applied", "applied"]
+        with Session(db_engine) as verify:
+            assert verify.get(Match, match_id).status == "completed"
+            assert verify.get(Surrogate, surrogate_id).stage.stage_key == "delivered"

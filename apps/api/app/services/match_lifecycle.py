@@ -780,7 +780,10 @@ def complete_on_delivery(
         return []
     spec = SYSTEM_TRANSITIONS["complete_on_delivery"]
     actor = _system_actor(actor_user_id)
-    matches = _lock_surrogate_matches(db, surrogate, spec.sources)
+    # Lock pending matches too: a cancellation resolved concurrently must either see
+    # this stage move or be seen here once it restores the match to accepted.
+    locked = _lock_surrogate_matches(db, surrogate, match_queries.COMMITTED_STATUSES)
+    matches = [match for match in locked if match.status in spec.sources]
     for match in matches:
         _complete(db, match, new_stage, actor, now)
     return matches
