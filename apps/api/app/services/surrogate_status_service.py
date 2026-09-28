@@ -347,6 +347,27 @@ def _cleanup_on_hold_follow_up_task(
     return task
 
 
+def _undo_history(
+    db: Session, surrogate: Surrogate, user_id: UUID | None, new_stage: PipelineStage, now: datetime
+) -> SurrogateStatusHistory | None:
+    """The latest change when ``user_id`` may undo it by returning to ``new_stage``."""
+    last_history = (
+        db.query(SurrogateStatusHistory)
+        .filter(SurrogateStatusHistory.surrogate_id == surrogate.id)
+        .order_by(SurrogateStatusHistory.recorded_at.desc())
+        .first()
+    )
+    if (
+        last_history
+        and last_history.changed_by_user_id == user_id
+        and last_history.recorded_at
+        and (now - last_history.recorded_at) <= UNDO_GRACE_PERIOD
+        and last_history.from_stage_id == new_stage.id
+    ):
+        return last_history
+    return None
+
+
 def change_status(
     db: Session,
     surrogate: Surrogate,
@@ -418,19 +439,6 @@ def change_status(
     if old_stage_id == new_stage.id:
         raise ValueError("Target stage is same as current stage")
 
-    # Match acceptance flushes the accepted Match before it moves the surrogate, so every
-    # stage-change path can require an accepted Match here.
-    if pipeline_service.stage_matches_key(new_stage, "matched"):
-        from app.services import match_queries
-
-        accepted_match = match_queries.get_accepted_match_for_surrogate(
-            db=db,
-            org_id=surrogate.organization_id,
-            surrogate_id=surrogate.id,
-        )
-        if accepted_match is None:
-            raise ValueError("Cannot set to Matched without an accepted Match.")
-
     if (
         not pipeline_service.stage_matches_key(new_stage, "on_hold")
         and on_hold_follow_up_months is not None
@@ -475,6 +483,24 @@ def change_status(
     is_regression = (
         not is_resume_from_on_hold and not is_interview_rebooking and new_stage.order < old_order
     )
+    undo_history = _undo_history(db, surrogate, user_id, new_stage, now) if is_regression else None
+
+    # Match acceptance flushes the accepted Match before it moves the surrogate, so every
+    # stage-change path can require an accepted Match here. Undoing a Delivered entry
+    # restores the match that entry completed before the surrogate returns to Matched.
+    if pipeline_service.stage_matches_key(new_stage, "matched"):
+        from app.services import match_lifecycle, match_queries
+
+        accepted_match = match_queries.get_accepted_match_for_surrogate(
+            db=db,
+            org_id=surrogate.organization_id,
+            surrogate_id=surrogate.id,
+        )
+        if accepted_match is None and not (
+            undo_history is not None
+            and match_lifecycle.can_undo_delivery_completion(db, surrogate, current_stage)
+        ):
+            raise ValueError("Cannot set to Matched without an accepted Match.")
 
     if (normalized_effective_at - now).total_seconds() > 1:
         raise ValueError("Cannot set future date for stage change")
@@ -548,22 +574,7 @@ def change_status(
             raise ValueError("Case managers can only regress to intake or post-approval stages")
 
     if is_regression:
-        last_history = (
-            db.query(SurrogateStatusHistory)
-            .filter(SurrogateStatusHistory.surrogate_id == surrogate.id)
-            .order_by(SurrogateStatusHistory.recorded_at.desc())
-            .first()
-        )
-
-        within_grace_period = (
-            last_history
-            and last_history.changed_by_user_id == user_id
-            and last_history.recorded_at
-            and (now - last_history.recorded_at) <= UNDO_GRACE_PERIOD
-            and last_history.from_stage_id == new_stage.id
-        )
-
-        if within_grace_period:
+        if undo_history is not None:
             result = apply_status_change(
                 db=db,
                 surrogate=surrogate,
@@ -778,8 +789,27 @@ def apply_status_change(
     Apply a status change to a surrogate.
 
     Called for non-regressions, undo within grace period, and approved regressions.
+    Entering Delivered completes the surrogate's accepted match; undoing that entry
+    restores it. Both run first so the match rows lock before the surrogate row.
     """
-    from app.services import approval_handoff_service, pipeline_service
+    from app.services import approval_handoff_service, match_lifecycle, pipeline_service
+
+    match_actor_id = approved_by_user_id or user_id
+    if is_undo:
+        restored = match_lifecycle.undo_delivery_completion(
+            db, surrogate, current_stage, actor_user_id=match_actor_id, now=recorded_at
+        )
+        if restored is None and pipeline_service.stage_matches_key(new_stage, "matched"):
+            from app.services import match_queries
+
+            # change_status allowed Matched because the match looked restorable; it changed.
+            if not match_queries.get_accepted_match_for_surrogate(
+                db, surrogate.organization_id, surrogate.id
+            ):
+                raise ValueError("Cannot set to Matched without an accepted Match.")
+    match_lifecycle.complete_on_delivery(
+        db, surrogate, new_stage, actor_user_id=match_actor_id, now=recorded_at
+    )
 
     approval_handoff_service.retain_at_approval(
         db, record=surrogate, kind="surrogate", target_stage=new_stage, actor_user_id=user_id

@@ -147,6 +147,8 @@ const ACTIVITY_TYPE_CONFIG: Record<string, ActivityTypeConfig> = {
     match_cancel_request_rejected: { icon: ActivityIcon, color: "bg-gray-500", bgColor: "bg-gray-100 dark:bg-gray-900/30", label: "Match cancellation rejected" },
     match_cancel_request_withdrawn: { icon: ActivityIcon, color: "bg-gray-500", bgColor: "bg-gray-100 dark:bg-gray-900/30", label: "Match cancellation withdrawn" },
     match_cancelled: { icon: ActivityIcon, color: "bg-gray-500", bgColor: "bg-gray-100 dark:bg-gray-900/30", label: "Match cancelled" },
+    match_completed: { icon: ActivityIcon, color: "bg-green-500", bgColor: "bg-green-100 dark:bg-green-900/30", label: "Match completed" },
+    match_completion_undone: { icon: ActivityIcon, color: "bg-amber-500", bgColor: "bg-amber-100 dark:bg-amber-900/30", label: "Match completion undone" },
     status_change_requested: { icon: ArrowRightIcon, color: "bg-amber-500", bgColor: "bg-amber-100 dark:bg-amber-900/30", label: "Stage change requested" },
     status_change_approved: { icon: ArrowRightIcon, color: "bg-green-500", bgColor: "bg-green-100 dark:bg-green-900/30", label: "Stage change approved" },
     status_change_rejected: { icon: ArrowRightIcon, color: "bg-red-500", bgColor: "bg-red-100 dark:bg-red-900/30", label: "Stage change rejected" },

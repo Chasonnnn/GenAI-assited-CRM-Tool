@@ -1,6 +1,7 @@
 """Treatment attempts on one match.
 
-New attempts are no longer recorded. Existing open attempts close with a cancelled match.
+New attempts are no longer recorded. Existing open attempts close with a cancelled or
+completed match.
 """
 
 from datetime import datetime
@@ -24,7 +25,7 @@ def list_attempts(db: Session, match: Match) -> list[MatchAttempt]:
 
 
 def close_open_attempts(db: Session, match: Match, now: datetime) -> None:
-    """Open attempts end with the cancelled match, keeping recorded dates and outcomes."""
+    """Open attempts end with the closed match, keeping recorded dates and outcomes."""
     for attempt in list_attempts(db, match):
         if attempt.status in OPEN_ATTEMPT_STATUSES:
             attempt.status = "cancelled"

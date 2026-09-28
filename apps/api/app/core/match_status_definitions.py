@@ -1,7 +1,9 @@
 """Shared fixed match lifecycle definitions.
 
 ``allowed_transitions`` are the moves a user action offers. ``system_transitions``
-happen only as a side effect of another change and no user action offers them.
+happen only as a side effect of another change and no user action offers them:
+a surrogate entering the Delivered stage completes her accepted match, and
+undoing that stage change restores it.
 """
 
 from __future__ import annotations
@@ -58,7 +60,7 @@ MATCH_STATUS_DEFINITIONS = [
         "color": "#059669",
         "order": 7,
         "allowed_transitions": [],
-        "system_transitions": [],
+        "system_transitions": [MatchStatus.ACCEPTED.value],
     },
 ]
 

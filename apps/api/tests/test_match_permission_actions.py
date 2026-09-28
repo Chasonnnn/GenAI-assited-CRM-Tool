@@ -295,17 +295,20 @@ async def test_accepted_match_offers_no_manual_completion(authed_client, db, tes
 
 @pytest.mark.asyncio
 async def test_status_metadata_lists_completion_as_system_transition_only(authed_client):
-    from app.services.match_lifecycle import TRANSITIONS
+    from app.services.match_lifecycle import SYSTEM_TRANSITIONS, TRANSITIONS
 
     response = await authed_client.get("/metadata/match-statuses")
     assert response.status_code == 200, response.text
     statuses = {row["value"]: row for row in response.json()["statuses"]}
     assert statuses["accepted"]["allowed_transitions"] == ["cancellation_pending"]
     assert statuses["accepted"]["system_transitions"] == ["completed"]
+    assert statuses["completed"]["system_transitions"] == ["accepted"]
     for value, row in statuses.items():
         user_targets = {t.target for t in TRANSITIONS.values() if value in t.sources}
+        system_targets = {t.target for t in SYSTEM_TRANSITIONS.values() if value in t.sources}
         assert set(row["allowed_transitions"]) == user_targets
-        assert not user_targets & set(row["system_transitions"])
+        assert set(row["system_transitions"]) == system_targets
+        assert not user_targets & system_targets
 
 
 @pytest.mark.asyncio

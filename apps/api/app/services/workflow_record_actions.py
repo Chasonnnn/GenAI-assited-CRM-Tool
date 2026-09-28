@@ -283,9 +283,14 @@ def update_field(
                     "error": "Workflow stage change requires regression approval",
                 }
         else:
+            from app.services import match_lifecycle
+
+            now = datetime.now(UTC)
+            # Legacy direct write: keep the Delivered match completion of apply_status_change.
+            match_lifecycle.complete_on_delivery(db, entity, stage, actor_user_id=None, now=now)
             entity.stage_id = stage.id
             entity.status_label = stage.label
-            entity.updated_at = datetime.now(UTC)
+            entity.updated_at = now
 
             history = SurrogateStatusHistory(
                 surrogate_id=entity.id,

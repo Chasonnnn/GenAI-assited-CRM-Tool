@@ -166,8 +166,11 @@ def test_create_matches_balanced_statuses(db, test_org, test_user, monkeypatch) 
         "declined",
         "cancellation_pending",
         "cancelled",
+        "completed",
     }
     dispatch.assert_not_called()
+    completed = db.query(Match).filter_by(organization_id=test_org.id, status="completed").all()
+    assert all(m.surrogate.stage.stage_key == "delivered" for m in completed)
 
     accepted_surrogate_ids = [
         row[0]
@@ -204,4 +207,5 @@ def test_create_matches_without_expansion(db, test_org, test_user, monkeypatch) 
         "declined",
         "cancellation_pending",
         "cancelled",
+        "completed",
     }

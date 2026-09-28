@@ -56,7 +56,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         order: 7,
         badgeClassName: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
         allowedTransitions: [],
-        systemTransitions: [],
+        systemTransitions: ["accepted"],
     },
 ]
 

@@ -37,6 +37,7 @@ describe("match status and stage label helpers", () => {
         const accepted = MATCH_STATUS_DEFINITIONS.find((definition) => definition.value === "accepted")
         expect(accepted?.allowedTransitions).toEqual(["cancellation_pending"])
         expect(accepted?.systemTransitions).toEqual(["completed"])
+        expect(MATCH_STATUS_DEFINITIONS.find((definition) => definition.value === "completed")?.systemTransitions).toEqual(["accepted"])
         expect(MATCH_STATUS_DEFINITIONS.some((definition) => definition.allowedTransitions.includes("completed"))).toBe(false)
     })
 })
