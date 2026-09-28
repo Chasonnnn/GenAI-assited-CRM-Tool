@@ -200,6 +200,18 @@ const CREATE_WORKFLOW_SUBJECT_OPTIONS: Array<{
     { value: "sperm_donor", label: WORKFLOW_SUBJECT_LABELS.sperm_donor },
 ]
 
+// Mirrors workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES; the engine matches on subject_type.
+const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubjectType>> = {
+    form_submitted: "form_submission",
+    intake_lead_created: "intake_lead",
+    match_proposed: "match",
+    match_accepted: "match",
+    match_declined: "match",
+    match_cancelled: "match",
+    appointment_scheduled: "appointment",
+    appointment_completed: "appointment",
+}
+
 const DONOR_TYPE_OPTIONS: SelectOption[] = [
     { value: "egg", label: "Egg Donor" },
     { value: "sperm", label: "Sperm Donor" },
@@ -942,6 +954,7 @@ function useAutomationPageView({
         conditionLogic,
         actions,
     } = workflowBuilderState
+    const savedSubjectType = FIXED_TRIGGER_SUBJECT_TYPES[triggerType] ?? subjectType
     const {
         open: showTestModal,
         workflowId: testWorkflowId,
@@ -1344,7 +1357,7 @@ function useAutomationPageView({
 
         const data: WorkflowCreate = {
             name: workflowName,
-            subject_type: subjectType,
+            subject_type: savedSubjectType,
             trigger_type: triggerType,
             trigger_config: buildTriggerConfig(),
             conditions: normalizeConditionsForSave(conditions),
@@ -2738,7 +2751,7 @@ function useAutomationPageView({
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">Record Type:</span>
                                             <span className="font-medium">
-                                                {WORKFLOW_SUBJECT_LABELS[subjectType]}
+                                                {WORKFLOW_SUBJECT_LABELS[savedSubjectType]}
                                             </span>
                                         </div>
                                         <div className="flex justify-between">

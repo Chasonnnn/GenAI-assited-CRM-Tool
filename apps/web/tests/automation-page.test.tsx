@@ -1205,6 +1205,75 @@ describe('AutomationPage', () => {
         )
     })
 
+    it('saves a form-submitted workflow with the form submission subject', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                trigger_types: [
+                    { value: 'form_submitted', label: 'Application Submitted', description: '' },
+                ],
+                action_types: [
+                    { value: 'create_intake_lead', label: 'Create Intake Lead', description: '' },
+                ],
+                action_types_by_trigger: { form_submitted: ['create_intake_lead'] },
+                trigger_entity_types: { form_submitted: 'form_submission' },
+                condition_fields: [],
+                condition_operators: [],
+                update_fields: [],
+                email_variables: [],
+                email_templates: [],
+                users: [],
+                queues: [],
+                statuses: [],
+                forms: [{ id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' }],
+            },
+            isLoading: false,
+        })
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+            target: { value: 'Route applications' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'form_submitted' },
+        })
+        const formSelect = getFirstElement(
+            screen.getAllByTestId('select').filter((select) =>
+                select.querySelector('option[value="form-surrogate"]'),
+            ),
+            'Expected a form select',
+        )
+        fireEvent.change(formSelect, { target: { value: 'form-surrogate' } })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'create_intake_lead' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        expect(screen.getByText('Form Submission')).toBeInTheDocument()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'form_submission',
+                trigger_type: 'form_submitted',
+                trigger_config: { form_id: 'form-surrogate' },
+            }),
+            expect.any(Object),
+        )
+    })
+
     it('names the workflow in its history dialog and shows the shared empty state', () => {
         mockUseWorkflows.mockReturnValue({
             data: [{
