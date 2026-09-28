@@ -641,3 +641,44 @@ async def test_dispatch_skips_surrogate_event_when_moved_time_makes_the_lead_sta
     event = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.job_id == job.id).one()
     assert event.status == "skipped"
     assert event.reason == "stale_meta_lead"
+
+
+def test_surrogate_event_rows_record_the_stage_effective_time(db, test_org, test_user):
+    from app.db.models import PipelineStage, ZapierOutboundEvent
+    from app.services import zapier_outbound_service
+
+    surrogate, _meta_lead = _meta_surrogate_with_reporting(db, test_org, test_user)
+    stage = db.get(PipelineStage, surrogate.stage_id)
+    effective_at = datetime.now(UTC) - timedelta(days=3)
+
+    queued = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_id=str(stage.id),
+        stage_label="Pre Qualified",
+        effective_at=effective_at,
+    )
+    skipped = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="unmapped_stage_key",
+        stage_slug="unmapped",
+        stage_id=str(stage.id),
+        stage_label="Unmapped",
+        effective_at=effective_at,
+    )
+
+    assert queued["queued"] is True
+    assert skipped["reason"] == "unmapped_stage"
+    rows = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.surrogate_id == surrogate.id)
+        .order_by(ZapierOutboundEvent.created_at)
+        .all()
+    )
+    assert [row.status for row in rows] == ["queued", "skipped"]
+    for row in rows:
+        assert row.effective_at == effective_at
+        assert row.stage_id == stage.id

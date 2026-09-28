@@ -431,6 +431,7 @@ def test_meta_donor_events_skip_unreportable_leads_like_surrogates(
     assert event.status == "skipped"
     assert event.reason == reason
     assert event.job_id is None
+    assert event.effective_at == result["history"].effective_at
     assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 0
 
 
@@ -674,6 +675,7 @@ def _backdated_donor_job(db, test_org, test_user, *, effective_days_ago, lead_da
         .one()
     )
     assert event.status == "queued"
+    assert event.effective_at == effective_at
     job = db.get(Job, event.job_id)
     assert job.payload["data"]["event_time"] == effective_at.isoformat()
     return job, event, effective_at

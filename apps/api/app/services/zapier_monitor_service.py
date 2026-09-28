@@ -86,6 +86,7 @@ def _create_event_record(
     attribution_source: str | None = None,
     first_party_submission_id: UUID | None = None,
     config_fingerprint: str | None = None,
+    effective_at: datetime | None = None,
     attempts: int = 0,
     last_error: str | None = None,
 ) -> ZapierOutboundEvent:
@@ -111,6 +112,7 @@ def _create_event_record(
         attribution_source=attribution_source,
         first_party_submission_id=first_party_submission_id,
         config_fingerprint=config_fingerprint,
+        effective_at=effective_at,
         attempts=attempts,
         last_error=last_error,
         created_at=now,
@@ -145,6 +147,7 @@ def create_donor_event(
     first_party_submission_id: UUID | None = None,
     config_fingerprint: str | None = None,
     job_id: UUID | None = None,
+    effective_at: datetime | None = None,
 ) -> ZapierOutboundEvent:
     """Create a donor delivery record inside the caller-owned transaction."""
     return _create_event_record(
@@ -168,6 +171,7 @@ def create_donor_event(
         attribution_source=attribution_source,
         first_party_submission_id=first_party_submission_id,
         config_fingerprint=config_fingerprint,
+        effective_at=effective_at,
     )
 
 
@@ -206,6 +210,8 @@ def record_skipped_event(
     stage_key: str | None = None,
     stage_slug: str | None = None,
     stage_label: str | None = None,
+    stage_id: UUID | None = None,
+    effective_at: datetime | None = None,
     surrogate_id: UUID | None = None,
     db: Session | None = None,
 ) -> None:
@@ -222,6 +228,8 @@ def record_skipped_event(
             stage_key=stage_key,
             stage_slug=stage_slug,
             stage_label=stage_label,
+            stage_id=stage_id,
+            effective_at=effective_at,
             surrogate_id=surrogate_id,
         ),
         db=db,
@@ -239,6 +247,8 @@ def record_queued_event(
     stage_key: str | None = None,
     stage_slug: str | None = None,
     stage_label: str | None = None,
+    stage_id: UUID | None = None,
+    effective_at: datetime | None = None,
     surrogate_id: UUID | None = None,
     db: Session | None = None,
 ) -> None:
@@ -255,6 +265,8 @@ def record_queued_event(
             stage_key=stage_key,
             stage_slug=stage_slug,
             stage_label=stage_label,
+            stage_id=stage_id,
+            effective_at=effective_at,
             surrogate_id=surrogate_id,
         ),
         db=db,
