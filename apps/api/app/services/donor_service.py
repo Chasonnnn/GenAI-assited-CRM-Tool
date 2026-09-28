@@ -621,6 +621,14 @@ def create_donor(
         if get_active_donor_by_email(db, org_id, str(data.email)):
             raise DonorConflictError("An active donor with this email already exists")
         _validate_owner(db, org_id, data.owner_type, data.owner_id)
+        owner_type, owner_id = data.owner_type, data.owner_id
+        if owner_type is None and owner_id is None:
+            # Every donor has an owner, as every surrogate does: unassigned donors
+            # (Meta, Zapier, website intake) wait in the org default queue.
+            from app.services import queue_service
+
+            owner_type = OwnerType.QUEUE.value
+            owner_id = queue_service.get_or_create_default_queue(db, org_id).id
 
         pipeline = _get_default_pipeline(db, org_id, data.donor_type)
         stage = _get_entry_stage(db, pipeline)
@@ -639,8 +647,8 @@ def create_donor(
             state=data.state,
             education=data.education,
             source=data.source,
-            owner_type=data.owner_type,
-            owner_id=data.owner_id,
+            owner_type=owner_type,
+            owner_id=owner_id,
             stage_id=stage.id,
         )
         db.add(donor)

@@ -187,7 +187,13 @@ def create_donor(
         )
     except ValueError as exc:
         _raise_domain_error(exc)
-    return DonorRead.model_validate(donor)
+    return DonorRead.model_validate(donor).model_copy(
+        update={
+            "owner_name": record_owner_service.owner_label(
+                db, session.org_id, donor.owner_type, donor.owner_id
+            )
+        }
+    )
 
 
 @router.get("/owner-options", response_model=RecordOwnerOptions)
