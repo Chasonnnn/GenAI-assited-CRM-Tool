@@ -1,21 +1,23 @@
-import { humanizeSelectKey } from "@/lib/select-labels"
-import { SURROGATE_SOURCE_LABELS } from "@/lib/surrogate-source-labels"
+import { createSelectLabelGetter } from "@/lib/select-labels"
+import { SURROGATE_SOURCE_LABELS, isSurrogateSource } from "@/lib/surrogate-source-labels"
+import type { SurrogateSource } from "@/lib/types/surrogate"
 
-/**
- * Donor source is free text, not an enum: the API create payload, intake promotion
- * ("shared_intake", review resolutions) and workflow actions each write their own key.
- * Known keys get product labels; other slugs are humanized and anything else reads "Other".
- */
-export const DONOR_SOURCE_LABELS: Readonly<Record<string, string>> = {
-    ...SURROGATE_SOURCE_LABELS,
-    shared_intake: "Intake form",
-    form_embed: "Website form",
-    manual_review_resolution: "Intake review",
-    manual_retry_resolution: "Intake review",
-}
+/** Donor source stores the surrogate source values ("meta", "website", ...). */
+export type DonorSource = SurrogateSource
 
-export function getDonorSourceLabel(value: string): string {
-    const key = value.trim()
-    const label = Object.hasOwn(DONOR_SOURCE_LABELS, key) ? DONOR_SOURCE_LABELS[key] : undefined
-    return label ?? humanizeSelectKey(key) ?? "Other"
-}
+/** One label map for donor sources: filter items, triggers, chips, badges and cells. */
+export const DONOR_SOURCE_LABELS: Readonly<Record<DonorSource, string>> = SURROGATE_SOURCE_LABELS
+
+export const isDonorSource = (value: string | null | undefined): value is DonorSource =>
+    isSurrogateSource(value)
+
+export const getDonorSourceLabel = createSelectLabelGetter(DONOR_SOURCE_LABELS, {
+    emptyLabel: "Unknown source",
+    unknownLabel: "Unknown source",
+})
+
+export const getDonorSourceFilterLabel = createSelectLabelGetter(DONOR_SOURCE_LABELS, {
+    emptyLabel: "All sources",
+    allValue: "all",
+    unknownLabel: "Unknown source",
+})

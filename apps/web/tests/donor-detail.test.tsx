@@ -379,8 +379,9 @@ describe("DonorDetailPage", () => {
 
     it.each([
         ["manual", "Manual"],
-        ["shared_intake", "Intake form"],
-        ["spring_campaign", "Spring campaign"],
+        ["meta", "Meta"],
+        ["website", "Website"],
+        ["spring_campaign", "Unknown source"],
     ])("labels the %s source through the donor source helper", (source, label) => {
         const query = mockUseDonor("donor-1")
         mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, source } })
