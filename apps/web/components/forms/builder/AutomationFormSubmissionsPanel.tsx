@@ -3,6 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import type { Route } from "next"
+import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import {
@@ -12,12 +13,23 @@ import {
     type MatchCandidateRead,
 } from "@/lib/api/forms"
 import { FORM_LEAD_KIND_LABELS, isDonorFormLeadKind } from "@/lib/forms/form-lead-kind"
+import { matchReasonLabel } from "@/lib/forms/submission-presentation"
+import { useDonors } from "@/lib/hooks/use-donors"
+import {
+    useApproveFormSubmission,
+    useRejectFormSubmission,
+    useRescanSubmissionFile,
+    useResolveSubmissionMatch,
+    useSubmissionDonorCandidates,
+} from "@/lib/hooks/use-forms"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "@/components/ui/toast"
 
 type SubmissionHistoryFilter = "all" | "pending" | "processed"
 
@@ -30,6 +42,7 @@ type RetryMatchOptions = {
 
 type AutomationFormSubmissionsPanelProps = {
     canPromoteLead?: ((submission: FormSubmissionRead) => boolean) | undefined
+    canEditSubject?: ((submission: FormSubmissionRead) => boolean) | undefined
     canReview?: boolean
     showWorkflowApprovals?: boolean
     formId: string | null
@@ -133,6 +146,241 @@ function readSubmissionIdentity(
     }
 }
 
+type SubjectEditCheck = (submission: FormSubmissionRead) => boolean
+
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error && error.message ? error.message : fallback
+}
+
+function isPendingDonorReview(submission: FormSubmissionRead) {
+    return isDonorFormLeadKind(submission.lead_kind) && submission.status === "pending_review"
+}
+
+function MatchReason({ submission }: { submission: FormSubmissionRead }) {
+    if (!submission.match_reason) return null
+    return (
+        <div>
+            <span className="font-medium">Reason:</span> {matchReasonLabel(submission.match_reason)}
+        </div>
+    )
+}
+
+function DonorOption({
+    donorNumber,
+    fullName,
+    reason,
+    disabled,
+    onLink,
+}: {
+    donorNumber: string
+    fullName: string
+    reason?: string
+    disabled: boolean
+    onLink: () => void
+}) {
+    return (
+        <li className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-stone-200 p-2">
+            <div className="min-w-0">
+                <p className="font-medium">{donorNumber} · {fullName}</p>
+                {reason ? <p className="text-xs text-stone-500">{reason}</p> : null}
+            </div>
+            <Button
+                type="button"
+                size="sm"
+                disabled={disabled}
+                aria-label={`Link to donor ${donorNumber}`}
+                onClick={onLink}
+            >
+                Link
+            </Button>
+        </li>
+    )
+}
+
+function DonorLinkReview({ submission }: { submission: FormSubmissionRead }) {
+    const [search, setSearch] = useState("")
+    const query = search.trim()
+    const candidates = useSubmissionDonorCandidates(submission.id)
+    const searchResults = useDonors(
+        { donor_type: submission.lead_kind === "sperm_donor" ? "sperm" : "egg", q: query, per_page: 10 },
+        { enabled: query.length >= 2 },
+    )
+    const resolve = useResolveSubmissionMatch()
+    const link = async (donorId: string) => {
+        try {
+            await resolve.mutateAsync({ submissionId: submission.id, payload: { donor_id: donorId } })
+            toast.success("Submission linked to donor")
+        } catch (error) {
+            toast.error(errorMessage(error, "Unable to link submission"))
+        }
+    }
+    const candidateItems = candidates.data ?? []
+    const candidateIds = new Set(candidateItems.map((candidate) => candidate.donor_id))
+    const searchItems = (searchResults.data?.items ?? []).filter((donor) => !candidateIds.has(donor.id))
+    const searchId = `donor-search-${submission.id}`
+
+    return (
+        <div className="space-y-3 rounded-md border border-stone-200 p-3">
+            <h4 className="text-sm font-semibold">Link to Donor</h4>
+            {candidates.isLoading ? (
+                <p className="text-stone-500">Loading matching donors…</p>
+            ) : candidates.isError ? (
+                <div role="alert" className="flex flex-wrap items-center gap-2">
+                    <p>Unable to load matching donors.</p>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void candidates.refetch()}>
+                        Retry
+                    </Button>
+                </div>
+            ) : candidateItems.length === 0 ? (
+                <p className="text-stone-500">No matching donors.</p>
+            ) : (
+                <ul className="space-y-2" aria-label="Matching donors">
+                    {candidateItems.map((candidate) => (
+                        <DonorOption
+                            key={candidate.donor_id}
+                            donorNumber={candidate.donor_number}
+                            fullName={candidate.full_name}
+                            reason={matchReasonLabel(candidate.reason)}
+                            disabled={resolve.isPending}
+                            onLink={() => void link(candidate.donor_id)}
+                        />
+                    ))}
+                </ul>
+            )}
+            <div className="space-y-2">
+                <Label htmlFor={searchId}>Search donors</Label>
+                <Input
+                    id={searchId}
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Name, number, email or phone"
+                />
+            </div>
+            {query.length < 2 ? null : searchResults.isLoading ? (
+                <p className="text-stone-500">Searching donors…</p>
+            ) : searchResults.isError ? (
+                <div role="alert" className="flex flex-wrap items-center gap-2">
+                    <p>Unable to search donors.</p>
+                    <Button type="button" size="sm" variant="outline" onClick={() => void searchResults.refetch()}>
+                        Retry
+                    </Button>
+                </div>
+            ) : searchItems.length === 0 ? (
+                <p className="text-stone-500">No donors found.</p>
+            ) : (
+                <ul className="space-y-2" aria-label="Donor search results">
+                    {searchItems.map((donor) => (
+                        <DonorOption
+                            key={donor.id}
+                            donorNumber={donor.donor_number}
+                            fullName={donor.full_name}
+                            disabled={resolve.isPending}
+                            onLink={() => void link(donor.id)}
+                        />
+                    ))}
+                </ul>
+            )}
+        </div>
+    )
+}
+
+/** Link, approve and reject controls for a pending donor application; the caller checks access. */
+function DonorReviewControls({
+    submission,
+    align = "start",
+}: {
+    submission: FormSubmissionRead
+    align?: "start" | "end"
+}) {
+    const [linkOpen, setLinkOpen] = useState(false)
+    const approve = useApproveFormSubmission()
+    const reject = useRejectFormSubmission()
+    const canLink = !submission.donor_id
+
+    return (
+        <div className="space-y-3">
+            <div className={`flex flex-wrap gap-2 ${align === "end" ? "justify-end" : ""}`}>
+                {canLink ? (
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant={linkOpen ? "default" : "outline"}
+                        aria-expanded={linkOpen}
+                        onClick={() => setLinkOpen((open) => !open)}
+                    >
+                        Link to Donor
+                    </Button>
+                ) : (
+                    <ConfirmDialog
+                        title="Approve this application?"
+                        confirmLabel="Approve"
+                        confirmVariant="default"
+                        errorFallback="Unable to approve application"
+                        onConfirm={() =>
+                            approve.mutateAsync({ submissionId: submission.id }).then(() => {
+                                toast.success("Application approved")
+                            })
+                        }
+                        trigger={<Button type="button" size="sm" variant="outline">Approve</Button>}
+                    />
+                )}
+                <ConfirmDialog
+                    title="Reject this application?"
+                    confirmLabel="Reject"
+                    errorFallback="Unable to reject application"
+                    onConfirm={() =>
+                        reject.mutateAsync({ submissionId: submission.id }).then(() => {
+                            toast.success("Application rejected")
+                        })
+                    }
+                    trigger={<Button type="button" size="sm" variant="outline">Reject</Button>}
+                />
+            </div>
+            {canLink && linkOpen ? <DonorLinkReview submission={submission} /> : null}
+        </div>
+    )
+}
+
+function FailedScanFiles({ submission, canRescan }: { submission: FormSubmissionRead; canRescan: boolean }) {
+    const rescan = useRescanSubmissionFile()
+    return (
+        <ul className="space-y-1">
+            {submission.files
+                .filter((file) => file.scan_status === "error")
+                .map((file) => (
+                    <li key={file.id} className="flex flex-wrap items-center gap-2">
+                        <span>
+                            <span className="font-medium">Scan failed:</span> {file.filename}
+                        </span>
+                        {canRescan ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={rescan.isPending}
+                                aria-label={`Rescan ${file.filename}`}
+                                onClick={() => {
+                                    rescan
+                                        .mutateAsync({
+                                            submissionId: submission.id,
+                                            fileId: file.id,
+                                            formId: submission.form_id,
+                                        })
+                                        .then(() => toast.success("Rescan queued"))
+                                        .catch((error: unknown) =>
+                                            toast.error(errorMessage(error, "Unable to rescan file")),
+                                        )
+                                }}
+                            >
+                                Rescan
+                            </Button>
+                        ) : null}
+                    </li>
+                ))}
+        </ul>
+    )
+}
+
 function WorkflowApprovalCard({
     onOpenApprovalQueue,
 }: {
@@ -227,6 +475,7 @@ function SubmissionIdentityGrid({
 function AmbiguousSubmissionCard({
     submission,
     isSelected,
+    canEditSubject,
     readAnswerValue,
     resolveSubmissionMatchPending,
     onSelectQueueSubmission,
@@ -234,6 +483,7 @@ function AmbiguousSubmissionCard({
 }: {
     submission: FormSubmissionRead
     isSelected: boolean
+    canEditSubject: boolean
     readAnswerValue: SubmissionIdentityReader
     resolveSubmissionMatchPending: boolean
     onSelectQueueSubmission: (submissionId: string | null) => void
@@ -245,6 +495,7 @@ function AmbiguousSubmissionCard({
         <div className="space-y-2 rounded-lg border border-stone-200 p-3 text-sm">
             <Badge variant="outline">{FORM_LEAD_KIND_LABELS[submission.lead_kind]}</Badge>
             <SubmissionIdentityGrid identity={identity} submission={submission} />
+            <MatchReason submission={submission} />
             <div className="flex flex-wrap gap-2">
                 <Button
                     type="button"
@@ -279,11 +530,15 @@ function AmbiguousSubmissionCard({
                 </Button>
                 : null}
             </div>
+            {canEditSubject && isPendingDonorReview(submission) ? (
+                <DonorReviewControls submission={submission} />
+            ) : null}
         </div>
     )
 }
 
 function AmbiguousMatchQueueCard({
+    canEditSubject,
     ambiguousSubmissions,
     selectedQueueSubmissionId,
     readAnswerValue,
@@ -298,7 +553,9 @@ function AmbiguousMatchQueueCard({
     | "resolveSubmissionMatchPending"
     | "onSelectQueueSubmission"
     | "onResolveSubmissionToLead"
->) {
+> & {
+    canEditSubject: SubjectEditCheck
+}) {
     return (
         <Card>
             <CardContent className="space-y-4 p-5">
@@ -315,6 +572,7 @@ function AmbiguousMatchQueueCard({
                                 key={submission.id}
                                 submission={submission}
                                 isSelected={selectedQueueSubmissionId === submission.id}
+                                canEditSubject={canEditSubject(submission)}
                                 readAnswerValue={readAnswerValue}
                                 resolveSubmissionMatchPending={resolveSubmissionMatchPending}
                                 onSelectQueueSubmission={onSelectQueueSubmission}
@@ -407,6 +665,7 @@ function LeadPromotionQueueCard({
 }
 
 function SubmissionReviewQueues({
+    canEditSubject,
     formId,
     ambiguousSubmissions,
     leadQueueSubmissions,
@@ -431,7 +690,9 @@ function SubmissionReviewQueues({
     | "onResolveSubmissionToLead"
     | "onPromoteLeadFromSubmission"
     | "canPromoteLead"
->) {
+> & {
+    canEditSubject: SubjectEditCheck
+}) {
     if (!formId) {
         return (
             <Card>
@@ -445,6 +706,7 @@ function SubmissionReviewQueues({
     return (
         <div className="grid gap-6 xl:grid-cols-2">
             <AmbiguousMatchQueueCard
+                canEditSubject={canEditSubject}
                 ambiguousSubmissions={ambiguousSubmissions}
                 selectedQueueSubmissionId={selectedQueueSubmissionId}
                 readAnswerValue={readAnswerValue}
@@ -558,6 +820,7 @@ function SubmissionHistoryIdentityGrid({
                 <span className="font-medium">Lead:</span>{" "}
                 {submission.intake_lead_id ? submission.intake_lead_id : "—"}
             </div>
+            <MatchReason submission={submission} />
             {isDonor ? (
                 <div className="sm:col-span-2 lg:col-span-3">
                     <DonorProfilePhotoPreview submission={submission} />
@@ -700,6 +963,7 @@ function SubmissionHistoryActions({
 
 function SubmissionHistoryEntry({
     canReview = true,
+    canEditSubject,
     submission,
     readAnswerValue,
     formatSubmissionDateTime,
@@ -723,8 +987,17 @@ function SubmissionHistoryEntry({
     | "onSelectQueueSubmission"
     | "onRetrySubmissionMatch"
 > & {
+    canEditSubject: boolean
     submission: FormSubmissionRead
 }) {
+    const hasFailedScan = submission.files.some((file) => file.scan_status === "error")
+    // Ambiguous donor applications show these controls in the review queue instead.
+    const showDonorControls =
+        canReview &&
+        canEditSubject &&
+        isPendingDonorReview(submission) &&
+        submission.match_status !== "ambiguous_review"
+
     return (
         <div className="space-y-3 rounded-lg border border-stone-200 p-3 text-sm">
             <SubmissionHistoryBadges
@@ -739,6 +1012,9 @@ function SubmissionHistoryEntry({
                 readAnswerValue={readAnswerValue}
                 formatSubmissionDateTime={formatSubmissionDateTime}
             />
+            {hasFailedScan ? (
+                <FailedScanFiles submission={submission} canRescan={canReview && canEditSubject} />
+            ) : null}
             <SubmissionHistoryActions
                 canReview={canReview}
                 submission={submission}
@@ -746,12 +1022,14 @@ function SubmissionHistoryEntry({
                 onSelectQueueSubmission={onSelectQueueSubmission}
                 onRetrySubmissionMatch={onRetrySubmissionMatch}
             />
+            {showDonorControls ? <DonorReviewControls submission={submission} align="end" /> : null}
         </div>
     )
 }
 
 function SubmissionHistoryCard({
     canReview = true,
+    canEditSubject,
     visibleSubmissionHistory,
     submissionHistoryFilter,
     isSubmissionHistoryLoading,
@@ -781,7 +1059,9 @@ function SubmissionHistoryCard({
     | "onSubmissionHistoryFilterChange"
     | "onSelectQueueSubmission"
     | "onRetrySubmissionMatch"
->) {
+> & {
+    canEditSubject: SubjectEditCheck
+}) {
     return (
         <Card>
             <CardContent className="space-y-4 p-5">
@@ -801,7 +1081,8 @@ function SubmissionHistoryCard({
                     <div className="space-y-3">
                         {visibleSubmissionHistory.map((submission) => (
                             <SubmissionHistoryEntry
-                canReview={canReview}
+                                canReview={canReview}
+                                canEditSubject={canEditSubject(submission)}
                                 key={submission.id}
                                 submission={submission}
                                 readAnswerValue={readAnswerValue}
@@ -904,7 +1185,7 @@ function SubmissionCandidateReviewCard({
                                     <p className="font-mono text-xs text-stone-600">
                                         surrogate_id: {candidate.surrogate_id}
                                     </p>
-                                    <p className="text-xs text-stone-500">{candidate.reason}</p>
+                                    <p className="text-xs text-stone-500">{matchReasonLabel(candidate.reason)}</p>
                                 </div>
                                 <Button
                                     type="button"
@@ -928,8 +1209,12 @@ function SubmissionCandidateReviewCard({
     )
 }
 
+// Callers that do not pass subject access get no donor review or rescan controls.
+const canEditNoSubject: SubjectEditCheck = () => false
+
 export function AutomationFormSubmissionsPanel({
     canReview = true,
+    canEditSubject = canEditNoSubject,
     showWorkflowApprovals = true,
     formId,
     pendingSubmissionHistory,
@@ -975,6 +1260,7 @@ export function AutomationFormSubmissionsPanel({
                 leadQueueSubmissions={leadQueueSubmissions}
             />
             {canReview && <SubmissionReviewQueues
+                canEditSubject={canEditSubject}
                 formId={formId}
                 ambiguousSubmissions={ambiguousSubmissions}
                 leadQueueSubmissions={leadQueueSubmissions}
@@ -989,6 +1275,7 @@ export function AutomationFormSubmissionsPanel({
             />}
             <SubmissionHistoryCard
                 canReview={canReview}
+                canEditSubject={canEditSubject}
                 visibleSubmissionHistory={visibleSubmissionHistory}
                 submissionHistoryFilter={submissionHistoryFilter}
                 isSubmissionHistoryLoading={isSubmissionHistoryLoading}
