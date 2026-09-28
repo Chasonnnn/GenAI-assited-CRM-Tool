@@ -708,6 +708,33 @@ describe("AutomationFormSubmissionsPanel donor review", () => {
         )
     })
 
+    it("keeps rejected applications out of the ambiguous and lead queues", () => {
+        const rejectedHeld = makeSubmission({
+            id: "sub-rejected-held",
+            lead_kind: "egg_donor",
+            status: "rejected",
+            match_status: "ambiguous_review",
+        })
+        const rejectedLead = makeSubmission({
+            id: "sub-rejected-lead",
+            lead_kind: "egg_donor",
+            status: "rejected",
+            intake_lead_id: "lead-rejected",
+            match_status: "lead_created",
+        })
+
+        renderPanel({
+            canEditSubject: () => true,
+            ambiguousSubmissions: [rejectedHeld],
+            leadQueueSubmissions: [rejectedLead],
+        })
+
+        expect(screen.getByText("No ambiguous submissions.")).toBeInTheDocument()
+        expect(screen.getByText("No pending lead submissions.")).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Create Intake Lead" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Promote to Egg Donor" })).not.toBeInTheDocument()
+    })
+
     it("hides donor review and rescan controls without subject edit access or review access", () => {
         const held = makeSubmission({ id: "sub-held", lead_kind: "egg_donor", match_status: "ambiguous_review" })
         const scanFailed = makeSubmission({

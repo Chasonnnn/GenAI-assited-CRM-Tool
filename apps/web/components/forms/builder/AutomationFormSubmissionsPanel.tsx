@@ -1212,6 +1212,10 @@ function SubmissionCandidateReviewCard({
 // Callers that do not pass subject access get no donor review or rescan controls.
 const canEditNoSubject: SubjectEditCheck = () => false
 
+function isOpenForReview(submission: FormSubmissionRead) {
+    return submission.status !== "rejected"
+}
+
 export function AutomationFormSubmissionsPanel({
     canReview = true,
     canEditSubject = canEditNoSubject,
@@ -1250,20 +1254,22 @@ export function AutomationFormSubmissionsPanel({
     onPromoteLeadFromSubmission,
     canPromoteLead,
 }: AutomationFormSubmissionsPanelProps) {
+    const openAmbiguousSubmissions = ambiguousSubmissions.filter(isOpenForReview)
+    const openLeadQueueSubmissions = leadQueueSubmissions.filter(isOpenForReview)
     return (
         <div className="mx-auto max-w-6xl space-y-6">
             {showWorkflowApprovals && <WorkflowApprovalCard onOpenApprovalQueue={onOpenApprovalQueue} />}
             <SubmissionMetricsGrid
                 pendingSubmissionHistory={pendingSubmissionHistory}
                 processedSubmissionHistory={processedSubmissionHistory}
-                ambiguousSubmissions={ambiguousSubmissions}
-                leadQueueSubmissions={leadQueueSubmissions}
+                ambiguousSubmissions={openAmbiguousSubmissions}
+                leadQueueSubmissions={openLeadQueueSubmissions}
             />
             {canReview && <SubmissionReviewQueues
                 canEditSubject={canEditSubject}
                 formId={formId}
-                ambiguousSubmissions={ambiguousSubmissions}
-                leadQueueSubmissions={leadQueueSubmissions}
+                ambiguousSubmissions={openAmbiguousSubmissions}
+                leadQueueSubmissions={openLeadQueueSubmissions}
                 selectedQueueSubmissionId={selectedQueueSubmissionId}
                 readAnswerValue={readAnswerValue}
                 resolveSubmissionMatchPending={resolveSubmissionMatchPending}
