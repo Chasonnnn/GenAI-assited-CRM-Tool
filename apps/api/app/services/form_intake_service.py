@@ -829,15 +829,37 @@ def _has_generated_intake_routing_configuration(workflow: AutomationWorkflow, fo
     """True when the routing workflow still holds a generated configuration, not admin edits."""
     if workflow.conditions:
         return False
-    # Earlier releases stored only the form id; the builder adds a single-kind form's kind.
-    generated_trigger_configs = (
-        {"form_id": str(form.id)},
-        {"form_id": str(form.id), "lead_kind": form.lead_kind},
-    )
-    if workflow.trigger_config not in generated_trigger_configs:
+    # Earlier releases stored only the form id; the builder adds a single-kind form's kind,
+    # which may be a kind the form had before an applicant type change.
+    trigger_config = workflow.trigger_config or {}
+    if set(trigger_config) - {"form_id", "lead_kind"} or trigger_config.get("form_id") != str(
+        form.id
+    ):
+        return False
+    if "lead_kind" in trigger_config and trigger_config["lead_kind"] not in {
+        "surrogate",
+        *DONOR_LEAD_KINDS,
+    }:
         return False
     actions = list(workflow.actions or [])
     return any(actions == list(generated) for generated in _GENERATED_INTAKE_ROUTING_ACTION_SETS)
+
+
+def _generated_intake_routing_is_equivalent(
+    workflow: AutomationWorkflow,
+    trigger_config: dict[str, Any],
+    actions: list[dict[str, Any]],
+) -> bool:
+    """True when the stored routing runs exactly like the current generated routing.
+
+    A stored config without lead_kind matches every submission of a single-kind form,
+    so it runs like the canonical config that names that kind.
+    """
+    stored_kind = (workflow.trigger_config or {}).get("lead_kind")
+    return list(workflow.actions or []) == actions and stored_kind in (
+        None,
+        trigger_config.get("lead_kind"),
+    )
 
 
 def _authorize_generated_intake_routing(
@@ -910,6 +932,11 @@ def ensure_default_intake_routing_workflow(
 
     if workflow:
         if not _has_generated_intake_routing_configuration(workflow, form):
+            return workflow
+        # Rewriting an equivalent config would change the digest and void a current grant.
+        if workflow_execution_authority.grant_is_current(
+            workflow
+        ) and _generated_intake_routing_is_equivalent(workflow, trigger_config, actions):
             return workflow
         workflow.subject_type = "form_submission"
         workflow.trigger_config = trigger_config

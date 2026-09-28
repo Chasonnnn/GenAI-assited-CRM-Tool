@@ -389,3 +389,58 @@ async def test_v1_publish_issues_no_grant(authed_client, db, test_org):
     assert workflow.execution_authority is None
     assert workflow.is_enabled is True
     assert _system_grants(db, workflow) == []
+
+
+@pytest.mark.parametrize(
+    ("first_kind", "second_kind"),
+    [("surrogate", "egg_donor"), ("egg_donor", "sperm_donor"), ("egg_donor", "surrogate")],
+)
+def test_republish_after_an_applicant_type_change_refreshes_generated_routing(
+    db, test_org, test_user, first_kind, second_kind
+):
+    form = _form(db, test_org.id, test_user.id, first_kind)
+    workflow = form_intake_service.ensure_default_intake_routing_workflow(
+        db, org_id=test_org.id, form=form, user_id=test_user.id
+    )
+    assert workflow.trigger_config == {"form_id": str(form.id), "lead_kind": first_kind}
+
+    form.lead_kind = second_kind
+    db.flush()
+    workflow = form_intake_service.ensure_default_intake_routing_workflow(
+        db, org_id=test_org.id, form=form, user_id=test_user.id
+    )
+
+    assert workflow.trigger_config == {"form_id": str(form.id), "lead_kind": second_kind}
+    assert workflow.actions == form_intake_service._default_intake_routing_actions(form)
+
+
+def test_republish_keeps_an_admin_grant_on_a_legacy_generated_config(db, test_org, test_user, v2):
+    form = _form(db, test_org.id, test_user.id, "surrogate")
+    workflow = form_intake_service.ensure_default_intake_routing_workflow(
+        db, org_id=test_org.id, form=form, user_id=test_user.id
+    )
+    # Routing generated before this release stored only the form id; an admin re-enabled it.
+    workflow.trigger_config = {"form_id": str(form.id)}
+    workflow.execution_authority = None
+    workflow.is_enabled = False
+    db.flush()
+    workflow = workflow_service.toggle_workflow(db, workflow, test_user.id)
+    admin_grant = dict(workflow.execution_authority)
+    publisher = _member(db, test_org.id)
+    db.add(
+        RolePermission(
+            organization_id=test_org.id,
+            role=Role.INTAKE_SPECIALIST.value,
+            permission="create_surrogates",
+            is_granted=False,
+        )
+    )
+    db.flush()
+
+    workflow = form_intake_service.ensure_default_intake_routing_workflow(
+        db, org_id=test_org.id, form=form, user_id=publisher.id
+    )
+
+    assert workflow.trigger_config == {"form_id": str(form.id)}
+    assert workflow.execution_authority == admin_grant
+    authority.execution_snapshot(db, workflow)

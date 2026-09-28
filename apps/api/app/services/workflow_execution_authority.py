@@ -212,7 +212,7 @@ def authorize_configuration(db: Session, workflow: AutomationWorkflow, user_id: 
     )
 
 
-def _grant_is_current(workflow: AutomationWorkflow) -> bool:
+def grant_is_current(workflow: AutomationWorkflow) -> bool:
     grant = workflow.execution_authority
     return bool(
         grant
@@ -236,7 +236,7 @@ def authorize_generated_routing(
     if (
         not enabled(db, workflow.organization_id)
         or workflow.scope != "org"
-        or _grant_is_current(workflow)
+        or grant_is_current(workflow)
     ):
         return False
     session = active_session(db, workflow.organization_id, publisher_user_id)
@@ -270,7 +270,7 @@ def execution_snapshot(db: Session, workflow: AutomationWorkflow) -> dict | None
             "owner_user_id": str(workflow.owner_user_id),
             "organization_id": str(workflow.organization_id),
         }
-    if not _grant_is_current(workflow):
+    if not grant_is_current(workflow):
         raise WorkflowAuthorityError("Organization workflow requires configuration authorization")
     return {
         **deepcopy(workflow.execution_authority),
