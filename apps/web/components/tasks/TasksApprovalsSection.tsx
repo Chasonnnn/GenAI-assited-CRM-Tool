@@ -117,6 +117,7 @@ export function TasksApprovalsSection({
                         {pendingStatusRequests.map((item) => {
                             const isIpRequest = item.request.entity_type === "intended_parent"
                             const isMatchRequest = item.request.entity_type === "match"
+                            const isDonorRequest = item.request.entity_type === "donor"
                             const requestLabel = isMatchRequest
                                 ? "Match Cancellation Request"
                                 : isIpRequest
@@ -126,7 +127,9 @@ export function TasksApprovalsSection({
                                 ? `/intended-parents/matches/${item.request.entity_id}`
                                 : isIpRequest
                                   ? `/intended-parents/${item.request.entity_id}`
-                                  : `/surrogates/${item.request.entity_id}`
+                                  : isDonorRequest
+                                    ? `/donors/${item.request.entity_id}`
+                                    : `/surrogates/${item.request.entity_id}`
                             return (
                                 <div
                                     key={`scr-${item.request.id}`}
