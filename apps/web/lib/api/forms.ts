@@ -335,9 +335,6 @@ export interface FormSubmissionSharedResponse {
     id: string
     status: FormSubmissionStatus
     outcome: SharedSubmissionOutcome
-    surrogate_id?: string | null
-    donor_id?: string | null
-    intake_lead_id?: string | null
 }
 
 export interface FormIntakePublicRead {

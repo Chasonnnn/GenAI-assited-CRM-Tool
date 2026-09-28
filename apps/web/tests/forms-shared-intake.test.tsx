@@ -117,8 +117,6 @@ describe('Shared Intake Public Page', () => {
             id: 'submission-1',
             status: 'pending_review',
             outcome: 'lead_created',
-            surrogate_id: null,
-            intake_lead_id: 'lead-1',
         })
     })
 

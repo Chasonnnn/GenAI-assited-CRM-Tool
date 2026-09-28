@@ -483,12 +483,11 @@ class FormIntakeDraftRestoreResponse(BaseModel):
 
 
 class FormSubmissionSharedResponse(BaseModel):
+    """Public submit result. Record ids stay internal so an applicant cannot learn a match."""
+
     id: UUID
     status: str
     outcome: SharedSubmissionOutcome
-    surrogate_id: UUID | None = None
-    donor_id: UUID | None = None
-    intake_lead_id: UUID | None = None
 
 
 class MatchCandidateRead(BaseModel):

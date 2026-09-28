@@ -1069,7 +1069,6 @@ async def test_embed_session_submit_stores_submission_attribution_consent_and_tr
     assert submit_res.status_code == 200
     payload = submit_res.json()
     assert payload["outcome"] == "workflow_pending"
-    assert payload["intake_lead_id"] is None
 
     duplicate_res = await authed_client.post(
         f"/forms/public/embed/{slug}/submit",
@@ -1274,7 +1273,6 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
     assert submit_res.status_code == 200
     payload = submit_res.json()
     assert payload["outcome"] == "lead_created"
-    assert payload["intake_lead_id"] is not None
 
     submission_id = uuid.UUID(payload["id"])
     intake_lead = (
@@ -1612,7 +1610,6 @@ async def test_internal_only_embed_submit_queues_crm_dataset_lead_without_sensit
     assert submit_res.status_code == 200
     submission_id = uuid.UUID(submit_res.json()["id"])
     assert submit_res.json()["outcome"] == "workflow_pending"
-    assert submit_res.json()["intake_lead_id"] is None
 
     assert (
         db.query(TrackingEventLog)

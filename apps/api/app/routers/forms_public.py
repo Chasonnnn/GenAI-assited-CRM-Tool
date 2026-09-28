@@ -400,9 +400,6 @@ def submit_embed_public_form(
         id=submission.id,
         status=submission.status,
         outcome=outcome,
-        surrogate_id=submission.surrogate_id,
-        donor_id=submission.donor_id,
-        intake_lead_id=submission.intake_lead_id,
     )
 
 
@@ -670,7 +667,4 @@ def submit_shared_public_form(
         id=submission.id,
         status=submission.status,
         outcome=outcome,
-        surrogate_id=submission.surrogate_id,
-        donor_id=submission.donor_id,
-        intake_lead_id=submission.intake_lead_id,
     )

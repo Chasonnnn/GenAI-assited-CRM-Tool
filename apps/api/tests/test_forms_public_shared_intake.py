@@ -395,7 +395,6 @@ async def test_shared_submit_blocks_unresolved_duplicate_applicant(authed_client
     )
     assert first_res.status_code == 200
     assert first_res.json()["outcome"] == "workflow_pending"
-    assert first_res.json()["intake_lead_id"] is None
 
     duplicate_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -448,8 +447,6 @@ async def test_shared_public_intake_route_reads_drafts_submits_and_lists_review_
     assert submit_res.status_code == 200
     submission_payload = submit_res.json()
     assert submission_payload["outcome"] == "workflow_pending"
-    assert submission_payload["surrogate_id"] is None
-    assert submission_payload["intake_lead_id"] is None
 
     submission = (
         db.query(FormSubmission)
@@ -830,8 +827,6 @@ async def test_shared_submit_no_match_defaults_to_workflow_pending_without_workf
     assert submit_res.status_code == 200
     body = submit_res.json()
     assert body["outcome"] == "workflow_pending"
-    assert body["surrogate_id"] is None
-    assert body["intake_lead_id"] is None
 
     submission = db.query(FormSubmission).filter(FormSubmission.id == body["id"]).first()
     assert submission is not None
@@ -1023,13 +1018,12 @@ async def test_shared_submit_workflow_lead_preserves_link_source_metadata(
     assert submit_res.status_code == 200
     body = submit_res.json()
     assert body["outcome"] == "lead_created"
-    assert body["intake_lead_id"] is not None
 
     lead = (
         db.query(IntakeLead)
         .filter(
             IntakeLead.organization_id == test_org.id,
-            IntakeLead.id == uuid.UUID(body["intake_lead_id"]),
+            IntakeLead.form_submission_id == uuid.UUID(body["id"]),
         )
         .one()
     )
@@ -1096,8 +1090,9 @@ async def test_shared_submit_exact_match_links_surrogate(
 
     body = submit_res.json()
     assert body["outcome"] == "linked"
-    assert body["surrogate_id"] == str(surrogate.id)
-    assert body["intake_lead_id"] is None
+    submission = db.get(FormSubmission, uuid.UUID(body["id"]))
+    assert submission.surrogate_id == surrogate.id
+    assert submission.intake_lead_id is None
 
 
 @pytest.mark.asyncio
@@ -1358,7 +1353,7 @@ async def test_shared_submission_retry_allows_unlink_and_relink(
     assert submit_res.status_code == 200
     payload = submit_res.json()
     assert payload["outcome"] == "linked"
-    assert payload["surrogate_id"] == str(surrogate_a.id)
+    assert db.get(FormSubmission, uuid.UUID(payload["id"])).surrogate_id == surrogate_a.id
 
     submission_id = payload["id"]
     retry_res = await authed_client.post(
@@ -1434,10 +1429,11 @@ async def test_shared_submission_retry_reuses_existing_lead_without_duplicates(
     assert submit_res.status_code == 200
     payload = submit_res.json()
     assert payload["outcome"] == "lead_created"
-    assert payload["intake_lead_id"] is not None
+    original_lead = db.get(FormSubmission, uuid.UUID(payload["id"])).intake_lead_id
+    assert original_lead is not None
 
     submission_id = payload["id"]
-    original_lead_id = payload["intake_lead_id"]
+    original_lead_id = str(original_lead)
 
     retry_reuse_res = await authed_client.post(
         f"/forms/submissions/{submission_id}/match/retry",
@@ -1524,7 +1520,7 @@ async def test_promote_intake_lead_links_pending_submission(
     payload = submit_res.json()
     assert payload["outcome"] == "lead_created"
 
-    lead_id = payload["intake_lead_id"]
+    lead_id = str(db.get(FormSubmission, uuid.UUID(payload["id"])).intake_lead_id)
     promote_res = await authed_client.post(
         f"/forms/intake-leads/{lead_id}/promote",
         json={"source": "manual", "is_priority": True},
@@ -1608,8 +1604,6 @@ async def test_shared_submit_no_match_workflow_can_auto_promote_to_surrogate(
     assert submit_res.status_code == 200
     payload = submit_res.json()
     assert payload["outcome"] == "linked"
-    assert payload["surrogate_id"] is not None
-    assert payload["intake_lead_id"] is not None
 
     submission = db.query(FormSubmission).filter(FormSubmission.id == payload["id"]).first()
     assert submission is not None

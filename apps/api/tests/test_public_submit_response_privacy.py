@@ -1,0 +1,148 @@
+"""Public submit responses must not reveal whether an applicant matched an existing record."""
+
+from __future__ import annotations
+
+import json
+import uuid
+
+import pytest
+
+from app.core.config import settings
+from app.db.models import AutomationWorkflow, FormSubmission
+from app.schemas.donor import DonorCreate
+from app.services import donor_service
+from tests.test_forms_public_embed import _create_published_lead_capture_form
+from tests.test_forms_public_shared_intake import (
+    _create_published_form_and_shared_link,
+    _create_surrogate,
+)
+from tests.test_hosted_donor_forms import _create_donor_form, _submit_donor_form
+
+PUBLIC_SUBMIT_RESPONSE_KEYS = {"id", "status", "outcome"}
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter_between_tests():
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
+def _auto_match_workflow(db, *, org_id, user_id, form_id: str) -> None:
+    db.add(
+        AutomationWorkflow(
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            name=f"Auto match {uuid.uuid4().hex[:6]}",
+            trigger_type="form_submitted",
+            trigger_config={"form_id": form_id},
+            conditions=[],
+            condition_logic="AND",
+            actions=[{"action_type": "auto_match_submission"}],
+            is_enabled=True,
+            scope="org",
+            owner_user_id=None,
+            created_by_user_id=user_id,
+        )
+    )
+    db.commit()
+
+
+@pytest.mark.asyncio
+async def test_hosted_submit_hides_the_matched_surrogate(
+    authed_client, client, db, test_org, test_user, default_stage
+):
+    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    surrogate = _create_surrogate(
+        db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        stage=default_stage,
+        full_name="Returning Applicant",
+        email="returning@example.com",
+        phone="+1 (555) 222-4444",
+        date_of_birth="1990-05-06",
+    )
+    _auto_match_workflow(db, org_id=test_org.id, user_id=test_user.id, form_id=form_id)
+
+    submit = await client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "Returning Applicant",
+                    "date_of_birth": "1990-05-06",
+                    "phone": "+1 (555) 222-4444",
+                    "email": "returning@example.com",
+                }
+            )
+        },
+    )
+
+    assert submit.status_code == 200, submit.text
+    assert set(submit.json()) == PUBLIC_SUBMIT_RESPONSE_KEYS
+    assert str(surrogate.id) not in submit.text
+    submission = db.get(FormSubmission, uuid.UUID(submit.json()["id"]))
+    assert submission.surrogate_id == surrogate.id
+
+
+@pytest.mark.asyncio
+async def test_hosted_submit_hides_the_matched_donor(
+    authed_client, client, db, test_org, test_user, monkeypatch
+):
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
+    donor = donor_service.create_donor(
+        db,
+        test_org.id,
+        test_user.id,
+        DonorCreate(
+            donor_type="egg",
+            full_name="Taylor Donor",
+            email="returning-donor@example.com",
+            phone="+16075550199",
+        ),
+    )
+    form_id, slug = await _create_donor_form(authed_client)
+    _auto_match_workflow(db, org_id=test_org.id, user_id=test_user.id, form_id=form_id)
+
+    submit = await _submit_donor_form(client, slug=slug, email="returning-donor@example.com")
+
+    assert submit.status_code == 200, submit.text
+    assert set(submit.json()) == PUBLIC_SUBMIT_RESPONSE_KEYS
+    assert str(donor.id) not in submit.text
+    submission = db.get(FormSubmission, uuid.UUID(submit.json()["id"]))
+    assert submission.donor_id == donor.id
+
+
+@pytest.mark.asyncio
+async def test_embed_submit_returns_only_the_submission_reference(authed_client, client, db):
+    _form_id, link_id, slug = await _create_published_lead_capture_form(authed_client)
+    origin = "https://www.ewisurrogacy.com"
+    update = await authed_client.patch(
+        f"/forms/intake-links/{link_id}",
+        json={"embed_enabled": True, "allowed_embed_origins": [origin]},
+    )
+    assert update.status_code == 200, update.text
+    public_form = await client.get(f"/forms/public/embed/{slug}", headers={"origin": origin})
+    assert public_form.status_code == 200, public_form.text
+    session = await client.post(
+        f"/forms/public/embed/{slug}/session",
+        json={"parent_origin": origin, "attribution": {}},
+    )
+    assert session.status_code == 200, session.text
+
+    submit = await client.post(
+        f"/forms/public/embed/{slug}/submit",
+        json={
+            "embed_session_token": session.json()["session_token"],
+            "idempotency_key": "embed-privacy-1",
+            "published_version_id": public_form.json()["published_version_id"],
+            "answers": {"full_name": "Embed Applicant", "email": "embed-privacy@example.com"},
+            "attribution": {},
+        },
+    )
+
+    assert submit.status_code == 200, submit.text
+    assert set(submit.json()) == PUBLIC_SUBMIT_RESPONSE_KEYS

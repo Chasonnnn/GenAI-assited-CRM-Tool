@@ -72,8 +72,6 @@ describe('multipart requests', () => {
                 id: 'submission-1',
                 status: 'pending_review',
                 outcome: 'workflow_pending',
-                surrogate_id: null,
-                intake_lead_id: null,
             })
         )
         global.fetch = fetchMock as unknown as typeof fetch
