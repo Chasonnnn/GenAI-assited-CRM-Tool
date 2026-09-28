@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.schemas.pipeline_semantics import StageSemantics
 from app.utils.normalization import normalize_phone, normalize_state
 
 EggSource = Literal["intended_mother", "egg_donor"]
@@ -341,6 +342,24 @@ class IntendedParentStatusChangeResponse(BaseModel):
     intended_parent: IntendedParentRead | None = None
     request_id: UUID | None = None
     message: str | None = None
+
+
+class IntendedParentStageOption(BaseModel):
+    """An active stage of the org's default intended parent pipeline."""
+
+    id: UUID
+    value: str
+    label: str
+    stage_key: str
+    stage_slug: str
+    stage_type: str
+    color: str
+    order: int
+    semantics: StageSemantics
+
+
+class IntendedParentStageOptions(BaseModel):
+    statuses: list[IntendedParentStageOption]
 
 
 # =============================================================================
