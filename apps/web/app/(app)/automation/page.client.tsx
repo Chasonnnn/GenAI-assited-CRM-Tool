@@ -239,6 +239,16 @@ function isDonorSubject(
 // Mirrors workflow_service.SHARED_DONOR_STAGE_ERROR.
 const SHARED_DONOR_STAGE_ERROR = "Stage references need a form for one donor type."
 
+// The applicant type belongs to the previous form; the backend rejects a lead kind that does
+// not match the selected form.
+function withIntakeTriggerForm(triggerType: string, config: JsonObject, formId: string | null): JsonObject {
+    if (config.form_id === formId) return config
+    const next: JsonObject = { ...config, form_id: formId }
+    const leadKindKey = INTAKE_LEAD_KIND_CONFIG_KEYS[triggerType]
+    if (leadKindKey) delete next[leadKindKey]
+    return next
+}
+
 function getDonorExecutionLink(execution: WorkflowExecution): string | null {
     if (
         execution.subject_type &&
@@ -1999,7 +2009,9 @@ function useAutomationPageView({
                                         <Select
                                             value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                                             onValueChange={(value) =>
-                                                setTriggerConfig((currentConfig) => ({ ...currentConfig, form_id: value }))
+                                                setTriggerConfig((currentConfig) =>
+                                                    withIntakeTriggerForm(triggerType, currentConfig, value),
+                                                )
                                             }
                                         >
                                             <SelectTrigger className="mt-1.5">
@@ -2032,7 +2044,9 @@ function useAutomationPageView({
                                         <Select
                                             value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                                             onValueChange={(value) =>
-                                                setTriggerConfig((currentConfig) => ({ ...currentConfig, form_id: value }))
+                                                setTriggerConfig((currentConfig) =>
+                                                    withIntakeTriggerForm(triggerType, currentConfig, value),
+                                                )
                                             }
                                         >
                                             <SelectTrigger className="mt-1.5">

@@ -1403,27 +1403,37 @@ describe('AutomationPage', () => {
     describe('Application Submitted stage updates', () => {
         const intakeOptions = (subjectType: string) => {
             const isEggDonor = subjectType === 'egg_donor'
+            const isDonor = isEggDonor || subjectType === 'sperm_donor'
+            const donorStatuses = {
+                egg_donor: [{ id: 'egg-contacted', value: 'contacted', label: 'Egg Donor Contacted', is_active: true }],
+                sperm_donor: [{ id: 'sperm-contacted', value: 'contacted', label: 'Sperm Donor Contacted', is_active: true }],
+            }
             return {
                 data: {
                     trigger_types: [
                         { value: 'form_submitted', label: 'Application Submitted', description: '' },
+                        { value: 'intake_lead_created', label: 'Intake Lead Created', description: '' },
                     ],
                     action_types: [
                         { value: 'update_field', label: 'Update Field', description: '' },
+                        { value: 'add_note', label: 'Add Note', description: '' },
                     ],
-                    action_types_by_trigger: { form_submitted: ['update_field'] },
-                    trigger_entity_types: { form_submitted: 'form_submission' },
+                    action_types_by_trigger: {
+                        form_submitted: ['update_field'],
+                        intake_lead_created: ['update_field', 'add_note'],
+                    },
+                    trigger_entity_types: { form_submitted: 'form_submission', intake_lead_created: 'intake_lead' },
                     condition_fields: ['stage_id', 'lead_kind'],
                     condition_operators: [{ value: 'in', label: 'Is one of' }],
-                    update_fields: isEggDonor
+                    update_fields: isDonor
                         ? ['stage_id', 'education', 'source']
                         : ['stage_id', 'is_priority'],
                     email_variables: [],
                     email_templates: [],
                     users: [],
                     queues: [],
-                    statuses: isEggDonor
-                        ? [{ id: 'egg-contacted', value: 'contacted', label: 'Egg Donor Contacted', is_active: true }]
+                    statuses: isDonor
+                        ? donorStatuses[subjectType as keyof typeof donorStatuses]
                         : [{ id: 'surrogate-contacted', value: 'contacted', label: 'Surrogate Contacted', is_active: true }],
                     forms: [
                         { id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' },
@@ -1468,6 +1478,19 @@ describe('AutomationPage', () => {
                 target: { value: 'update_field' },
             })
         }
+
+        const FIXED_SUBJECTS: Record<string, string> = {
+            form_submitted: 'form_submission',
+            intake_lead_created: 'intake_lead',
+        }
+
+        const formSelect = (formId: string) =>
+            getFirstElement(
+                screen.getAllByTestId('select').filter((select) =>
+                    select.querySelector(`option[value="${formId}"]`),
+                ),
+                'Expected a form select',
+            )
 
         const optionLabels = (select: HTMLElement) =>
             Array.from(select.querySelectorAll('option'))
@@ -1617,6 +1640,61 @@ describe('AutomationPage', () => {
 
             expect(screen.getByText('Stage references need a form for one donor type.')).toBeInTheDocument()
             expect(mockUpdateWorkflow.mutate).not.toHaveBeenCalled()
+        })
+
+        it.each([
+            { triggerType: 'form_submitted', key: 'lead_kind' },
+            { triggerType: 'intake_lead_created', key: 'lead_type' },
+        ])('clears the $key applicant type when the $triggerType form changes', ({ triggerType, key }) => {
+            mockUseWorkflows.mockReturnValue({
+                data: [{
+                    id: 'workflow-egg-intake',
+                    name: 'Egg donor intake',
+                    description: null,
+                    icon: 'activity',
+                    subject_type: FIXED_SUBJECTS[triggerType],
+                    trigger_type: triggerType,
+                    is_enabled: true,
+                    run_count: 0,
+                    last_run_at: null,
+                    last_error: null,
+                    created_at: '2026-09-28T00:00:00Z',
+                    can_edit: true,
+                }],
+                isLoading: false,
+            })
+            mockUseWorkflow.mockReturnValue({
+                data: {
+                    id: 'workflow-egg-intake',
+                    name: 'Egg donor intake',
+                    description: null,
+                    scope: 'personal',
+                    subject_type: FIXED_SUBJECTS[triggerType],
+                    trigger_type: triggerType,
+                    trigger_config: { form_id: 'form-egg-donor', [key]: 'egg_donor' },
+                    conditions: [],
+                    condition_logic: 'AND',
+                    actions: [{ action_type: 'update_field', field: 'is_priority', value: true }],
+                },
+                isLoading: false,
+            })
+
+            renderAutomationPage()
+            fireEvent.click(screen.getByRole('button', { name: 'Actions for workflow Egg donor intake' }))
+            fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+            fireEvent.change(formSelect('form-surrogate'), { target: { value: 'form-surrogate' } })
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+            expect(mockUpdateWorkflow.mutate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: 'workflow-egg-intake',
+                    data: expect.objectContaining({ trigger_config: { form_id: 'form-surrogate' } }),
+                }),
+                expect.any(Object),
+            )
         })
 
         it('keeps stage conditions when an existing donor application workflow is saved', () => {
