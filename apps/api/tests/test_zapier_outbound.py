@@ -96,8 +96,13 @@ async def test_zapier_outbound_test_event_queues_job(authed_client, db, test_org
     assert data["lead_id"] == "lead-test-1"
 
 
+LEAD_EMAIL_SHA256 = "9fbdefe2837a03c9225be80e741f316f4d174d1732b719b6abb6477efc1ae9d2"
+# Meta normalizes phones to digits with country code and no "+": sha256("15551234567").
+LEAD_PHONE_SHA256 = "d6736136ea896c1bfdc553e0e86e702c70d060d805696ca3e4e9e0961353860a"
+
+
 def test_build_stage_event_payload_exposes_zapier_matching_fields():
-    from app.services import meta_capi, zapier_outbound_service
+    from app.services import zapier_outbound_service
 
     payload = zapier_outbound_service.build_stage_event_payload(
         lead_id="1559954882011881",
@@ -125,9 +130,31 @@ def test_build_stage_event_payload_exposes_zapier_matching_fields():
     assert payload["facebook_click_id"] == "fb.1.1772942400.persisted-click-id"
     assert payload["fbc"] == "fb.1.1772942400.persisted-click-id"
     assert payload["user_data"] == {
-        "email_hash": meta_capi.hash_for_capi("lead@example.com"),
-        "phone_hash": meta_capi.hash_for_capi("+15551234567"),
+        "email_hash": LEAD_EMAIL_SHA256,
+        "phone_hash": LEAD_PHONE_SHA256,
     }
+
+
+def test_build_stage_event_payload_never_sends_placeholder_email():
+    from app.services import zapier_outbound_service
+
+    payload = zapier_outbound_service.build_stage_event_payload(
+        lead_id="1559954882011881",
+        event_name="Qualified",
+        event_time=datetime(2026, 3, 8, 6, 56, 36, tzinfo=UTC),
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_id=None,
+        stage_label="Pre Qualified",
+        surrogate_id=None,
+        include_hashed_pii=True,
+        email="meta-1559954882011881@Placeholder.Invalid",
+        phone="+1 (555) 123-4567",
+    )
+
+    assert "customer_email" not in payload
+    assert payload["user_data"] == {"phone_hash": LEAD_PHONE_SHA256}
+    assert "placeholder" not in str(payload).lower()
 
 
 def test_enqueue_stage_event_skips_meta_leads_older_than_90_days(db, test_org, test_user):

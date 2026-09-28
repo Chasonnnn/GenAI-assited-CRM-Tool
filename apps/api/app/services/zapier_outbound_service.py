@@ -34,6 +34,8 @@ from app.utils.presentation import humanize_identifier
 logger = logging.getLogger(__name__)
 MAX_META_LEAD_AGE = timedelta(days=90)
 FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
+# Meta leads without an email get this generated address; it must never reach Meta.
+PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid"
 
 
 def _now_utc() -> datetime:
@@ -117,6 +119,31 @@ def _resolve_meta_click_id(meta_lead: MetaLead) -> str | None:
     )
 
 
+def _matchable_email(email: str | None) -> str | None:
+    normalized = (email or "").strip()
+    if "@" not in normalized or normalized.lower().endswith(PLACEHOLDER_EMAIL_SUFFIX):
+        return None
+    return normalized
+
+
+def _customer_match_fields(email: str | None, phone: str | None) -> dict[str, object]:
+    """Raw contact fields plus Meta-normalized hashes, shared by surrogate and donor payloads."""
+    fields: dict[str, object] = {}
+    user_data: dict[str, str] = {}
+    matchable_email = _matchable_email(email)
+    if matchable_email:
+        fields["customer_email"] = matchable_email
+        user_data["email_hash"] = meta_capi.hash_for_capi(matchable_email)
+    if phone:
+        fields["customer_phone_number"] = phone
+        normalized_phone = meta_capi.normalize_phone_for_capi(phone)
+        if normalized_phone:
+            user_data["phone_hash"] = meta_capi.hash_for_capi(normalized_phone)
+    if user_data:
+        fields["user_data"] = user_data
+    return fields
+
+
 def _skip_event(
     db: Session,
     *,
@@ -196,15 +223,7 @@ def build_stage_event_payload(
         payload["facebook_click_id"] = normalized_fbc
 
     if include_hashed_pii:
-        user_data: dict[str, str] = {}
-        if email:
-            payload["customer_email"] = email
-            user_data["email_hash"] = meta_capi.hash_for_capi(email)
-        if phone:
-            payload["customer_phone_number"] = phone
-            user_data["phone_hash"] = meta_capi.hash_for_capi(phone)
-        if user_data:
-            payload["user_data"] = user_data
+        payload.update(_customer_match_fields(email, phone))
 
     if test_mode:
         payload["test_mode"] = True
@@ -592,11 +611,7 @@ def build_donor_stage_event_payload(
         payload.update({str(key): value for key, value in fields.items() if value})
 
     if include_hashed_pii:
-        user_data: dict[str, str] = {}
-        if email:
-            user_data["email_hash"] = meta_capi.hash_for_capi(email)
-        if phone:
-            user_data["phone_hash"] = meta_capi.hash_for_capi(phone)
+        user_data = _customer_match_fields(email, phone).get("user_data")
         if user_data:
             payload["user_data"] = user_data
     return payload
@@ -681,7 +696,9 @@ def enqueue_donor_stage_event(
     has_browser_matching = isinstance(attribution_fields, dict) and bool(
         attribution_fields.get("fbc") or attribution_fields.get("fbp")
     )
-    has_contact_matching = settings.outbound_send_hashed_pii and bool(donor.email or donor.phone)
+    has_contact_matching = settings.outbound_send_hashed_pii and bool(
+        _customer_match_fields(donor.email, donor.phone).get("user_data")
+    )
     if attribution["source"] == "website" and not (has_browser_matching or has_contact_matching):
         return skip("missing_matching_data", event_name=event_name, attribution=attribution)
 

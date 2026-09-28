@@ -322,6 +322,44 @@ def test_applied_donor_stage_queues_one_minimal_meta_payload(db, test_org, test_
     )
 
 
+def test_donor_payload_hashes_meta_normalized_phone_and_skips_placeholder_email(
+    db, test_org, test_user
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    donor.email = "meta-1234567890abcdef@placeholder.invalid"
+    db.commit()
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+
+    result = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.donor_status_history_id == result["history"].id)
+        .one()
+    )
+    payload = db.get(Job, event.job_id).payload["data"]
+    # sha256("16075550102"): digits with country code and no "+", as Meta expects.
+    assert payload["user_data"] == {
+        "phone_hash": "7515397f91001442b8a497e2562bc8e7ee3c914396f7da402a59cc40f66dd0d1"
+    }
+    assert "placeholder" not in str(payload)
+
+
 @pytest.mark.asyncio
 async def test_dispatch_uses_positive_payload_allowlist(db, test_org, test_user, monkeypatch):
     from app.jobs.handlers import zapier as zapier_handler
