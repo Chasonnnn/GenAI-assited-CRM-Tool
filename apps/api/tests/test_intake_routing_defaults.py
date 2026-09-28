@@ -1,4 +1,7 @@
-"""Generated intake routing must route donors like the donor fixture and survive republish."""
+"""Generated intake routing must route donors like the donor fixture and survive republish.
+
+Republishing never re-enables a paused routing workflow; only a new one starts enabled.
+"""
 
 import json
 import uuid
@@ -77,9 +80,7 @@ async def test_generated_donor_routing_matches_fixture_and_creates_donor(
 
 
 @pytest.mark.asyncio
-async def test_republish_keeps_admin_edits_and_restores_disabled_routing(
-    authed_client, db, test_org
-):
+async def test_republish_keeps_admin_edits_and_disabled_routing(authed_client, db, test_org):
     form_id, _ = await _create_donor_form(authed_client)
     workflow = _routing_workflow(db, test_org.id, form_id)
     edited_actions = [
@@ -99,7 +100,7 @@ async def test_republish_keeps_admin_edits_and_restores_disabled_routing(
     assert workflow.conditions == [
         {"field": "source_mode", "operator": "equals", "value": "shared"}
     ]
-    assert workflow.is_enabled is True
+    assert workflow.is_enabled is False
 
 
 @pytest.mark.asyncio
@@ -122,8 +123,7 @@ async def test_surrogate_subject_form_workflow_does_not_suppress_routing_repair(
 ):
     """CRIT-5: a builder workflow saved with subject 'surrogate' never runs for submissions."""
     form_id, _ = await _create_donor_form(authed_client)
-    routing = _routing_workflow(db, test_org.id, form_id)
-    routing.is_enabled = False
+    db.delete(_routing_workflow(db, test_org.id, form_id))
     db.add(
         AutomationWorkflow(
             organization_id=test_org.id,
@@ -145,7 +145,7 @@ async def test_surrogate_subject_form_workflow_does_not_suppress_routing_repair(
     republished = await authed_client.post(f"/forms/{form_id}/publish")
     assert republished.status_code == 200, republished.text
 
-    db.refresh(routing)
+    routing = _routing_workflow(db, test_org.id, form_id)
     assert routing.is_enabled is True
     assert routing.actions == DONOR_DEFAULT_ACTIONS
 
@@ -187,8 +187,7 @@ async def test_other_org_workflow_does_not_suppress_routing(authed_client, db, t
     from app.db.models import Organization
 
     form_id, _ = await _create_donor_form(authed_client)
-    routing = _routing_workflow(db, test_org.id, form_id)
-    routing.is_enabled = False
+    db.delete(_routing_workflow(db, test_org.id, form_id))
     other_org = Organization(name="Other agency", slug=f"routing-{uuid.uuid4().hex}")
     db.add(other_org)
     db.flush()
@@ -212,5 +211,4 @@ async def test_other_org_workflow_does_not_suppress_routing(authed_client, db, t
     republished = await authed_client.post(f"/forms/{form_id}/publish")
     assert republished.status_code == 200, republished.text
 
-    db.refresh(routing)
-    assert routing.is_enabled is True
+    assert _routing_workflow(db, test_org.id, form_id).is_enabled is True

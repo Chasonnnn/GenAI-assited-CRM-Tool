@@ -339,6 +339,8 @@ async def test_published_form_workflow_routes_both_donor_types(
     update = await authed_client.put(f"/forms/{form_id}/mappings", json={"mappings": mappings})
     assert update.status_code == 200, update.text
     assert (await authed_client.post(f"/forms/{form_id}/publish")).status_code == 200
+    # Generated routing is authorized under v2 too; only the workflow under test may route.
+    _disable_generated_routing(db, form_id)
     workflow = workflow_service.create_workflow(
         db,
         test_org.id,

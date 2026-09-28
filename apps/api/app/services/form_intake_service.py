@@ -65,6 +65,7 @@ from app.services import (
     meta_crm_dataset_service,
     org_service,
     surrogate_input_normalization_service,
+    workflow_execution_authority,
     zapier_outbound_service,
 )
 from app.services.attachment_service import (
@@ -794,12 +795,61 @@ def _default_intake_routing_actions(form: Form) -> list[dict[str, Any]]:
     return [dict(action) for action in SURROGATE_DEFAULT_INTAKE_ROUTING_ACTIONS]
 
 
-def _has_generated_intake_routing_configuration(workflow: AutomationWorkflow) -> bool:
+def _generated_intake_routing_trigger_config(db: Session, form: Form) -> dict[str, Any]:
+    """Return the trigger config a builder save would store for the generated workflow.
+
+    Matching the builder's canonical form keeps a no-op save from changing the
+    execution-authority digest.
+    """
+    from app.services import workflow_service
+
+    return workflow_service._canonicalize_trigger_config(
+        db,
+        form.organization_id,
+        WorkflowTriggerType.FORM_SUBMITTED,
+        {"form_id": str(form.id)},
+        entity_type="form_submission",
+    )
+
+
+def _has_generated_intake_routing_configuration(workflow: AutomationWorkflow, form: Form) -> bool:
     """True when the routing workflow still holds a generated configuration, not admin edits."""
     if workflow.conditions:
         return False
+    # Earlier releases stored only the form id; the builder adds a single-kind form's kind.
+    generated_trigger_configs = (
+        {"form_id": str(form.id)},
+        {"form_id": str(form.id), "lead_kind": form.lead_kind},
+    )
+    if workflow.trigger_config not in generated_trigger_configs:
+        return False
     actions = list(workflow.actions or [])
     return any(actions == list(generated) for generated in _GENERATED_INTAKE_ROUTING_ACTION_SETS)
+
+
+def _authorize_generated_intake_routing(
+    db: Session,
+    workflow: AutomationWorkflow,
+    *,
+    form: Form,
+    trigger_config: dict[str, Any],
+    actions: list[dict[str, Any]],
+    user_id: uuid.UUID | None,
+) -> None:
+    """Grant system execution authority only to the exact current generated configuration."""
+    if (
+        workflow.conditions
+        or workflow.subject_type != "form_submission"
+        or workflow.trigger_config != trigger_config
+        or workflow.actions != actions
+    ):
+        return
+    create_permission = (
+        "create_donors" if form.lead_kind in DONOR_LEAD_KINDS else "create_surrogates"
+    )
+    workflow_execution_authority.authorize_generated_routing(
+        db, workflow, user_id, create_permission
+    )
 
 
 def ensure_default_intake_routing_workflow(
@@ -810,11 +860,13 @@ def ensure_default_intake_routing_workflow(
     user_id: uuid.UUID | None,
     commit: bool = True,
 ) -> AutomationWorkflow | None:
-    """Ensure an enabled, form-scoped shared-intake routing workflow exists.
+    """Ensure a form-scoped shared-intake routing workflow exists.
 
-    Republishing keeps admin edits to the generated workflow; it only refreshes a
-    configuration that still matches a generated default and re-enables routing when
-    no other enabled form_submission workflow routes this form.
+    A new routing workflow starts enabled. Republishing refreshes only a
+    configuration that still matches a generated default, keeps admin edits and
+    their execution grant, and never re-enables a paused workflow. Under permission
+    v2 an exact generated configuration gets a system execution grant when the
+    publisher can create the form's record type.
     """
     if form.status != FormStatus.PUBLISHED.value:
         return None
@@ -840,58 +892,60 @@ def ensure_default_intake_routing_workflow(
     ):
         return None
 
-    trigger_config = {"form_id": str(form.id)}
+    trigger_config = _generated_intake_routing_trigger_config(db, form)
     actions = _default_intake_routing_actions(form)
-    now = datetime.now(UTC)
 
     if workflow:
+        if not _has_generated_intake_routing_configuration(workflow, form):
+            return workflow
         workflow.subject_type = "form_submission"
         workflow.trigger_config = trigger_config
-        if _has_generated_intake_routing_configuration(workflow):
-            workflow.actions = actions
-            workflow.conditions = []
-            workflow.condition_logic = "AND"
-        workflow.is_enabled = True
+        workflow.actions = actions
+        workflow.conditions = []
+        workflow.condition_logic = "AND"
         workflow.requires_review = False
         workflow.is_system_workflow = True
         workflow.updated_by_user_id = user_id
-        workflow.updated_at = now
-        if commit:
-            db.commit()
-            db.refresh(workflow)
-        else:
-            db.flush()
-        return workflow
-
-    workflow = AutomationWorkflow(
-        organization_id=org_id,
-        name=f"Intake Routing ({str(form.id)[:8]})",
-        description=(
-            "Matches donor submissions to an existing donor, or creates a donor after the "
-            "uploaded photo passes scanning."
-            if form.lead_kind in DONOR_LEAD_KINDS
-            else (
-                "Automatically routes shared form submissions by running auto-match first, "
-                "then creating an intake lead if no deterministic match exists."
-            )
-        ),
-        icon="workflow",
-        scope="org",
-        owner_user_id=None,
-        subject_type="form_submission",
-        trigger_type=WorkflowTriggerType.FORM_SUBMITTED.value,
+        workflow.updated_at = datetime.now(UTC)
+    else:
+        workflow = AutomationWorkflow(
+            organization_id=org_id,
+            name=f"Intake Routing ({str(form.id)[:8]})",
+            description=(
+                "Matches donor submissions to an existing donor, or creates a donor after the "
+                "uploaded photo passes scanning."
+                if form.lead_kind in DONOR_LEAD_KINDS
+                else (
+                    "Automatically routes shared form submissions by running auto-match first, "
+                    "then creating an intake lead if no deterministic match exists."
+                )
+            ),
+            icon="workflow",
+            scope="org",
+            owner_user_id=None,
+            subject_type="form_submission",
+            trigger_type=WorkflowTriggerType.FORM_SUBMITTED.value,
+            trigger_config=trigger_config,
+            conditions=[],
+            condition_logic="AND",
+            actions=actions,
+            is_enabled=True,
+            is_system_workflow=True,
+            system_key=system_key,
+            requires_review=False,
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
+        )
+        db.add(workflow)
+    db.flush()
+    _authorize_generated_intake_routing(
+        db,
+        workflow,
+        form=form,
         trigger_config=trigger_config,
-        conditions=[],
-        condition_logic="AND",
         actions=actions,
-        is_enabled=True,
-        is_system_workflow=True,
-        system_key=system_key,
-        requires_review=False,
-        created_by_user_id=user_id,
-        updated_by_user_id=user_id,
+        user_id=user_id,
     )
-    db.add(workflow)
     if commit:
         db.commit()
         db.refresh(workflow)
