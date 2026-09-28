@@ -2,16 +2,14 @@
 
 Save-time validation forced ``requires_approval: true`` on every send_email action
 in a donor-context workflow or template. Approval is now optional, but the stored
-forced values still hold donor emails for review. Every stored donor-context
-send_email approval was forced by validation, so all of them are set to
-``requires_approval: false``. Surrogate-context actions, other action types,
-executions, and pending approval tasks are unchanged.
-
-Donor context uses frozen copies of the resolvers at this revision:
-workflows follow ``resolve_effective_workflow_subject_type`` (the trigger form is
-looked up in the workflow organization), templates and template drafts follow
-``resolve_effective_template_subject_type`` (an organization template binds its
-form, then the unbound resolver applies).
+forced values still hold donor emails for review. Only rows with a proven donor
+context are set to ``requires_approval: false``: a donor subject, a donor
+``lead_kind``/``lead_type``, a donor-only trigger, or a trigger form (looked up in
+the workflow organization) whose lead kind is a donor kind. Intake workflows with
+no form and no kind, or with a form that does not resolve, were also forced, but
+they can be legacy surrogate workflows whose approval an admin chose before the
+forcing existed, so they keep their approval. Surrogate-context actions, other
+action types, executions, and pending approval tasks are unchanged.
 
 An organization workflow whose stored v2 ``execution_authority`` digest matched
 the configuration before this change gets the recomputed digest, so it stays
@@ -38,7 +36,6 @@ depends_on = None
 
 # Frozen copies of workflow_service and template_service constants.
 DONOR_SUBJECT_TYPES = frozenset({"egg_donor", "sperm_donor"})
-DONOR_PERMISSION_CONTEXT = "donor"
 INTAKE_CONTEXT_KEYS = {"form_submitted": "lead_kind", "intake_lead_created": "lead_type"}
 LEGACY_TRIGGER_SUBJECT_TYPES = {
     "form_submitted": "form_submission",
@@ -82,41 +79,14 @@ def _workflow_is_donor_context(
     trigger_config: object,
     form_kind: str | None,
 ) -> bool:
-    """Frozen resolve_effective_workflow_subject_type, reduced to donor context."""
+    """Proven donor context: a donor subject, donor intake kind, or donor trigger form."""
     if subject_type in DONOR_SUBJECT_TYPES:
         return True
     context_key = INTAKE_CONTEXT_KEYS.get(trigger_type)
     if context_key is None:
         return False
     config = trigger_config if isinstance(trigger_config, dict) else {}
-    configured_kind = config.get(context_key)
-    form_id = config.get("form_id")
-    if configured_kind in DONOR_SUBJECT_TYPES or form_kind in DONOR_SUBJECT_TYPES:
-        return True
-    if configured_kind == "surrogate" or form_kind == "surrogate":
-        return False
-    if form_id and form_kind is None and configured_kind is None:
-        return True
-    return not form_id and configured_kind is None
-
-
-def _unbound_is_donor_context(
-    subject_type: str | None, trigger_type: str, trigger_config: dict
-) -> bool:
-    """Frozen resolve_unbound_workflow_subject_type, reduced to donor context."""
-    if subject_type is None:
-        subject_type = LEGACY_TRIGGER_SUBJECT_TYPES.get(trigger_type, "surrogate")
-    if subject_type in DONOR_SUBJECT_TYPES:
-        return True
-    context_key = INTAKE_CONTEXT_KEYS.get(trigger_type)
-    if context_key is None:
-        return False
-    configured_kind = trigger_config.get(context_key)
-    if configured_kind in DONOR_SUBJECT_TYPES:
-        return True
-    if trigger_config.get("form_id") or trigger_config.get("form_name"):
-        return True
-    return configured_kind != "surrogate"
+    return config.get(context_key) in DONOR_SUBJECT_TYPES or form_kind in DONOR_SUBJECT_TYPES
 
 
 def _template_is_donor_context(
@@ -125,21 +95,12 @@ def _template_is_donor_context(
     trigger_config: object,
     form_kind: str | None,
 ) -> bool:
-    """Frozen resolve_effective_template_subject_type, reduced to donor context."""
-    config = dict(trigger_config) if isinstance(trigger_config, dict) else {}
-    context_key = INTAKE_CONTEXT_KEYS.get(trigger_type)
-    if context_key and config.get("form_id"):
-        configured_kind = config.pop(context_key, None)
-        config.pop("form_id", None)
-        if form_kind in DONOR_SUBJECT_TYPES:
-            config[context_key] = form_kind
-        elif configured_kind in DONOR_SUBJECT_TYPES:
-            config[context_key] = configured_kind
-        elif form_kind == "surrogate":
-            config[context_key] = form_kind
+    """Proven donor context for a template or template draft."""
+    if subject_type is None:
+        subject_type = LEGACY_TRIGGER_SUBJECT_TYPES.get(trigger_type)
     if subject_type is None and trigger_type in DONOR_ONLY_TRIGGER_TYPES:
         return True
-    return _unbound_is_donor_context(subject_type, trigger_type, config)
+    return _workflow_is_donor_context(subject_type, trigger_type, trigger_config, form_kind)
 
 
 def _form_id(trigger_type: str, trigger_config: object) -> UUID | None:

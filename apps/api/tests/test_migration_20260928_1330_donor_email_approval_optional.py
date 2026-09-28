@@ -174,6 +174,7 @@ def test_upgrade_clears_forced_donor_email_approval(db_engine):
             foreign_surrogate_form = _insert_form(connection, other_org_id, "surrogate")
 
             donor_actions = [TASK, _email()]
+            surrogate_actions = [TASK, _email()]
             flipped = {
                 "donor_subject": _insert_workflow(
                     connection,
@@ -190,27 +191,12 @@ def test_upgrade_clears_forced_donor_email_approval(db_engine):
                     trigger_config={"form_id": str(donor_form)},
                     actions=donor_actions,
                 ),
-                "unscoped_intake": _insert_workflow(
-                    connection,
-                    org_id,
-                    subject_type="intake_lead",
-                    trigger_type="intake_lead_created",
-                    actions=donor_actions,
-                ),
                 "donor_lead_type": _insert_workflow(
                     connection,
                     org_id,
                     subject_type="intake_lead",
                     trigger_type="intake_lead_created",
                     trigger_config={"lead_type": "sperm_donor"},
-                    actions=donor_actions,
-                ),
-                "foreign_form": _insert_workflow(
-                    connection,
-                    org_id,
-                    subject_type="form_submission",
-                    trigger_type="form_submitted",
-                    trigger_config={"form_id": str(foreign_surrogate_form)},
                     actions=donor_actions,
                 ),
                 "valid_grant": _insert_workflow(
@@ -228,8 +214,24 @@ def test_upgrade_clears_forced_donor_email_approval(db_engine):
                     actions=donor_actions,
                 ),
             }
-            surrogate_actions = [TASK, _email()]
+            # Unscoped or unresolved intake workflows could be legacy surrogate workflows
+            # whose approval an admin chose, so they keep it.
             untouched = {
+                "unscoped_intake": _insert_workflow(
+                    connection,
+                    org_id,
+                    subject_type="intake_lead",
+                    trigger_type="intake_lead_created",
+                    actions=surrogate_actions,
+                ),
+                "foreign_form": _insert_workflow(
+                    connection,
+                    org_id,
+                    subject_type="form_submission",
+                    trigger_type="form_submitted",
+                    trigger_config={"form_id": str(foreign_surrogate_form)},
+                    actions=surrogate_actions,
+                ),
                 "surrogate": _insert_workflow(
                     connection,
                     org_id,
@@ -340,7 +342,7 @@ def test_upgrade_clears_forced_donor_email_approval(db_engine):
             }
             assert templates[donor_template].actions == _cleared(donor_actions)
             assert templates[donor_template].draft_config["actions"] == _cleared(donor_actions)
-            assert templates[intake_template].actions == _cleared(donor_actions)
+            assert templates[intake_template].actions == donor_actions
             assert templates[intake_template].draft_config["actions"] == surrogate_actions
             assert templates[surrogate_template].actions == surrogate_actions
             assert templates[surrogate_template].draft_config["actions"] == _cleared(donor_actions)
