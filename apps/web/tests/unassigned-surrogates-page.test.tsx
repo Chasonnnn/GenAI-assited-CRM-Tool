@@ -120,7 +120,7 @@ describe("UnassignedSurrogatesPage", () => {
             expect(screen.getByText("Agency")).toBeInTheDocument()
             expect(screen.queryByText("agency")).not.toBeInTheDocument()
             const stageBadge = screen.getByText("New Unread")
-            expect(stageBadge).toHaveStyle({ ...stageBadgeStyle("#3B82F6"), color: "#FFFFFF" })
+            expect(stageBadge).toHaveStyle({ backgroundColor: stageBadgeStyle("#3B82F6").backgroundColor, color: "#FFFFFF" })
             expect(stageBadgeStyle("#3B82F6").backgroundColor).not.toBe("#3B82F6")
         })
 

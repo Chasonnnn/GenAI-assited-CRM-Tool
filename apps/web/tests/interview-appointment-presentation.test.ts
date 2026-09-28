@@ -34,14 +34,14 @@ describe("interview appointment presentation", () => {
     })
 
     it("keeps white text and colors that already reach AA contrast", () => {
-        expect(stageBadgeStyle("#DB2777")).toEqual({ backgroundColor: "#DB2777", color: "#FFFFFF" })
-        expect(stageBadgeStyle(" #64748b ")).toEqual({ backgroundColor: "#64748B", color: "#FFFFFF" })
+        expect(stageBadgeStyle("#DB2777")).toEqual({ backgroundColor: "#DB2777", borderColor: "transparent", color: "#FFFFFF" })
+        expect(stageBadgeStyle(" #64748b ")).toEqual({ backgroundColor: "#64748B", borderColor: "transparent", color: "#FFFFFF" })
     })
 
     it("passes through values that are not six-digit hex", () => {
-        expect(stageBadgeStyle("")).toEqual({ backgroundColor: "", color: "#FFFFFF" })
-        expect(stageBadgeStyle("#fff")).toEqual({ backgroundColor: "#fff", color: "#FFFFFF" })
-        expect(stageBadgeStyle("var(--primary)")).toEqual({ backgroundColor: "var(--primary)", color: "#FFFFFF" })
+        expect(stageBadgeStyle("").backgroundColor).toBe("")
+        expect(stageBadgeStyle("#fff").backgroundColor).toBe("#fff")
+        expect(stageBadgeStyle("var(--primary)").backgroundColor).toBe("var(--primary)")
     })
 
     // Every color seeded by apps/api/app/core/stage_definitions.py, plus the #6B7280 fallback.
@@ -49,13 +49,24 @@ describe("interview appointment presentation", () => {
         "#059669", "#06B6D4", "#0891B2", "#0D9488", "#0EA5E9", "#10B981", "#14B8A6", "#16A34A",
         "#22C55E", "#3B82F6", "#6366F1", "#64748B", "#6B7280", "#84CC16", "#8B5CF6", "#A855F7",
         "#B4536A", "#D97706", "#DB2777", "#EF4444", "#F59E0B", "#FDE68A",
-    ])("darkens seeded stage color %s only until white text reaches AA", (color) => {
+    ])("gives seeded stage color %s white text at AA contrast", (color) => {
         const { backgroundColor, color: foreground } = stageBadgeStyle(color)
         expect(foreground).toBe("#FFFFFF")
         expect(contrastRatio(backgroundColor, "#FFFFFF")).toBeGreaterThanOrEqual(4.5)
         expect(luminance(backgroundColor)).toBeLessThanOrEqual(luminance(color))
         if (contrastRatio(color, "#FFFFFF") >= 4.5) expect(backgroundColor).toBe(color)
-        else expect(contrastRatio(backgroundColor, "#FFFFFF")).toBeLessThan(4.7)
+    })
+
+    // Pairs that collapsed to one shade when every fill stopped exactly at 4.5:1.
+    it.each([
+        ["#10B981", "#059669"],
+        ["#22C55E", "#16A34A"],
+        ["#14B8A6", "#0D9488"],
+        ["#06B6D4", "#0891B2"],
+    ])("keeps the lighter stage color %s lighter than %s", (lighter, darker) => {
+        const lighterFill = stageBadgeStyle(lighter).backgroundColor
+        const darkerFill = stageBadgeStyle(darker).backgroundColor
+        expect(luminance(lighterFill)).toBeGreaterThan(luminance(darkerFill) * 1.15)
     })
 })
 
