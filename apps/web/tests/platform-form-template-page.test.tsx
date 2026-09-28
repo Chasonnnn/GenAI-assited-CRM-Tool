@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react"
-import type { ImgHTMLAttributes } from "react"
+import { Activity, type ImgHTMLAttributes } from "react"
 import PlatformFormTemplatePage from "../app/ops/templates/forms/[id]/page.client"
 
 const mockUpdate = vi.fn()
@@ -10,6 +10,7 @@ const mockDelete = vi.fn()
 const navigationState = vi.hoisted(() => ({
     templateId: "tpl_form_1",
 }))
+const routerReplace = vi.hoisted(() => vi.fn())
 
 const buildTemplateData = (id = "tpl_form_1", name = "Surrogate Application Form") => ({
     id,
@@ -35,7 +36,7 @@ vi.mock("next/navigation", () => ({
     useParams: () => ({ id: navigationState.templateId }),
     useRouter: () => ({
         push: vi.fn(),
-        replace: vi.fn(),
+        replace: routerReplace,
     }),
 }))
 
@@ -65,6 +66,7 @@ describe("PlatformFormTemplatePage", () => {
         mockCreate.mockReset()
         mockPublish.mockReset()
         mockDelete.mockReset()
+        routerReplace.mockReset()
         mockTemplateData = buildTemplateData()
         vi.useRealTimers()
     })
@@ -482,6 +484,129 @@ describe("PlatformFormTemplatePage", () => {
 
         expect(saves.map((save) => save.name)).toEqual(["Renamed once", "Renamed twice"])
         expect(screen.getByText(/^Saved /)).toBeInTheDocument()
+    })
+
+    describe("while a save is pending", () => {
+        const advance = async (ms: number) => {
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(ms)
+            })
+        }
+        const saveButton = () => screen.getByRole("button", { name: /^save$/i })
+        const publishButton = () => screen.getByRole("button", { name: /^publish$/i })
+        const deferred = (mock: typeof mockUpdate) => {
+            const requests: Array<{ finish: () => void }> = []
+            mock.mockImplementation(({ payload }: { payload: { name: string } }) =>
+                new Promise((resolve) => {
+                    requests.push({
+                        finish: () =>
+                            resolve({
+                                ...mockTemplateData,
+                                id: "tpl_form_1",
+                                current_version: 2,
+                                draft: { ...mockTemplateData.draft, name: payload.name },
+                            }),
+                    })
+                }))
+            return requests
+        }
+
+        beforeEach(() => {
+            vi.useFakeTimers()
+        })
+
+        it("ignores Save and Publish while a new template is being created", async () => {
+            navigationState.templateId = "new"
+            mockTemplateData = undefined as unknown as typeof mockTemplateData
+            const creates: Array<{ finish: () => void }> = []
+            mockCreate.mockImplementation((payload: { name: string }) =>
+                new Promise((resolve) => {
+                    creates.push({
+                        finish: () =>
+                            resolve({
+                                ...buildTemplateData("tpl-form-new", payload.name),
+                                current_version: 1,
+                            }),
+                    })
+                }))
+            render(<PlatformFormTemplatePage />)
+            fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "New intake" } })
+            fireEvent.click(screen.getByRole("button", { name: /add name field/i }))
+
+            fireEvent.click(saveButton())
+            await advance(10)
+            expect(creates).toHaveLength(1)
+            expect(saveButton()).toBeDisabled()
+            expect(publishButton()).toBeDisabled()
+
+            fireEvent.click(saveButton())
+            fireEvent.click(publishButton())
+            await advance(10)
+            expect(screen.queryByRole("dialog", { name: "Publish Form Template" })).not.toBeInTheDocument()
+
+            creates[0].finish()
+            await advance(10)
+            await advance(5000)
+
+            expect(mockCreate).toHaveBeenCalledTimes(1)
+            expect(mockUpdate).not.toHaveBeenCalled()
+            expect(mockPublish).not.toHaveBeenCalled()
+            expect(routerReplace.mock.calls).toEqual([["/ops/templates/forms/tpl-form-new"]])
+            expect(saveButton()).toBeEnabled()
+        })
+
+        it("does not resend a draft whose autosave failed until it changes", async () => {
+            mockUpdate.mockImplementation(() =>
+                new Promise((_resolve, reject) => {
+                    setTimeout(() => reject(new Error("Template changed since it was loaded")), 300)
+                }))
+            render(<PlatformFormTemplatePage />)
+            fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed once" } })
+            await advance(1200)
+            await advance(400)
+            expect(mockUpdate).toHaveBeenCalledTimes(1)
+
+            await advance(12000)
+            expect(mockUpdate).toHaveBeenCalledTimes(1)
+            expect(screen.getByText("Autosave failed")).toBeInTheDocument()
+
+            fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed twice" } })
+            await advance(1200)
+            await advance(10)
+            await advance(12000)
+
+            expect(mockUpdate.mock.calls.map(([{ payload }]) => payload.name)).toEqual([
+                "Renamed once",
+                "Renamed twice",
+            ])
+        })
+
+        it("clears Save when the builder is hidden and shown again during the save", async () => {
+            const saves = deferred(mockUpdate)
+            const renderBuilder = (mode: "visible" | "hidden") => (
+                <Activity mode={mode}>
+                    <PlatformFormTemplatePage />
+                </Activity>
+            )
+            const view = render(renderBuilder("visible"))
+            fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed" } })
+            fireEvent.click(saveButton())
+            await advance(10)
+            expect(saves).toHaveLength(1)
+
+            view.rerender(renderBuilder("hidden"))
+            await advance(10)
+            view.rerender(renderBuilder("visible"))
+            await advance(10)
+            saves[0].finish()
+            await advance(10)
+            await advance(5000)
+
+            expect(saves).toHaveLength(1)
+            expect(saveButton()).toBeEnabled()
+            expect(publishButton()).toBeEnabled()
+            expect(screen.getByText(/^Saved /)).toBeInTheDocument()
+        })
     })
 
     describe("publish state", () => {

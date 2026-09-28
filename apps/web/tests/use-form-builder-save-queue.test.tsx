@@ -1,6 +1,6 @@
-import { act, renderHook } from "@testing-library/react"
+import { act, render, renderHook } from "@testing-library/react"
 import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query"
-import { useState, type PropsWithChildren } from "react"
+import { Activity, useState, type PropsWithChildren } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
@@ -26,6 +26,7 @@ function renderBuilder() {
         ({ scopeKey }: { scopeKey: string }) => {
             const [fingerprint, setFingerprint] = useState("draft-1")
             const [savedFingerprint, setSavedFingerprint] = useState("draft-0")
+            const [failedFingerprint, setFailedFingerprint] = useState("")
             const [status, setStatus] = useState("idle")
             const request = useMutation({ mutationFn: saveRequest })
             const saveQueue = useFormBuilderSaveQueue(scopeKey)
@@ -40,9 +41,13 @@ function renderBuilder() {
                     {
                         onSuccess: (saved) => {
                             setSavedFingerprint(saved)
+                            setFailedFingerprint("")
                             setStatus("saved")
                         },
-                        onError: () => setStatus("error"),
+                        onError: () => {
+                            setFailedFingerprint(submitted)
+                            setStatus("error")
+                        },
                     },
                 )
             }
@@ -50,6 +55,7 @@ function renderBuilder() {
                 enabled: !saveQueue.isBusy,
                 fingerprint,
                 savedFingerprint,
+                failedFingerprint,
                 save: () => {
                     void save()
                 },
@@ -144,5 +150,43 @@ describe("useFormBuilderSaveQueue", () => {
         expect(result.current.savedFingerprint).toBe("draft-0")
         expect(result.current.isBusy).toBe(false)
         client.clear()
+    })
+
+    it("applies a result after the builder is hidden and shown again", async () => {
+        let finish = () => {}
+        const onSuccess = vi.fn()
+        let queue: ReturnType<typeof useFormBuilderSaveQueue> | null = null
+        function Builder() {
+            queue = useFormBuilderSaveQueue("form-a")
+            return null
+        }
+        const view = render(
+            <Activity mode="visible">
+                <Builder />
+            </Activity>,
+        )
+        act(() => {
+            void queue?.enqueue(() => new Promise<string>((resolve) => (finish = () => resolve("saved"))), {
+                onSuccess,
+                onError: () => {},
+            })
+        })
+        await advance(10)
+
+        view.rerender(
+            <Activity mode="hidden">
+                <Builder />
+            </Activity>,
+        )
+        view.rerender(
+            <Activity mode="visible">
+                <Builder />
+            </Activity>,
+        )
+        finish()
+        await advance(10)
+
+        expect(onSuccess).toHaveBeenCalledWith("saved", expect.anything())
+        expect(queue?.isBusy).toBe(false)
     })
 })

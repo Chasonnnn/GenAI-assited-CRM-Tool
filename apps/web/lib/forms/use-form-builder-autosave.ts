@@ -6,6 +6,8 @@ type FormBuilderAutosaveOptions = {
     enabled: boolean
     fingerprint: string
     savedFingerprint: string
+    // The draft whose last save failed. Autosave does not resend it; an edit or Save does.
+    failedFingerprint: string
     // Queues the save. The builder's save queue applies its result.
     save: () => void
     delayMs?: number
@@ -15,6 +17,7 @@ export function useFormBuilderAutosave({
     enabled,
     fingerprint,
     savedFingerprint,
+    failedFingerprint,
     save,
     delayMs = 1200,
 }: FormBuilderAutosaveOptions) {
@@ -24,7 +27,7 @@ export function useFormBuilderAutosave({
 
     useEffect(() => {
         if (!enabled) return
-        if (fingerprint === savedFingerprint) return
+        if (fingerprint === savedFingerprint || fingerprint === failedFingerprint) return
 
         const timeout = window.setTimeout(() => {
             saveActiveDraft()
@@ -33,5 +36,5 @@ export function useFormBuilderAutosave({
         return () => {
             window.clearTimeout(timeout)
         }
-    }, [delayMs, enabled, fingerprint, savedFingerprint])
+    }, [delayMs, enabled, failedFingerprint, fingerprint, savedFingerprint])
 }

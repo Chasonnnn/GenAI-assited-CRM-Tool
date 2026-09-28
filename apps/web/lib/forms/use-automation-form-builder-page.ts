@@ -184,8 +184,8 @@ type AutomationDraft = {
 }
 
 // Returns the saved form and leaves builder state to the save queue's handlers. Only the
-// redirect to a newly created form happens here, right after create, and only for the current
-// builder generation.
+// redirect to a newly created form happens here, right after create, and only while the builder
+// is still showing that draft.
 async function persistAutomationDraft({
     draft,
     ticket,
@@ -208,7 +208,7 @@ async function persistAutomationDraft({
     let savedForm: FormRead
     if (isNewForm) {
         savedForm = await createFormMutation.mutateAsync(draft.payload)
-        if (ticket.isCurrent()) router.replace(`/automation/forms/${savedForm.id}`)
+        if (ticket.isCurrent() && ticket.isActive()) router.replace(`/automation/forms/${savedForm.id}`)
     } else {
         savedForm = await updateFormMutation.mutateAsync({
             formId: id,
@@ -229,6 +229,7 @@ function buildSavedState(draft: AutomationDraft, savedForm: FormRead): Partial<A
         isPublished: savedForm.status === "published",
         lastSavedAt: savedForm.updated_at ? new Date(savedForm.updated_at) : new Date(),
         lastSavedFingerprint: draft.fingerprint,
+        lastFailedFingerprint: "",
         lastSavedSchemaFingerprint: draft.schemaFingerprint,
     }
 }
@@ -513,6 +514,7 @@ export function useAutomationFormBuilderPage() {
         })
 
     const handleSave = () => {
+        if (!saveQueue.isIdle()) return
         if (!state.formName.trim()) {
             toast.error("Form name is required")
             return
@@ -520,13 +522,13 @@ export function useAutomationFormBuilderPage() {
         const draft = captureDraft()
         patchState({ isSaving: true })
         return saveQueue.enqueue((ticket) => persistDraft(draft, ticket), {
-            onSuccess: (savedForm) => {
+            onSuccess: (savedForm, ticket) => {
                 patchState({ ...buildSavedState(draft, savedForm), isSaving: false })
-                toast.success("Form saved")
+                if (ticket.isActive()) toast.success("Form saved")
             },
-            onError: () => {
-                patchState({ autoSaveStatus: "error", isSaving: false })
-                toast.error("Failed to save form")
+            onError: (_error, ticket) => {
+                patchState({ autoSaveStatus: "error", isSaving: false, lastFailedFingerprint: draft.fingerprint })
+                if (ticket.isActive()) toast.error("Failed to save form")
             },
         })
     }
@@ -540,12 +542,13 @@ export function useAutomationFormBuilderPage() {
             !saveQueue.isBusy,
         fingerprint: draftFingerprint,
         savedFingerprint: state.lastSavedFingerprint,
+        failedFingerprint: state.lastFailedFingerprint,
         save: () => {
             const draft = captureDraft()
             patchState({ autoSaveStatus: "saving" })
             void saveQueue.enqueue((ticket) => persistDraft(draft, ticket), {
                 onSuccess: (savedForm) => patchState(buildSavedState(draft, savedForm)),
-                onError: () => patchState({ autoSaveStatus: "error" }),
+                onError: () => patchState({ autoSaveStatus: "error", lastFailedFingerprint: draft.fingerprint }),
             })
         },
     })
@@ -704,6 +707,7 @@ export function useAutomationFormBuilderPage() {
     }
 
     const confirmPublish = () => {
+        if (!saveQueue.isIdle()) return
         if (hasMissingCriticalMappings()) {
             return
         }
@@ -722,11 +726,11 @@ export function useAutomationFormBuilderPage() {
                 return { savedForm, published: true, intakeLinkCount: (intakeLinkResult.data || []).length }
             },
             {
-                onSuccess: ({ savedForm, published, intakeLinkCount }) => {
+                onSuccess: ({ savedForm, published, intakeLinkCount }, ticket) => {
                     patchState({ ...buildSavedState(draft, savedForm), isPublishing: false })
                     if (!published) {
                         patchState({ autoSaveStatus: "error" })
-                        toast.error("Failed to publish form")
+                        if (ticket.isActive()) toast.error("Failed to publish form")
                         return
                     }
                     patchState({
@@ -735,11 +739,11 @@ export function useAutomationFormBuilderPage() {
                         showSharePrompt: intakeLinkCount > 0,
                         publishValidationAttempted: false,
                     })
-                    toast.success("Form published")
+                    if (ticket.isActive()) toast.success("Form published")
                 },
-                onError: () => {
-                    patchState({ autoSaveStatus: "error", isPublishing: false })
-                    toast.error("Failed to publish form")
+                onError: (_error, ticket) => {
+                    patchState({ autoSaveStatus: "error", isPublishing: false, lastFailedFingerprint: draft.fingerprint })
+                    if (ticket.isActive()) toast.error("Failed to publish form")
                 },
             },
         )
@@ -1039,7 +1043,8 @@ export function useAutomationFormBuilderPage() {
         patchState,
         autoSaveLabel,
         publicationStatus,
-        publishDisabled: publicationStatus === "published",
+        hasPendingSave: saveQueue.isBusy,
+        publishDisabled: publicationStatus === "published" || saveQueue.isBusy,
         workspaceProps: {
             leadKind: state.formLeadKind,
             desktopCanvasWidthClass: "max-w-[min(100%,72rem)]",

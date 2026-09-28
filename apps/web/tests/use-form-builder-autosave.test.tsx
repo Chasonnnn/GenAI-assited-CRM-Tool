@@ -26,6 +26,7 @@ describe("useFormBuilderAutosave", () => {
                 enabled: true,
                 fingerprint: "draft-1",
                 savedFingerprint: "draft-0",
+                failedFingerprint: "",
                 save,
             }),
         )
@@ -37,22 +38,27 @@ describe("useFormBuilderAutosave", () => {
         expect(save).toHaveBeenCalledTimes(1)
     })
 
-    it("waits while disabled and skips a draft that is already saved", async () => {
+    it("waits while disabled and skips a draft that is already saved or failed", async () => {
         const save = vi.fn()
+        type Props = { enabled: boolean; savedFingerprint: string; failedFingerprint: string }
         const { rerender } = renderHook(
-            ({ enabled, savedFingerprint }: { enabled: boolean; savedFingerprint: string }) =>
-                useFormBuilderAutosave({ enabled, fingerprint: "draft-1", savedFingerprint, save }),
-            { initialProps: { enabled: false, savedFingerprint: "draft-0" } },
+            ({ enabled, savedFingerprint, failedFingerprint }: Props) =>
+                useFormBuilderAutosave({ enabled, fingerprint: "draft-1", savedFingerprint, failedFingerprint, save }),
+            { initialProps: { enabled: false, savedFingerprint: "draft-0", failedFingerprint: "" } },
         )
 
         await advance(5000)
         expect(save).not.toHaveBeenCalled()
 
-        rerender({ enabled: true, savedFingerprint: "draft-1" })
+        rerender({ enabled: true, savedFingerprint: "draft-1", failedFingerprint: "" })
         await advance(5000)
         expect(save).not.toHaveBeenCalled()
 
-        rerender({ enabled: true, savedFingerprint: "draft-0" })
+        rerender({ enabled: true, savedFingerprint: "draft-0", failedFingerprint: "draft-1" })
+        await advance(5000)
+        expect(save).not.toHaveBeenCalled()
+
+        rerender({ enabled: true, savedFingerprint: "draft-0", failedFingerprint: "" })
         await advance(1200)
         expect(save).toHaveBeenCalledTimes(1)
     })

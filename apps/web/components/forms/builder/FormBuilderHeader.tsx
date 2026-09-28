@@ -30,6 +30,7 @@ type FormBuilderHeaderProps = {
     onFormNameChange: (value: string) => void
     onSave: () => void
     onPublish: () => void
+    saveDisabled?: boolean
     publishDisabled?: boolean
     deleteAction?: DeleteAction
 }
@@ -47,6 +48,7 @@ export function FormBuilderHeader({
     onFormNameChange,
     onSave,
     onPublish,
+    saveDisabled = false,
     publishDisabled = false,
     deleteAction,
 }: FormBuilderHeaderProps) {
@@ -106,7 +108,7 @@ export function FormBuilderHeader({
                         {autoSaveLabel}
                     </span>
                 ) : null}
-                <Button variant="secondary" size="sm" onClick={onSave} disabled={isSaving}>
+                <Button variant="secondary" size="sm" onClick={onSave} disabled={saveDisabled || isSaving}>
                     {isSaving ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
                     Save
                 </Button>

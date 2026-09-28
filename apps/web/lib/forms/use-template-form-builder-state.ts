@@ -34,6 +34,7 @@ type TemplateBuilderState = {
     autoSaveStatus: AutoSaveStatus
     lastSavedAt: Date | null
     lastSavedFingerprint: string
+    lastFailedFingerprint: string
     showPublishDialog: boolean
     showDeleteTemplateDialog: boolean
     showDeletePageDialog: boolean
@@ -80,6 +81,7 @@ const buildInitialState = (templateKey: string, isNewForm: boolean): TemplateBui
     autoSaveStatus: "idle",
     lastSavedAt: null,
     lastSavedFingerprint: "",
+    lastFailedFingerprint: "",
     showPublishDialog: false,
     showDeleteTemplateDialog: false,
     showDeletePageDialog: false,

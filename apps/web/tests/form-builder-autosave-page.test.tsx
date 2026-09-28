@@ -1,10 +1,12 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react"
+import { Activity } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import FormBuilderPage from "../app/(app)/automation/forms/[id]/page.client"
-import type { FormRead, FormSchema, FormUpdatePayload } from "@/lib/api/forms"
+import type { FormCreatePayload, FormRead, FormSchema, FormUpdatePayload } from "@/lib/api/forms"
 
 const api = vi.hoisted(() => ({
+    createForm: vi.fn(),
     getForm: vi.fn(),
     listFormIntakeLinks: vi.fn(),
     listFormMappings: vi.fn(),
@@ -15,6 +17,7 @@ const api = vi.hoisted(() => ({
 }))
 const { toastError, toastSuccess } = vi.hoisted(() => ({ toastError: vi.fn(), toastSuccess: vi.fn() }))
 const navigationState = vi.hoisted(() => ({ formId: "form-a" }))
+const routerReplace = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/api/forms", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/api/forms")>()),
@@ -23,7 +26,7 @@ vi.mock("@/lib/api/forms", async (importOriginal) => ({
 
 vi.mock("next/navigation", () => ({
     useParams: () => ({ id: navigationState.formId }),
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+    useRouter: () => ({ push: vi.fn(), replace: routerReplace }),
 }))
 
 vi.mock("@/components/ui/toast", () => ({
@@ -98,10 +101,27 @@ async function advance(ms: number) {
 }
 
 const header = () => within(screen.getByLabelText("Form name").parentElement as HTMLElement)
+const saveButton = () => screen.getByRole("button", { name: /^save$/i })
 const headerPublishButton = () =>
     screen
         .getAllByRole("button", { name: /^publish$/i })
         .find((button) => !button.closest("[role='alertdialog']")) as HTMLElement
+
+function renderBuilder(mode: "visible" | "hidden" = "visible") {
+    return (
+        <Activity mode={mode}>
+            <FormBuilderPage />
+        </Activity>
+    )
+}
+
+function addRequiredIdentityFields() {
+    fireEvent.click(screen.getByRole("button", { name: "Add preset Full Name field" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add preset Email field" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add preset Phone field" }))
+    fireEvent.click(screen.getByRole("button", { name: "Demographics" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add preset Date of Birth field" }))
+}
 
 function editTitle(value: string) {
     if (!screen.queryByLabelText("Title")) {
@@ -113,6 +133,7 @@ function editTitle(value: string) {
 describe("FormBuilderPage autosave", () => {
     let server: Map<string, FormRead>
     let updates: PendingUpdate[]
+    let creates: Array<{ finish: () => void }>
 
     const settleStartedUpdates = async (from = 0) => {
         for (const update of updates.slice(from)) {
@@ -124,6 +145,7 @@ describe("FormBuilderPage autosave", () => {
     beforeEach(() => {
         vi.useFakeTimers()
         navigationState.formId = "form-a"
+        routerReplace.mockReset()
         toastError.mockReset()
         toastSuccess.mockReset()
         server = new Map([
@@ -131,6 +153,25 @@ describe("FormBuilderPage autosave", () => {
             ["form-b", buildForm("form-b", { status: "draft", published_schema: null })],
         ])
         updates = []
+        creates = []
+        api.createForm.mockImplementation(
+            (payload: FormCreatePayload) =>
+                new Promise<FormRead>((resolve) => {
+                    creates.push({
+                        finish: () => {
+                            const created = buildForm("form-new", {
+                                name: payload.name,
+                                status: "draft",
+                                form_schema: payload.form_schema ?? null,
+                                published_schema: null,
+                            })
+                            server.set(created.id, created)
+                            resolve(created)
+                        },
+                    })
+                }),
+        )
+        api.publishForm.mockReset()
         api.getForm.mockImplementation(async (formId: string) => server.get(formId))
         api.listFormMappings.mockResolvedValue([])
         api.listFormIntakeLinks.mockResolvedValue([])
@@ -199,54 +240,185 @@ describe("FormBuilderPage autosave", () => {
         expect(headerPublishButton()).toBeEnabled()
     })
 
-    it("keeps a manual save when an older autosave fails afterwards", async () => {
+    it("ignores Save and Publish while a new form is being created", async () => {
+        navigationState.formId = "new"
+        render(<FormBuilderPage />)
+        await advance(10)
+        fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Published Intake" } })
+        addRequiredIdentityFields()
+
+        fireEvent.click(saveButton())
+        await advance(10)
+        expect(creates).toHaveLength(1)
+        expect(saveButton()).toBeDisabled()
+        expect(headerPublishButton()).toBeDisabled()
+
+        fireEvent.click(saveButton())
+        fireEvent.click(headerPublishButton())
+        await advance(10)
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
+
+        creates[0].finish()
+        await advance(10)
+        await advance(5000)
+
+        expect(api.createForm).toHaveBeenCalledTimes(1)
+        expect(api.publishForm).not.toHaveBeenCalled()
+        expect(routerReplace.mock.calls).toEqual([["/automation/forms/form-new"]])
+        expect(toastSuccess.mock.calls).toEqual([["Form saved"]])
+        expect(saveButton()).toBeEnabled()
+    })
+
+    it("does not redirect or report a create that finishes after the builder closes", async () => {
+        navigationState.formId = "new"
+        const view = render(<FormBuilderPage />)
+        await advance(10)
+        fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Published Intake" } })
+        fireEvent.click(saveButton())
+        await advance(10)
+        expect(creates).toHaveLength(1)
+
+        view.unmount()
+        creates[0].finish()
+        await advance(10)
+
+        expect(routerReplace).not.toHaveBeenCalled()
+        expect(toastSuccess).not.toHaveBeenCalled()
+        expect(toastError).not.toHaveBeenCalled()
+    })
+
+    it("ignores Save clicked before a starting autosave has rendered", async () => {
         render(<FormBuilderPage />)
         await advance(10)
         editTitle("Apply now")
-        await advance(1200)
-        await advance(3000)
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1200)
+            fireEvent.click(saveButton())
+        })
+        await advance(10)
         expect(updates).toHaveLength(1)
 
-        editTitle("Apply this week")
-        fireEvent.click(screen.getByRole("button", { name: /^save$/i }))
+        await settleStartedUpdates()
         await advance(10)
-        await settleStartedUpdates(1)
-        updates[0].fail()
-        await advance(10)
-        await settleStartedUpdates(1)
         await advance(5000)
 
-        expect(updates.map((update) => update.title)).toEqual(["Apply now", "Apply this week"])
-        expect(toastSuccess).toHaveBeenCalledWith("Form saved")
-        expect(screen.queryByText("Autosave failed")).not.toBeInTheDocument()
+        expect(updates).toHaveLength(1)
+        expect(toastSuccess).not.toHaveBeenCalled()
         expect(screen.getByText(/^Saved /)).toBeInTheDocument()
     })
 
-    it("keeps a publish when an older autosave fails afterwards", async () => {
+    it("waits for an autosave before publishing from an open dialog", async () => {
+        render(<FormBuilderPage />)
+        await advance(10)
+        editTitle("Apply now")
+        fireEvent.click(headerPublishButton())
+        await advance(10)
+        const dialog = screen.getByRole("alertdialog", { name: /publish form/i })
+
+        await advance(1200)
+        await advance(10)
+        expect(updates).toHaveLength(1)
+        const confirm = within(dialog).getByRole("button", { name: /^publish$/i })
+        expect(confirm).toBeDisabled()
+        fireEvent.click(confirm)
+        await advance(10)
+        expect(updates).toHaveLength(1)
+
+        updates[0].finish()
+        await advance(10)
+        expect(confirm).toBeEnabled()
+        fireEvent.click(confirm)
+        await advance(10)
+        await settleStartedUpdates(1)
+        await advance(10)
+
+        expect(updates.map((update) => update.title)).toEqual(["Apply now", "Apply now"])
+        expect(api.publishForm).toHaveBeenCalledTimes(1)
+        expect(toastSuccess).toHaveBeenCalledWith("Form published")
+        expect(header().getByText("Published")).toBeInTheDocument()
+    })
+
+    it("does not resend a draft whose autosave failed until it changes or is saved", async () => {
         render(<FormBuilderPage />)
         await advance(10)
         editTitle("Apply now")
         await advance(1200)
-        await advance(3000)
+        await advance(10)
         expect(updates).toHaveLength(1)
 
-        editTitle("Apply this week")
+        updates[0].fail()
+        await advance(10)
+        await advance(12000)
+        expect(updates).toHaveLength(1)
+        expect(screen.getByText("Autosave failed")).toBeInTheDocument()
+
+        editTitle("Apply now!")
+        await advance(1200)
+        await advance(10)
+        expect(updates.map((update) => update.title)).toEqual(["Apply now", "Apply now!"])
+
+        updates[1].fail()
+        await advance(10)
+        await advance(12000)
+        expect(updates).toHaveLength(2)
+
+        fireEvent.click(saveButton())
+        await advance(10)
+        await settleStartedUpdates(2)
+        await advance(5000)
+
+        expect(updates.map((update) => update.title)).toEqual(["Apply now", "Apply now!", "Apply now!"])
+        expect(screen.getByText(/^Saved /)).toBeInTheDocument()
+    })
+
+    it("clears Save when the builder is hidden and shown again during the save", async () => {
+        const view = render(renderBuilder())
+        await advance(10)
+        editTitle("Apply now")
+        fireEvent.click(saveButton())
+        await advance(10)
+        expect(updates).toHaveLength(1)
+
+        view.rerender(renderBuilder("hidden"))
+        await advance(10)
+        updates[0].finish()
+        await advance(10)
+        expect(toastSuccess).not.toHaveBeenCalled()
+
+        view.rerender(renderBuilder())
+        await advance(10)
+        await advance(5000)
+
+        expect(updates).toHaveLength(1)
+        expect(saveButton()).toBeEnabled()
+        expect(headerPublishButton()).toBeEnabled()
+        expect(screen.getByText(/^Saved /)).toBeInTheDocument()
+    })
+
+    it("clears Publish when the builder is hidden and shown again during the publish", async () => {
+        const view = render(renderBuilder())
+        await advance(10)
+        editTitle("Apply now")
         fireEvent.click(headerPublishButton())
         await advance(10)
         const dialog = screen.getByRole("alertdialog", { name: /publish form/i })
         fireEvent.click(within(dialog).getByRole("button", { name: /^publish$/i }))
         await advance(10)
-        await settleStartedUpdates(1)
-        updates[0].fail()
+        expect(updates).toHaveLength(1)
+
+        view.rerender(renderBuilder("hidden"))
         await advance(10)
-        await settleStartedUpdates(1)
+        view.rerender(renderBuilder())
+        await advance(10)
+        await settleStartedUpdates()
+        await advance(10)
         await advance(5000)
 
         expect(api.publishForm).toHaveBeenCalledTimes(1)
         expect(toastSuccess).toHaveBeenCalledWith("Form published")
-        expect(screen.queryByText("Autosave failed")).not.toBeInTheDocument()
+        expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
         expect(header().getByText("Published")).toBeInTheDocument()
-        expect(headerPublishButton()).toBeDisabled()
+        expect(saveButton()).toBeEnabled()
     })
 
     it("does not autosave a form opened from another form without edits", async () => {

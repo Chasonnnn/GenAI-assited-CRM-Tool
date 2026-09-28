@@ -48,6 +48,7 @@ type AutomationBuilderState = {
     autoSaveStatus: AutoSaveStatus
     lastSavedAt: Date | null
     lastSavedFingerprint: string
+    lastFailedFingerprint: string
     lastSavedSchemaFingerprint: string
 }
 
@@ -100,6 +101,7 @@ const buildInitialState = (formKey: string, isNewForm: boolean): AutomationBuild
     autoSaveStatus: "idle",
     lastSavedAt: null,
     lastSavedFingerprint: "",
+    lastFailedFingerprint: "",
     lastSavedSchemaFingerprint: "",
 })
 

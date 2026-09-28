@@ -17,6 +17,7 @@ type TemplateFormPublishDialogProps = {
     onOpenChange: (open: boolean) => void
     onPublish: () => void
     isLoading?: boolean
+    disabled?: boolean
 }
 
 export function TemplateFormPublishDialog({
@@ -24,6 +25,7 @@ export function TemplateFormPublishDialog({
     onOpenChange,
     onPublish,
     isLoading = false,
+    disabled = false,
 }: TemplateFormPublishDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -43,7 +45,7 @@ export function TemplateFormPublishDialog({
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
-                    <Button onClick={onPublish} disabled={isLoading}>
+                    <Button onClick={onPublish} disabled={disabled || isLoading}>
                         {isLoading ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
                         Publish
                     </Button>

@@ -59,6 +59,7 @@ export function AutomationFormBuilderScreen({
                 onFormNameChange={controller.onFormNameChange}
                 onSave={controller.handleSave}
                 onPublish={controller.handlePublish}
+                saveDisabled={controller.hasPendingSave}
                 publishDisabled={controller.publishDisabled}
             />
 
@@ -141,7 +142,7 @@ export function AutomationFormBuilderScreen({
                         <AlertDialogAction
                             onClick={controller.confirmPublish}
                             className="bg-teal-600 hover:bg-teal-700"
-                            disabled={controller.state.isPublishing}
+                            disabled={controller.hasPendingSave}
                         >
                             {controller.state.isPublishing ? <Loader2Icon className="mr-2 size-4 animate-spin" /> : null}
                             Publish
