@@ -188,7 +188,7 @@ class DonorParty(Party):
         if old_stage.id == target.id:
             return []
         _authorize_stage_move(db, match, actor_user_id, "donor", donor, target)
-        donor_service.apply_status_change(
+        result = donor_service.apply_status_change(
             db,
             donor=donor,
             old_stage=old_stage,
@@ -205,12 +205,13 @@ class DonorParty(Party):
             commit=False,
         )
         return [
+            *result.get("after_commit_effects", []),
             (
                 "donor_stage_changed",
                 lambda: workflow_triggers.trigger_donor_stage_changed(
                     db, donor, old_stage=old_stage, new_stage=target
                 ),
-            )
+            ),
         ]
 
     def on_accept(self, db, match, *, actor_user_id, actor_role, now) -> list[Effect]:

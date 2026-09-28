@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 from uuid import UUID
 
 from fastapi import Request
@@ -60,6 +60,8 @@ class DonorStatusChangeResult(TypedDict):
     history: DonorStatusHistory | None
     request_id: UUID | None
     message: str | None
+    # Post-commit work for callers that own the transaction (commit=False), as named steps.
+    after_commit_effects: NotRequired[list[tuple[str, Callable[[], None]]]]
 
 
 UNDO_GRACE_PERIOD = timedelta(minutes=5)
@@ -1319,7 +1321,7 @@ def apply_status_change(
         db.rollback()
         raise
 
-    if commit:
+    def notify_stage_changed() -> None:
         dispatch_stage_changed_notification(
             db,
             donor=refreshed,
@@ -1327,7 +1329,20 @@ def apply_status_change(
             new_stage=new_stage,
             user_id=user_id,
         )
-    if emit_workflow_events and commit:
+
+    if not commit:
+        # The caller commits, then runs these like surrogate after_commit_effects.
+        return DonorStatusChangeResult(
+            status="applied",
+            donor=refreshed,
+            history=history,
+            request_id=None,
+            message=None,
+            after_commit_effects=[("donor_stage_changed_notification", notify_stage_changed)],
+        )
+
+    notify_stage_changed()
+    if emit_workflow_events:
         dispatch_stage_changed_workflow(
             db,
             donor=refreshed,

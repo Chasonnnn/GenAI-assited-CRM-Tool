@@ -225,3 +225,99 @@ def test_donor_assignment_rejects_other_org_user_without_notifying(db, test_org,
             db, donor, test_user.id, DonorUpdate(owner_type="user", owner_id=outsider_id)
         )
     assert db.query(Notification).filter(Notification.user_id == outsider_id).count() == 0
+
+
+def _stage_changed_bodies(db, org_id, user_id, donor_id) -> list[str]:
+    return [
+        notification.body
+        for notification in db.query(Notification)
+        .filter(
+            Notification.organization_id == org_id,
+            Notification.user_id == user_id,
+            Notification.type == NotificationType.SURROGATE_STATUS_CHANGED.value,
+            Notification.entity_id == donor_id,
+        )
+        .order_by(Notification.created_at)
+        .all()
+    ]
+
+
+def test_approved_donor_regression_notifies_owner_and_creator(db, test_org, test_user):
+    from datetime import UTC, datetime
+
+    from app.db.models import StatusChangeRequest
+    from app.services import status_change_request_service
+
+    creator = _member(db, test_org.id, name="Donor Creator")
+    owner = _member(db, test_org.id, name="Donor Owner")
+    requester = _member(db, test_org.id, role=Role.CASE_MANAGER, name="Donor Requester")
+    donor = _donor(db, test_org.id, creator.id, owner_id=owner.id)
+    new_stage = donor.stage
+    contacted = _stage(db, test_org.id, "contacted")
+    donor.stage_id = contacted.id
+    donor.stage = contacted
+    now = datetime.now(UTC)
+    request = StatusChangeRequest(
+        organization_id=test_org.id,
+        entity_type="donor",
+        entity_id=donor.id,
+        target_stage_id=new_stage.id,
+        effective_at=now,
+        reason="Screening restarted",
+        requested_by_user_id=requester.id,
+        requested_at=now,
+        status="pending",
+    )
+    db.add(request)
+    db.commit()
+
+    status_change_request_service.approve_request(
+        db, request.id, test_org.id, test_user.id, Role.ADMIN
+    )
+
+    db.refresh(donor)
+    assert donor.stage_id == new_stage.id
+    expected = f"Donor Requester changed stage from {contacted.label} to {new_stage.label}"
+    for recipient in (owner, creator):
+        assert _stage_changed_bodies(db, test_org.id, recipient.id, donor.id) == [expected]
+    assert _stage_changed_bodies(db, test_org.id, requester.id, donor.id) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("donor_type", ["egg", "sperm"])
+async def test_match_driven_donor_stage_moves_notify_the_donor_owner(
+    authed_client, db, test_org, test_user, donor_type
+):
+    from app.db.models import Donor
+    from tests.test_match_cancel_request import _create_intended_parent
+    from tests.test_match_cases import _accept, _case
+    from tests.test_match_cases import _donor as _api_donor
+    from tests.test_match_participant_stages import _cancel
+
+    owner = _member(db, test_org.id, name="Matched Donor Owner")
+    created = await _api_donor(authed_client, donor_type=donor_type)
+    donor = db.get(Donor, uuid.UUID(created["id"]))
+    donor.owner_type = "user"
+    donor.owner_id = owner.id
+    db.commit()
+    handoff = donor.stage
+    matched = _stage(db, test_org.id, "matched", entity_type=f"{donor_type}_donor")
+
+    match = await _accept(
+        authed_client,
+        await _case(authed_client, await _create_intended_parent(authed_client), donor=created),
+    )
+    db.refresh(donor)
+    assert donor.stage_id == matched.id
+    assert _stage_changed_bodies(db, test_org.id, owner.id, donor.id) == [
+        f"{test_user.display_name} changed stage from {handoff.label} to {matched.label}"
+    ]
+
+    await _cancel(authed_client, db, match)
+
+    db.refresh(donor)
+    assert donor.stage_id == handoff.id
+    assert _stage_changed_bodies(db, test_org.id, owner.id, donor.id) == [
+        f"{test_user.display_name} changed stage from {handoff.label} to {matched.label}",
+        f"{test_user.display_name} changed stage from {matched.label} to {handoff.label}",
+    ]

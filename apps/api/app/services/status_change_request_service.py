@@ -1,5 +1,6 @@
 """Service for handling status change requests (admin approval workflow)."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -312,6 +313,7 @@ def approve_request(
     now = datetime.now(UTC)
     surrogate_stage_event = None
     donor_stage_event: tuple[Donor, PipelineStage, PipelineStage] | None = None
+    donor_stage_effects: list[tuple[str, Callable[[], None]]] = []
 
     if request.entity_type == "surrogate":
         # Get surrogate
@@ -472,6 +474,7 @@ def approve_request(
         if changed_donor is None:
             raise ValueError("Donor stage change was not applied")
         donor_stage_event = (changed_donor, old_stage, target_stage)
+        donor_stage_effects = list(result.get("after_commit_effects", []))
     elif request.entity_type == "match":
         match = match_queries.get_match(db, request.entity_id, org_id)
         if not match:
@@ -536,6 +539,8 @@ def approve_request(
 
     if donor_stage_event:
         changed_donor, old_stage, target_stage = donor_stage_event
+        for _name, run in donor_stage_effects:
+            run()
         donor_service.dispatch_stage_changed_workflow(
             db,
             donor=changed_donor,
