@@ -696,7 +696,7 @@ def test_workflow(
         field = condition.get("field")
         operator = condition.get("operator")
         value = condition.get("value")
-        entity_value = getattr(entity, field, None)
+        entity_value = engine.condition_value(db, entity, field)
 
         result = engine._evaluate_condition(operator, entity_value, value)
         conditions_evaluated.append(

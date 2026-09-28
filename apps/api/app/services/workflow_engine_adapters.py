@@ -139,6 +139,42 @@ class DefaultWorkflowDomainAdapter:
             return None
         return kind, donor_id
 
+    def intake_linked_stage_id(self, db: Session, entity: Any) -> UUID | None:
+        """Return the current stage of the record an intake source is linked to.
+
+        A donor link counts only for the source's donor subtype; links outside the
+        source organization are ignored.
+        """
+        if isinstance(entity, FormSubmission):
+            kind, surrogate_id, donor_id = entity.lead_kind, entity.surrogate_id, entity.donor_id
+        elif isinstance(entity, IntakeLead):
+            kind = entity.lead_type
+            surrogate_id, donor_id = entity.promoted_surrogate_id, entity.promoted_donor_id
+        else:
+            return None
+        if kind in {"egg_donor", "sperm_donor"}:
+            if donor_id is None:
+                return None
+            return (
+                db.query(Donor.stage_id)
+                .filter(
+                    Donor.id == donor_id,
+                    Donor.organization_id == entity.organization_id,
+                    Donor.donor_type == kind.removesuffix("_donor"),
+                )
+                .scalar()
+            )
+        if surrogate_id is None:
+            return None
+        return (
+            db.query(Surrogate.stage_id)
+            .filter(
+                Surrogate.id == surrogate_id,
+                Surrogate.organization_id == entity.organization_id,
+            )
+            .scalar()
+        )
+
     def resolve_donor_subject(
         self, db: Session, org_id: UUID, subject_type: str, subject_id: UUID | None
     ) -> Donor | None:
