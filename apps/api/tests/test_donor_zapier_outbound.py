@@ -1919,6 +1919,24 @@ async def test_donor_test_event_rejects_unsupported_event_names(authed_client, d
 
 
 @pytest.mark.asyncio
+async def test_donor_test_event_rejects_a_lead_id_longer_than_the_stored_column(
+    authed_client, db, test_org
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    _configure_reporting(db, test_org.id, donor_type="egg", pipeline=pipeline, stage=ready_stage)
+    url = "/integrations/zapier/test-outbound/donor"
+    body = {"donor_type": "egg", "event_name": "Lead", "attribution_source": "meta"}
+
+    too_long = await authed_client.post(url, json={**body, "lead_id": "x" * 121})
+    longest = await authed_client.post(url, json={**body, "lead_id": "x" * 120})
+
+    assert too_long.status_code == 422
+    assert longest.status_code == 200, longest.text
+    assert longest.json()["lead_id"] == "x" * 120
+    assert db.query(ZapierOutboundEvent).filter_by(organization_id=test_org.id).count() == 1
+
+
+@pytest.mark.asyncio
 async def test_donor_test_job_skips_when_donor_reporting_is_disabled_before_dispatch(
     authed_client, db, test_org, monkeypatch
 ):

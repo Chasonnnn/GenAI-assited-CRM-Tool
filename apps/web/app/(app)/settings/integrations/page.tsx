@@ -4821,6 +4821,7 @@ function ZapierDonorOutboundTestControls({
                         onChange={(event) => setLeadId(event.target.value)}
                         name="zapier-donor-test-lead-id"
                         autoComplete="off"
+                        maxLength={120}
                     />
                 </div>
             ) : null}

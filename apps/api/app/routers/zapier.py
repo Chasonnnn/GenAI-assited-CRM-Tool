@@ -129,7 +129,7 @@ class ZapierDonorOutboundTestRequest(BaseModel):
     donor_type: Literal["egg", "sperm"]
     event_name: Literal["Lead", "Qualified", "Converted", "Lost", "Not Qualified"]
     attribution_source: Literal["meta", "website"] = "meta"
-    lead_id: str | None = Field(default=None, max_length=255)
+    lead_id: str | None = Field(default=None, max_length=120)
 
 
 class ZapierDonorOutboundTestResponse(BaseModel):

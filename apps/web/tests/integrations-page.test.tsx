@@ -2572,6 +2572,7 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).getByRole('combobox', { name: 'Donor test type' })).toHaveTextContent('Egg donor')
         expect(within(dialog).getByRole('combobox', { name: 'Donor test event' })).toHaveTextContent('Lead')
         expect(within(dialog).getByRole('combobox', { name: 'Donor test attribution' })).toHaveTextContent('Meta lead')
+        expect(within(dialog).getByLabelText('Lead ID (optional)')).toHaveAttribute('maxLength', '120')
         fireEvent.change(within(dialog).getByLabelText('Lead ID (optional)'), {
             target: { value: 'real-donor-lead' },
         })
