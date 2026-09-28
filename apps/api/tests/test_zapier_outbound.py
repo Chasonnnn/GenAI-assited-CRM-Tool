@@ -452,21 +452,17 @@ def _meta_surrogate_with_reporting(db, test_org, test_user, *, received_at=None,
     return surrogate, meta_lead
 
 
-def test_synthetic_meta_lead_id_detection():
-    from app.services import zapier_outbound_service
-
-    assert zapier_outbound_service._is_synthetic_meta_lead_id(f"zapier-{uuid4()}") is True
-    assert zapier_outbound_service._is_synthetic_meta_lead_id("1559954882011881") is False
-    assert zapier_outbound_service._is_synthetic_meta_lead_id(f"zapier-test-{uuid4()}") is False
-    assert zapier_outbound_service._is_synthetic_meta_lead_id(None) is False
-
-
-def test_surrogate_event_with_synthetic_meta_lead_id_is_skipped(db, test_org, test_user):
+@pytest.mark.parametrize("id_form", ["legacy", "generated", "test"])
+def test_surrogate_event_with_synthetic_meta_lead_id_is_skipped(db, test_org, test_user, id_form):
     from app.db.enums import JobType
     from app.db.models import Job, ZapierOutboundEvent
-    from app.services import zapier_outbound_service
+    from app.services import meta_lead_service, zapier_outbound_service
 
-    synthetic_id = f"zapier-{uuid4()}"
+    synthetic_id = {
+        "legacy": f"zapier-{uuid4()}",
+        "generated": meta_lead_service.generate_synthetic_meta_lead_id(),
+        "test": f"zapier-test-{uuid4()}",
+    }[id_form]
     surrogate, _meta_lead = _meta_surrogate_with_reporting(
         db, test_org, test_user, lead_id=synthetic_id
     )
