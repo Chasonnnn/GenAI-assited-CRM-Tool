@@ -170,6 +170,45 @@ async def test_stage_change_rejects_stage_from_another_org(db, test_org, test_us
 
 
 @pytest.mark.asyncio
+async def test_stage_change_on_another_orgs_intended_parent_returns_not_found(
+    db, test_org, authed_client
+):
+    other_org = _other_org(db)
+    creator = User(
+        id=uuid.uuid4(),
+        email=f"other-ip-owner-{uuid.uuid4().hex[:8]}@test.com",
+        display_name="Other Org Owner",
+        token_version=1,
+        is_active=True,
+    )
+    db.add(creator)
+    db.flush()
+    foreign_ip = ip_service.create_intended_parent(
+        db,
+        other_org.id,
+        creator.id,
+        full_name="Other Org Stage IP",
+        email=f"other-org-stage-{uuid.uuid4().hex[:8]}@example.com",
+    )
+    foreign_stage_id = foreign_ip.stage_id
+    history = _history_count(db, str(foreign_ip.id))
+    targets = (
+        _get_stage(db, test_org.id, "ready_to_match"),
+        _get_stage(db, other_org.id, "ready_to_match"),
+    )
+
+    for target in targets:
+        response = await authed_client.patch(
+            f"/intended-parents/{foreign_ip.id}/status", json={"stage_id": str(target.id)}
+        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Intended parent not found"
+
+    assert _stage_id(db, str(foreign_ip.id)) == foreign_stage_id
+    assert _history_count(db, str(foreign_ip.id)) == history
+
+
+@pytest.mark.asyncio
 async def test_approving_another_orgs_ip_request_returns_not_found(db, authed_client):
     other_org = _other_org(db)
     requester = User(
