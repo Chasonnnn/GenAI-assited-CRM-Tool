@@ -2,7 +2,7 @@
  * React Query hooks for forms and submissions.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import {
     listForms,
     listSurrogateApplicationForms,
@@ -47,6 +47,7 @@ import {
     type FormTemplateLibraryDetail,
     type FormTemplateUseRequest,
     type FormCreatePayload,
+    type FormRead,
     type FormUpdatePayload,
     type FormFieldMappingItem,
     type FormIntakeLinkCreatePayload,
@@ -136,14 +137,27 @@ export function useForm(formId: string | null) {
     })
 }
 
+// Writes a mutation response into the form detail cache. A detail request still in flight
+// started before the write and would land after it, and invalidation cancels only requests of
+// observed queries, so cancel it first. exact keeps the mappings, intake link, and submission
+// queries nested under the detail key fetching.
+async function writeFormDetail(
+    queryClient: QueryClient,
+    formId: string,
+    update: FormRead | ((form: FormRead | undefined) => FormRead | undefined),
+) {
+    await queryClient.cancelQueries({ queryKey: formKeys.detail(formId), exact: true })
+    queryClient.setQueryData<FormRead>(formKeys.detail(formId), update)
+}
+
 export function useCreateForm() {
     const queryClient = useQueryClient()
 
     return useMutation({
         mutationFn: (payload: FormCreatePayload) => createForm(payload),
-        onSuccess: (form) => {
+        onSuccess: async (form) => {
             void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
-            queryClient.setQueryData(formKeys.detail(form.id), form)
+            await writeFormDetail(queryClient, form.id, form)
         },
     })
 }
@@ -154,9 +168,9 @@ export function useUpdateForm() {
     return useMutation({
         mutationFn: ({ formId, payload }: { formId: string; payload: FormUpdatePayload }) =>
             updateForm(formId, payload),
-        onSuccess: (form) => {
+        onSuccess: async (form) => {
             void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
-            queryClient.setQueryData(formKeys.detail(form.id), form)
+            await writeFormDetail(queryClient, form.id, form)
         },
     })
 }
@@ -178,7 +192,12 @@ export function usePublishForm() {
 
     return useMutation({
         mutationFn: (formId: string) => publishForm(formId),
-        onSuccess: (_result, formId) => {
+        onSuccess: async (result, formId) => {
+            // Publish copies the saved draft schema to the live copy. Mirror that before the
+            // refetch lands so the builder does not briefly report unpublished changes.
+            await writeFormDetail(queryClient, formId, (form) =>
+                form ? { ...form, status: result.status, published_schema: form.form_schema ?? null } : form,
+            )
             void queryClient.invalidateQueries({ queryKey: formKeys.detail(formId) })
             void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: formKeys.intakeLinks(formId) })
@@ -237,9 +256,9 @@ export function useSetDefaultSurrogateApplicationForm() {
 
     return useMutation({
         mutationFn: (formId: string) => setDefaultSurrogateApplicationForm(formId),
-        onSuccess: (form) => {
+        onSuccess: async (form) => {
             void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
-            queryClient.setQueryData(formKeys.detail(form.id), form)
+            await writeFormDetail(queryClient, form.id, form)
         },
     })
 }
@@ -713,9 +732,9 @@ export function useUseFormTemplate() {
     return useMutation({
         mutationFn: ({ templateId, payload }: { templateId: string; payload: FormTemplateUseRequest }) =>
             createFormFromTemplate(templateId, payload),
-        onSuccess: (form) => {
+        onSuccess: async (form) => {
             void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
-            queryClient.setQueryData(formKeys.detail(form.id), form)
+            await writeFormDetail(queryClient, form.id, form)
         },
     })
 }
