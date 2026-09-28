@@ -83,22 +83,25 @@ IDENTITY_DONOR_FIELDS = ("full_name", "email", "phone", "state", "education")
 DONOR_LEAD_KINDS = {FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value}
 DONOR_PROFILE_PHOTO_CONTENT_TYPES = {"image/png", "image/jpeg"}
 INTAKE_SLUG_MAX_LENGTH = 100
-EMBED_ALLOWED_ATTRIBUTION_KEYS = {
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
-    "ad_id",
-    "adset_id",
-    "campaign_id",
-    "fbclid",
-    "fbc",
-    "fbp",
-    "referrer",
-    "landing_url",
+# Allowed attribution keys and their maximum lengths, matching the LeadAttribution columns.
+EMBED_ATTRIBUTION_MAX_LENGTHS = {
+    "utm_source": 255,
+    "utm_medium": 255,
+    "utm_campaign": 255,
+    "utm_term": 255,
+    "utm_content": 255,
+    "ad_id": 255,
+    "adset_id": 255,
+    "campaign_id": 255,
+    "fbclid": 500,
+    "fbc": 500,
+    "fbp": 500,
+    "referrer": 1000,
+    "landing_url": 1000,
 }
 EMBED_URL_ATTRIBUTION_KEYS = {"referrer", "landing_url"}
+EMBED_ATTRIBUTION_SOURCE_SURFACE = "form_embed"
+HOSTED_ATTRIBUTION_SOURCE_SURFACE = "hosted_intake"
 DEFAULT_EMBED_TRACKING_MODE = TrackingMode.ENHANCED_MATCH_LEAD.value
 DEFAULT_SHARED_INTAKE_TRACKING_MODE = TrackingMode.INTERNAL_ONLY.value
 META_TRACKING_MODES = {
@@ -1739,12 +1742,18 @@ def create_shared_submission(
     file_field_keys: list[str] | None = None,
     published_version_id: uuid.UUID | None = None,
     source_metadata: dict[str, Any] | None = None,
+    attribution: dict[str, Any] | None = None,
     challenge_token: str | None = None,
     idempotency_key: str | None = None,
     sms_operational: bool = False,
     sms_promotional: bool = False,
     sms_phone_field_key: str | None = None,
 ) -> tuple[FormSubmission, str]:
+    """Create a hosted /intake submission.
+
+    ``attribution`` is the applicant's landing context (UTM, Meta click ids, landing URL,
+    referrer). Link ``utm_defaults`` fill keys the applicant did not bring.
+    """
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form is not published")
     if not form.published_schema_json:
@@ -1857,6 +1866,18 @@ def create_shared_submission(
         if existing:
             return existing, _normalize_shared_outcome(existing.match_status)
         raise
+    sanitized_attribution = sanitize_embed_attribution(
+        {**(link.utm_defaults or {}), **(attribution or {})}
+    )
+    if sanitized_attribution:
+        _create_lead_attribution(
+            db,
+            link=link,
+            submission=submission,
+            source_surface=HOSTED_ATTRIBUTION_SOURCE_SURFACE,
+            parent_origin=None,
+            attribution=sanitized_attribution,
+        )
     metadata = source_metadata or {}
     client_ip = str(metadata.get("client_ip") or "").strip() or None
     user_agent = str(metadata.get("user_agent") or "").strip() or None
@@ -1906,11 +1927,17 @@ def create_shared_submission(
 
 
 def sanitize_embed_attribution(payload: dict[str, Any] | None) -> dict[str, str]:
+    """Keep allowlisted scalar attribution values for embed and hosted intake.
+
+    Oversized values are dropped rather than truncated, because a cut click id or URL
+    would be reported to Meta as a different value.
+    """
     sanitized: dict[str, str] = {}
     for key, value in (payload or {}).items():
-        if key not in EMBED_ALLOWED_ATTRIBUTION_KEYS:
+        max_length = EMBED_ATTRIBUTION_MAX_LENGTHS.get(key)
+        if max_length is None:
             continue
-        if value is None:
+        if isinstance(value, bool) or not isinstance(value, str | int | float):
             continue
         text = str(value).strip()
         if not text:
@@ -1920,7 +1947,9 @@ def sanitize_embed_attribution(payload: dict[str, Any] | None) -> dict[str, str]
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 continue
             text = urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
-        sanitized[key] = text[:1000]
+        if len(text) > max_length:
+            continue
+        sanitized[key] = text
     return sanitized
 
 
@@ -1995,7 +2024,8 @@ def _create_lead_attribution(
     *,
     link: FormIntakeLink,
     submission: FormSubmission,
-    session: EmbedSession,
+    source_surface: str,
+    parent_origin: str | None,
     attribution: dict[str, str],
 ) -> LeadAttribution:
     source = attribution.get("utm_source")
@@ -2005,7 +2035,7 @@ def _create_lead_attribution(
         organization_id=link.organization_id,
         form_submission_id=submission.id,
         intake_link_id=link.id,
-        source_surface="form_embed",
+        source_surface=source_surface,
         source=source,
         medium=medium,
         campaign=campaign,
@@ -2016,7 +2046,7 @@ def _create_lead_attribution(
         fbc=attribution.get("fbc"),
         fbp=attribution.get("fbp"),
         referrer=attribution.get("referrer"),
-        parent_origin=session.parent_origin,
+        parent_origin=parent_origin,
         landing_url=attribution.get("landing_url"),
         first_touch_json=attribution or None,
         last_touch_json=attribution or None,
@@ -2398,7 +2428,8 @@ def submit_lead_capture_embed(
         db,
         link=link,
         submission=submission,
-        session=session,
+        source_surface=EMBED_ATTRIBUTION_SOURCE_SURFACE,
+        parent_origin=session.parent_origin,
         attribution=sanitized_attribution,
     )
     _create_consent_record(

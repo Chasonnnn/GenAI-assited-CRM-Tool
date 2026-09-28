@@ -126,6 +126,17 @@ def _get_embed_origin(request: Request) -> str | None:
     return f"{parsed.scheme}://{parsed.hostname}{port}"
 
 
+def _parse_attribution_part(raw: str | None) -> dict[str, object]:
+    """Attribution is optional landing context, so a malformed part never rejects the application."""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def _get_active_embed_link_or_404(
     *,
     db: Session,
@@ -581,6 +592,7 @@ def submit_shared_public_form(
     sms_operational: Annotated[bool, "fastapi_param"] = Form(default=False),
     sms_promotional: Annotated[bool, "fastapi_param"] = Form(default=False),
     sms_phone_field_key: Annotated[str | None, "fastapi_param"] = Form(default=None),
+    attribution: Annotated[str | None, "fastapi_param"] = Form(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
@@ -620,7 +632,6 @@ def submit_shared_public_form(
     source_metadata = {
         "campaign_name": intake_link.campaign_name,
         "event_name": intake_link.event_name,
-        "utm": {**(intake_link.utm_defaults or {}), **utm_fields},
         "client_ip": get_client_ip(request),
         "user_agent": request.headers.get("user-agent"),
     }
@@ -641,6 +652,7 @@ def submit_shared_public_form(
             file_field_keys=parsed_keys,
             published_version_id=published_version_id,
             source_metadata=source_metadata,
+            attribution={**utm_fields, **_parse_attribution_part(attribution)},
             challenge_token=challenge_token,
             idempotency_key=resolved_idempotency_key,
             sms_operational=sms_operational,
