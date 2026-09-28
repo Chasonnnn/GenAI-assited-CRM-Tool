@@ -18,7 +18,7 @@ from tests.test_forms_public_shared_intake import (
 )
 from tests.test_hosted_donor_forms import _create_donor_form, _submit_donor_form
 
-PUBLIC_SUBMIT_RESPONSE_KEYS = {"id", "status", "outcome"}
+PUBLIC_SUBMIT_RESPONSE_KEYS = {"id", "outcome"}
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +28,13 @@ def _reset_rate_limiter_between_tests():
     limiter.reset()
     yield
     limiter.reset()
+
+
+def _public_result(response) -> dict:
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert set(body) == PUBLIC_SUBMIT_RESPONSE_KEYS
+    return {key: value for key, value in body.items() if key != "id"}
 
 
 def _auto_match_workflow(db, *, org_id, user_id, form_id: str) -> None:
@@ -81,11 +88,27 @@ async def test_hosted_submit_hides_the_matched_surrogate(
         },
     )
 
-    assert submit.status_code == 200, submit.text
-    assert set(submit.json()) == PUBLIC_SUBMIT_RESPONSE_KEYS
+    stranger = await client.post(
+        f"/forms/public/intake/{slug}/submit",
+        data={
+            "answers": json.dumps(
+                {
+                    "full_name": "New Applicant",
+                    "date_of_birth": "1992-07-08",
+                    "phone": "+1 (555) 333-7777",
+                    "email": "new-applicant@example.com",
+                }
+            )
+        },
+    )
+
+    assert _public_result(submit) == _public_result(stranger) == {"outcome": "received"}
     assert str(surrogate.id) not in submit.text
     submission = db.get(FormSubmission, uuid.UUID(submit.json()["id"]))
     assert submission.surrogate_id == surrogate.id
+    assert submission.match_status == "linked"
+    unmatched = db.get(FormSubmission, uuid.UUID(stranger.json()["id"]))
+    assert unmatched.match_status != "linked"
 
 
 @pytest.mark.asyncio
@@ -106,14 +129,24 @@ async def test_hosted_submit_hides_the_matched_donor(
     )
     form_id, slug = await _create_donor_form(authed_client)
     _auto_match_workflow(db, org_id=test_org.id, user_id=test_user.id, form_id=form_id)
+    _other_form_id, other_slug = await _create_donor_form(authed_client)
 
     submit = await _submit_donor_form(client, slug=slug, email="returning-donor@example.com")
+    stranger = await _submit_donor_form(
+        client, slug=other_slug, email="new-donor@example.com", idempotency_key="stranger-1"
+    )
+    replay = await _submit_donor_form(
+        client, slug=other_slug, email="new-donor@example.com", idempotency_key="stranger-1"
+    )
 
-    assert submit.status_code == 200, submit.text
-    assert set(submit.json()) == PUBLIC_SUBMIT_RESPONSE_KEYS
+    assert _public_result(submit) == _public_result(stranger) == {"outcome": "received"}
+    assert replay.json() == stranger.json()
     assert str(donor.id) not in submit.text
     submission = db.get(FormSubmission, uuid.UUID(submit.json()["id"]))
     assert submission.donor_id == donor.id
+    assert submission.match_status == "linked"
+    unmatched = db.get(FormSubmission, uuid.UUID(stranger.json()["id"]))
+    assert unmatched.donor_id is None
 
 
 @pytest.mark.asyncio
@@ -144,5 +177,4 @@ async def test_embed_submit_returns_only_the_submission_reference(authed_client,
         },
     )
 
-    assert submit.status_code == 200, submit.text
-    assert set(submit.json()) == PUBLIC_SUBMIT_RESPONSE_KEYS
+    assert _public_result(submit) == {"outcome": "received"}

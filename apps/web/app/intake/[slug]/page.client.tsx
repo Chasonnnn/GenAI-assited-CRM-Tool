@@ -43,7 +43,6 @@ import {
     saveSharedPublicFormDraft,
     submitSharedPublicForm,
     type FormIntakePublicRead,
-    type FormSubmissionSharedResponse,
     type FormSchema,
 } from "@/lib/api/forms"
 import { useHostedIntakeAutosave } from "@/lib/hooks/use-hosted-intake-autosave"
@@ -917,7 +916,6 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const [isSubmitting, setIsSubmitting] = React.useState(false)
     const submissionAttemptRef = React.useRef<SubmissionAttempt | null>(null)
     const [isSubmitted, setIsSubmitted] = React.useState(false)
-    const [submissionOutcome, setSubmissionOutcome] = React.useState<FormSubmissionSharedResponse["outcome"] | null>(null)
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
     // Inline errors for the step the user tried to leave; a field's error clears when it changes.
     const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
@@ -1296,7 +1294,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                 formConfig?.messaging_consent?.operational
                 || formConfig?.messaging_consent?.promotional,
             )
-            const response = await submitSharedPublicForm(
+            await submitSharedPublicForm(
                 token,
                 answers,
                 files,
@@ -1319,7 +1317,6 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             if (draftSessionId) {
                 window.localStorage.removeItem(`intake-draft-session:${token}`)
             }
-            setSubmissionOutcome(response.outcome)
             setIsSubmitted(true)
         }
         void submit()
@@ -1529,7 +1526,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
 
     // Success state
     if (isSubmitted) {
-        return <PublicFormSuccessState outcome={submissionOutcome} />
+        return <PublicFormSuccessState />
     }
 
     return (

@@ -225,7 +225,7 @@ async def test_builder_payload_workflow_runs_on_real_form_submission(authed_clie
     )
     assert submit_response.status_code == 200, submit_response.text
     body = submit_response.json()
-    assert body["outcome"] == "lead_created"
+    assert db.get(FormSubmission, uuid.UUID(body["id"])).match_status == "lead_created"
 
     submission = db.get(FormSubmission, uuid.UUID(body["id"]))
     execution = (

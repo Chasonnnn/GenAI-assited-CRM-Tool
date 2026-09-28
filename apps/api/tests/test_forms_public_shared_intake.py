@@ -395,7 +395,7 @@ async def test_shared_submit_blocks_unresolved_duplicate_applicant(authed_client
         data={"answers": json.dumps(answers)},
     )
     assert first_res.status_code == 200
-    assert first_res.json()["outcome"] == "workflow_pending"
+    assert first_res.json()["outcome"] == "received"
 
     duplicate_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -447,7 +447,10 @@ async def test_shared_public_intake_route_reads_drafts_submits_and_lists_review_
     )
     assert submit_res.status_code == 200
     submission_payload = submit_res.json()
-    assert submission_payload["outcome"] == "workflow_pending"
+    assert (
+        db.get(FormSubmission, uuid.UUID(submission_payload["id"])).match_status
+        == "workflow_pending"
+    )
 
     submission = (
         db.query(FormSubmission)
@@ -827,7 +830,7 @@ async def test_shared_submit_no_match_defaults_to_workflow_pending_without_workf
     )
     assert submit_res.status_code == 200
     body = submit_res.json()
-    assert body["outcome"] == "workflow_pending"
+    assert db.get(FormSubmission, uuid.UUID(body["id"])).match_status == "workflow_pending"
 
     submission = db.query(FormSubmission).filter(FormSubmission.id == body["id"]).first()
     assert submission is not None
@@ -1018,7 +1021,7 @@ async def test_shared_submit_workflow_lead_preserves_link_source_metadata(
     )
     assert submit_res.status_code == 200
     body = submit_res.json()
-    assert body["outcome"] == "lead_created"
+    assert db.get(FormSubmission, uuid.UUID(body["id"])).match_status == "lead_created"
 
     lead = (
         db.query(IntakeLead)
@@ -1090,7 +1093,7 @@ async def test_shared_submit_exact_match_links_surrogate(
     assert submit_res.status_code == 200
 
     body = submit_res.json()
-    assert body["outcome"] == "linked"
+    assert db.get(FormSubmission, uuid.UUID(body["id"])).match_status == "linked"
     submission = db.get(FormSubmission, uuid.UUID(body["id"]))
     assert submission.surrogate_id == surrogate.id
     assert submission.intake_lead_id is None
@@ -1254,7 +1257,7 @@ async def test_shared_submit_ambiguous_then_manual_resolve(
     )
     assert submit_res.status_code == 200
     payload = submit_res.json()
-    assert payload["outcome"] == "ambiguous_review"
+    assert db.get(FormSubmission, uuid.UUID(payload["id"])).match_status == "ambiguous_review"
 
     submission_id = payload["id"]
     queue_res = await authed_client.get(
@@ -1353,7 +1356,7 @@ async def test_shared_submission_retry_allows_unlink_and_relink(
     )
     assert submit_res.status_code == 200
     payload = submit_res.json()
-    assert payload["outcome"] == "linked"
+    assert db.get(FormSubmission, uuid.UUID(payload["id"])).match_status == "linked"
     assert db.get(FormSubmission, uuid.UUID(payload["id"])).surrogate_id == surrogate_a.id
 
     submission_id = payload["id"]
@@ -1429,7 +1432,7 @@ async def test_shared_submission_retry_reuses_existing_lead_without_duplicates(
     )
     assert submit_res.status_code == 200
     payload = submit_res.json()
-    assert payload["outcome"] == "lead_created"
+    assert db.get(FormSubmission, uuid.UUID(payload["id"])).match_status == "lead_created"
     original_lead = db.get(FormSubmission, uuid.UUID(payload["id"])).intake_lead_id
     assert original_lead is not None
 
@@ -1519,7 +1522,7 @@ async def test_promote_intake_lead_links_pending_submission(
     )
     assert submit_res.status_code == 200
     payload = submit_res.json()
-    assert payload["outcome"] == "lead_created"
+    assert db.get(FormSubmission, uuid.UUID(payload["id"])).match_status == "lead_created"
 
     lead_id = str(db.get(FormSubmission, uuid.UUID(payload["id"])).intake_lead_id)
     promote_res = await authed_client.post(
@@ -1604,7 +1607,7 @@ async def test_shared_submit_no_match_workflow_can_auto_promote_to_surrogate(
     )
     assert submit_res.status_code == 200
     payload = submit_res.json()
-    assert payload["outcome"] == "linked"
+    assert db.get(FormSubmission, uuid.UUID(payload["id"])).match_status == "linked"
 
     submission = db.query(FormSubmission).filter(FormSubmission.id == payload["id"]).first()
     assert submission is not None

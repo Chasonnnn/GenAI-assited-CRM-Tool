@@ -291,6 +291,7 @@ class FormDraftStatusRead(BaseModel):
 
 FormLinkMode = Literal["shared"]
 SharedSubmissionOutcome = Literal["workflow_pending", "linked", "ambiguous_review", "lead_created"]
+PublicSubmissionOutcome = Literal["received"]
 
 
 class FormIntakeLinkCreate(BaseModel):
@@ -485,11 +486,10 @@ class FormIntakeDraftRestoreResponse(BaseModel):
 
 
 class FormSubmissionSharedResponse(BaseModel):
-    """Public submit result. Record ids stay internal so an applicant cannot learn a match."""
+    """Public submit result. It is the same for every applicant, so no one can learn a match."""
 
     id: UUID
-    status: str
-    outcome: SharedSubmissionOutcome
+    outcome: PublicSubmissionOutcome = "received"
 
 
 class MatchCandidateRead(BaseModel):

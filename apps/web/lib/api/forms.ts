@@ -333,8 +333,7 @@ export interface FormDeliverySettings {
 
 export interface FormSubmissionSharedResponse {
     id: string
-    status: FormSubmissionStatus
-    outcome: SharedSubmissionOutcome
+    outcome: 'received'
 }
 
 export interface FormIntakePublicRead {

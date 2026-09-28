@@ -115,8 +115,7 @@ describe('Shared Intake Public Page', () => {
         })
         submitSharedPublicForm.mockResolvedValue({
             id: 'submission-1',
-            status: 'pending_review',
-            outcome: 'lead_created',
+            outcome: 'received',
         })
     })
 

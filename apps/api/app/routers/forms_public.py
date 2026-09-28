@@ -380,7 +380,7 @@ def submit_embed_public_form(
     if not form or form.status != FormStatus.PUBLISHED.value:
         raise HTTPException(status_code=404, detail="Form not found")
     try:
-        submission, outcome = form_intake_service.submit_lead_capture_embed(
+        submission, _outcome = form_intake_service.submit_lead_capture_embed(
             db=db,
             link=intake_link,
             form=form,
@@ -402,11 +402,7 @@ def submit_embed_public_form(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return FormSubmissionSharedResponse(
-        id=submission.id,
-        status=submission.status,
-        outcome=outcome,
-    )
+    return FormSubmissionSharedResponse(id=submission.id)
 
 
 @router.get("/intake/{slug}/draft/{draft_session_id}", response_model=FormIntakeDraftPublicRead)
@@ -646,7 +642,7 @@ def submit_shared_public_form(
     )
 
     try:
-        submission, outcome = form_intake_service.create_shared_submission(
+        submission, _outcome = form_intake_service.create_shared_submission(
             db=db,
             link=intake_link,
             form=form,
@@ -669,8 +665,4 @@ def submit_shared_public_form(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return FormSubmissionSharedResponse(
-        id=submission.id,
-        status=submission.status,
-        outcome=outcome,
-    )
+    return FormSubmissionSharedResponse(id=submission.id)

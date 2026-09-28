@@ -331,7 +331,7 @@ async def test_hosted_donor_form_promotes_exact_subtype_with_clean_profile_photo
     )
     assert submit.status_code == 200, submit.text
     submission_id = submit.json()["id"]
-    assert set(submit.json()) == {"id", "status", "outcome"}
+    assert submit.json() == {"id": submission_id, "outcome": "received"}
 
     submitted_file = (
         db.query(FormSubmissionFile)

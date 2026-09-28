@@ -662,7 +662,7 @@ async def test_auto_match_keeps_new_submission_ambiguous_when_surrogate_already_
     )
     assert submission_res.status_code == 200
     first_payload = submission_res.json()
-    assert first_payload["outcome"] == "linked"
+    assert db.get(FormSubmission, uuid.UUID(first_payload["id"])).match_status == "linked"
     assert db.get(FormSubmission, uuid.UUID(first_payload["id"])).surrogate_id == surrogate.id
 
     resubmission_res = await authed_client.post(
@@ -1142,10 +1142,11 @@ async def test_shared_submit_accepts_custom_identity_fields_when_mapped(authed_c
         },
     )
     assert submission_res.status_code == 200
-    assert submission_res.json()["outcome"] == "workflow_pending"
+    assert submission_res.json()["outcome"] == "received"
 
     submissions_res = await authed_client.get(f"/forms/{form_id}/submissions")
     assert submissions_res.status_code == 200
+    assert submissions_res.json()[0]["match_status"] == "workflow_pending"
     assert {
         (item["field_key"], item["surrogate_field"])
         for item in submissions_res.json()[0]["mapping_snapshot"]
