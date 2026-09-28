@@ -2548,6 +2548,69 @@ describe('IntegrationsPage', () => {
         })
     })
 
+    it('labels donor skip reasons, sources and test events in zapier activity', () => {
+        const baseEvent = zapierEventsData.items[0]
+        zapierEventsData = {
+            items: [
+                {
+                    ...baseEvent,
+                    id: 'event-config',
+                    status: 'skipped',
+                    reason: 'donor_config_changed',
+                    last_error: null,
+                    can_retry: false,
+                    donor_type: 'egg',
+                    pipeline_id: 'egg-pipeline-1',
+                    stage_id: 'egg-stage-ready',
+                    attribution_source: 'meta',
+                },
+                {
+                    ...baseEvent,
+                    id: 'event-unknown',
+                    status: 'skipped',
+                    reason: 'future_skip_reason',
+                    last_error: null,
+                    can_retry: false,
+                },
+                {
+                    ...baseEvent,
+                    id: 'event-test',
+                    source: 'test',
+                    status: 'delivered',
+                    event_name: 'Lead',
+                    last_error: null,
+                    can_retry: false,
+                    stage_key: null,
+                    stage_label: null,
+                    donor_type: 'sperm',
+                    attribution_source: 'website',
+                    lead_id: null,
+                },
+                {
+                    ...baseEvent,
+                    id: 'event-workflow-like',
+                    source: 'bulk_backfill',
+                    status: 'queued',
+                    last_error: null,
+                    can_retry: false,
+                },
+            ],
+            total: 4,
+        }
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        expect(within(dialog).getByText('Configuration changed before sending')).toBeInTheDocument()
+        expect(within(dialog).getByText('Future skip reason')).toBeInTheDocument()
+        expect(within(dialog).getByText('Bulk backfill')).toBeInTheDocument()
+        expect(within(dialog).getByText('Sperm donor · Test event')).toBeInTheDocument()
+        expect(within(dialog).queryByText(/_/)).not.toBeInTheDocument()
+        expect(within(dialog).queryByText('Sperm donor stage unavailable')).not.toBeInTheDocument()
+    })
+
     it('syncs zapier stage mapping rows with the live pipeline even when saved settings are stale', () => {
         zapierSettingsData = {
             ...createZapierSettingsData(),

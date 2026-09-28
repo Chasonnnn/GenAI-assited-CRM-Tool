@@ -146,6 +146,7 @@ import type {
     ZapierStageBucket,
 } from "@/lib/api/zapier"
 import { getStageSemantics } from "@/lib/surrogate-stage-context"
+import { humanizeSelectKey } from "@/lib/select-labels"
 
 const statusConfig = {
     healthy: { icon: CheckCircleIcon, color: "text-green-600", badge: "default" as const, label: "Healthy" },
@@ -444,6 +445,7 @@ function getDonorEventStageLabel(
     const pipeline = pipelinesByType[donorType]?.find((item) => item.id === event.pipeline_id)
     const stage = pipeline?.stages.find((item) => item.id === event.stage_id)
     const donorLabel = getDonorTypeLabel(donorType)
+    if (event.source === "test" && !event.stage_id) return `${donorLabel} · Test event`
     if (pipeline && stage) return `${donorLabel} · ${pipeline.name} · ${stage.label}`
     if (event.stage_label) {
         return pipeline
@@ -679,16 +681,46 @@ function formatZapierRate(rate: number): string {
     return `${Math.round(rate * 100)}%`
 }
 
+const ZAPIER_SOURCE_LABELS: Record<string, string> = {
+    automatic: "Automatic",
+    workflow: "Workflow",
+    test: "Test",
+}
+
+const ZAPIER_SKIP_REASON_LABELS: Record<string, string> = {
+    duplicate: "Already sent",
+    not_meta_source: "Not a Meta lead",
+    missing_meta_lead_fk: "No linked Meta lead",
+    missing_meta_lead: "Meta lead not found",
+    missing_meta_lead_id: "Meta lead ID missing",
+    synthetic_meta_lead_id: "Not a real Meta lead ID",
+    stale_meta_lead: "Meta lead older than 90 days",
+    outbound_disabled: "Surrogate reporting disabled",
+    missing_webhook_url: "Webhook URL missing",
+    unmapped_stage: "Stage not mapped",
+    unmapped_donor_stage: "Stage not mapped",
+    donor_outbound_disabled: "Donor reporting disabled",
+    donor_stage_undo: "Undo of an earlier change",
+    donor_stage_undone: "Withdrawn by undo",
+    missing_donor_attribution: "No Meta lead or website form",
+    missing_matching_data: "No click ID or contact data",
+    donor_dispatch_disabled: "Donor reporting disabled before sending",
+    donor_dispatch_url_missing: "Webhook URL removed before sending",
+    donor_event_invalid: "Invalid event record",
+    donor_subject_missing: "Donor stage change not found",
+    donor_attribution_missing: "Attribution no longer linked",
+    donor_stage_inactive: "Stage no longer active",
+    donor_mapping_changed: "Mapping changed before sending",
+    donor_config_changed: "Configuration changed before sending",
+}
+
 function formatZapierSource(source: string): string {
-    if (source === "automatic") return "Automatic"
-    if (source === "workflow") return "Workflow"
-    if (source === "test") return "Test"
-    return source.replace(/_/g, " ")
+    return ZAPIER_SOURCE_LABELS[source] ?? humanizeSelectKey(source) ?? "Other"
 }
 
 function formatZapierReason(reason: string | null | undefined): string {
     if (!reason) return "—"
-    return reason.replace(/_/g, " ")
+    return ZAPIER_SKIP_REASON_LABELS[reason] ?? humanizeSelectKey(reason) ?? "Other reason"
 }
 
 function formatZapierAttribution(event: ZapierOutboundEvent): string {
