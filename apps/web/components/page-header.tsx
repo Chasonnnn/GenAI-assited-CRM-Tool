@@ -4,19 +4,12 @@ import type * as React from "react"
 import { ArrowLeftIcon } from "lucide-react"
 
 import Link from "@/components/app-link"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 type PageHeaderProps = {
     /** Must match the sidebar label for top-level pages. */
     title: React.ReactNode
-    /** Record count shown as a badge next to the title. Hidden while null or undefined. */
-    count?: number | null | undefined
-    /** Unfiltered total. When set and different from `count`, the badge reads "8 of 151". */
-    countTotal?: number | null | undefined
-    /** Screen-reader noun after the count, for example "surrogates". */
-    countLabel?: string | undefined
     /** Leading back button for detail and editor pages. Top-level pages leave it unset. */
     back?: { href: string; label: string } | undefined
     /** Inline status after the title, such as a status badge or save state. */
@@ -30,28 +23,18 @@ type PageHeaderProps = {
     className?: string | undefined
 }
 
-function formatCount(count: number, total: number | null | undefined) {
-    if (total === null || total === undefined || total === count) return count.toLocaleString()
-    return `${count.toLocaleString()} of ${total.toLocaleString()}`
-}
-
 /**
- * Page header bar: 64px band with a 24px h1, optional count badge, optional back button,
+ * Page header bar: 64px band with a 24px h1, optional back button,
  * inline meta and right-aligned actions. Page content goes below it in a `p-6` wrapper.
  */
 function PageHeader({
     title,
-    count,
-    countTotal,
-    countLabel,
     back,
     meta,
     actions,
     sticky = false,
     className,
 }: PageHeaderProps) {
-    const hasCount = typeof count === "number"
-
     return (
         <div
             data-slot="page-header"
@@ -75,12 +58,6 @@ function PageHeader({
                         </Button>
                     ) : null}
                     <h1 className="truncate text-2xl font-semibold">{title}</h1>
-                    {hasCount ? (
-                        <Badge variant="outline" className="tabular-nums" data-slot="page-header-count">
-                            {formatCount(count, countTotal)}
-                            {countLabel ? <span className="sr-only"> {countLabel}</span> : null}
-                        </Badge>
-                    ) : null}
                     {meta}
                 </div>
                 {actions ? (

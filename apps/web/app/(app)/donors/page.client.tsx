@@ -544,8 +544,6 @@ export default function DonorsPageClient() {
         committedSearch || stageFilter !== "all" || showArchived || dynamicFilter || ownerId ||
         dateRange !== "all",
     )
-    // Unfiltered total for the header badge ("8 of 42"); only fetched while a filter is active.
-    const unfilteredQuery = useDonors({ donor_type: donorType, page: 1, per_page: 1 }, { enabled: isFiltered })
     const stageOptions = pipelineStageOptions(stages)
     const currentListHref = buildDonorsHref(query, { new: false })
 
@@ -661,9 +659,6 @@ export default function DonorsPageClient() {
         <div className="flex h-full flex-col overflow-hidden">
             <PageHeader
                 title="Donors"
-                count={data?.total}
-                countTotal={isFiltered ? unfilteredQuery.data?.total : undefined}
-                countLabel={getDonorTypePluralLabel(donorType).toLowerCase()}
                 actions={
                     canCreateDonors ? (
                         <Button

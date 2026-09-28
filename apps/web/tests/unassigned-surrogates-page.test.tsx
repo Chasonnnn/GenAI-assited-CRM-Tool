@@ -87,7 +87,7 @@ describe("UnassignedSurrogatesPage", () => {
             )
         }
 
-        it("renders the shared page header with a count and no subtitle", () => {
+        it("renders the shared page header without a count or subtitle", () => {
             mocks.useUnassignedQueue.mockReturnValue({
                 data: {
                     items: [
@@ -114,7 +114,7 @@ describe("UnassignedSurrogatesPage", () => {
             const { container } = renderPage()
 
             expect(screen.getByRole("heading", { level: 1, name: "Unassigned Queue" })).toBeInTheDocument()
-            expect(container.querySelector('[data-slot="page-header-count"]')).toHaveTextContent("1 surrogates")
+            expect(container.querySelector('[data-slot="page-header-count"]')).toBeNull()
             expect(screen.queryByText("Claim a surrogate to start working the case.")).not.toBeInTheDocument()
             expect(screen.getByText("#S10152")).toBeInTheDocument()
             expect(screen.getByText("Agency")).toBeInTheDocument()

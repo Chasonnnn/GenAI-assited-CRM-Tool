@@ -262,9 +262,6 @@ function MatchesList() {
         <div className="flex flex-col h-full overflow-hidden">
             <PageHeader
                 title="Matches"
-                count={data?.total}
-                countTotal={hasActiveFilters ? stats?.total : undefined}
-                countLabel="matches"
                 actions={
                     canProposeMatches ? (
                         <Button onClick={() => setIsNewMatchOpen(true)}>

@@ -123,7 +123,7 @@ describe('MatchesPage', () => {
     it('renders the default match list, summary, and filters', () => {
         render(<MatchesPage />)
         expect(screen.getByRole('heading', { level: 1, name: 'Matches' })).toBeInTheDocument()
-        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('2')
+        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
         expect(screen.queryByText('Total')).not.toBeInTheDocument()
         expect(screen.getAllByText('Proposed').length).toBeGreaterThan(0)
         expect(screen.getAllByText('Accepted').length).toBeGreaterThan(0)
@@ -158,10 +158,10 @@ describe('MatchesPage', () => {
         expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
     })
 
-    it('shows filtered and unfiltered counts when a filter is active', () => {
+    it('shows no header count when a filter is active', () => {
         mockSearchParams.set('status', 'accepted')
         render(<MatchesPage />)
-        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('2 of 42')
+        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
     })
 
     it('shows New Match only with propose_matches', () => {

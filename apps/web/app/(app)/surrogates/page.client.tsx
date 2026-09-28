@@ -1027,14 +1027,6 @@ export function SurrogatesPageClient() {
         ...(ownerFilter === "all" ? {} : { owner_id: ownerFilter }),
         ...(dynamicFilter ? { dynamic_filter: dynamicFilter } : {}),
     }
-    const isListFiltered = Object.keys(listFilters).length > 0
-
-    // Unfiltered first page, for the "8 of 151" header count. It shares the cache entry of the
-    // unfiltered list, so it usually costs no request.
-    const { data: unfilteredData } = useSurrogates(
-        { page: 1, per_page: perPage },
-        { enabled: isListFiltered },
-    )
 
     const listQuery = useSurrogates({
         page,
@@ -1046,7 +1038,6 @@ export function SurrogatesPageClient() {
     const isLoading = listQuery.isLoading || isCheckingStageFilter
 
     const totalCount = data?.total ?? null
-    const unfilteredTotal = isListFiltered ? (unfilteredData?.total ?? null) : totalCount
     const totalPages = data?.pages ?? null
     const hasTotal = totalCount !== null
     const totalCountValue = totalCount ?? 0
@@ -1277,9 +1268,6 @@ export function SurrogatesPageClient() {
         <div className="flex flex-col h-full overflow-hidden">
             <PageHeader
                 title="Surrogates"
-                count={totalCount}
-                countTotal={unfilteredTotal}
-                countLabel="surrogates"
                 actions={
                     <>
                         {isDeveloper && (

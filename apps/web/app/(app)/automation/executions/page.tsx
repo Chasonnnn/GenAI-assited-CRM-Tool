@@ -347,8 +347,8 @@ function ExecutionDetailsRow({
     )
 }
 
-function WorkflowExecutionsHeader({ totalExecutions }: { totalExecutions: number | null }) {
-    return <PageHeader title="Executions" count={totalExecutions} countLabel="executions" />
+function WorkflowExecutionsHeader() {
+    return <PageHeader title="Executions" />
 }
 
 function WorkflowExecutionStatsGrid({
@@ -820,7 +820,7 @@ export default function WorkflowExecutionsPage() {
     if (blockedState) {
         return (
             <div className="flex min-h-screen flex-col">
-                <WorkflowExecutionsHeader totalExecutions={null} />
+                <WorkflowExecutionsHeader />
                 {blockedState}
             </div>
         )
@@ -828,7 +828,7 @@ export default function WorkflowExecutionsPage() {
 
     return (
         <div className="flex min-h-screen flex-col">
-            <WorkflowExecutionsHeader totalExecutions={executionsData ? totalExecutions : null} />
+            <WorkflowExecutionsHeader />
 
             {/* Main Content */}
             <div className="flex-1 space-y-6 p-6">

@@ -77,7 +77,7 @@ describe("Ops agencies data loading", () => {
         mockPush.mockReset()
     })
 
-    it("shows the filtered count against the platform total and labels plan and status", async () => {
+    it("labels plan and status without a header count", async () => {
         mockListOrganizations.mockResolvedValue({
             items: [{ ...org("one", "Agency One"), subscription_status: "past_due", subscription_plan: "professional" }],
             total: 1,
@@ -86,11 +86,8 @@ describe("Ops agencies data loading", () => {
         renderAgenciesPage()
 
         expect(await screen.findByText("Agency One")).toBeInTheDocument()
-        await waitFor(() =>
-            expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent(
-                "1 of 3 agencies"
-            )
-        )
+        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
+        expect(mockGetPlatformStats).not.toHaveBeenCalled()
         expect(screen.getByRole("heading", { level: 1, name: "Agencies" })).toBeInTheDocument()
         expect(screen.getByText("Past due")).toBeInTheDocument()
         expect(screen.getByText("Professional")).toBeInTheDocument()

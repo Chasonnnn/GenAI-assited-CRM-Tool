@@ -142,8 +142,6 @@ function UnassignedSurrogatesContent({
         <div className="flex h-full flex-col overflow-hidden">
             <PageHeader
                 title="Unassigned Queue"
-                count={total}
-                countLabel="surrogates"
                 actions={
                     <Button
                         variant="outline"

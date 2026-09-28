@@ -294,17 +294,13 @@ describe("DonorsPage", () => {
         expect(search).toHaveAttribute("placeholder", "Search donors")
     })
 
-    it("shows the filtered count against the unfiltered total", () => {
+    it("shows no header count and skips the unfiltered total request while filtered", () => {
         mockSearchParams.set("q", "maya")
-        mockUseDonors.mockImplementation((filters: { per_page?: number }) =>
-            filters.per_page === 1
-                ? { data: { items: [], total: 42, page: 1, per_page: 1, pages: 42 }, isLoading: false }
-                : { data: { items: [], total: 3, page: 1, per_page: 20, pages: 1 }, isLoading: false },
-        )
 
         render(<DonorsPage />)
 
-        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent("3 of 42")
+        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
+        expect(mockUseDonors).not.toHaveBeenCalledWith(expect.objectContaining({ per_page: 1 }), expect.anything())
     })
 
     it("validates donor email inline before calling the API", async () => {

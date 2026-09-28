@@ -309,7 +309,7 @@ describe('SurrogatesPage', () => {
         const { container } = render(<SurrogatesPage />)
         expect(screen.getByText('No surrogates yet')).toBeInTheDocument()
         expect(screen.getByRole('heading', { level: 1, name: 'Surrogates' })).toBeInTheDocument()
-        expect(container.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('0 surrogates')
+        expect(container.querySelector('[data-slot="page-header-count"]')).toBeNull()
     })
 
     it('shows a load error with retry and never the server detail', async () => {
@@ -333,7 +333,7 @@ describe('SurrogatesPage', () => {
         expect(refetch).toHaveBeenCalledTimes(1)
     })
 
-    it('shows the filtered count against the unfiltered total', () => {
+    it('shows no header count and fetches only the filtered list', () => {
         mockSearchParams.set('stage', 's2')
         mockUseSurrogates.mockImplementation((filters: { stage_id?: string }) => ({
             data: filters.stage_id
@@ -345,8 +345,9 @@ describe('SurrogatesPage', () => {
 
         const { container } = render(<SurrogatesPage />)
 
-        expect(container.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('8 of 151')
+        expect(container.querySelector('[data-slot="page-header-count"]')).toBeNull()
         expect(screen.queryByText(/total surrogates/)).not.toBeInTheDocument()
+        expect(mockUseSurrogates).not.toHaveBeenCalledWith(expect.not.objectContaining({ stage_id: 's2' }), expect.anything())
     })
 
     it('offers every surrogate source in the Source filter, using the badge labels', async () => {

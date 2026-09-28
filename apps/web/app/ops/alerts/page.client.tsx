@@ -177,8 +177,6 @@ export default function GlobalAlertsPage() {
         <div>
             <PageHeader
                 title="Alerts"
-                count={alertsQuery.isSuccess ? alertsQuery.data.total : null}
-                countLabel="alerts"
                 actions={
                     <Button variant="outline" onClick={fetchAlerts} disabled={isLoading}>
                         <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
