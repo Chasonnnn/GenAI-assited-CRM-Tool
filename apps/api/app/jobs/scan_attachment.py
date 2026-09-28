@@ -232,7 +232,8 @@ def scan_form_submission_file_job(file_id: UUID) -> bool:
     Scan a form submission file for viruses and update its status.
 
     Returns:
-        True if scan completed (regardless of result), False on error
+        True if the scan recorded a result, a backoff retry, or an error status;
+        False when nothing was recorded and the caller must retry this attempt.
     """
     if not getattr(settings, "ATTACHMENT_SCAN_ENABLED", False):
         logger.info("Scanning disabled, marking form submission file %s as clean", file_id)
@@ -335,7 +336,10 @@ def scan_form_submission_file_job(file_id: UUID) -> bool:
                 mark_error,
                 exc_info=mark_error,
             )
-        return False
+            return False
+        # The backoff retry or the error status now owns the outcome; reporting success keeps
+        # the caller from requeueing this attempt as a second pending scan.
+        return True
 
     finally:
         if temp_file and attachment_service._get_storage_backend() == "s3":

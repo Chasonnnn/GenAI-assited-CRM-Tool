@@ -828,6 +828,73 @@ async def test_transient_scan_failure_retries_with_backoff_then_errors(
 
 
 @pytest.mark.asyncio
+async def test_remote_scan_exception_leaves_only_the_backoff_retry_pending(
+    authed_client, db, test_org, monkeypatch
+):
+    from datetime import UTC, datetime, timedelta
+
+    from app import scan_job_runner
+    from app.db.models import Job
+    from app.jobs import scan_attachment
+    from app.services import job_service
+
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", True, raising=False)
+    _, slug = await _create_donor_form(authed_client)
+    response = await _submit_donor_form(authed_client, slug=slug, email="raises@example.com")
+    assert response.status_code == 200, response.text
+    photo = _photo(db, db.get(FormSubmission, uuid.UUID(response.json()["id"])))
+    monkeypatch.setattr(settings, "ENV", "production", raising=False)
+
+    class _NoRollbackSession(_SessionProxy):
+        # The scan fails before it writes; a real rollback would discard the test transaction.
+        def rollback(self):
+            self._db.expire_all()
+
+    monkeypatch.setattr(scan_attachment, "SessionLocal", lambda: _NoRollbackSession(db))
+    monkeypatch.setattr(scan_job_runner, "SessionLocal", lambda: _SessionProxy(db))
+    monkeypatch.setattr(scan_job_runner, "_prepare_scanner", lambda: None)
+
+    def _download_fails(_key):
+        raise OSError("storage unavailable")
+
+    monkeypatch.setattr(scan_attachment, "_download_storage_key_to_temp", _download_fails)
+
+    def scan_jobs():
+        return (
+            db.query(Job)
+            .filter(
+                Job.organization_id == test_org.id,
+                Job.job_type == "form_submission_file_scan",
+                Job.payload["submission_file_id"].as_string() == str(photo.id),
+            )
+            .all()
+        )
+
+    [first_scan] = scan_jobs()
+    claimed = job_service.claim_job_for_dispatch(db, first_scan.id)
+    assert claimed is not None
+    started = datetime.now(UTC)
+
+    exit_code = scan_job_runner.run_scan_job(
+        scan_type="form_submission_file",
+        resource_id=photo.id,
+        job_id=claimed.id,
+        claim_token=claimed.claim_token,
+    )
+
+    assert exit_code == 0
+    db.expire_all()
+    assert db.get(Job, claimed.id).status == "completed"
+    pending = [job for job in scan_jobs() if job.status == "pending"]
+    assert len(pending) == 1
+    assert pending[0].id != claimed.id
+    assert pending[0].payload["scan_attempt"] == 2
+    assert pending[0].run_at >= started + timedelta(seconds=55)
+    db.refresh(photo)
+    assert photo.scan_status == "pending"
+
+
+@pytest.mark.asyncio
 async def test_retry_match_replays_failed_donor_promotion(authed_client, db, test_org):
     from app.jobs.handlers.form_submissions import process_donor_intake_promote
 
