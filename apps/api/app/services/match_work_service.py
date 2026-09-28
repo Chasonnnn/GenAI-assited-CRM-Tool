@@ -50,7 +50,8 @@ def validate_context(
         from app.services import match_lifecycle
 
         match = match_lifecycle.lock_match(db, match)
-    if write and match.status in {"completed", "cancelled", "declined", "cancellation_pending"}:
+    # Completed matches stay open so postpartum work can attach after delivery.
+    if write and match.status in {"cancelled", "declined", "cancellation_pending"}:
         raise HTTPException(status_code=409, detail="This match is not open for new work")
     if attempt_id:
         attempt = (

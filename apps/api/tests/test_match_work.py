@@ -339,7 +339,7 @@ async def test_historical_ip_notes_do_not_expose_denied_surrogate_notes(
 
 
 @pytest.mark.asyncio
-async def test_wrong_attempt_source_and_closed_case_are_rejected(authed_client, cases):
+async def test_wrong_attempt_source_and_closed_case_are_rejected(authed_client, db, cases):
     old, current, attempt = cases
     wrong_attempt = await authed_client.get(
         f"/matches/{old.id}/work", params={"attempt_id": str(attempt.id)}
@@ -349,6 +349,8 @@ async def test_wrong_attempt_source_and_closed_case_are_rejected(authed_client, 
         f"/matches/{current.id}/notes", json={"content": "bad", "source": "donor"}
     )
     assert wrong_source.status_code == 400
+    old.status = "cancelled"
+    db.flush()
     closed = await authed_client.post(f"/matches/{old.id}/notes", json={"content": "bad"})
     assert closed.status_code == 409
     orphan_attempt = await authed_client.post(
@@ -477,7 +479,7 @@ def test_work_lock_refreshes_preloaded_closed_case(db, test_auth, cases):
 
     _, current, _ = cases
     assert current.status == "accepted"
-    db.execute(text("UPDATE matches SET status = 'completed' WHERE id = :id"), {"id": current.id})
+    db.execute(text("UPDATE matches SET status = 'cancelled' WHERE id = :id"), {"id": current.id})
     assert current.status == "accepted"
     with pytest.raises(HTTPException) as exc:
         validate_context(db, test_auth.org.id, current.id, write=True)

@@ -607,7 +607,8 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         filteredActivity,
     } = useMatchDetailRelatedData(match, sourceFilter, workPage)
 
-    const canCreateWork = match?.status === "under_review" || match?.status === "accepted"
+    // Completed matches accept postpartum work; the backend rejects work on the other closed statuses.
+    const canCreateWork = match?.status === "under_review" || match?.status === "accepted" || match?.status === "completed"
 
     const invalidateMatchSourceQueries = (
         entityIds?: {

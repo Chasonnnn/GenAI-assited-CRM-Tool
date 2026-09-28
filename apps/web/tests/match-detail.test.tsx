@@ -202,7 +202,18 @@ describe('MatchDetailPage', () => {
         pending_cancellation_request_id: null,
     }
 
-    it.each(['completed', 'cancelled', 'cancellation_pending', 'declined'])('keeps %s case work readable without creation actions', async (status) => {
+    it('offers case work creation on a completed match for postpartum work', () => {
+        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'completed', outcome: 'Delivered', closed_at: '2026-09-05T12:00:00Z' }, isLoading: false })
+        mockUseMatchWork.mockReturnValue({ data: { notes: [], files: [], tasks: [], activity: [] }, isLoading: false })
+        render(<MatchDetailPage />)
+        expect(screen.getByRole('button', { name: 'Add Note' })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('tab', { name: 'Files' }))
+        expect(screen.getByRole('button', { name: 'Upload File' })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('tab', { name: 'Tasks' }))
+        expect(screen.getByRole('button', { name: 'Add Task' })).toBeInTheDocument()
+    })
+
+    it.each(['cancelled', 'cancellation_pending', 'declined'])('keeps %s case work readable without creation actions', async (status) => {
         mockUseMatch.mockReturnValue({ data: { ...mockMatch, status, outcome: 'Finished.', closed_at: '2026-09-05T12:00:00Z' }, isLoading: false })
         mockUseMatchWork.mockReturnValue({ data: { notes: [{ id: 'note1', content: 'Existing case note', source: 'match', created_at: '2026-09-05T12:00:00Z', author_name: 'Admin' }], files: [], tasks: [], activity: [] }, isLoading: false })
         render(<MatchDetailPage />)

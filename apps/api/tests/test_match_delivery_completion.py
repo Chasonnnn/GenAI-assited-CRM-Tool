@@ -608,6 +608,61 @@ async def test_delivered_completion_stays_inside_the_surrogates_organization(
 
 
 # =============================================================================
+# After delivery
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_completed_match_accepts_postpartum_work(authed_client, db, test_auth, test_user):
+    from app.db.models import Appointment
+    from tests.test_match_rollout import _png
+
+    delivered = _stage(db, test_auth.org.id, role="delivered")
+    match = await _create_accepted_match(authed_client)
+    assert (await _move(authed_client, match["surrogate_id"], delivered)).status_code == 200
+    assert _match_row(db, match["id"]).status == "completed"
+
+    note = await authed_client.post(
+        f"/matches/{match['id']}/notes", json={"content": "Postpartum check-in"}
+    )
+    assert note.status_code == 201, note.text
+    task = await authed_client.post(
+        "/tasks", json={"title": "Postpartum call", "match_id": match["id"]}
+    )
+    assert task.status_code == 201, task.text
+    file = await authed_client.post(
+        f"/matches/{match['id']}/attachments",
+        files={"file": ("discharge.png", _png(), "image/png")},
+    )
+    assert file.status_code == 201, file.text
+    start = (datetime.now(UTC) + timedelta(days=3)).replace(microsecond=0)
+    appointment = Appointment(
+        organization_id=test_auth.org.id,
+        user_id=test_user.id,
+        intended_parent_id=uuid.UUID(match["intended_parent_id"]),
+        client_name="QA",
+        client_email="qa@example.com",
+        client_phone="6075550100",
+        client_timezone="UTC",
+        scheduled_start=start,
+        scheduled_end=start + timedelta(minutes=30),
+        duration_minutes=30,
+        meeting_mode="phone",
+        status="confirmed",
+    )
+    db.add(appointment)
+    db.flush()
+    linked = await authed_client.patch(
+        f"/appointments/{appointment.id}/link", json={"match_id": match["id"]}
+    )
+    assert linked.status_code == 200, linked.text
+    work = (await authed_client.get(f"/matches/{match['id']}/work")).json()
+    assert note.json()["id"] in {item["id"] for item in work["notes"]}
+    assert task.json()["id"] in {item["id"] for item in work["tasks"]}
+    assert file.json()["id"] in {item["id"] for item in work["files"]}
+
+
+# =============================================================================
 # Concurrency with the match engine
 # =============================================================================
 
