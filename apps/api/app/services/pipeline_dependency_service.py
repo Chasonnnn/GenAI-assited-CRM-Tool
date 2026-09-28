@@ -295,34 +295,7 @@ def build_pipeline_dependency_graph(
                     }
                 )
 
-    workflows = []
-    if pipeline.entity_type in {
-        SURROGATE_PIPELINE_ENTITY,
-        INTENDED_PARENT_PIPELINE_ENTITY,
-        EGG_DONOR_PIPELINE_ENTITY,
-        SPERM_DONOR_PIPELINE_ENTITY,
-    }:
-        workflow_query = db.query(AutomationWorkflow).filter(
-            AutomationWorkflow.organization_id == pipeline.organization_id
-        )
-        if pipeline.entity_type in {
-            EGG_DONOR_PIPELINE_ENTITY,
-            SPERM_DONOR_PIPELINE_ENTITY,
-        }:
-            workflow_query = workflow_query.filter(
-                AutomationWorkflow.subject_type == pipeline.entity_type
-            )
-        else:
-            workflow_query = workflow_query.filter(
-                AutomationWorkflow.subject_type.notin_(
-                    {
-                        EGG_DONOR_PIPELINE_ENTITY,
-                        SPERM_DONOR_PIPELINE_ENTITY,
-                    }
-                )
-            )
-        workflows = workflow_query.all()
-    for workflow in workflows:
+    for workflow in pipeline_service.get_stage_reference_workflows(db, pipeline):
         for stage in stages:
             if not stage.stage_key or stage.stage_key not in stage_map:
                 continue

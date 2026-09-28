@@ -886,6 +886,38 @@ def test_surrogate_dependency_graph_does_not_reuse_donor_workflow_references(
     assert contacted["workflow_refs"] == []
 
 
+def test_intended_parent_dependency_graph_ignores_surrogate_workflow_references(
+    db, test_org, test_user
+):
+    pipeline_service.get_or_create_default_pipeline(db, test_org.id, test_user.id)
+    ip_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db,
+        test_org.id,
+        test_user.id,
+        entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
+    )
+    db.add(
+        AutomationWorkflow(
+            organization_id=test_org.id,
+            name=f"Surrogate matched workflow {uuid.uuid4().hex[:8]}",
+            subject_type="surrogate",
+            trigger_type=WorkflowTriggerType.STATUS_CHANGED.value,
+            trigger_config={"to_stage_key": "matched"},
+            conditions=[{"field": "stage_id", "operator": "in", "stage_keys": ["matched"]}],
+            actions=[],
+            is_enabled=True,
+            scope="org",
+            created_by_user_id=test_user.id,
+        )
+    )
+    db.commit()
+
+    graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, ip_pipeline)
+    matched = next(stage for stage in graph["stages"] if stage["stage_key"] == "matched")
+
+    assert matched["workflow_refs"] == []
+
+
 def test_donor_dependency_graph_counts_only_same_org_and_donor_type(db, test_org, test_user):
     egg_pipeline = pipeline_service.get_or_create_default_pipeline(
         db,
@@ -1093,6 +1125,100 @@ def test_apply_donor_pipeline_remap_updates_only_same_subtype_workflows(db, test
     assert UUID(egg_workflow.trigger_config["to_stage_id"]) == egg_target.id
     assert sperm_workflow.trigger_config["to_stage_key"] == sperm_custom.stage_key
     assert UUID(sperm_workflow.trigger_config["to_stage_id"]) == sperm_custom.id
+
+
+def test_apply_intended_parent_pipeline_remap_leaves_surrogate_workflows_unchanged(
+    db, test_org, test_user
+):
+    surrogate_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id
+    )
+    ip_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=INTENDED_PARENT_PIPELINE_ENTITY
+    )
+    contacted = pipeline_service.get_stage_by_key(db, surrogate_pipeline.id, "contacted")
+    surrogate_matched = pipeline_service.get_stage_by_key(db, surrogate_pipeline.id, "matched")
+    assert contacted is not None
+    assert surrogate_matched is not None
+    ip_custom = pipeline_service.create_stage(
+        db,
+        ip_pipeline.id,
+        slug="secondary_review",
+        label="Secondary Review",
+        color="#475569",
+        stage_type="intake",
+        user_id=test_user.id,
+    )
+    ip_target = pipeline_service.get_stage_by_key(db, ip_pipeline.id, "new")
+    assert ip_target is not None
+    surrogate_workflow = workflow_service.create_workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        WorkflowCreate(
+            name=f"Surrogate stage workflow {uuid.uuid4().hex[:8]}",
+            trigger_type=WorkflowTriggerType.STATUS_CHANGED,
+            trigger_config={"from_stage_key": "contacted", "to_stage_key": "matched"},
+            conditions=[
+                {
+                    "field": "stage_id",
+                    "operator": "in",
+                    "value": [str(contacted.id), str(surrogate_matched.id)],
+                }
+            ],
+            actions=[
+                {
+                    "action_type": "send_notification",
+                    "title": "Surrogate stage changed",
+                    "body": "Pipeline remap audit workflow",
+                    "recipients": "owner",
+                }
+            ],
+        ),
+    )
+    db.commit()
+    db.refresh(surrogate_workflow)
+    trigger_config_before = deepcopy(surrogate_workflow.trigger_config)
+    conditions_before = deepcopy(surrogate_workflow.conditions)
+    assert trigger_config_before["from_stage_id"] == str(contacted.id)
+    assert trigger_config_before["to_stage_id"] == str(surrogate_matched.id)
+
+    kept_stages = [
+        stage
+        for stage in pipeline_service.get_stages(db, ip_pipeline.id, include_inactive=True)
+        if stage.is_active and stage.id != ip_custom.id
+    ]
+    pipeline_service.apply_pipeline_draft(
+        db,
+        ip_pipeline,
+        name=ip_pipeline.name,
+        stages=[
+            {
+                "id": str(stage.id),
+                "stage_key": stage.stage_key,
+                "slug": stage.slug,
+                "label": stage.label,
+                "color": stage.color,
+                "order": index + 1,
+                "category": stage.stage_type,
+                "is_active": stage.is_active,
+                "semantics": stage.semantics,
+            }
+            for index, stage in enumerate(kept_stages)
+        ],
+        feature_config=ip_pipeline.feature_config,
+        remaps=[
+            {
+                "removed_stage_key": ip_custom.stage_key,
+                "target_stage_key": ip_target.stage_key,
+            }
+        ],
+        user_id=test_user.id,
+    )
+
+    db.refresh(surrogate_workflow)
+    assert surrogate_workflow.trigger_config == trigger_config_before
+    assert surrogate_workflow.conditions == conditions_before
 
 
 def test_delete_donor_stage_migrates_matching_subtype_records(db, test_org, test_user):

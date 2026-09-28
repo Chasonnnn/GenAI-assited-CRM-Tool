@@ -1811,6 +1811,23 @@ def build_pipeline_draft_preview(
     return preview
 
 
+def get_stage_reference_workflows(db: Session, pipeline: Pipeline) -> list[AutomationWorkflow]:
+    """Return the org workflows whose stage references belong to this pipeline."""
+    workflow_query = db.query(AutomationWorkflow).filter(
+        AutomationWorkflow.organization_id == pipeline.organization_id
+    )
+    if pipeline.entity_type == SURROGATE_PIPELINE_ENTITY:
+        # Other non-donor subjects (match, appointment, form, intake) share surrogate stages.
+        return workflow_query.filter(
+            AutomationWorkflow.subject_type.notin_(
+                {INTENDED_PARENT_PIPELINE_ENTITY, *DONOR_PIPELINE_ENTITY_TYPES}
+            )
+        ).all()
+    if pipeline.entity_type in {INTENDED_PARENT_PIPELINE_ENTITY, *DONOR_PIPELINE_ENTITY_TYPES}:
+        return workflow_query.filter(AutomationWorkflow.subject_type == pipeline.entity_type).all()
+    return []
+
+
 def _apply_external_stage_remaps(
     db: Session,
     pipeline: Pipeline,
@@ -1915,25 +1932,7 @@ def _apply_external_stage_remaps(
             remap_by_key,
         )
 
-    workflows = []
-    if pipeline.entity_type in {
-        SURROGATE_PIPELINE_ENTITY,
-        INTENDED_PARENT_PIPELINE_ENTITY,
-        *DONOR_PIPELINE_ENTITY_TYPES,
-    }:
-        workflow_query = db.query(AutomationWorkflow).filter(
-            AutomationWorkflow.organization_id == pipeline.organization_id
-        )
-        if pipeline.entity_type in DONOR_PIPELINE_ENTITY_TYPES:
-            workflow_query = workflow_query.filter(
-                AutomationWorkflow.subject_type == pipeline.entity_type
-            )
-        else:
-            workflow_query = workflow_query.filter(
-                AutomationWorkflow.subject_type.notin_(DONOR_PIPELINE_ENTITY_TYPES)
-            )
-        workflows = workflow_query.all()
-    for workflow in workflows:
+    for workflow in get_stage_reference_workflows(db, pipeline):
         workflow_service.remap_workflow_stage_references(
             db,
             pipeline.organization_id,
