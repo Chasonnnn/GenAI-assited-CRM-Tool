@@ -1161,6 +1161,12 @@
       "422"
     ]
   },
+  "/donors/{donor_id}/meta-lead": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/donors/{donor_id}/notes": {
     "GET": [
       "200",
@@ -1909,6 +1915,12 @@
   "/integrations/meta/forms/{form_id}": {
     "DELETE": [
       "204",
+      "422"
+    ]
+  },
+  "/integrations/meta/forms/{form_id}/leads/{lead_id}/reroute": {
+    "POST": [
+      "200",
       "422"
     ]
   },
