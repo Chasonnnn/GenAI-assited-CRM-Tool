@@ -23,6 +23,7 @@ import { AlertTriangleIcon, CheckCircleIcon, FileTextIcon, Loader2Icon, RefreshC
 import { toast } from "@/components/ui/toast"
 import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import { SettingsPageGate } from "../../../settings-page-gate"
+import { getMetaLeadKindLabel, isZapierMetaForm } from "./meta-form-labels"
 
 const statusBadge = (status: string) => {
     if (status === "mapped") {
@@ -47,12 +48,6 @@ const statusBadge = (status: string) => {
             Unmapped
         </Badge>
     )
-}
-
-const leadKindLabel = {
-    surrogate: "Surrogate",
-    egg_donor: "Egg donor",
-    sperm_donor: "Sperm donor",
 }
 
 export default function MetaFormsPage() {
@@ -167,11 +162,17 @@ function MetaFormsContent() {
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                <div>{form.page_name || "—"}</div>
-                                                <div className="text-xs text-muted-foreground">{form.page_id}</div>
+                                                {isZapierMetaForm(form) ? (
+                                                    <div>Zapier</div>
+                                                ) : (
+                                                    <>
+                                                        <div>{form.page_name || "—"}</div>
+                                                        <div className="text-xs text-muted-foreground">{form.page_id}</div>
+                                                    </>
+                                                )}
                                             </TableCell>
                                             <TableCell>
-                                                {leadKindLabel[form.lead_kind ?? "surrogate"]}
+                                                {getMetaLeadKindLabel(form.lead_kind)}
                                             </TableCell>
                                             <TableCell>{statusBadge(form.mapping_status)}</TableCell>
                                             <TableCell>

@@ -103,6 +103,27 @@ describe("MetaFormsPage", () => {
         expect(screen.queryByText("Couldn't load lead forms")).not.toBeInTheDocument()
     })
 
+    it("labels Zapier pages and lead types instead of raw ids", () => {
+        mockUseMetaForms.mockReturnValue({
+            data: [
+                FORM,
+                { ...FORM, id: "form-2", form_name: "Donor intake", page_id: "zapier", page_name: null, lead_kind: "egg_donor" },
+            ],
+            isLoading: false,
+        })
+
+        render(<MetaFormsPage />)
+
+        const agencyRow = screen.getByText("Spring intake").closest("tr") as HTMLElement
+        expect(within(agencyRow).getByText("Agency page")).toBeInTheDocument()
+        expect(within(agencyRow).getByText("page-1")).toBeInTheDocument()
+        expect(within(agencyRow).getByText("Surrogate")).toBeInTheDocument()
+        const zapierRow = screen.getByText("Donor intake").closest("tr") as HTMLElement
+        expect(within(zapierRow).getByText("Zapier")).toBeInTheDocument()
+        expect(within(zapierRow).queryByText("zapier")).not.toBeInTheDocument()
+        expect(within(zapierRow).getByText("Egg donor")).toBeInTheDocument()
+    })
+
     it("shows the empty state without helper copy when no forms are synced", () => {
         mockUseMetaForms.mockReturnValue({ data: [], isLoading: false, isError: false })
 
