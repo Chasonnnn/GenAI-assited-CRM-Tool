@@ -4,6 +4,9 @@ from app.db.models import Donor, Membership, Pipeline, PipelineStage, Queue, Use
 from app.schemas.auth import UserSession
 from app.services import permission_policy_service, permission_service, record_scope_service
 
+# Intended parents have no applicant approval gate; their record scope has no phases.
+APPROVAL_MODULES = {"surrogate": "surrogates", "donor": "donors"}
+
 
 def crosses_approval(db, record, target_stage) -> bool:
     if target_stage is None:
@@ -116,10 +119,10 @@ def authorize_stage_change(
         )
     else:
         allowed = execution_permissions
-    module = "surrogates" if kind == "surrogate" else "donors"
     if f"change_{kind}_status" not in allowed:
         raise ValueError("Stage change permission required")
-    if crosses_approval(db, record, target_stage) and f"approve_{module}" not in allowed:
+    module = APPROVAL_MODULES.get(kind)
+    if module and crosses_approval(db, record, target_stage) and f"approve_{module}" not in allowed:
         raise ValueError("Applicant approval permission required")
     return True
 

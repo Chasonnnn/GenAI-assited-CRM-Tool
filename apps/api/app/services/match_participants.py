@@ -355,22 +355,21 @@ def _authorize_stage_move(db, match, actor_user_id, kind, record, target, *, pre
         db, match.organization_id, actor_user_id, member.role, permission
     ):
         raise ValueError(f"Missing permission: {permission}")
-    if kind != "intended_parent":
-        uses_record_policy = approval_handoff_service.authorize_stage_change(
-            db,
-            record=record,
-            kind=kind,
-            target_stage=target,
-            user_id=actor_user_id,
-            lock_configuration=not preview,
-        )
-        if not uses_record_policy and not pipeline_semantics_service.can_role_access_stage(
-            member.role,
-            target,
-            feature_config=pipeline_semantics_service.get_pipeline_feature_config(target.pipeline),
-            mutation=True,
-        ):
-            raise ValueError(f"Role not permitted to change {kind} stage")
+    uses_record_policy = approval_handoff_service.authorize_stage_change(
+        db,
+        record=record,
+        kind=kind,
+        target_stage=target,
+        user_id=actor_user_id,
+        lock_configuration=not preview,
+    )
+    if not uses_record_policy and not pipeline_semantics_service.can_role_access_stage(
+        member.role,
+        target,
+        feature_config=pipeline_semantics_service.get_pipeline_feature_config(target.pipeline),
+        mutation=True,
+    ):
+        raise ValueError(f"Role not permitted to change {kind.replace('_', ' ')} stage")
 
 
 def check_accept_stage_changes(db: Session, match: Match, actor_user_id: UUID) -> None:

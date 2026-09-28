@@ -19,6 +19,7 @@ from app.db.models import (
     StatusChangeRequest,
     User,
 )
+from app.services import pipeline_semantics_service
 from app.utils.datetime_parsing import normalize_effective_at
 
 
@@ -85,12 +86,22 @@ def change_status(
 ) -> StatusChangeResult:
     """Change intended parent stage with backdating and regression support.
 
+    Enforces the actor's stage-change authority and the target stage's rules.
     The stage change or approval request commits together with its audit event.
     """
     previous_status = ip.status
     current_stage = get_current_stage(db, ip)
     if new_stage.id == current_stage.id:
         raise ValueError("Target stage is same as current stage")
+
+    role_str = user_role.value if hasattr(user_role, "value") else user_role
+    if not role_str:
+        raise ValueError("User role is required to change status")
+    _authorize_stage_change(db, ip=ip, new_stage=new_stage, user_id=user_id, role=role_str)
+    reason = reason.strip() if reason else None
+    target_semantics = pipeline_semantics_service.get_stage_semantics(new_stage)
+    if target_semantics.requires_reason_on_enter and not reason:
+        raise ValueError(f"Reason required when moving to {new_stage.label}")
 
     now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, ip.organization_id)
@@ -104,10 +115,6 @@ def change_status(
 
     if ip.created_at and normalized_effective_at < ip.created_at:
         raise ValueError("Cannot set date before intended parent was created")
-
-    role_str = user_role.value if hasattr(user_role, "value") else user_role
-    if not role_str:
-        raise ValueError("User role is required to change status")
 
     if is_regression:
         last_history = (
@@ -240,6 +247,33 @@ def change_status(
         previous_status=previous_status,
         request=request,
     )
+
+
+def _authorize_stage_change(
+    db: Session,
+    *,
+    ip: IntendedParent,
+    new_stage: PipelineStage,
+    user_id: UUID,
+    role: str,
+) -> None:
+    """Permission v2 authority and record scope, or the pipeline's role mutation rules."""
+    from app.services import approval_handoff_service
+
+    uses_record_policy = approval_handoff_service.authorize_stage_change(
+        db,
+        record=ip,
+        kind="intended_parent",
+        target_stage=new_stage,
+        user_id=user_id,
+    )
+    if not uses_record_policy and not pipeline_semantics_service.can_role_access_stage(
+        role,
+        new_stage,
+        feature_config=pipeline_semantics_service.get_pipeline_feature_config(new_stage.pipeline),
+        mutation=True,
+    ):
+        raise ValueError("Role not permitted to change intended parent stage")
 
 
 def _log_status_change_audit(
