@@ -11,7 +11,7 @@ from tests.test_migration_20260928_1300_workflow_fixed_trigger_subjects import (
 )
 
 REVISION = "20260928_1340_zapier_event_effective_at"
-PREVIOUS = "20260928_1320_donor_workflow_source_canonical"
+PREVIOUS = "20260928_1330_donor_email_approval_optional"
 
 
 def _event_columns(connection):

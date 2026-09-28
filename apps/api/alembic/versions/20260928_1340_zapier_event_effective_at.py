@@ -5,7 +5,7 @@ time, which surrogate rows did not store. Existing rows keep NULL and are not
 replayable; donor replays read the time from donor_status_history.
 
 Revision ID: 20260928_1340_zapier_event_effective_at
-Revises: 20260928_1320_donor_workflow_source_canonical
+Revises: 20260928_1330_donor_email_approval_optional
 """
 
 import sqlalchemy as sa
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20260928_1340_zapier_event_effective_at"
-down_revision = "20260928_1320_donor_workflow_source_canonical"
+down_revision = "20260928_1330_donor_email_approval_optional"
 branch_labels = None
 depends_on = None
 
