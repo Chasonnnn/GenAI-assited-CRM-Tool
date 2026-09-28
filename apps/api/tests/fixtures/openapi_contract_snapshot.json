@@ -1413,6 +1413,12 @@
       "422"
     ]
   },
+  "/forms/donors/{donor_id}/submissions": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/intake-leads/{lead_id}": {
     "GET": [
       "200",
@@ -1542,6 +1548,12 @@
   },
   "/forms/submissions/{submission_id}/approve": {
     "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/donor-candidates": {
+    "GET": [
       "200",
       "422"
     ]

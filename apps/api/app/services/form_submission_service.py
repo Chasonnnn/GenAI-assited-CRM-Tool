@@ -48,6 +48,7 @@ from app.services.surrogate_input_normalization_service import (
 )
 from app.utils.normalization import normalize_phone
 
+DONOR_LEAD_KINDS = {"egg_donor", "sperm_donor"}
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_FILE_COUNT = 10
 PER_FILE_FIELD_MAX_COUNT = 5
@@ -239,6 +240,35 @@ def get_donor_numbers_for_submissions(
         )
         .all()
     }
+
+
+def list_donor_submissions(
+    db: Session,
+    org_id: uuid.UUID,
+    donor_id: uuid.UUID,
+    *,
+    session=None,
+) -> list[tuple[FormSubmission, str]]:
+    """Applications linked to one donor, newest first, with their form names."""
+    query = (
+        db.query(FormSubmission, Form.name)
+        .join(
+            Form,
+            (Form.id == FormSubmission.form_id) & (Form.organization_id == org_id),
+        )
+        .filter(
+            FormSubmission.organization_id == org_id,
+            FormSubmission.donor_id == donor_id,
+        )
+    )
+    if session is not None:
+        from app.services import form_submission_access
+
+        query = query.filter(form_submission_access.visibility_filter(db, session))
+    return [
+        (submission, form_name)
+        for submission, form_name in query.order_by(FormSubmission.submitted_at.desc()).all()
+    ]
 
 
 def get_submission_by_surrogate(
@@ -667,20 +697,83 @@ def mark_submission_file_scanned(
     record.scan_status = status
     record.quarantined = status in ("infected", "error")
     db.flush()
-    if status == "clean":
-        from app.services import donor_intake_service
+    if status not in ("clean", "infected"):
+        return record
+    from app.services import donor_intake_service
 
-        submission = (
-            db.query(FormSubmission)
-            .filter(
-                FormSubmission.organization_id == record.organization_id,
-                FormSubmission.id == record.submission_id,
-            )
-            .first()
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == record.organization_id,
+            FormSubmission.id == record.submission_id,
         )
-        if submission:
-            donor_intake_service.enqueue_promotion(db, submission=submission)
+        .first()
+    )
+    if not submission:
+        return record
+    if status == "clean":
+        donor_intake_service.enqueue_promotion(db, submission=submission)
+        donor_intake_service.apply_linked_photo_after_scan(db, submission)
+    elif donor_intake_service.is_profile_photo(db, submission, record.id):
+        donor_intake_service.hold_for_photo_review(db, submission)
     return record
+
+
+def _approve_donor_submission(
+    db: Session,
+    submission: FormSubmission,
+    reviewer_id: uuid.UUID,
+    review_notes: str | None,
+) -> FormSubmission:
+    from app.services import audit_service, donor_intake_service
+
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == submission.organization_id,
+            FormSubmission.id == submission.id,
+        )
+        .with_for_update()
+        .populate_existing()
+        .one()
+    )
+    if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
+        raise ValueError("Submission is not pending review")
+    if not submission.donor_id:
+        raise ValueError("Submission is not linked to a donor")
+    donor = (
+        db.query(Donor)
+        .filter(
+            Donor.organization_id == submission.organization_id,
+            Donor.id == submission.donor_id,
+        )
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if not donor:
+        raise ValueError("Donor not found")
+    try:
+        donor_intake_service.apply_linked_submission(
+            db, submission=submission, donor=donor, actor_user_id=reviewer_id
+        )
+        donor_intake_service.mark_submission_approved(submission, reviewer_id=reviewer_id)
+        submission.review_notes = review_notes
+        audit_service.log_event(
+            db=db,
+            org_id=submission.organization_id,
+            event_type=AuditEventType.FORM_SUBMISSION_APPROVED,
+            actor_user_id=reviewer_id,
+            target_type="form_submission",
+            target_id=submission.id,
+            details={"form_id": str(submission.form_id), "donor_id": str(donor.id)},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(submission)
+    return submission
 
 
 def approve_submission(
@@ -689,6 +782,8 @@ def approve_submission(
     reviewer_id: uuid.UUID,
     review_notes: str | None,
 ) -> FormSubmission:
+    if submission.lead_kind in DONOR_LEAD_KINDS:
+        return _approve_donor_submission(db, submission, reviewer_id, review_notes)
     if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
         raise ValueError("Submission is not pending review")
     if not submission.surrogate_id:
@@ -766,7 +861,11 @@ def reject_submission(
         target_id=submission.id,
         details={
             "form_id": str(submission.form_id),
-            "surrogate_id": str(submission.surrogate_id),
+            **(
+                {"donor_id": str(submission.donor_id) if submission.donor_id else None}
+                if submission.lead_kind in DONOR_LEAD_KINDS
+                else {"surrogate_id": str(submission.surrogate_id)}
+            ),
         },
     )
 

@@ -1407,6 +1407,10 @@ def _has_unresolved_duplicate_applicant_submission(
     if phone_hash:
         contact_filters.append(FormSubmission.phone_hash == phone_hash)
 
+    # Rejected applications and donor applications held for an unusable photo are closed for the
+    # applicant, so they may apply again.
+    from app.services.donor_intake_service import PHOTO_REVIEW_REASON
+
     query = (
         db.query(FormSubmission.id)
         .outerjoin(
@@ -1418,6 +1422,8 @@ def _has_unresolved_duplicate_applicant_submission(
             FormSubmission.form_id == link.form_id,
             FormSubmission.full_name_normalized == full_name_normalized,
             or_(*contact_filters),
+            FormSubmission.status != FormSubmissionStatus.REJECTED.value,
+            FormSubmission.match_reason.is_distinct_from(PHOTO_REVIEW_REASON),
             or_(
                 FormSubmission.status == FormSubmissionStatus.PENDING_REVIEW.value,
                 IntakeLead.status == IntakeLeadStatus.PENDING_REVIEW.value,
@@ -1444,6 +1450,18 @@ def _has_unresolved_duplicate_applicant_submission(
         lead_contact_filters.append(IntakeLead.email_hash == email_hash)
     if phone_hash:
         lead_contact_filters.append(IntakeLead.phone_hash == phone_hash)
+    closed_source_submission = (
+        select(FormSubmission.id)
+        .where(
+            FormSubmission.organization_id == IntakeLead.organization_id,
+            FormSubmission.id == IntakeLead.form_submission_id,
+            or_(
+                FormSubmission.status == FormSubmissionStatus.REJECTED.value,
+                FormSubmission.match_reason == PHOTO_REVIEW_REASON,
+            ),
+        )
+        .exists()
+    )
     lead_candidates = (
         db.query(IntakeLead)
         .filter(
@@ -1452,6 +1470,7 @@ def _has_unresolved_duplicate_applicant_submission(
             IntakeLead.status == IntakeLeadStatus.PENDING_REVIEW.value,
             IntakeLead.full_name_normalized == full_name_normalized,
             or_(*lead_contact_filters),
+            ~closed_source_submission,
         )
         .limit(25)
         .all()
@@ -3252,6 +3271,104 @@ def list_match_candidates(
     return query.order_by(FormSubmissionMatchCandidate.created_at.asc()).all()
 
 
+def _link_submission_to_donor(
+    db: Session,
+    *,
+    submission: FormSubmission,
+    donor_id: uuid.UUID,
+    reviewer_id: uuid.UUID | None,
+    review_notes: str | None,
+) -> tuple[FormSubmission, str]:
+    """Manually link a held donor application; the caller authorized the donor."""
+    from app.services import audit_service, donor_intake_service
+
+    if submission.lead_kind not in DONOR_LEAD_KINDS:
+        raise ValueError("Only donor submissions can be linked to a donor")
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == submission.organization_id,
+            FormSubmission.id == submission.id,
+        )
+        .with_for_update()
+        .populate_existing()
+        .one()
+    )
+    donor = (
+        db.query(Donor)
+        .filter(
+            Donor.organization_id == submission.organization_id,
+            Donor.id == donor_id,
+            Donor.is_archived.is_(False),
+        )
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if donor is None:
+        raise ValueError("Donor not found")
+    if donor.donor_type != submission.lead_kind.removesuffix("_donor"):
+        raise ValueError("Donor type does not match this application")
+    if submission.donor_id == donor.id:
+        return submission, FormSubmissionMatchStatus.LINKED.value
+    if submission.donor_id:
+        raise ValueError("Submission is already linked to another donor")
+    if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
+        raise ValueError("Only pending_review submissions can be linked")
+    if (
+        db.query(FormSubmission.id)
+        .filter(
+            FormSubmission.organization_id == submission.organization_id,
+            FormSubmission.form_id == submission.form_id,
+            FormSubmission.donor_id == donor.id,
+        )
+        .first()
+        is not None
+    ):
+        raise ValueError("Donor already has a submission for this form")
+
+    try:
+        now = datetime.now(UTC)
+        submission.donor_id = donor.id
+        submission.match_status = FormSubmissionMatchStatus.LINKED.value
+        submission.match_reason = "manually_linked"
+        submission.matched_at = now
+        if review_notes is not None:
+            submission.review_notes = review_notes.strip() or None
+        if submission.intake_lead_id:
+            lead = (
+                db.query(IntakeLead)
+                .filter(
+                    IntakeLead.organization_id == submission.organization_id,
+                    IntakeLead.id == submission.intake_lead_id,
+                )
+                .with_for_update()
+                .first()
+            )
+            if lead is not None and lead.status == IntakeLeadStatus.PENDING_REVIEW.value:
+                lead.status = IntakeLeadStatus.PROMOTED.value
+                lead.promoted_donor_id = donor.id
+                lead.promoted_at = now
+        donor_intake_service.mark_submission_linked(
+            db, submission=submission, donor=donor, reviewer_id=reviewer_id
+        )
+        audit_service.log_event(
+            db,
+            org_id=submission.organization_id,
+            event_type=AuditEventType.FORM_SUBMISSION_MATCHED,
+            actor_user_id=reviewer_id,
+            target_type="form_submission",
+            target_id=submission.id,
+            details={"donor_id": str(donor.id), "reason": submission.match_reason},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(submission)
+    return submission, FormSubmissionMatchStatus.LINKED.value
+
+
 def resolve_submission_match(
     db: Session,
     *,
@@ -3260,9 +3377,19 @@ def resolve_submission_match(
     create_intake_lead: bool,
     reviewer_id: uuid.UUID | None,
     review_notes: str | None = None,
+    donor_id: uuid.UUID | None = None,
 ) -> tuple[FormSubmission, str]:
     if submission.source_mode != FormLinkMode.SHARED.value:
         raise ValueError("Only shared submissions can be match-resolved")
+
+    if donor_id:
+        return _link_submission_to_donor(
+            db,
+            submission=submission,
+            donor_id=donor_id,
+            reviewer_id=reviewer_id,
+            review_notes=review_notes,
+        )
 
     if surrogate_id:
         if submission.lead_kind in DONOR_LEAD_KINDS:
@@ -3760,6 +3887,21 @@ def _promote_donor_intake_lead(
                 },
                 synchronize_session=False,
             )
+        )
+        # Promotion applies the donor's application, so it resolves review like surrogate approval.
+        db.query(FormSubmission).filter(
+            FormSubmission.organization_id == lead.organization_id,
+            FormSubmission.intake_lead_id == lead.id,
+            FormSubmission.donor_id == donor.id,
+            FormSubmission.status == FormSubmissionStatus.PENDING_REVIEW.value,
+        ).update(
+            {
+                FormSubmission.status: FormSubmissionStatus.APPROVED.value,
+                FormSubmission.reviewed_at: now,
+                FormSubmission.reviewed_by_user_id: user_id,
+                FormSubmission.applied_at: now,
+            },
+            synchronize_session=False,
         )
         zapier_outbound_service.enqueue_donor_created_event(db, donor=donor)
         db.commit()

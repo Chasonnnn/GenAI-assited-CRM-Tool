@@ -35,6 +35,8 @@ from app.core.surrogate_access import (
 from app.db.enums import FormPurpose
 from app.schemas.auth import UserSession
 from app.schemas.forms import (
+    DonorMatchCandidateRead,
+    DonorSubmissionRead,
     FormCreate,
     FormDeliverySettings,
     FormDeliverySettingsUpdate,
@@ -74,6 +76,7 @@ from app.schemas.platform_templates import (
 )
 from app.services import (
     audit_service,
+    donor_intake_service,
     donor_service,
     email_delivery_service,
     email_service,
@@ -86,6 +89,7 @@ from app.services import (
     org_service,
     permission_policy_service,
     permission_service,
+    record_scope_service,
     surrogate_service,
 )
 
@@ -129,6 +133,37 @@ def _require_donor_lead_access(
         permission.value,
     ):
         raise HTTPException(status_code=403, detail=f"Missing permission: {permission.value}")
+
+
+def _authorize_submission_decision(db: Session, session: UserSession, submission, *, action: str):
+    """Approve and reject require edit access to the submission's surrogate or donor subject."""
+    form_submission_access.check_submission(db, session, submission, write=True)
+    if submission.lead_kind in DONOR_LEAD_KINDS:
+        _require_donor_lead_access(db, session, submission.lead_kind, require_write=True)
+        if submission.donor_id:
+            if not donor_service.get_donor(db, session.org_id, submission.donor_id):
+                raise HTTPException(status_code=404, detail="Donor not found")
+        elif action == "approve":
+            raise HTTPException(
+                status_code=409,
+                detail="Submission is not linked to a donor. Resolve matching first.",
+            )
+        return
+    permission = POLICIES["surrogates"].actions["edit"]
+    role = getattr(session.role, "value", session.role)
+    if not permission_service.check_permission(
+        db, session.org_id, session.user_id, role, permission.value
+    ):
+        raise HTTPException(status_code=403, detail=f"Missing permission: {permission.value}")
+    if not submission.surrogate_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Submission is not linked to a surrogate. Resolve matching first.",
+        )
+    surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
+    if not surrogate:
+        raise HTTPException(status_code=404, detail="Surrogate not found")
+    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
 
 
 def _require_donor_form_mutation(
@@ -1386,6 +1421,71 @@ def list_submission_match_candidates(
     ]
 
 
+@router.get(
+    "/submissions/{submission_id}/donor-candidates",
+    response_model=list[DonorMatchCandidateRead],
+    dependencies=[Depends(_require_submission_view)],
+)
+def list_submission_donor_candidates(
+    submission_id: UUID,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    form_submission_access.check_submission(db, session, submission, write=False)
+    if submission.lead_kind not in DONOR_LEAD_KINDS:
+        return []
+    _require_donor_lead_access(db, session, submission.lead_kind)
+    return [
+        DonorMatchCandidateRead(
+            donor_id=donor.id,
+            donor_number=donor.donor_number,
+            full_name=donor.full_name,
+            donor_type=donor.donor_type,
+            reason=reason,
+        )
+        for donor, reason in donor_intake_service.list_match_candidates(
+            db, submission, session=session
+        )
+    ]
+
+
+@router.get(
+    "/donors/{donor_id}/submissions",
+    response_model=list[DonorSubmissionRead],
+    dependencies=[Depends(require_permission(POLICIES["donors"].default))],
+)
+def list_donor_submissions(
+    donor_id: UUID,
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    donor = donor_service.get_donor(db, session.org_id, donor_id)
+    if not donor:
+        raise HTTPException(status_code=404, detail="Donor not found")
+    if permission_policy_service.is_enabled(
+        db, session.org_id
+    ) and not record_scope_service.can_access_record(
+        db, session, "donor", donor, allow_archived=True
+    ):
+        raise HTTPException(status_code=403, detail="You don't have access to this donor")
+    return [
+        DonorSubmissionRead(
+            id=submission.id,
+            form_id=submission.form_id,
+            form_name=form_name,
+            status=submission.status,
+            submitted_at=submission.submitted_at,
+            reviewed_at=submission.reviewed_at,
+        )
+        for submission, form_name in form_submission_service.list_donor_submissions(
+            db, session.org_id, donor.id, session=session
+        )
+    ]
+
+
 @router.post(
     "/submissions/{submission_id}/match/resolve",
     response_model=FormSubmissionMatchResolveResponse,
@@ -1417,12 +1517,25 @@ def resolve_submission_match(
             from app.services.record_access_service import get_record_with_access
 
             get_record_with_access(db, session, "surrogate", surrogate.id, action="edit")
+    if body.donor_id:
+        if submission.lead_kind not in DONOR_LEAD_KINDS:
+            raise HTTPException(
+                status_code=400, detail="Only donor submissions can be linked to a donor"
+            )
+        donor = donor_service.get_donor(db, session.org_id, body.donor_id)
+        if not donor:
+            raise HTTPException(status_code=404, detail="Donor not found")
+        if permission_policy_service.is_enabled(db, session.org_id):
+            from app.services.record_access_service import get_record_with_access
+
+            get_record_with_access(db, session, "donor", donor.id, action="edit")
 
     try:
         submission, outcome = form_intake_service.resolve_submission_match(
             db=db,
             submission=submission,
             surrogate_id=body.surrogate_id,
+            donor_id=body.donor_id,
             create_intake_lead=body.create_intake_lead,
             reviewer_id=session.user_id,
             review_notes=body.review_notes,
@@ -1577,7 +1690,14 @@ def promote_intake_lead(
     "/submissions/{submission_id}/approve",
     response_model=FormSubmissionRead,
     dependencies=[
-        Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
+        Depends(
+            require_any_permissions(
+                [
+                    POLICIES["surrogates"].actions["edit"],
+                    POLICIES["donors"].actions["edit"],
+                ]
+            )
+        ),
         Depends(require_csrf_header),
     ],
 )
@@ -1590,16 +1710,7 @@ def approve_submission(
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    form_submission_access.check_submission(db, session, submission, write=True)
-    if not submission.surrogate_id:
-        raise HTTPException(
-            status_code=409,
-            detail="Submission is not linked to a surrogate. Resolve matching first.",
-        )
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
-    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    _authorize_submission_decision(db, session, submission, action="approve")
     try:
         submission = form_submission_service.approve_submission(
             db=db,
@@ -1617,7 +1728,14 @@ def approve_submission(
     "/submissions/{submission_id}/reject",
     response_model=FormSubmissionRead,
     dependencies=[
-        Depends(require_permission(POLICIES["surrogates"].actions["edit"])),
+        Depends(
+            require_any_permissions(
+                [
+                    POLICIES["surrogates"].actions["edit"],
+                    POLICIES["donors"].actions["edit"],
+                ]
+            )
+        ),
         Depends(require_csrf_header),
     ],
 )
@@ -1630,16 +1748,7 @@ def reject_submission(
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    form_submission_access.check_submission(db, session, submission, write=True)
-    if not submission.surrogate_id:
-        raise HTTPException(
-            status_code=409,
-            detail="Submission is not linked to a surrogate. Resolve matching first.",
-        )
-    surrogate = surrogate_service.get_surrogate(db, session.org_id, submission.surrogate_id)
-    if not surrogate:
-        raise HTTPException(status_code=404, detail="Surrogate not found")
-    check_surrogate_access(surrogate, session.role, session.user_id, db=db, org_id=session.org_id)
+    _authorize_submission_decision(db, session, submission, action="reject")
     try:
         submission = form_submission_service.reject_submission(
             db=db,

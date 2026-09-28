@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 FieldType = Literal[
     "text",
@@ -500,10 +500,34 @@ class MatchCandidateRead(BaseModel):
     created_at: datetime
 
 
+class DonorMatchCandidateRead(BaseModel):
+    donor_id: UUID
+    donor_number: str
+    full_name: str
+    donor_type: Literal["egg", "sperm"]
+    reason: Literal["donor_email_phone_match", "donor_email_match", "donor_phone_match"]
+
+
+class DonorSubmissionRead(BaseModel):
+    id: UUID
+    form_id: UUID
+    form_name: str
+    status: Literal["pending_review", "approved", "rejected"]
+    submitted_at: datetime
+    reviewed_at: datetime | None
+
+
 class FormSubmissionMatchResolveRequest(BaseModel):
     surrogate_id: UUID | None = None
+    donor_id: UUID | None = None
     create_intake_lead: bool = False
     review_notes: str | None = None
+
+    @model_validator(mode="after")
+    def _single_subject(self) -> FormSubmissionMatchResolveRequest:
+        if self.surrogate_id and self.donor_id:
+            raise ValueError("Provide surrogate_id or donor_id, not both")
+        return self
 
 
 class FormSubmissionMatchRetryRequest(BaseModel):
