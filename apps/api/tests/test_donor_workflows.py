@@ -418,9 +418,7 @@ async def test_execution_history_enriches_only_exact_tenant_subtype_donors(
     history_by_id = {item["id"]: item for item in history_response.json()["items"]}
 
     exact_execution = next(
-        item
-        for item in history_by_id.values()
-        if item["subject_id"] == str(exact_donor.id)
+        item for item in history_by_id.values() if item["subject_id"] == str(exact_donor.id)
     )
     assert exact_execution["entity_name"] == exact_donor.full_name
     assert exact_execution["entity_number"] == exact_donor.donor_number
@@ -1686,13 +1684,9 @@ def test_form_submission_workflows_match_exact_donor_lead_kind(
     )
 
     executions = (
-        db.query(WorkflowExecution)
-        .filter(WorkflowExecution.entity_id == submission.id)
-        .all()
+        db.query(WorkflowExecution).filter(WorkflowExecution.entity_id == submission.id).all()
     )
-    assert {execution.workflow_id for execution in executions} == {
-        workflows["egg_donor"].id
-    }
+    assert {execution.workflow_id for execution in executions} == {workflows["egg_donor"].id}
     assert executions[0].subject_type == "form_submission"
     assert executions[0].trigger_event["lead_kind"] == "egg_donor"
 
@@ -1739,14 +1733,8 @@ def test_intake_lead_workflows_match_exact_donor_lead_type(db, test_org, test_us
         submission_id=None,
     )
 
-    executions = (
-        db.query(WorkflowExecution)
-        .filter(WorkflowExecution.entity_id == lead.id)
-        .all()
-    )
-    assert {execution.workflow_id for execution in executions} == {
-        workflows["sperm_donor"].id
-    }
+    executions = db.query(WorkflowExecution).filter(WorkflowExecution.entity_id == lead.id).all()
+    assert {execution.workflow_id for execution in executions} == {workflows["sperm_donor"].id}
     assert executions[0].subject_type == "intake_lead"
     assert executions[0].trigger_event["lead_type"] == "sperm_donor"
 
