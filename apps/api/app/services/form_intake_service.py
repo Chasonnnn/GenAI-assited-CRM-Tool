@@ -3419,6 +3419,8 @@ def resolve_submission_match(
 
     if not create_intake_lead:
         raise ValueError("Provide surrogate_id or set create_intake_lead=true")
+    if submission.status == FormSubmissionStatus.REJECTED.value:
+        raise ValueError("Rejected submissions cannot be moved to intake")
 
     if submission.intake_lead_id:
         submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
@@ -3823,6 +3825,11 @@ def _promote_donor_intake_lead(
     linked_submissions = _linked_submissions_for_lead(db, lead)
     if not linked_submissions:
         raise ValueError("Donor intake lead has no source submission")
+    if all(
+        submission.status == FormSubmissionStatus.REJECTED.value
+        for submission in linked_submissions
+    ):
+        raise ValueError("Rejected intake leads cannot be promoted")
     profile_photo = _profile_photo_for_donor_lead(
         db,
         lead=lead,
@@ -3948,6 +3955,8 @@ def promote_intake_lead(
         if not locked_lead:
             raise ValueError("Intake lead not found")
         lead = locked_lead
+    if lead.status == IntakeLeadStatus.REJECTED.value:
+        raise ValueError("Rejected intake leads cannot be promoted")
     if getattr(lead, "lead_type", FormLeadKind.SURROGATE.value) in DONOR_LEAD_KINDS:
         if is_priority or assign_to_user is not None:
             raise ValueError("Surrogate assignment options do not apply to donor promotion")

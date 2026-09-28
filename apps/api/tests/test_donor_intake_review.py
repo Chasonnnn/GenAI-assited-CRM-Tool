@@ -263,6 +263,45 @@ async def test_rejected_donor_applicant_can_resubmit_and_is_not_promoted(
 
 
 @pytest.mark.asyncio
+async def test_rejecting_donor_application_closes_its_intake_lead(authed_client, db, test_org):
+    _, _, submission = await _manual_submission(authed_client, db, email="closed@example.com")
+    resolved = await authed_client.post(
+        f"/forms/submissions/{submission.id}/match/resolve", json={"create_intake_lead": True}
+    )
+    assert resolved.status_code == 200, resolved.text
+    lead_id = uuid.UUID(resolved.json()["submission"]["intake_lead_id"])
+
+    rejected = await authed_client.post(f"/forms/submissions/{submission.id}/reject", json={})
+    assert rejected.status_code == 200, rejected.text
+
+    lead = db.get(IntakeLead, lead_id)
+    db.refresh(lead)
+    assert lead.status == "rejected"
+    promoted = await authed_client.post(f"/forms/intake-leads/{lead_id}/promote", json={})
+    assert promoted.status_code == 400, promoted.text
+    db.refresh(submission)
+    assert submission.donor_id is None
+    assert submission.status == "rejected"
+    assert db.query(Donor).filter(Donor.organization_id == test_org.id).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_rejected_donor_application_cannot_be_moved_to_intake(authed_client, db):
+    _, _, submission = await _manual_submission(authed_client, db, email="noreopen@example.com")
+    rejected = await authed_client.post(f"/forms/submissions/{submission.id}/reject", json={})
+    assert rejected.status_code == 200, rejected.text
+
+    resolved = await authed_client.post(
+        f"/forms/submissions/{submission.id}/match/resolve", json={"create_intake_lead": True}
+    )
+
+    assert resolved.status_code == 400, resolved.text
+    db.refresh(submission)
+    assert submission.intake_lead_id is None
+    assert db.query(IntakeLead).filter(IntakeLead.form_submission_id == submission.id).count() == 0
+
+
+@pytest.mark.asyncio
 async def test_bad_photo_donor_applicant_can_resubmit(authed_client, db):
     from app.services import form_submission_service
 

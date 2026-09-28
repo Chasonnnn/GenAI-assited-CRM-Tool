@@ -10,13 +10,14 @@ from typing import Any
 
 from fastapi import UploadFile
 from pydantic import EmailStr, TypeAdapter
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.enums import (
     AuditEventType,
     FormSubmissionStatus,
+    IntakeLeadStatus,
     JobStatus,
     JobType,
     SurrogateActivityType,
@@ -27,6 +28,7 @@ from app.db.models import (
     FormFieldMapping,
     FormSubmission,
     FormSubmissionFile,
+    IntakeLead,
     Job,
     Surrogate,
 )
@@ -942,6 +944,39 @@ def approve_submission(
     return submission
 
 
+def _close_rejected_submission_lead(db: Session, submission: FormSubmission) -> None:
+    """A rejected application closes its pending intake lead so it leaves promotion."""
+    if not submission.intake_lead_id:
+        return
+    lead = (
+        db.query(IntakeLead)
+        .filter(
+            IntakeLead.organization_id == submission.organization_id,
+            IntakeLead.id == submission.intake_lead_id,
+        )
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if lead is None or lead.status != IntakeLeadStatus.PENDING_REVIEW.value:
+        return
+    still_open = (
+        db.query(FormSubmission.id)
+        .filter(
+            FormSubmission.organization_id == submission.organization_id,
+            or_(
+                FormSubmission.intake_lead_id == lead.id,
+                FormSubmission.id == lead.form_submission_id,
+            ),
+            FormSubmission.id != submission.id,
+            FormSubmission.status != FormSubmissionStatus.REJECTED.value,
+        )
+        .first()
+    )
+    if still_open is None:
+        lead.status = IntakeLeadStatus.REJECTED.value
+
+
 def reject_submission(
     db: Session,
     submission: FormSubmission,
@@ -955,6 +990,7 @@ def reject_submission(
     submission.reviewed_at = datetime.now(UTC)
     submission.reviewed_by_user_id = reviewer_id
     submission.review_notes = review_notes
+    _close_rejected_submission_lead(db, submission)
 
     from app.services import audit_service
 
