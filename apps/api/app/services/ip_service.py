@@ -522,9 +522,11 @@ def create_intended_parent(
         user_id,
         entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
     )
-    default_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "new")
-    if not default_stage:
-        raise RuntimeError("Default intended parent stage 'new' not found")
+    default_stage = pipeline_service.get_stage_by_system_role(
+        db, pipeline.id, "intake_entry", INTENDED_PARENT_PIPELINE_ENTITY
+    )
+    if not default_stage or not default_stage.is_active:
+        raise RuntimeError("Intended parent pipeline entry stage is not configured")
 
     ip = IntendedParent(
         organization_id=org_id,

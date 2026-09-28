@@ -17,6 +17,7 @@ from app.core.deps import (
 from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.core.record_creation import require_record_creation
+from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.db.enums import AuditEventType, EntityType, Role
 from app.schemas.activity import EntityActivityRead, EntityActivityResponse
 from app.schemas.auth import UserSession
@@ -376,7 +377,9 @@ def update_status(
         )
 
     # Disallow setting Matched directly unless there is an accepted Match row
-    if pipeline_service.stage_matches_key(target_stage, "matched"):
+    if pipeline_service.stage_matches_system_role(
+        target_stage, "matched", INTENDED_PARENT_PIPELINE_ENTITY
+    ):
         from app.services import match_queries
 
         accepted = match_queries.get_accepted_match_for_intended_parent(
