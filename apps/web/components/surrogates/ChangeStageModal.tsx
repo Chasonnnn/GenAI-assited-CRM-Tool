@@ -38,7 +38,8 @@ import {
 import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/error-utils"
 import { toast } from "@/components/ui/toast"
-import type { PipelineStage } from "@/lib/api/pipelines"
+import { LoadErrorState } from "@/components/error-state"
+import type { PipelineEntityType, PipelineStage } from "@/lib/api/pipelines"
 import { StageOptionLabel, groupStageOptions } from "@/components/stage-select"
 import { pipelineStageOptions } from "@/lib/stage-options"
 
@@ -71,10 +72,21 @@ const FOLLOW_UP_OPTIONS: Array<{
     },
 ]
 
+/** Load state of the stage list; callers that always have their stages omit it. */
+export type StageOptionsState =
+    | { status: "ready" }
+    | { status: "loading" }
+    | { status: "error"; onRetry: () => void; isRetrying: boolean }
+
+const READY_STAGE_OPTIONS: StageOptionsState = { status: "ready" }
+
 interface ChangeStageModalProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     stages: PipelineStage[]
+    stageOptionsState?: StageOptionsState
+    /** Pipeline the stages belong to; stage semantics and stage-specific steps depend on it. */
+    entityType?: PipelineEntityType
     currentStageId: string
     comparisonStageId?: string
     currentStageLabel: string
@@ -103,18 +115,46 @@ interface ChangeStageModalProps {
 function StageSelectionList({
     label,
     stages,
+    state,
     currentStageId,
     selectedStageId,
     onStageSelect,
 }: {
     label: string
     stages: PipelineStage[]
+    state: StageOptionsState
     currentStageId: string
     selectedStageId: string | null
     onStageSelect: (stage: PipelineStage) => void
 }) {
     const stageById = new Map(stages.map((stage) => [stage.id, stage]))
     const stageGroups = groupStageOptions(pipelineStageOptions(stages))
+
+    if (state.status === "loading") {
+        return (
+            <div className="space-y-2">
+                <Label>New {label}</Label>
+                <div role="status" className="flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground">
+                    <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                    Loading stages
+                </div>
+            </div>
+        )
+    }
+
+    if (state.status === "error") {
+        return (
+            <div className="space-y-2">
+                <Label>New {label}</Label>
+                <LoadErrorState
+                    title="Couldn't load stages"
+                    onRetry={state.onRetry}
+                    isRetrying={state.isRetrying}
+                    className="min-h-0 py-6"
+                />
+            </div>
+        )
+    }
 
     return (
         <div className="space-y-2">
@@ -474,6 +514,8 @@ function ChangeStageModalContent({
     open,
     onOpenChange,
     stages,
+    stageOptionsState = READY_STAGE_OPTIONS,
+    entityType = "surrogate",
     currentStageId,
     comparisonStageId,
     currentStageLabel,
@@ -512,9 +554,12 @@ function ChangeStageModalContent({
         stages.find((stage) => stage.id === (comparisonStageId ?? currentStageId)) ?? currentStage
 
     const selectedStage = stages.find(s => s.id === selectedStageId)
-    const isDeliveredStage = stageHasCapability(selectedStage, "requires_delivery_details")
-    const isOnHoldStage = stageUsesPauseBehavior(selectedStage)
-    const isInterviewScheduledStage = stageMatchesKey(selectedStage, "interview_scheduled")
+    // Interview scheduling belongs to the surrogate pipeline; other pipelines may reuse the key.
+    const supportsInterviewStages = entityType === "surrogate"
+    const isDeliveredStage = stageHasCapability(selectedStage, "requires_delivery_details", entityType)
+    const isOnHoldStage = stageUsesPauseBehavior(selectedStage, entityType)
+    const isInterviewScheduledStage =
+        supportsInterviewStages && stageMatchesKey(selectedStage, "interview_scheduled")
     const showDeliveryFields = deliveryFieldsEnabled && isDeliveredStage
     const interviewSlots = useInterviewSlots(surrogateId ?? "", interviewDate, timezone, isInterviewScheduledStage && Boolean(surrogateId))
     const interviewDateTime = isInterviewScheduledStage
@@ -523,12 +568,12 @@ function ChangeStageModalContent({
 
     const isResumeSelection = (() => {
         if (!selectedStage || !currentStage || !comparisonStage) return false
-        return stageUsesPauseBehavior(currentStage) && selectedStage.id === comparisonStage.id
+        return stageUsesPauseBehavior(currentStage, entityType) && selectedStage.id === comparisonStage.id
     })()
 
     const isRegression = (() => {
         if (!selectedStage || !comparisonStage) return false
-        if (stageMatchesKey(currentStage, "reschedule_needed") && stageMatchesKey(selectedStage, "interview_scheduled")) return false
+        if (isInterviewScheduledStage && stageMatchesKey(currentStage, "reschedule_needed")) return false
         return !isResumeSelection && selectedStage.order < comparisonStage.order
     })()
     const requiresApproval = isRegression && !canSelfApproveRegression
@@ -554,7 +599,7 @@ function ChangeStageModalContent({
     })()
 
     const reasonRequired =
-        isRegression || isBackdated || stageRequiresReasonOnEnter(selectedStage)
+        isRegression || isBackdated || stageRequiresReasonOnEnter(selectedStage, entityType)
 
     const canSubmit =
         Boolean(selectedStageId) &&
@@ -628,7 +673,7 @@ function ChangeStageModalContent({
     const label = entityLabel ?? "Stage"
     const handleStageSelect = (stage: PipelineStage) => {
         setSelectedStageId(stage.id)
-        if (stageMatchesKey(stage, "interview_scheduled")) {
+        if (supportsInterviewStages && stageMatchesKey(stage, "interview_scheduled")) {
             setInterviewDate(schedulingDateKey(new Date(), timezone))
             setInterviewSelectedStart(null)
             setInterviewCustomTime("")
@@ -674,6 +719,7 @@ function ChangeStageModalContent({
                     <StageSelectionList
                         label={label}
                         stages={sortedStages}
+                        state={stageOptionsState}
                         currentStageId={currentStageId}
                         selectedStageId={selectedStageId}
                         onStageSelect={handleStageSelect}

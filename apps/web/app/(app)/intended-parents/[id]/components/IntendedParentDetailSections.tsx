@@ -72,6 +72,7 @@ export function IntendedParentHeader({
     statusLabel,
     statusStyle,
     isStatusPending,
+    canChangeStage,
     onProposeMatch,
     onChangeStage,
     onEdit,
@@ -83,6 +84,7 @@ export function IntendedParentHeader({
     statusLabel: string
     statusStyle: CSSProperties
     isStatusPending: boolean
+    canChangeStage: boolean
     onProposeMatch: () => void
     onChangeStage: () => void
     onEdit: () => void
@@ -120,14 +122,16 @@ export function IntendedParentHeader({
                         <HeartHandshakeIcon className="hidden size-4 sm:block" />
                         Propose Match
                     </Button>
-                    <Button
-                        variant="outline"
-                        className="px-2 sm:px-4"
-                        onClick={onChangeStage}
-                        disabled={isStatusPending || intendedParent.is_archived}
-                    >
-                        Change Stage
-                    </Button>
+                    {canChangeStage ? (
+                        <Button
+                            variant="outline"
+                            className="px-2 sm:px-4"
+                            onClick={onChangeStage}
+                            disabled={isStatusPending || intendedParent.is_archived}
+                        >
+                            Change Stage
+                        </Button>
+                    ) : null}
                     <Badge className="min-w-0 max-w-full" variant="outline" style={statusStyle}>
                         <span className="truncate">{statusLabel}</span>
                     </Badge>
