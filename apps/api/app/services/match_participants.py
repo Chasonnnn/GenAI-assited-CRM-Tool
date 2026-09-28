@@ -116,7 +116,13 @@ class SurrogateParty(Party):
         actor_user_id: UUID,
         now: datetime,
     ) -> list[Effect]:
-        """Return the surrogate to Ready to Match. The stage history credits the approver."""
+        """Return a surrogate who has not reached Delivered to Ready to Match.
+
+        A surrogate at Delivered, or at a later stage of the same type (a custom
+        postpartum stage), keeps her stage. Paused and terminal stages are not
+        journey stages and still return to Ready to Match. The stage history
+        credits the approver.
+        """
         from app.services import pipeline_service, surrogate_status_service
 
         surrogate = match_queries.get_surrogate_with_stage(
@@ -125,6 +131,15 @@ class SurrogateParty(Party):
         if not surrogate or not surrogate.stage:
             raise ValueError("Match participants not found")
         old_stage = surrogate.stage
+        delivered = pipeline_service.get_stage_by_system_role(
+            db, old_stage.pipeline_id, "delivered"
+        )
+        if (
+            delivered
+            and old_stage.stage_type == delivered.stage_type
+            and old_stage.order >= delivered.order
+        ):
+            return []
         ready = pipeline_service.get_stage_by_system_role(db, old_stage.pipeline_id, "handoff")
         if not ready:
             raise ValueError("Ready to match stage not found")

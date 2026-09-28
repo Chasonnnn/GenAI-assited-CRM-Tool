@@ -662,6 +662,55 @@ async def test_completed_match_accepts_postpartum_work(authed_client, db, test_a
     assert file.json()["id"] in {item["id"] for item in work["files"]}
 
 
+async def _approve_cancellation(authed_client, db, match_id: str) -> None:
+    request = (
+        db.query(StatusChangeRequest)
+        .filter_by(entity_id=uuid.UUID(match_id), status="pending")
+        .one()
+    )
+    response = await authed_client.post(f"/status-change-requests/{request.id}/approve")
+    assert response.status_code == 200, response.text
+    assert _match_row(db, match_id).status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_approved_cancellation_keeps_a_delivered_surrogate_at_delivered(
+    authed_client, db, test_auth
+):
+    delivered = _stage(db, test_auth.org.id, role="delivered")
+    match = await _create_accepted_match(authed_client)
+    requested = await authed_client.post(
+        f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+    )
+    assert requested.status_code == 200, requested.text
+    assert (await _move(authed_client, match["surrogate_id"], delivered)).status_code == 200
+
+    await _approve_cancellation(authed_client, db, match["id"])
+
+    assert db.get(Surrogate, uuid.UUID(match["surrogate_id"])).stage_id == delivered.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage_key", ["matched", "transfer_cycle", "anatomy_scanned", "on_hold"])
+async def test_approved_cancellation_before_delivery_returns_the_surrogate_to_ready_to_match(
+    authed_client, db, test_auth, stage_key
+):
+    journey = _stage(db, test_auth.org.id, key=stage_key)
+    ready = _stage(db, test_auth.org.id, role="handoff")
+    match = await _create_accepted_match(authed_client)
+    if stage_key != "matched":
+        moved = await _move(authed_client, match["surrogate_id"], journey, reason="Progress")
+        assert moved.status_code == 200, moved.text
+    requested = await authed_client.post(
+        f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
+    )
+    assert requested.status_code == 200, requested.text
+
+    await _approve_cancellation(authed_client, db, match["id"])
+
+    assert db.get(Surrogate, uuid.UUID(match["surrogate_id"])).stage_id == ready.id
+
+
 # =============================================================================
 # Concurrency with the match engine
 # =============================================================================
