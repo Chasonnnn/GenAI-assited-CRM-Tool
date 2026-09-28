@@ -684,6 +684,15 @@ describe("MetaFormMappingPage", () => {
         ))
     })
 
+    it("disables donor form lead types without edit_donors", async () => {
+        mockPermissions = ["manage_meta_leads"]
+        render(<MetaFormMappingPage />)
+
+        fireEvent.mouseDown(screen.getByRole("combobox", { name: /^lead type$/i }))
+        expect(await screen.findByRole("option", { name: "Sperm donor" })).toHaveAttribute("aria-disabled", "true")
+        expect(screen.getByRole("option", { name: "Surrogate" })).not.toHaveAttribute("aria-disabled", "true")
+    })
+
     it("disables donor lead types for reroute without edit_donors", async () => {
         mockPermissions = ["manage_meta_leads"]
         const baseline = mockUseMetaFormUnconvertedLeads()

@@ -155,6 +155,7 @@ function MetaMappingOutdatedAlert() {
 function MetaColumnMappingCard({
     aiMapPending,
     availableFields,
+    canEditDonors,
     columnLabels,
     data,
     mappings,
@@ -167,6 +168,7 @@ function MetaColumnMappingCard({
 }: {
     aiMapPending: boolean
     availableFields: string[]
+    canEditDonors: boolean
     columnLabels: ReadonlyMap<string, string>
     data: MetaFormMappingData
     mappings: ColumnMappingDraft[]
@@ -205,7 +207,11 @@ function MetaColumnMappingCard({
                                 </SelectTrigger>
                                 <SelectContent>
                                     {META_LEAD_KIND_OPTIONS.map((option) => (
-                                        <SelectItem key={option.value} value={option.value}>
+                                        <SelectItem
+                                            key={option.value}
+                                            value={option.value}
+                                            disabled={isDonorLeadKind(option.value) && !canEditDonors}
+                                        >
                                             {option.label}
                                         </SelectItem>
                                     ))}
@@ -1029,6 +1035,7 @@ function MetaFormMappingContent() {
                 <MetaColumnMappingCard
                     aiMapPending={aiMapMutation.isPending}
                     availableFields={availableFields}
+                    canEditDonors={canEditDonors}
                     columnLabels={columnLabels}
                     data={data}
                     mappings={mappings}
