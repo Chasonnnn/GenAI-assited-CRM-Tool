@@ -23,10 +23,10 @@ from app.db.models import (
     Surrogate,
 )
 from app.db.session import SessionLocal
-from app.schemas.donor import DonorCreate
 from app.schemas.surrogate import SurrogateCreate
 from app.services import (
     custom_field_service,
+    donor_input_normalization_service,
     donor_service,
     surrogate_input_normalization_service,
     surrogate_service,
@@ -48,9 +48,12 @@ def _safe_conversion_error(error: Exception) -> str:
     error_class = type(error).__name__
     if isinstance(error, IntegrityError):
         constraint_name = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
-        if isinstance(constraint_name, str) and constraint_name and all(
-            character.isalnum() or character in {"_", "-", "."}
-            for character in constraint_name
+        if (
+            isinstance(constraint_name, str)
+            and constraint_name
+            and all(
+                character.isalnum() or character in {"_", "-", "."} for character in constraint_name
+            )
         ):
             return f"{error_class} ({constraint_name[:100]})"
     if isinstance(error, ValidationError):
@@ -550,22 +553,34 @@ def convert_to_donor_with_mapping(
     meta_form_id = meta_lead.meta_form_id
 
     try:
+        donor_input = donor_input_normalization_service.build_donor_create_from_payload(
+            {
+                **row_data,
+                "full_name": full_name,
+                "email": email,
+                "source": SurrogateSource.META.value,
+            },
+            donor_type=donor_type,
+            fallback_source=SurrogateSource.META.value,
+            required_fields=frozenset(REQUIRED_CONVERSION_FIELDS),
+        )
         donor = donor_service.create_donor(
             db=db,
             org_id=meta_lead.organization_id,
             user_id=user_id or SYSTEM_USER_ID,
-            data=DonorCreate(
-                donor_type=donor_type,
-                full_name=full_name,
-                email=email,
-                phone=row_data.get("phone"),
-                state=row_data.get("state"),
-                education=row_data.get("education"),
-                source="Meta",
-            ),
+            data=donor_input.create,
             commit=False,
             emit_workflow_events=False,
         )
+        for field_name, value in donor_input.profile.items():
+            setattr(donor, field_name, value)
+        if donor_input.dropped_fields:
+            # Donors have no import_metadata; the lead keeps the names of dropped
+            # values for review, as surrogate import_metadata does.
+            unmapped_fields = {
+                **(unmapped_fields or {}),
+                "dropped_invalid_fields": donor_input.dropped_fields,
+            }
         meta_lead.is_converted = True
         meta_lead.converted_donor_id = donor.id
         meta_lead.converted_at = datetime.now(UTC)
@@ -684,9 +699,7 @@ def process_stored_meta_lead(
         )
         return meta_lead.status, None
 
-    configured_lead_kind = (
-        form.lead_kind if form.mapping_status != "unmapped" else None
-    )
+    configured_lead_kind = form.lead_kind if form.mapping_status != "unmapped" else None
     if meta_lead.lead_kind is None and configured_lead_kind:
         meta_lead.lead_kind = configured_lead_kind
         db.commit()
@@ -719,8 +732,7 @@ def process_stored_meta_lead(
     logger.info(
         "Meta lead %s converted to %s",
         meta_lead.meta_lead_id,
-        getattr(subject, "donor_number", None)
-        or getattr(subject, "surrogate_number", None),
+        getattr(subject, "donor_number", None) or getattr(subject, "surrogate_number", None),
     )
     return meta_lead.status, subject
 

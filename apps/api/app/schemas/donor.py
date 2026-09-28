@@ -6,10 +6,45 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.db.enums import SurrogateSource
 from app.schemas.donor_profile import DonorProfileUpdate
 from app.utils.normalization import normalize_phone, normalize_state
 
 DonorTypeValue = Literal["egg", "sperm"]
+
+# Donor source shares the surrogate source vocabulary. Hosted and embedded CRM
+# form intake historically wrote its routing path; every such donor is a website donor.
+DONOR_WEBSITE_SOURCE_ALIASES = frozenset(
+    {
+        "shared_intake",
+        "form_embed",
+        "website_intake",
+        "website_embed",
+        "manual_review_resolution",
+        "manual_retry_resolution",
+    }
+)
+DONOR_SOURCE_VALUES = frozenset(source.value for source in SurrogateSource)
+
+
+def normalize_donor_source(value: object) -> str | None:
+    """Return the canonical lowercase source value, or raise for an unknown source."""
+    if value is None:
+        return None
+    if isinstance(value, SurrogateSource):
+        return value.value
+    if not isinstance(value, str):
+        raise ValueError("Donor source must be text")
+    key = value.strip().lower()
+    if not key:
+        return None
+    if key in DONOR_SOURCE_VALUES:
+        return key
+    if key in DONOR_WEBSITE_SOURCE_ALIASES:
+        return SurrogateSource.WEBSITE.value
+    raise ValueError(
+        "Invalid donor source. Use one of: " + ", ".join(source.value for source in SurrogateSource)
+    )
 
 
 class DonorCreate(BaseModel):
@@ -21,7 +56,7 @@ class DonorCreate(BaseModel):
     phone: str | None = Field(None, max_length=50)
     state: str | None = Field(None, max_length=100)
     education: str | None = Field(None, max_length=255)
-    source: str | None = Field(None, max_length=100)
+    source: str = Field(SurrogateSource.MANUAL.value, max_length=100)
     owner_type: Literal["user", "queue"] | None = None
     owner_id: UUID | None = None
 
@@ -34,6 +69,11 @@ class DonorCreate(BaseModel):
     @classmethod
     def normalize_state_field(cls, value: str | None) -> str | None:
         return normalize_state(value)
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_source_field(cls, value: object) -> str:
+        return normalize_donor_source(value) or SurrogateSource.MANUAL.value
 
 
 class DonorUpdate(DonorProfileUpdate):
@@ -57,6 +97,11 @@ class DonorUpdate(DonorProfileUpdate):
     @classmethod
     def normalize_state_field(cls, value: str | None) -> str | None:
         return normalize_state(value)
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def normalize_source_field(cls, value: object) -> str | None:
+        return normalize_donor_source(value)
 
 
 class DonorStatusUpdate(BaseModel):

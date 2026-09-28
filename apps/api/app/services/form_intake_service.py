@@ -30,6 +30,7 @@ from app.db.enums import (
     IntakeLeadStatus,
     JobStatus,
     JobType,
+    SurrogateSource,
     TrackingMode,
     WorkflowExecutionStatus,
 )
@@ -54,7 +55,6 @@ from app.db.models import (
     TrackingEventLog,
     WorkflowExecution,
 )
-from app.schemas.donor import DonorCreate
 from app.schemas.forms import FormSchema, MessagingConsentOptionRead, MessagingConsentOptionsRead
 from app.services import (
     embed_policy_service,
@@ -3529,15 +3529,25 @@ def _promote_donor_intake_lead(
         }
     )
 
-    from app.services import donor_service
+    from app.services import donor_input_normalization_service, donor_service
 
-    donor_data = DonorCreate.model_validate(mapped_payload)
+    donor_input = donor_input_normalization_service.build_donor_create_from_payload(
+        mapped_payload,
+        donor_type=mapped_payload["donor_type"],
+        fallback_source=SurrogateSource.WEBSITE.value,
+    )
+    donor_data = donor_input.create
     if donor_service.get_active_donor_by_email(
         db,
         lead.organization_id,
         str(donor_data.email),
     ):
         raise donor_service.DonorConflictError("An active donor with this email already exists")
+    if donor_input.dropped_fields:
+        lead.source_metadata = {
+            **(lead.source_metadata or {}),
+            "dropped_invalid_submission_fields": donor_input.dropped_fields,
+        }
 
     try:
         donor = donor_service.create_donor(

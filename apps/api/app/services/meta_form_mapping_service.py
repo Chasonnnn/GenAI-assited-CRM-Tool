@@ -37,7 +37,7 @@ META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
 ]
 AUTO_SAFE_SCHEMA_KEYS = {"lead_id"}
 TEST_LEAD_PATTERN = re.compile(r"test lead:|dummy data", re.IGNORECASE)
-# Donor conversions always set source to the canonical "Meta"
+# Donor conversions always set source to the canonical "meta"
 # (meta_lead_service). "source" is intentionally not mappable for donor
 # forms: a stored mapping would never be applied and only mislead admins.
 DONOR_META_MAPPING_FIELDS = ["full_name", "email", "phone", "state", "education"]
@@ -350,9 +350,7 @@ def get_reprocess_eligibility_for_leads(
     for lead in leads:
         effective_lead_kind = getattr(lead, "lead_kind", None) or lead_kind
         subject_group = (
-            "donor"
-            if effective_lead_kind in {"egg_donor", "sperm_donor"}
-            else "surrogate"
+            "donor" if effective_lead_kind in {"egg_donor", "sperm_donor"} else "surrogate"
         )
         subject_group_by_lead[lead.id] = subject_group
         email = _extract_lead_email(lead)
@@ -791,9 +789,7 @@ def _validate_mapping_targets(column_mappings: list[dict], lead_kind: str) -> No
         }
     )
     if unsupported_fields:
-        raise ValueError(
-            "Unsupported donor mapping field(s): " + ", ".join(unsupported_fields)
-        )
+        raise ValueError("Unsupported donor mapping field(s): " + ", ".join(unsupported_fields))
 
 
 def _format_sample_value(value: object) -> str:
