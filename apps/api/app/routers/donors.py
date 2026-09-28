@@ -22,6 +22,7 @@ from app.schemas.auth import UserSession
 from app.schemas.donor import (
     DonorCreate,
     DonorListResponse,
+    DonorMetaLeadRead,
     DonorRead,
     DonorStatusChangeResponse,
     DonorStatusHistoryRead,
@@ -37,6 +38,7 @@ from app.services import (
     donor_profile_service,
     donor_service,
     entity_activity_service,
+    meta_lead_service,
     note_service,
     permission_policy_service,
     permission_service,
@@ -237,6 +239,29 @@ def get_donor(
             "can_claim": approval_handoff_service.can_claim_donor(db, session, donor),
         }
     )
+
+
+@router.get("/{donor_id}/meta-lead", response_model=DonorMetaLeadRead | None)
+def get_donor_meta_lead(
+    donor_id: UUID,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> DonorMetaLeadRead | None:
+    donor = _get_or_404(db, session, donor_id, allow_archived=True)
+    summary = meta_lead_service.get_donor_meta_lead_summary(db, session.org_id, donor.id)
+    if summary is None:
+        return None
+    phi_access_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="donor",
+        target_id=donor.id,
+        request=request,
+        details={"view": "donor_meta_lead"},
+    )
+    return DonorMetaLeadRead.model_validate(summary)
 
 
 @router.get("/{donor_id}/profile", response_model=DonorProfileRead)

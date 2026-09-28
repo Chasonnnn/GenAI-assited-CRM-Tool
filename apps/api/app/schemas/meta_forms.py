@@ -49,6 +49,7 @@ class MetaFormMappingPreviewResponse(BaseModel):
     sample_rows: list[dict]
     has_live_leads: bool
     available_fields: list[str]
+    available_fields_by_lead_kind: dict[MetaLeadKind, list[str]] = Field(default_factory=dict)
     ai_available: bool
     unsupported_mapped_fields: list[str] = Field(default_factory=list)
     mapping_rules: list[ColumnMappingItem] | None

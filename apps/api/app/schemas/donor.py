@@ -178,3 +178,20 @@ class DonorStatusChangeResponse(BaseModel):
     history: DonorStatusHistoryRead | None = None
     request_id: UUID | None = None
     message: str | None = None
+
+
+class DonorMetaLeadAnswer(BaseModel):
+    key: str
+    label: str | None = None
+    value: str
+
+
+class DonorMetaLeadRead(BaseModel):
+    """Read-only answers of the Meta lead a donor was converted from."""
+
+    id: UUID
+    form_name: str | None
+    meta_created_time: datetime | None
+    received_at: datetime
+    answers: list[DonorMetaLeadAnswer]
+    dropped_fields: list[str] = Field(default_factory=list)

@@ -50,11 +50,7 @@ def _can_access_donor_forms(
     *,
     require_write: bool,
 ) -> bool:
-    permission = (
-        POLICIES["donors"].actions["edit"]
-        if require_write
-        else POLICIES["donors"].default
-    )
+    permission = POLICIES["donors"].actions["edit"] if require_write else POLICIES["donors"].default
     role = getattr(session.role, "value", session.role)
     return permission_service.check_permission(
         db,
@@ -85,11 +81,7 @@ def _require_donor_form_access(
         return
     if _can_access_donor_forms(db, session, require_write=require_write):
         return
-    permission = (
-        POLICIES["donors"].actions["edit"]
-        if require_write
-        else POLICIES["donors"].default
-    )
+    permission = POLICIES["donors"].actions["edit"] if require_write else POLICIES["donors"].default
     raise HTTPException(status_code=403, detail=f"Missing permission: {permission.value}")
 
 
@@ -100,8 +92,8 @@ def list_meta_forms(
 ):
     forms = meta_form_mapping_service.list_forms(db, session.org_id)
     if not _can_access_donor_forms(db, session, require_write=False):
-        donor_form_external_ids = (
-            meta_form_mapping_service.get_donor_lead_form_external_ids(db, session.org_id)
+        donor_form_external_ids = meta_form_mapping_service.get_donor_lead_form_external_ids(
+            db, session.org_id
         )
         forms = [
             form
@@ -253,6 +245,7 @@ def preview_meta_form_mapping(
         sample_rows=preview["sample_rows"],
         has_live_leads=preview["has_live_leads"],
         available_fields=preview["available_fields"],
+        available_fields_by_lead_kind=preview["available_fields_by_lead_kind"],
         ai_available=preview["ai_available"],
         unsupported_mapped_fields=preview["unsupported_mapped_fields"],
         mapping_rules=[ColumnMappingItem(**m) for m in (form.mapping_rules or [])]
