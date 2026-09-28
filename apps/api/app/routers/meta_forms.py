@@ -22,6 +22,8 @@ from app.schemas.meta_forms import (
     MetaFormSyncRequest,
     MetaFormUnconvertedLeadItem,
     MetaFormUnconvertedLeadListResponse,
+    MetaLeadRerouteRequest,
+    MetaLeadRerouteResponse,
 )
 from app.services import (
     job_service,
@@ -446,6 +448,47 @@ def reconvert_meta_form_leads(
     )
 
 
+@router.post(
+    "/{form_id}/leads/{lead_id}/reroute",
+    response_model=MetaLeadRerouteResponse,
+)
+def reroute_meta_form_lead(
+    form_id: UUID,
+    lead_id: UUID,
+    data: MetaLeadRerouteRequest,
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+):
+    form = meta_form_mapping_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    lead = meta_form_mapping_service.get_form_lead(db, form, lead_id)
+    if not lead:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
+    for lead_kind in (lead.lead_kind, data.lead_kind):
+        _require_donor_form_access(db, session, lead_kind, require_write=True)
+
+    try:
+        queued, block_reason = meta_form_mapping_service.reroute_unconverted_lead(
+            db, form, lead, lead_kind=data.lead_kind
+        )
+    except meta_form_mapping_service.MetaLeadRerouteError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    return MetaLeadRerouteResponse(
+        success=True,
+        lead_kind=data.lead_kind,
+        queued=queued,
+        reprocess_block_reason=block_reason,
+        message=(
+            "Lead type updated and the lead is queued for conversion."
+            if queued
+            else "Lead type updated. The lead was not queued for conversion."
+        ),
+    )
+
+
 @router.delete("/{form_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_meta_form(
     form_id: UUID,
@@ -485,6 +528,7 @@ def _serialize_unconverted_lead(
         fetch_error=lead.fetch_error,
         reprocess_eligible=reprocess_eligible,
         reprocess_block_reason=reprocess_block_reason,
+        lead_kind=lead.lead_kind,
         received_at=lead.received_at,
         meta_created_time=lead.meta_created_time,
     )

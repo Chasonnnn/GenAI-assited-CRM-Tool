@@ -455,6 +455,61 @@ def get_reprocess_plan_for_form(
     return leads, eligible_ids, reasons_by_lead, reason_counts
 
 
+class MetaLeadRerouteError(ValueError):
+    """The lead cannot be rerouted."""
+
+
+def get_form_lead(db: Session, form: MetaForm, lead_id: UUID) -> MetaLead | None:
+    return db.scalar(
+        select(MetaLead).where(
+            MetaLead.organization_id == form.organization_id,
+            MetaLead.meta_form_id == form.form_external_id,
+            MetaLead.id == lead_id,
+        )
+    )
+
+
+def reroute_unconverted_lead(
+    db: Session,
+    form: MetaForm,
+    lead: MetaLead,
+    *,
+    lead_kind: str,
+) -> tuple[bool, str | None]:
+    """Set one unconverted lead's kind and queue it for conversion when it is eligible.
+
+    Returns (queued, block_reason). A lead keeps its kind across form reclassification;
+    this explicit per-lead choice is the way to move it.
+    """
+    from app.db.enums import JobType
+    from app.services import job_service
+
+    if lead_kind not in {"surrogate", *DONOR_LEAD_KINDS}:
+        raise MetaLeadRerouteError("Unsupported Meta lead kind")
+    if lead.organization_id != form.organization_id or lead.meta_form_id != form.form_external_id:
+        raise MetaLeadRerouteError("Lead does not belong to this form")
+    if lead.is_converted:
+        raise MetaLeadRerouteError("Converted leads cannot be rerouted")
+
+    lead.lead_kind = lead_kind
+    reasons, _ = get_reprocess_eligibility_for_leads(
+        db, form.organization_id, [lead], lead_kind=lead_kind
+    )
+    block_reason = reasons.get(lead.id)
+    if form.mapping_status != "mapped" or form.mapping_version_id != form.current_version_id:
+        block_reason = block_reason or "mapping_not_ready"
+    if block_reason is None:
+        job_service.enqueue_job(
+            db=db,
+            org_id=form.organization_id,
+            job_type=JobType.META_LEAD_REPROCESS_FORM,
+            payload={"form_id": str(form.id), "lead_ids": [str(lead.id)]},
+            commit=False,
+        )
+    db.commit()
+    return block_reason is None, block_reason
+
+
 def build_mapping_preview(
     db: Session,
     form: MetaForm,
