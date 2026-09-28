@@ -52,7 +52,7 @@ def _email_jobs(db, org_id) -> list[Job]:
     )
 
 
-def test_unowned_donor_assign_then_email_runs_without_approval(
+def test_queue_owned_donor_assign_then_email_runs_without_approval(
     db, test_org, test_user, monkeypatch
 ):
     donor = donor_service.create_donor(
@@ -61,12 +61,12 @@ def test_unowned_donor_assign_then_email_runs_without_approval(
         test_user.id,
         DonorCreate(
             donor_type="egg",
-            full_name="Unowned Website Donor",
-            email=f"unowned-{uuid.uuid4().hex[:8]}@example.com",
+            full_name="Queue Owned Website Donor",
+            email=f"queue-owned-{uuid.uuid4().hex[:8]}@example.com",
         ),
         emit_workflow_events=False,
     )
-    assert donor.owner_id is None
+    assert donor.owner_type == "queue"
     template = _template(db, test_org.id, test_user.id)
     _mock_email_provider(monkeypatch)
 

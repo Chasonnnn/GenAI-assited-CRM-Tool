@@ -242,7 +242,7 @@ async def test_builder_payload_workflow_runs_on_real_form_submission(authed_clie
         db.query(IntakeLead)
         .filter(
             IntakeLead.organization_id == test_org.id,
-            IntakeLead.id == uuid.UUID(body["intake_lead_id"]),
+            IntakeLead.form_submission_id == submission.id,
         )
         .count()
         == 1
