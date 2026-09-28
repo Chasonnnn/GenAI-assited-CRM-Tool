@@ -87,6 +87,8 @@ import { getTasks, type TaskListParams } from "@/lib/api/tasks"
 import { getSurrogates, type SurrogateListParams } from "@/lib/api/surrogates"
 import { listDonors } from "@/lib/api/donors"
 import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
+import { DONOR_SOURCE_LABELS } from "@/lib/donor-source-labels"
+import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
 import { getWorkflowExecutionStatusLabel } from "@/lib/constants/workflow-execution-status"
 import { US_STATES } from "@/lib/constants/us-states"
 import { parseDateInput } from "@/lib/utils/date"
@@ -211,6 +213,13 @@ const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubjectType>> 
     appointment_scheduled: "appointment",
     appointment_completed: "appointment",
 }
+
+// Update Field writes only canonical donor sources; the backend rejects anything else.
+const UPDATE_SOURCE_OPTIONS = toSelectOptions(DONOR_SOURCE_LABELS)
+const getUpdateSourceLabel = createSelectLabelGetter(DONOR_SOURCE_LABELS, {
+    emptyLabel: "Select source",
+    unknownLabel: "Unknown source",
+})
 
 const DONOR_TYPE_OPTIONS: SelectOption[] = [
     { value: "egg", label: "Egg Donor" },
@@ -2573,10 +2582,11 @@ function useAutomationPageView({
                                                 {action.action_type === "update_field" && (
                                                     <div className="space-y-3">
                                                         <Select
+                                                            aria-label={`Field to update ${index + 1}`}
                                                             value={typeof action.field === "string" ? action.field : ""}
                                                             onValueChange={(value) => value && updateAction(index, { field: value, value: "" })}
                                                         >
-                                                            <SelectTrigger>
+                                                            <SelectTrigger aria-label={`Field to update ${index + 1}`}>
                                                                 <SelectValue placeholder="Select field" />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -2614,6 +2624,25 @@ function useAutomationPageView({
                                                                 <SelectContent>
                                                                     <SelectItem value="true">Priority</SelectItem>
                                                                     <SelectItem value="false">Normal</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        ) : action.field === "source" ? (
+                                                            <Select
+                                                                aria-label={`Source value ${index + 1}`}
+                                                                value={typeof action.value === "string" ? action.value : ""}
+                                                                onValueChange={(value) => value && updateAction(index, { value })}
+                                                            >
+                                                                <SelectTrigger aria-label={`Source value ${index + 1}`}>
+                                                                    <SelectValue placeholder="Select source">
+                                                                        {getUpdateSourceLabel}
+                                                                    </SelectValue>
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {UPDATE_SOURCE_OPTIONS.map((source) => (
+                                                                        <SelectItem key={source.value} value={source.value}>
+                                                                            {source.label}
+                                                                        </SelectItem>
+                                                                    ))}
                                                                 </SelectContent>
                                                             </Select>
                                                         ) : action.field === "owner_type" ? (

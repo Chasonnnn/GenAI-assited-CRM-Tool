@@ -833,6 +833,96 @@ describe('AutomationPage', () => {
         )
     })
 
+    it('offers only canonical donor sources for an Update Field source action', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['view_donors', 'edit_donors'] },
+        })
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                trigger_types: [
+                    { value: 'donor_created', label: 'Donor Created', description: '' },
+                ],
+                action_types: [
+                    { value: 'update_field', label: 'Update Field', description: '' },
+                ],
+                action_types_by_trigger: { donor_created: ['update_field'] },
+                trigger_entity_types: { donor_created: 'egg_donor' },
+                condition_fields: [],
+                condition_operators: [],
+                update_fields: ['source', 'education'],
+                email_variables: [],
+                email_templates: [],
+                users: [],
+                queues: [],
+                statuses: [],
+            },
+            isLoading: false,
+        })
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByRole('combobox', { name: 'Record type' }), {
+            target: { value: 'egg_donor' },
+        })
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Egg Donors'), {
+            target: { value: 'Set donor source' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'donor_created' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'update_field' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Field to update 1' }), {
+            target: { value: 'source' },
+        })
+
+        expect(screen.queryByPlaceholderText('Value')).not.toBeInTheDocument()
+        const sourceSelect = screen.getByRole('combobox', { name: 'Source value 1' })
+        const sourceOptions = Array.from(sourceSelect.querySelectorAll('option'))
+            .filter((option) => option.value)
+            .map((option) => [option.value, option.textContent])
+        expect(sourceOptions).toEqual([
+            ['manual', 'Manual'],
+            ['meta', 'Meta'],
+            ['tiktok', 'TikTok'],
+            ['google', 'Google'],
+            ['website', 'Website'],
+            ['referral', 'Referral'],
+            ['agency', 'Agency'],
+            ['import', 'Import'],
+            ['other', 'Other'],
+        ])
+        fireEvent.change(sourceSelect, { target: { value: 'tiktok' } })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'egg_donor',
+                actions: [expect.objectContaining({
+                    action_type: 'update_field',
+                    field: 'source',
+                    value: 'tiktok',
+                })],
+            }),
+            expect.any(Object),
+        )
+    })
+
     it('keeps an existing donor workflow subject visible and immutable', () => {
         mockUseWorkflows.mockReturnValue({
             data: [{
