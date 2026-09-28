@@ -24,9 +24,8 @@ import {
     CalendarPlusIcon,
     CircleXIcon,
 } from "lucide-react"
-import { useMatch, matchKeys, useAcceptMatch, useDeclineMatch, useCancelMatch, useMatchWork, useCreateMatchNote, useUploadMatchFile, matchWorkKeys, useCompleteMatch, useWithdrawMatchCancellation } from "@/lib/hooks/use-matches"
+import { useMatch, matchKeys, useAcceptMatch, useDeclineMatch, useCancelMatch, useMatchWork, useCreateMatchNote, useUploadMatchFile, matchWorkKeys, useWithdrawMatchCancellation } from "@/lib/hooks/use-matches"
 import type { MatchRead, MatchWorkSource } from "@/lib/api/matches"
-import { CompleteMatchDialog } from "@/components/matches/CompleteMatchDialog"
 import { MatchAcceptWarnings, MatchActionControls, MatchConflictBadge, type MatchAction } from "@/components/matches/MatchActionControls"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
 import { DeclineMatchDialog } from "@/components/matches/DeclineMatchDialog"
@@ -564,8 +563,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
     const [acceptDialogOpen, setAcceptDialogOpen] = useState(false)
     const [actionError, setActionError] = useState<string | null>(null)
     const [workPage, setWorkPage] = useState(1)
-    const [completeDialogOpen, setCompleteDialogOpen] = useState(false)
-    const completeMutation = useCompleteMatch()
     const [declineDialogOpen, setDeclineDialogOpen] = useState(false)
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
     const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false)
@@ -687,7 +684,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         if (action === "accept") setAcceptDialogOpen(true)
         else if (action === "decline") setDeclineDialogOpen(true)
         else if (action === "request_cancel") setCancelDialogOpen(true)
-        else if (action === "complete") setCompleteDialogOpen(true)
         else void handleWithdrawCancellation()
     }
 
@@ -750,7 +746,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                         accept: acceptMatchMutation.isPending,
                         decline: declineMatchMutation.isPending,
                         request_cancel: cancelMatchMutation.isPending,
-                        complete: completeMutation.isPending,
                         withdraw_cancel: withdrawCancellationMutation.isPending,
                     }}
                     onAction={handleMatchAction}
@@ -838,7 +833,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                     onConfirm={handleAcceptMatch}
                 />
             ) : null}
-            {completeDialogOpen && <CompleteMatchDialog onClose={() => setCompleteDialogOpen(false)} isPending={completeMutation.isPending} onComplete={async (data) => { const result = await completeMutation.mutateAsync({ matchId, data }); invalidateMatchSourceQueries(result) }} />}
             <MatchDetailDialogs
                 declineDialogOpen={declineDialogOpen}
                 cancelDialogOpen={cancelDialogOpen}

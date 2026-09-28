@@ -47,7 +47,6 @@ POLICIES: dict[str, ResourcePolicy] = {
             "accept": P.MATCHES_DECIDE,
             "decline": P.MATCHES_DECIDE,
             "request_cancel": P.MATCHES_CLOSE,
-            "complete": P.MATCHES_CLOSE,
             "withdraw_cancel": P.MATCHES_CLOSE,
         },
     ),

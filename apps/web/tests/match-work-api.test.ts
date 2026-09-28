@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { getMatchWork, listMatches, uploadMatchFile, createMatchNote, completeMatch } from "@/lib/api/matches"
+import { getMatchWork, listMatches, uploadMatchFile, createMatchNote } from "@/lib/api/matches"
 import api from "@/lib/api"
 import { getTasks } from "@/lib/api/tasks"
 import { getAppointments } from "@/lib/api/appointments"
@@ -35,9 +35,5 @@ describe("match API context", () => {
         await uploadMatchFile("match2", file, "donor")
         expect(api.upload).toHaveBeenCalledWith("/matches/match2/attachments?source=donor", expect.any(FormData))
         expect(vi.mocked(api.upload).mock.calls[0]?.[1].get("file")).toBe(file)
-    })
-    it("uses the exact lifecycle target for completion", async () => {
-        await completeMatch("match2", { outcome: "Completed" })
-        expect(api.put).toHaveBeenCalledWith("/matches/match2/complete", { outcome: "Completed" })
     })
 })

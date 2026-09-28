@@ -326,7 +326,6 @@ MATCH_STATUS_FLOW = [
     MatchStatus.DECLINED.value,
     MatchStatus.CANCELLATION_PENDING.value,
     MatchStatus.CANCELLED.value,
-    MatchStatus.COMPLETED.value,
 ]
 MATCH_ACCEPTABLE_SURROGATE_STAGES = {"ready_to_match"}
 
@@ -1128,14 +1127,6 @@ def create_matches(
         fallback=proposer,
     )
     targets = _build_match_targets(count, mode=mode)
-    if not match_lifecycle.expansion_enabled():
-        # complete() is fenced behind MATCH_CASE_EXPANSION_ENABLED; seed accepted instead.
-        skipped = targets.count(MatchStatus.COMPLETED.value)
-        targets = [
-            MatchStatus.ACCEPTED.value if t == MatchStatus.COMPLETED.value else t for t in targets
-        ]
-        if skipped:
-            print(f"  - match expansion disabled: seeding {skipped} completed matches as accepted")
     used_pairs: set[tuple[UUID, UUID]] = set()
     used_accepted_surrogates: set[UUID] = set()
     created_matches: list[Match] = []
@@ -1288,15 +1279,6 @@ def create_matches(
                         actor_user_id=decider.id,
                         request=request,
                         before_commit=resolve,
-                        dispatch_effects=False,
-                    )
-                if target_status == MatchStatus.COMPLETED.value:
-                    match = match_lifecycle.transition(
-                        db,
-                        match,
-                        "complete",
-                        actor_user_id=decider.id,
-                        outcome="Seed completed match",
                         dispatch_effects=False,
                     )
                 if target_status in {

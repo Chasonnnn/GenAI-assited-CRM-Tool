@@ -31,7 +31,7 @@ export interface MatchRead {
     closure_reason?: string | null
     outcome?: string | null
     intended_parent_id: string
-    allowed_actions: Array<'accept' | 'decline' | 'request_cancel' | 'withdraw_cancel' | 'complete'>
+    allowed_actions: Array<'accept' | 'decline' | 'request_cancel' | 'withdraw_cancel'>
     blocked_reasons: Record<string, string>
     pending_cancellation_request_id: string | null
     accept_eligibility_warnings: string[]
@@ -328,9 +328,4 @@ export async function uploadMatchFile(matchId: string, file: File, source: Match
     const body = new FormData()
     body.append('file', file)
     return api.upload<MatchWorkFile>(`/matches/${matchId}/attachments?${params}`, body)
-}
-
-export interface MatchCompleteRequest { outcome: string; reason?: string }
-export function completeMatch(matchId: string, data: MatchCompleteRequest): Promise<MatchRead> {
-    return api.put<MatchRead>(`/matches/${matchId}/complete`, data)
 }

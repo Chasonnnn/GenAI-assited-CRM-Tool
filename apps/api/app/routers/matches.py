@@ -19,7 +19,6 @@ from app.schemas.auth import UserSession
 from app.schemas.matches import (
     MatchAcceptRequest,
     MatchCancelRequest,
-    MatchCompleteRequest,
     MatchCreate,
     MatchDeclineRequest,
     MatchEventCreate,
@@ -374,15 +373,3 @@ def delete_match_event(
     Requires: Case Manager+ role
     """
     match_event_service.delete_event(db, session, match_id, event_id)
-
-
-@router.put(
-    "/{match_id}/complete", response_model=MatchRead, dependencies=[Depends(require_csrf_header)]
-)
-def complete_match(
-    match_id: UUID,
-    data: MatchCompleteRequest,
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
-) -> MatchRead:
-    return _transition(db, session, match_id, "complete", outcome=data.outcome, reason=data.reason)

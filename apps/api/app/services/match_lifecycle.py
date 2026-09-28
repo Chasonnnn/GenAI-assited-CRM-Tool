@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.enums import AuditEventType, MatchStatus, SurrogateActivityType
-from app.db.models import Match, MatchAttempt, StatusChangeRequest
+from app.db.models import Match, StatusChangeRequest
 from app.services import match_effects, match_participants, match_queries
 
 UNDER_REVIEW = MatchStatus.UNDER_REVIEW.value
@@ -83,13 +83,6 @@ TRANSITIONS: dict[str, Transition] = {
             "Only accepted matches can be cancelled",
             "match_cancel_requested",
         ),
-        Transition(
-            "complete",
-            (ACCEPTED,),
-            COMPLETED,
-            "Only accepted matches can be completed",
-            "match_completed",
-        ),
         # Approvals queue (ADR 0004): the approvals service checks
         # approve_status_change_requests and owns the request record.
         Transition(
@@ -130,7 +123,7 @@ def require_expansion() -> None:
     """Fence new match data until all application readers support it.
 
     Gated while disabled: donor proposals, repeat surrogate/IP proposals, donor
-    accept, complete, and donor links on appointments.
+    accept, and donor links on appointments.
     Surrogate propose, accept, decline, cancellation requests and their
     resolution, match notes, files and tasks, match links on appointments,
     and reads stay open.
@@ -424,7 +417,6 @@ class _Context:
     request: StatusChangeRequest | None
     reason: str | None
     notes: str | None
-    outcome: str | None
 
 
 def transition(
@@ -437,7 +429,6 @@ def transition(
     request: StatusChangeRequest | None = None,
     reason: str | None = None,
     notes: str | None = None,
-    outcome: str | None = None,
     before_commit: Callable[[], None] | None = None,
     dispatch_effects: bool = True,
 ) -> Match:
@@ -458,8 +449,6 @@ def transition(
         # it during a stage move instead can deadlock on a shared participant.
         if permission_policy_service.is_enabled(db, match.organization_id):
             permission_policy_service.lock_configuration(db, match.organization_id)
-    if action == "complete":
-        require_expansion()
     locked, _ = _lock(db, match, with_competitors=action == "accept" and bool(match.surrogate_id))
     if action == "accept" and locked.donor_id:
         require_expansion()
@@ -474,7 +463,6 @@ def transition(
         request=request,
         reason=reason,
         notes=notes,
-        outcome=outcome,
     )
     if action == "request_cancel" and locked.status == CANCELLATION_PENDING:
         raise TransitionError("A pending cancellation request already exists for this match", 409)
@@ -535,18 +523,6 @@ def check_action(db: Session, match: Match, action: str, *, actor_user_id: UUID)
         if warnings:
             raise TransitionError("; ".join(warnings))
         match_participants.check_accept_stage_changes(db, match, actor_user_id)
-    elif action == "complete":
-        require_expansion()
-        if (
-            db.query(MatchAttempt.id)
-            .filter(
-                MatchAttempt.organization_id == match.organization_id,
-                MatchAttempt.match_id == match.id,
-                MatchAttempt.status.in_(("planned", "in_progress")),
-            )
-            .first()
-        ):
-            raise TransitionError("Finish or cancel open attempts before completing the match")
     elif action == "request_cancel":
         if (
             db.query(StatusChangeRequest.id)
@@ -652,22 +628,6 @@ def _request_cancel(ctx: _Context) -> list:
     return match_effects.cancel_request_pending_notification(db, match, request, ctx.actor_user_id)
 
 
-def _complete(ctx: _Context) -> list:
-    db, match = ctx.db, ctx.match
-    outcome = ctx.outcome or ""
-    if not outcome.strip():
-        raise TransitionError("Completion outcome is required")
-    check_action(db, match, "complete", actor_user_id=ctx.actor_user_id)
-    match.status = COMPLETED
-    match.closed_at = ctx.now
-    match.closed_by_user_id = ctx.actor_user_id
-    match.closure_reason = ctx.reason.strip() if ctx.reason else None
-    match.outcome = outcome.strip()
-    match.updated_at = ctx.now
-    write_case_change(db, match, ctx.actor_user_id, "match_completed")
-    return []
-
-
 def _approve_cancel(ctx: _Context) -> list:
     from app.services import match_attempts
 
@@ -713,7 +673,6 @@ _APPLY: dict[str, Callable[[_Context], list]] = {
     "accept": _accept,
     "decline": _decline,
     "request_cancel": _request_cancel,
-    "complete": _complete,
     "approve_cancel": _approve_cancel,
     "reject_cancel": _restore_accepted,
     "withdraw_cancel": _restore_accepted,

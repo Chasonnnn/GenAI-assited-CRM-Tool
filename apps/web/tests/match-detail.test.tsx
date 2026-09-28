@@ -64,7 +64,6 @@ vi.mock('@tanstack/react-query', async () => {
 })
 
 // Mock match hooks
-const mockCompleteMatchMutateAsync = vi.fn()
 const mockUseMatchWork = vi.fn()
 const mockUseDonor = vi.fn()
 const mockCreateMatchNote = vi.fn()
@@ -79,7 +78,6 @@ const mockUseWithdrawMatchCancellation = vi.fn()
 vi.mock('@/lib/hooks/use-matches', () => ({
     useMatch: (id: string) => mockUseMatch(id),
     useMatchWork: (id: string, page?: number) => mockUseMatchWork(id, page),
-    useCompleteMatch: () => ({ mutateAsync: mockCompleteMatchMutateAsync, isPending: false }),
     useCreateMatchNote: () => ({ mutateAsync: mockCreateMatchNote, isPending: false }),
     useUploadMatchFile: () => ({ mutateAsync: mockUploadMatchFile, isPending: false }),
     matchWorkKeys: { all: (id: string) => ['matches', 'detail', id, 'work'] },
@@ -438,14 +436,12 @@ describe('MatchDetailPage', () => {
         expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
     })
 
-    it('records completion outcome through the existing match action area', async () => {
-        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted', allowed_actions: ['complete', 'request_cancel'] }, isLoading: false })
-        mockCompleteMatchMutateAsync.mockResolvedValue({ ...mockMatch, status: 'completed' })
+    it('offers no manual completion on an accepted match', () => {
+        mockUseMatch.mockReturnValue({ data: { ...mockMatch, status: 'accepted', allowed_actions: ['request_cancel'], blocked_reasons: { complete: 'New match features are temporarily unavailable' } }, isLoading: false })
         render(<MatchDetailPage />)
-        fireEvent.click(screen.getByRole('button', { name: 'Complete Match' }))
-        fireEvent.change(screen.getByLabelText('Outcome'), { target: { value: 'Relationship completed' } })
-        fireEvent.click(screen.getAllByRole('button', { name: 'Complete Match' }).at(-1)!)
-        await waitFor(() => expect(mockCompleteMatchMutateAsync).toHaveBeenCalledWith({ matchId: 'match1', data: { outcome: 'Relationship completed' } }))
+        expect(screen.getByRole('button', { name: 'Cancel Match' })).toBeEnabled()
+        expect(screen.queryByRole('button', { name: 'Complete Match' })).not.toBeInTheDocument()
+        expect(screen.queryByText('New match features are temporarily unavailable')).not.toBeInTheDocument()
     })
 
     it('shows work pagination and requests the next page without changing case identity', () => {

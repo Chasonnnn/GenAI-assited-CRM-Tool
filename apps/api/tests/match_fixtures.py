@@ -74,7 +74,7 @@ def seed_surrogate_match(db, client, *, status="under_review") -> Match:
 
 
 def seed_attempt(db, match_id, *, attempt_type="embryo_transfer", status="planned") -> MatchAttempt:
-    """Attempts have no write API; existing rows still drive completion and cancel rules."""
+    """Attempts have no write API; existing open rows still close with a cancelled match."""
     match = db.get(Match, uuid.UUID(str(match_id)))
     sequence = db.query(MatchAttempt).filter(MatchAttempt.match_id == match.id).count() + 1
     attempt = MatchAttempt(

@@ -6,6 +6,7 @@ export interface MatchStatusDefinition {
     order: number
     badgeClassName: string
     allowedTransitions: MatchStatus[]
+    systemTransitions: MatchStatus[]
 }
 
 export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
@@ -15,13 +16,15 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         order: 2,
         badgeClassName: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
         allowedTransitions: ["accepted", "declined"],
+        systemTransitions: [],
     },
     {
         value: "accepted",
         label: "Accepted",
         order: 3,
         badgeClassName: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-        allowedTransitions: ["cancellation_pending", "completed"],
+        allowedTransitions: ["cancellation_pending"],
+        systemTransitions: ["completed"],
     },
     {
         value: "cancellation_pending",
@@ -29,6 +32,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         order: 4,
         badgeClassName: "bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200",
         allowedTransitions: ["accepted", "cancelled"],
+        systemTransitions: [],
     },
     {
         value: "declined",
@@ -36,6 +40,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         order: 5,
         badgeClassName: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
         allowedTransitions: [],
+        systemTransitions: [],
     },
     {
         value: "cancelled",
@@ -43,6 +48,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         order: 6,
         badgeClassName: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
         allowedTransitions: [],
+        systemTransitions: [],
     },
     {
         value: "completed",
@@ -50,6 +56,7 @@ export const MATCH_STATUS_DEFINITIONS: MatchStatusDefinition[] = [
         order: 7,
         badgeClassName: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
         allowedTransitions: [],
+        systemTransitions: [],
     },
 ]
 
@@ -81,7 +88,6 @@ const MATCH_ACTION_LABELS: Record<string, string> = {
     decline: "Decline",
     request_cancel: "Request cancellation",
     withdraw_cancel: "Withdraw cancellation request",
-    complete: "Complete",
 }
 
 export function getMatchActionLabel(action: string): string {

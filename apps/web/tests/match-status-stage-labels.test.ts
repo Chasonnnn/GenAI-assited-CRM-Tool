@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { STAGE_DEFS } from "@/lib/constants/stages.generated"
 import { getDonorStageLabel } from "@/lib/donor-stage-utils"
-import { getMatchActionLabel, getMatchStatusLabel, isMatchStatus } from "@/lib/match-status-definitions"
+import { MATCH_STATUS_DEFINITIONS, getMatchActionLabel, getMatchStatusLabel, isMatchStatus } from "@/lib/match-status-definitions"
 
 const orgStages: PipelineStage[] = [
     { id: "stage-under-review", stage_key: "under_review", slug: "under_review", label: "Application Review", color: "#F59E0B", order: 8, stage_type: "intake", is_active: true },
@@ -30,5 +30,13 @@ describe("match status and stage label helpers", () => {
     it("labels match actions without echoing raw keys", () => {
         expect(getMatchActionLabel("request_cancel")).toBe("Request cancellation")
         expect(getMatchActionLabel("not_an_action")).toBe("Unknown match action")
+        expect(getMatchActionLabel("complete")).toBe("Unknown match action")
+    })
+
+    it("reaches completed only as a system transition", () => {
+        const accepted = MATCH_STATUS_DEFINITIONS.find((definition) => definition.value === "accepted")
+        expect(accepted?.allowedTransitions).toEqual(["cancellation_pending"])
+        expect(accepted?.systemTransitions).toEqual(["completed"])
+        expect(MATCH_STATUS_DEFINITIONS.some((definition) => definition.allowedTransitions.includes("completed"))).toBe(false)
     })
 })

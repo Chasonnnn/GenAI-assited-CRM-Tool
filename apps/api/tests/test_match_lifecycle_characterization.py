@@ -834,10 +834,7 @@ async def test_accept_match_outside_proposed_or_reviewing_returns_400(
     authed_client, db, current_status
 ):
     ip = await _create_intended_parent(authed_client)
-    if current_status == "completed":
-        created = await _case(authed_client, ip, donor=await _donor(authed_client))
-    else:
-        created = await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client))
+    created = await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client))
     if current_status == "declined":
         await authed_client.put(f"/matches/{created['id']}/decline", json={"reason": "No"})
     elif current_status == "cancelled":
@@ -855,10 +852,9 @@ async def test_accept_match_outside_proposed_or_reviewing_returns_400(
         if current_status == "cancellation_pending":
             await _request_cancel(authed_client, created)
         else:
-            response = await authed_client.put(
-                f"/matches/{created['id']}/complete", json={"outcome": "Done"}
-            )
-            assert response.status_code == 200
+            row = _match_row(db, created["id"])
+            row.status, row.closed_at = "completed", datetime.now(UTC)
+            db.commit()
     assert _match_row(db, created["id"]).status == current_status
 
     response = await authed_client.put(f"/matches/{created['id']}/accept", json={})
@@ -1172,89 +1168,6 @@ async def test_cancel_request_with_stale_pending_request_returns_409(authed_clie
 
 
 # =============================================================================
-# Complete
-# =============================================================================
-
-
-@pytest.mark.asyncio
-async def test_complete_accepted_surrogate_match_without_stage_change(
-    authed_client, db, test_auth, monkeypatch
-):
-    spies = _spy_effects(monkeypatch)
-    surrogate = await _create_surrogate(authed_client)
-    ip = await _create_intended_parent(authed_client)
-    created = await _accept(authed_client, await _case(authed_client, ip, surrogate=surrogate))
-    _reset(spies)
-    before = _snapshot(db, test_auth.org.id)
-
-    with _locked_tables(db) as locks:
-        response = await authed_client.put(
-            f"/matches/{created['id']}/complete",
-            json={"outcome": "  Delivered  ", "reason": "  Journey complete  "},
-        )
-
-    assert response.status_code == 200, response.text
-    completed = response.json()
-    assert completed["status"] == "completed"
-    assert completed["outcome"] == "Delivered"
-    assert completed["closure_reason"] == "Journey complete"
-    assert completed["closed_at"] is not None
-    assert _match_row(db, created["id"]).closed_by_user_id == test_auth.user.id
-    assert _stage_slug(db, Surrogate, surrogate["id"]) == "matched"
-    assert _ip_stage_key(db, ip["id"]) == "matched"
-    assert locks == ["matches", "surrogates", "intended_parents"]
-    assert _diff(before, _snapshot(db, test_auth.org.id)) == {
-        "audit": {("match_completed", "match"): 1},
-        "surrogate_activity": {"match_completed": 1},
-        "entity_activity": {("intended_parent", "match_completed"): 1},
-        "stage_history": {},
-    }
-    assert _call_counts(spies) == {}
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "body,status_code,detail",
-    [
-        ({}, 422, None),
-        ({"outcome": ""}, 422, None),
-        ({"outcome": "   "}, 400, "Completion outcome is required"),
-    ],
-)
-async def test_complete_requires_outcome(authed_client, db, body, status_code, detail):
-    ip = await _create_intended_parent(authed_client)
-    created = await _accept(
-        authed_client,
-        await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client)),
-    )
-
-    response = await authed_client.put(f"/matches/{created['id']}/complete", json=body)
-
-    assert response.status_code == status_code
-    if detail:
-        assert response.json()["detail"] == detail
-    assert _match_row(db, created["id"]).status == "accepted"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("current_status", ["under_review", "cancellation_pending"])
-async def test_complete_requires_accepted_status(authed_client, db, current_status):
-    ip = await _create_intended_parent(authed_client)
-    created = await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client))
-    if current_status == "cancellation_pending":
-        await _accept(authed_client, created)
-        await _request_cancel(authed_client, created)
-
-    response = await authed_client.put(
-        f"/matches/{created['id']}/complete", json={"outcome": "Done"}
-    )
-
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Only accepted matches can be completed"
-    assert _match_row(db, created["id"]).status == current_status
-
-
-# =============================================================================
 # Rollout flag MATCH_CASE_EXPANSION_ENABLED=false
 # =============================================================================
 
@@ -1355,7 +1268,6 @@ MATCH_MUTATIONS = [
     ("PUT", "/matches/{id}/accept", {}),
     ("PUT", "/matches/{id}/decline", {"reason": "No"}),
     ("POST", "/matches/{id}/cancel-request", {"reason": "Ended"}),
-    ("PUT", "/matches/{id}/complete", {"outcome": "Done"}),
     ("PATCH", "/matches/{id}/notes", {"notes": "Changed"}),
 ]
 
@@ -1383,7 +1295,7 @@ async def test_user_without_propose_matches_is_denied_every_mutation(
 ):
     ip = await _create_intended_parent(authed_client)
     created = await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client))
-    if "cancel-request" in path or "complete" in path:
+    if "cancel-request" in path:
         await _accept(authed_client, created)
     status_before = _match_row(db, created["id"]).status
 
@@ -1456,7 +1368,7 @@ async def test_other_org_user_gets_404_for_match_routes(
 ):
     ip = await _create_intended_parent(authed_client)
     created = await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client))
-    if "cancel-request" in path or "complete" in path:
+    if "cancel-request" in path:
         await _accept(authed_client, created)
     row = _match_row(db, created["id"])
     before = (row.status, row.notes, row.reviewed_by_user_id, row.updated_at)
@@ -2331,12 +2243,9 @@ async def test_lifecycle_workflow_callbacks_include_both_match_kinds(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("donor", [False, True])
-@pytest.mark.parametrize(
-    "action,body", [("decline", {"reason": "Ended"}), ("complete", {"outcome": "Done"})]
-)
 @pytest.mark.parametrize("foreign_org", [False, True])
-async def test_decline_and_complete_enforce_org_and_permission_for_both_match_kinds(
-    authed_client, db, test_auth, donor, action, body, foreign_org
+async def test_decline_enforces_org_and_permission_for_both_match_kinds(
+    authed_client, db, test_auth, donor, foreign_org
 ):
     party = await _donor(authed_client) if donor else await _create_surrogate(authed_client)
     match = await _case(
@@ -2344,15 +2253,13 @@ async def test_decline_and_complete_enforce_org_and_permission_for_both_match_ki
         await _create_intended_parent(authed_client),
         **({"donor": party} if donor else {"surrogate": party}),
     )
-    if action == "complete":
-        match = await _accept(authed_client, match)
     before = _transition_history(db, test_auth.org.id)
     org_id = _other_org(db).id if foreign_org else test_auth.org.id
     async with _client_for(db, org_id, revoke=() if foreign_org else ("propose_matches",)) as (
         _,
         client,
     ):
-        response = await client.put(f"/matches/{match['id']}/{action}", json=body)
+        response = await client.put(f"/matches/{match['id']}/decline", json={"reason": "Ended"})
     assert response.status_code == (404 if foreign_org else 403)
     assert _match_row(db, match["id"]).status == match["status"]
     assert _transition_history(db, test_auth.org.id) == before

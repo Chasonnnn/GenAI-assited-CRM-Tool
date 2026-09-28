@@ -19,6 +19,7 @@ export interface MatchStatusMetadata {
     color: string
     order: number
     allowed_transitions: MatchStatus[]
+    system_transitions: MatchStatus[]
 }
 
 export async function getIntendedParentStatuses(): Promise<{ statuses: StageMetadataOption[] }> {

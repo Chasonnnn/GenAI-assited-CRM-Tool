@@ -224,7 +224,7 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
     "close_matches": PermissionDef(
         "close_matches",
         "Close Matches",
-        "Request cancellation or complete matches",
+        "Cancel matches",
         PermissionCategory.INTENDED_PARENTS,
     ),
     # Donors

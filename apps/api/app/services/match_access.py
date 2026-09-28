@@ -21,7 +21,6 @@ MatchAction = Literal[
     "accept",
     "decline",
     "request_cancel",
-    "complete",
     "withdraw_cancel",
     "approve_cancel",
     "reject_cancel",
@@ -33,14 +32,13 @@ _ACTION_PERMISSIONS = {
     "accept": "decide_matches",
     "decline": "decide_matches",
     "request_cancel": "close_matches",
-    "complete": "close_matches",
     "withdraw_cancel": "close_matches",
     "approve_cancel": "approve_status_change_requests",
     "reject_cancel": "approve_status_change_requests",
     "edit_notes": "propose_matches",
     "edit_events": "propose_matches",
 }
-PUBLIC_ACTIONS = ("accept", "decline", "request_cancel", "withdraw_cancel", "complete")
+PUBLIC_ACTIONS = ("accept", "decline", "request_cancel", "withdraw_cancel")
 
 
 def required_permissions(db: Session, session: UserSession, action: MatchAction) -> list[str]:

@@ -166,7 +166,6 @@ def test_create_matches_balanced_statuses(db, test_org, test_user, monkeypatch) 
         "declined",
         "cancellation_pending",
         "cancelled",
-        "completed",
     }
     dispatch.assert_not_called()
 
@@ -182,9 +181,7 @@ def test_create_matches_balanced_statuses(db, test_org, test_user, monkeypatch) 
     assert len(accepted_surrogate_ids) == len(set(accepted_surrogate_ids))
 
 
-def test_create_matches_without_expansion_seeds_completed_as_accepted(
-    db, test_org, test_user, monkeypatch
-) -> None:
+def test_create_matches_without_expansion(db, test_org, test_user, monkeypatch) -> None:
     from app.services import match_lifecycle
 
     monkeypatch.setattr(match_lifecycle.settings, "MATCH_CASE_EXPANSION_ENABLED", False)

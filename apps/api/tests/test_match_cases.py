@@ -48,7 +48,7 @@ async def _accept(client, case):
 
 
 @pytest.mark.asyncio
-async def test_donor_concurrent_cases_repeat_and_open_attempt_guard(authed_client, db):
+async def test_donor_concurrent_cases_and_repeat_after_closure(authed_client, db):
     donor = await _donor(authed_client)
     first_ip = await _create_intended_parent(authed_client)
     second_ip = await _create_intended_parent(authed_client)
@@ -60,18 +60,21 @@ async def test_donor_concurrent_cases_repeat_and_open_attempt_guard(authed_clien
         "/matches/", json={"donor_id": donor["id"], "intended_parent_id": first_ip["id"]}
     )
     assert duplicate.status_code == 409
-    attempt = seed_attempt(db, first["id"], attempt_type="retrieval")
-    blocked = await authed_client.put(
-        f"/matches/{first['id']}/complete", json={"outcome": "Relationship completed"}
+    requested = await authed_client.post(
+        f"/matches/{first['id']}/cancel-request", json={"reason": "Relationship ended"}
     )
-    assert blocked.status_code == 400
-    attempt.status = "completed"
-    db.flush()
-    finished = await authed_client.put(
-        f"/matches/{first['id']}/complete", json={"outcome": "Relationship completed"}
+    assert requested.status_code == 200, requested.text
+    pending = (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.entity_id == uuid.UUID(first["id"]),
+            StatusChangeRequest.status == "pending",
+        )
+        .one()
     )
-    assert finished.status_code == 200, finished.text
-    assert finished.json()["closed_at"]
+    approved = await authed_client.post(f"/status-change-requests/{pending.id}/approve")
+    assert approved.status_code == 200, approved.text
+    assert db.get(Match, uuid.UUID(first["id"])).closed_at is not None
     later = await _case(authed_client, first_ip, donor=donor)
     assert later["id"] != first["id"]
     listed = await authed_client.get(
@@ -83,7 +86,7 @@ async def test_donor_concurrent_cases_repeat_and_open_attempt_guard(authed_clien
     audit = (
         db.query(AuditLog)
         .filter(
-            AuditLog.target_id == uuid.UUID(first["id"]), AuditLog.event_type == "match_completed"
+            AuditLog.target_id == uuid.UUID(first["id"]), AuditLog.event_type == "match_cancelled"
         )
         .one()
     )

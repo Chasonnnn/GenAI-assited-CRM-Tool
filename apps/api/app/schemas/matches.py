@@ -196,8 +196,3 @@ class MatchEventRead(BaseModel):
     created_by_user_id: str | None
     created_at: str
     updated_at: str
-
-
-class MatchCompleteRequest(BaseModel):
-    outcome: str = Field(min_length=1, max_length=2000)
-    reason: str | None = Field(None, max_length=2000)

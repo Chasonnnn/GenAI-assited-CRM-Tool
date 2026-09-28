@@ -430,31 +430,6 @@ async def test_manual_donor_matched_guard_preserves_permission_and_org_scope(
 
 
 @pytest.mark.asyncio
-async def test_donor_complete_keeps_participant_stages(authed_client, db, subtests):
-    for kind in ["egg", "sperm"]:
-        with subtests.test(kind=repr(kind)):
-            donor = await _donor(authed_client, donor_type=kind)
-            ip = await _create_intended_parent(authed_client)
-            match = await _accept(authed_client, await _case(authed_client, ip, donor=donor))
-            before = db.query(DonorStatusHistory).filter_by(donor_id=uuid.UUID(donor["id"])).count()
-            response = await authed_client.put(
-                f"/matches/{match['id']}/complete", json={"outcome": "Completed"}
-            )
-            assert response.status_code == 200
-            assert response.json()["status"] == "completed"
-            assert db.get(Donor, uuid.UUID(donor["id"])).stage.stage_key == "matched"
-            assert db.get(IntendedParent, uuid.UUID(ip["id"])).stage.stage_key == "matched"
-            assert (
-                db.query(DonorStatusHistory).filter_by(donor_id=uuid.UUID(donor["id"])).count()
-                == before
-            )
-            later = await _case(
-                authed_client, await _create_intended_parent(authed_client), donor=donor
-            )
-            assert "Donor at Matched is not" in later["accept_eligibility_warnings"][0]
-
-
-@pytest.mark.asyncio
 async def test_missing_matched_stage_cannot_partially_accept(
     authed_client, db, monkeypatch, subtests
 ):

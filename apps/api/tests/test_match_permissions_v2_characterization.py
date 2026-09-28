@@ -166,7 +166,6 @@ MATCH_WRITES = [
         200,
         "cancellation_pending",
     ),
-    ("PUT", "/matches/{id}/complete", {"outcome": "Done"}, "accepted", 200, "completed"),
     ("POST", "/matches/{id}/events", _EVENT, "accepted", 201, "accepted"),
     ("PUT", "/matches/{id}/events/{event_id}", {"title": "Moved"}, "accepted", 200, "accepted"),
     ("DELETE", "/matches/{id}/events/{event_id}", None, "accepted", 204, "accepted"),
@@ -326,7 +325,6 @@ async def test_v2_role_without_action_permission_is_denied_every_mutation(
                 "accept": "decide_matches",
                 "decline": "decide_matches",
                 "cancel-request": "close_matches",
-                "complete": "close_matches",
             }.get(path.rsplit("/", 1)[-1], "propose_matches")
             role = Role.OPERATIONS
             if configured == "case_manager_role_denied":

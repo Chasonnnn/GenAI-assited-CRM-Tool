@@ -29,10 +29,6 @@ async def test_disabled_expansion_preserves_legacy_match_operations(
     )
     assert response.status_code == 503
     assert db.query(Match).filter_by(organization_id=test_auth.org.id).count() == before
-    response = await authed_client.put(
-        f"/matches/{case['id']}/complete", json={"outcome": "Completed"}
-    )
-    assert response.status_code == 503
     db.expire_all()
     assert db.get(Match, uuid.UUID(case["id"])).status == "accepted"
 

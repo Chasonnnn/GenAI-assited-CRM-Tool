@@ -253,18 +253,6 @@ export function useUploadMatchFile(matchId: string) {
     })
 }
 
-import { completeMatch, type MatchCompleteRequest } from '@/lib/api/matches'
-export function useCompleteMatch() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: ({ matchId, data }: { matchId: string; data: MatchCompleteRequest }) => completeMatch(matchId, data),
-        onSuccess: (result) => {
-            queryClient.setQueryData(matchKeys.detail(result.id), result)
-            void queryClient.invalidateQueries({ queryKey: matchKeys.all })
-        },
-    })
-}
-
 import { cancelRequest as cancelStatusChangeRequest } from '@/lib/api/status-change-requests'
 export function useWithdrawMatchCancellation() {
     const queryClient = useQueryClient()
