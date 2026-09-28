@@ -77,6 +77,12 @@ def hash_for_capi(value: str) -> str:
     return hashlib.sha256(value.lower().strip().encode("utf-8")).hexdigest()
 
 
+def normalize_phone_for_capi(phone: str | None) -> str | None:
+    """Return Meta's phone match format: digits with country code, no "+" or punctuation."""
+    digits = "".join(ch for ch in phone or "" if ch.isdigit())
+    return digits if len(digits) >= 10 else None
+
+
 def map_surrogate_status_to_meta_status(surrogate_status: str) -> str | None:
     """Map internal case status slug to Meta Ads status label."""
     if not surrogate_status:

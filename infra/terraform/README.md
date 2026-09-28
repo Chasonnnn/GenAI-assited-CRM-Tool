@@ -92,6 +92,8 @@ cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
 Dedicated scan job:
 - Keep `crm-worker` lean and dispatch malware scans to the dedicated Cloud Run job (`attachment_scan_job_*` vars).
 - Keep `crm-clamav-update` for weekly signature refresh only; it is not the scan executor.
+- The API and the worker both start the scan job. The worker claims due scan jobs (first scans of public uploads and scheduled retries) and needs `roles/run.jobsExecutorWithOverrides` on the scan job (`google_cloud_run_v2_job_iam_member.worker_attachment_scan_executor`).
+- Deploy order: apply that IAM grant before deploying a worker image that claims scan jobs. Without it, worker dispatches get 403, the scan jobs fail after their retry attempts, and the files stay pending until someone opens them.
 
 Terraform only creates Secret Manager containers. Add secret versions out-of-band (manual or CI):
 ```bash

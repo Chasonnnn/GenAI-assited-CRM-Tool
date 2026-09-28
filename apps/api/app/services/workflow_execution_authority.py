@@ -21,6 +21,8 @@ from app.db.models import (
 from app.schemas.auth import UserSession
 from app.services import permission_policy_service, permission_service
 
+SHARED_INTAKE_ROUTING_AUTHORIZER = "system:shared_intake_routing"
+
 
 class WorkflowAuthorityError(ValueError):
     """An actor or execution no longer has authority for the requested action."""
@@ -210,6 +212,53 @@ def authorize_configuration(db: Session, workflow: AutomationWorkflow, user_id: 
     )
 
 
+def grant_is_current(workflow: AutomationWorkflow) -> bool:
+    grant = workflow.execution_authority
+    return bool(
+        grant
+        and grant.get("organization_id") == str(workflow.organization_id)
+        and grant.get("configuration_digest") == configuration_digest(workflow)
+    )
+
+
+def authorize_generated_routing(
+    db: Session,
+    workflow: AutomationWorkflow,
+    publisher_user_id: UUID | None,
+    create_permission: str,
+) -> bool:
+    """Grant a generated shared-intake routing workflow the rights of its fixed actions.
+
+    The caller verifies the workflow holds the exact generated configuration. The
+    publisher must hold ``create_permission`` for the form's record type. A grant that
+    still matches the configuration is kept. Returns True when a new grant is stored.
+    """
+    if (
+        not enabled(db, workflow.organization_id)
+        or workflow.scope != "org"
+        or grant_is_current(workflow)
+    ):
+        return False
+    session = active_session(db, workflow.organization_id, publisher_user_id)
+    if session is None or not has_permissions(db, session, {create_permission}):
+        return False
+    keys: set[str] = set()
+    for action in workflow.actions:
+        keys.update(action_permissions(db, workflow, action))
+    workflow.execution_authority = {
+        "version": 2,
+        "organization_id": str(workflow.organization_id),
+        "configuration_digest": configuration_digest(workflow),
+        "permissions": sorted(keys),
+        "authorized_by": SHARED_INTAKE_ROUTING_AUTHORIZER,
+        "authorized_by_user_id": None,
+        "authorized_at": datetime.now(UTC).isoformat(),
+    }
+    db.flush()
+    audit_configuration(db, workflow, publisher_user_id, "system_authorize")
+    return True
+
+
 def execution_snapshot(db: Session, workflow: AutomationWorkflow) -> dict | None:
     if not enabled(db, workflow.organization_id):
         return None
@@ -221,14 +270,13 @@ def execution_snapshot(db: Session, workflow: AutomationWorkflow) -> dict | None
             "owner_user_id": str(workflow.owner_user_id),
             "organization_id": str(workflow.organization_id),
         }
-    grant = workflow.execution_authority
-    if (
-        not grant
-        or grant.get("organization_id") != str(workflow.organization_id)
-        or grant.get("configuration_digest") != configuration_digest(workflow)
-    ):
+    if not grant_is_current(workflow):
         raise WorkflowAuthorityError("Organization workflow requires configuration authorization")
-    return {**deepcopy(grant), "scope": "org", "workflow_id": str(workflow.id)}
+    return {
+        **deepcopy(workflow.execution_authority),
+        "scope": "org",
+        "workflow_id": str(workflow.id),
+    }
 
 
 def personal_subject_allowed(

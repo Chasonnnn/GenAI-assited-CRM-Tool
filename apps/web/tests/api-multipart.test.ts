@@ -70,10 +70,7 @@ describe('multipart requests', () => {
         const fetchMock = vi.fn().mockResolvedValue(
             makeResponse({
                 id: 'submission-1',
-                status: 'pending_review',
-                outcome: 'workflow_pending',
-                surrogate_id: null,
-                intake_lead_id: null,
+                outcome: 'received',
             })
         )
         global.fetch = fetchMock as unknown as typeof fetch
@@ -111,10 +108,7 @@ describe('multipart requests', () => {
         const fetchMock = vi.fn().mockResolvedValue(
             makeResponse({
                 id: 'submission-1',
-                status: 'pending_review',
-                outcome: 'lead_created',
-                surrogate_id: null,
-                intake_lead_id: 'lead-1',
+                outcome: 'received',
             })
         )
         global.fetch = fetchMock as unknown as typeof fetch

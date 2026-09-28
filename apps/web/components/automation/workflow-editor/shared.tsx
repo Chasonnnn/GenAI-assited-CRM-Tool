@@ -9,7 +9,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import type { ActionConfig, Condition } from "@/lib/api/workflows"
+import type { ActionConfig, Condition, WorkflowSubjectType } from "@/lib/api/workflows"
+import { FORM_LEAD_KIND_LABELS } from "@/lib/forms/form-lead-kind"
+import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
 
 export type SelectOption = { value: string; label: string }
@@ -82,6 +84,62 @@ export const EMAIL_RECIPIENT_OPTIONS: SelectOption[] = [
     { value: "all_admins", label: "All Admins" },
     { value: "user", label: "Specific User" },
 ]
+
+export type DonorLeadKind = Extract<WorkflowSubjectType, "egg_donor" | "sperm_donor">
+
+export function isDonorLeadKind(value: unknown): value is DonorLeadKind {
+    return value === "egg_donor" || value === "sperm_donor"
+}
+
+// Intake triggers store the applicant type under a trigger-specific key.
+export const INTAKE_LEAD_KIND_CONFIG_KEYS: Partial<Record<string, string>> = {
+    form_submitted: "lead_kind",
+    intake_lead_created: "lead_type",
+}
+
+// "Both" leaves the applicant type unset, so the workflow runs for either donor type.
+export const APPLICANT_TYPE_BOTH = "both"
+const APPLICANT_TYPE_BOTH_LABEL = "Both"
+
+const APPLICANT_TYPE_LABELS: Record<string, string> = {
+    egg_donor: FORM_LEAD_KIND_LABELS.egg_donor,
+    sperm_donor: FORM_LEAD_KIND_LABELS.sperm_donor,
+    [APPLICANT_TYPE_BOTH]: APPLICANT_TYPE_BOTH_LABEL,
+}
+
+export const APPLICANT_TYPE_OPTIONS = toSelectOptions(APPLICANT_TYPE_LABELS)
+
+export const getApplicantTypeLabel = createSelectLabelGetter(APPLICANT_TYPE_LABELS, {
+    emptyLabel: APPLICANT_TYPE_BOTH_LABEL,
+    allValue: APPLICANT_TYPE_BOTH,
+    unknownLabel: "Unknown applicant type",
+})
+
+export function isDonorIntakeWorkflow({
+    triggerConfig,
+    formLeadKind,
+    subjectType,
+}: {
+    triggerConfig: JsonObject
+    formLeadKind?: string | null | undefined
+    subjectType?: string | null | undefined
+}): boolean {
+    return (
+        isDonorLeadKind(formLeadKind) ||
+        isDonorLeadKind(triggerConfig.lead_type) ||
+        isDonorLeadKind(triggerConfig.lead_kind) ||
+        isDonorLeadKind(subjectType)
+    )
+}
+
+// Priority and owner assignment are surrogate-only promotion options.
+export function stripDonorPromotionOptions(action: ActionConfig): ActionConfig {
+    if (action.action_type !== "promote_intake_lead") return action
+    const donorAction = { ...action }
+    delete donorAction.is_priority
+    delete donorAction.assign_to_user
+    return donorAction
+}
 
 export function createClientRowId(): string {
     if (typeof globalThis.crypto?.randomUUID === "function") {

@@ -23,6 +23,7 @@ from app.core.permissions import PermissionKey as P
 from app.core.policies import POLICIES
 from app.core.stage_definitions import (
     DONOR_PIPELINE_ENTITY_TYPES,
+    INTENDED_PARENT_PIPELINE_ENTITY,
     SURROGATE_PIPELINE_ENTITY,
     PipelineEntityType,
     normalize_pipeline_entity_type,
@@ -45,7 +46,21 @@ router = APIRouter(
 MANAGE_PIPELINES_DEP = Depends(require_permission(POLICIES["pipelines"].default))
 
 
-def _require_donor_pipeline_access(
+# (view, edit, change_status) record permissions per non-surrogate pipeline entity type.
+_RECORD_PIPELINE_PERMISSIONS: dict[str, tuple[P, P, P]] = {
+    **{
+        entity_type: (P.DONORS_VIEW, P.DONORS_EDIT, P.DONORS_CHANGE_STATUS)
+        for entity_type in DONOR_PIPELINE_ENTITY_TYPES
+    },
+    INTENDED_PARENT_PIPELINE_ENTITY: (
+        P.INTENDED_PARENTS_VIEW,
+        P.INTENDED_PARENTS_EDIT,
+        P.INTENDED_PARENTS_CHANGE_STATUS,
+    ),
+}
+
+
+def _require_record_pipeline_access(
     db: Session,
     session: UserSession,
     entity_type: str,
@@ -53,15 +68,17 @@ def _require_donor_pipeline_access(
     require_write: bool = False,
     require_change_status: bool = False,
 ) -> None:
-    """Apply donor resource permissions to donor pipeline operations."""
-    if entity_type not in DONOR_PIPELINE_ENTITY_TYPES:
+    """Apply donor and intended parent resource permissions to their pipeline operations."""
+    permissions = _RECORD_PIPELINE_PERMISSIONS.get(entity_type)
+    if permissions is None:
         return
 
-    required_permissions = [P.DONORS_VIEW]
+    view, edit, change_status = permissions
+    required_permissions = [view]
     if require_write:
-        required_permissions.append(P.DONORS_EDIT)
+        required_permissions.append(edit)
     if require_change_status:
-        required_permissions.append(P.DONORS_CHANGE_STATUS)
+        required_permissions.append(change_status)
 
     role = getattr(session.role, "value", session.role)
     for permission in required_permissions:
@@ -94,7 +111,7 @@ def _get_pipeline_for_request(
         and pipeline.entity_type != normalize_pipeline_entity_type(requested_entity_type)
     ):
         raise HTTPException(status_code=404, detail="Pipeline not found")
-    _require_donor_pipeline_access(
+    _require_record_pipeline_access(
         db,
         session,
         pipeline.entity_type,
@@ -323,7 +340,7 @@ def list_pipelines(
     """
     # Ensure default exists
     normalized_entity_type = normalize_pipeline_entity_type(entity_type)
-    _require_donor_pipeline_access(db, session, normalized_entity_type)
+    _require_record_pipeline_access(db, session, normalized_entity_type)
     pipeline_service.get_or_create_default_pipeline(
         db,
         session.org_id,
@@ -361,7 +378,7 @@ def get_default_pipeline(
     Requires: Authenticated user
     """
     normalized_entity_type = normalize_pipeline_entity_type(entity_type)
-    _require_donor_pipeline_access(db, session, normalized_entity_type)
+    _require_record_pipeline_access(db, session, normalized_entity_type)
     pipeline = pipeline_service.get_or_create_default_pipeline(
         db,
         session.org_id,
@@ -389,7 +406,7 @@ def get_default_pipeline_semantics(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
     normalized_entity_type = normalize_pipeline_entity_type(entity_type)
-    _require_donor_pipeline_access(db, session, normalized_entity_type)
+    _require_record_pipeline_access(db, session, normalized_entity_type)
     pipeline = pipeline_service.get_or_create_default_pipeline(
         db,
         session.org_id,
@@ -595,7 +612,7 @@ def create_pipeline(
     """
     stages = [s.model_dump() for s in data.stages] if data.stages else None
     normalized_entity_type = normalize_pipeline_entity_type(data.entity_type)
-    _require_donor_pipeline_access(
+    _require_record_pipeline_access(
         db,
         session,
         normalized_entity_type,
@@ -644,7 +661,7 @@ def sync_default_pipeline_stages(
     Requires: Manager+ role
     """
     normalized_entity_type = normalize_pipeline_entity_type(entity_type)
-    _require_donor_pipeline_access(
+    _require_record_pipeline_access(
         db,
         session,
         normalized_entity_type,

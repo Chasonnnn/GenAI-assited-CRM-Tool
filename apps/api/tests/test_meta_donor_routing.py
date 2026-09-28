@@ -135,7 +135,7 @@ async def test_meta_mapping_api_exposes_and_updates_exact_lead_kind_values(
     assert donor_preview.status_code == 200
     assert "education" in donor_preview.json()["available_fields"]
     assert "journey_timing_preference" not in donor_preview.json()["available_fields"]
-    # Donor conversions always set source="Meta"; a source mapping would be dead.
+    # Donor conversions always set source="meta"; a source mapping would be dead.
     assert "source" not in donor_preview.json()["available_fields"]
     assert donor_preview.json()["unsupported_mapped_fields"] == []
     listed = await authed_client.get("/integrations/meta/forms")
@@ -224,7 +224,7 @@ def test_process_stored_meta_lead_routes_each_donor_subtype_to_its_entry_stage(
     assert isinstance(subject, Donor)
     assert subject.donor_type == donor_type
     assert subject.education == "Bachelor's degree"
-    assert subject.source == "Meta"
+    assert subject.source == "meta"
     assert subject.stage.system_role == "intake_entry"
     pipeline = db.get(Pipeline, db.get(PipelineStage, subject.stage_id).pipeline_id)
     assert pipeline is not None
@@ -285,9 +285,7 @@ def test_meta_donor_conversion_is_idempotent_on_replay(db, test_org):
     assert db.query(Donor).filter(Donor.organization_id == test_org.id).count() == 1
 
 
-def test_meta_donor_conversion_rolls_back_donor_and_link_together(
-    db, test_org, monkeypatch
-):
+def test_meta_donor_conversion_rolls_back_donor_and_link_together(db, test_org, monkeypatch):
     from app.db.models import Donor, MetaLead
     from app.services import donor_service, meta_lead_service, workflow_triggers
 
@@ -316,6 +314,7 @@ def test_meta_donor_conversion_rolls_back_donor_and_link_together(
     savepoint = db.begin_nested()
 
     with monkeypatch.context() as failure_patch:
+
         def record_create(*args, **kwargs):
             create_calls.append(kwargs)
             return original_create_donor(*args, **kwargs)
@@ -480,9 +479,7 @@ async def test_zapier_meta_webhook_returns_donor_contract_for_donor_form(
     assert donor.donor_type == "egg"
 
 
-def test_meta_donor_duplicate_email_fails_without_creating_another_donor(
-    db, test_org, test_user
-):
+def test_meta_donor_duplicate_email_fails_without_creating_another_donor(db, test_org, test_user):
     from app.db.models import Donor
     from app.schemas.donor import DonorCreate
     from app.services import donor_service, meta_lead_service
@@ -555,9 +552,7 @@ def test_meta_form_lookup_fails_closed_across_organizations(db, test_org):
 
 
 @pytest.mark.asyncio
-async def test_meta_mapping_api_hides_cross_org_form(
-    authed_client: AsyncClient, db, test_org
-):
+async def test_meta_mapping_api_hides_cross_org_form(authed_client: AsyncClient, db, test_org):
     from app.db.models import Organization
 
     other_org = Organization(

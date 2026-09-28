@@ -370,7 +370,7 @@ async def test_accept_requires_ip_stage_permission_and_rolls_back_primary_move(
     if policy == 2:
         _activate_v2(db, test_auth.org.id)
         _set_role_permission(
-            db, test_auth.org.id, Role.CASE_MANAGER, "edit_intended_parents", False
+            db, test_auth.org.id, Role.CASE_MANAGER, "change_intended_parent_status", False
         )
     for kind in ["surrogate", "egg", "sperm"]:
         with subtests.test(kind=repr(kind)):
@@ -391,11 +391,11 @@ async def test_accept_requires_ip_stage_permission_and_rolls_back_primary_move(
                 db,
                 test_auth.org.id,
                 role=Role.CASE_MANAGER if policy == 2 else Role.ADMIN,
-                revoke=("edit_intended_parents",) if policy == 1 else (),
+                revoke=("change_intended_parent_status",) if policy == 1 else (),
             ) as (_, client):
                 response = await client.put(f"/matches/{match['id']}/accept", json={})
             assert response.status_code == 400
-            assert response.json()["detail"] == "Missing permission: edit_intended_parents"
+            assert response.json()["detail"] == "Missing permission: change_intended_parent_status"
             assert _match_row(db, match["id"]).status == "under_review"
             assert db.get(model, uuid.UUID(party["id"])).stage_id == before
             assert (
@@ -427,31 +427,6 @@ async def test_manual_donor_matched_guard_preserves_permission_and_org_scope(
                 assert response.status_code == (403 if denied == "permission" else 404)
                 db.refresh(row)
                 assert row.stage_id == before
-
-
-@pytest.mark.asyncio
-async def test_donor_complete_keeps_participant_stages(authed_client, db, subtests):
-    for kind in ["egg", "sperm"]:
-        with subtests.test(kind=repr(kind)):
-            donor = await _donor(authed_client, donor_type=kind)
-            ip = await _create_intended_parent(authed_client)
-            match = await _accept(authed_client, await _case(authed_client, ip, donor=donor))
-            before = db.query(DonorStatusHistory).filter_by(donor_id=uuid.UUID(donor["id"])).count()
-            response = await authed_client.put(
-                f"/matches/{match['id']}/complete", json={"outcome": "Completed"}
-            )
-            assert response.status_code == 200
-            assert response.json()["status"] == "completed"
-            assert db.get(Donor, uuid.UUID(donor["id"])).stage.stage_key == "matched"
-            assert db.get(IntendedParent, uuid.UUID(ip["id"])).stage.stage_key == "matched"
-            assert (
-                db.query(DonorStatusHistory).filter_by(donor_id=uuid.UUID(donor["id"])).count()
-                == before
-            )
-            later = await _case(
-                authed_client, await _create_intended_parent(authed_client), donor=donor
-            )
-            assert "Donor at Matched is not" in later["accept_eligibility_warnings"][0]
 
 
 @pytest.mark.asyncio

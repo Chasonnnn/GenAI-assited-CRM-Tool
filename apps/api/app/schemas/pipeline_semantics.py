@@ -309,7 +309,6 @@ def default_stage_semantics(
             "retrieval_complete",
             "collection_in_progress",
             "donation_complete",
-            "closed",
         }:
             integration_bucket = "converted"
         elif normalized_key == "disqualified":

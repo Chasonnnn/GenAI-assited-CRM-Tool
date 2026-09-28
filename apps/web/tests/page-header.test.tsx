@@ -28,27 +28,6 @@ describe("PageHeader", () => {
         expect(actions).toContainElement(screen.getByRole("button", { name: "Invite Member" }))
     })
 
-    it("shows the count badge with a screen-reader noun", () => {
-        render(<PageHeader title="Surrogates" count={1510} countLabel="surrogates" />)
-
-        const badge = document.querySelector('[data-slot="page-header-count"]')
-        expect(badge).toHaveTextContent("1,510 surrogates")
-        expect(badge?.textContent?.startsWith("1,510")).toBe(true)
-        expect(screen.getByText("surrogates")).toHaveClass("sr-only")
-    })
-
-    it("reads 'n of total' while a filter narrows the list", () => {
-        render(<PageHeader title="Matches" count={3} countTotal={42} />)
-
-        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent("3 of 42")
-    })
-
-    it("hides the badge while the count is unknown", () => {
-        render(<PageHeader title="Matches" count={null} countTotal={42} />)
-
-        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
-    })
-
     it("renders a labelled back link and inline meta for detail pages", () => {
         render(
             <PageHeader

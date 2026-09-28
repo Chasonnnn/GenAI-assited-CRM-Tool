@@ -145,11 +145,11 @@ def build_pipeline_dependency_graph(
     }
 
     if pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY:
+        # Archived intended parents are restored onto their stored stage, so count them too.
         entity_counts = dict(
             db.query(IntendedParent.stage_id, func.count(IntendedParent.id))
             .filter(
                 IntendedParent.organization_id == pipeline.organization_id,
-                IntendedParent.is_archived.is_(False),
                 IntendedParent.stage_id.is_not(None),
             )
             .group_by(IntendedParent.stage_id)
@@ -258,6 +258,20 @@ def build_pipeline_dependency_graph(
                 normalized = _normalize_stage_key(item.get("stage_key") or item.get("stage_slug"))
                 if normalized:
                     integration_refs[normalized].add("meta_crm_dataset")
+    elif pipeline.entity_type in {EGG_DONOR_PIPELINE_ENTITY, SPERM_DONOR_PIPELINE_ENTITY}:
+        zapier_settings = (
+            db.query(ZapierWebhookSettings)
+            .filter(ZapierWebhookSettings.organization_id == pipeline.organization_id)
+            .first()
+        )
+        donor_mapping = zapier_settings.donor_outbound_event_mapping if zapier_settings else None
+        stage_key_by_id = {str(stage.id): stage.stage_key for stage in stages}
+        for item in donor_mapping if isinstance(donor_mapping, list) else []:
+            if not isinstance(item, dict) or str(item.get("pipeline_id")) != str(pipeline.id):
+                continue
+            stage_key = stage_key_by_id.get(str(item.get("stage_id")))
+            if stage_key:
+                integration_refs[stage_key].add("zapier_outbound")
 
     for stage_key, refs in integration_refs.items():
         if stage_key in stage_map:
@@ -295,34 +309,7 @@ def build_pipeline_dependency_graph(
                     }
                 )
 
-    workflows = []
-    if pipeline.entity_type in {
-        SURROGATE_PIPELINE_ENTITY,
-        INTENDED_PARENT_PIPELINE_ENTITY,
-        EGG_DONOR_PIPELINE_ENTITY,
-        SPERM_DONOR_PIPELINE_ENTITY,
-    }:
-        workflow_query = db.query(AutomationWorkflow).filter(
-            AutomationWorkflow.organization_id == pipeline.organization_id
-        )
-        if pipeline.entity_type in {
-            EGG_DONOR_PIPELINE_ENTITY,
-            SPERM_DONOR_PIPELINE_ENTITY,
-        }:
-            workflow_query = workflow_query.filter(
-                AutomationWorkflow.subject_type == pipeline.entity_type
-            )
-        else:
-            workflow_query = workflow_query.filter(
-                AutomationWorkflow.subject_type.notin_(
-                    {
-                        EGG_DONOR_PIPELINE_ENTITY,
-                        SPERM_DONOR_PIPELINE_ENTITY,
-                    }
-                )
-            )
-        workflows = workflow_query.all()
-    for workflow in workflows:
+    for workflow in pipeline_service.get_stage_reference_workflows(db, pipeline):
         for stage in stages:
             if not stage.stage_key or stage.stage_key not in stage_map:
                 continue

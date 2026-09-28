@@ -9,7 +9,7 @@ import type { JsonObject } from '../types/json'
 type FormStatus = 'draft' | 'published' | 'archived'
 export type FormPurpose = 'surrogate_application' | 'lead_capture' | 'event_intake' | 'other'
 export type FormLeadKind = 'surrogate' | 'egg_donor' | 'sperm_donor'
-type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
+export type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
 type FormLinkMode = 'shared'
 type SharedSubmissionOutcome = 'workflow_pending' | 'linked' | 'ambiguous_review' | 'lead_created'
 type EmbedHealthCheckStatus = 'pass' | 'warning' | 'block'
@@ -333,11 +333,7 @@ export interface FormDeliverySettings {
 
 export interface FormSubmissionSharedResponse {
     id: string
-    status: FormSubmissionStatus
-    outcome: SharedSubmissionOutcome
-    surrogate_id?: string | null
-    donor_id?: string | null
-    intake_lead_id?: string | null
+    outcome: 'received'
 }
 
 export interface FormIntakePublicRead {
@@ -350,6 +346,7 @@ export interface FormIntakePublicRead {
     max_file_size_bytes: number
     max_file_count: number
     allowed_mime_types?: string[] | null
+    field_allowed_mime_types?: Record<string, string[]>
     campaign_name?: string | null
     event_name?: string | null
     messaging_consent?: MessagingConsentOptionsRead
@@ -421,8 +418,28 @@ export interface MatchCandidateRead {
     created_at: string
 }
 
+export type DonorMatchCandidateReason = 'donor_email_phone_match' | 'donor_email_match' | 'donor_phone_match'
+
+export interface DonorMatchCandidateRead {
+    donor_id: string
+    donor_number: string
+    full_name: string
+    donor_type: 'egg' | 'sperm'
+    reason: DonorMatchCandidateReason
+}
+
+export interface DonorSubmissionRead {
+    id: string
+    form_id: string
+    form_name: string
+    status: FormSubmissionStatus
+    submitted_at: string
+    reviewed_at: string | null
+}
+
 export interface ResolveSubmissionMatchPayload {
     surrogate_id?: string | null
+    donor_id?: string | null
     create_intake_lead?: boolean
     review_notes?: string | null
 }
@@ -803,6 +820,7 @@ export function submitSharedPublicForm(
     messagingConsent?: { operational?: boolean; promotional?: boolean; phoneFieldKey?: string | null },
     publishedVersionId?: string | null,
     idempotencyKey?: string,
+    attribution?: Record<string, string>,
 ): Promise<FormSubmissionSharedResponse> {
     const formData = new FormData()
     formData.append('answers', JSON.stringify(answers))
@@ -821,6 +839,9 @@ export function submitSharedPublicForm(
     // Multipart has no null; omitting the part sends sms_phone_field_key as null.
     if (messagingConsent?.phoneFieldKey) {
         formData.append('sms_phone_field_key', messagingConsent.phoneFieldKey)
+    }
+    if (attribution && Object.keys(attribution).length > 0) {
+        formData.append('attribution', JSON.stringify(attribution))
     }
     const options = challengeToken ? { headers: { "X-Intake-Challenge": challengeToken } } : undefined
     return api.upload<FormSubmissionSharedResponse>(`/forms/public/intake/${slug}/submit`, formData, options)
@@ -883,6 +904,18 @@ export function updateSubmissionAnswers(
 
 export function listSubmissionMatchCandidates(submissionId: string): Promise<MatchCandidateRead[]> {
     return api.get<MatchCandidateRead[]>(`/forms/submissions/${submissionId}/match-candidates`)
+}
+
+export function listSubmissionDonorCandidates(submissionId: string): Promise<DonorMatchCandidateRead[]> {
+    return api.get<DonorMatchCandidateRead[]>(`/forms/submissions/${submissionId}/donor-candidates`)
+}
+
+export function listDonorSubmissions(donorId: string): Promise<DonorSubmissionRead[]> {
+    return api.get<DonorSubmissionRead[]>(`/forms/donors/${donorId}/submissions`)
+}
+
+export function rescanSubmissionFile(submissionId: string, fileId: string): Promise<FormSubmissionFileRead> {
+    return api.post<FormSubmissionFileRead>(`/forms/submissions/${submissionId}/files/${fileId}/rescan`)
 }
 
 export function resolveSubmissionMatch(

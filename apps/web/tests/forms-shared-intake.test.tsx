@@ -115,10 +115,7 @@ describe('Shared Intake Public Page', () => {
         })
         submitSharedPublicForm.mockResolvedValue({
             id: 'submission-1',
-            status: 'pending_review',
-            outcome: 'lead_created',
-            surrogate_id: null,
-            intake_lead_id: 'lead-1',
+            outcome: 'received',
         })
     })
 
@@ -671,6 +668,7 @@ describe('Shared Intake Public Page', () => {
                 undefined,
                 'version-1',
                 expect.any(String),
+                expect.objectContaining({ landing_url: expect.any(String) }),
             )
         })
 
@@ -715,6 +713,105 @@ describe('Shared Intake Public Page', () => {
         expect(attemptKey).not.toBe('other-attempt')
         expect(attemptKey).not.toBe('old-attempt')
         expect(window.sessionStorage.getItem('intake-submit:other-form:version-1')).toBe('other-attempt')
+    })
+
+    describe('landing attribution', () => {
+        const originalLocation = window.location
+        const landingUrl =
+            'https://app.surrogacyforce.com/intake/event-abc?utm_source=facebook&utm_campaign=donor-fall&fbclid=click-abc&ad_id=ad-9&email=leak@example.com'
+
+        function setLocation(url: string) {
+            const next = new URL(url)
+            Object.defineProperty(window, 'location', {
+                writable: true,
+                value: { ...originalLocation, href: next.href, origin: next.origin, search: next.search },
+            })
+        }
+
+        async function submitApplication() {
+            await screen.findByRole('heading', { name: 'Event Intake Form' })
+            fireEvent.click(screen.getByRole('checkbox'))
+            fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+        }
+
+        beforeEach(() => {
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2026-09-27T12:00:00.123Z'))
+            Object.defineProperty(document, 'referrer', {
+                configurable: true,
+                value: 'https://www.ewisurrogacy.com/egg-donors?utm_source=facebook',
+            })
+        })
+
+        afterEach(() => {
+            Object.defineProperty(window, 'location', { writable: true, value: originalLocation })
+            Object.defineProperty(document, 'referrer', { configurable: true, value: '' })
+        })
+
+        it('sends allowlisted query values, a millisecond fbc, the landing URL and referrer', async () => {
+            setLocation(`${landingUrl}#apply`)
+            render(<PublicIntakeFormClient slug="event-abc" />)
+
+            await submitApplication()
+
+            await waitFor(() => expect(submitSharedPublicForm).toHaveBeenCalledTimes(1))
+            expect(submitSharedPublicForm.mock.calls[0]?.[8]).toEqual({
+                utm_source: 'facebook',
+                utm_campaign: 'donor-fall',
+                fbclid: 'click-abc',
+                ad_id: 'ad-9',
+                fbc: `fb.1.${Date.parse('2026-09-27T12:00:00.123Z')}.click-abc`,
+                referrer: 'https://www.ewisurrogacy.com/egg-donors',
+                landing_url: landingUrl,
+            })
+            await screen.findByText(/added to intake review/i)
+            expect(window.localStorage.getItem('intake-attribution:event-abc')).toBeNull()
+        })
+
+        it('keeps the first landing attribution through a failed submit and a later bare visit', async () => {
+            submitSharedPublicForm.mockRejectedValueOnce(new Error('Response lost'))
+            setLocation(landingUrl)
+            const firstPage = render(<PublicIntakeFormClient slug="event-abc" />)
+            await submitApplication()
+            await waitFor(() => {
+                expect(submitSharedPublicForm).toHaveBeenCalledTimes(1)
+                expect(screen.getByRole('button', { name: 'Submit Application' })).toBeEnabled()
+            })
+            firstPage.unmount()
+
+            vi.setSystemTime(new Date('2026-09-28T09:30:00.000Z'))
+            setLocation('https://app.surrogacyforce.com/intake/event-abc')
+            render(<PublicIntakeFormClient slug="event-abc" />)
+            await submitApplication()
+
+            await screen.findByText(/added to intake review/i)
+            const firstAttribution = submitSharedPublicForm.mock.calls[0]?.[8]
+            expect(firstAttribution).toMatchObject({
+                fbclid: 'click-abc',
+                fbc: `fb.1.${Date.parse('2026-09-27T12:00:00.123Z')}.click-abc`,
+            })
+            expect(submitSharedPublicForm.mock.calls[1]?.[8]).toEqual(firstAttribution)
+        })
+
+        it('replaces stored attribution when a later visit brings new query values', async () => {
+            window.localStorage.setItem(
+                'intake-attribution:event-abc',
+                JSON.stringify({
+                    query: { utm_source: 'google' },
+                    attribution: { utm_source: 'google', landing_url: 'https://app.surrogacyforce.com/intake/event-abc?utm_source=google' },
+                }),
+            )
+            setLocation('https://app.surrogacyforce.com/intake/event-abc?utm_source=facebook&fbc=fb.1.1790510400000.click-xyz')
+            render(<PublicIntakeFormClient slug="event-abc" />)
+
+            await submitApplication()
+
+            await waitFor(() => expect(submitSharedPublicForm).toHaveBeenCalledTimes(1))
+            expect(submitSharedPublicForm.mock.calls[0]?.[8]).toMatchObject({
+                utm_source: 'facebook',
+                fbc: 'fb.1.1790510400000.click-xyz',
+            })
+        })
     })
 
     it.each([
@@ -806,6 +903,7 @@ describe('Shared Intake Public Page', () => {
                 { operational: false, promotional: false, phoneFieldKey: null },
                 'version-1',
                 expect.any(String),
+                expect.objectContaining({ landing_url: expect.any(String) }),
             )
         })
     })
@@ -933,6 +1031,7 @@ describe('Shared Intake Public Page', () => {
                     { operational: false, promotional: false, phoneFieldKey: null },
                     'version-1',
                     expect.any(String),
+                    expect.objectContaining({ landing_url: expect.any(String) }),
                 )
             })
         })
@@ -970,6 +1069,7 @@ describe('Shared Intake Public Page', () => {
                     { operational: true, promotional: false, phoneFieldKey: 'mobile_number' },
                     'version-1',
                     expect.any(String),
+                    expect.objectContaining({ landing_url: expect.any(String) }),
                 )
             })
         })
@@ -1021,6 +1121,7 @@ describe('Shared Intake Public Page', () => {
                     { operational: false, promotional: false, phoneFieldKey: null },
                     'version-1',
                     expect.any(String),
+                    expect.objectContaining({ landing_url: expect.any(String) }),
                 )
             })
         })
@@ -1086,6 +1187,7 @@ describe('Shared Intake Public Page', () => {
                     { operational: false, promotional: false, phoneFieldKey: null },
                     'version-1',
                     expect.any(String),
+                    expect.objectContaining({ landing_url: expect.any(String) }),
                 )
             })
         })
@@ -1173,6 +1275,7 @@ describe('Shared Intake Public Page', () => {
                 { operational: true, promotional: false, phoneFieldKey: 'mobile_number' },
                 'version-1',
                 expect.any(String),
+                expect.objectContaining({ landing_url: expect.any(String) }),
             )
             expect(screen.getByText('Review Your Application')).toBeInTheDocument()
         })
@@ -1253,6 +1356,7 @@ describe('Shared Intake Public Page', () => {
                 undefined,
                 'version-1',
                 expect.any(String),
+                expect.objectContaining({ landing_url: expect.any(String) }),
             )
         })
     })
@@ -1315,8 +1419,41 @@ describe('Shared Intake Public Page', () => {
                 undefined,
                 'version-1',
                 expect.any(String),
+                expect.objectContaining({ landing_url: expect.any(String) }),
             )
         })
+    })
+
+    it('limits the donor profile photo picker to its field upload types', async () => {
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            allowed_mime_types: ['application/pdf', 'image/png', 'image/jpeg'],
+            field_allowed_mime_types: { profile_photo: ['image/jpeg', 'image/png'] },
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Donor Application',
+                        fields: [
+                            { key: 'profile_photo', label: 'Profile Photo', type: 'file', required: true },
+                            { key: 'medical_records', label: 'Medical Records', type: 'file', required: false },
+                        ],
+                    },
+                ],
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="donor-form" />)
+
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        const photoInput = screen
+            .getByRole('group', { name: 'Profile Photo' })
+            .querySelector('input[type="file"]')
+        const recordsInput = screen
+            .getByRole('group', { name: 'Medical Records' })
+            .querySelector('input[type="file"]')
+        expect(photoInput).toHaveAttribute('accept', 'image/jpeg,image/png')
+        expect(recordsInput).toHaveAttribute('accept', 'application/pdf,image/png,image/jpeg')
     })
 
     it('clears the local draft session after successful submit', async () => {

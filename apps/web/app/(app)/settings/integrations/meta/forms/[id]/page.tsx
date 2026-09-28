@@ -25,14 +25,24 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Loader2Icon, SparklesIcon } from "lucide-react"
 import { QueryErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
+import { toast } from "@/components/ui/toast"
 import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import { SettingsPageGate } from "../../../../settings-page-gate"
+import {
+    META_LEAD_KIND_OPTIONS,
+    getMetaLeadKindLabel,
+    getMetaLeadStatusLabel,
+    getReprocessBlockReasonLabel,
+    isDonorLeadKind,
+} from "../meta-form-labels"
 import {
     useMetaFormMapping,
     useReconvertMetaFormLeads,
     useMetaFormUnconvertedLeads,
+    useRerouteMetaFormLead,
     useUpdateMetaFormMapping,
 } from "@/lib/hooks/use-meta-forms"
+import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { useAiMapImport } from "@/lib/hooks/use-import"
 import {
     applyUnknownColumnBehavior,
@@ -69,18 +79,19 @@ const UNKNOWN_COLUMN_BEHAVIOR_OPTIONS = [
     { value: "warn", label: "Warn only" },
 ] satisfies Array<{ value: UnknownColumnBehavior; label: string }>
 
-const LEAD_KIND_OPTIONS = [
-    { value: "surrogate", label: "Surrogate" },
-    { value: "egg_donor", label: "Egg donor" },
-    { value: "sperm_donor", label: "Sperm donor" },
-] satisfies Array<{ value: MetaLeadKind; label: string }>
+// Donor conversions store only donor fields: no custom fields and no Meta metadata.
+const DONOR_ACTION_OPTIONS = ACTION_OPTIONS.filter(
+    (option) => option.value !== "metadata" && option.value !== "custom"
+)
+const DONOR_UNKNOWN_COLUMN_BEHAVIOR_OPTIONS = UNKNOWN_COLUMN_BEHAVIOR_OPTIONS.filter(
+    (option) => option.value !== "metadata"
+)
 
 const ACTION_LABELS = new Map(ACTION_OPTIONS.map((option) => [option.value, option.label]))
 const TRANSFORM_LABELS = new Map(TRANSFORM_OPTIONS.map((option) => [option.value, option.label]))
 const UNKNOWN_COLUMN_BEHAVIOR_LABELS = new Map(
     UNKNOWN_COLUMN_BEHAVIOR_OPTIONS.map((option) => [option.value, option.label])
 )
-const LEAD_KIND_LABELS = new Map(LEAD_KIND_OPTIONS.map((option) => [option.value, option.label]))
 
 function getActionLabel(value: string | null) {
     return value ? ACTION_LABELS.get(value) ?? value : "Action"
@@ -94,8 +105,27 @@ function getUnknownColumnBehaviorLabel(value: UnknownColumnBehavior | null) {
     return value ? UNKNOWN_COLUMN_BEHAVIOR_LABELS.get(value) ?? value : "Store metadata"
 }
 
-function getLeadKindLabel(value: MetaLeadKind | null) {
-    return value ? LEAD_KIND_LABELS.get(value) ?? value : "Surrogate"
+/** Shows donor-unsupported targets and custom/metadata actions as Ignore, which is what saving sends. */
+function restrictMappingsToDonorFields(
+    mappings: ColumnMappingDraft[],
+    allowedFields: ReadonlySet<string>
+): ColumnMappingDraft[] {
+    return mappings.map((mapping) => {
+        const unsupportedTarget =
+            mapping.action === "map" &&
+            !!mapping.surrogate_field &&
+            !allowedFields.has(mapping.surrogate_field)
+        if (!unsupportedTarget && mapping.action !== "custom" && mapping.action !== "metadata") {
+            return mapping
+        }
+        return {
+            ...mapping,
+            action: "ignore",
+            surrogate_field: null,
+            transformation: null,
+            custom_field_key: null,
+        }
+    })
 }
 
 type MetaFormMappingData = NonNullable<ReturnType<typeof useMetaFormMapping>["data"]>
@@ -124,6 +154,8 @@ function MetaMappingOutdatedAlert() {
 
 function MetaColumnMappingCard({
     aiMapPending,
+    availableFields,
+    canEditDonors,
     columnLabels,
     data,
     mappings,
@@ -135,6 +167,8 @@ function MetaColumnMappingCard({
     leadKind,
 }: {
     aiMapPending: boolean
+    availableFields: string[]
+    canEditDonors: boolean
     columnLabels: ReadonlyMap<string, string>
     data: MetaFormMappingData
     mappings: ColumnMappingDraft[]
@@ -145,6 +179,10 @@ function MetaColumnMappingCard({
     unknownColumnBehavior: UnknownColumnBehavior
     leadKind: MetaLeadKind
 }) {
+    const donorKind = isDonorLeadKind(leadKind)
+    const unknownBehaviorOptions = donorKind
+        ? DONOR_UNKNOWN_COLUMN_BEHAVIOR_OPTIONS
+        : UNKNOWN_COLUMN_BEHAVIOR_OPTIONS
     return (
         <Card className="overflow-hidden">
             <CardHeader>
@@ -164,14 +202,16 @@ function MetaColumnMappingCard({
                                     aria-label="Lead type"
                                 >
                                     <SelectValue>
-                                        {(value: string | null) =>
-                                            getLeadKindLabel(value as MetaLeadKind | null)
-                                        }
+                                        {(value: string | null) => getMetaLeadKindLabel(value)}
                                     </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {LEAD_KIND_OPTIONS.map((option) => (
-                                        <SelectItem key={option.value} value={option.value}>
+                                    {META_LEAD_KIND_OPTIONS.map((option) => (
+                                        <SelectItem
+                                            key={option.value}
+                                            value={option.value}
+                                            disabled={isDonorLeadKind(option.value) && !canEditDonors}
+                                        >
                                             {option.label}
                                         </SelectItem>
                                     ))}
@@ -199,7 +239,7 @@ function MetaColumnMappingCard({
                                     </SelectValue>
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {UNKNOWN_COLUMN_BEHAVIOR_OPTIONS.map((option) => (
+                                    {unknownBehaviorOptions.map((option) => (
                                         <SelectItem key={option.value} value={option.value}>
                                             {option.label}
                                         </SelectItem>
@@ -266,7 +306,8 @@ function MetaColumnMappingCard({
                             {mappings.map((mapping) => (
                                 <MetaColumnMappingRow
                                     key={mapping.csv_column}
-                                    availableFields={data.available_fields}
+                                    actionOptions={donorKind ? DONOR_ACTION_OPTIONS : ACTION_OPTIONS}
+                                    availableFields={availableFields}
                                     columnLabel={columnLabels.get(mapping.csv_column) || mapping.csv_column}
                                     mapping={mapping}
                                     onUpdateMapping={onUpdateMapping}
@@ -281,11 +322,13 @@ function MetaColumnMappingCard({
 }
 
 function MetaColumnMappingRow({
+    actionOptions,
     availableFields,
     columnLabel,
     mapping,
     onUpdateMapping,
 }: {
+    actionOptions: ReadonlyArray<{ value: string; label: string }>
     availableFields: string[]
     columnLabel: string
     mapping: ColumnMappingDraft
@@ -335,7 +378,7 @@ function MetaColumnMappingRow({
                         </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                        {ACTION_OPTIONS.map((option) => (
+                        {actionOptions.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                                 {option.label}
                             </SelectItem>
@@ -503,19 +546,27 @@ function MetaMappingActions({
 }
 
 function MetaUnconvertedLeadsCard({
+    canEditDonors,
+    formLeadKind,
     leadCount,
     reconvertMessage,
     reconvertPending,
+    reroutingLeadId,
     unconvertedLeadData,
     unconvertedLeadsLoading,
     onReconvert,
+    onReroute,
 }: {
+    canEditDonors: boolean
+    formLeadKind: MetaLeadKind
     leadCount: number
     reconvertMessage: string
     reconvertPending: boolean
+    reroutingLeadId: string | null
     unconvertedLeadData: MetaFormUnconvertedLeadData | undefined
     unconvertedLeadsLoading: boolean
     onReconvert: () => Promise<void>
+    onReroute: (leadId: string, leadKind: MetaLeadKind) => Promise<void>
 }) {
     return (
         <Card className="overflow-hidden">
@@ -576,7 +627,13 @@ function MetaUnconvertedLeadsCard({
                         Loading unconverted leads…
                     </div>
                 ) : unconvertedLeadData?.items.length ? (
-                    <MetaUnconvertedLeadsTable items={unconvertedLeadData.items} />
+                    <MetaUnconvertedLeadsTable
+                        canEditDonors={canEditDonors}
+                        formLeadKind={formLeadKind}
+                        items={unconvertedLeadData.items}
+                        reroutingLeadId={reroutingLeadId}
+                        onReroute={onReroute}
+                    />
                 ) : (
                     <p className="text-sm text-muted-foreground">
                         No unconverted leads are currently queued for this form.
@@ -587,7 +644,19 @@ function MetaUnconvertedLeadsCard({
     )
 }
 
-function MetaUnconvertedLeadsTable({ items }: { items: MetaFormUnconvertedLeadData["items"] }) {
+function MetaUnconvertedLeadsTable({
+    canEditDonors,
+    formLeadKind,
+    items,
+    reroutingLeadId,
+    onReroute,
+}: {
+    canEditDonors: boolean
+    formLeadKind: MetaLeadKind
+    items: MetaFormUnconvertedLeadData["items"]
+    reroutingLeadId: string | null
+    onReroute: (leadId: string, leadKind: MetaLeadKind) => Promise<void>
+}) {
     return (
         <div className="max-h-[360px] overflow-auto">
             <Table>
@@ -597,35 +666,73 @@ function MetaUnconvertedLeadsTable({ items }: { items: MetaFormUnconvertedLeadDa
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Lead type</TableHead>
                         <TableHead>Retry</TableHead>
                         <TableHead>Reason</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {items.map((lead) => (
-                        <TableRow key={lead.id}>
-                            <TableCell className="font-mono text-xs">
-                                {lead.meta_lead_id}
-                            </TableCell>
-                            <TableCell>{lead.full_name || "—"}</TableCell>
-                            <TableCell>{lead.email || "—"}</TableCell>
-                            <TableCell>
-                                <Badge variant="secondary">{lead.status}</Badge>
-                            </TableCell>
-                            <TableCell>
-                                {lead.reprocess_eligible ? (
-                                    <Badge>Eligible</Badge>
-                                ) : (
-                                    <Badge variant="outline">Blocked</Badge>
-                                )}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                                {lead.reprocess_block_reason
-                                    ? lead.reprocess_block_reason.replace(/_/g, " ")
-                                    : lead.conversion_error || "Awaiting mapping"}
-                            </TableCell>
-                        </TableRow>
-                    ))}
+                    {items.map((lead) => {
+                        const leadKind = lead.lead_kind ?? formLeadKind
+                        return (
+                            <TableRow key={lead.id}>
+                                <TableCell className="font-mono text-xs">
+                                    {lead.meta_lead_id}
+                                </TableCell>
+                                <TableCell>{lead.full_name || "—"}</TableCell>
+                                <TableCell>{lead.email || "—"}</TableCell>
+                                <TableCell>
+                                    <Badge variant="secondary">{getMetaLeadStatusLabel(lead.status)}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                    <Select
+                                        value={leadKind}
+                                        onValueChange={(value) => {
+                                            if (value && value !== leadKind) {
+                                                void onReroute(lead.id, value as MetaLeadKind)
+                                            }
+                                        }}
+                                        disabled={
+                                            reroutingLeadId !== null ||
+                                            (isDonorLeadKind(leadKind) && !canEditDonors)
+                                        }
+                                    >
+                                        <SelectTrigger
+                                            className="h-8 w-[140px]"
+                                            aria-label={`Lead type for ${lead.meta_lead_id}`}
+                                        >
+                                            <SelectValue>
+                                                {(value: string | null) => getMetaLeadKindLabel(value)}
+                                            </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {META_LEAD_KIND_OPTIONS.map((option) => (
+                                                <SelectItem
+                                                    key={option.value}
+                                                    value={option.value}
+                                                    disabled={isDonorLeadKind(option.value) && !canEditDonors}
+                                                >
+                                                    {option.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </TableCell>
+                                <TableCell>
+                                    {lead.reprocess_eligible ? (
+                                        <Badge>Eligible</Badge>
+                                    ) : (
+                                        <Badge variant="outline">Blocked</Badge>
+                                    )}
+                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
+                                    {lead.reprocess_block_reason
+                                        ? getReprocessBlockReasonLabel(lead.reprocess_block_reason)
+                                        : lead.conversion_error || "Awaiting mapping"}
+                                </TableCell>
+                            </TableRow>
+                        )
+                    })}
                 </TableBody>
             </Table>
         </div>
@@ -658,7 +765,10 @@ function MetaFormMappingContent() {
         useMetaFormUnconvertedLeads(formId, (data?.form.unconverted_leads || 0) > 0)
     const updateMutation = useUpdateMetaFormMapping(formId)
     const reconvertMutation = useReconvertMetaFormLeads(formId)
+    const rerouteMutation = useRerouteMetaFormLead(formId)
     const aiMapMutation = useAiMapImport()
+    const { can } = usePermissionCheck()
+    const canEditDonors = can("edit_donors")
 
     const [mappingOverrides, setMappingOverrides] = useState<Record<string, ColumnMappingDraft>>({})
     const [unknownColumnBehaviorOverride, setUnknownColumnBehaviorOverride] =
@@ -666,6 +776,7 @@ function MetaFormMappingContent() {
     const [leadKindOverride, setLeadKindOverride] = useState<MetaLeadKind | null>(null)
     const [error, setError] = useState<string>("")
     const [reconvertMessage, setReconvertMessage] = useState<string>("")
+    const [reroutingLeadId, setReroutingLeadId] = useState<string | null>(null)
 
     const columnLabels = new Map(
         data?.columns.map((col) => [col.key, col.label || col.key] as const) ?? []
@@ -701,20 +812,29 @@ function MetaFormMappingContent() {
             unknownColumnBehavior: data.unknown_column_behavior || "metadata",
         }
     })()
-    const unknownColumnBehavior =
-        unknownColumnBehaviorOverride ?? serverMappingState.unknownColumnBehavior
     const leadKind = leadKindOverride ?? data?.form.lead_kind ?? "surrogate"
+    const donorKind = isDonorLeadKind(leadKind)
+    const availableFields = data ? data.available_fields_by_lead_kind[leadKind] : []
+    const selectedUnknownColumnBehavior =
+        unknownColumnBehaviorOverride ?? serverMappingState.unknownColumnBehavior
+    const unknownColumnBehavior =
+        donorKind && selectedUnknownColumnBehavior === "metadata"
+            ? "ignore"
+            : selectedUnknownColumnBehavior
     const touchedColumns = new Set(serverMappingState.touchedColumns)
     for (const csvColumn of Object.keys(mappingOverrides)) {
         touchedColumns.add(csvColumn)
     }
-    const mappings = applyUnknownColumnBehavior(
+    const mergedMappings = applyUnknownColumnBehavior(
         serverMappingState.mappings.map(
             (mapping) => mappingOverrides[mapping.csv_column] ?? mapping
         ),
         unknownColumnBehavior,
         touchedColumns
     )
+    const mappings = donorKind
+        ? restrictMappingsToDonorFields(mergedMappings, new Set(availableFields))
+        : mergedMappings
 
     const updateMapping = (csvColumn: string, patch: Partial<ColumnMappingDraft>) => {
         const currentMapping = mappings.find((mapping) => mapping.csv_column === csvColumn)
@@ -762,6 +882,15 @@ function MetaFormMappingContent() {
 
                     const derived = buildColumnMappingsFromSuggestions([suggestion])[0]
                     if (!derived) continue
+                    if (
+                        donorKind &&
+                        (derived.action === "custom" ||
+                            derived.action === "metadata" ||
+                            (derived.surrogate_field !== null &&
+                                !availableFields.includes(derived.surrogate_field)))
+                    ) {
+                        continue
+                    }
 
                     const shouldAdopt =
                         (!mapping.surrogate_field &&
@@ -831,7 +960,7 @@ function MetaFormMappingContent() {
         try {
             const result = await reconvertMutation.mutateAsync()
             const blockedSummary = Object.entries(result.blocked_reasons || {})
-                .map(([reason, count]) => `${count} ${reason.replace(/_/g, " ")}`)
+                .map(([reason, count]) => `${count} ${getReprocessBlockReasonLabel(reason).toLowerCase()}`)
                 .join(", ")
             setReconvertMessage(
                 [
@@ -843,6 +972,28 @@ function MetaFormMappingContent() {
             )
         } catch (err: unknown) {
             setError(getActionErrorMessage(err, "Couldn't queue reconversion. Try again.") ?? "")
+        }
+    }
+
+    const handleReroute = async (leadId: string, nextLeadKind: MetaLeadKind) => {
+        setReroutingLeadId(leadId)
+        try {
+            const result = await rerouteMutation.mutateAsync({ leadId, leadKind: nextLeadKind })
+            const kindLabel = getMetaLeadKindLabel(result.lead_kind)
+            if (result.queued) {
+                toast.success(`Lead queued for conversion as ${kindLabel}`)
+            } else {
+                toast.warning(
+                    `Lead type changed to ${kindLabel}. Not queued: ${getReprocessBlockReasonLabel(
+                        result.reprocess_block_reason
+                    ).toLowerCase()}.`
+                )
+            }
+        } catch (err: unknown) {
+            const message = getActionErrorMessage(err, "Couldn't change the lead type. Try again.")
+            if (message) toast.error(message)
+        } finally {
+            setReroutingLeadId(null)
         }
     }
 
@@ -883,6 +1034,8 @@ function MetaFormMappingContent() {
 
                 <MetaColumnMappingCard
                     aiMapPending={aiMapMutation.isPending}
+                    availableFields={availableFields}
+                    canEditDonors={canEditDonors}
                     columnLabels={columnLabels}
                     data={data}
                     mappings={mappings}
@@ -905,12 +1058,16 @@ function MetaFormMappingContent() {
 
                 {data.form.unconverted_leads > 0 && (
                     <MetaUnconvertedLeadsCard
+                        canEditDonors={canEditDonors}
+                        formLeadKind={data.form.lead_kind}
                         leadCount={data.form.unconverted_leads}
                         reconvertMessage={reconvertMessage}
                         reconvertPending={reconvertMutation.isPending}
+                        reroutingLeadId={reroutingLeadId}
                         unconvertedLeadData={unconvertedLeadData}
                         unconvertedLeadsLoading={unconvertedLeadsLoading}
                         onReconvert={handleReconvert}
+                        onReroute={handleReroute}
                     />
                 )}
             </div>

@@ -25,7 +25,12 @@ from app.db.models import (
     Task,
 )
 from app.schemas.task import TaskCreate
-from app.services import import_detection_service, queue_service, task_service
+from app.services import (
+    donor_input_normalization_service,
+    import_detection_service,
+    queue_service,
+    task_service,
+)
 from app.utils.normalization import normalize_email
 from app.utils.pagination import paginate_query_by_offset
 
@@ -37,11 +42,26 @@ META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
 ]
 AUTO_SAFE_SCHEMA_KEYS = {"lead_id"}
 TEST_LEAD_PATTERN = re.compile(r"test lead:|dummy data", re.IGNORECASE)
-# Donor conversions always set source to the canonical "Meta"
+# Donor conversions always set source to the canonical "meta"
 # (meta_lead_service). "source" is intentionally not mappable for donor
 # forms: a stored mapping would never be applied and only mislead admins.
-DONOR_META_MAPPING_FIELDS = ["full_name", "email", "phone", "state", "education"]
+DONOR_META_MAPPING_FIELDS = list(donor_input_normalization_service.DONOR_INTAKE_FIELDS)
 DONOR_LEAD_KINDS = {"egg_donor", "sperm_donor"}
+# Donors have no custom fields or import metadata, so these actions would drop data.
+DONOR_UNSUPPORTED_ACTIONS = {"custom", "metadata"}
+
+
+def available_fields_for_lead_kind(lead_kind: str | None) -> list[str]:
+    if lead_kind in DONOR_LEAD_KINDS:
+        return list(DONOR_META_MAPPING_FIELDS)
+    return list(import_detection_service.AVAILABLE_SURROGATE_FIELDS)
+
+
+def available_fields_by_lead_kind() -> dict[str, list[str]]:
+    return {
+        lead_kind: available_fields_for_lead_kind(lead_kind)
+        for lead_kind in ("surrogate", "egg_donor", "sperm_donor")
+    }
 
 
 def donor_unsupported_mapped_fields(form: MetaForm) -> list[str]:
@@ -350,9 +370,7 @@ def get_reprocess_eligibility_for_leads(
     for lead in leads:
         effective_lead_kind = getattr(lead, "lead_kind", None) or lead_kind
         subject_group = (
-            "donor"
-            if effective_lead_kind in {"egg_donor", "sperm_donor"}
-            else "surrogate"
+            "donor" if effective_lead_kind in {"egg_donor", "sperm_donor"} else "surrogate"
         )
         subject_group_by_lead[lead.id] = subject_group
         email = _extract_lead_email(lead)
@@ -435,6 +453,61 @@ def get_reprocess_plan_for_form(
     )
     eligible_ids = [lead.id for lead in leads if reasons_by_lead.get(lead.id) is None]
     return leads, eligible_ids, reasons_by_lead, reason_counts
+
+
+class MetaLeadRerouteError(ValueError):
+    """The lead cannot be rerouted."""
+
+
+def get_form_lead(db: Session, form: MetaForm, lead_id: UUID) -> MetaLead | None:
+    return db.scalar(
+        select(MetaLead).where(
+            MetaLead.organization_id == form.organization_id,
+            MetaLead.meta_form_id == form.form_external_id,
+            MetaLead.id == lead_id,
+        )
+    )
+
+
+def reroute_unconverted_lead(
+    db: Session,
+    form: MetaForm,
+    lead: MetaLead,
+    *,
+    lead_kind: str,
+) -> tuple[bool, str | None]:
+    """Set one unconverted lead's kind and queue it for conversion when it is eligible.
+
+    Returns (queued, block_reason). A lead keeps its kind across form reclassification;
+    this explicit per-lead choice is the way to move it.
+    """
+    from app.db.enums import JobType
+    from app.services import job_service
+
+    if lead_kind not in {"surrogate", *DONOR_LEAD_KINDS}:
+        raise MetaLeadRerouteError("Unsupported Meta lead kind")
+    if lead.organization_id != form.organization_id or lead.meta_form_id != form.form_external_id:
+        raise MetaLeadRerouteError("Lead does not belong to this form")
+    if lead.is_converted:
+        raise MetaLeadRerouteError("Converted leads cannot be rerouted")
+
+    lead.lead_kind = lead_kind
+    reasons, _ = get_reprocess_eligibility_for_leads(
+        db, form.organization_id, [lead], lead_kind=lead_kind
+    )
+    block_reason = reasons.get(lead.id)
+    if form.mapping_status != "mapped" or form.mapping_version_id != form.current_version_id:
+        block_reason = block_reason or "mapping_not_ready"
+    if block_reason is None:
+        job_service.enqueue_job(
+            db=db,
+            org_id=form.organization_id,
+            job_type=JobType.META_LEAD_REPROCESS_FORM,
+            payload={"form_id": str(form.id), "lead_ids": [str(lead.id)]},
+            commit=False,
+        )
+    db.commit()
+    return block_reason is None, block_reason
 
 
 def build_mapping_preview(
@@ -573,11 +646,8 @@ def build_mapping_preview(
     sample_matrix = [[row.get(key, "") for key in keys] for row in sample_rows]
 
     # Analyze columns with learning from previous corrections
-    available_fields = (
-        DONOR_META_MAPPING_FIELDS
-        if form.lead_kind in {"egg_donor", "sperm_donor"}
-        else import_detection_service.AVAILABLE_SURROGATE_FIELDS
-    )
+    is_donor_form = form.lead_kind in DONOR_LEAD_KINDS
+    available_fields = available_fields_for_lead_kind(form.lead_kind)
     suggestions = import_detection_service.analyze_columns_with_learning(
         db,
         form.organization_id,
@@ -590,12 +660,17 @@ def build_mapping_preview(
 
     # Override csv_column to use question keys
     for idx, suggestion in enumerate(suggestions):
+        if is_donor_form:
+            if suggestion.suggested_field not in available_fields:
+                suggestion.suggested_field = None
+            if suggestion.default_action in DONOR_UNSUPPORTED_ACTIONS:
+                suggestion.default_action = "ignore"
         if idx < len(keys):
             suggestion.csv_column = keys[idx]
             if keys[idx] in system_keys:
                 if keys[idx] == "meta_platform" and suggestion.suggested_field == "source":
                     continue
-                suggestion.default_action = "metadata"
+                suggestion.default_action = "ignore" if is_donor_form else "metadata"
 
     # AI availability (for optional AI mapping)
     from app.services.import_ai_mapper_service import is_ai_available
@@ -608,6 +683,7 @@ def build_mapping_preview(
         "sample_rows": sample_rows,
         "has_live_leads": has_live_leads,
         "available_fields": available_fields,
+        "available_fields_by_lead_kind": available_fields_by_lead_kind(),
         "ai_available": ai_available,
         "unsupported_mapped_fields": donor_unsupported_mapped_fields(form),
     }
@@ -791,8 +867,18 @@ def _validate_mapping_targets(column_mappings: list[dict], lead_kind: str) -> No
         }
     )
     if unsupported_fields:
+        raise ValueError("Unsupported donor mapping field(s): " + ", ".join(unsupported_fields))
+    unsupported_action_columns = sorted(
+        {
+            str(mapping.get("csv_column") or "")
+            for mapping in column_mappings
+            if mapping.get("action") in DONOR_UNSUPPORTED_ACTIONS
+        }
+    )
+    if unsupported_action_columns:
         raise ValueError(
-            "Unsupported donor mapping field(s): " + ", ".join(unsupported_fields)
+            "Donor forms cannot store custom fields or metadata. Map these columns to a "
+            "donor field or ignore them: " + ", ".join(unsupported_action_columns)
         )
 
 

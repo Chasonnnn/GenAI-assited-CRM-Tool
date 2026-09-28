@@ -1,4 +1,8 @@
-"""Match lifecycle engine: every match status change goes through ``transition``.
+"""Match lifecycle engine: every match status change goes through this module.
+
+User actions go through ``transition``. The surrogate stage service applies the
+``SYSTEM_TRANSITIONS`` (completion on entering Delivered and its undo) inside
+its own stage-change transaction; see "Surrogate Delivered stage" below.
 
 One transition takes the row locks in a fixed order, checks the source status
 and party rules, applies party stage moves, writes match history (audit and
@@ -26,8 +30,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.constants import SYSTEM_USER_ID
 from app.db.enums import AuditEventType, MatchStatus, SurrogateActivityType
-from app.db.models import Match, MatchAttempt, StatusChangeRequest
+from app.db.models import Match, StatusChangeRequest, Surrogate, SurrogateStatusHistory
 from app.services import match_effects, match_participants, match_queries
 
 UNDER_REVIEW = MatchStatus.UNDER_REVIEW.value
@@ -83,13 +88,6 @@ TRANSITIONS: dict[str, Transition] = {
             "Only accepted matches can be cancelled",
             "match_cancel_requested",
         ),
-        Transition(
-            "complete",
-            (ACCEPTED,),
-            COMPLETED,
-            "Only accepted matches can be completed",
-            "match_completed",
-        ),
         # Approvals queue (ADR 0004): the approvals service checks
         # approve_status_change_requests and owns the request record.
         Transition(
@@ -116,6 +114,24 @@ TRANSITIONS: dict[str, Transition] = {
     )
 }
 
+# No user action offers these. The surrogate stage service applies them in its
+# own transaction; a match outside ``sources`` is left unchanged. Rejecting or
+# withdrawing a cancellation also completes the restored match of a surrogate
+# who is in Delivered.
+SYSTEM_TRANSITIONS: dict[str, Transition] = {
+    t.action: t
+    for t in (
+        Transition("complete_on_delivery", (ACCEPTED,), COMPLETED, None, "match_completed"),
+        Transition(
+            "undo_delivery_completion",
+            (COMPLETED,),
+            ACCEPTED,
+            None,
+            "match_completion_undone",
+        ),
+    )
+}
+
 
 # =============================================================================
 # Rollout flag (the only reader of MATCH_CASE_EXPANSION_ENABLED)
@@ -130,9 +146,10 @@ def require_expansion() -> None:
     """Fence new match data until all application readers support it.
 
     Gated while disabled: donor proposals, repeat surrogate/IP proposals, donor
-    accept, complete, attempt writes, match work writes, and donor or match
-    links on appointments. Surrogate propose, accept, decline,
-    cancellation requests and their resolution, notes, and reads stay open.
+    accept, and donor links on appointments.
+    Surrogate propose, accept, decline, cancellation requests and their
+    resolution, match notes, files and tasks, match links on appointments,
+    and reads stay open.
     """
     if not expansion_enabled():
         raise HTTPException(
@@ -423,7 +440,6 @@ class _Context:
     request: StatusChangeRequest | None
     reason: str | None
     notes: str | None
-    outcome: str | None
 
 
 def transition(
@@ -436,7 +452,6 @@ def transition(
     request: StatusChangeRequest | None = None,
     reason: str | None = None,
     notes: str | None = None,
-    outcome: str | None = None,
     before_commit: Callable[[], None] | None = None,
     dispatch_effects: bool = True,
 ) -> Match:
@@ -457,8 +472,6 @@ def transition(
         # it during a stage move instead can deadlock on a shared participant.
         if permission_policy_service.is_enabled(db, match.organization_id):
             permission_policy_service.lock_configuration(db, match.organization_id)
-    if action == "complete":
-        require_expansion()
     locked, _ = _lock(db, match, with_competitors=action == "accept" and bool(match.surrogate_id))
     if action == "accept" and locked.donor_id:
         require_expansion()
@@ -473,7 +486,6 @@ def transition(
         request=request,
         reason=reason,
         notes=notes,
-        outcome=outcome,
     )
     if action == "request_cancel" and locked.status == CANCELLATION_PENDING:
         raise TransitionError("A pending cancellation request already exists for this match", 409)
@@ -534,18 +546,6 @@ def check_action(db: Session, match: Match, action: str, *, actor_user_id: UUID)
         if warnings:
             raise TransitionError("; ".join(warnings))
         match_participants.check_accept_stage_changes(db, match, actor_user_id)
-    elif action == "complete":
-        require_expansion()
-        if (
-            db.query(MatchAttempt.id)
-            .filter(
-                MatchAttempt.organization_id == match.organization_id,
-                MatchAttempt.match_id == match.id,
-                MatchAttempt.status.in_(("planned", "in_progress")),
-            )
-            .first()
-        ):
-            raise TransitionError("Finish or cancel open attempts before completing the match")
     elif action == "request_cancel":
         if (
             db.query(StatusChangeRequest.id)
@@ -651,22 +651,6 @@ def _request_cancel(ctx: _Context) -> list:
     return match_effects.cancel_request_pending_notification(db, match, request, ctx.actor_user_id)
 
 
-def _complete(ctx: _Context) -> list:
-    db, match = ctx.db, ctx.match
-    outcome = ctx.outcome or ""
-    if not outcome.strip():
-        raise TransitionError("Completion outcome is required")
-    check_action(db, match, "complete", actor_user_id=ctx.actor_user_id)
-    match.status = COMPLETED
-    match.closed_at = ctx.now
-    match.closed_by_user_id = ctx.actor_user_id
-    match.closure_reason = ctx.reason.strip() if ctx.reason else None
-    match.outcome = outcome.strip()
-    match.updated_at = ctx.now
-    write_case_change(db, match, ctx.actor_user_id, "match_completed")
-    return []
-
-
 def _approve_cancel(ctx: _Context) -> list:
     from app.services import match_attempts
 
@@ -705,6 +689,15 @@ def _restore_accepted(ctx: _Context) -> list:
         TRANSITIONS[ctx.action].history,
         {"status_request_id": str(ctx.request.id)},
     )
+    if match.surrogate_id:
+        from app.services import pipeline_service
+
+        # _lock refreshed the surrogate row under its lock, so its stage is current.
+        surrogate = ctx.db.get(Surrogate, match.surrogate_id)
+        stage = pipeline_service.get_stage_by_id(ctx.db, surrogate.stage_id)
+        if stage is not None and _is_delivered(stage):
+            # Delivery left the match pending; it completes once the request is resolved.
+            _complete(ctx.db, match, stage, _system_actor(ctx.actor_user_id), ctx.now)
     return []
 
 
@@ -712,11 +705,162 @@ _APPLY: dict[str, Callable[[_Context], list]] = {
     "accept": _accept,
     "decline": _decline,
     "request_cancel": _request_cancel,
-    "complete": _complete,
     "approve_cancel": _approve_cancel,
     "reject_cancel": _restore_accepted,
     "withdraw_cancel": _restore_accepted,
 }
+
+
+# =============================================================================
+# Surrogate Delivered stage (system transitions)
+# =============================================================================
+#
+# surrogate_status_service.apply_status_change, and the legacy direct stage
+# writes of v1 workflows and AI actions, call these before they write the
+# surrogate row; the caller commits the stage move and the match together.
+# Lock order therefore matches ``transition``: the organization configuration
+# (permission v2), then the surrogate's match rows FOR UPDATE in id order, then
+# the surrogate row, which the stage write locks with its UPDATE. The intended
+# parent row is not locked; its activity insert takes only FOR KEY SHARE.
+
+
+def _system_actor(actor_user_id: UUID | None) -> UUID | None:
+    """The workflow system user is not recorded as the closing user."""
+    return None if actor_user_id == SYSTEM_USER_ID else actor_user_id
+
+
+def _is_delivered(stage) -> bool:
+    from app.core.stage_definitions import SURROGATE_PIPELINE_ENTITY
+    from app.services import pipeline_service
+
+    return pipeline_service.stage_matches_system_role(stage, "delivered", SURROGATE_PIPELINE_ENTITY)
+
+
+def _lock_surrogate_matches(
+    db: Session, surrogate, statuses: tuple[str, ...], *, closed_since: datetime | None = None
+) -> list[Match]:
+    from app.services import permission_policy_service
+
+    if permission_policy_service.is_enabled(db, surrogate.organization_id):
+        permission_policy_service.lock_configuration(db, surrogate.organization_id)
+    query = db.query(Match).filter(
+        Match.organization_id == surrogate.organization_id,
+        Match.surrogate_id == surrogate.id,
+        Match.status.in_(statuses),
+    )
+    if closed_since is not None:
+        query = query.filter(Match.closed_at >= closed_since)
+    return query.order_by(Match.id).populate_existing().with_for_update().all()
+
+
+def _complete(db: Session, match: Match, delivered_stage, actor: UUID | None, now: datetime):
+    from app.services import match_attempts
+
+    spec = SYSTEM_TRANSITIONS["complete_on_delivery"]
+    match.status = spec.target
+    match.closed_at = now
+    match.closed_by_user_id = actor
+    match.closure_reason = None
+    match.outcome = delivered_stage.label
+    match.updated_at = now
+    match_attempts.close_open_attempts(db, match, now)
+    write_case_change(db, match, actor, spec.history)
+
+
+def complete_on_delivery(
+    db: Session, surrogate, new_stage, *, actor_user_id: UUID | None, now: datetime
+) -> list[Match]:
+    """Complete the surrogate's accepted match when she enters the Delivered stage.
+
+    The Delivered stage label becomes the outcome and open attempts close.
+    Cancellation-pending matches stay pending; rejecting or withdrawing the
+    request later completes them (``_restore_accepted``). Does not commit.
+    """
+    if not _is_delivered(new_stage):
+        return []
+    spec = SYSTEM_TRANSITIONS["complete_on_delivery"]
+    actor = _system_actor(actor_user_id)
+    # Lock pending matches too: a cancellation resolved concurrently must either see
+    # this stage move or be seen here once it restores the match to accepted.
+    locked = _lock_surrogate_matches(db, surrogate, match_queries.COMMITTED_STATUSES)
+    matches = [match for match in locked if match.status in spec.sources]
+    for match in matches:
+        _complete(db, match, new_stage, actor, now)
+    return matches
+
+
+def _completed_by_delivery(db: Session, surrogate, current_stage, *, lock: bool) -> Match | None:
+    """The match completed by the surrogate's latest entry into Delivered, if it can be
+    accepted again without colliding with another committed or open match."""
+    if not _is_delivered(current_stage):
+        return None
+    entry = (
+        db.query(SurrogateStatusHistory)
+        .filter(
+            SurrogateStatusHistory.organization_id == surrogate.organization_id,
+            SurrogateStatusHistory.surrogate_id == surrogate.id,
+        )
+        .order_by(SurrogateStatusHistory.recorded_at.desc())
+        .first()
+    )
+    if entry is None or entry.to_stage_id != current_stage.id:
+        return None
+    # Only a Delivered entry completes a surrogate match, at or after the entry's
+    # recorded time, so a match completed since then was completed by this entry.
+    sources = SYSTEM_TRANSITIONS["undo_delivery_completion"].sources
+    if lock:
+        candidates = _lock_surrogate_matches(db, surrogate, sources, closed_since=entry.recorded_at)
+    else:
+        candidates = (
+            db.query(Match)
+            .filter(
+                Match.organization_id == surrogate.organization_id,
+                Match.surrogate_id == surrogate.id,
+                Match.status.in_(sources),
+                Match.closed_at >= entry.recorded_at,
+            )
+            .all()
+        )
+    match = max(candidates, key=lambda row: row.closed_at, default=None)
+    if match is None:
+        return None
+    if match_queries.get_accepted_match_for_surrogate(db, match.organization_id, surrogate.id):
+        return None
+    if match_queries.get_existing_match(
+        db, match.organization_id, surrogate.id, match.intended_parent_id
+    ):
+        return None
+    return match
+
+
+def can_undo_delivery_completion(db: Session, surrogate, current_stage) -> bool:
+    """Read-only: undoing the current Delivered entry would restore an accepted match."""
+    return _completed_by_delivery(db, surrogate, current_stage, lock=False) is not None
+
+
+def undo_delivery_completion(
+    db: Session, surrogate, current_stage, *, actor_user_id: UUID | None, now: datetime
+) -> Match | None:
+    """Restore the match completed by the Delivered entry being undone.
+
+    Clears the closure fields. Attempts closed at completion stay cancelled.
+    Does nothing when the match is no longer completed or the surrogate or the
+    pair has another committed or open match. Does not commit.
+    """
+    match = _completed_by_delivery(db, surrogate, current_stage, lock=True)
+    if match is None:
+        return None
+    spec = SYSTEM_TRANSITIONS["undo_delivery_completion"]
+    match.status = spec.target
+    match.closed_at = None
+    match.closed_by_user_id = None
+    match.closure_reason = None
+    match.outcome = None
+    match.updated_at = now
+    # Sessions disable autoflush; later reads in this stage change must see the match.
+    db.flush()
+    write_case_change(db, match, _system_actor(actor_user_id), spec.history)
+    return match
 
 
 def update_notes(db: Session, match: Match, *, notes: str) -> Match:

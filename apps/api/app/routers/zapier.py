@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_csrf_header, require_permission
@@ -125,6 +125,20 @@ class ZapierOutboundTestResponse(BaseModel):
     lead_id: str
 
 
+class ZapierDonorOutboundTestRequest(BaseModel):
+    donor_type: Literal["egg", "sperm"]
+    event_name: Literal["Lead", "Qualified", "Converted", "Lost", "Not Qualified"]
+    attribution_source: Literal["meta", "website"] = "meta"
+    lead_id: str | None = Field(default=None, max_length=120)
+
+
+class ZapierDonorOutboundTestResponse(BaseModel):
+    status: str
+    event_name: str
+    event_id: str
+    lead_id: str | None = None
+
+
 class ZapierOutboundEventResponse(BaseModel):
     id: UUID
     source: str
@@ -151,6 +165,7 @@ class ZapierOutboundEventResponse(BaseModel):
     delivered_at: datetime | None = None
     last_attempt_at: datetime | None = None
     can_retry: bool
+    can_replay: bool
 
 
 class ZapierOutboundEventsResponse(BaseModel):
@@ -507,7 +522,15 @@ def parse_field_paste(
         if not inbound or inbound.organization_id != session.org_id:
             raise HTTPException(status_code=404, detail="Inbound webhook not found.")
 
-    form_id = data.form_id or parsed.get("form_id")
+    form_id = (data.form_id or "").strip() or parsed.get("form_id")
+    if not form_id and parsed.get("form_id_without_value"):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The pasted field list names form_id but not its value. Enter the Meta form "
+                "ID, or paste sample data that includes it (form_id: 1234567890)."
+            ),
+        )
     if not form_id and inbound:
         form_id = f"zapier-{inbound.webhook_id}"
 
@@ -516,6 +539,18 @@ def parse_field_paste(
             status_code=400,
             detail="form_id or webhook_id is required to create the mapping.",
         )
+
+    existing_form = meta_form_mapping_service.get_form_by_external_id(
+        db, session.org_id, str(form_id)
+    )
+    if existing_form is not None and (
+        existing_form.lead_kind in workflow_access.DONOR_SUBJECT_TYPES
+        or meta_form_mapping_service.form_has_donor_leads(
+            db, session.org_id, existing_form.form_external_id
+        )
+    ):
+        _require_donor_view(db, session)
+        _require_donor_edit(db, session)
 
     form_name = data.form_name or parsed.get("form_name")
     if not form_name:
@@ -593,6 +628,31 @@ def send_outbound_test(
     return ZapierOutboundTestResponse(status="queued", **result)
 
 
+@router.post("/test-outbound/donor", response_model=ZapierDonorOutboundTestResponse)
+def send_donor_outbound_test(
+    data: ZapierDonorOutboundTestRequest,
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
+):
+    _require_donor_view(db, session)
+    _require_donor_edit(db, session)
+    try:
+        result = zapier_outbound_service.enqueue_donor_test_event(
+            db,
+            session.org_id,
+            donor_type=data.donor_type,
+            event_name=data.event_name,
+            attribution_source=data.attribution_source,
+            lead_id=data.lead_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ZapierDonorOutboundTestResponse(status="queued", **result)
+
+
 @router.get("/events", response_model=ZapierOutboundEventsResponse)
 def list_outbound_events(
     status: Annotated[
@@ -668,6 +728,34 @@ def retry_outbound_event(
     return _serialize_outbound_event(event)
 
 
+@router.post("/events/{event_id}/replay", response_model=ZapierOutboundEventResponse)
+def replay_outbound_event(
+    event_id: UUID,
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
+):
+    event = zapier_monitor_service.get_event(db, org_id=session.org_id, event_id=event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if zapier_monitor_service.is_donor_event(event):
+        _require_donor_view(db, session)
+        _require_donor_edit(db, session)
+
+    try:
+        event = zapier_outbound_service.replay_skipped_event(
+            db,
+            org_id=session.org_id,
+            event_id=event_id,
+        )
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "Event not found" else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    return _serialize_outbound_event(event)
+
+
 def _serialize_settings(
     db: Session,
     organization_id: UUID,
@@ -712,7 +800,11 @@ def _serialize_settings(
     if include_donor_settings:
         response_data.update(
             donor_outbound_enabled=bool(settings.donor_outbound_enabled),
-            donor_event_mapping=list(settings.donor_outbound_event_mapping or []),
+            donor_event_mapping=(
+                None
+                if settings.donor_outbound_event_mapping is None
+                else list(settings.donor_outbound_event_mapping)
+            ),
         )
     return ZapierSettingsResponse(**response_data)
 
@@ -744,4 +836,5 @@ def _serialize_outbound_event(event) -> ZapierOutboundEventResponse:
         delivered_at=event.delivered_at,
         last_attempt_at=event.last_attempt_at,
         can_retry=event.status == "failed" and event.job_id is not None,
+        can_replay=zapier_monitor_service.can_replay_event(event),
     )

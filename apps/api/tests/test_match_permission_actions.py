@@ -16,7 +16,6 @@ ACTIONS = {
     "accept": ("under_review", "PUT", "accept", {}, "decide_matches"),
     "decline": ("under_review", "PUT", "decline", {"reason": "Not a fit"}, "decide_matches"),
     "request_cancel": ("accepted", "POST", "cancel-request", {"reason": "Ended"}, "close_matches"),
-    "complete": ("accepted", "PUT", "complete", {"outcome": "Finished"}, "close_matches"),
     "withdraw_cancel": ("cancellation_pending", "POST", "cancel", None, "close_matches"),
 }
 
@@ -235,7 +234,7 @@ async def test_approval_uses_permission_not_admin_role(
     "kind,permission",
     [
         ("surrogate", "change_surrogate_status"),
-        ("surrogate", "edit_intended_parents"),
+        ("surrogate", "change_intended_parent_status"),
         ("egg", "change_donor_status"),
         ("sperm", "change_donor_status"),
     ],
@@ -278,57 +277,57 @@ async def test_accept_preview_and_execution_require_each_moving_party_permission
 
 
 @pytest.mark.asyncio
-async def test_complete_preview_and_execution_block_open_attempts(
-    authed_client, db, test_auth, subtests
-):
-    from app.db.models import MatchAttempt
+@pytest.mark.parametrize("version", [1, 2])
+async def test_accepted_match_offers_no_manual_completion(authed_client, db, test_auth, version):
+    if version == 2:
+        _activate_v2(db, test_auth.org.id)
+    match, _ = await _fixture(authed_client, db, test_auth.user.id, "accepted")
 
-    for status in ["planned", "in_progress"]:
-        with subtests.test(status=repr(status)):
-            match, _ = await _fixture(authed_client, db, test_auth.user.id, "accepted")
-            db.add(
-                MatchAttempt(
-                    organization_id=match.organization_id,
-                    match_id=match.id,
-                    sequence=1,
-                    attempt_type="embryo_transfer",
-                    status=status,
-                )
-            )
-            db.commit()
-            read = await authed_client.get(f"/matches/{match.id}")
-            assert "complete" not in read.json()["allowed_actions"]
-            response = await authed_client.put(
-                f"/matches/{match.id}/complete", json={"outcome": "Ended"}
-            )
-            assert response.status_code == 400
-            assert response.json()["detail"] == read.json()["blocked_reasons"]["complete"]
-            assert _match_row(db, match.id).status == "accepted"
+    read = await authed_client.get(f"/matches/{match.id}")
+    assert read.status_code == 200, read.text
+    assert "complete" not in read.json()["allowed_actions"]
+    assert "complete" not in read.json()["blocked_reasons"]
+    response = await authed_client.put(f"/matches/{match.id}/complete", json={"outcome": "Ended"})
+    assert response.status_code in {404, 405}
+    row = _match_row(db, match.id)
+    assert (row.status, row.closed_at, row.outcome) == ("accepted", None, None)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action", ["accept", "complete"])
-async def test_preview_and_execution_respect_expansion_flag(authed_client, db, monkeypatch, action):
+async def test_status_metadata_lists_completion_as_system_transition_only(authed_client):
+    from app.services.match_lifecycle import SYSTEM_TRANSITIONS, TRANSITIONS
+
+    response = await authed_client.get("/metadata/match-statuses")
+    assert response.status_code == 200, response.text
+    statuses = {row["value"]: row for row in response.json()["statuses"]}
+    assert statuses["accepted"]["allowed_transitions"] == ["cancellation_pending"]
+    assert statuses["accepted"]["system_transitions"] == ["completed"]
+    assert statuses["completed"]["system_transitions"] == ["accepted"]
+    for value, row in statuses.items():
+        user_targets = {t.target for t in TRANSITIONS.values() if value in t.sources}
+        system_targets = {t.target for t in SYSTEM_TRANSITIONS.values() if value in t.sources}
+        assert set(row["allowed_transitions"]) == user_targets
+        assert set(row["system_transitions"]) == system_targets
+        assert not user_targets & system_targets
+
+
+@pytest.mark.asyncio
+async def test_preview_and_execution_respect_expansion_flag(authed_client, db, monkeypatch):
     from app.core.config import settings
-    from tests.test_match_cases import _accept, _donor
+    from tests.test_match_cases import _donor
 
     match = await _case(
         authed_client,
         await _create_intended_parent(authed_client),
         donor=await _donor(authed_client),
     )
-    if action == "complete":
-        await _accept(authed_client, match)
     monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", False)
     read = await authed_client.get(f"/matches/{match['id']}")
     assert read.status_code == 200, read.text
-    assert action not in read.json()["allowed_actions"]
-    response = await authed_client.put(
-        f"/matches/{match['id']}/{action}",
-        json={"outcome": "Ended"} if action == "complete" else {},
-    )
+    assert "accept" not in read.json()["allowed_actions"]
+    response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
     assert response.status_code == 503
-    assert response.json()["detail"] == read.json()["blocked_reasons"][action]
+    assert response.json()["detail"] == read.json()["blocked_reasons"]["accept"]
 
 
 @pytest.mark.asyncio

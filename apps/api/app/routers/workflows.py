@@ -75,11 +75,9 @@ def _require_subject_edit_access(
     session: UserSession,
     subject_type: str | None,
 ) -> None:
-    from app.services import permission_policy_service
-
-    if permission_policy_service.is_enabled(db, session.org_id):
-        return
-    if not workflow_access.can_edit_subject(db, session, subject_type):
+    if not workflow_access.can_view_subject(db, session, subject_type):
+        raise HTTPException(status_code=403, detail="Missing permission: view_donors")
+    if not workflow_access.can_configure_subject(db, session, subject_type):
         raise HTTPException(status_code=403, detail="Missing permission: edit_donors")
 
 
@@ -232,7 +230,7 @@ def get_workflow_options(
             session.role in {Role.ADMIN, Role.DEVELOPER} and workflow_scope != "personal"
         ),
         subject_type=subject_type,
-        include_donor_forms=workflow_access.can_view_subject(db, session, "donor"),
+        include_donor_forms=workflow_access.can_configure_subject(db, session, "donor"),
     )
 
 
@@ -696,7 +694,7 @@ def test_workflow(
         field = condition.get("field")
         operator = condition.get("operator")
         value = condition.get("value")
-        entity_value = getattr(entity, field, None)
+        entity_value = engine.condition_value(db, entity, field)
 
         result = engine._evaluate_condition(operator, entity_value, value)
         conditions_evaluated.append(

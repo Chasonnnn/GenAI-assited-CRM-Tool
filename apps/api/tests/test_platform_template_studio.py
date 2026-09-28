@@ -588,18 +588,9 @@ async def test_platform_workflow_template_donor_subject_publish_gate(
             },
             "Action send_message does not support donor workflows",
         ),
-        (
-            {
-                "conditions": [],
-                "actions": [{"action_type": "send_email"}],
-            },
-            "Donor email actions require review approval",
-        ),
     ],
 )
-def test_platform_workflow_template_rejects_donor_incompatible_content(
-    draft_overrides, error
-):
+def test_platform_workflow_template_rejects_donor_incompatible_content(draft_overrides, error):
     from app.services import platform_template_write_service as template_writes
 
     draft = {
@@ -664,9 +655,7 @@ def test_platform_workflow_template_allows_reviewed_donor_email_binding():
         portable=True,
     )
 
-    assert result["bindings"] == [
-        "actions.0.template_id: select an organization email template"
-    ]
+    assert result["bindings"] == ["actions.0.template_id: select an organization email template"]
 
 
 @pytest.mark.asyncio

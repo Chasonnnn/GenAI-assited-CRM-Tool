@@ -104,6 +104,24 @@ async def test_create_match_response_excludes_compatibility_score(authed_client,
 
 
 @pytest.mark.asyncio
+async def test_match_responses_include_participant_stage_colors(authed_client, db):
+    match = await _create_accepted_match(authed_client)
+    row = db.get(Match, uuid.UUID(match["id"]))
+    surrogate = db.get(Surrogate, row.surrogate_id)
+    ip = db.get(IntendedParent, row.intended_parent_id)
+
+    detail = await authed_client.get(f"/matches/{match['id']}")
+    listing = await authed_client.get("/matches/")
+
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["surrogate_stage_color"] == surrogate.stage.color
+    assert detail.json()["ip_stage_color"] == ip.stage.color
+    item = next(i for i in listing.json()["items"] if i["id"] == match["id"])
+    assert item["surrogate_stage_color"] == surrogate.stage.color
+    assert item["donor_stage_color"] is None
+
+
+@pytest.mark.asyncio
 async def test_match_cancel_request_creates_pending_request(authed_client, db, test_auth):
     match = await _create_accepted_match(authed_client)
 

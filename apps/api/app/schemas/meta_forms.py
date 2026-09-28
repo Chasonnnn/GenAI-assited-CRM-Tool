@@ -49,6 +49,7 @@ class MetaFormMappingPreviewResponse(BaseModel):
     sample_rows: list[dict]
     has_live_leads: bool
     available_fields: list[str]
+    available_fields_by_lead_kind: dict[MetaLeadKind, list[str]] = Field(default_factory=dict)
     ai_available: bool
     unsupported_mapped_fields: list[str] = Field(default_factory=list)
     mapping_rules: list[ColumnMappingItem] | None
@@ -87,6 +88,7 @@ class MetaFormUnconvertedLeadItem(BaseModel):
     fetch_error: str | None = None
     reprocess_eligible: bool = True
     reprocess_block_reason: str | None = None
+    lead_kind: MetaLeadKind | None = None
     received_at: datetime
     meta_created_time: datetime | None = None
 
@@ -98,6 +100,22 @@ class MetaFormUnconvertedLeadListResponse(BaseModel):
     total: int
     eligible_count: int = 0
     blocked_count: int = 0
+
+
+class MetaLeadRerouteRequest(BaseModel):
+    """Request to convert one unconverted lead as a different lead kind."""
+
+    lead_kind: MetaLeadKind
+
+
+class MetaLeadRerouteResponse(BaseModel):
+    """Response after rerouting one unconverted lead."""
+
+    success: bool
+    lead_kind: MetaLeadKind
+    queued: bool
+    reprocess_block_reason: str | None = None
+    message: str
 
 
 class MetaFormReconvertResponse(BaseModel):

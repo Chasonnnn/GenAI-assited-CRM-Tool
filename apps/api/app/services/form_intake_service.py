@@ -30,6 +30,7 @@ from app.db.enums import (
     IntakeLeadStatus,
     JobStatus,
     JobType,
+    SurrogateSource,
     TrackingMode,
     WorkflowExecutionStatus,
 )
@@ -54,7 +55,6 @@ from app.db.models import (
     TrackingEventLog,
     WorkflowExecution,
 )
-from app.schemas.donor import DonorCreate
 from app.schemas.forms import FormSchema, MessagingConsentOptionRead, MessagingConsentOptionsRead
 from app.services import (
     embed_policy_service,
@@ -65,6 +65,8 @@ from app.services import (
     meta_crm_dataset_service,
     org_service,
     surrogate_input_normalization_service,
+    workflow_execution_authority,
+    zapier_outbound_service,
 )
 from app.services.attachment_service import (
     load_file_bytes,
@@ -81,24 +83,29 @@ from app.utils.normalization import (
 IDENTITY_SURROGATE_FIELDS = ("full_name", "date_of_birth", "phone", "email")
 IDENTITY_DONOR_FIELDS = ("full_name", "email", "phone", "state", "education")
 DONOR_LEAD_KINDS = {FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value}
+# Hosted and embedded donor intake are website traffic; the review path stays in lead metadata.
+DONOR_INTAKE_SOURCE = "website"
 DONOR_PROFILE_PHOTO_CONTENT_TYPES = {"image/png", "image/jpeg"}
 INTAKE_SLUG_MAX_LENGTH = 100
-EMBED_ALLOWED_ATTRIBUTION_KEYS = {
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
-    "ad_id",
-    "adset_id",
-    "campaign_id",
-    "fbclid",
-    "fbc",
-    "fbp",
-    "referrer",
-    "landing_url",
+# Allowed attribution keys and their maximum lengths, matching the LeadAttribution columns.
+EMBED_ATTRIBUTION_MAX_LENGTHS = {
+    "utm_source": 255,
+    "utm_medium": 255,
+    "utm_campaign": 255,
+    "utm_term": 255,
+    "utm_content": 255,
+    "ad_id": 255,
+    "adset_id": 255,
+    "campaign_id": 255,
+    "fbclid": 500,
+    "fbc": 500,
+    "fbp": 500,
+    "referrer": 1000,
+    "landing_url": 1000,
 }
 EMBED_URL_ATTRIBUTION_KEYS = {"referrer", "landing_url"}
+EMBED_ATTRIBUTION_SOURCE_SURFACE = "form_embed"
+HOSTED_ATTRIBUTION_SOURCE_SURFACE = "hosted_intake"
 DEFAULT_EMBED_TRACKING_MODE = TrackingMode.ENHANCED_MATCH_LEAD.value
 DEFAULT_SHARED_INTAKE_TRACKING_MODE = TrackingMode.INTERNAL_ONLY.value
 META_TRACKING_MODES = {
@@ -188,6 +195,19 @@ DUPLICATE_APPLICANT_MESSAGE = "An intake submission is already pending review."
 
 class DuplicateApplicantSubmissionError(ValueError):
     """Raised when a public applicant already has an unresolved submission."""
+
+
+SURROGATE_FORM_SUBMISSION_CONFLICT_MESSAGE = "Surrogate already has a submission for this form"
+DONOR_FORM_SUBMISSION_CONFLICT_MESSAGE = "Donor already has a submission for this form"
+
+
+class SubmissionLinkConflictError(ValueError):
+    """Raised when the link target already has a submission for the same form."""
+
+
+def _is_unique_violation(exc: IntegrityError, constraint_name: str) -> bool:
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None) == constraint_name
 
 
 def _default_tracking_mode_for_form(db: Session, form: Form) -> str:
@@ -431,7 +451,65 @@ def ensure_default_intake_link(
     )
 
 
+def _embed_file_upload_blocker(
+    form: Form, version: PublishedIntakeVersion | None = None
+) -> str | None:
+    """Return why a form cannot be embedded: the embed flow submits no files.
+
+    Reads what the link serves: its published version, or else the schema the next version
+    snapshots (published before draft, as create_published_intake_version does).
+    """
+    lead_kinds = (form.lead_kind, version.lead_kind_snapshot if version is not None else None)
+    if any(lead_kind in DONOR_LEAD_KINDS for lead_kind in lead_kinds):
+        return (
+            "Donor forms need a profile photo upload and cannot be embedded. "
+            "Share the hosted link instead."
+        )
+    schema_json = (
+        version.form_schema_snapshot_json
+        if version is not None
+        else form.published_schema_json or form.schema_json
+    )
+    if not schema_json:
+        return None
+    fields = form_submission_service.flatten_fields(
+        form_submission_service.parse_schema(schema_json)
+    )
+    required_file_labels = [
+        field.label for field in fields.values() if field.type == "file" and field.required
+    ]
+    if not required_file_labels:
+        return None
+    return (
+        f"Embedded forms cannot collect file uploads: {', '.join(required_file_labels)}. "
+        "Share the hosted link instead."
+    )
+
+
+class EmbedUnavailableError(ValueError):
+    """The link has embed enabled, but the embed cannot submit its form."""
+
+
+def ensure_embed_can_submit(
+    db: Session,
+    *,
+    link: FormIntakeLink,
+    form: Form,
+    version: PublishedIntakeVersion | None = None,
+) -> None:
+    """Refuse every public embed request, so links enabled before the upload rule stop serving."""
+    blocker = _embed_file_upload_blocker(
+        form, version if version is not None else _published_version_for_link(db, link=link)
+    )
+    if blocker:
+        raise EmbedUnavailableError(blocker)
+
+
 def _validate_link_embed_policy(*, db: Session, form: Form, link: FormIntakeLink) -> None:
+    if link.embed_enabled:
+        file_upload_blocker = _embed_file_upload_blocker(form)
+        if file_upload_blocker:
+            raise ValueError(file_upload_blocker)
     if link.embed_enabled and not link.allowed_embed_origins:
         raise ValueError("Allowed embed origins are required when embed is enabled")
     if link.tracking_mode in PRIVACY_SAFE_FIELD_POLICY_MODES:
@@ -567,6 +645,16 @@ def get_embed_setup_health(
     else:
         add_check("purpose", "Lead capture purpose", "pass", "The form uses lead_capture purpose.")
 
+    file_upload_blocker = (
+        _embed_file_upload_blocker(form, _published_version_for_link(db, link=link))
+        if form
+        else None
+    )
+    if file_upload_blocker:
+        add_check("file_uploads", "File uploads", "block", file_upload_blocker)
+    else:
+        add_check("file_uploads", "File uploads", "pass", "No file upload is required.")
+
     if link.embed_enabled:
         add_check("embed_enabled", "Embed enabled", "pass", "Iframe embedding is enabled.")
     else:
@@ -668,41 +756,135 @@ def _has_enabled_form_scoped_submission_workflow(
     *,
     org_id: uuid.UUID,
     form_id: uuid.UUID,
+    exclude_workflow_id: uuid.UUID | None = None,
 ) -> bool:
-    workflows = (
-        db.query(AutomationWorkflow)
-        .filter(
-            AutomationWorkflow.organization_id == org_id,
-            AutomationWorkflow.scope == "org",
-            AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
-            AutomationWorkflow.is_enabled.is_(True),
-        )
-        .all()
+    # Only form_submission-subject workflows run for submissions; a surrogate-subject
+    # workflow with a form trigger never executes and must not suppress default routing.
+    query = db.query(AutomationWorkflow).filter(
+        AutomationWorkflow.organization_id == org_id,
+        AutomationWorkflow.scope == "org",
+        AutomationWorkflow.subject_type == "form_submission",
+        AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
+        AutomationWorkflow.is_enabled.is_(True),
     )
+    if exclude_workflow_id is not None:
+        query = query.filter(AutomationWorkflow.id != exclude_workflow_id)
     target_form_id = str(form_id)
     return any(
-        _trigger_config_form_id(workflow.trigger_config) == target_form_id for workflow in workflows
+        _trigger_config_form_id(workflow.trigger_config) == target_form_id
+        for workflow in query.all()
     )
+
+
+SURROGATE_DEFAULT_INTAKE_ROUTING_ACTIONS: tuple[dict[str, Any], ...] = (
+    {"action_type": "auto_match_submission", "requires_approval": True},
+    {"action_type": "create_intake_lead", "requires_approval": True},
+)
+# Matches scripts/fixtures/donor-intake-workflow.json: link exact matches, otherwise create
+# the donor once the profile photo scan is clean.
+DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS: tuple[dict[str, Any], ...] = (
+    {"action_type": "auto_match_submission", "requires_approval": False},
+    {
+        "action_type": "create_intake_lead",
+        "source": "website",
+        "auto_promote": True,
+        "requires_approval": False,
+    },
+)
+# Earlier generated donor routing; republishing upgrades it because no admin edited it.
+_LEGACY_DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS: tuple[dict[str, Any], ...] = (
+    {"action_type": "create_intake_lead", "requires_approval": True},
+)
+_GENERATED_INTAKE_ROUTING_ACTION_SETS = (
+    SURROGATE_DEFAULT_INTAKE_ROUTING_ACTIONS,
+    DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS,
+    _LEGACY_DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS,
+)
 
 
 def _default_intake_routing_actions(form: Form) -> list[dict[str, Any]]:
     if form.lead_kind in DONOR_LEAD_KINDS:
-        return [
-            {
-                "action_type": "create_intake_lead",
-                "requires_approval": True,
-            }
-        ]
-    return [
-        {
-            "action_type": "auto_match_submission",
-            "requires_approval": True,
-        },
-        {
-            "action_type": "create_intake_lead",
-            "requires_approval": True,
-        },
-    ]
+        return [dict(action) for action in DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS]
+    return [dict(action) for action in SURROGATE_DEFAULT_INTAKE_ROUTING_ACTIONS]
+
+
+def _generated_intake_routing_trigger_config(db: Session, form: Form) -> dict[str, Any]:
+    """Return the trigger config a builder save would store for the generated workflow.
+
+    Matching the builder's canonical form keeps a no-op save from changing the
+    execution-authority digest.
+    """
+    from app.services import workflow_service
+
+    return workflow_service._canonicalize_trigger_config(
+        db,
+        form.organization_id,
+        WorkflowTriggerType.FORM_SUBMITTED,
+        {"form_id": str(form.id)},
+        entity_type="form_submission",
+    )
+
+
+def _has_generated_intake_routing_configuration(workflow: AutomationWorkflow, form: Form) -> bool:
+    """True when the routing workflow still holds a generated configuration, not admin edits."""
+    if workflow.conditions:
+        return False
+    # Earlier releases stored only the form id; the builder adds a single-kind form's kind,
+    # which may be a kind the form had before an applicant type change.
+    trigger_config = workflow.trigger_config or {}
+    if set(trigger_config) - {"form_id", "lead_kind"} or trigger_config.get("form_id") != str(
+        form.id
+    ):
+        return False
+    if "lead_kind" in trigger_config and trigger_config["lead_kind"] not in {
+        "surrogate",
+        *DONOR_LEAD_KINDS,
+    }:
+        return False
+    actions = list(workflow.actions or [])
+    return any(actions == list(generated) for generated in _GENERATED_INTAKE_ROUTING_ACTION_SETS)
+
+
+def _generated_intake_routing_is_equivalent(
+    workflow: AutomationWorkflow,
+    trigger_config: dict[str, Any],
+    actions: list[dict[str, Any]],
+) -> bool:
+    """True when the stored routing runs exactly like the current generated routing.
+
+    A stored config without lead_kind matches every submission of a single-kind form,
+    so it runs like the canonical config that names that kind.
+    """
+    stored_kind = (workflow.trigger_config or {}).get("lead_kind")
+    return list(workflow.actions or []) == actions and stored_kind in (
+        None,
+        trigger_config.get("lead_kind"),
+    )
+
+
+def _authorize_generated_intake_routing(
+    db: Session,
+    workflow: AutomationWorkflow,
+    *,
+    form: Form,
+    trigger_config: dict[str, Any],
+    actions: list[dict[str, Any]],
+    user_id: uuid.UUID | None,
+) -> None:
+    """Grant system execution authority only to the exact current generated configuration."""
+    if (
+        workflow.conditions
+        or workflow.subject_type != "form_submission"
+        or workflow.trigger_config != trigger_config
+        or workflow.actions != actions
+    ):
+        return
+    create_permission = (
+        "create_donors" if form.lead_kind in DONOR_LEAD_KINDS else "create_surrogates"
+    )
+    workflow_execution_authority.authorize_generated_routing(
+        db, workflow, user_id, create_permission
+    )
 
 
 def ensure_default_intake_routing_workflow(
@@ -713,12 +895,15 @@ def ensure_default_intake_routing_workflow(
     user_id: uuid.UUID | None,
     commit: bool = True,
 ) -> AutomationWorkflow | None:
-    """Ensure an enabled, form-scoped shared-intake routing workflow exists."""
-    if form.status != FormStatus.PUBLISHED.value:
-        return None
+    """Ensure a form-scoped shared-intake routing workflow exists.
 
-    # Respect existing enabled custom workflows for this form.
-    if _has_enabled_form_scoped_submission_workflow(db, org_id=org_id, form_id=form.id):
+    A new routing workflow starts enabled. Republishing refreshes only a
+    configuration that still matches a generated default, keeps admin edits and
+    their execution grant, and never re-enables a paused workflow. Under permission
+    v2 an exact generated configuration gets a system execution grant when the
+    publisher can create the form's record type.
+    """
+    if form.status != FormStatus.PUBLISHED.value:
         return None
 
     system_key = f"shared_intake_routing:{form.id}"
@@ -733,56 +918,74 @@ def ensure_default_intake_routing_workflow(
         .first()
     )
 
-    trigger_config = {"form_id": str(form.id)}
+    # Respect existing enabled custom workflows for this form.
+    if _has_enabled_form_scoped_submission_workflow(
+        db,
+        org_id=org_id,
+        form_id=form.id,
+        exclude_workflow_id=workflow.id if workflow else None,
+    ):
+        return None
+
+    trigger_config = _generated_intake_routing_trigger_config(db, form)
     actions = _default_intake_routing_actions(form)
-    now = datetime.now(UTC)
 
     if workflow:
+        if not _has_generated_intake_routing_configuration(workflow, form):
+            return workflow
+        # Rewriting an equivalent config would change the digest and void a current grant.
+        if workflow_execution_authority.grant_is_current(
+            workflow
+        ) and _generated_intake_routing_is_equivalent(workflow, trigger_config, actions):
+            return workflow
         workflow.subject_type = "form_submission"
         workflow.trigger_config = trigger_config
         workflow.actions = actions
         workflow.conditions = []
         workflow.condition_logic = "AND"
-        workflow.is_enabled = True
         workflow.requires_review = False
         workflow.is_system_workflow = True
         workflow.updated_by_user_id = user_id
-        workflow.updated_at = now
-        if commit:
-            db.commit()
-            db.refresh(workflow)
-        else:
-            db.flush()
-        return workflow
-
-    workflow = AutomationWorkflow(
-        organization_id=org_id,
-        name=f"Intake Routing ({str(form.id)[:8]})",
-        description=(
-            "Creates a donor intake lead for review."
-            if form.lead_kind in DONOR_LEAD_KINDS
-            else (
-                "Automatically routes shared form submissions by running auto-match first, "
-                "then creating an intake lead if no deterministic match exists."
-            )
-        ),
-        icon="workflow",
-        scope="org",
-        owner_user_id=None,
-        subject_type="form_submission",
-        trigger_type=WorkflowTriggerType.FORM_SUBMITTED.value,
+        workflow.updated_at = datetime.now(UTC)
+    else:
+        workflow = AutomationWorkflow(
+            organization_id=org_id,
+            name=f"Intake Routing ({str(form.id)[:8]})",
+            description=(
+                "Matches donor submissions to an existing donor, or creates a donor after the "
+                "uploaded photo passes scanning."
+                if form.lead_kind in DONOR_LEAD_KINDS
+                else (
+                    "Automatically routes shared form submissions by running auto-match first, "
+                    "then creating an intake lead if no deterministic match exists."
+                )
+            ),
+            icon="workflow",
+            scope="org",
+            owner_user_id=None,
+            subject_type="form_submission",
+            trigger_type=WorkflowTriggerType.FORM_SUBMITTED.value,
+            trigger_config=trigger_config,
+            conditions=[],
+            condition_logic="AND",
+            actions=actions,
+            is_enabled=True,
+            is_system_workflow=True,
+            system_key=system_key,
+            requires_review=False,
+            created_by_user_id=user_id,
+            updated_by_user_id=user_id,
+        )
+        db.add(workflow)
+    db.flush()
+    _authorize_generated_intake_routing(
+        db,
+        workflow,
+        form=form,
         trigger_config=trigger_config,
-        conditions=[],
-        condition_logic="AND",
         actions=actions,
-        is_enabled=True,
-        is_system_workflow=True,
-        system_key=system_key,
-        requires_review=False,
-        created_by_user_id=user_id,
-        updated_by_user_id=user_id,
+        user_id=user_id,
     )
-    db.add(workflow)
     if commit:
         db.commit()
         db.refresh(workflow)
@@ -1023,6 +1226,34 @@ def get_intake_mapping_snapshot(
     if published_version and published_version.lead_kind_snapshot in DONOR_LEAD_KINDS:
         return published_version.mapping_snapshot_json or []
     return form_submission_service._snapshot_mappings(db, form.id)  # type: ignore[attr-defined]
+
+
+def get_public_field_allowed_mime_types(
+    *,
+    form: Form,
+    lead_kind: str | None,
+    mapping_snapshot: list[dict[str, Any]],
+) -> dict[str, list[str]]:
+    """Return per-field upload types that are narrower than the form list.
+
+    The donor profile photo accepts only PNG or JPEG at submit, so the hosted picker offers
+    only those types even when the form allows other files.
+    """
+    if lead_kind not in DONOR_LEAD_KINDS:
+        return {}
+    photo_field_key = _mapping_lookup_from_snapshot(mapping_snapshot).get("profile_photo")
+    if not photo_field_key:
+        return {}
+    form_allowed = (
+        form.allowed_mime_types or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES
+    )
+    photo_types = sorted(DONOR_PROFILE_PHOTO_CONTENT_TYPES)
+    allowed_photo_types = [
+        content_type
+        for content_type in photo_types
+        if form_submission_service._mime_allowed(content_type, form_allowed)  # type: ignore[attr-defined]
+    ]
+    return {photo_field_key: allowed_photo_types or photo_types}
 
 
 def resolve_phone_field_key(
@@ -1304,6 +1535,10 @@ def _has_unresolved_duplicate_applicant_submission(
     if phone_hash:
         contact_filters.append(FormSubmission.phone_hash == phone_hash)
 
+    # Rejected applications and donor applications held for an unusable photo are closed for the
+    # applicant, so they may apply again.
+    from app.services.donor_intake_service import PHOTO_REVIEW_REASON
+
     query = (
         db.query(FormSubmission.id)
         .outerjoin(
@@ -1315,6 +1550,8 @@ def _has_unresolved_duplicate_applicant_submission(
             FormSubmission.form_id == link.form_id,
             FormSubmission.full_name_normalized == full_name_normalized,
             or_(*contact_filters),
+            FormSubmission.status != FormSubmissionStatus.REJECTED.value,
+            FormSubmission.match_reason.is_distinct_from(PHOTO_REVIEW_REASON),
             or_(
                 FormSubmission.status == FormSubmissionStatus.PENDING_REVIEW.value,
                 IntakeLead.status == IntakeLeadStatus.PENDING_REVIEW.value,
@@ -1341,6 +1578,18 @@ def _has_unresolved_duplicate_applicant_submission(
         lead_contact_filters.append(IntakeLead.email_hash == email_hash)
     if phone_hash:
         lead_contact_filters.append(IntakeLead.phone_hash == phone_hash)
+    closed_source_submission = (
+        select(FormSubmission.id)
+        .where(
+            FormSubmission.organization_id == IntakeLead.organization_id,
+            FormSubmission.id == IntakeLead.form_submission_id,
+            or_(
+                FormSubmission.status == FormSubmissionStatus.REJECTED.value,
+                FormSubmission.match_reason == PHOTO_REVIEW_REASON,
+            ),
+        )
+        .exists()
+    )
     lead_candidates = (
         db.query(IntakeLead)
         .filter(
@@ -1349,6 +1598,7 @@ def _has_unresolved_duplicate_applicant_submission(
             IntakeLead.status == IntakeLeadStatus.PENDING_REVIEW.value,
             IntakeLead.full_name_normalized == full_name_normalized,
             or_(*lead_contact_filters),
+            ~closed_source_submission,
         )
         .limit(25)
         .all()
@@ -1739,12 +1989,18 @@ def create_shared_submission(
     file_field_keys: list[str] | None = None,
     published_version_id: uuid.UUID | None = None,
     source_metadata: dict[str, Any] | None = None,
+    attribution: dict[str, Any] | None = None,
     challenge_token: str | None = None,
     idempotency_key: str | None = None,
     sms_operational: bool = False,
     sms_promotional: bool = False,
     sms_phone_field_key: str | None = None,
 ) -> tuple[FormSubmission, str]:
+    """Create a hosted /intake submission.
+
+    ``attribution`` is the applicant's landing context (UTM, Meta click ids, landing URL,
+    referrer). Link ``utm_defaults`` fill keys the applicant did not bring.
+    """
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form is not published")
     if not form.published_schema_json:
@@ -1857,6 +2113,18 @@ def create_shared_submission(
         if existing:
             return existing, _normalize_shared_outcome(existing.match_status)
         raise
+    sanitized_attribution = sanitize_embed_attribution(
+        {**(link.utm_defaults or {}), **(attribution or {})}
+    )
+    if sanitized_attribution:
+        _create_lead_attribution(
+            db,
+            link=link,
+            submission=submission,
+            source_surface=HOSTED_ATTRIBUTION_SOURCE_SURFACE,
+            parent_origin=None,
+            attribution=sanitized_attribution,
+        )
     metadata = source_metadata or {}
     client_ip = str(metadata.get("client_ip") or "").strip() or None
     user_agent = str(metadata.get("user_agent") or "").strip() or None
@@ -1906,11 +2174,17 @@ def create_shared_submission(
 
 
 def sanitize_embed_attribution(payload: dict[str, Any] | None) -> dict[str, str]:
+    """Keep allowlisted scalar attribution values for embed and hosted intake.
+
+    Oversized values are dropped rather than truncated, because a cut click id or URL
+    would be reported to Meta as a different value.
+    """
     sanitized: dict[str, str] = {}
     for key, value in (payload or {}).items():
-        if key not in EMBED_ALLOWED_ATTRIBUTION_KEYS:
+        max_length = EMBED_ATTRIBUTION_MAX_LENGTHS.get(key)
+        if max_length is None:
             continue
-        if value is None:
+        if isinstance(value, bool) or not isinstance(value, str | int | float):
             continue
         text = str(value).strip()
         if not text:
@@ -1920,7 +2194,9 @@ def sanitize_embed_attribution(payload: dict[str, Any] | None) -> dict[str, str]
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 continue
             text = urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
-        sanitized[key] = text[:1000]
+        if len(text) > max_length:
+            continue
+        sanitized[key] = text
     return sanitized
 
 
@@ -1995,7 +2271,8 @@ def _create_lead_attribution(
     *,
     link: FormIntakeLink,
     submission: FormSubmission,
-    session: EmbedSession,
+    source_surface: str,
+    parent_origin: str | None,
     attribution: dict[str, str],
 ) -> LeadAttribution:
     source = attribution.get("utm_source")
@@ -2005,7 +2282,7 @@ def _create_lead_attribution(
         organization_id=link.organization_id,
         form_submission_id=submission.id,
         intake_link_id=link.id,
-        source_surface="form_embed",
+        source_surface=source_surface,
         source=source,
         medium=medium,
         campaign=campaign,
@@ -2016,7 +2293,7 @@ def _create_lead_attribution(
         fbc=attribution.get("fbc"),
         fbp=attribution.get("fbp"),
         referrer=attribution.get("referrer"),
-        parent_origin=session.parent_origin,
+        parent_origin=parent_origin,
         landing_url=attribution.get("landing_url"),
         first_touch_json=attribution or None,
         last_touch_json=attribution or None,
@@ -2270,6 +2547,9 @@ def create_embed_session(
 ):
     if not link.embed_enabled:
         raise PermissionError("Embed is not enabled")
+    form = form_service.get_form(db, link.organization_id, link.form_id)
+    if form is not None:
+        ensure_embed_can_submit(db, link=link, form=form)
     sanitized_attribution = sanitize_embed_attribution(attribution)
     return embed_policy_service.create_embed_session(
         db,
@@ -2298,6 +2578,7 @@ def submit_lead_capture_embed(
 ) -> tuple[FormSubmission, str]:
     if not link.embed_enabled:
         raise PermissionError("Embed is not enabled")
+    ensure_embed_can_submit(db, link=link, form=form)
     if form.status != FormStatus.PUBLISHED.value:
         raise ValueError("Form is not published")
     if form.purpose != FormPurpose.LEAD_CAPTURE.value:
@@ -2398,7 +2679,8 @@ def submit_lead_capture_embed(
         db,
         link=link,
         submission=submission,
-        session=session,
+        source_surface=EMBED_ATTRIBUTION_SOURCE_SURFACE,
+        parent_origin=session.parent_origin,
         attribution=sanitized_attribution,
     )
     _create_consent_record(
@@ -2754,7 +3036,10 @@ def create_intake_lead_for_submission(
     )
     if auto_promote_website_lead and not commit:
         raise ValueError("Website promotion must own its transaction")
-    lead_source = "website" if auto_promote_website_lead else (source or "shared_intake")
+    if submission.lead_kind in DONOR_LEAD_KINDS:
+        lead_source = DONOR_INTAKE_SOURCE
+    else:
+        lead_source = "website" if auto_promote_website_lead else (source or "shared_intake")
     metadata.setdefault("source", lead_source)
 
     lead = _create_intake_lead(
@@ -3118,6 +3403,109 @@ def list_match_candidates(
     return query.order_by(FormSubmissionMatchCandidate.created_at.asc()).all()
 
 
+def _link_submission_to_donor(
+    db: Session,
+    *,
+    submission: FormSubmission,
+    donor_id: uuid.UUID,
+    reviewer_id: uuid.UUID | None,
+    review_notes: str | None,
+) -> tuple[FormSubmission, str]:
+    """Manually link a held donor application; the caller authorized the donor."""
+    from app.services import audit_service, donor_intake_service
+
+    if submission.lead_kind not in DONOR_LEAD_KINDS:
+        raise ValueError("Only donor submissions can be linked to a donor")
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == submission.organization_id,
+            FormSubmission.id == submission.id,
+        )
+        .with_for_update()
+        .populate_existing()
+        .one()
+    )
+    donor = (
+        db.query(Donor)
+        .filter(
+            Donor.organization_id == submission.organization_id,
+            Donor.id == donor_id,
+            Donor.is_archived.is_(False),
+        )
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if donor is None:
+        raise ValueError("Donor not found")
+    if donor.donor_type != submission.lead_kind.removesuffix("_donor"):
+        raise ValueError("Donor type does not match this application")
+    if submission.donor_id == donor.id:
+        return submission, FormSubmissionMatchStatus.LINKED.value
+    if submission.donor_id:
+        raise ValueError("Submission is already linked to another donor")
+    if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
+        raise ValueError("Only pending_review submissions can be linked")
+    if (
+        db.query(FormSubmission.id)
+        .filter(
+            FormSubmission.organization_id == submission.organization_id,
+            FormSubmission.form_id == submission.form_id,
+            FormSubmission.donor_id == donor.id,
+        )
+        .first()
+        is not None
+    ):
+        raise SubmissionLinkConflictError(DONOR_FORM_SUBMISSION_CONFLICT_MESSAGE)
+
+    try:
+        now = datetime.now(UTC)
+        submission.donor_id = donor.id
+        submission.match_status = FormSubmissionMatchStatus.LINKED.value
+        submission.match_reason = "manually_linked"
+        submission.matched_at = now
+        if review_notes is not None:
+            submission.review_notes = review_notes.strip() or None
+        if submission.intake_lead_id:
+            lead = (
+                db.query(IntakeLead)
+                .filter(
+                    IntakeLead.organization_id == submission.organization_id,
+                    IntakeLead.id == submission.intake_lead_id,
+                )
+                .with_for_update()
+                .first()
+            )
+            if lead is not None and lead.status == IntakeLeadStatus.PENDING_REVIEW.value:
+                lead.status = IntakeLeadStatus.PROMOTED.value
+                lead.promoted_donor_id = donor.id
+                lead.promoted_at = now
+        donor_intake_service.mark_submission_linked(
+            db, submission=submission, donor=donor, reviewer_id=reviewer_id
+        )
+        audit_service.log_event(
+            db,
+            org_id=submission.organization_id,
+            event_type=AuditEventType.FORM_SUBMISSION_MATCHED,
+            actor_user_id=reviewer_id,
+            target_type="form_submission",
+            target_id=submission.id,
+            details={"donor_id": str(donor.id), "reason": submission.match_reason},
+        )
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if _is_unique_violation(exc, "uq_form_submission_donor_non_null"):
+            raise SubmissionLinkConflictError(DONOR_FORM_SUBMISSION_CONFLICT_MESSAGE) from None
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(submission)
+    return submission, FormSubmissionMatchStatus.LINKED.value
+
+
 def resolve_submission_match(
     db: Session,
     *,
@@ -3126,23 +3514,43 @@ def resolve_submission_match(
     create_intake_lead: bool,
     reviewer_id: uuid.UUID | None,
     review_notes: str | None = None,
+    donor_id: uuid.UUID | None = None,
 ) -> tuple[FormSubmission, str]:
     if submission.source_mode != FormLinkMode.SHARED.value:
         raise ValueError("Only shared submissions can be match-resolved")
 
+    if donor_id:
+        return _link_submission_to_donor(
+            db,
+            submission=submission,
+            donor_id=donor_id,
+            reviewer_id=reviewer_id,
+            review_notes=review_notes,
+        )
+
     if surrogate_id:
         if submission.lead_kind in DONOR_LEAD_KINDS:
             raise ValueError("Donor submissions cannot be linked to a surrogate")
+        # Lock the surrogate so concurrent links to it serialize before the pre-check.
         surrogate = (
             db.query(Surrogate)
             .filter(
                 Surrogate.organization_id == submission.organization_id,
                 Surrogate.id == surrogate_id,
             )
+            .with_for_update()
             .first()
         )
         if not surrogate:
             raise ValueError("Surrogate not found")
+        if _has_existing_submission_for_surrogate_form(
+            db,
+            org_id=submission.organization_id,
+            form_id=submission.form_id,
+            surrogate_id=surrogate.id,
+            exclude_submission_id=submission.id,
+        ):
+            raise SubmissionLinkConflictError(SURROGATE_FORM_SUBMISSION_CONFLICT_MESSAGE)
         submission.surrogate_id = surrogate.id
         submission.match_status = FormSubmissionMatchStatus.LINKED.value
         submission.match_reason = "manually_linked"
@@ -3152,12 +3560,22 @@ def resolve_submission_match(
         db.query(FormSubmissionMatchCandidate).filter(
             FormSubmissionMatchCandidate.submission_id == submission.id
         ).delete(synchronize_session=False)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            if _is_unique_violation(exc, "uq_form_submission_surrogate_non_null"):
+                raise SubmissionLinkConflictError(
+                    SURROGATE_FORM_SUBMISSION_CONFLICT_MESSAGE
+                ) from None
+            raise
         db.refresh(submission)
         return submission, FormSubmissionMatchStatus.LINKED.value
 
     if not create_intake_lead:
         raise ValueError("Provide surrogate_id or set create_intake_lead=true")
+    if submission.status == FormSubmissionStatus.REJECTED.value:
+        raise ValueError("Rejected submissions cannot be moved to intake")
 
     if submission.intake_lead_id:
         submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
@@ -3277,6 +3695,18 @@ def _retry_submission_match(
         submission, outcome = auto_match_submission(
             db=db, submission=submission, session=session, commit=False
         )
+        if (
+            submission.lead_kind in DONOR_LEAD_KINDS
+            and outcome == FormSubmissionMatchStatus.LEAD_CREATED.value
+            and submission.intake_lead_id
+        ):
+            from app.services import donor_intake_service
+
+            # The retained lead keeps its queue state, and a failed auto-promotion is replayed.
+            submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
+            submission.match_reason = "existing_lead_retained"
+            db.flush()
+            donor_intake_service.enqueue_promotion(db, submission=submission)
 
     if (
         create_intake_lead_if_unmatched
@@ -3473,6 +3903,46 @@ def _copy_profile_photo_to_donor_attachment(
     return attachment
 
 
+def _dispatch_promoted_donor_side_effects(
+    db: Session,
+    *,
+    donor: Donor,
+    attachment_id: uuid.UUID,
+) -> None:
+    """Run post-commit donor workflows with the same isolation and alerts as manual creation."""
+    from app.services import donor_service, workflow_triggers
+
+    def trigger_document_uploaded(workflow_db: Session, workflow_donor: Donor) -> None:
+        attachment = (
+            workflow_db.query(Attachment)
+            .filter(
+                Attachment.organization_id == workflow_donor.organization_id,
+                Attachment.donor_id == workflow_donor.id,
+                Attachment.id == attachment_id,
+            )
+            .one()
+        )
+        workflow_triggers.trigger_document_uploaded(workflow_db, attachment)
+
+    donor_service._dispatch_side_effect_isolated(
+        db=db,
+        donor=donor,
+        event_key="created",
+        failure_kind="workflow",
+        trigger=lambda workflow_db, workflow_donor: workflow_triggers.trigger_donor_created(
+            workflow_db, workflow_donor
+        ),
+    )
+    donor_service._dispatch_side_effect_isolated(
+        db=db,
+        donor=donor,
+        event_key="document_uploaded",
+        failure_kind="workflow",
+        trigger=trigger_document_uploaded,
+        details={"attachment_id": str(attachment_id)},
+    )
+
+
 def _promote_donor_intake_lead(
     db: Session,
     *,
@@ -3510,6 +3980,11 @@ def _promote_donor_intake_lead(
     linked_submissions = _linked_submissions_for_lead(db, lead)
     if not linked_submissions:
         raise ValueError("Donor intake lead has no source submission")
+    if all(
+        submission.status == FormSubmissionStatus.REJECTED.value
+        for submission in linked_submissions
+    ):
+        raise ValueError("Rejected intake leads cannot be promoted")
     profile_photo = _profile_photo_for_donor_lead(
         db,
         lead=lead,
@@ -3529,15 +4004,25 @@ def _promote_donor_intake_lead(
         }
     )
 
-    from app.services import donor_service
+    from app.services import donor_input_normalization_service, donor_service
 
-    donor_data = DonorCreate.model_validate(mapped_payload)
+    donor_input = donor_input_normalization_service.build_donor_create_from_payload(
+        mapped_payload,
+        donor_type=mapped_payload["donor_type"],
+        fallback_source=SurrogateSource.WEBSITE.value,
+    )
+    donor_data = donor_input.create
     if donor_service.get_active_donor_by_email(
         db,
         lead.organization_id,
         str(donor_data.email),
     ):
         raise donor_service.DonorConflictError("An active donor with this email already exists")
+    if donor_input.dropped_fields:
+        lead.source_metadata = {
+            **(lead.source_metadata or {}),
+            "dropped_invalid_submission_fields": donor_input.dropped_fields,
+        }
 
     try:
         donor = donor_service.create_donor(
@@ -3577,22 +4062,29 @@ def _promote_donor_intake_lead(
                 synchronize_session=False,
             )
         )
+        # Promotion applies the donor's application, so it resolves review like surrogate approval.
+        db.query(FormSubmission).filter(
+            FormSubmission.organization_id == lead.organization_id,
+            FormSubmission.intake_lead_id == lead.id,
+            FormSubmission.donor_id == donor.id,
+            FormSubmission.status == FormSubmissionStatus.PENDING_REVIEW.value,
+        ).update(
+            {
+                FormSubmission.status: FormSubmissionStatus.APPROVED.value,
+                FormSubmission.reviewed_at: now,
+                FormSubmission.reviewed_by_user_id: user_id,
+                FormSubmission.applied_at: now,
+            },
+            synchronize_session=False,
+        )
+        zapier_outbound_service.enqueue_donor_created_event(db, donor=donor)
         db.commit()
     except Exception:
         db.rollback()
         raise
     db.refresh(lead)
     donor = donor_service.get_donor(db, lead.organization_id, donor.id) or donor
-    from app.services import workflow_triggers
-
-    try:
-        workflow_triggers.trigger_donor_created(db, donor)
-    except Exception:
-        logger.debug("trigger_promoted_donor_created_failed", exc_info=True)
-    try:
-        workflow_triggers.trigger_document_uploaded(db, attachment)
-    except Exception:
-        logger.debug("trigger_promoted_donor_document_uploaded_failed", exc_info=True)
+    _dispatch_promoted_donor_side_effects(db, donor=donor, attachment_id=attachment.id)
     return donor, int(linked_count or 0)
 
 
@@ -3618,6 +4110,8 @@ def promote_intake_lead(
         if not locked_lead:
             raise ValueError("Intake lead not found")
         lead = locked_lead
+    if lead.status == IntakeLeadStatus.REJECTED.value:
+        raise ValueError("Rejected intake leads cannot be promoted")
     if getattr(lead, "lead_type", FormLeadKind.SURROGATE.value) in DONOR_LEAD_KINDS:
         if is_priority or assign_to_user is not None:
             raise ValueError("Surrogate assignment options do not apply to donor promotion")
@@ -3625,7 +4119,7 @@ def promote_intake_lead(
             db,
             lead=lead,
             user_id=user_id,
-            source=source,
+            source=DONOR_INTAKE_SOURCE,
         )
     if lead.status == IntakeLeadStatus.PROMOTED.value and lead.promoted_surrogate_id:
         surrogate = (

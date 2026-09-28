@@ -561,9 +561,6 @@ function IntendedParentsList() {
         <div className="flex flex-col h-full overflow-hidden">
             <PageHeader
                 title="Intended Parents"
-                count={data?.total}
-                countTotal={hasActiveFilters ? stats?.total : undefined}
-                countLabel="intended parents"
                 actions={
                     canCreate ? (
                         <Button onClick={() => setIsCreateOpen(true)}>

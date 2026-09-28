@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { appointmentBadgeStatus, localDateTimeToIso } from "@/components/surrogates/InterviewAppointmentManager"
-import { readableForeground } from "@/lib/stage-colors"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 import type { InterviewAppointment } from "@/lib/api/interview-appointment"
 
 const appointment = (overrides: Partial<InterviewAppointment> = {}): InterviewAppointment => ({
@@ -33,52 +33,40 @@ describe("interview appointment presentation", () => {
         expect(localDateTimeToIso("")).toBeNull()
     })
 
-    it("uses a readable dark foreground for rollout yellow and white for purple", () => {
-        expect(readableForeground("#FDE68A")).toBe("#422006")
-        expect(readableForeground("#A855F7")).toBe("#FFFFFF")
+    it("keeps white text and colors that already reach AA contrast", () => {
+        expect(stageBadgeStyle("#DB2777")).toEqual({ backgroundColor: "#DB2777", borderColor: "transparent", color: "#FFFFFF" })
+        expect(stageBadgeStyle(" #64748b ")).toEqual({ backgroundColor: "#64748B", borderColor: "transparent", color: "#FFFFFF" })
     })
 
-    it("uses dark text on mid-luminance stage colors", () => {
-        expect(readableForeground("#06b6d4")).toBe("#422006")
-        expect(readableForeground("#10b981")).toBe("#422006")
-        expect(readableForeground(" #06B6D4 ")).toBe("#422006")
-    })
-
-    it("falls back to white for values that are not six-digit hex", () => {
-        expect(readableForeground("")).toBe("#FFFFFF")
-        expect(readableForeground("#fff")).toBe("#FFFFFF")
-        expect(readableForeground("var(--primary)")).toBe("#FFFFFF")
+    it("passes through values that are not six-digit hex", () => {
+        expect(stageBadgeStyle("").backgroundColor).toBe("")
+        expect(stageBadgeStyle("#fff").backgroundColor).toBe("#fff")
+        expect(stageBadgeStyle("var(--primary)").backgroundColor).toBe("var(--primary)")
     })
 
     // Every color seeded by apps/api/app/core/stage_definitions.py, plus the #6B7280 fallback.
     it.each([
-        ["#059669", "#422006"],
-        ["#06B6D4", "#422006"],
-        ["#0891B2", "#422006"],
-        ["#0D9488", "#422006"],
-        ["#0EA5E9", "#422006"],
-        ["#10B981", "#422006"],
-        ["#14B8A6", "#422006"],
-        ["#16A34A", "#422006"],
-        ["#22C55E", "#422006"],
-        ["#3B82F6", "#422006"],
-        ["#6366F1", "#FFFFFF"],
-        ["#64748B", "#FFFFFF"],
-        ["#6B7280", "#FFFFFF"],
-        ["#84CC16", "#422006"],
-        ["#8B5CF6", "#FFFFFF"],
-        ["#A855F7", "#FFFFFF"],
-        ["#B4536A", "#FFFFFF"],
-        ["#D97706", "#422006"],
-        ["#DB2777", "#FFFFFF"],
-        ["#EF4444", "#422006"],
-        ["#F59E0B", "#422006"],
-        ["#FDE68A", "#422006"],
-    ])("picks the higher-contrast foreground for seeded stage color %s", (background, expected) => {
-        const foreground = readableForeground(background)
-        const other = foreground === "#FFFFFF" ? "#422006" : "#FFFFFF"
-        expect(foreground).toBe(expected)
-        expect(contrastRatio(background, foreground)).toBeGreaterThan(contrastRatio(background, other))
+        "#059669", "#06B6D4", "#0891B2", "#0D9488", "#0EA5E9", "#10B981", "#14B8A6", "#16A34A",
+        "#22C55E", "#3B82F6", "#6366F1", "#64748B", "#6B7280", "#84CC16", "#8B5CF6", "#A855F7",
+        "#B4536A", "#D97706", "#DB2777", "#EF4444", "#F59E0B", "#FDE68A",
+    ])("gives seeded stage color %s white text at AA contrast", (color) => {
+        const { backgroundColor, color: foreground } = stageBadgeStyle(color)
+        expect(foreground).toBe("#FFFFFF")
+        expect(contrastRatio(backgroundColor, "#FFFFFF")).toBeGreaterThanOrEqual(4.5)
+        expect(luminance(backgroundColor)).toBeLessThanOrEqual(luminance(color))
+        if (contrastRatio(color, "#FFFFFF") >= 4.5) expect(backgroundColor).toBe(color)
+    })
+
+    // Pairs that collapsed to one shade when every fill stopped exactly at 4.5:1.
+    it.each([
+        ["#10B981", "#059669"],
+        ["#22C55E", "#16A34A"],
+        ["#14B8A6", "#0D9488"],
+        ["#06B6D4", "#0891B2"],
+    ])("keeps the lighter stage color %s lighter than %s", (lighter, darker) => {
+        const lighterFill = stageBadgeStyle(lighter).backgroundColor
+        const darkerFill = stageBadgeStyle(darker).backgroundColor
+        expect(luminance(lighterFill)).toBeGreaterThan(luminance(darkerFill) * 1.15)
     })
 })
 

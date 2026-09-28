@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react"
 
 import type { PipelineStage } from "@/lib/api/pipelines"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 
 function normalizeColor(color: string | null | undefined): string {
     return /^#[0-9A-Fa-f]{6}$/.test(color ?? "") ? String(color) : "#6B7280"
@@ -23,18 +24,21 @@ export function getDonorStageLabel(
     return stage?.label ?? donor.status_label ?? "Stage unavailable"
 }
 
-export function getDonorStageStyle(
+/** The donor's configured stage color, for dots and stage badges. */
+export function getDonorStageColor(
     stages: PipelineStage[] | null | undefined,
     donor: { stage_id?: string | null; stage_key?: string | null },
-): CSSProperties {
+): string {
     const stage = (stages ?? []).find(
         (candidate) =>
             candidate.id === donor.stage_id || candidate.stage_key === donor.stage_key,
     )
-    const color = normalizeColor(stage?.color)
-    return {
-        borderColor: `${color}33`,
-        backgroundColor: `${color}14`,
-        color,
-    }
+    return normalizeColor(stage?.color)
+}
+
+export function getDonorStageStyle(
+    stages: PipelineStage[] | null | undefined,
+    donor: { stage_id?: string | null; stage_key?: string | null },
+): CSSProperties {
+    return stageBadgeStyle(getDonorStageColor(stages, donor))
 }

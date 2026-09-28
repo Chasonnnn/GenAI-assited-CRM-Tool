@@ -7,7 +7,9 @@ import {
     syncMetaForms,
     updateMetaFormMapping,
     deleteMetaForm,
+    rerouteMetaFormLead,
     type MetaFormMappingUpdate,
+    type MetaLeadKind,
 } from '@/lib/api/meta-forms'
 
 export const metaFormsKeys = {
@@ -67,6 +69,19 @@ export function useReconvertMetaFormLeads(formId: string) {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: () => reconvertMetaFormLeads(formId),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.mapping(formId) })
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })
+            void queryClient.invalidateQueries({ queryKey: metaFormsKeys.unconvertedLeads(formId) })
+        },
+    })
+}
+
+export function useRerouteMetaFormLead(formId: string) {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: ({ leadId, leadKind }: { leadId: string; leadKind: MetaLeadKind }) =>
+            rerouteMetaFormLead(formId, leadId, leadKind),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: metaFormsKeys.mapping(formId) })
             void queryClient.invalidateQueries({ queryKey: metaFormsKeys.list() })

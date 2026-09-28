@@ -92,6 +92,7 @@ describe("DonorsPage", () => {
         mockSearchParams.delete("to")
         mockSearchParams.delete("sort_by")
         mockSearchParams.delete("sort_order")
+        mockSearchParams.delete("source")
         mockRouterReplace.mockReset()
         mockUseDonors.mockReset()
         mockCreateDonor.mockReset()
@@ -277,6 +278,32 @@ describe("DonorsPage", () => {
         )
     })
 
+    it("labels the Source column and filters by a URL-backed source in More Filters", async () => {
+        mockSearchParams.set("source", "meta")
+
+        render(<DonorsPage />)
+
+        expect(screen.getByRole("columnheader", { name: "Source" })).toBeInTheDocument()
+        expect(screen.getByText("Manual")).toHaveAttribute("data-slot", "badge")
+        expect(mockUseDonors).toHaveBeenCalledWith(expect.objectContaining({ source: "meta" }))
+        fireEvent.click(screen.getByRole("button", { name: "More Filters" }))
+        const trigger = await screen.findByRole("combobox", { name: "Filter by source" })
+        expect(trigger).toHaveTextContent("Meta")
+        expect(trigger).not.toHaveTextContent("meta")
+
+        fireEvent.click(screen.getByRole("button", { name: "Remove filter: Source: Meta" }))
+        expect(mockRouterReplace).toHaveBeenLastCalledWith("/donors", { scroll: false })
+    })
+
+    it("ignores an unknown source value instead of forwarding it", () => {
+        mockSearchParams.set("source", "Meta")
+
+        render(<DonorsPage />)
+
+        expect(mockUseDonors).toHaveBeenCalledWith(expect.not.objectContaining({ source: "Meta" }))
+        expect(screen.queryByRole("button", { name: /Remove filter: Source/ })).not.toBeInTheDocument()
+    })
+
     it("keeps the type tabs above a Stage, Date, More Filters, search toolbar", () => {
         render(<DonorsPage />)
 
@@ -294,17 +321,13 @@ describe("DonorsPage", () => {
         expect(search).toHaveAttribute("placeholder", "Search donors")
     })
 
-    it("shows the filtered count against the unfiltered total", () => {
+    it("shows no header count and skips the unfiltered total request while filtered", () => {
         mockSearchParams.set("q", "maya")
-        mockUseDonors.mockImplementation((filters: { per_page?: number }) =>
-            filters.per_page === 1
-                ? { data: { items: [], total: 42, page: 1, per_page: 1, pages: 42 }, isLoading: false }
-                : { data: { items: [], total: 3, page: 1, per_page: 20, pages: 1 }, isLoading: false },
-        )
 
         render(<DonorsPage />)
 
-        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent("3 of 42")
+        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
+        expect(mockUseDonors).not.toHaveBeenCalledWith(expect.objectContaining({ per_page: 1 }), expect.anything())
     })
 
     it("validates donor email inline before calling the API", async () => {

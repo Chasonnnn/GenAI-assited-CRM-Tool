@@ -1,4 +1,5 @@
 import type {
+    PipelineEntityType,
     PipelineFeatureConfig,
     PipelineStage,
     RoleStageRule,
@@ -49,10 +50,15 @@ export interface SurrogateStageContext {
 
 function defaultStageSemantics(
     stageKey: string | null,
-    stageType: string | null | undefined
+    stageType: string | null | undefined,
+    entityType: PipelineEntityType,
 ): StageSemantics {
     const normalizedKey = normalizeStageKey(stageKey)
-    const generated = normalizedKey ? DEFAULT_STAGE_SEMANTICS_BY_KEY[normalizedKey] : undefined
+    // The generated defaults describe surrogate stages only; other pipelines share stage keys.
+    const generated =
+        entityType === "surrogate" && normalizedKey
+            ? DEFAULT_STAGE_SEMANTICS_BY_KEY[normalizedKey]
+            : undefined
     if (generated) {
         return {
             ...generated,
@@ -80,10 +86,13 @@ function defaultStageSemantics(
     }
 }
 
-export function getStageSemantics(stage: StageSemanticRef | null | undefined): StageSemantics {
+export function getStageSemantics(
+    stage: StageSemanticRef | null | undefined,
+    entityType: PipelineEntityType = "surrogate",
+): StageSemantics {
     const stageKey = getStageSemanticKey(stage)
-    const base = defaultStageSemantics(stageKey, stage?.stage_type)
-    return {
+    const base = defaultStageSemantics(stageKey, stage?.stage_type, entityType)
+    const semantics: StageSemantics = {
         ...base,
         ...stage?.semantics,
         capabilities: {
@@ -91,21 +100,30 @@ export function getStageSemantics(stage: StageSemanticRef | null | undefined): S
             ...(stage?.semantics?.capabilities ?? {}),
         },
     }
+    // Intended parents keep no paused-from stage, so no intended parent stage can pause and resume.
+    return entityType === "intended_parent" ? { ...semantics, pause_behavior: "none" } : semantics
 }
 
 export function stageHasCapability(
     stage: StageSemanticRef | null | undefined,
-    capability: StageCapabilityKey
+    capability: StageCapabilityKey,
+    entityType: PipelineEntityType = "surrogate",
 ): boolean {
-    return Boolean(getStageSemantics(stage).capabilities[capability])
+    return Boolean(getStageSemantics(stage, entityType).capabilities[capability])
 }
 
-export function stageRequiresReasonOnEnter(stage: StageSemanticRef | null | undefined): boolean {
-    return getStageSemantics(stage).requires_reason_on_enter
+export function stageRequiresReasonOnEnter(
+    stage: StageSemanticRef | null | undefined,
+    entityType: PipelineEntityType = "surrogate",
+): boolean {
+    return getStageSemantics(stage, entityType).requires_reason_on_enter
 }
 
-export function stageUsesPauseBehavior(stage: StageSemanticRef | null | undefined): boolean {
-    return getStageSemantics(stage).pause_behavior === "resume_previous_stage"
+export function stageUsesPauseBehavior(
+    stage: StageSemanticRef | null | undefined,
+    entityType: PipelineEntityType = "surrogate",
+): boolean {
+    return getStageSemantics(stage, entityType).pause_behavior === "resume_previous_stage"
 }
 
 function roleRuleMatchesStage(stage: PipelineStage, rule: RoleStageRule | undefined): boolean {

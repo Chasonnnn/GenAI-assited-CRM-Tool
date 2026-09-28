@@ -6,6 +6,7 @@ import Link from "@/components/app-link"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -171,6 +172,12 @@ function formatMatchProposedDate(dateStr: string) {
     })
 }
 
+function MatchStageBadge({ label, color }: { label: string | null | undefined; color: string | null | undefined }) {
+    return color
+        ? <Badge className="text-xs" style={stageBadgeStyle(color)}>{label}</Badge>
+        : <Badge variant="outline" className="text-xs">{label}</Badge>
+}
+
 export default function MatchesPage() {
     return (
         <ListPageGate title="Matches" permission="view_matches" deniedDescription={MATCHES_DENIED_DESCRIPTION}>
@@ -262,9 +269,6 @@ function MatchesList() {
         <div className="flex flex-col h-full overflow-hidden">
             <PageHeader
                 title="Matches"
-                count={data?.total}
-                countTotal={hasActiveFilters ? stats?.total : undefined}
-                countLabel="matches"
                 actions={
                     canProposeMatches ? (
                         <Button onClick={() => setIsNewMatchOpen(true)}>
@@ -446,9 +450,10 @@ function MatchesList() {
                                             </TableCell>
                                             <TableCell>
                                                 {(match.match_kind === "donor" ? match.donor_stage_label : match.surrogate_stage_label) ? (
-                                                    <Badge variant="outline" className="text-xs">
-                                                        {match.match_kind === "donor" ? match.donor_stage_label : match.surrogate_stage_label}
-                                                    </Badge>
+                                                    <MatchStageBadge
+                                                        label={match.match_kind === "donor" ? match.donor_stage_label : match.surrogate_stage_label}
+                                                        color={match.match_kind === "donor" ? match.donor_stage_color : match.surrogate_stage_color}
+                                                    />
                                                 ) : (
                                                     <span className="text-muted-foreground">No stage</span>
                                                 )}

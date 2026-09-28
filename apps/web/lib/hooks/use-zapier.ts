@@ -113,6 +113,24 @@ export function useZapierOutboundTest() {
     });
 }
 
+export function useZapierDonorOutboundTest() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: zapierApi.sendZapierDonorOutboundTest,
+        onSuccess: () => {
+            void queryClient.invalidateQueries({
+                queryKey: [...zapierKeys.all, 'outbound-events'],
+                exact: false,
+            });
+            void queryClient.invalidateQueries({
+                queryKey: [...zapierKeys.all, 'outbound-events-summary'],
+                exact: false,
+            });
+        },
+    });
+}
+
 export function useZapierOutboundEventsSummary(windowHours = 24) {
     return useQuery({
         queryKey: zapierKeys.outboundEventsSummary(windowHours),
@@ -137,6 +155,18 @@ export function useRetryZapierOutboundEvent() {
             eventId: string;
             payload?: zapierApi.RetryZapierOutboundEventRequest;
         }) => zapierApi.retryZapierOutboundEvent(eventId, payload),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: zapierKeys.outboundEventsSummary(24) });
+            void queryClient.invalidateQueries({ queryKey: [...zapierKeys.all, 'outbound-events'] });
+        },
+    });
+}
+
+export function useReplayZapierOutboundEvent() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ eventId }: { eventId: string }) =>
+            zapierApi.replayZapierOutboundEvent(eventId),
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: zapierKeys.outboundEventsSummary(24) });
             void queryClient.invalidateQueries({ queryKey: [...zapierKeys.all, 'outbound-events'] });

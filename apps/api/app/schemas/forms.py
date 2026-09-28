@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 FieldType = Literal[
     "text",
@@ -291,6 +291,7 @@ class FormDraftStatusRead(BaseModel):
 
 FormLinkMode = Literal["shared"]
 SharedSubmissionOutcome = Literal["workflow_pending", "linked", "ambiguous_review", "lead_created"]
+PublicSubmissionOutcome = Literal["received"]
 
 
 class FormIntakeLinkCreate(BaseModel):
@@ -370,6 +371,8 @@ class FormIntakePublicRead(BaseModel):
     max_file_size_bytes: int
     max_file_count: int
     allowed_mime_types: list[str] | None
+    # Upload types for fields narrower than the form list, keyed by field key.
+    field_allowed_mime_types: dict[str, list[str]]
     campaign_name: str | None
     event_name: str | None
     messaging_consent: MessagingConsentOptionsRead
@@ -483,12 +486,10 @@ class FormIntakeDraftRestoreResponse(BaseModel):
 
 
 class FormSubmissionSharedResponse(BaseModel):
+    """Public submit result. It is the same for every applicant, so no one can learn a match."""
+
     id: UUID
-    status: str
-    outcome: SharedSubmissionOutcome
-    surrogate_id: UUID | None = None
-    donor_id: UUID | None = None
-    intake_lead_id: UUID | None = None
+    outcome: PublicSubmissionOutcome = "received"
 
 
 class MatchCandidateRead(BaseModel):
@@ -499,10 +500,34 @@ class MatchCandidateRead(BaseModel):
     created_at: datetime
 
 
+class DonorMatchCandidateRead(BaseModel):
+    donor_id: UUID
+    donor_number: str
+    full_name: str
+    donor_type: Literal["egg", "sperm"]
+    reason: Literal["donor_email_phone_match", "donor_email_match", "donor_phone_match"]
+
+
+class DonorSubmissionRead(BaseModel):
+    id: UUID
+    form_id: UUID
+    form_name: str
+    status: Literal["pending_review", "approved", "rejected"]
+    submitted_at: datetime
+    reviewed_at: datetime | None
+
+
 class FormSubmissionMatchResolveRequest(BaseModel):
     surrogate_id: UUID | None = None
+    donor_id: UUID | None = None
     create_intake_lead: bool = False
     review_notes: str | None = None
+
+    @model_validator(mode="after")
+    def _single_subject(self) -> FormSubmissionMatchResolveRequest:
+        if self.surrogate_id and self.donor_id:
+            raise ValueError("Provide surrogate_id or donor_id, not both")
+        return self
 
 
 class FormSubmissionMatchRetryRequest(BaseModel):

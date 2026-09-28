@@ -121,14 +121,6 @@ describe('MatchTasksCalendar', () => {
         expect(screen.queryByText('no_show')).not.toBeInTheDocument()
     })
 
-    it('keeps attempt calendars restricted to explicitly assigned work', () => {
-        render(<MatchTasksCalendar matchId="match1" attemptId="attempt1" />)
-        expect(mockUseTasks).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt1' }))
-        expect(mockUseTasks.mock.calls[0][0]).not.toHaveProperty('include_record_history')
-        expect(mockUseAppointments).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt1' }))
-        expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('include_record_history')
-    })
-
     it('navigates to previous month', () => {
         render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         const prevButton = screen.getAllByRole('button')[0] // First button is prev
@@ -211,10 +203,12 @@ describe('MatchTasksCalendar with empty state', () => {
         expect(screen.getByText('Surrogate')).toBeInTheDocument()
     })
 
-    it('keeps calendar requests scoped to the selected treatment attempt', () => {
-        render(<MatchTasksCalendar matchId="match1" attemptId="attempt2" />)
-        expect(mockUseTasks).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt2' }))
-        expect(mockUseAppointments).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt2' }))
+    it('requests the whole match with its record history', () => {
+        render(<MatchTasksCalendar matchId="match1" />)
+        expect(mockUseTasks).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', include_record_history: true }))
+        expect(mockUseTasks.mock.calls[0][0]).not.toHaveProperty('attempt_id')
+        expect(mockUseAppointments).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', include_record_history: true }))
+        expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('attempt_id')
         expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('surrogate_id')
         expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('intended_parent_id')
     })

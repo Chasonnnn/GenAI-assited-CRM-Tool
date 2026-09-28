@@ -8,7 +8,7 @@ import api from '../api';
 export interface StatusChangeRequest {
     id: string;
     organization_id: string;
-    entity_type: 'surrogate' | 'intended_parent' | 'match';
+    entity_type: 'surrogate' | 'intended_parent' | 'match' | 'donor';
     entity_id: string;
     target_stage_id: string | null;
     target_status: string | null;
@@ -43,7 +43,7 @@ export interface StatusChangeRequestListResponse {
 }
 
 export interface ListStatusChangeRequestsParams {
-    entity_type?: 'surrogate' | 'intended_parent' | 'match';
+    entity_type?: 'surrogate' | 'intended_parent' | 'match' | 'donor';
     page?: number;
     per_page?: number;
 }

@@ -620,3 +620,45 @@ def test_transcript_storage_local_cleanup_versions(monkeypatch, tmp_path):
     assert deleted == 1
     assert (root / "v2.json").exists()
     assert not (root / "v1.json").exists()
+
+
+def test_cli_repair_matched_without_match_keeps_intended_parent_of_completed_match(
+    db, _cli_db, _echo_log
+):
+    from datetime import UTC, datetime
+
+    from app.db.enums import IntendedParentStatus
+    from app.db.models import Match
+    from app.services import pipeline_service
+
+    org = _create_org(db, slug="acme")
+    user = _create_user_with_membership(
+        db,
+        org=org,
+        email="repair-completed@example.com",
+        role=Role.DEVELOPER,
+    )
+    surrogate, intended_parent, _, _ = _create_orphaned_matched_records(db, org=org, user=user)
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, org.id, user.id)
+    delivered = pipeline_service.get_stage_by_system_role(db, pipeline.id, "delivered")
+    surrogate.stage_id = delivered.id
+    surrogate.status_label = delivered.label
+    db.add(
+        Match(
+            organization_id=org.id,
+            match_number="M10001",
+            surrogate_id=surrogate.id,
+            intended_parent_id=intended_parent.id,
+            status="completed",
+            closed_at=datetime.now(UTC),
+            outcome=delivered.label,
+            proposed_by_user_id=user.id,
+        )
+    )
+    db.commit()
+
+    _cli_db.repair_matched_without_match.callback(org_slug="acme", apply=True)
+
+    db.refresh(intended_parent)
+    assert intended_parent.status == IntendedParentStatus.MATCHED.value
+    assert any("Found 0 orphaned matched intended parent(s)" in line for line in _echo_log)

@@ -3,21 +3,24 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
 
+from sqlalchemy import case, exists, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.stage_definitions import LABEL_OVERRIDES
-from app.db.enums import JobType, SurrogateSource
+from app.db.enums import JobStatus, JobType, SurrogateSource
 from app.db.models import (
     Donor,
     DonorStatusHistory,
     FormSubmission,
     IntakeLead,
+    Job,
     LeadAttribution,
     MetaLead,
+    Pipeline,
     PipelineStage,
     Surrogate,
     ZapierOutboundEvent,
@@ -25,6 +28,7 @@ from app.db.models import (
 from app.services import (
     job_service,
     meta_capi,
+    meta_lead_service,
     meta_outbound_service,
     zapier_monitor_service,
     zapier_settings_service,
@@ -32,8 +36,29 @@ from app.services import (
 from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
-MAX_META_LEAD_AGE = timedelta(days=90)
+MAX_META_LEAD_AGE = meta_outbound_service.MAX_META_LEAD_AGE
 FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
+# Meta leads without an email get this generated address; it must never reach Meta.
+PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid"
+# Surrogate and donor events share one webhook URL; record_type lets one Zap branch.
+SURROGATE_RECORD_TYPE = "surrogate"
+# A donor event in these states was sent or will be; later occurrences are duplicates.
+DONOR_REPORTED_EVENT_STATUSES = ("queued", "delivered", "failed")
+# A replayed event whose previous job is in these states could be delivered twice.
+ACTIVE_JOB_STATUSES = (JobStatus.PENDING.value, JobStatus.RUNNING.value)
+# Browser ids that let Meta match a website event; they rank above other ad fields.
+MATCHABLE_ATTRIBUTION_COLUMNS = (LeadAttribution.fbc, LeadAttribution.fbp)
+# Click and campaign fields; source, medium and campaign hold the utm_* values.
+AD_ATTRIBUTION_COLUMNS = (
+    *MATCHABLE_ATTRIBUTION_COLUMNS,
+    LeadAttribution.fbclid,
+    LeadAttribution.ad_id,
+    LeadAttribution.adset_id,
+    LeadAttribution.campaign_id,
+    LeadAttribution.source,
+    LeadAttribution.medium,
+    LeadAttribution.campaign,
+)
 
 
 def _now_utc() -> datetime:
@@ -117,6 +142,31 @@ def _resolve_meta_click_id(meta_lead: MetaLead) -> str | None:
     )
 
 
+def _matchable_email(email: str | None) -> str | None:
+    normalized = (email or "").strip()
+    if "@" not in normalized or normalized.lower().endswith(PLACEHOLDER_EMAIL_SUFFIX):
+        return None
+    return normalized
+
+
+def _customer_match_fields(email: str | None, phone: str | None) -> dict[str, object]:
+    """Raw contact fields plus Meta-normalized hashes, shared by surrogate and donor payloads."""
+    fields: dict[str, object] = {}
+    user_data: dict[str, str] = {}
+    matchable_email = _matchable_email(email)
+    if matchable_email:
+        fields["customer_email"] = matchable_email
+        user_data["email_hash"] = meta_capi.hash_for_capi(matchable_email)
+    if phone:
+        fields["customer_phone_number"] = phone
+        normalized_phone = meta_capi.normalize_phone_for_capi(phone)
+        if normalized_phone:
+            user_data["phone_hash"] = meta_capi.hash_for_capi(normalized_phone)
+    if user_data:
+        fields["user_data"] = user_data
+    return fields
+
+
 def _skip_event(
     db: Session,
     *,
@@ -126,6 +176,8 @@ def _skip_event(
     stage_key: str,
     stage_slug: str | None,
     stage_label: str | None,
+    stage_id: UUID | None,
+    effective_at: datetime,
     event_id: str | None = None,
     event_name: str | None = None,
     lead_id: str | None = None,
@@ -141,6 +193,8 @@ def _skip_event(
         stage_key=stage_key,
         stage_slug=stage_slug,
         stage_label=stage_label,
+        stage_id=stage_id,
+        effective_at=effective_at,
         surrogate_id=surrogate.id,
     )
     return {
@@ -176,6 +230,7 @@ def build_stage_event_payload(
         "lifecycle_stage_name": event_name,
         "stage_in_sales_process": event_name,
         "event_time": event_time.astimezone(UTC).isoformat(),
+        "record_type": SURROGATE_RECORD_TYPE,
         "lead_id": lead_id,
         "facebook_lead_id": lead_id,
         "stage_key": stage_key,
@@ -196,15 +251,7 @@ def build_stage_event_payload(
         payload["facebook_click_id"] = normalized_fbc
 
     if include_hashed_pii:
-        user_data: dict[str, str] = {}
-        if email:
-            payload["customer_email"] = email
-            user_data["email_hash"] = meta_capi.hash_for_capi(email)
-        if phone:
-            payload["customer_phone_number"] = phone
-            user_data["phone_hash"] = meta_capi.hash_for_capi(phone)
-        if user_data:
-            payload["user_data"] = user_data
+        payload.update(_customer_match_fields(email, phone))
 
     if test_mode:
         payload["test_mode"] = True
@@ -212,20 +259,24 @@ def build_stage_event_payload(
     return payload
 
 
-def _extract_meta_fields(meta_lead: MetaLead, surrogate: Surrogate) -> dict[str, str | None]:
+def _extract_meta_fields(
+    meta_lead: MetaLead,
+    surrogate: Surrogate | None = None,
+) -> dict[str, str | None]:
+    """Meta lead tracking fields; surrogates prefer their tracked columns, donors have none."""
     fields = meta_lead.field_data_raw or meta_lead.field_data or {}
     return {
         "meta_lead_id": meta_lead.meta_lead_id,
-        "meta_form_id": surrogate.meta_form_id or meta_lead.meta_form_id,
+        "meta_form_id": (surrogate.meta_form_id if surrogate else None) or meta_lead.meta_form_id,
         "meta_page_id": meta_lead.meta_page_id,
-        "meta_ad_id": surrogate.meta_ad_external_id
+        "meta_ad_id": (surrogate.meta_ad_external_id if surrogate else None)
         or fields.get("meta_ad_id")
         or fields.get("ad_id"),
-        "meta_adset_id": surrogate.meta_adset_external_id
+        "meta_adset_id": (surrogate.meta_adset_external_id if surrogate else None)
         or fields.get("meta_adset_id")
         or fields.get("adset_id")
         or fields.get("ad_set_id"),
-        "meta_campaign_id": surrogate.meta_campaign_external_id
+        "meta_campaign_id": (surrogate.meta_campaign_external_id if surrogate else None)
         or fields.get("meta_campaign_id")
         or fields.get("campaign_id"),
         "meta_ad_name": fields.get("meta_ad_name") or fields.get("ad_name"),
@@ -241,6 +292,13 @@ def _extract_meta_fields(meta_lead: MetaLead, surrogate: Surrogate) -> dict[str,
     }
 
 
+def _parse_stage_id(value: str | None) -> UUID | None:
+    try:
+        return UUID(str(value)) if value else None
+    except ValueError:
+        return None
+
+
 def enqueue_stage_event(
     db: Session,
     surrogate: Surrogate,
@@ -251,50 +309,65 @@ def enqueue_stage_event(
     stage_label: str | None,
     effective_at: datetime | None = None,
     source: str = "automatic",
+    replay_event: ZapierOutboundEvent | None = None,
 ) -> dict[str, object]:
-    """Enqueue a Zapier stage event if configured and applicable."""
+    """Enqueue a Zapier stage event if configured and applicable.
+
+    With replay_event, the outcome overwrites that skipped row instead of adding a row.
+    """
+    event_time = _coerce_utc(effective_at) or _now_utc()
+    stage_uuid = _parse_stage_id(stage_id)
+
+    def skip(
+        reason: str,
+        *,
+        event_id: str | None = None,
+        event_name: str | None = None,
+        lead_id: str | None = None,
+    ) -> dict[str, object]:
+        if replay_event is not None:
+            zapier_monitor_service.record_replay_result(
+                replay_event,
+                status="skipped",
+                reason=reason,
+                job_id=None,
+                event_id=event_id,
+                event_name=event_name,
+                lead_id=lead_id,
+            )
+            db.commit()
+            return {
+                "queued": False,
+                "reason": reason,
+                "event_name": event_name,
+                "event_id": event_id,
+                "lead_id": lead_id,
+            }
+        return _skip_event(
+            db,
+            surrogate=surrogate,
+            source=source,
+            reason=reason,
+            stage_key=stage_key,
+            stage_slug=stage_slug,
+            stage_label=stage_label,
+            stage_id=stage_uuid,
+            effective_at=event_time,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=lead_id,
+        )
+
     if surrogate.source != SurrogateSource.META.value:
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="not_meta_source",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-        )
+        return skip("not_meta_source")
     if not surrogate.meta_lead_id:
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="missing_meta_lead_fk",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-        )
+        return skip("missing_meta_lead_fk")
 
     settings = zapier_settings_service.get_settings(db, surrogate.organization_id)
     if not settings or not settings.outbound_enabled:
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="outbound_disabled",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-        )
+        return skip("outbound_disabled")
     if not settings.outbound_webhook_url:
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="missing_webhook_url",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-        )
+        return skip("missing_webhook_url")
 
     mapping = zapier_settings_service.normalize_event_mapping(
         settings.outbound_event_mapping,
@@ -303,26 +376,10 @@ def enqueue_stage_event(
     )
     mapping_item = resolve_mapping_item(mapping, stage_key)
     if not mapping_item:
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="unmapped_stage",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-        )
+        return skip("unmapped_stage")
     event_name = str(mapping_item.get("event_name") or "").strip()
     if not event_name:
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="unmapped_stage",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-        )
+        return skip("unmapped_stage")
 
     meta_lead = (
         db.query(MetaLead)
@@ -333,50 +390,24 @@ def enqueue_stage_event(
         .first()
     )
     if not meta_lead:
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="missing_meta_lead",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-            event_name=event_name,
-        )
+        return skip("missing_meta_lead", event_name=event_name)
     if not meta_lead.meta_lead_id:
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="missing_meta_lead_id",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-            event_name=event_name,
-        )
+        return skip("missing_meta_lead_id", event_name=event_name)
+    lead_id = meta_lead.meta_lead_id
+    if meta_lead_service.is_synthetic_meta_lead_id(lead_id):
+        return skip("synthetic_meta_lead_id", event_name=event_name, lead_id=lead_id)
 
-    event_time = effective_at or _now_utc()
     if not _is_meta_lead_within_reporting_window(meta_lead, event_time=event_time):
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="stale_meta_lead",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-            event_name=event_name,
-            lead_id=meta_lead.meta_lead_id,
-        )
+        return skip("stale_meta_lead", event_name=event_name, lead_id=lead_id)
     meta_fields = _extract_meta_fields(meta_lead, surrogate)
     event_id = meta_outbound_service.build_stage_event_key(
         "zapier_stage",
-        meta_lead.meta_lead_id,
+        lead_id,
         stage_key,
         mapping,
     )
     payload = build_stage_event_payload(
-        lead_id=meta_lead.meta_lead_id,
+        lead_id=lead_id,
         event_name=event_name,
         event_time=event_time,
         stage_key=stage_key,
@@ -406,6 +437,7 @@ def enqueue_stage_event(
         "webhook_id": settings.webhook_id,
     }
     idempotency_key = event_id
+    duplicate_fields = {"event_id": event_id, "event_name": event_name, "lead_id": lead_id}
 
     existing_job = job_service.get_job_by_idempotency_key(
         db,
@@ -413,19 +445,35 @@ def enqueue_stage_event(
         idempotency_key=idempotency_key,
     )
     if existing_job:
-        return _skip_event(
-            surrogate=surrogate,
-            source=source,
-            reason="duplicate",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-            event_id=event_id,
-            event_name=event_name,
-            lead_id=meta_lead.meta_lead_id,
-        ) | {"idempotency_key": idempotency_key}
+        if replay_event is None or existing_job.id != replay_event.job_id:
+            return skip("duplicate", **duplicate_fields) | {"idempotency_key": idempotency_key}
+        # The key belongs to this row's own finished attempt; the payload event_id stays.
+        idempotency_key = _replay_job_key(idempotency_key)
 
     try:
+        if replay_event is not None:
+            job = job_service.enqueue_job(
+                db,
+                org_id=surrogate.organization_id,
+                job_type=JobType.ZAPIER_STAGE_EVENT,
+                payload=job_payload,
+                idempotency_key=idempotency_key,
+                commit=False,
+            )
+            zapier_monitor_service.record_replay_result(
+                replay_event,
+                status="queued",
+                reason=None,
+                job_id=job.id,
+                **duplicate_fields,
+            )
+            db.commit()
+            return {
+                "queued": True,
+                "reason": None,
+                **duplicate_fields,
+                "idempotency_key": idempotency_key,
+            }
         job = job_service.schedule_job(
             db=db,
             org_id=surrogate.organization_id,
@@ -440,10 +488,12 @@ def enqueue_stage_event(
             source=source,
             event_id=event_id,
             event_name=event_name,
-            lead_id=meta_lead.meta_lead_id,
+            lead_id=lead_id,
             stage_key=stage_key,
             stage_slug=stage_slug,
             stage_label=stage_label,
+            stage_id=stage_uuid,
+            effective_at=event_time,
             surrogate_id=surrogate.id,
         )
         return {
@@ -451,39 +501,17 @@ def enqueue_stage_event(
             "reason": None,
             "event_name": event_name,
             "event_id": event_id,
-            "lead_id": meta_lead.meta_lead_id,
+            "lead_id": lead_id,
             "idempotency_key": idempotency_key,
         }
     except IntegrityError:
         db.rollback()
         logger.info("Skipping duplicate Zapier stage event for key=%s", idempotency_key)
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="duplicate",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-            event_id=event_id,
-            event_name=event_name,
-            lead_id=meta_lead.meta_lead_id,
-        ) | {"idempotency_key": idempotency_key}
+        return skip("duplicate", **duplicate_fields) | {"idempotency_key": idempotency_key}
     except Exception as exc:
         db.rollback()
         logger.warning("Failed to enqueue Zapier stage event: %s", exc)
-        return _skip_event(
-            db,
-            surrogate=surrogate,
-            source=source,
-            reason="enqueue_failed",
-            stage_key=stage_key,
-            stage_slug=stage_slug,
-            stage_label=stage_label,
-            event_id=event_id,
-            event_name=event_name,
-            lead_id=meta_lead.meta_lead_id,
-        ) | {"idempotency_key": idempotency_key}
+        return skip("enqueue_failed", **duplicate_fields) | {"idempotency_key": idempotency_key}
 
 
 def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] | None:
@@ -497,37 +525,61 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
         .first()
     )
     if meta_lead is not None:
+        fields = _extract_meta_fields(meta_lead)
+        # lead_id is written from the attribution itself, not from lead tracking fields.
+        fields.pop("meta_lead_id", None)
+        fbc = _resolve_meta_click_id(meta_lead)
+        if fbc:
+            fields["fbc"] = fbc
+            fields["facebook_click_id"] = fbc
         return {
             "source": "meta",
             "lead_id": meta_lead.meta_lead_id or None,
+            "lead_timestamp": _resolve_meta_lead_timestamp(meta_lead),
             "first_party_submission_id": None,
-            "fields": {
-                "meta_form_id": meta_lead.meta_form_id,
-                "meta_page_id": meta_lead.meta_page_id,
-            },
+            "fields": fields,
         }
 
+    promoted_submission_ids = select(IntakeLead.form_submission_id).where(
+        IntakeLead.organization_id == donor.organization_id,
+        IntakeLead.promoted_donor_id == donor.id,
+    )
+    # The hosted page records landing_url on every submit, so a row alone is not ad data.
+    has_matchable_data = or_(*(column != "" for column in MATCHABLE_ATTRIBUTION_COLUMNS))
+    has_ad_data = or_(*(column != "" for column in AD_ATTRIBUTION_COLUMNS))
+
+    def submission_has(condition):
+        return exists().where(
+            LeadAttribution.organization_id == donor.organization_id,
+            LeadAttribution.form_submission_id == FormSubmission.id,
+            condition,
+        )
+
+    # Only fbc or fbp can satisfy website matching, so a later UTM-only visit must not hide
+    # an earlier click. Prefer the latest submission with fbc or fbp, then with other ad
+    # data, then the latest submission.
+    submission_rank = case(
+        (submission_has(has_matchable_data), 0),
+        (submission_has(has_ad_data), 1),
+        else_=2,
+    )
+    attribution_rank = case((has_matchable_data, 0), (has_ad_data, 1), else_=2)
     submission = (
         db.query(FormSubmission)
         .filter(
             FormSubmission.organization_id == donor.organization_id,
-            FormSubmission.donor_id == donor.id,
+            or_(
+                FormSubmission.donor_id == donor.id,
+                FormSubmission.id.in_(promoted_submission_ids),
+            ),
         )
-        .order_by(FormSubmission.submitted_at.desc(), FormSubmission.id.desc())
+        .order_by(
+            submission_rank,
+            FormSubmission.submitted_at.desc(),
+            FormSubmission.id.desc(),
+        )
         .first()
     )
-    if submission is None:
-        submission = (
-            db.query(FormSubmission)
-            .join(IntakeLead, IntakeLead.form_submission_id == FormSubmission.id)
-            .filter(
-                FormSubmission.organization_id == donor.organization_id,
-                IntakeLead.organization_id == donor.organization_id,
-                IntakeLead.promoted_donor_id == donor.id,
-            )
-            .order_by(FormSubmission.submitted_at.desc(), FormSubmission.id.desc())
-            .first()
-        )
     if submission is None:
         return None
 
@@ -537,7 +589,7 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
             LeadAttribution.organization_id == donor.organization_id,
             LeadAttribution.form_submission_id == submission.id,
         )
-        .order_by(LeadAttribution.created_at.desc())
+        .order_by(attribution_rank, LeadAttribution.created_at.desc())
         .first()
     )
     fields: dict[str, str | None] = {}
@@ -564,9 +616,11 @@ def build_donor_stage_event_payload(
     event_name: str,
     event_time: datetime,
     attribution: dict[str, object],
+    donor_type: str,
     include_hashed_pii: bool,
     email: str | None,
     phone: str | None,
+    test_mode: bool = False,
 ) -> dict[str, object]:
     """Build the minimal external donor payload without internal stage/profile data."""
     payload: dict[str, object] = {
@@ -575,6 +629,7 @@ def build_donor_stage_event_payload(
         "lifecycle_stage_name": event_name,
         "stage_in_sales_process": event_name,
         "event_time": event_time.astimezone(UTC).isoformat(),
+        "record_type": f"{donor_type}_donor",
         "attribution_source": attribution["source"],
     }
     lead_id = attribution.get("lead_id")
@@ -591,14 +646,72 @@ def build_donor_stage_event_payload(
         payload.update({str(key): value for key, value in fields.items() if value})
 
     if include_hashed_pii:
-        user_data: dict[str, str] = {}
-        if email:
-            user_data["email_hash"] = meta_capi.hash_for_capi(email)
-        if phone:
-            user_data["phone_hash"] = meta_capi.hash_for_capi(phone)
-        if user_data:
-            payload["user_data"] = user_data
+        payload.update(_customer_match_fields(email, phone))
+    if test_mode:
+        payload["test_mode"] = True
     return payload
+
+
+def _donor_event_id(donor_id: UUID, event_name: str) -> str:
+    """Stable id per donor and event name, like the surrogate per-lead bucket key."""
+    return f"zapier_donor:{donor_id}:{event_name.strip().lower().replace(' ', '_')}"
+
+
+def _withdraw_undone_donor_event(
+    db: Session,
+    *,
+    donor: Donor,
+    undo_history: DonorStatusHistory,
+) -> None:
+    """Skip the forward event an undo reverses while its job is still unclaimed.
+
+    Surrogate undo does not withdraw events. Donors do, because each donor event is sent
+    at most once and an accidental stage change would otherwise spend that send.
+    """
+    undone_history = (
+        db.query(DonorStatusHistory)
+        .filter(
+            DonorStatusHistory.organization_id == donor.organization_id,
+            DonorStatusHistory.donor_id == donor.id,
+            DonorStatusHistory.id != undo_history.id,
+            DonorStatusHistory.old_stage_id == undo_history.new_stage_id,
+            DonorStatusHistory.new_stage_id == undo_history.old_stage_id,
+            DonorStatusHistory.is_undo.is_(False),
+        )
+        .order_by(DonorStatusHistory.recorded_at.desc())
+        .first()
+    )
+    if undone_history is None:
+        return
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter(
+            ZapierOutboundEvent.organization_id == donor.organization_id,
+            ZapierOutboundEvent.donor_status_history_id == undone_history.id,
+            ZapierOutboundEvent.status == "queued",
+        )
+        .first()
+    )
+    if event is None or event.job_id is None:
+        return
+    # Lock the unclaimed job so a worker cannot claim it until this transaction ends;
+    # a job already claimed is past withdrawal and delivers normally.
+    pending_job = (
+        db.query(Job.id)
+        .filter(
+            Job.id == event.job_id,
+            Job.organization_id == donor.organization_id,
+            Job.status == JobStatus.PENDING.value,
+        )
+        .with_for_update()
+        .first()
+    )
+    if pending_job is None:
+        return
+    event.status = "skipped"
+    event.reason = "donor_stage_undone"
+    event.updated_at = _now_utc()
+    db.flush()
 
 
 def enqueue_donor_stage_event(
@@ -608,8 +721,12 @@ def enqueue_donor_stage_event(
     history: DonorStatusHistory,
     new_stage: PipelineStage,
     source: str = "automatic",
+    replay_event: ZapierOutboundEvent | None = None,
 ) -> dict[str, object]:
-    """Atomically attach a donor stage occurrence to its delivery job."""
+    """Atomically attach a donor stage occurrence to its delivery job.
+
+    With replay_event (that occurrence's skipped row), the outcome overwrites the row.
+    """
     existing = (
         db.query(ZapierOutboundEvent)
         .filter(
@@ -618,18 +735,37 @@ def enqueue_donor_stage_event(
         )
         .first()
     )
-    if existing is not None:
+    if existing is not None and (replay_event is None or existing.id != replay_event.id):
         return {
             "queued": existing.status == "queued",
             "reason": "duplicate",
             "event_id": existing.event_id,
         }
 
-    event_id = f"zapier_donor_stage:{history.id}"
+    # The job key stays per stage occurrence, so a skipped or withdrawn occurrence never
+    # blocks the first real send; the stable event_id below carries the dedupe.
+    occurrence_key = f"zapier_donor_stage:{history.id}"
+    event_id = occurrence_key
     pipeline_id = new_stage.pipeline_id
 
     def skip(reason: str, *, event_name: str | None = None, attribution=None):
         attribution = attribution or {}
+        if replay_event is not None:
+            zapier_monitor_service.record_replay_result(
+                replay_event,
+                status="skipped",
+                reason=reason,
+                job_id=None,
+                event_id=event_id,
+                event_name=event_name,
+                lead_id=attribution.get("lead_id"),
+                attribution_source=attribution.get("source"),
+                first_party_submission_id=attribution.get("first_party_submission_id"),
+                config_fingerprint=None,
+                effective_at=history.effective_at,
+            )
+            db.flush()
+            return {"queued": False, "reason": reason, "event_id": event_id}
         event = zapier_monitor_service.create_donor_event(
             db,
             org_id=donor.organization_id,
@@ -649,10 +785,12 @@ def enqueue_donor_stage_event(
             stage_id=new_stage.id,
             attribution_source=attribution.get("source"),
             first_party_submission_id=attribution.get("first_party_submission_id"),
+            effective_at=history.effective_at,
         )
         return {"queued": False, "reason": reason, "event_id": event.event_id}
 
     if history.is_undo:
+        _withdraw_undone_donor_event(db, donor=donor, undo_history=history)
         return skip("donor_stage_undo")
 
     settings = zapier_settings_service.get_settings(db, donor.organization_id)
@@ -670,19 +808,46 @@ def enqueue_donor_stage_event(
     if mapping_item is None:
         return skip("unmapped_donor_stage")
     event_name = str(mapping_item["event_name"])
+    event_id = _donor_event_id(donor.id, event_name)
 
     attribution = _resolve_donor_attribution(db, donor)
     if attribution is None:
         return skip("missing_donor_attribution", event_name=event_name)
-    if attribution["source"] == "meta" and not attribution.get("lead_id"):
-        return skip("missing_meta_lead_id", event_name=event_name, attribution=attribution)
+    if attribution["source"] == "meta":
+        lead_id = attribution.get("lead_id")
+        if not lead_id:
+            return skip("missing_meta_lead_id", event_name=event_name, attribution=attribution)
+        if meta_lead_service.is_synthetic_meta_lead_id(str(lead_id)):
+            return skip("synthetic_meta_lead_id", event_name=event_name, attribution=attribution)
+        lead_timestamp = attribution.get("lead_timestamp")
+        event_time = _coerce_utc(history.effective_at) or _now_utc()
+        if isinstance(lead_timestamp, datetime) and event_time - lead_timestamp > MAX_META_LEAD_AGE:
+            return skip("stale_meta_lead", event_name=event_name, attribution=attribution)
     attribution_fields = attribution.get("fields")
     has_browser_matching = isinstance(attribution_fields, dict) and bool(
         attribution_fields.get("fbc") or attribution_fields.get("fbp")
     )
-    has_contact_matching = settings.outbound_send_hashed_pii and bool(donor.email or donor.phone)
+    has_contact_matching = settings.outbound_send_hashed_pii and bool(
+        _customer_match_fields(donor.email, donor.phone).get("user_data")
+    )
     if attribution["source"] == "website" and not (has_browser_matching or has_contact_matching):
         return skip("missing_matching_data", event_name=event_name, attribution=attribution)
+
+    # Stage changes lock the donor row before this point, so concurrent changes for one
+    # donor serialize here and the later one sees the earlier event.
+    already_reported_query = db.query(ZapierOutboundEvent.id).filter(
+        ZapierOutboundEvent.organization_id == donor.organization_id,
+        ZapierOutboundEvent.donor_id == donor.id,
+        ZapierOutboundEvent.event_id == event_id,
+        ZapierOutboundEvent.status.in_(DONOR_REPORTED_EVENT_STATUSES),
+    )
+    if replay_event is not None:
+        already_reported_query = already_reported_query.filter(
+            ZapierOutboundEvent.id != replay_event.id
+        )
+    already_reported = already_reported_query.first()
+    if already_reported is not None:
+        return skip("duplicate", event_name=event_name, attribution=attribution)
 
     fingerprint = zapier_settings_service.donor_config_fingerprint(
         webhook_url=settings.outbound_webhook_url,
@@ -696,31 +861,55 @@ def enqueue_donor_stage_event(
         event_name=event_name,
         event_time=history.effective_at,
         attribution=attribution,
+        donor_type=donor.donor_type,
         include_hashed_pii=settings.outbound_send_hashed_pii,
         email=donor.email,
         phone=donor.phone,
     )
-    event = zapier_monitor_service.create_donor_event(
-        db,
-        org_id=donor.organization_id,
-        source=source,
-        status="queued",
-        reason=None,
-        event_id=event_id,
-        event_name=event_name,
-        lead_id=attribution.get("lead_id"),
-        stage_key=new_stage.stage_key,
-        stage_slug=new_stage.slug,
-        stage_label=new_stage.label,
-        donor_id=donor.id,
-        donor_status_history_id=history.id,
-        donor_type=donor.donor_type,
-        pipeline_id=pipeline_id,
-        stage_id=new_stage.id,
-        attribution_source=str(attribution["source"]),
-        first_party_submission_id=attribution.get("first_party_submission_id"),
-        config_fingerprint=fingerprint,
-    )
+    job_key = occurrence_key
+    if replay_event is not None:
+        # A skip at dispatch completes the occurrence's job; the replay needs its own key.
+        if job_service.get_job_by_idempotency_key(
+            db, org_id=donor.organization_id, idempotency_key=occurrence_key
+        ):
+            job_key = _replay_job_key(occurrence_key)
+        zapier_monitor_service.record_replay_result(
+            replay_event,
+            status="queued",
+            reason=None,
+            job_id=None,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=attribution.get("lead_id"),
+            attribution_source=str(attribution["source"]),
+            first_party_submission_id=attribution.get("first_party_submission_id"),
+            config_fingerprint=fingerprint,
+            effective_at=history.effective_at,
+        )
+        event = replay_event
+    else:
+        event = zapier_monitor_service.create_donor_event(
+            db,
+            org_id=donor.organization_id,
+            source=source,
+            status="queued",
+            reason=None,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=attribution.get("lead_id"),
+            stage_key=new_stage.stage_key,
+            stage_slug=new_stage.slug,
+            stage_label=new_stage.label,
+            donor_id=donor.id,
+            donor_status_history_id=history.id,
+            donor_type=donor.donor_type,
+            pipeline_id=pipeline_id,
+            stage_id=new_stage.id,
+            attribution_source=str(attribution["source"]),
+            first_party_submission_id=attribution.get("first_party_submission_id"),
+            config_fingerprint=fingerprint,
+            effective_at=history.effective_at,
+        )
     job = job_service.enqueue_job(
         db,
         org_id=donor.organization_id,
@@ -731,7 +920,7 @@ def enqueue_donor_stage_event(
             "config_fingerprint": fingerprint,
             "data": payload,
         },
-        idempotency_key=event_id,
+        idempotency_key=job_key,
         commit=False,
     )
     event.job_id = job.id
@@ -743,6 +932,254 @@ def enqueue_donor_stage_event(
         "event_name": event_name,
         "job_id": str(job.id),
     }
+
+
+def _replay_job_key(key: str) -> str:
+    return f"{key}:replay:{uuid4().hex}"
+
+
+def _replay_surrogate_event(db: Session, *, event: ZapierOutboundEvent) -> None:
+    surrogate = (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.id == event.surrogate_id,
+            Surrogate.organization_id == event.organization_id,
+        )
+        .first()
+    )
+    if surrogate is None:
+        raise ValueError("Surrogate is unavailable")
+    enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key=str(event.stage_key),
+        stage_slug=event.stage_slug,
+        stage_id=str(event.stage_id) if event.stage_id else None,
+        stage_label=event.stage_label,
+        effective_at=event.effective_at,
+        source=event.source,
+        replay_event=event,
+    )
+
+
+def _replay_donor_event(db: Session, *, event: ZapierOutboundEvent, donor: Donor | None) -> None:
+    if donor is None:
+        raise ValueError("Donor is unavailable")
+    history = (
+        db.query(DonorStatusHistory)
+        .filter(
+            DonorStatusHistory.id == event.donor_status_history_id,
+            DonorStatusHistory.organization_id == event.organization_id,
+            DonorStatusHistory.donor_id == donor.id,
+        )
+        .first()
+    )
+    if history is None or history.is_undo or history.new_stage_id is None:
+        raise ValueError("Donor stage change is unavailable")
+    undone_later = (
+        db.query(DonorStatusHistory.id)
+        .filter(
+            DonorStatusHistory.organization_id == event.organization_id,
+            DonorStatusHistory.donor_id == donor.id,
+            DonorStatusHistory.is_undo.is_(True),
+            DonorStatusHistory.old_stage_id == history.new_stage_id,
+            DonorStatusHistory.new_stage_id == history.old_stage_id,
+            DonorStatusHistory.recorded_at > history.recorded_at,
+        )
+        .first()
+    )
+    if undone_later is not None:
+        raise ValueError("A later undo reversed this stage change")
+    stage = (
+        db.query(PipelineStage)
+        .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+        .filter(
+            Pipeline.organization_id == event.organization_id,
+            PipelineStage.id == history.new_stage_id,
+        )
+        .first()
+    )
+    if stage is None:
+        raise ValueError("Donor stage is unavailable")
+    enqueue_donor_stage_event(
+        db,
+        donor=donor,
+        history=history,
+        new_stage=stage,
+        source=event.source,
+        replay_event=event,
+    )
+    db.commit()
+
+
+def replay_skipped_event(db: Session, *, org_id: UUID, event_id: UUID) -> ZapierOutboundEvent:
+    """Re-run enqueue for a skipped event against current settings and data, in place.
+
+    The row keeps its id; it ends queued with a new job, or skipped with the new reason.
+    Refusals raise ValueError before any write; the caller's session end releases locks.
+    """
+    event = zapier_monitor_service.get_event(db, org_id=org_id, event_id=event_id)
+    if event is None:
+        raise ValueError("Event not found")
+    donor = None
+    if zapier_monitor_service.is_donor_event(event) and event.donor_id is not None:
+        # Lock the donor before the event, in the order stage changes use, so a replay
+        # serializes with stage changes and other replays for the same donor.
+        donor = (
+            db.query(Donor)
+            .filter(Donor.id == event.donor_id, Donor.organization_id == org_id)
+            .populate_existing()
+            .with_for_update(key_share=True)
+            .first()
+        )
+    event = zapier_monitor_service.lock_event(db, org_id=org_id, event_id=event_id)
+    if event is None:
+        raise ValueError("Event not found")
+    if not zapier_monitor_service.can_replay_event(event):
+        raise ValueError("This event cannot be replayed")
+    if event.job_id is not None:
+        job_status = (
+            db.query(Job.status)
+            .filter(Job.id == event.job_id, Job.organization_id == org_id)
+            .scalar()
+        )
+        if job_status in ACTIVE_JOB_STATUSES:
+            raise ValueError("Event delivery is still in progress")
+    if zapier_monitor_service.is_donor_event(event):
+        _replay_donor_event(db, event=event, donor=donor)
+    else:
+        _replay_surrogate_event(db, event=event)
+    db.refresh(event)
+    return event
+
+
+def enqueue_donor_created_event(db: Session, *, donor: Donor) -> dict[str, object] | None:
+    """Report a new donor's entry stage when its mapping has an event, e.g. Lead.
+
+    Meta conversion and hosted-intake promotion call this in their creation transaction,
+    after the lead or submission is linked. Manual creation has no attribution and does not.
+    """
+    # Sessions do not autoflush; the attribution link must be visible to the queries below.
+    db.flush()
+    history = (
+        db.query(DonorStatusHistory)
+        .filter(
+            DonorStatusHistory.organization_id == donor.organization_id,
+            DonorStatusHistory.donor_id == donor.id,
+            DonorStatusHistory.old_stage_id.is_(None),
+        )
+        .order_by(DonorStatusHistory.recorded_at.asc())
+        .first()
+    )
+    if history is None or history.new_stage_id is None:
+        return None
+    stage = (
+        db.query(PipelineStage)
+        .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+        .filter(
+            Pipeline.organization_id == donor.organization_id,
+            PipelineStage.id == history.new_stage_id,
+        )
+        .first()
+    )
+    if stage is None:
+        return None
+    return enqueue_donor_stage_event(db, donor=donor, history=history, new_stage=stage)
+
+
+TEST_META_FIELDS = {
+    "meta_form_id": "test_form",
+    "meta_campaign_id": "test_campaign",
+    "meta_ad_id": "test_ad",
+    "meta_platform": "facebook",
+}
+TEST_FBC = "fb.1.1772952996.test-click-id"
+TEST_FBP = "fb.1.1772952996.1234567890"
+TEST_EMAIL = "zapier-test@example.com"
+TEST_PHONE = "+15551234567"
+# Stands in for a hosted-form submission id in website samples; no submission row exists.
+TEST_SUBMISSION_ID = UUID(int=0)
+
+
+def enqueue_donor_test_event(
+    db: Session,
+    organization_id: UUID,
+    *,
+    donor_type: str,
+    event_name: str,
+    attribution_source: str,
+    lead_id: str | None = None,
+) -> dict[str, object]:
+    """Queue a donor sample event through the donor delivery path, like the surrogate test."""
+    settings = zapier_settings_service.get_settings(db, organization_id)
+    if not settings or not settings.outbound_webhook_url:
+        raise ValueError("Outbound webhook URL not configured.")
+    if not settings.donor_outbound_enabled:
+        raise ValueError("Donor stage events are disabled.")
+    if donor_type not in zapier_settings_service.DONOR_TYPES:
+        raise ValueError("Donor type must be egg or sperm.")
+    if event_name not in zapier_settings_service.SUPPORTED_DONOR_EVENT_NAMES:
+        raise ValueError("Unsupported donor event name.")
+
+    event_time = _now_utc()
+    event_slug = event_name.strip().lower().replace(" ", "_")
+    event_id = f"zapier_donor_test:{donor_type}:{event_slug}:{event_time.timestamp()}"
+    if attribution_source == "meta":
+        lead_id = (lead_id or "").strip() or f"zapier-test-{organization_id}"
+        attribution: dict[str, object] = {
+            "source": "meta",
+            "lead_id": lead_id,
+            "fields": {**TEST_META_FIELDS, "fbc": TEST_FBC, "facebook_click_id": TEST_FBC},
+        }
+    elif attribution_source == "website":
+        lead_id = None
+        attribution = {
+            "source": "website",
+            "first_party_submission_id": TEST_SUBMISSION_ID,
+            "fields": {"fbc": TEST_FBC, "fbp": TEST_FBP},
+        }
+    else:
+        raise ValueError("Attribution source must be meta or website.")
+
+    payload = build_donor_stage_event_payload(
+        event_id=event_id,
+        event_name=event_name,
+        event_time=event_time,
+        attribution=attribution,
+        donor_type=donor_type,
+        include_hashed_pii=settings.outbound_send_hashed_pii,
+        email=TEST_EMAIL,
+        phone=TEST_PHONE,
+        test_mode=True,
+    )
+    try:
+        event = zapier_monitor_service.create_donor_test_event(
+            db,
+            org_id=organization_id,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=lead_id,
+            donor_type=donor_type,
+            attribution_source=attribution_source,
+        )
+        job = job_service.enqueue_job(
+            db,
+            org_id=organization_id,
+            job_type=JobType.ZAPIER_STAGE_EVENT,
+            payload={
+                "delivery_kind": "donor_test",
+                "event_record_id": str(event.id),
+                "data": payload,
+            },
+            idempotency_key=event_id,
+            commit=False,
+        )
+        event.job_id = job.id
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"event_id": event_id, "event_name": event_name, "lead_id": lead_id}
 
 
 def enqueue_test_event(
@@ -770,15 +1207,10 @@ def enqueue_test_event(
         stage_label=LABEL_OVERRIDES.get(stage_key, humanize_identifier(stage_key)),
         surrogate_id=None,
         include_hashed_pii=include_hashed_pii,
-        email="zapier-test@example.com" if include_hashed_pii else None,
-        phone="+15551234567" if include_hashed_pii else None,
-        meta_fields={
-            "meta_form_id": "test_form",
-            "meta_campaign_id": "test_campaign",
-            "meta_ad_id": "test_ad",
-            "meta_platform": "facebook",
-        },
-        fbc="fb.1.1772952996.test-click-id",
+        email=TEST_EMAIL if include_hashed_pii else None,
+        phone=TEST_PHONE if include_hashed_pii else None,
+        meta_fields=dict(TEST_META_FIELDS),
+        fbc=TEST_FBC,
         event_id=event_id,
         test_mode=True,
     )

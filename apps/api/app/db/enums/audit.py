@@ -131,6 +131,7 @@ class AuditEventType(str, Enum):
 
     MATCH_PROPOSED = "match_proposed"
     MATCH_COMPLETED = "match_completed"
+    MATCH_COMPLETION_UNDONE = "match_completion_undone"
     MATCH_ATTEMPT_CREATED = "match_attempt_created"
     MATCH_ATTEMPT_UPDATED = "match_attempt_updated"
     MATCH_CANCEL_REQUESTED = "match_cancel_requested"
@@ -153,6 +154,7 @@ class AuditEventType(str, Enum):
     FORM_SUBMISSION_APPROVED = "form_submission_approved"
     FORM_SUBMISSION_REJECTED = "form_submission_rejected"
     FORM_SUBMISSION_FILE_DOWNLOADED = "form_submission_file_downloaded"
+    FORM_SUBMISSION_FILE_RESCAN_REQUESTED = "form_submission_file_rescan_requested"
 
     # Tasks
     TASK_DELETED = "task_deleted"

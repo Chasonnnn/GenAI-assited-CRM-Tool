@@ -524,8 +524,15 @@ async def test_public_sms_read_and_submit_use_same_phone_field(
 @pytest.mark.parametrize("surface", ["intake", "embed"])
 @pytest.mark.parametrize("variant", ["mapped", "draft_mapped"])
 async def test_public_sms_auto_match_uses_submission_snapshots(
-    authed_client, db, test_org, test_user, default_stage, messaging_consent_settings,
-    monkeypatch, surface, variant,
+    authed_client,
+    db,
+    test_org,
+    test_user,
+    default_stage,
+    messaging_consent_settings,
+    monkeypatch,
+    surface,
+    variant,
 ):
     from tests.test_forms_public_shared_intake import _create_surrogate
 
@@ -1068,8 +1075,7 @@ async def test_embed_session_submit_stores_submission_attribution_consent_and_tr
     )
     assert submit_res.status_code == 200
     payload = submit_res.json()
-    assert payload["outcome"] == "workflow_pending"
-    assert payload["intake_lead_id"] is None
+    assert db.get(FormSubmission, uuid.UUID(payload["id"])).match_status == "workflow_pending"
 
     duplicate_res = await authed_client.post(
         f"/forms/public/embed/{slug}/submit",
@@ -1088,8 +1094,7 @@ async def test_embed_session_submit_stores_submission_attribution_consent_and_tr
         },
     )
     assert duplicate_res.status_code == 200
-    assert duplicate_res.json()["id"] == payload["id"]
-    assert duplicate_res.json()["outcome"] == "workflow_pending"
+    assert duplicate_res.json() == payload
 
     submission_id = uuid.UUID(payload["id"])
     link_uuid = uuid.UUID(link_id)
@@ -1273,8 +1278,7 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
     )
     assert submit_res.status_code == 200
     payload = submit_res.json()
-    assert payload["outcome"] == "lead_created"
-    assert payload["intake_lead_id"] is not None
+    assert db.get(FormSubmission, uuid.UUID(payload["id"])).match_status == "lead_created"
 
     submission_id = uuid.UUID(payload["id"])
     intake_lead = (
@@ -1611,8 +1615,10 @@ async def test_internal_only_embed_submit_queues_crm_dataset_lead_without_sensit
     )
     assert submit_res.status_code == 200
     submission_id = uuid.UUID(submit_res.json()["id"])
-    assert submit_res.json()["outcome"] == "workflow_pending"
-    assert submit_res.json()["intake_lead_id"] is None
+    assert (
+        db.get(FormSubmission, uuid.UUID(submit_res.json()["id"])).match_status
+        == "workflow_pending"
+    )
 
     assert (
         db.query(TrackingEventLog)

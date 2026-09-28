@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { getStageSemantics, getSurrogateStageContext } from "@/lib/surrogate-stage-context"
+import {
+    getStageSemantics,
+    getSurrogateStageContext,
+    stageRequiresReasonOnEnter,
+    stageUsesPauseBehavior,
+} from "@/lib/surrogate-stage-context"
 import type { PipelineStage } from "@/lib/api/pipelines"
 
 const stageById = new Map<string, PipelineStage>([
@@ -195,5 +200,30 @@ describe("getSurrogateStageContext", () => {
                 tracks_interview_outcome: false,
             },
         })
+    })
+
+    it("does not give another pipeline's stages the surrogate defaults for a shared key", () => {
+        const onHold = { stage_key: "on_hold", stage_type: "paused" as const }
+
+        expect(stageUsesPauseBehavior(onHold)).toBe(true)
+        expect(stageRequiresReasonOnEnter(onHold)).toBe(true)
+        expect(stageUsesPauseBehavior(onHold, "intended_parent")).toBe(false)
+        expect(stageRequiresReasonOnEnter(onHold, "intended_parent")).toBe(false)
+        expect(getStageSemantics({ stage_key: "delivered" }, "intended_parent").capabilities)
+            .toMatchObject({ shows_pregnancy_tracking: false, requires_delivery_details: false })
+    })
+
+    it("keeps server semantics for intended parent stages except pause behavior", () => {
+        const stage = {
+            stage_key: "custom_review",
+            stage_type: "post_approval" as const,
+            semantics: {
+                requires_reason_on_enter: true,
+                pause_behavior: "resume_previous_stage" as const,
+            },
+        }
+
+        expect(stageRequiresReasonOnEnter(stage, "intended_parent")).toBe(true)
+        expect(stageUsesPauseBehavior(stage, "intended_parent")).toBe(false)
     })
 })

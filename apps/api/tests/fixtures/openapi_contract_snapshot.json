@@ -1161,6 +1161,12 @@
       "422"
     ]
   },
+  "/donors/{donor_id}/meta-lead": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/donors/{donor_id}/notes": {
     "GET": [
       "200",
@@ -1407,6 +1413,12 @@
       "422"
     ]
   },
+  "/forms/donors/{donor_id}/submissions": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/intake-leads/{lead_id}": {
     "GET": [
       "200",
@@ -1540,6 +1552,12 @@
       "422"
     ]
   },
+  "/forms/submissions/{submission_id}/donor-candidates": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/submissions/{submission_id}/export": {
     "GET": [
       "200",
@@ -1560,6 +1578,12 @@
   },
   "/forms/submissions/{submission_id}/files/{file_id}/download": {
     "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/files/{file_id}/rescan": {
+    "POST": [
       "200",
       "422"
     ]
@@ -1912,6 +1936,12 @@
       "422"
     ]
   },
+  "/integrations/meta/forms/{form_id}/leads/{lead_id}/reroute": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/integrations/meta/forms/{form_id}/mapping": {
     "GET": [
       "200",
@@ -1942,6 +1972,12 @@
   },
   "/integrations/zapier/events/summary": {
     "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/events/{event_id}/replay": {
+    "POST": [
       "200",
       "422"
     ]
@@ -1981,6 +2017,12 @@
     ]
   },
   "/integrations/zapier/test-outbound": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/integrations/zapier/test-outbound/donor": {
     "POST": [
       "200",
       "422"
@@ -2466,30 +2508,8 @@
       "422"
     ]
   },
-  "/matches/{match_id}/attempts": {
-    "GET": [
-      "200",
-      "422"
-    ],
-    "POST": [
-      "201",
-      "422"
-    ]
-  },
-  "/matches/{match_id}/attempts/{attempt_id}": {
-    "PATCH": [
-      "200",
-      "422"
-    ]
-  },
   "/matches/{match_id}/cancel-request": {
     "POST": [
-      "200",
-      "422"
-    ]
-  },
-  "/matches/{match_id}/complete": {
-    "PUT": [
       "200",
       "422"
     ]

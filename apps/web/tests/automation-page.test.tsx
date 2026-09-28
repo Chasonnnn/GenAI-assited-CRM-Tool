@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import AutomationPage from '../app/(app)/automation/page.client'
 import { ApiError } from '@/lib/api'
+import { getApplicantTypeLabel } from '@/components/automation/workflow-editor/shared'
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -722,7 +723,41 @@ describe('AutomationPage', () => {
         expect(screen.getByText('Task ID')).toBeInTheDocument()
     })
 
+    it.each([
+        { policyVersion: 1, permissions: [], labels: ['Surrogate'] },
+        { policyVersion: 1, permissions: ['view_donors'], labels: ['Surrogate'] },
+        {
+            policyVersion: 1,
+            permissions: ['view_donors', 'edit_donors'],
+            labels: ['Surrogate', 'Egg Donor', 'Sperm Donor'],
+        },
+        { policyVersion: 2, permissions: ['manage_automation'], labels: ['Surrogate'] },
+        {
+            policyVersion: 2,
+            permissions: ['manage_automation', 'view_donors'],
+            labels: ['Surrogate', 'Egg Donor', 'Sperm Donor'],
+        },
+    ])('offers donor record types only with the donor create permission (v$policyVersion, $permissions)', ({ policyVersion, permissions, labels }) => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: policyVersion, permissions } })
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+
+        const recordTypeOptions = Array.from(
+            screen.getByRole('combobox', { name: 'Record type' }).querySelectorAll('option'),
+        )
+            .filter((option) => option.value)
+            .map((option) => option.textContent)
+        expect(recordTypeOptions).toEqual(labels)
+    })
+
     it('creates an egg donor workflow from subject-specific options', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors', 'edit_donors'] } })
         mockUseWorkflowOptions.mockImplementation(
             (_scope: string, subjectType: string) => ({
                 data: subjectType === 'egg_donor'
@@ -805,6 +840,96 @@ describe('AutomationPage', () => {
             expect.objectContaining({
                 subject_type: 'egg_donor',
                 trigger_type: 'donor_created',
+            }),
+            expect.any(Object),
+        )
+    })
+
+    it('offers only canonical donor sources for an Update Field source action', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['view_donors', 'edit_donors'] },
+        })
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                trigger_types: [
+                    { value: 'donor_created', label: 'Donor Created', description: '' },
+                ],
+                action_types: [
+                    { value: 'update_field', label: 'Update Field', description: '' },
+                ],
+                action_types_by_trigger: { donor_created: ['update_field'] },
+                trigger_entity_types: { donor_created: 'egg_donor' },
+                condition_fields: [],
+                condition_operators: [],
+                update_fields: ['source', 'education'],
+                email_variables: [],
+                email_templates: [],
+                users: [],
+                queues: [],
+                statuses: [],
+            },
+            isLoading: false,
+        })
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByRole('combobox', { name: 'Record type' }), {
+            target: { value: 'egg_donor' },
+        })
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Egg Donors'), {
+            target: { value: 'Set donor source' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'donor_created' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'update_field' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Field to update 1' }), {
+            target: { value: 'source' },
+        })
+
+        expect(screen.queryByPlaceholderText('Value')).not.toBeInTheDocument()
+        const sourceSelect = screen.getByRole('combobox', { name: 'Source value 1' })
+        const sourceOptions = Array.from(sourceSelect.querySelectorAll('option'))
+            .filter((option) => option.value)
+            .map((option) => [option.value, option.textContent])
+        expect(sourceOptions).toEqual([
+            ['manual', 'Manual'],
+            ['meta', 'Meta'],
+            ['tiktok', 'TikTok'],
+            ['google', 'Google'],
+            ['website', 'Website'],
+            ['referral', 'Referral'],
+            ['agency', 'Agency'],
+            ['import', 'Import'],
+            ['other', 'Other'],
+        ])
+        fireEvent.change(sourceSelect, { target: { value: 'tiktok' } })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'egg_donor',
+                actions: [expect.objectContaining({
+                    action_type: 'update_field',
+                    field: 'source',
+                    value: 'tiktok',
+                })],
             }),
             expect.any(Object),
         )
@@ -1041,6 +1166,7 @@ describe('AutomationPage', () => {
     })
 
     it('configures the returned assign-donor action without surrogate controls', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors', 'edit_donors'] } })
         mockUseWorkflowOptions.mockImplementation(
             (_scope: string, subjectType: string) => ({
                 data: {
@@ -1122,6 +1248,7 @@ describe('AutomationPage', () => {
     })
 
     it('configures a returned donor messaging action with mandatory approval', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors', 'edit_donors'] } })
         mockUseWorkflowOptions.mockImplementation(
             (_scope: string, subjectType: string) => ({
                 data: {
@@ -1199,6 +1326,741 @@ describe('AutomationPage', () => {
                     purpose: 'operational',
                     message_template_version_id: 'message-template-1',
                     requires_approval: true,
+                }],
+            }),
+            expect.any(Object),
+        )
+    })
+
+    it('saves a form-submitted workflow with the form submission subject', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                trigger_types: [
+                    { value: 'form_submitted', label: 'Application Submitted', description: '' },
+                ],
+                action_types: [
+                    { value: 'create_intake_lead', label: 'Create Intake Lead', description: '' },
+                ],
+                action_types_by_trigger: { form_submitted: ['create_intake_lead'] },
+                trigger_entity_types: { form_submitted: 'form_submission' },
+                condition_fields: [],
+                condition_operators: [],
+                update_fields: [],
+                email_variables: [],
+                email_templates: [],
+                users: [],
+                queues: [],
+                statuses: [],
+                forms: [{ id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' }],
+            },
+            isLoading: false,
+        })
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+            target: { value: 'Route applications' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'form_submitted' },
+        })
+        const formSelect = getFirstElement(
+            screen.getAllByTestId('select').filter((select) =>
+                select.querySelector('option[value="form-surrogate"]'),
+            ),
+            'Expected a form select',
+        )
+        fireEvent.change(formSelect, { target: { value: 'form-surrogate' } })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'create_intake_lead' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        expect(screen.getByText('Form Submission')).toBeInTheDocument()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'form_submission',
+                trigger_type: 'form_submitted',
+                trigger_config: { form_id: 'form-surrogate' },
+            }),
+            expect.any(Object),
+        )
+    })
+
+    describe('Application Submitted stage updates', () => {
+        const intakeOptions = (subjectType: string) => {
+            const isEggDonor = subjectType === 'egg_donor'
+            const isDonor = isEggDonor || subjectType === 'sperm_donor'
+            const donorStatuses = {
+                egg_donor: [{ id: 'egg-contacted', value: 'contacted', label: 'Egg Donor Contacted', is_active: true }],
+                sperm_donor: [{ id: 'sperm-contacted', value: 'contacted', label: 'Sperm Donor Contacted', is_active: true }],
+            }
+            return {
+                data: {
+                    trigger_types: [
+                        { value: 'form_submitted', label: 'Application Submitted', description: '' },
+                        { value: 'intake_lead_created', label: 'Intake Lead Created', description: '' },
+                    ],
+                    action_types: [
+                        { value: 'update_field', label: 'Update Field', description: '' },
+                        { value: 'add_note', label: 'Add Note', description: '' },
+                    ],
+                    action_types_by_trigger: {
+                        form_submitted: ['update_field'],
+                        intake_lead_created: ['update_field', 'add_note'],
+                    },
+                    trigger_entity_types: { form_submitted: 'form_submission', intake_lead_created: 'intake_lead' },
+                    condition_fields: ['stage_id', 'lead_kind'],
+                    condition_operators: [{ value: 'in', label: 'Is one of' }],
+                    update_fields: isDonor
+                        ? ['stage_id', 'education', 'source']
+                        : ['stage_id', 'is_priority'],
+                    email_variables: [],
+                    email_templates: [],
+                    users: [],
+                    queues: [],
+                    statuses: isDonor
+                        ? donorStatuses[subjectType as keyof typeof donorStatuses]
+                        : [{ id: 'surrogate-contacted', value: 'contacted', label: 'Surrogate Contacted', is_active: true }],
+                    forms: [
+                        { id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' },
+                        { id: 'form-egg-donor', name: 'Egg Donor Application', lead_kind: 'egg_donor' },
+                        {
+                            id: 'form-shared-donor',
+                            name: 'Donor Application',
+                            lead_kind: 'egg_donor',
+                            lead_kinds: ['egg_donor', 'sperm_donor'],
+                        },
+                    ],
+                },
+                isLoading: false,
+            }
+        }
+
+        const createStageUpdate = (formId: string) => {
+            renderAutomationPage()
+            fireEvent.click(
+                getLastElement(
+                    screen.getAllByRole('button', { name: /create workflow/i }),
+                    'Expected a create workflow button',
+                ),
+            )
+            fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+                target: { value: 'Move applicants' },
+            })
+            fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+                target: { value: 'form_submitted' },
+            })
+            const formSelect = getFirstElement(
+                screen.getAllByTestId('select').filter((select) =>
+                    select.querySelector(`option[value="${formId}"]`),
+                ),
+                'Expected a form select',
+            )
+            fireEvent.change(formSelect, { target: { value: formId } })
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+            fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+                target: { value: 'update_field' },
+            })
+        }
+
+        const FIXED_SUBJECTS: Record<string, string> = {
+            form_submitted: 'form_submission',
+            intake_lead_created: 'intake_lead',
+        }
+
+        const formSelect = (formId: string) =>
+            getFirstElement(
+                screen.getAllByTestId('select').filter((select) =>
+                    select.querySelector(`option[value="${formId}"]`),
+                ),
+                'Expected a form select',
+            )
+
+        const optionLabels = (select: HTMLElement) =>
+            Array.from(select.querySelectorAll('option'))
+                .filter((option) => option.value)
+                .map((option) => option.textContent)
+
+        beforeEach(() => {
+            mockUseEffectivePermissions.mockReturnValue({
+                data: { permissions: ['view_donors', 'edit_donors'] },
+            })
+            mockUseWorkflowOptions.mockImplementation(
+                (_scope: string, subjectType: string) => intakeOptions(subjectType),
+            )
+        })
+
+        it.each([
+            {
+                formId: 'form-surrogate',
+                fields: ['Stage', 'Is Priority'],
+                stages: ['Surrogate Contacted'],
+                stageId: 'surrogate-contacted',
+            },
+            {
+                formId: 'form-egg-donor',
+                fields: ['Stage', 'Education', 'Source'],
+                stages: ['Egg Donor Contacted'],
+                stageId: 'egg-contacted',
+            },
+        ])('offers the $formId record fields and stages and saves the stage', ({ formId, fields, stages, stageId }) => {
+            createStageUpdate(formId)
+
+            expect(optionLabels(screen.getByRole('combobox', { name: 'Field to update 1' }))).toEqual(fields)
+            fireEvent.change(screen.getByRole('combobox', { name: 'Field to update 1' }), {
+                target: { value: 'stage_id' },
+            })
+            const stageSelect = screen.getByRole('combobox', { name: 'Stage value 1' })
+            expect(optionLabels(stageSelect)).toEqual(stages)
+            fireEvent.change(stageSelect, { target: { value: stageId } })
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(
+                getLastElement(
+                    screen.getAllByRole('button', { name: /create workflow/i }),
+                    'Expected a save workflow button',
+                ),
+            )
+
+            expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    subject_type: 'form_submission',
+                    trigger_type: 'form_submitted',
+                    trigger_config: { form_id: formId },
+                    actions: [expect.objectContaining({
+                        action_type: 'update_field',
+                        field: 'stage_id',
+                        value: stageId,
+                    })],
+                }),
+                expect.any(Object),
+            )
+        })
+
+        it('offers no stage references for a form shared by both donor types', () => {
+            renderAutomationPage()
+            fireEvent.click(
+                getLastElement(
+                    screen.getAllByRole('button', { name: /create workflow/i }),
+                    'Expected a create workflow button',
+                ),
+            )
+            fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+                target: { value: 'Donor applicants' },
+            })
+            fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+                target: { value: 'form_submitted' },
+            })
+            const formSelect = getFirstElement(
+                screen.getAllByTestId('select').filter((select) =>
+                    select.querySelector('option[value="form-shared-donor"]'),
+                ),
+                'Expected a form select',
+            )
+            fireEvent.change(formSelect, { target: { value: 'form-shared-donor' } })
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /add condition/i }))
+
+            const conditionFieldSelect = getFirstElement(
+                screen.getAllByTestId('select').filter((select) =>
+                    select.querySelector('option[value="lead_kind"]'),
+                ),
+                'Expected a condition field select',
+            )
+            expect(optionLabels(conditionFieldSelect)).toEqual(['Applicant Type'])
+
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+            fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+                target: { value: 'update_field' },
+            })
+
+            expect(optionLabels(screen.getByRole('combobox', { name: 'Field to update 1' }))).toEqual([
+                'Education',
+                'Source',
+            ])
+        })
+
+        it('blocks saving an existing shared donor form workflow that references a stage', () => {
+            mockUseWorkflows.mockReturnValue({
+                data: [{
+                    id: 'workflow-shared-application',
+                    name: 'Shared donor applications',
+                    description: null,
+                    icon: 'activity',
+                    subject_type: 'form_submission',
+                    trigger_type: 'form_submitted',
+                    is_enabled: true,
+                    run_count: 0,
+                    last_run_at: null,
+                    last_error: null,
+                    created_at: '2026-09-28T00:00:00Z',
+                    can_edit: true,
+                }],
+                isLoading: false,
+            })
+            mockUseWorkflow.mockReturnValue({
+                data: {
+                    id: 'workflow-shared-application',
+                    name: 'Shared donor applications',
+                    description: null,
+                    scope: 'personal',
+                    subject_type: 'form_submission',
+                    trigger_type: 'form_submitted',
+                    trigger_config: { form_id: 'form-shared-donor' },
+                    conditions: [{ field: 'stage_id', operator: 'in', value: [] }],
+                    condition_logic: 'AND',
+                    actions: [{ action_type: 'add_note', content: 'Review' }],
+                },
+                isLoading: false,
+            })
+
+            renderAutomationPage()
+            fireEvent.click(
+                screen.getByRole('button', { name: 'Actions for workflow Shared donor applications' }),
+            )
+            fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+            expect(screen.getByText('Stage references need a form for one donor type.')).toBeInTheDocument()
+            expect(mockUpdateWorkflow.mutate).not.toHaveBeenCalled()
+        })
+
+        const startIntakeWorkflow = (triggerType: string, formId: string) => {
+            renderAutomationPage()
+            fireEvent.click(
+                getLastElement(
+                    screen.getAllByRole('button', { name: /create workflow/i }),
+                    'Expected a create workflow button',
+                ),
+            )
+            fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+                target: { value: 'Donor applicants' },
+            })
+            fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+                target: { value: triggerType },
+            })
+            fireEvent.change(formSelect(formId), { target: { value: formId } })
+        }
+
+        const saveNewWorkflow = () => {
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(
+                getLastElement(
+                    screen.getAllByRole('button', { name: /create workflow/i }),
+                    'Expected a save workflow button',
+                ),
+            )
+        }
+
+        it.each(['form_submitted', 'intake_lead_created'])(
+            'offers an applicant type only for a %s form shared by both donor types',
+            (triggerType) => {
+                startIntakeWorkflow(triggerType, 'form-egg-donor')
+                expect(screen.queryByRole('combobox', { name: 'Applicant Type' })).not.toBeInTheDocument()
+
+                fireEvent.change(formSelect('form-shared-donor'), { target: { value: 'form-shared-donor' } })
+                const applicantTypeSelect = screen.getByRole('combobox', { name: 'Applicant Type' })
+                expect(applicantTypeSelect).toHaveValue('both')
+                expect(optionLabels(applicantTypeSelect)).toEqual(['Egg Donor', 'Sperm Donor', 'Both'])
+            },
+        )
+
+        it('maps every applicant type value to its label', () => {
+            expect(getApplicantTypeLabel('egg_donor')).toBe('Egg Donor')
+            expect(getApplicantTypeLabel('sperm_donor')).toBe('Sperm Donor')
+            expect(getApplicantTypeLabel('both')).toBe('Both')
+            expect(getApplicantTypeLabel(null)).toBe('Both')
+            expect(getApplicantTypeLabel('surrogate')).toBe('Unknown applicant type')
+        })
+
+        it.each([
+            {
+                triggerType: 'form_submitted',
+                key: 'lead_kind',
+                leadKind: 'egg_donor',
+                stages: ['Egg Donor Contacted'],
+                stageId: 'egg-contacted',
+            },
+            {
+                triggerType: 'intake_lead_created',
+                key: 'lead_type',
+                leadKind: 'sperm_donor',
+                stages: ['Sperm Donor Contacted'],
+                stageId: 'sperm-contacted',
+            },
+        ])(
+            'saves $leadKind as the $triggerType $key and offers its stages',
+            ({ triggerType, key, leadKind, stages, stageId }) => {
+                startIntakeWorkflow(triggerType, 'form-shared-donor')
+                fireEvent.change(screen.getByRole('combobox', { name: 'Applicant Type' }), {
+                    target: { value: leadKind },
+                })
+                fireEvent.click(screen.getByRole('button', { name: /next/i }))
+                fireEvent.click(screen.getByRole('button', { name: /next/i }))
+                fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+                fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+                    target: { value: 'update_field' },
+                })
+                fireEvent.change(screen.getByRole('combobox', { name: 'Field to update 1' }), {
+                    target: { value: 'stage_id' },
+                })
+                const stageSelect = screen.getByRole('combobox', { name: 'Stage value 1' })
+                expect(optionLabels(stageSelect)).toEqual(stages)
+                fireEvent.change(stageSelect, { target: { value: stageId } })
+                saveNewWorkflow()
+
+                expect(mockUseWorkflowOptions).toHaveBeenCalledWith('personal', leadKind)
+                expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        trigger_type: triggerType,
+                        trigger_config: { form_id: 'form-shared-donor', [key]: leadKind },
+                        actions: [expect.objectContaining({ field: 'stage_id', value: stageId })],
+                    }),
+                    expect.any(Object),
+                )
+            },
+        )
+
+        it('saves no applicant type when Both is selected', () => {
+            startIntakeWorkflow('form_submitted', 'form-shared-donor')
+            const applicantTypeSelect = screen.getByRole('combobox', { name: 'Applicant Type' })
+            fireEvent.change(applicantTypeSelect, { target: { value: 'egg_donor' } })
+            fireEvent.change(applicantTypeSelect, { target: { value: 'both' } })
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+            fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+                target: { value: 'update_field' },
+            })
+            const fieldSelect = screen.getByRole('combobox', { name: 'Field to update 1' })
+            expect(optionLabels(fieldSelect)).toEqual(['Education', 'Source'])
+            fireEvent.change(fieldSelect, { target: { value: 'education' } })
+            fireEvent.change(screen.getByPlaceholderText('Value'), { target: { value: 'Bachelor' } })
+            saveNewWorkflow()
+
+            expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+                expect.objectContaining({ trigger_config: { form_id: 'form-shared-donor' } }),
+                expect.any(Object),
+            )
+        })
+
+        it('resets the applicant type when the trigger form changes', () => {
+            startIntakeWorkflow('form_submitted', 'form-shared-donor')
+            fireEvent.change(screen.getByRole('combobox', { name: 'Applicant Type' }), {
+                target: { value: 'egg_donor' },
+            })
+            fireEvent.change(formSelect('form-egg-donor'), { target: { value: 'form-egg-donor' } })
+            fireEvent.change(formSelect('form-shared-donor'), { target: { value: 'form-shared-donor' } })
+
+            expect(screen.getByRole('combobox', { name: 'Applicant Type' })).toHaveValue('both')
+        })
+
+        it.each([
+            { triggerType: 'form_submitted', key: 'lead_kind' },
+            { triggerType: 'intake_lead_created', key: 'lead_type' },
+        ])('clears the $key applicant type when the $triggerType form changes', ({ triggerType, key }) => {
+            mockUseWorkflows.mockReturnValue({
+                data: [{
+                    id: 'workflow-egg-intake',
+                    name: 'Egg donor intake',
+                    description: null,
+                    icon: 'activity',
+                    subject_type: FIXED_SUBJECTS[triggerType],
+                    trigger_type: triggerType,
+                    is_enabled: true,
+                    run_count: 0,
+                    last_run_at: null,
+                    last_error: null,
+                    created_at: '2026-09-28T00:00:00Z',
+                    can_edit: true,
+                }],
+                isLoading: false,
+            })
+            mockUseWorkflow.mockReturnValue({
+                data: {
+                    id: 'workflow-egg-intake',
+                    name: 'Egg donor intake',
+                    description: null,
+                    scope: 'personal',
+                    subject_type: FIXED_SUBJECTS[triggerType],
+                    trigger_type: triggerType,
+                    trigger_config: { form_id: 'form-egg-donor', [key]: 'egg_donor' },
+                    conditions: [],
+                    condition_logic: 'AND',
+                    actions: [{ action_type: 'update_field', field: 'is_priority', value: true }],
+                },
+                isLoading: false,
+            })
+
+            renderAutomationPage()
+            fireEvent.click(screen.getByRole('button', { name: 'Actions for workflow Egg donor intake' }))
+            fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+            fireEvent.change(formSelect('form-surrogate'), { target: { value: 'form-surrogate' } })
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+            expect(mockUpdateWorkflow.mutate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: 'workflow-egg-intake',
+                    data: expect.objectContaining({ trigger_config: { form_id: 'form-surrogate' } }),
+                }),
+                expect.any(Object),
+            )
+        })
+
+        it('keeps stage conditions when an existing donor application workflow is saved', () => {
+            mockUseWorkflows.mockReturnValue({
+                data: [{
+                    id: 'workflow-egg-application',
+                    name: 'Egg donor applications',
+                    description: null,
+                    icon: 'activity',
+                    subject_type: 'form_submission',
+                    trigger_type: 'form_submitted',
+                    is_enabled: true,
+                    run_count: 0,
+                    last_run_at: null,
+                    last_error: null,
+                    created_at: '2026-09-28T00:00:00Z',
+                    can_edit: true,
+                }],
+                isLoading: false,
+            })
+            mockUseWorkflow.mockReturnValue({
+                data: {
+                    id: 'workflow-egg-application',
+                    name: 'Egg donor applications',
+                    description: null,
+                    scope: 'personal',
+                    subject_type: 'form_submission',
+                    trigger_type: 'form_submitted',
+                    trigger_config: { form_id: 'form-egg-donor', lead_kind: 'egg_donor' },
+                    conditions: [
+                        { field: 'stage_id', operator: 'in', value: ['egg-contacted'], stage_keys: ['contacted'] },
+                    ],
+                    condition_logic: 'AND',
+                    actions: [
+                        { action_type: 'update_field', field: 'stage_id', value: 'egg-contacted', value_stage_key: 'contacted' },
+                    ],
+                },
+                isLoading: false,
+            })
+
+            renderAutomationPage()
+            fireEvent.click(
+                screen.getByRole('button', { name: 'Actions for workflow Egg donor applications' }),
+            )
+            fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            expect(optionLabels(screen.getByRole('combobox', { name: 'Stage value 1' }))).toEqual([
+                'Egg Donor Contacted',
+            ])
+            fireEvent.click(screen.getByRole('button', { name: /next/i }))
+            fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+            expect(mockUseWorkflowOptions).toHaveBeenCalledWith('personal', 'egg_donor')
+            expect(mockUpdateWorkflow.mutate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: 'workflow-egg-application',
+                    data: expect.objectContaining({
+                        conditions: [
+                            expect.objectContaining({ field: 'stage_id', operator: 'in', value: ['egg-contacted'] }),
+                        ],
+                        actions: [expect.objectContaining({ field: 'stage_id', value: 'egg-contacted' })],
+                    }),
+                }),
+                expect.any(Object),
+            )
+        })
+    })
+
+    it('drops surrogate-only promotion options for donor intake forms', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                trigger_types: [
+                    { value: 'intake_lead_created', label: 'Intake Lead Created', description: '' },
+                ],
+                action_types: [
+                    { value: 'promote_intake_lead', label: 'Promote Intake Lead', description: '' },
+                ],
+                action_types_by_trigger: { intake_lead_created: ['promote_intake_lead'] },
+                trigger_entity_types: { intake_lead_created: 'intake_lead' },
+                condition_fields: [],
+                condition_operators: [],
+                update_fields: [],
+                email_variables: [],
+                email_templates: [],
+                users: [],
+                queues: [],
+                statuses: [],
+                forms: [
+                    { id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' },
+                    { id: 'form-egg-donor', name: 'Egg Donor Application', lead_kind: 'egg_donor' },
+                ],
+            },
+            isLoading: false,
+        })
+        const selectForm = (formId: string) => {
+            const formSelect = getFirstElement(
+                screen.getAllByTestId('select').filter((select) =>
+                    select.querySelector(`option[value="${formId}"]`),
+                ),
+                'Expected a form select',
+            )
+            fireEvent.change(formSelect, { target: { value: formId } })
+        }
+        const promotionSwitch = (label: string) => {
+            const promotionSwitchElement = screen.getByText(label).parentElement?.querySelector('[role="switch"]')
+            if (!promotionSwitchElement) throw new Error(`Expected the ${label} switch`)
+            return promotionSwitchElement
+        }
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Surrogates'), {
+            target: { value: 'Promote leads' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'intake_lead_created' },
+        })
+        selectForm('form-surrogate')
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'promote_intake_lead' },
+        })
+        fireEvent.click(promotionSwitch('Mark as priority'))
+        fireEvent.click(promotionSwitch('Assign to workflow owner if available'))
+
+        fireEvent.click(screen.getByRole('button', { name: /back/i }))
+        fireEvent.click(screen.getByRole('button', { name: /back/i }))
+        selectForm('form-egg-donor')
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        expect(screen.queryByText('Mark as priority')).not.toBeInTheDocument()
+        expect(screen.queryByText('Assign to workflow owner if available')).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+
+        const payload = mockCreateWorkflow.mutate.mock.calls.at(-1)?.[0]
+        expect(payload).toMatchObject({
+            subject_type: 'intake_lead',
+            trigger_type: 'intake_lead_created',
+            trigger_config: { form_id: 'form-egg-donor' },
+        })
+        expect(payload.actions).toHaveLength(1)
+        expect(payload.actions[0].action_type).toBe('promote_intake_lead')
+        expect(payload.actions[0]).not.toHaveProperty('is_priority')
+        expect(payload.actions[0]).not.toHaveProperty('assign_to_user')
+    })
+
+    it('keeps approval optional for donor email actions', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors', 'edit_donors'] } })
+        mockUseWorkflowOptions.mockImplementation(
+            (_scope: string, subjectType: string) => ({
+                data: {
+                    trigger_types: subjectType === 'egg_donor'
+                        ? [{ value: 'donor_created', label: 'Donor Created', description: '' }]
+                        : [{ value: 'surrogate_created', label: 'Surrogate Created', description: '' }],
+                    action_types: [{ value: 'send_email', label: 'Send Email', description: '' }],
+                    action_types_by_trigger: subjectType === 'egg_donor'
+                        ? { donor_created: ['send_email'] }
+                        : { surrogate_created: ['send_email'] },
+                    trigger_entity_types: subjectType === 'egg_donor'
+                        ? { donor_created: 'egg_donor' }
+                        : { surrogate_created: 'surrogate' },
+                    condition_fields: [],
+                    condition_operators: [],
+                    update_fields: [],
+                    email_variables: [],
+                    email_templates: [{ id: 'email-template-1', name: 'Donor welcome' }],
+                    users: [],
+                    queues: [],
+                    statuses: [],
+                },
+                isLoading: false,
+            }),
+        )
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByRole('combobox', { name: 'Record type' }), {
+            target: { value: 'egg_donor' },
+        })
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Egg Donors'), {
+            target: { value: 'Egg donor welcome email' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'donor_created' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'send_email' },
+        })
+        const templateSelect = getFirstElement(
+            screen.getAllByTestId('select').filter((select) =>
+                select.querySelector('option[value="email-template-1"]'),
+            ),
+            'Expected an email template select',
+        )
+        fireEvent.change(templateSelect, { target: { value: 'email-template-1' } })
+        const approval = screen.getByRole('switch', { name: 'Requires Approval' })
+        expect(approval).not.toHaveAttribute('aria-disabled', 'true')
+        expect(approval).toHaveAttribute('aria-checked', 'false')
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'egg_donor',
+                actions: [{
+                    action_type: 'send_email',
+                    template_id: 'email-template-1',
+                    recipients: 'donor',
                 }],
             }),
             expect.any(Object),

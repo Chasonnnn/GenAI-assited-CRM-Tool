@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db.enums import Role
 from app.db.models import AuditLog, IntendedParent, Match, MatchAttempt, StatusChangeRequest
 from app.services import match_access, match_lifecycle, match_queries
+from tests.match_fixtures import seed_attempt
 from tests.test_match_cancel_request import (
     _create_intended_parent,
     _create_surrogate,
@@ -47,7 +48,7 @@ async def _accept(client, case):
 
 
 @pytest.mark.asyncio
-async def test_donor_concurrent_cases_repeat_and_attempt_history(authed_client, db):
+async def test_donor_concurrent_cases_and_repeat_after_closure(authed_client, db):
     donor = await _donor(authed_client)
     first_ip = await _create_intended_parent(authed_client)
     second_ip = await _create_intended_parent(authed_client)
@@ -59,36 +60,23 @@ async def test_donor_concurrent_cases_repeat_and_attempt_history(authed_client, 
         "/matches/", json={"donor_id": donor["id"], "intended_parent_id": first_ip["id"]}
     )
     assert duplicate.status_code == 409
-    a = await authed_client.post(
-        f"/matches/{first['id']}/attempts",
-        json={"attempt_type": "retrieval", "started_at": "2026-09-01"},
+    requested = await authed_client.post(
+        f"/matches/{first['id']}/cancel-request", json={"reason": "Relationship ended"}
     )
-    assert a.status_code == 201, a.text
-    assert a.json()["sequence"] == 1
-    blocked = await authed_client.put(
-        f"/matches/{first['id']}/complete", json={"outcome": "Relationship completed"}
+    assert requested.status_code == 200, requested.text
+    pending = (
+        db.query(StatusChangeRequest)
+        .filter(
+            StatusChangeRequest.entity_id == uuid.UUID(first["id"]),
+            StatusChangeRequest.status == "pending",
+        )
+        .one()
     )
-    assert blocked.status_code == 400
-    update = await authed_client.patch(
-        f"/matches/{first['id']}/attempts/{a.json()['id']}",
-        json={"status": "completed", "ended_at": "2026-09-03", "outcome": "Completed"},
-    )
-    assert update.status_code == 200, update.text
-    finished = await authed_client.put(
-        f"/matches/{first['id']}/complete", json={"outcome": "Relationship completed"}
-    )
-    assert finished.status_code == 200, finished.text
-    assert finished.json()["closed_at"]
+    approved = await authed_client.post(f"/status-change-requests/{pending.id}/approve")
+    assert approved.status_code == 200, approved.text
+    assert db.get(Match, uuid.UUID(first["id"])).closed_at is not None
     later = await _case(authed_client, first_ip, donor=donor)
     assert later["id"] != first["id"]
-    assert (await authed_client.get(f"/matches/{later['id']}/attempts")).json() == []
-    assert (await authed_client.get(f"/matches/{first['id']}/attempts")).json()[0][
-        "outcome"
-    ] == "Completed"
-    read_only = await authed_client.patch(
-        f"/matches/{first['id']}/attempts/{a.json()['id']}", json={"status": "planned"}
-    )
-    assert read_only.status_code == 400
     listed = await authed_client.get(
         "/matches/", params={"match_kind": "donor", "donor_id": donor["id"], "q": "Case Donor"}
     )
@@ -98,7 +86,7 @@ async def test_donor_concurrent_cases_repeat_and_attempt_history(authed_client, 
     audit = (
         db.query(AuditLog)
         .filter(
-            AuditLog.target_id == uuid.UUID(first["id"]), AuditLog.event_type == "match_completed"
+            AuditLog.target_id == uuid.UUID(first["id"]), AuditLog.event_type == "match_cancelled"
         )
         .one()
     )
@@ -185,19 +173,10 @@ async def test_case_exact_participants_and_attempt_parent_constraints(authed_cli
             )
         )
         db.flush()
-    result = await authed_client.post(
-        f"/matches/{case['id']}/attempts", json={"attempt_type": "embryo_transfer"}
-    )
-    assert result.status_code == 400
-    result = await authed_client.post(
-        f"/matches/{case['id']}/attempts",
-        json={"attempt_type": "retrieval", "started_at": "2026-09-03", "ended_at": "2026-09-01"},
-    )
-    assert result.status_code == 400
 
 
 @pytest.mark.asyncio
-async def test_attempt_route_org_and_permission_denials(authed_client, db, test_auth):
+async def test_match_access_denies_other_org(authed_client, db, test_auth):
     from fastapi import HTTPException
 
     from app.schemas.auth import UserSession
@@ -215,13 +194,27 @@ async def test_attempt_route_org_and_permission_denials(authed_client, db, test_
     with pytest.raises(HTTPException) as denied:
         match_access.load(db, session, uuid.UUID(case["id"]))
     assert denied.value.status_code == 404
-    missing = await authed_client.get(f"/matches/{uuid.uuid4()}/attempts")
-    assert missing.status_code == 404
-    session.org_id = test_auth.org.id
-    session.role = Role.INTAKE_SPECIALIST
-    with pytest.raises(HTTPException) as denied:
-        match_access.load(db, session, uuid.UUID(case["id"]), action="edit_attempts")
-    assert denied.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_attempt_routes_are_removed(authed_client, db, test_auth):
+    ip = await _create_intended_parent(authed_client)
+    case = await _accept(
+        authed_client,
+        await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client)),
+    )
+    attempt = seed_attempt(db, case["id"])
+    path = f"/matches/{case['id']}/attempts"
+    for method, url, body in (
+        ("GET", path, None),
+        ("POST", path, {"attempt_type": "embryo_transfer"}),
+        ("PATCH", f"{path}/{attempt.id}", {"status": "completed"}),
+    ):
+        response = await authed_client.request(method, url, json=body)
+        assert response.status_code in {404, 405}, (method, response.text)
+    db.expire_all()
+    assert db.query(MatchAttempt).filter_by(organization_id=test_auth.org.id).count() == 1
+    assert db.get(MatchAttempt, attempt.id).status == "planned"
 
 
 @pytest.mark.asyncio
@@ -349,10 +342,7 @@ async def test_donor_cancellation_approval_and_attempt_closure(authed_client, db
     donor = await _donor(authed_client)
     ip = await _create_intended_parent(authed_client)
     case = await _accept(authed_client, await _case(authed_client, ip, donor=donor))
-    attempt = await authed_client.post(
-        f"/matches/{case['id']}/attempts", json={"attempt_type": "retrieval"}
-    )
-    assert attempt.status_code == 201
+    attempt = seed_attempt(db, case["id"], attempt_type="retrieval")
     requested = await authed_client.post(
         f"/matches/{case['id']}/cancel-request", json={"reason": "Case ended"}
     )
@@ -368,7 +358,8 @@ async def test_donor_cancellation_approval_and_attempt_closure(authed_client, db
     approved = await authed_client.post(f"/status-change-requests/{pending.id}/approve")
     assert approved.status_code == 200, approved.text
     assert db.get(Match, uuid.UUID(case["id"])).status == "cancelled"
-    assert db.get(MatchAttempt, uuid.UUID(attempt.json()["id"])).status == "cancelled"
+    db.expire_all()
+    assert db.get(MatchAttempt, attempt.id).status == "cancelled"
     repeat = await _case(authed_client, ip, donor=donor)
     assert repeat["id"] != case["id"]
 

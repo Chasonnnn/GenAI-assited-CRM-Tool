@@ -692,10 +692,15 @@ function useSurrogateDetailActionsValue({
         }
         if (result.request_id) response.request_id = result.request_id
         if (result.status === "applied") {
-            toast.success(`Stage updated to ${targetStageLabel}`, {
+            // The toast action does not close its toast, so a second click would run the undo again.
+            let undoStarted = false
+            const toastId = toast.success(`Stage updated to ${targetStageLabel}`, {
                 action: {
                     label: "Undo (5 min)",
                     onClick: () => void (async () => {
+                        if (undoStarted) return
+                        undoStarted = true
+                        toast.dismiss(toastId)
                         try {
                             await changeStatusMutation.mutateAsync({
                                 surrogateId,

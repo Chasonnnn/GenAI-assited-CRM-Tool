@@ -96,8 +96,13 @@ async def test_zapier_outbound_test_event_queues_job(authed_client, db, test_org
     assert data["lead_id"] == "lead-test-1"
 
 
+LEAD_EMAIL_SHA256 = "9fbdefe2837a03c9225be80e741f316f4d174d1732b719b6abb6477efc1ae9d2"
+# Meta normalizes phones to digits with country code and no "+": sha256("15551234567").
+LEAD_PHONE_SHA256 = "d6736136ea896c1bfdc553e0e86e702c70d060d805696ca3e4e9e0961353860a"
+
+
 def test_build_stage_event_payload_exposes_zapier_matching_fields():
-    from app.services import meta_capi, zapier_outbound_service
+    from app.services import zapier_outbound_service
 
     payload = zapier_outbound_service.build_stage_event_payload(
         lead_id="1559954882011881",
@@ -119,15 +124,38 @@ def test_build_stage_event_payload_exposes_zapier_matching_fields():
 
     assert payload["lead_id"] == "1559954882011881"
     assert payload["event_name"] == "Qualified"
+    assert payload["record_type"] == "surrogate"
     assert payload["lifecycle_stage_name"] == "Qualified"
     assert payload["customer_email"] == "lead@example.com"
     assert payload["customer_phone_number"] == "+15551234567"
     assert payload["facebook_click_id"] == "fb.1.1772942400.persisted-click-id"
     assert payload["fbc"] == "fb.1.1772942400.persisted-click-id"
     assert payload["user_data"] == {
-        "email_hash": meta_capi.hash_for_capi("lead@example.com"),
-        "phone_hash": meta_capi.hash_for_capi("+15551234567"),
+        "email_hash": LEAD_EMAIL_SHA256,
+        "phone_hash": LEAD_PHONE_SHA256,
     }
+
+
+def test_build_stage_event_payload_never_sends_placeholder_email():
+    from app.services import zapier_outbound_service
+
+    payload = zapier_outbound_service.build_stage_event_payload(
+        lead_id="1559954882011881",
+        event_name="Qualified",
+        event_time=datetime(2026, 3, 8, 6, 56, 36, tzinfo=UTC),
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_id=None,
+        stage_label="Pre Qualified",
+        surrogate_id=None,
+        include_hashed_pii=True,
+        email="meta-1559954882011881@Placeholder.Invalid",
+        phone="+1 (555) 123-4567",
+    )
+
+    assert "customer_email" not in payload
+    assert payload["user_data"] == {"phone_hash": LEAD_PHONE_SHA256}
+    assert "placeholder" not in str(payload).lower()
 
 
 def test_enqueue_stage_event_skips_meta_leads_older_than_90_days(db, test_org, test_user):
@@ -373,3 +401,284 @@ def test_build_default_event_mapping_uses_pipeline_semantics(db, test_org):
     assert by_stage["new_unread"]["bucket"] is None
     assert by_stage["new_unread"]["event_name"] == ""
     assert by_stage["new_unread"]["enabled"] is False
+
+
+def _meta_surrogate_with_reporting(db, test_org, test_user, *, received_at=None, lead_id=None):
+    from app.db.enums import SurrogateSource
+    from app.db.models import MetaLead
+    from app.schemas.surrogate import SurrogateCreate
+    from app.services import surrogate_service, zapier_settings_service
+
+    meta_lead = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id=lead_id or f"lead-{uuid4().hex[:8]}",
+        meta_form_id="form_1",
+        meta_page_id="page_1",
+        field_data={"email": "lead@example.com"},
+        field_data_raw={"email": "lead@example.com"},
+        received_at=received_at or datetime.now(UTC),
+    )
+    db.add(meta_lead)
+    db.commit()
+    db.refresh(meta_lead)
+
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(
+            full_name="Zapier Meta Lead",
+            email=f"lead-{uuid4().hex[:8]}@example.com",
+            phone="+1 (555) 123-4567",
+            source=SurrogateSource.META,
+        ),
+    )
+    surrogate.meta_lead_id = meta_lead.id
+    surrogate.meta_form_id = meta_lead.meta_form_id
+
+    settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    settings.outbound_webhook_url = "https://hooks.zapier.com/hooks/catch/123/abc"
+    settings.outbound_enabled = True
+    settings.outbound_send_hashed_pii = True
+    settings.outbound_event_mapping = [
+        {
+            "stage_key": "pre_qualified",
+            "event_name": "Qualified",
+            "bucket": "qualified",
+            "enabled": True,
+        }
+    ]
+    db.commit()
+    return surrogate, meta_lead
+
+
+@pytest.mark.parametrize("id_form", ["legacy", "generated", "test"])
+def test_surrogate_event_with_synthetic_meta_lead_id_is_skipped(db, test_org, test_user, id_form):
+    from app.db.enums import JobType
+    from app.db.models import Job, ZapierOutboundEvent
+    from app.services import meta_lead_service, zapier_outbound_service
+
+    synthetic_id = {
+        "legacy": f"zapier-{uuid4()}",
+        "generated": meta_lead_service.generate_synthetic_meta_lead_id(),
+        "test": f"zapier-test-{uuid4()}",
+    }[id_form]
+    surrogate, _meta_lead = _meta_surrogate_with_reporting(
+        db, test_org, test_user, lead_id=synthetic_id
+    )
+
+    result = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_label="Pre Qualified",
+    )
+
+    assert result["queued"] is False
+    assert result["reason"] == "synthetic_meta_lead_id"
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.ZAPIER_STAGE_EVENT.value,
+        )
+        .count()
+        == 0
+    )
+    skipped = (
+        db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.surrogate_id == surrogate.id).one()
+    )
+    assert skipped.status == "skipped"
+    assert skipped.reason == "synthetic_meta_lead_id"
+
+
+def test_repeated_surrogate_bucket_records_duplicate_skip(db, test_org, test_user):
+    from app.db.models import ZapierOutboundEvent
+    from app.services import zapier_outbound_service
+
+    surrogate, meta_lead = _meta_surrogate_with_reporting(db, test_org, test_user)
+
+    first = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_label="Pre Qualified",
+    )
+    second = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_label="Pre Qualified",
+    )
+
+    assert first["queued"] is True
+    assert second["queued"] is False
+    assert second["reason"] == "duplicate"
+    assert second["event_id"] == first["event_id"]
+    rows = (
+        db.query(ZapierOutboundEvent)
+        .filter(
+            ZapierOutboundEvent.organization_id == test_org.id,
+            ZapierOutboundEvent.surrogate_id == surrogate.id,
+        )
+        .all()
+    )
+    assert sorted(row.status for row in rows) == ["queued", "skipped"]
+    skipped = next(row for row in rows if row.status == "skipped")
+    assert skipped.reason == "duplicate"
+    assert skipped.lead_id == meta_lead.meta_lead_id
+
+
+def _capture_zapier_webhook(monkeypatch):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    sent: dict[str, object] = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, *, json, headers):
+            sent.update({"url": url, "json": json, "headers": headers})
+            return Response()
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", Client)
+    return sent
+
+
+def _queued_surrogate_job(db, test_org, surrogate, *, effective_at):
+    from app.db.models import Job
+    from app.services import zapier_outbound_service
+
+    result = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_label="Pre Qualified",
+        effective_at=effective_at,
+    )
+    assert result["queued"] is True
+    return (
+        db.query(Job)
+        .filter(Job.organization_id == test_org.id, Job.idempotency_key == result["event_id"])
+        .one()
+    )
+
+
+@pytest.mark.asyncio
+async def test_dispatch_moves_surrogate_event_older_than_meta_window_to_six_days_ago(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    now = datetime.now(UTC)
+    surrogate, _meta_lead = _meta_surrogate_with_reporting(
+        db, test_org, test_user, received_at=now - timedelta(days=20)
+    )
+    effective_at = now - timedelta(days=10)
+    job = _queued_surrogate_job(db, test_org, surrogate, effective_at=effective_at)
+    sent = _capture_zapier_webhook(monkeypatch)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    sent_time = datetime.fromisoformat(sent["json"]["event_time"])
+    assert abs(sent_time - (now - timedelta(days=6))) < timedelta(minutes=1)
+    db.refresh(job)
+    assert job.payload["data"]["event_time"] == effective_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_keeps_surrogate_event_time_inside_meta_window(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    now = datetime.now(UTC)
+    surrogate, _meta_lead = _meta_surrogate_with_reporting(
+        db, test_org, test_user, received_at=now - timedelta(days=20)
+    )
+    effective_at = now - timedelta(days=2)
+    job = _queued_surrogate_job(db, test_org, surrogate, effective_at=effective_at)
+    sent = _capture_zapier_webhook(monkeypatch)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    assert sent["json"]["event_time"] == effective_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_skips_surrogate_event_when_moved_time_makes_the_lead_stale(
+    db, test_org, test_user, monkeypatch
+):
+    from app.db.models import ZapierOutboundEvent
+    from app.jobs.handlers import zapier as zapier_handler
+
+    now = datetime.now(UTC)
+    surrogate, _meta_lead = _meta_surrogate_with_reporting(
+        db, test_org, test_user, received_at=now - timedelta(days=97)
+    )
+    # 87 days after the lead at enqueue; 91 days once moved to six days ago.
+    job = _queued_surrogate_job(db, test_org, surrogate, effective_at=now - timedelta(days=10))
+    sent = _capture_zapier_webhook(monkeypatch)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    assert sent == {}
+    event = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.job_id == job.id).one()
+    assert event.status == "skipped"
+    assert event.reason == "stale_meta_lead"
+
+
+def test_surrogate_event_rows_record_the_stage_effective_time(db, test_org, test_user):
+    from app.db.models import PipelineStage, ZapierOutboundEvent
+    from app.services import zapier_outbound_service
+
+    surrogate, _meta_lead = _meta_surrogate_with_reporting(db, test_org, test_user)
+    stage = db.get(PipelineStage, surrogate.stage_id)
+    effective_at = datetime.now(UTC) - timedelta(days=3)
+
+    queued = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="pre_qualified",
+        stage_slug="pre_qualified",
+        stage_id=str(stage.id),
+        stage_label="Pre Qualified",
+        effective_at=effective_at,
+    )
+    skipped = zapier_outbound_service.enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key="unmapped_stage_key",
+        stage_slug="unmapped",
+        stage_id=str(stage.id),
+        stage_label="Unmapped",
+        effective_at=effective_at,
+    )
+
+    assert queued["queued"] is True
+    assert skipped["reason"] == "unmapped_stage"
+    rows = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.surrogate_id == surrogate.id)
+        .order_by(ZapierOutboundEvent.created_at)
+        .all()
+    )
+    assert [row.status for row in rows] == ["queued", "skipped"]
+    for row in rows:
+        assert row.effective_at == effective_at
+        assert row.stage_id == stage.id

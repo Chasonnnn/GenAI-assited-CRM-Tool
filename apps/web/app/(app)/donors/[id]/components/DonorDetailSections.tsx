@@ -13,18 +13,20 @@ import { Card } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DonorApplicationsSection } from "@/components/donors/DonorApplicationsSection"
 import { DonorAssignMenu, DonorClaimMenuItem } from "@/components/donors/DonorAssignMenu"
 import { RecordCollaboratorsDialog } from "@/components/permissions/record-collaborators-dialog"
 import { DonorDocumentsSection } from "@/components/donors/DonorDocumentsSection"
 import { DonorNotesSection } from "@/components/donors/DonorNotesSection"
 import { DonorTasksSection } from "@/components/donors/DonorTasksSection"
 import { DonorOverviewTab } from "@/components/donors/DonorOverviewTab"
+import { DonorMetaLeadCard } from "./DonorMetaLeadCard"
 import { SurrogateDetailHeader } from "@/components/surrogates/detail/SurrogateDetailHeader"
 import type { PipelineStage } from "@/lib/api/pipelines"
 import type { EntityActivity } from "@/lib/api/activity"
 import type { TaskListItem } from "@/lib/api/tasks"
 import { normalizeDonorHistory } from "@/lib/activity-history"
-import { getDonorStageLabel, getDonorStageStyle } from "@/lib/donor-stage-utils"
+import { getDonorStageColor, getDonorStageLabel } from "@/lib/donor-stage-utils"
 import type { Donor, DonorStatusHistoryItem } from "@/lib/types/donor"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 
@@ -82,7 +84,7 @@ export function DonorDetailSections({
     const router = useRouter()
     const searchParams = useSearchParams()
     const initialTab = searchParams.get("tab")
-    const [tab, setTab] = useState(initialTab && ["overview", "notes", "tasks", "history"].includes(initialTab) ? initialTab : "overview")
+    const [tab, setTab] = useState(initialTab && ["overview", "notes", "tasks", "applications", "history"].includes(initialTab) ? initialTab : "overview")
     const [correspondenceOpen, setCorrespondenceOpen] = useState(false)
     const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
     const canManageCollaborators = policyV2 && !!permissionsQuery.data?.capabilities?.can_manage_roles
@@ -97,7 +99,10 @@ export function DonorDetailSections({
         const query = params.toString()
         window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`)
     }
-    const activityPanel = <EntityActivityTimeline
+    // The overview side column renders this slot, so the Meta lead card sits above the timeline.
+    const activityPanel = <>
+    <DonorMetaLeadCard donorId={donor.id} enabled={donor.source === "meta"} />
+    <EntityActivityTimeline
         currentStageId={donor.stage_id}
         stages={stages}
         stageHistory={normalizeDonorHistory(history)}
@@ -110,12 +115,13 @@ export function DonorDetailSections({
         historyHref={`/donors/${donor.id}?tab=history&return_to=${encodeURIComponent(returnTo)}`}
         onViewHistory={() => changeTab("history")}
     />
+    </>
     return <div className="flex flex-1 flex-col">
         <SurrogateDetailHeader
             recordLabel="Donor"
             surrogateNumber={donor.donor_number}
             statusLabel={getDonorStageLabel(stages, donor)}
-            statusColor={String(getDonorStageStyle(stages, donor).color)}
+            statusColor={getDonorStageColor(stages, donor)}
             isArchived={donor.is_archived}
             onBack={() => router.push(returnTo as Route)}>
             {access.changeStage && !donor.is_archived && <Button size="sm" variant="outline" onClick={onChangeStage}>Change Stage</Button>}
@@ -140,6 +146,7 @@ export function DonorDetailSections({
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="notes">Notes</TabsTrigger>
                     <TabsTrigger value="tasks">Tasks</TabsTrigger>
+                    <TabsTrigger value="applications">Applications</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
                 </TabsList>
                 {tab === "overview" && <DonorOverviewTab donor={donor} canEdit={canEdit} activityPanel={activityPanel} />}
@@ -151,6 +158,9 @@ export function DonorDetailSections({
                 </TabsContent>
                 <TabsContent value="tasks" className="space-y-4">
                     {access.viewTasks ? <DonorTasksSection donor={donor} canView={access.viewTasks} canCreate={access.createTasks} /> : <p className="text-sm text-muted-foreground">You don’t have permission to view tasks.</p>}
+                </TabsContent>
+                <TabsContent value="applications">
+                    {tab === "applications" && <DonorApplicationsSection donorId={donor.id} canOpenSubmissions={hasPermission(policyV2 ? "view_form_submissions" : "manage_forms")} />}
                 </TabsContent>
                 <TabsContent value="history">
                     {tab === "history" && <EntityActivityHistory embedded entityType="donor" entityId={donor.id} backHref={returnTo} />}

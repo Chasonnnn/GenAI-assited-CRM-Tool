@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server"
 import { fireEvent, render, screen } from "@testing-library/react"
 
 import UnassignedSurrogatesPage from "@/app/(app)/surrogates/unassigned/page.client"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 
 const mocks = vi.hoisted(() => ({
     redirect: vi.fn(),
@@ -86,7 +87,7 @@ describe("UnassignedSurrogatesPage", () => {
             )
         }
 
-        it("renders the shared page header with a count and no subtitle", () => {
+        it("renders the shared page header without a count or subtitle", () => {
             mocks.useUnassignedQueue.mockReturnValue({
                 data: {
                     items: [
@@ -113,13 +114,14 @@ describe("UnassignedSurrogatesPage", () => {
             const { container } = renderPage()
 
             expect(screen.getByRole("heading", { level: 1, name: "Unassigned Queue" })).toBeInTheDocument()
-            expect(container.querySelector('[data-slot="page-header-count"]')).toHaveTextContent("1 surrogates")
+            expect(container.querySelector('[data-slot="page-header-count"]')).toBeNull()
             expect(screen.queryByText("Claim a surrogate to start working the case.")).not.toBeInTheDocument()
             expect(screen.getByText("#S10152")).toBeInTheDocument()
             expect(screen.getByText("Agency")).toBeInTheDocument()
             expect(screen.queryByText("agency")).not.toBeInTheDocument()
             const stageBadge = screen.getByText("New Unread")
-            expect(stageBadge).toHaveStyle({ backgroundColor: "#3B82F6" })
+            expect(stageBadge).toHaveStyle({ backgroundColor: stageBadgeStyle("#3B82F6").backgroundColor, color: "#FFFFFF" })
+            expect(stageBadgeStyle("#3B82F6").backgroundColor).not.toBe("#3B82F6")
         })
 
         it("shows the empty state without a first-page button on page 1", () => {

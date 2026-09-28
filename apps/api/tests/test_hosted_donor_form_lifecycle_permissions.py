@@ -487,4 +487,12 @@ async def test_admin_with_edit_donors_can_manage_hosted_donor_form_lifecycle(
         )
         .one()
     )
-    assert workflow.actions == [{"action_type": "create_intake_lead", "requires_approval": True}]
+    assert workflow.actions == [
+        {"action_type": "auto_match_submission", "requires_approval": False},
+        {
+            "action_type": "create_intake_lead",
+            "source": "website",
+            "auto_promote": True,
+            "requires_approval": False,
+        },
+    ]

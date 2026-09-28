@@ -53,9 +53,10 @@ const SCRIPT = `
     return "";
   }
 
+  // Meta's fbc format is fb.1.<creation time in milliseconds>.<fbclid>.
   function buildFbcFromClickId(fbclid) {
     if (!fbclid) return "";
-    return "fb.1." + Math.floor(Date.now() / 1000) + "." + fbclid;
+    return "fb.1." + Date.now() + "." + fbclid;
   }
 
   function collectAttribution() {

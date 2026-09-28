@@ -13,11 +13,13 @@ import type {
     DonorType,
     DonorUpdate,
 } from "@/lib/types/donor"
+import type { SurrogateSource } from "@/lib/types/surrogate"
 
 export interface DonorFilters {
     donor_type: DonorType
     stage_id?: string
     state?: string
+    source?: SurrogateSource
     q?: string
     owner_id?: string
     dynamic_filter?: "attention_stuck"
@@ -43,6 +45,7 @@ export async function listDonors(filters: DonorFilters): Promise<DonorListRespon
     const params = new URLSearchParams({ donor_type: filters.donor_type })
     if (filters.stage_id) params.set("stage_id", filters.stage_id)
     if (filters.state) params.set("state", filters.state)
+    if (filters.source) params.set("source", filters.source)
     if (filters.q) params.set("q", filters.q)
     if (filters.owner_id) params.set("owner_id", filters.owner_id)
     if (filters.dynamic_filter) params.set("dynamic_filter", filters.dynamic_filter)
@@ -120,4 +123,24 @@ export async function getDonorProfile(id: string): Promise<DonorProfile> {
 
 export async function revealDonorSensitiveInfo(id: string): Promise<{ ssn: string | null; partner_ssn: string | null }> {
     return api.post(`/donors/${id}/sensitive-info/reveal`, {})
+}
+
+export interface DonorMetaLeadAnswer {
+    key: string
+    label: string | null
+    value: string
+}
+
+/** Answers of the Meta lead a donor was converted from; null for other donors. */
+export interface DonorMetaLead {
+    id: string
+    form_name: string | null
+    meta_created_time: string | null
+    received_at: string
+    answers: DonorMetaLeadAnswer[]
+    dropped_fields: string[]
+}
+
+export async function getDonorMetaLead(id: string): Promise<DonorMetaLead | null> {
+    return api.get<DonorMetaLead | null>(`/donors/${id}/meta-lead`)
 }

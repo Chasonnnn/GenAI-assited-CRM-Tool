@@ -4,7 +4,7 @@ import { useState } from "react"
 import type { Route } from "next"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -278,7 +278,7 @@ export function StageChart() {
     return (
         <Card className="h-full flex flex-col gap-0 p-0">
             <CardHeader className="p-6 pb-0 gap-0">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                     <CardTitle className="text-base font-semibold">Pipeline Distribution</CardTitle>
                     <div className="flex flex-wrap items-center gap-2">
                         <ToggleGroup
@@ -300,9 +300,6 @@ export function StageChart() {
                         </ToggleGroup>
                     </div>
                 </div>
-                <CardDescription className="text-sm text-muted-foreground mb-4">
-                    {totalCount.toLocaleString()} {subjectPlural.toLowerCase()} in pipeline
-                </CardDescription>
             </CardHeader>
             <CardContent className="px-4 pb-6 pt-0 flex-1">
                 {isLoading ? (

@@ -4,6 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as pipelinesApi from '../api/pipelines';
+import { metadataKeys } from './use-metadata';
 import type {
     PipelineDraft,
     PipelineEntityType,
@@ -36,6 +37,19 @@ const pipelineKeys = {
         [...pipelineKeys.all, 'default-semantics', entityType] as const,
     stages: (id: string) => [...pipelineKeys.all, 'stages', id] as const,
 };
+
+/**
+ * Intended parent pages read their stages from the metadata endpoint, not the pipeline queries.
+ * Stage mutations carry no entity type, so they pass none and always refresh it.
+ */
+function invalidateIntendedParentStageMetadata(
+    queryClient: ReturnType<typeof useQueryClient>,
+    entityType?: PipelineEntityType,
+) {
+    if (entityType === undefined || entityType === 'intended_parent') {
+        void queryClient.invalidateQueries({ queryKey: metadataKeys.intendedParentStatuses() });
+    }
+}
 
 // ============================================================================
 // Queries
@@ -134,8 +148,9 @@ export function useCreatePipeline() {
             stages?: StageCreate[];
             feature_config?: PipelineFeatureConfig;
         }) => pipelinesApi.createPipeline(name, entity_type, stages, feature_config),
-        onSuccess: () => {
+        onSuccess: (_, { entity_type }) => {
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
+            invalidateIntendedParentStageMetadata(queryClient, entity_type);
         },
     });
 }
@@ -160,6 +175,7 @@ export function useUpdatePipeline() {
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
+            invalidateIntendedParentStageMetadata(queryClient, entityType);
         },
     });
 }
@@ -170,8 +186,9 @@ export function useDeletePipeline() {
     return useMutation({
         mutationFn: ({ id, entityType = 'surrogate' }: { id: string; entityType?: PipelineEntityType }) =>
             pipelinesApi.deletePipeline(id, entityType),
-        onSuccess: () => {
+        onSuccess: (_, { entityType = 'surrogate' }) => {
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.all });
+            invalidateIntendedParentStageMetadata(queryClient, entityType);
         },
     });
 }
@@ -196,6 +213,7 @@ export function useRollbackPipeline() {
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
+            invalidateIntendedParentStageMetadata(queryClient, entityType);
         },
     });
 }
@@ -232,6 +250,7 @@ export function useApplyPipelineDraft() {
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.list(entityType) });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.default(entityType) });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics(entityType) });
+            invalidateIntendedParentStageMetadata(queryClient, entityType);
         },
     });
 }
@@ -253,6 +272,7 @@ export function useCreateStage() {
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+            invalidateIntendedParentStageMetadata(queryClient);
         },
     });
 }
@@ -269,6 +289,7 @@ export function useUpdateStage() {
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+            invalidateIntendedParentStageMetadata(queryClient);
         },
     });
 }
@@ -296,6 +317,7 @@ export function useDeleteStage() {
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+            invalidateIntendedParentStageMetadata(queryClient);
         },
     });
 }
@@ -320,6 +342,7 @@ export function useReorderStages() {
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.versions(pipelineId) });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.default() });
             void queryClient.invalidateQueries({ queryKey: pipelineKeys.defaultSemantics() });
+            invalidateIntendedParentStageMetadata(queryClient);
         },
     });
 }

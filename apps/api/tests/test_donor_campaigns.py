@@ -362,8 +362,11 @@ def test_donor_template_variables_include_identity_owner_brand_and_unsubscribe(
         "org_name": test_org.name,
         "org_logo_url": "",
         "unsubscribe_url": variables["unsubscribe_url"],
+        "form_link": "",
+        "appointment_link": variables["appointment_link"],
     }
     assert variables["unsubscribe_url"].startswith("http")
+    assert "/book/" in variables["appointment_link"]
 
 
 def test_donor_email_campaign_send_is_exact_and_idempotent(

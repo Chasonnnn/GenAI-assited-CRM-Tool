@@ -25,7 +25,7 @@ from app.db.models import (
     UserPermissionOverride,
 )
 from app.services import intended_parent_status_service, notification_service
-from tests.match_fixtures import seed_surrogate_match
+from tests.match_fixtures import seed_attempt, seed_surrogate_match
 from tests.test_match_cancel_request import _create_intended_parent, _create_surrogate
 from tests.test_match_cases import _accept, _case, _donor
 from tests.test_match_lifecycle_characterization import (
@@ -183,14 +183,10 @@ async def test_approve_cancellation_closes_open_surrogate_attempts(authed_client
         authed_client,
         await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client)),
     )
-    attempts = []
-    for status in ("planned", "in_progress", "completed"):
-        response = await authed_client.post(
-            f"/matches/{match['id']}/attempts",
-            json={"attempt_type": "embryo_transfer", "status": status},
-        )
-        assert response.status_code == 201, response.text
-        attempts.append(response.json()["id"])
+    attempts = [
+        seed_attempt(db, match["id"], status=status).id
+        for status in ("planned", "in_progress", "completed")
+    ]
     response = await authed_client.post(
         f"/matches/{match['id']}/cancel-request", json={"reason": "Ended"}
     )
@@ -205,7 +201,7 @@ async def test_approve_cancellation_closes_open_surrogate_attempts(authed_client
 
     assert response.status_code == 200, response.text
     db.expire_all()
-    assert [db.get(MatchAttempt, uuid.UUID(a)).status for a in attempts] == [
+    assert [db.get(MatchAttempt, a).status for a in attempts] == [
         "cancelled",
         "cancelled",
         "completed",

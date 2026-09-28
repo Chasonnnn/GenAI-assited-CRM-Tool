@@ -32,7 +32,8 @@ interface ZapierSettings {
     send_hashed_pii: boolean;
     event_mapping: ZapierEventMappingItem[];
     donor_outbound_enabled?: boolean;
-    donor_event_mapping?: ZapierDonorEventMappingItem[];
+    // Null until the first donor mapping save.
+    donor_event_mapping?: ZapierDonorEventMappingItem[] | null;
 }
 
 interface ZapierInboundWebhook {
@@ -103,6 +104,22 @@ interface ZapierOutboundTestResponse {
     lead_id: string;
 }
 
+export type ZapierDonorAttributionSource = 'meta' | 'website';
+
+export interface ZapierDonorOutboundTestRequest {
+    donor_type: ZapierDonorEventMappingItem['donor_type'];
+    event_name: ZapierDonorEventMappingItem['event_name'];
+    attribution_source: ZapierDonorAttributionSource;
+    lead_id?: string;
+}
+
+interface ZapierDonorOutboundTestResponse {
+    status: string;
+    event_name: string;
+    event_id: string;
+    lead_id: string | null;
+}
+
 type ZapierOutboundEventStatus = 'queued' | 'delivered' | 'failed' | 'skipped';
 
 export interface ZapierOutboundEvent {
@@ -131,6 +148,7 @@ export interface ZapierOutboundEvent {
     delivered_at?: string | null;
     last_attempt_at?: string | null;
     can_retry: boolean;
+    can_replay: boolean;
 }
 
 interface ZapierOutboundEventsResponse {
@@ -224,6 +242,15 @@ export async function sendZapierOutboundTest(
     return api.post<ZapierOutboundTestResponse>('/integrations/zapier/test-outbound', payload);
 }
 
+export async function sendZapierDonorOutboundTest(
+    payload: ZapierDonorOutboundTestRequest,
+): Promise<ZapierDonorOutboundTestResponse> {
+    return api.post<ZapierDonorOutboundTestResponse>(
+        '/integrations/zapier/test-outbound/donor',
+        payload,
+    );
+}
+
 export async function getZapierOutboundEvents(
     params: ZapierOutboundEventsRequest = {},
 ): Promise<ZapierOutboundEventsResponse> {
@@ -256,6 +283,10 @@ export async function retryZapierOutboundEvent(
     payload: RetryZapierOutboundEventRequest = {},
 ): Promise<ZapierOutboundEvent> {
     return api.post<ZapierOutboundEvent>(`/integrations/zapier/events/${eventId}/retry`, payload);
+}
+
+export async function replayZapierOutboundEvent(eventId: string): Promise<ZapierOutboundEvent> {
+    return api.post<ZapierOutboundEvent>(`/integrations/zapier/events/${eventId}/replay`);
 }
 
 export async function parseZapierFieldPaste(

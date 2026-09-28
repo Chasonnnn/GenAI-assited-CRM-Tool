@@ -264,23 +264,13 @@ def parse_worker_job_types(raw: str | None) -> list[str] | None:
 
 
 WORKER_JOB_TYPES = parse_worker_job_types(os.getenv("WORKER_JOB_TYPES"))
-REMOTE_SCAN_JOB_TYPES = {
-    JobType.ATTACHMENT_SCAN.value,
-    JobType.FORM_SUBMISSION_FILE_SCAN.value,
-    JobType.MESSAGE_MEDIA_SCAN.value,
-}
 
 
 def _claimed_job_types() -> list[str] | None:
-    if not scan_dispatch_service.remote_scan_dispatch_configured():
-        return WORKER_JOB_TYPES
-
-    if WORKER_JOB_TYPES is None:
-        return [
-            job_type.value for job_type in JobType if job_type.value not in REMOTE_SCAN_JOB_TYPES
-        ]
-
-    return [job_type for job_type in WORKER_JOB_TYPES if job_type not in REMOTE_SCAN_JOB_TYPES]
+    # Scan job types stay claimable in remote mode: their handlers dispatch the dedicated
+    # Cloud Run scan job with the claim token, so scheduled retries and first scans of
+    # public uploads start without waiting for a request-path dispatch.
+    return WORKER_JOB_TYPES
 
 
 def _log_job_failure(job, exception: Exception) -> None:
@@ -938,21 +928,23 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
         return
 
     claimed_job_types = _claimed_job_types()
-    if WORKER_JOB_TYPES is None and claimed_job_types is None:
+    if claimed_job_types is None:
         job_types_display = "all"
-    elif WORKER_JOB_TYPES is None and claimed_job_types is not None:
-        job_types_display = (
-            "all-except-attachment_scan,form_submission_file_scan,message_media_scan"
-        )
     elif claimed_job_types:
         job_types_display = ",".join(claimed_job_types)
     else:
         job_types_display = "none"
+    scan_mode = (
+        "remote-dispatch"
+        if scan_dispatch_service.remote_scan_dispatch_configured()
+        else "in-process"
+    )
     logger.info(
-        "Worker starting (poll interval: %ss, batch size: %s, job types: %s)",
+        "Worker starting (poll interval: %ss, batch size: %s, job types: %s, scans: %s)",
         POLL_INTERVAL_SECONDS,
         BATCH_SIZE,
         job_types_display,
+        scan_mode,
     )
 
     last_session_cleanup = datetime.min.replace(tzinfo=UTC)

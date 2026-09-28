@@ -43,10 +43,10 @@ import {
     saveSharedPublicFormDraft,
     submitSharedPublicForm,
     type FormIntakePublicRead,
-    type FormSubmissionSharedResponse,
     type FormSchema,
 } from "@/lib/api/forms"
 import { useHostedIntakeAutosave } from "@/lib/hooks/use-hosted-intake-autosave"
+import { captureHostedIntakeAttribution, clearHostedIntakeAttribution } from "./hosted-intake-attribution"
 import { FileUploadZone } from "./components/file-upload-zone"
 import { PrivacyNotice } from "./components/privacy-notice"
 import { ProgressStepper, type Step } from "./components/progress-stepper"
@@ -916,7 +916,6 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const [isSubmitting, setIsSubmitting] = React.useState(false)
     const submissionAttemptRef = React.useRef<SubmissionAttempt | null>(null)
     const [isSubmitted, setIsSubmitted] = React.useState(false)
-    const [submissionOutcome, setSubmissionOutcome] = React.useState<FormSubmissionSharedResponse["outcome"] | null>(null)
     const [datePickerOpen, setDatePickerOpen] = React.useState<Record<string, boolean>>({})
     // Inline errors for the step the user tried to leave; a field's error clears when it changes.
     const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
@@ -930,6 +929,11 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const [isRestoringResume, setIsRestoringResume] = React.useState(false)
     const suppressedIdentityFingerprintsRef = React.useRef<Set<string> | null>(null)
     const lookupCacheRef = React.useRef<Map<string, "no_match" | "match_found"> | null>(null)
+
+    React.useEffect(() => {
+        // Record the landing attribution on arrival, before a reload or later visit drops the URL query.
+        captureHostedIntakeAttribution(token)
+    }, [token])
 
     const bootstrapDraftSession = createDraftSessionState(token)
     const bootstrapQuery = useQuery({
@@ -1290,7 +1294,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                 formConfig?.messaging_consent?.operational
                 || formConfig?.messaging_consent?.promotional,
             )
-            const response = await submitSharedPublicForm(
+            await submitSharedPublicForm(
                 token,
                 answers,
                 files,
@@ -1305,13 +1309,14 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                     : undefined,
                 formConfig?.published_version_id,
                 attempt.key,
+                captureHostedIntakeAttribution(token),
             )
             clearSubmissionAttempt(attemptScope)
+            clearHostedIntakeAttribution(token)
             submissionAttemptRef.current = null
             if (draftSessionId) {
                 window.localStorage.removeItem(`intake-draft-session:${token}`)
             }
-            setSubmissionOutcome(response.outcome)
             setIsSubmitted(true)
         }
         void submit()
@@ -1521,7 +1526,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
 
     // Success state
     if (isSubmitted) {
-        return <PublicFormSuccessState outcome={submissionOutcome} />
+        return <PublicFormSuccessState />
     }
 
     return (
@@ -1733,7 +1738,11 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                             onFilesChange={(nextFiles) => updateFileUploads(field.key, nextFiles)}
                                             maxFiles={getMaxFilesForField(field.key)}
                                             maxFileSizeBytes={formConfig.max_file_size_bytes}
-                                            allowedMimeTypes={formConfig.allowed_mime_types ?? null}
+                                            allowedMimeTypes={
+                                                formConfig.field_allowed_mime_types?.[field.key] ??
+                                                formConfig.allowed_mime_types ??
+                                                null
+                                            }
                                         />
                                         {error ? <FieldError id={errorId}>{error}</FieldError> : null}
                                         {field.help_text && (

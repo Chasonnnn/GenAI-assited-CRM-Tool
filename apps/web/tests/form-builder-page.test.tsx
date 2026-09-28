@@ -21,6 +21,7 @@ const mockUpdateForm = vi.fn()
 const mockSetFormMappings = vi.fn()
 const mockPublishForm = vi.fn()
 const mockPromoteIntakeLead = vi.fn()
+const mockResolveSubmissionMatch = vi.fn()
 const mockRefetchIntakeLinks = vi.fn()
 const { toastError, toastSuccess, useFormMappingOptionsMock } = vi.hoisted(() => ({
     toastError: vi.fn(),
@@ -106,7 +107,7 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useFormMappings: () => mockFormMappings(),
     usePublishForm: () => ({ mutateAsync: mockPublishForm, isPending: false }),
     useRetrySubmissionMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useResolveSubmissionMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useResolveSubmissionMatch: () => ({ mutateAsync: mockResolveSubmissionMatch, isPending: false }),
     useSetFormMappings: () => ({ mutateAsync: mockSetFormMappings, isPending: false }),
     useSetDefaultSurrogateApplicationForm: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSubmissionMatchCandidates: () => ({ data: [], isLoading: false }),
@@ -133,6 +134,7 @@ describe("FormBuilderPage", () => {
         mockSetFormMappings.mockReset()
         mockPublishForm.mockReset()
         mockPromoteIntakeLead.mockReset()
+        mockResolveSubmissionMatch.mockReset()
         mockRefetchIntakeLinks.mockReset()
         toastError.mockReset()
         toastSuccess.mockReset()
@@ -537,6 +539,81 @@ describe("FormBuilderPage", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Review Candidates" }))
 
         expect(screen.getByLabelText("Reviewer notes")).toHaveValue("")
+    })
+
+    it("shows the API reason when linking a submission to a surrogate fails", async () => {
+        const form: FormRead = {
+            id: "form-1",
+            name: "Surrogate Application",
+            status: "published",
+            purpose: "surrogate_application",
+            lead_kind: "surrogate",
+            created_at: "2026-07-16T00:00:00Z",
+            updated_at: "2026-07-16T00:00:00Z",
+            description: null,
+            form_schema: { pages: [{ title: "Application", fields: [] }] },
+            published_schema: null,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            max_file_count: 10,
+            allowed_mime_types: null,
+            default_application_email_template_id: null,
+        }
+        const submission: FormSubmissionRead = {
+            id: "submission-1",
+            form_id: "form-1",
+            surrogate_id: null,
+            donor_id: null,
+            lead_kind: "surrogate",
+            status: "pending_review",
+            submitted_at: "2026-07-16T00:00:00Z",
+            reviewed_at: null,
+            reviewed_by_user_id: null,
+            review_notes: null,
+            answers: { full_name: "Alex Applicant", email: "alex@example.com" },
+            schema_snapshot: null,
+            source_mode: "shared",
+            intake_link_id: "link-1",
+            intake_lead_id: null,
+            match_status: "ambiguous_review",
+            match_reason: null,
+            matched_at: null,
+            files: [],
+        }
+        mockResolveSubmissionMatch.mockRejectedValueOnce(
+            new Error("Surrogate already has a submission for this form"),
+        )
+        navigationState.formId = form.id
+        mockUseForm.mockReturnValue({ data: form, isLoading: false })
+        mockFormSubmissions.mockImplementation(
+            (_formId: string | null, params: ListFormSubmissionsParams = {}) => ({
+                data: params.match_status === "ambiguous_review" ? [submission] : [],
+                refetch: vi.fn(),
+                isLoading: false,
+            }),
+        )
+
+        render(<FormBuilderPage />)
+        fireEvent.click(screen.getByRole("tab", { name: /^submissions$/i }))
+        fireEvent.click(await screen.findByRole("button", { name: "Review Candidates" }))
+        fireEvent.change(screen.getByLabelText("Manual surrogate ID link"), {
+            target: { value: "surrogate-2" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Link Surrogate ID" }))
+
+        await vi.waitFor(() =>
+            expect(toastError).toHaveBeenCalledWith(
+                "Surrogate already has a submission for this form",
+            ),
+        )
+        expect(mockResolveSubmissionMatch).toHaveBeenCalledWith({
+            submissionId: "submission-1",
+            payload: {
+                surrogate_id: "surrogate-2",
+                create_intake_lead: false,
+                review_notes: null,
+            },
+        })
+        expect(toastSuccess).not.toHaveBeenCalledWith("Submission linked to surrogate")
     })
 
     it("keeps donor drafts unchanged and reports the required profile photo at publish", async () => {

@@ -11,7 +11,8 @@ from app.core.pipeline_stage_colors import resolve_stage_color
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.db.enums import Role, SurrogateSource, TaskType
 from app.schemas.auth import UserSession
-from app.services import pipeline_service
+from app.schemas.intended_parent import IntendedParentStageOption, IntendedParentStageOptions
+from app.services import pipeline_semantics_service, pipeline_service
 
 router = APIRouter(prefix="/metadata", tags=["metadata"])
 
@@ -88,16 +89,12 @@ def list_task_types(
     return {"task_types": task_types}
 
 
-@router.get("/intended-parent-statuses")
+@router.get("/intended-parent-statuses", response_model=IntendedParentStageOptions)
 def list_intended_parent_statuses(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-) -> object:
-    """
-    Get intended-parent stage metadata from the scoped default pipeline.
-
-    Returns list of {id, value, label, stage_key, stage_slug, stage_type, color, order}.
-    """
+) -> IntendedParentStageOptions:
+    """Active stages of the session org's default intended parent pipeline, with semantics."""
     pipeline = pipeline_service.get_or_create_default_pipeline(
         db,
         session.org_id,
@@ -105,14 +102,14 @@ def list_intended_parent_statuses(
         entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
     )
     statuses = [
-        {
-            "id": str(stage.id),
-            "value": stage.stage_key,
-            "label": stage.label,
-            "stage_key": stage.stage_key,
-            "stage_slug": stage.slug,
-            "stage_type": stage.stage_type,
-            "color": resolve_stage_color(
+        IntendedParentStageOption(
+            id=stage.id,
+            value=stage.stage_key,
+            label=stage.label,
+            stage_key=stage.stage_key,
+            stage_slug=stage.slug,
+            stage_type=stage.stage_type,
+            color=resolve_stage_color(
                 color=stage.color,
                 label=stage.label,
                 slug=stage.slug,
@@ -121,11 +118,12 @@ def list_intended_parent_statuses(
                 order=stage.order,
                 is_locked=stage.is_locked,
             ),
-            "order": stage.order,
-        }
+            order=stage.order,
+            semantics=pipeline_semantics_service.get_stage_semantics(stage),
+        )
         for stage in pipeline_service.get_stages(db, pipeline.id, include_inactive=False)
     ]
-    return {"statuses": statuses}
+    return IntendedParentStageOptions(statuses=statuses)
 
 
 @router.get("/match-statuses")

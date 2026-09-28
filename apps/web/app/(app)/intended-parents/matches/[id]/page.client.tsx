@@ -6,6 +6,7 @@ import Link from "@/components/app-link"
 import { toast } from "@/components/ui/toast"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Badge } from "@/components/ui/badge"
+import { stageBadgeStyle } from "@/lib/stage-colors"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -24,11 +25,9 @@ import {
     CalendarPlusIcon,
     CircleXIcon,
 } from "lucide-react"
-import { useMatch, matchKeys, useAcceptMatch, useDeclineMatch, useCancelMatch, useMatchWork, useCreateMatchNote, useUploadMatchFile, matchWorkKeys, useCompleteMatch, useWithdrawMatchCancellation } from "@/lib/hooks/use-matches"
+import { useMatch, matchKeys, useAcceptMatch, useDeclineMatch, useCancelMatch, useMatchWork, useCreateMatchNote, useUploadMatchFile, matchWorkKeys, useWithdrawMatchCancellation } from "@/lib/hooks/use-matches"
 import type { MatchRead, MatchWorkSource } from "@/lib/api/matches"
-import { CompleteMatchDialog } from "@/components/matches/CompleteMatchDialog"
 import { MatchAcceptWarnings, MatchActionControls, MatchConflictBadge, type MatchAction } from "@/components/matches/MatchActionControls"
-import { MatchAttemptControl } from "@/components/matches/MatchAttemptControl"
 import { MatchTasksCalendar } from "@/components/matches/MatchTasksCalendar"
 import { DeclineMatchDialog } from "@/components/matches/DeclineMatchDialog"
 import { CancelMatchDialog } from "@/components/matches/CancelMatchDialog"
@@ -93,6 +92,13 @@ function formatMatchDateTime(dateStr: string | null | undefined) {
 
 type MatchDetailOverviewTabsProps = ComponentProps<typeof MatchDetailOverviewTabs>
 
+/** Stage badge in the stage's color; neutral when the stage color is unknown. */
+function StageBadge({ color, className, children }: { color: string | null | undefined; className: string; children: ReactNode }) {
+    return color
+        ? <Badge className={className} style={stageBadgeStyle(color)}>{children}</Badge>
+        : <Badge variant="secondary" className={className}>{children}</Badge>
+}
+
 function MatchDetailHeader({
     match,
     pending,
@@ -122,9 +128,9 @@ function MatchDetailHeader({
                         {match.match_number ? `Match #${match.match_number}` : "—"}
                     </span>
                     {match.surrogate_stage_label && (
-                        <Badge variant="secondary" className="text-xs">
+                        <StageBadge color={match.surrogate_stage_color} className="text-xs">
                             {match.surrogate_stage_label}
-                        </Badge>
+                        </StageBadge>
                     )}
                 </div>
                 <Badge className={getMatchStatusBadgeClassName(match.status)}>
@@ -139,9 +145,7 @@ function MatchDetailHeader({
 
 function MatchDetailMainTabs({
     userAiEnabled,
-    attemptControls,
     matchId,
-    attemptId,
     participantKind,
     donorData,
     donorLoading,
@@ -152,14 +156,14 @@ function MatchDetailMainTabs({
     surrogateLoading,
     intendedParentData,
     intendedParentLoading,
+    participantStageColor,
+    intendedParentStageColor,
     overviewTabsProps,
     onShowScheduleParser,
     onAddTask,
 }: {
     userAiEnabled: boolean
-    attemptControls: ReactNode
     matchId: string
-    attemptId?: string
     participantKind: "surrogate" | "donor"
     donorData: Donor | undefined
     donorLoading: boolean
@@ -170,6 +174,8 @@ function MatchDetailMainTabs({
     surrogateLoading: boolean
     intendedParentData: IntendedParent | undefined
     intendedParentLoading: boolean
+    participantStageColor: string | null | undefined
+    intendedParentStageColor: string | null | undefined
     overviewTabsProps: MatchDetailOverviewTabsProps
     onShowScheduleParser: () => void
     onAddTask?: (() => void) | undefined
@@ -182,7 +188,6 @@ function MatchDetailMainTabs({
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="calendar">Calendar</TabsTrigger>
                     </TabsList>
-                    {attemptControls}
                     {userAiEnabled && participantKind === "surrogate" && (
                         <Button
                             variant="outline"
@@ -199,12 +204,14 @@ function MatchDetailMainTabs({
                 <TabsContent value="overview" className="h-[calc(100vh-145px)]">
                     {/* Below xl the case work column is too narrow for its four tabs, so it spans both card columns. */}
                     <div className="grid h-full gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-[minmax(0,35fr)_minmax(0,35fr)_minmax(0,30fr)]">
-                        {participantKind === "donor" ? <DonorProfileColumn donor={donorData} isLoading={donorLoading} isError={donorError} /> : <SurrogateProfileColumn
+                        {participantKind === "donor" ? <DonorProfileColumn donor={donorData} stageColor={participantStageColor} isLoading={donorLoading} isError={donorError} /> : <SurrogateProfileColumn
                             surrogateData={surrogateData}
+                            stageColor={participantStageColor}
                             isLoading={surrogateLoading}
                         />}
                         <IntendedParentProfileColumn
                             intendedParentData={intendedParentData}
+                            stageColor={intendedParentStageColor}
                             isLoading={intendedParentLoading}
                         />
                         <MatchDetailOverviewTabs {...overviewTabsProps} className="lg:col-span-2 xl:col-span-1" />
@@ -215,7 +222,6 @@ function MatchDetailMainTabs({
                     <MatchTasksCalendar
                         matchId={matchId}
                         participantKind={participantKind}
-                        {...(attemptId ? { attemptId } : {})}
                         surrogateId={surrogateId ?? ""}
                         ipId={intendedParentId}
                         {...(onAddTask ? { onAddTask } : {})}
@@ -226,13 +232,13 @@ function MatchDetailMainTabs({
     )
 }
 
-function DonorProfileColumn({ donor, isLoading, isError }: { donor: Donor | undefined; isLoading: boolean; isError: boolean }) {
+function DonorProfileColumn({ donor, stageColor, isLoading, isError }: { donor: Donor | undefined; stageColor: string | null | undefined; isLoading: boolean; isError: boolean }) {
     return <div className="min-w-0 border rounded-lg p-4 overflow-y-auto">
         <div className="flex items-center gap-2 mb-3"><UserIcon className="size-4 text-purple-500" /><h2 className="text-sm font-semibold text-purple-500">Donor</h2></div>
         {isLoading ? <div role="status" className="flex justify-center h-32 items-center"><Loader2Icon className="size-5 animate-spin" /></div> : isError ? <p role="alert" className="text-sm text-muted-foreground">Unable to load donor profile</p> : donor ? <div className="space-y-3">
             <div className="flex items-start gap-3">
                 <Avatar className="size-10"><AvatarFallback className="bg-purple-500/10 text-purple-500 text-sm">{donor.full_name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
-                <div className="min-w-0"><h3 className="text-base font-semibold truncate"><Link href={`/donors/${donor.id}`} className="hover:underline">{donor.full_name}</Link></h3><div className="flex flex-wrap gap-1 mt-0.5"><Badge variant="outline" className="text-xs px-1.5 py-0">#{donor.donor_number}</Badge><Badge variant="secondary" className="text-xs px-1.5 py-0">{donor.status_label}</Badge></div></div>
+                <div className="min-w-0"><h3 className="text-base font-semibold truncate"><Link href={`/donors/${donor.id}`} className="hover:underline">{donor.full_name}</Link></h3><div className="flex flex-wrap gap-1 mt-0.5"><Badge variant="outline" className="text-xs px-1.5 py-0">#{donor.donor_number}</Badge><StageBadge color={stageColor} className="text-xs px-1.5 py-0">{donor.status_label}</StageBadge></div></div>
             </div>
             <Separator />
             <div className="space-y-2 text-sm">
@@ -249,9 +255,11 @@ function DonorProfileColumn({ donor, isLoading, isError }: { donor: Donor | unde
 
 function SurrogateProfileColumn({
     surrogateData,
+    stageColor,
     isLoading,
 }: {
     surrogateData: SurrogateRead | undefined
+    stageColor: string | null | undefined
     isLoading: boolean
 }) {
     return (
@@ -284,7 +292,7 @@ function SurrogateProfileColumn({
                             </h3>
                             <div className="flex items-center gap-1 mt-0.5">
                                 <Badge variant="outline" className="text-xs px-1.5 py-0">#{surrogateData.surrogate_number}</Badge>
-                                <Badge variant="secondary" className="text-xs px-1.5 py-0">{surrogateData.status_label}</Badge>
+                                <StageBadge color={stageColor} className="text-xs px-1.5 py-0">{surrogateData.status_label}</StageBadge>
                             </div>
                         </div>
                     </div>
@@ -341,9 +349,11 @@ function SurrogateProfileColumn({
 
 function IntendedParentProfileColumn({
     intendedParentData,
+    stageColor,
     isLoading,
 }: {
     intendedParentData: IntendedParent | undefined
+    stageColor: string | null | undefined
     isLoading: boolean
 }) {
     return (
@@ -374,9 +384,9 @@ function IntendedParentProfileColumn({
                                     {intendedParentData.full_name || "Intended Parent"}
                                 </Link>
                             </h3>
-                            <Badge variant="secondary" className="text-xs px-1.5 py-0 mt-0.5">
+                            <StageBadge color={stageColor} className="text-xs px-1.5 py-0 mt-0.5">
                                 {intendedParentData.status_label || intendedParentData.status || "—"}
-                            </Badge>
+                            </StageBadge>
                         </div>
                     </div>
 
@@ -549,11 +559,11 @@ function MatchDetailDialogs({
     )
 }
 
-function useMatchDetailRelatedData(match: MatchRead | undefined, sourceFilter: SourceFilter, attemptId?: string, workPage = 1) {
+function useMatchDetailRelatedData(match: MatchRead | undefined, sourceFilter: SourceFilter, workPage = 1) {
     const { data: surrogateData, isLoading: surrogateLoading } = useSurrogate(match?.surrogate_id || "")
     const { data: ipData, isLoading: ipLoading } = useIntendedParent(match?.intended_parent_id || "")
     const donorQuery = useDonor(match?.donor_id ?? null)
-    const work = useMatchWork(match?.id ?? "", attemptId, workPage)
+    const work = useMatchWork(match?.id ?? "", workPage)
     return {
         surrogateData, surrogateLoading, ipData, ipLoading,
         donorData: donorQuery.data, donorLoading: donorQuery.isLoading, donorError: donorQuery.isError,
@@ -571,9 +581,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
     const [acceptDialogOpen, setAcceptDialogOpen] = useState(false)
     const [actionError, setActionError] = useState<string | null>(null)
     const [workPage, setWorkPage] = useState(1)
-    const [selectedAttemptId, setSelectedAttemptId] = useState("")
-    const [completeDialogOpen, setCompleteDialogOpen] = useState(false)
-    const completeMutation = useCompleteMatch()
     const [declineDialogOpen, setDeclineDialogOpen] = useState(false)
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
     const [addNoteDialogOpen, setAddNoteDialogOpen] = useState(false)
@@ -616,11 +623,10 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         filteredFiles,
         filteredTasks,
         filteredActivity,
-    } = useMatchDetailRelatedData(match, sourceFilter, selectedAttemptId || undefined, workPage)
+    } = useMatchDetailRelatedData(match, sourceFilter, workPage)
 
-    // Match actions come from allowed_actions. Attempt edits check the key the attempts API requires.
-    const canEditAttempts = can("propose_matches")
-    const canCreateWork = match?.status === "under_review" || match?.status === "accepted"
+    // Completed matches accept postpartum work; the backend rejects work on the other closed statuses.
+    const canCreateWork = match?.status === "under_review" || match?.status === "accepted" || match?.status === "completed"
 
     const invalidateMatchSourceQueries = (
         entityIds?: {
@@ -697,19 +703,18 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
         if (action === "accept") setAcceptDialogOpen(true)
         else if (action === "decline") setDeclineDialogOpen(true)
         else if (action === "request_cancel") setCancelDialogOpen(true)
-        else if (action === "complete") setCompleteDialogOpen(true)
         else void handleWithdrawCancellation()
     }
 
     const handleAddNote = async (source: MatchWorkSource, content: string) => {
         try {
-            await createNoteMutation.mutateAsync({ source, content, ...(selectedAttemptId ? { attempt_id: selectedAttemptId } : {}) })
+            await createNoteMutation.mutateAsync({ source, content })
             toast.success("Note added successfully")
         } catch (error) { toast.error("Failed to add note"); throw error }
     }
     const handleUploadFile = async (source: MatchWorkSource, file: File) => {
         try {
-            await uploadAttachmentMutation.mutateAsync({ source, file, ...(selectedAttemptId ? { attemptId: selectedAttemptId } : {}) })
+            await uploadAttachmentMutation.mutateAsync({ source, file })
             toast.success("File uploaded successfully")
         } catch (error) { toast.error("Failed to upload file"); throw error }
     }
@@ -721,7 +726,7 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
     }
     const handleAddTask = async (target: MatchWorkSource, data: TaskFormData) => {
         try {
-            await createTaskMutation.mutateAsync({ ...data, match_id: matchId, work_source: target, ...(selectedAttemptId ? { attempt_id: selectedAttemptId } : {}) })
+            await createTaskMutation.mutateAsync({ ...data, match_id: matchId, work_source: target })
             void queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
             void queryClient.invalidateQueries({ queryKey: matchWorkKeys.all(matchId) })
             toast.success("Task created successfully")
@@ -760,7 +765,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                         accept: acceptMatchMutation.isPending,
                         decline: declineMatchMutation.isPending,
                         request_cancel: cancelMatchMutation.isPending,
-                        complete: completeMutation.isPending,
                         withdraw_cancel: withdrawCancellationMutation.isPending,
                     }}
                     onAction={handleMatchAction}
@@ -785,8 +789,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                 ) : null}
                 {match.outcome && <div className="px-6 py-2 text-sm border-b"><span className="font-medium">Outcome: </span>{match.outcome}{match.closed_at && <span className="text-muted-foreground"> · {formatMatchDate(match.closed_at)}</span>}</div>}
                 <MatchDetailMainTabs
-                    attemptControls={<MatchAttemptControl match={match} selectedId={selectedAttemptId} onSelect={(id) => { setSelectedAttemptId(id); setWorkPage(1) }} canEdit={canEditAttempts} />}
-                    {...(selectedAttemptId ? { attemptId: selectedAttemptId } : {})}
                     matchId={matchId}
                     participantKind={match.match_kind ?? "surrogate"}
                     donorData={donorData}
@@ -799,6 +801,8 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                     surrogateLoading={surrogateLoading}
                     intendedParentData={ipData}
                     intendedParentLoading={ipLoading}
+                    participantStageColor={match.match_kind === "donor" ? match.donor_stage_color : match.surrogate_stage_color}
+                    intendedParentStageColor={match.ip_stage_color}
                     overviewTabsProps={{
                         participantKind: match.match_kind ?? "surrogate",
                         hasMore: hasMoreWork,
@@ -850,7 +854,6 @@ function MatchDetailPageContent({ matchId }: { matchId: string }) {
                     onConfirm={handleAcceptMatch}
                 />
             ) : null}
-            {completeDialogOpen && <CompleteMatchDialog onClose={() => setCompleteDialogOpen(false)} isPending={completeMutation.isPending} onComplete={async (data) => { const result = await completeMutation.mutateAsync({ matchId, data }); invalidateMatchSourceQueries(result) }} />}
             <MatchDetailDialogs
                 declineDialogOpen={declineDialogOpen}
                 cancelDialogOpen={cancelDialogOpen}

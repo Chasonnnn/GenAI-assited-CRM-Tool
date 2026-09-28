@@ -9,6 +9,7 @@ from app.core.permissions import (
     PERMISSION_PRESENTATION,
     PERMISSION_REGISTRY,
     PERMISSION_TOPIC_SECTIONS,
+    ROLE_DEFAULTS,
     V2_AI_PERMISSIONS,
     V2_DEFAULT_PERMISSIONS,
     V2_PERSONAL_WORKSPACE_PERMISSIONS,
@@ -96,6 +97,14 @@ def test_create_actions_are_independent_from_edit():
         )
         assert edit in effective
         assert create not in effective
+
+
+@pytest.mark.parametrize("defaults", [ROLE_DEFAULTS, V2_ROLE_DEFAULTS], ids=["v1", "v2"])
+def test_intended_parent_stage_change_defaults_follow_edit(defaults):
+    for role, permissions in defaults.items():
+        assert ("edit_intended_parents" in permissions) == (
+            "change_intended_parent_status" in permissions
+        ), role
 
 
 def test_every_permission_has_exactly_one_topic_and_short_label():

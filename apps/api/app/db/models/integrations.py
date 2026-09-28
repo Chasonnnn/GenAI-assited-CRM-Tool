@@ -246,6 +246,8 @@ class ZapierOutboundEvent(Base):
         nullable=True,
     )
     config_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Stage effective time; replaying a skipped surrogate event needs it.
+    effective_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)

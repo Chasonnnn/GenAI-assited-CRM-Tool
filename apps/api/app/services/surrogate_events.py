@@ -202,7 +202,7 @@ def _maybe_send_capi_event(
     - Surrogate source is META
     - Status changes into a different Meta status bucket
     """
-    from app.services import job_service, meta_capi
+    from app.services import job_service, meta_capi, meta_lead_service
 
     if surrogate.source != SurrogateSource.META.value:
         return
@@ -226,7 +226,10 @@ def _maybe_send_capi_event(
         )
         .first()
     )
-    if not meta_lead:
+    if not meta_lead or not meta_lead.meta_lead_id:
+        return
+    # A CRM-generated lead id is unknown to Meta.
+    if meta_lead_service.is_synthetic_meta_lead_id(meta_lead.meta_lead_id):
         return
 
     idempotency_key = f"meta_capi:{meta_lead.meta_lead_id}:{new_status}"

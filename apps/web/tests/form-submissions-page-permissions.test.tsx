@@ -6,7 +6,9 @@ import FormSubmissionsPage from "@/app/(app)/automation/form-submissions/page"
 const mocks = vi.hoisted(() => ({
     access: vi.fn(), forms: vi.fn(), submissions: vi.fn(), candidates: vi.fn(),
     resolve: vi.fn(), retry: vi.fn(), promote: vi.fn(), refetch: vi.fn(),
+    searchParams: new URLSearchParams(),
 }))
+vi.mock("next/navigation", () => ({ useSearchParams: () => mocks.searchParams }))
 vi.mock("@/components/app-link", () => ({
     default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => <a href={href} {...props}>{children}</a>,
 }))
@@ -20,7 +22,12 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useResolveSubmissionMatch: () => ({ mutateAsync: mocks.resolve, isPending: false }),
     useRetrySubmissionMatch: () => ({ mutateAsync: mocks.retry, isPending: false }),
     usePromoteIntakeLead: () => ({ mutateAsync: mocks.promote, isPending: false }),
+    useApproveFormSubmission: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useRejectFormSubmission: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useRescanSubmissionFile: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useSubmissionDonorCandidates: () => ({ data: [], isLoading: false, isError: false }),
 }))
+vi.mock("@/lib/hooks/use-donors", () => ({ useDonors: () => ({ data: undefined, isLoading: false, isError: false }) }))
 vi.mock("@/components/ui/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 function submission(): FormSubmissionRead {
@@ -32,6 +39,7 @@ function submission(): FormSubmissionRead {
 describe("standalone form submission access", () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        mocks.searchParams = new URLSearchParams()
         mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions"] }, isLoading: false, isError: false, refetch: mocks.refetch })
         mocks.forms.mockReturnValue({ data: [{ id: "form-1", name: "Applicant intake" }], isLoading: false, isError: false, refetch: mocks.refetch })
         mocks.submissions.mockReturnValue({ data: [submission()], isLoading: false, isError: false, refetch: mocks.refetch })
@@ -110,5 +118,33 @@ describe("standalone form submission access", () => {
         fireEvent.click(screen.getByRole("button", { name: "Keep As Lead" }))
         await waitFor(() => expect(mocks.resolve).toHaveBeenCalledWith({ submissionId: "submission-1", payload: { create_intake_lead: true, review_notes: null } }))
         expect(mocks.refetch).toHaveBeenCalled()
+    })
+
+    it("opens the form named in the link", () => {
+        mocks.searchParams = new URLSearchParams("form=form-2")
+        mocks.forms.mockReturnValue({ data: [{ id: "form-1", name: "Applicant intake" }, { id: "form-2", name: "Donor follow-up" }], isLoading: false, isError: false })
+        render(<FormSubmissionsPage />)
+        expect(screen.getByRole("combobox", { name: "Form" })).toHaveTextContent("Donor follow-up")
+        expect(mocks.submissions).toHaveBeenLastCalledWith("form-2", { limit: 100 })
+    })
+
+    it("falls back to the first form when the linked form is not reviewable", () => {
+        mocks.searchParams = new URLSearchParams("form=other-org-form")
+        render(<FormSubmissionsPage />)
+        expect(screen.getByRole("combobox", { name: "Form" })).toHaveTextContent("Applicant intake")
+        expect(mocks.submissions).toHaveBeenLastCalledWith("form-1", { limit: 100 })
+    })
+
+    it("shows donor review controls only with donor edit access", () => {
+        mocks.submissions.mockReturnValue({ data: [{ ...submission(), lead_kind: "egg_donor" }], isLoading: false })
+        mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions", "review_form_submissions", "edit_surrogates"] } })
+        const view = render(<FormSubmissionsPage />)
+        expect(screen.getByRole("button", { name: "Create Intake Lead" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Link to Donor" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument()
+        mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions", "review_form_submissions", "edit_donors"] } })
+        view.rerender(<FormSubmissionsPage />)
+        expect(screen.getByRole("button", { name: "Link to Donor" })).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument()
     })
 })

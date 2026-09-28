@@ -4,6 +4,7 @@ import { render, screen, fireEvent, within, act, waitFor } from '@testing-librar
 import IntegrationsPage from '../app/(app)/settings/integrations/page'
 import { ApiError } from '../lib/api'
 import type { ResendSettings } from '../lib/api/resend'
+import { toast } from '../components/ui/toast'
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -33,7 +34,9 @@ const mockZapierInboundUpdate = vi.fn()
 const mockZapierTestLead = vi.fn()
 const mockZapierOutboundUpdate = vi.fn()
 const mockZapierOutboundTest = vi.fn()
+const mockZapierDonorOutboundTest = vi.fn()
 const mockRetryZapierOutboundEvent = vi.fn()
+const mockReplayZapierOutboundEvent = vi.fn()
 const mockZapierFieldPaste = vi.fn()
 const mockZapierInboundDelete = vi.fn()
 const mockMetaConnectUrl = vi.fn()
@@ -74,7 +77,8 @@ const createZapierSettingsData = () => ({
         { stage_key: 'matched', event_name: 'ConvertedLead', enabled: true, bucket: null },
     ],
     donor_outbound_enabled: false,
-    donor_event_mapping: [],
+    // Null until the first donor mapping save.
+    donor_event_mapping: null,
 })
 
 const recommendedZapierMapping = [
@@ -516,9 +520,11 @@ vi.mock('@/lib/hooks/use-zapier', () => ({
     useZapierTestLead: () => ({ mutateAsync: mockZapierTestLead, isPending: false }),
     useUpdateZapierOutboundSettings: () => ({ mutateAsync: mockZapierOutboundUpdate, isPending: false }),
     useZapierOutboundTest: () => ({ mutateAsync: mockZapierOutboundTest, isPending: false }),
+    useZapierDonorOutboundTest: () => ({ mutateAsync: mockZapierDonorOutboundTest, isPending: false }),
     useZapierOutboundEventsSummary: () => ({ data: zapierEventsSummaryData, isLoading: false }),
     useZapierOutboundEvents: () => ({ data: zapierEventsData, isLoading: false }),
     useRetryZapierOutboundEvent: () => ({ mutateAsync: mockRetryZapierOutboundEvent, isPending: false }),
+    useReplayZapierOutboundEvent: () => ({ mutateAsync: mockReplayZapierOutboundEvent, isPending: false }),
     useZapierFieldPaste: () => ({ mutateAsync: mockZapierFieldPaste, isPending: false }),
     useDeleteZapierInboundWebhook: () => ({ mutateAsync: mockZapierInboundDelete, isPending: false }),
 }))
@@ -762,8 +768,10 @@ describe('IntegrationsPage', () => {
         mockZapierInboundUpdate.mockReset()
         mockZapierOutboundUpdate.mockReset()
         mockZapierOutboundTest.mockReset()
+        mockZapierDonorOutboundTest.mockReset()
         mockZapierTestLead.mockReset()
         mockRetryZapierOutboundEvent.mockReset()
+        mockReplayZapierOutboundEvent.mockReset()
         mockZapierFieldPaste.mockReset()
         mockZapierInboundDelete.mockReset()
         mockMetaConnectUrl.mockReset()
@@ -2047,6 +2055,93 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).queryByText('Paste the Zapier field list first.')).not.toBeInTheDocument()
     })
 
+    it('lists every active form as a Zapier route and links to mappings only with manage_meta_leads', () => {
+        metaFormsData = [
+            metaFormsData[0],
+            { ...metaFormsData[0], id: 'meta-form-2', form_external_id: '1234567890', form_name: 'Page Intake', page_id: '555', lead_kind: 'egg_donor' as const },
+            { ...metaFormsData[0], id: 'meta-form-3', form_external_id: '999', form_name: 'Retired Intake', page_id: '555', is_active: false },
+        ]
+        const view = render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        let dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Form routing' }))
+
+        const routes = within(dialog).getByRole('table')
+        expect(within(routes).getByText('Zapier Intake')).toBeInTheDocument()
+        expect(within(routes).getByText('Page Intake')).toBeInTheDocument()
+        expect(within(routes).getByText('Egg donor')).toBeInTheDocument()
+        expect(within(routes).queryByText('Retired Intake')).not.toBeInTheDocument()
+        expect(within(routes).queryByRole('columnheader', { name: 'Action' })).not.toBeInTheDocument()
+        expect(within(dialog).queryByRole('link', { name: 'Edit route' })).not.toBeInTheDocument()
+        expect(within(dialog).queryByRole('link', { name: 'Open form mappings' })).not.toBeInTheDocument()
+        view.unmount()
+
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_integrations', 'manage_meta_leads', 'view_donors', 'edit_donors'] },
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Form routing' }))
+        expect(within(dialog).getAllByRole('link', { name: 'Edit route' }).map((link) => link.getAttribute('href'))).toEqual([
+            '/settings/integrations/meta/forms/meta-form-1',
+            '/settings/integrations/meta/forms/meta-form-2',
+        ])
+        expect(within(dialog).getByRole('link', { name: 'Open form mappings' })).toHaveAttribute('href', '/settings/integrations/meta/forms')
+    })
+
+    it('sends the Meta form ID with a Zapier field paste and shows a rejected paste inline', async () => {
+        const detail = 'The pasted field list names form_id but not its value. Enter the Meta form ID, or paste sample data that includes it (form_id: 1234567890).'
+        mockZapierFieldPaste
+            .mockRejectedValueOnce(new ApiError(400, 'Bad Request', detail))
+            .mockResolvedValueOnce({
+                form_id: '1234567890',
+                form_name: null,
+                meta_form_id: 'meta-form-2',
+                field_count: 2,
+                field_keys: ['full_name', 'email'],
+                mapping_url: '/settings/integrations/meta/forms/meta-form-2',
+            })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Form routing' }))
+
+        const paste = ['form_id', 'full_name', 'email'].map((key) => `{{=gives["312"]["${key}"]}}`).join('\n')
+        fireEvent.change(within(dialog).getByLabelText('Paste Zapier Field List'), { target: { value: paste } })
+        fireEvent.click(within(dialog).getByRole('button', { name: /extract fields/i }))
+
+        expect(await within(dialog).findByText(detail)).toBeInTheDocument()
+        expect(mockZapierFieldPaste).toHaveBeenLastCalledWith({ paste, webhook_id: 'abc' })
+
+        fireEvent.change(within(dialog).getByLabelText('Meta form ID (optional)'), { target: { value: ' 1234567890 ' } })
+        fireEvent.click(within(dialog).getByRole('button', { name: /extract fields/i }))
+
+        await waitFor(() => expect(mockZapierFieldPaste).toHaveBeenLastCalledWith({ paste, webhook_id: 'abc', form_id: '1234567890' }))
+        expect(await within(dialog).findByText('Fields detected')).toBeInTheDocument()
+        expect(within(dialog).queryByText(detail)).not.toBeInTheDocument()
+        expect(within(dialog).queryByRole('link', { name: 'Open mapping' })).not.toBeInTheDocument()
+    })
+
+    it('defaults the test lead to the only active form when its page is not Zapier', async () => {
+        metaFormsData = [{ ...metaFormsData[0], form_external_id: '1234567890', page_id: '555' }]
+        mockZapierTestLead.mockResolvedValue({
+            status: 'converted',
+            duplicate: false,
+            meta_lead_id: 'lead-1',
+            surrogate_id: 'surrogate-1',
+            message: 'Stored',
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /send test lead/i }))
+
+        expect(mockZapierTestLead).toHaveBeenCalledWith({ form_id: '1234567890' })
+    })
+
     it('rotates the Resend webhook URL only after confirmation', async () => {
         mockRotateWebhook.mockResolvedValue({ webhook_url: 'https://api.test/webhooks/resend/new' })
 
@@ -2071,6 +2166,9 @@ describe('IntegrationsPage', () => {
             { ...metaFormsData[0], id: 'route-egg', form_name: 'Egg donor inquiry', lead_kind: 'egg_donor' },
             { ...metaFormsData[0], id: 'route-sperm', form_name: 'Sperm donor intake', lead_kind: 'sperm_donor' },
         ]
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_integrations', 'manage_meta_leads', 'view_donors', 'edit_donors'] },
+        })
 
         render(<IntegrationsPage />)
         fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
@@ -2106,7 +2204,7 @@ describe('IntegrationsPage', () => {
         fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
         expect(
             within(dialog).getByLabelText('Enable Egg donor Egg Donor Pipeline Ready to match'),
-        ).toBeChecked()
+        ).not.toBeChecked()
 
         mockUseZapierSettingsQuery.mockImplementation(() => ({
             data: { ...zapierSettingsData, inbound_webhooks: [...zapierSettingsData.inbound_webhooks] },
@@ -2120,7 +2218,7 @@ describe('IntegrationsPage', () => {
         fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
         expect(
             within(dialog).getByLabelText('Enable Egg donor Egg Donor Pipeline Ready to match'),
-        ).toBeChecked()
+        ).not.toBeChecked()
 
         fireEvent.click(within(dialog).getByRole('tab', { name: /incoming leads/i }))
         await act(async () => {
@@ -2134,7 +2232,7 @@ describe('IntegrationsPage', () => {
         expect(within(dialog).getByLabelText('Enable donor stage events')).toBeChecked()
         expect(
             within(dialog).getByLabelText('Enable Egg donor Egg Donor Pipeline Ready to match'),
-        ).toBeChecked()
+        ).not.toBeChecked()
 
         await act(async () => {
             fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
@@ -2149,14 +2247,14 @@ describe('IntegrationsPage', () => {
                         pipeline_id: 'egg-pipeline-1',
                         stage_id: 'egg-stage-ready',
                         event_name: 'Converted',
-                        enabled: true,
+                        enabled: false,
                     }),
                     expect.objectContaining({
                         donor_type: 'sperm',
                         pipeline_id: 'sperm-pipeline-1',
                         stage_id: 'sperm-stage-new',
                         event_name: 'Lead',
-                        enabled: true,
+                        enabled: false,
                     }),
                 ]),
             }),
@@ -2312,6 +2410,172 @@ describe('IntegrationsPage', () => {
         expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_event_mapping')
     })
 
+    it('suggests donor events from stage semantics and saves only tracked stages', async () => {
+        const eggPipeline = {
+            ...donorPipelineData.egg_donor[0],
+            stages: [
+                ...donorPipelineData.egg_donor[0].stages,
+                {
+                    id: 'egg-stage-hold',
+                    stage_key: 'on_hold',
+                    slug: 'on_hold',
+                    label: 'On hold',
+                    stage_type: 'paused',
+                    is_active: true,
+                    semantics: { integration_bucket: 'none' },
+                },
+                {
+                    id: 'egg-stage-disqualified',
+                    stage_key: 'disqualified',
+                    slug: 'disqualified',
+                    label: 'Disqualified',
+                    stage_type: 'terminal',
+                    is_active: true,
+                    semantics: { integration_bucket: 'not_qualified' },
+                },
+                {
+                    id: 'egg-stage-closed',
+                    stage_key: 'closed',
+                    slug: 'closed',
+                    label: 'Closed',
+                    stage_type: 'terminal',
+                    is_active: true,
+                    semantics: { integration_bucket: 'converted' },
+                },
+            ],
+        }
+        mockUsePipelines.mockImplementation((entityType = 'surrogate') => ({
+            data: entityType === 'surrogate'
+                ? pipelineData
+                : entityType === 'egg_donor'
+                    ? [eggPipeline]
+                    : donorPipelineData.sperm_donor,
+            isLoading: false,
+            isError: false,
+        }))
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
+        fireEvent.click(within(dialog).getByLabelText('Enable donor stage events'))
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
+
+        const expectRow = (stageLabel: string, eventLabel: string, enabled: boolean) => {
+            expect(
+                within(dialog).getByLabelText(`Zapier event for Egg donor ${stageLabel}`),
+            ).toHaveTextContent(eventLabel)
+            const toggle = within(dialog).getByLabelText(
+                `Enable Egg donor Egg Donor Pipeline ${stageLabel}`,
+            )
+            if (enabled) {
+                expect(toggle).toBeChecked()
+            } else {
+                expect(toggle).not.toBeChecked()
+                expect(toggle).toHaveAttribute('data-disabled')
+            }
+        }
+        expectRow('New inquiry', 'Lead', true)
+        expectRow('Ready to match', 'Converted', true)
+        expectRow('On hold', 'Not Tracked', false)
+        expectRow('Disqualified', 'Not Qualified', true)
+        expectRow('Closed', 'Not Tracked', false)
+
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+
+        const payload = mockZapierOutboundUpdate.mock.calls[0]?.[0]
+        expect(payload.donor_event_mapping).toEqual([
+            { donor_type: 'egg', pipeline_id: 'egg-pipeline-1', stage_id: 'egg-stage-new', event_name: 'Lead', enabled: true },
+            { donor_type: 'egg', pipeline_id: 'egg-pipeline-1', stage_id: 'egg-stage-ready', event_name: 'Converted', enabled: true },
+            { donor_type: 'egg', pipeline_id: 'egg-pipeline-1', stage_id: 'egg-stage-disqualified', event_name: 'Not Qualified', enabled: true },
+            { donor_type: 'sperm', pipeline_id: 'sperm-pipeline-1', stage_id: 'sperm-stage-new', event_name: 'Lead', enabled: true },
+        ])
+    })
+
+    it('does not re-suggest donor events for stages left out of a saved mapping', async () => {
+        const savedItem = {
+            donor_type: 'egg' as const,
+            pipeline_id: 'egg-pipeline-1',
+            stage_id: 'egg-stage-ready',
+            event_name: 'Converted' as const,
+            enabled: true,
+        }
+        zapierSettingsData = {
+            ...createZapierSettingsData(),
+            donor_outbound_enabled: true,
+            donor_event_mapping: [savedItem],
+        }
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
+        fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
+
+        expect(
+            within(dialog).getByLabelText('Zapier event for Egg donor New inquiry'),
+        ).toHaveTextContent('Not Tracked')
+        expect(
+            within(dialog).getByLabelText('Enable Egg donor Egg Donor Pipeline New inquiry'),
+        ).not.toBeChecked()
+
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+
+        expect(mockZapierOutboundUpdate.mock.calls[0]?.[0].donor_event_mapping).toEqual([savedItem])
+    })
+
+    it('keeps every donor stage Not Tracked after that mapping is saved and reloaded', async () => {
+        const donorStages = [
+            ['Egg donors', 'Egg donor', 'Egg Donor Pipeline', 'New inquiry'],
+            ['Egg donors', 'Egg donor', 'Egg Donor Pipeline', 'Ready to match'],
+            ['Sperm donors', 'Sperm donor', 'Sperm Donor Pipeline', 'New inquiry'],
+        ] as const
+        mockZapierOutboundUpdate.mockResolvedValue({})
+        const { rerender } = render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        let dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
+        fireEvent.click(within(dialog).getByLabelText('Enable donor stage events'))
+        for (const [tab, donorLabel, , stageLabel] of donorStages) {
+            fireEvent.click(within(dialog).getByRole('tab', { name: tab }))
+            fireEvent.click(within(dialog).getByLabelText(`Zapier event for ${donorLabel} ${stageLabel}`))
+            // Closed popups can stay mounted; the open one is the latest.
+            const notTracked = screen.getAllByRole('option', { name: 'Not Tracked' }).at(-1)!
+            fireEvent.mouseMove(notTracked)
+            fireEvent.click(notTracked)
+        }
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+        expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).toMatchObject({
+            donor_outbound_enabled: true,
+            donor_event_mapping: [],
+        })
+
+        zapierSettingsData = {
+            ...zapierSettingsData,
+            donor_outbound_enabled: true,
+            donor_event_mapping: [],
+        }
+        rerender(<IntegrationsPage />)
+        dialog = screen.getByRole('dialog')
+        for (const [tab, donorLabel, pipelineName, stageLabel] of donorStages) {
+            fireEvent.click(within(dialog).getByRole('tab', { name: tab }))
+            expect(
+                within(dialog).getByLabelText(`Zapier event for ${donorLabel} ${stageLabel}`),
+            ).toHaveTextContent('Not Tracked')
+            expect(
+                within(dialog).getByLabelText(`Enable ${donorLabel} ${pipelineName} ${stageLabel}`),
+            ).not.toBeChecked()
+        }
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
+        })
+        expect(mockZapierOutboundUpdate.mock.calls[1]?.[0].donor_event_mapping).toEqual([])
+    })
+
     it('passes a real lead id to the outbound zapier test action', async () => {
         zapierSettingsData = {
             ...createZapierSettingsData(),
@@ -2340,6 +2604,129 @@ describe('IntegrationsPage', () => {
             stage_key: 'new_unread',
             lead_id: 'real-lead-123',
         })
+    })
+
+    it('sends a donor test event from the activity tab', async () => {
+        zapierSettingsData = {
+            ...createZapierSettingsData(),
+            outbound_webhook_url: 'https://hooks.zapier.com/hooks/catch/123/abc',
+            donor_outbound_enabled: true,
+        }
+        mockZapierDonorOutboundTest.mockResolvedValue({
+            status: 'queued',
+            event_name: 'Lead',
+            event_id: 'zapier_donor_test:egg:lead:1',
+            lead_id: 'real-donor-lead',
+        })
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        expect(within(dialog).getByRole('combobox', { name: 'Donor test type' })).toHaveTextContent('Egg donor')
+        expect(within(dialog).getByRole('combobox', { name: 'Donor test event' })).toHaveTextContent('Lead')
+        expect(within(dialog).getByRole('combobox', { name: 'Donor test attribution' })).toHaveTextContent('Meta lead')
+        expect(within(dialog).getByLabelText('Lead ID (optional)')).toHaveAttribute('maxLength', '120')
+        fireEvent.change(within(dialog).getByLabelText('Lead ID (optional)'), {
+            target: { value: 'real-donor-lead' },
+        })
+        await act(async () => {
+            fireEvent.click(within(dialog).getByRole('button', { name: /send donor test event/i }))
+        })
+
+        expect(mockZapierDonorOutboundTest).toHaveBeenCalledWith({
+            donor_type: 'egg',
+            event_name: 'Lead',
+            attribution_source: 'meta',
+            lead_id: 'real-donor-lead',
+        })
+        expect(mockZapierOutboundTest).not.toHaveBeenCalled()
+    })
+
+    it('disables the donor test event while donor reporting is off', () => {
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        expect(within(dialog).getByRole('button', { name: /send donor test event/i })).toBeDisabled()
+    })
+
+    it('hides the donor test event without donor edit access', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_integrations', 'view_donors'] },
+        })
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        expect(within(dialog).queryByRole('button', { name: /send donor test event/i })).not.toBeInTheDocument()
+        expect(within(dialog).getByRole('button', { name: /send test event/i })).toBeInTheDocument()
+    })
+
+    it('labels donor skip reasons, sources and test events in zapier activity', () => {
+        const baseEvent = zapierEventsData.items[0]
+        zapierEventsData = {
+            items: [
+                {
+                    ...baseEvent,
+                    id: 'event-config',
+                    status: 'skipped',
+                    reason: 'donor_config_changed',
+                    last_error: null,
+                    can_retry: false,
+                    donor_type: 'egg',
+                    pipeline_id: 'egg-pipeline-1',
+                    stage_id: 'egg-stage-ready',
+                    attribution_source: 'meta',
+                },
+                {
+                    ...baseEvent,
+                    id: 'event-unknown',
+                    status: 'skipped',
+                    reason: 'future_skip_reason',
+                    last_error: null,
+                    can_retry: false,
+                },
+                {
+                    ...baseEvent,
+                    id: 'event-test',
+                    source: 'test',
+                    status: 'delivered',
+                    event_name: 'Lead',
+                    last_error: null,
+                    can_retry: false,
+                    stage_key: null,
+                    stage_label: null,
+                    donor_type: 'sperm',
+                    attribution_source: 'website',
+                    lead_id: null,
+                },
+                {
+                    ...baseEvent,
+                    id: 'event-workflow-like',
+                    source: 'bulk_backfill',
+                    status: 'queued',
+                    last_error: null,
+                    can_retry: false,
+                },
+            ],
+            total: 4,
+        }
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        expect(within(dialog).getByText('Configuration changed before sending')).toBeInTheDocument()
+        expect(within(dialog).getByText('Future skip reason')).toBeInTheDocument()
+        expect(within(dialog).getByText('Bulk backfill')).toBeInTheDocument()
+        expect(within(dialog).getByText('Sperm donor · Test event')).toBeInTheDocument()
+        expect(within(dialog).queryByText(/_/)).not.toBeInTheDocument()
+        expect(within(dialog).queryByText('Sperm donor stage unavailable')).not.toBeInTheDocument()
     })
 
     it('syncs zapier stage mapping rows with the live pipeline even when saved settings are stale', () => {
@@ -2469,6 +2856,68 @@ describe('IntegrationsPage', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: /retry/i }))
 
         expect(mockRetryZapierOutboundEvent).toHaveBeenCalledWith({ eventId: 'event-1' })
+    })
+
+    it('replays skipped zapier events only when the event allows it', async () => {
+        const baseEvent = zapierEventsData.items[0]
+        zapierEventsData = {
+            items: [
+                {
+                    ...baseEvent,
+                    id: 'event-replayable',
+                    status: 'skipped',
+                    reason: 'outbound_disabled',
+                    last_error: null,
+                    can_retry: false,
+                    can_replay: true,
+                },
+                {
+                    ...baseEvent,
+                    id: 'event-final',
+                    status: 'skipped',
+                    reason: 'duplicate',
+                    last_error: null,
+                    can_retry: false,
+                    can_replay: false,
+                },
+            ],
+            total: 2,
+        }
+        const success = vi.spyOn(toast, 'success')
+        const warning = vi.spyOn(toast, 'warning')
+        const error = vi.spyOn(toast, 'error')
+        mockReplayZapierOutboundEvent
+            .mockResolvedValueOnce({ ...zapierEventsData.items[0], status: 'queued', reason: null, can_replay: false })
+            .mockResolvedValueOnce({ ...zapierEventsData.items[0], reason: 'unmapped_stage', can_replay: true })
+            .mockRejectedValueOnce(new Error('Event delivery is still in progress'))
+            .mockRejectedValueOnce(new Error(''))
+
+        render(<IntegrationsPage />)
+        fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
+        const dialog = screen.getByRole('dialog')
+        fireEvent.click(within(dialog).getByRole('tab', { name: /activity/i }))
+
+        const replayButtons = within(dialog).getAllByRole('button', { name: /^replay$/i })
+        expect(replayButtons).toHaveLength(2)
+        expect(replayButtons[0]).toBeEnabled()
+        expect(replayButtons[1]).toBeDisabled()
+        expect(within(dialog).queryByRole('button', { name: /^retry$/i })).not.toBeInTheDocument()
+
+        fireEvent.click(replayButtons[0])
+        await waitFor(() => expect(success).toHaveBeenCalledWith('Replay queued'))
+        expect(mockReplayZapierOutboundEvent).toHaveBeenCalledWith({ eventId: 'event-replayable' })
+
+        fireEvent.click(replayButtons[0])
+        await waitFor(() => expect(warning).toHaveBeenCalledWith('Replay skipped: Stage not mapped'))
+
+        fireEvent.click(replayButtons[0])
+        await waitFor(() => expect(error).toHaveBeenCalledWith('Event delivery is still in progress'))
+
+        fireEvent.click(replayButtons[0])
+        await waitFor(() => expect(error).toHaveBeenCalledWith('Failed to replay outbound event'))
+        success.mockRestore()
+        warning.mockRestore()
+        error.mockRestore()
     })
 
     it('loads and saves Meta CRM dataset settings in the Meta dialog', async () => {

@@ -382,6 +382,11 @@ class UpdateStatusExecutor(ActionExecutor):
                 "success": result["status"] == "applied",
             }
         old_label = surrogate.status_label
+        from app.services import match_lifecycle
+
+        now = datetime.now(UTC)
+        # Legacy direct write: keep the Delivered match completion of apply_status_change.
+        match_lifecycle.complete_on_delivery(db, surrogate, stage, actor_user_id=user_id, now=now)
         surrogate.stage_id = stage.id
         surrogate.status_label = stage.label
 
@@ -396,6 +401,8 @@ class UpdateStatusExecutor(ActionExecutor):
             from_label_snapshot=old_label,
             to_label_snapshot=stage.label,
             changed_by_user_id=user_id,
+            # The undo finds the completed match by closed_at >= recorded_at; use one clock.
+            recorded_at=now,
         )
         db.add(history)
 

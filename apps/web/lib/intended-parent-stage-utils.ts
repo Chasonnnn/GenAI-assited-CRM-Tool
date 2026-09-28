@@ -2,64 +2,17 @@ import type { CSSProperties } from "react"
 
 import type { StageMetadataOption } from "@/lib/api/metadata"
 import type { PipelineStage } from "@/lib/api/pipelines"
-
-const DEFAULT_INTENDED_PARENT_STAGE_OPTIONS: StageMetadataOption[] = [
-    {
-        id: "new",
-        value: "new",
-        label: "New",
-        stage_key: "new",
-        stage_slug: "new",
-        stage_type: "intake",
-        color: "#3B82F6",
-        order: 1,
-    },
-    {
-        id: "ready_to_match",
-        value: "ready_to_match",
-        label: "Ready to Match",
-        stage_key: "ready_to_match",
-        stage_slug: "ready_to_match",
-        stage_type: "post_approval",
-        color: "#F59E0B",
-        order: 2,
-    },
-    {
-        id: "matched",
-        value: "matched",
-        label: "Matched",
-        stage_key: "matched",
-        stage_slug: "matched",
-        stage_type: "post_approval",
-        color: "#10B981",
-        order: 3,
-    },
-    {
-        id: "delivered",
-        value: "delivered",
-        label: "Delivered",
-        stage_key: "delivered",
-        stage_slug: "delivered",
-        stage_type: "post_approval",
-        color: "#14B8A6",
-        order: 4,
-    },
-]
+import { stageBadgeStyle } from "@/lib/stage-colors"
 
 function normalizeColor(color: string | null | undefined): string {
     return /^#[0-9A-Fa-f]{6}$/.test(color ?? "") ? String(color) : "#6B7280"
 }
 
-function withHexAlpha(color: string, alphaHex: string): string {
-    const normalized = normalizeColor(color)
-    return `${normalized}${alphaHex}`
-}
-
+/** Stage ids come only from the org's pipeline; there is no built-in fallback list. */
 export function getIntendedParentStageOptions(
     options: StageMetadataOption[] | undefined | null,
 ): StageMetadataOption[] {
-    const resolved = options?.length ? options : DEFAULT_INTENDED_PARENT_STAGE_OPTIONS
-    return resolved.toSorted((left, right) => left.order - right.order)
+    return (options ?? []).toSorted((left, right) => left.order - right.order)
 }
 
 function getIntendedParentStageOptionByValue(
@@ -97,14 +50,9 @@ export function getIntendedParentStatusStyle(
     value: string | null | undefined,
     fallbackColor?: string | null,
 ): CSSProperties {
-    const color = normalizeColor(
+    return stageBadgeStyle(normalizeColor(
         getIntendedParentStageOptionByValue(options, value)?.color ?? fallbackColor,
-    )
-    return {
-        borderColor: withHexAlpha(color, "33"),
-        backgroundColor: withHexAlpha(color, "14"),
-        color,
-    }
+    ))
 }
 
 export function toPipelineStages(options: StageMetadataOption[] | undefined | null): PipelineStage[] {
@@ -118,5 +66,6 @@ export function toPipelineStages(options: StageMetadataOption[] | undefined | nu
         category: stage.stage_type,
         stage_type: stage.stage_type,
         is_active: true,
+        semantics: stage.semantics,
     }))
 }

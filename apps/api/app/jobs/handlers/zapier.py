@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from uuid import UUID
 
 import httpx
@@ -19,7 +20,7 @@ from app.db.models import (
     ZapierOutboundEvent,
 )
 from app.jobs.utils import safe_url
-from app.services import zapier_monitor_service, zapier_settings_service
+from app.services import meta_outbound_service, zapier_monitor_service, zapier_settings_service
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ DONOR_PAYLOAD_KEYS = frozenset(
         "lifecycle_stage_name",
         "stage_in_sales_process",
         "event_time",
+        "record_type",
         "attribution_source",
         "lead_id",
         "facebook_lead_id",
@@ -40,23 +42,89 @@ DONOR_PAYLOAD_KEYS = frozenset(
         "meta_ad_id",
         "meta_adset_id",
         "meta_campaign_id",
+        "meta_ad_name",
+        "meta_adset_name",
+        "meta_campaign_name",
+        "meta_form_name",
+        "meta_page_name",
+        "meta_platform",
         "ad_id",
         "adset_id",
         "campaign_id",
         "fbclid",
         "fbc",
+        "facebook_click_id",
         "fbp",
+        "customer_email",
+        "customer_phone_number",
         "user_data",
+        "test_mode",
     }
 )
 DONOR_USER_DATA_KEYS = frozenset({"email_hash", "phone_hash"})
+# Sent only while the shared outbound_send_hashed_pii setting is on, as for surrogates.
+DONOR_CONTACT_KEYS = ("customer_email", "customer_phone_number", "user_data")
 
 
 def _skip_donor_delivery(db, job, reason: str) -> None:
     zapier_monitor_service.mark_job_skipped(db=db, job_id=job.id, reason=reason)
 
 
-async def _process_donor_stage_event(db, job, payload: dict) -> None:
+def _filter_donor_payload(webhook_data: object, *, settings) -> dict:
+    """Apply the donor positive allowlist and the current hashed-PII setting."""
+    if not isinstance(webhook_data, dict):
+        raise RuntimeError("Donor Zapier event payload is invalid")
+    filtered = {key: value for key, value in webhook_data.items() if key in DONOR_PAYLOAD_KEYS}
+    user_data = filtered.get("user_data")
+    if isinstance(user_data, dict):
+        filtered["user_data"] = {
+            key: value for key, value in user_data.items() if key in DONOR_USER_DATA_KEYS
+        }
+        if not filtered["user_data"]:
+            filtered.pop("user_data")
+    else:
+        filtered.pop("user_data", None)
+    if not settings.outbound_send_hashed_pii:
+        for key in DONOR_CONTACT_KEYS:
+            filtered.pop(key, None)
+    return filtered
+
+
+def _parse_event_time(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _meta_lead_timestamp(meta_lead_row) -> datetime | None:
+    if meta_lead_row is None:
+        return None
+    return meta_lead_row.meta_created_time or meta_lead_row.received_at
+
+
+def _apply_send_event_time(webhook_data: dict, *, lead_timestamp: datetime | None) -> bool:
+    """Set the event_time to send; False when the lead is too old for that time.
+
+    Meta rejects events older than 7 days, so older event times move to 6 days ago at send
+    time. The 90-day lead-age rule then applies to the time that is sent.
+    """
+    event_time = _parse_event_time(webhook_data.get("event_time"))
+    if event_time is None:
+        return True
+    sent_time = meta_outbound_service.clamp_meta_event_time(event_time)
+    if not meta_outbound_service.is_meta_lead_within_reporting_window(
+        lead_timestamp, event_time=sent_time
+    ):
+        return False
+    if sent_time != event_time:
+        webhook_data["event_time"] = sent_time.isoformat()
+    return True
+
+
+def _load_donor_event(db, job, payload: dict) -> ZapierOutboundEvent:
     try:
         event_record_id = UUID(str(payload.get("event_record_id") or ""))
     except ValueError as exc:
@@ -75,13 +143,63 @@ async def _process_donor_stage_event(db, job, payload: dict) -> None:
     )
     if event is None:
         raise RuntimeError("Donor Zapier event is unavailable")
+    return event
 
+
+def _donor_delivery_settings(db, job):
+    """Return current delivery settings, or None after recording why delivery is skipped."""
     settings = zapier_settings_service.get_settings(db, job.organization_id)
     if settings is None or not settings.donor_outbound_enabled:
         _skip_donor_delivery(db, job, "donor_dispatch_disabled")
-        return
+        return None
     if not settings.outbound_webhook_url:
         _skip_donor_delivery(db, job, "donor_dispatch_url_missing")
+        return None
+    return settings
+
+
+async def _post_donor_payload(settings, webhook_data: dict) -> None:
+    webhook_url = validate_outbound_webhook_url(settings.outbound_webhook_url)
+    headers: dict[str, str] = {}
+    secret = zapier_settings_service.decrypt_webhook_secret(
+        settings.outbound_webhook_secret_encrypted
+    )
+    if secret:
+        headers["X-Webhook-Token"] = secret
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(webhook_url, json=webhook_data, headers=headers)
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(f"Zapier webhook returned HTTP {exc.response.status_code}") from exc
+    except httpx.RequestError as exc:
+        raise RuntimeError("Zapier webhook request failed") from exc
+
+
+async def _process_donor_test_event(db, job, payload: dict) -> None:
+    event = _load_donor_event(db, job, payload)
+    if event.source != "test" or event.donor_type is None:
+        raise RuntimeError("Donor Zapier test event is unavailable")
+    if event.status == "skipped":
+        return
+    settings = _donor_delivery_settings(db, job)
+    if settings is None:
+        return
+    await _post_donor_payload(
+        settings, _filter_donor_payload(payload.get("data"), settings=settings)
+    )
+    logger.info("Donor Zapier test event delivered for job %s", job.id)
+
+
+async def _process_donor_stage_event(db, job, payload: dict) -> None:
+    event = _load_donor_event(db, job, payload)
+    if event.status == "skipped":
+        # Withdrawn before dispatch, e.g. by an undo within the grace period.
+        return
+
+    settings = _donor_delivery_settings(db, job)
+    if settings is None:
         return
     if (
         not event.donor_type
@@ -109,19 +227,21 @@ async def _process_donor_stage_event(db, job, payload: dict) -> None:
         _skip_donor_delivery(db, job, "donor_subject_missing")
         return
 
+    lead_timestamp = None
     if event.attribution_source == "meta":
-        meta_lead_id = (
-            db.query(MetaLead.id)
+        meta_lead_row = (
+            db.query(MetaLead.id, MetaLead.meta_created_time, MetaLead.received_at)
             .filter(
                 MetaLead.organization_id == job.organization_id,
                 MetaLead.converted_donor_id == event.donor_id,
                 MetaLead.meta_lead_id == event.lead_id,
             )
-            .scalar()
+            .first()
         )
-        if meta_lead_id is None:
+        if meta_lead_row is None:
             _skip_donor_delivery(db, job, "donor_attribution_missing")
             return
+        lead_timestamp = _meta_lead_timestamp(meta_lead_row)
     elif event.attribution_source == "website":
         if event.first_party_submission_id is None:
             _skip_donor_delivery(db, job, "donor_attribution_missing")
@@ -192,43 +312,17 @@ async def _process_donor_stage_event(db, job, payload: dict) -> None:
         _skip_donor_delivery(db, job, "donor_config_changed")
         return
 
-    webhook_data = payload.get("data")
-    if not isinstance(webhook_data, dict):
-        raise RuntimeError("Donor Zapier event payload is invalid")
-    webhook_data = {key: value for key, value in webhook_data.items() if key in DONOR_PAYLOAD_KEYS}
-    user_data = webhook_data.get("user_data")
-    if isinstance(user_data, dict):
-        webhook_data["user_data"] = {
-            key: value for key, value in user_data.items() if key in DONOR_USER_DATA_KEYS
-        }
-        if not webhook_data["user_data"]:
-            webhook_data.pop("user_data")
-    else:
-        webhook_data.pop("user_data", None)
-    if not settings.outbound_send_hashed_pii:
-        webhook_data.pop("user_data", None)
+    webhook_data = _filter_donor_payload(payload.get("data"), settings=settings)
     if webhook_data.get("attribution_source") == "website" and not (
         webhook_data.get("fbc") or webhook_data.get("fbp") or webhook_data.get("user_data")
     ):
         _skip_donor_delivery(db, job, "missing_matching_data")
         return
+    if not _apply_send_event_time(webhook_data, lead_timestamp=lead_timestamp):
+        _skip_donor_delivery(db, job, "stale_meta_lead")
+        return
 
-    webhook_url = validate_outbound_webhook_url(settings.outbound_webhook_url)
-    headers: dict[str, str] = {}
-    secret = zapier_settings_service.decrypt_webhook_secret(
-        settings.outbound_webhook_secret_encrypted
-    )
-    if secret:
-        headers["X-Webhook-Token"] = secret
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(webhook_url, json=webhook_data, headers=headers)
-            response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        raise RuntimeError(f"Zapier webhook returned HTTP {exc.response.status_code}") from exc
-    except httpx.RequestError as exc:
-        raise RuntimeError("Zapier webhook request failed") from exc
+    await _post_donor_payload(settings, webhook_data)
     logger.info("Donor Zapier stage event delivered for job %s", job.id)
 
 
@@ -239,6 +333,9 @@ async def process_zapier_stage_event(db, job) -> None:
 
     if payload.get("delivery_kind") == "donor_stage":
         await _process_donor_stage_event(db, job, payload)
+        return
+    if payload.get("delivery_kind") == "donor_test":
+        await _process_donor_test_event(db, job, payload)
         return
 
     webhook_url = payload.get("url")
@@ -258,6 +355,23 @@ async def process_zapier_stage_event(db, job) -> None:
             str(exc),
         )
         return
+
+    if isinstance(webhook_data, dict):
+        webhook_data = dict(webhook_data)
+        lead_timestamp = None
+        lead_id = webhook_data.get("lead_id")
+        if not webhook_data.get("test_mode") and job.organization_id and lead_id:
+            lead_timestamp = _meta_lead_timestamp(
+                db.query(MetaLead.meta_created_time, MetaLead.received_at)
+                .filter(
+                    MetaLead.organization_id == job.organization_id,
+                    MetaLead.meta_lead_id == str(lead_id),
+                )
+                .first()
+            )
+        if not _apply_send_event_time(webhook_data, lead_timestamp=lead_timestamp):
+            zapier_monitor_service.mark_job_skipped(db=db, job_id=job.id, reason="stale_meta_lead")
+            return
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(webhook_url, json=webhook_data, headers=webhook_headers)

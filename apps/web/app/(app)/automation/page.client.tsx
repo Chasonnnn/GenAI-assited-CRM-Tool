@@ -87,6 +87,8 @@ import { getTasks, type TaskListParams } from "@/lib/api/tasks"
 import { getSurrogates, type SurrogateListParams } from "@/lib/api/surrogates"
 import { listDonors } from "@/lib/api/donors"
 import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
+import { DONOR_SOURCE_LABELS } from "@/lib/donor-source-labels"
+import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
 import { getWorkflowExecutionStatusLabel } from "@/lib/constants/workflow-execution-status"
 import { US_STATES } from "@/lib/constants/us-states"
 import { parseDateInput } from "@/lib/utils/date"
@@ -95,9 +97,12 @@ import { completeWorkflowSetup, startWorkflowSetup } from "@/lib/workflow-metric
 import {
     areJsonObjectsEqual,
     ConditionValueInput,
+    APPLICANT_TYPE_BOTH,
+    APPLICANT_TYPE_OPTIONS,
     EMAIL_RECIPIENT_OPTIONS,
     FORM_MATCH_STATUS_OPTIONS,
     FORM_SOURCE_MODE_OPTIONS,
+    INTAKE_LEAD_KIND_CONFIG_KEYS,
     LIST_OPERATORS,
     MULTISELECT_FIELDS,
     OWNER_TYPE_OPTIONS,
@@ -105,11 +110,15 @@ import {
     VALUELESS_OPERATORS,
     createClientRowId,
     getEmailRecipientKind,
+    getApplicantTypeLabel,
     getEmailRecipientUserId,
+    isDonorIntakeWorkflow,
+    isDonorLeadKind,
     normalizeEditableActionsForSave as normalizeActionsForSave,
     normalizeEditableActionsForUi as normalizeActionsForUi,
     normalizeEditableConditionsForSave as normalizeConditionsForSave,
     normalizeEditableConditionsForUi as normalizeConditionsForUi,
+    stripDonorPromotionOptions,
     toListArray,
     type EditableAction,
     type EditableCondition,
@@ -200,6 +209,25 @@ const CREATE_WORKFLOW_SUBJECT_OPTIONS: Array<{
     { value: "sperm_donor", label: WORKFLOW_SUBJECT_LABELS.sperm_donor },
 ]
 
+// Mirrors workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES; the engine matches on subject_type.
+const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubjectType>> = {
+    form_submitted: "form_submission",
+    intake_lead_created: "intake_lead",
+    match_proposed: "match",
+    match_accepted: "match",
+    match_declined: "match",
+    match_cancelled: "match",
+    appointment_scheduled: "appointment",
+    appointment_completed: "appointment",
+}
+
+// Update Field writes only canonical donor sources; the backend rejects anything else.
+const UPDATE_SOURCE_OPTIONS = toSelectOptions(DONOR_SOURCE_LABELS)
+const getUpdateSourceLabel = createSelectLabelGetter(DONOR_SOURCE_LABELS, {
+    emptyLabel: "Select source",
+    unknownLabel: "Unknown source",
+})
+
 const DONOR_TYPE_OPTIONS: SelectOption[] = [
     { value: "egg", label: "Egg Donor" },
     { value: "sperm", label: "Sperm Donor" },
@@ -209,6 +237,19 @@ function isDonorSubject(
     subjectType: WorkflowSubjectType,
 ): subjectType is Extract<WorkflowSubjectType, "egg_donor" | "sperm_donor"> {
     return subjectType === "egg_donor" || subjectType === "sperm_donor"
+}
+
+// Mirrors workflow_service.SHARED_DONOR_STAGE_ERROR.
+const SHARED_DONOR_STAGE_ERROR = "Stage references need a form for one donor type."
+
+// The applicant type belongs to the previous form; the backend rejects a lead kind that does
+// not match the selected form.
+function withIntakeTriggerForm(triggerType: string, config: JsonObject, formId: string | null): JsonObject {
+    if (config.form_id === formId) return config
+    const next: JsonObject = { ...config, form_id: formId }
+    const leadKindKey = INTAKE_LEAD_KIND_CONFIG_KEYS[triggerType]
+    if (leadKindKey) delete next[leadKindKey]
+    return next
 }
 
 function getDonorExecutionLink(execution: WorkflowExecution): string | null {
@@ -895,6 +936,11 @@ function useAutomationPageView({
     const canManageAutomation = can("manage_automation")
     const policyV2 = (policyVersion ?? 1) >= 2
     const canManageOrgWorkflows = canManageAutomation && (!policyV2 || can("manage_org_workflows"))
+    // Mirrors the create route: v1 also requires edit_donors for donor workflows.
+    const canCreateDonorWorkflows = can("view_donors") && (policyV2 || can("edit_donors"))
+    const createWorkflowSubjectOptions = CREATE_WORKFLOW_SUBJECT_OPTIONS.filter(
+        (option) => canCreateDonorWorkflows || !isDonorSubject(option.value),
+    )
     const [detailsWorkflow, setDetailsWorkflow] = useState<WorkflowListItem | null>(null)
     const [activeTab] = useState(initialTab)
 
@@ -942,6 +988,7 @@ function useAutomationPageView({
         conditionLogic,
         actions,
     } = workflowBuilderState
+    const savedSubjectType = FIXED_TRIGGER_SUBJECT_TYPES[triggerType] ?? subjectType
     const {
         open: showTestModal,
         workflowId: testWorkflowId,
@@ -1011,8 +1058,43 @@ function useAutomationPageView({
     const { data: workflows, isLoading: workflowsLoading } = workflowsQuery
     const { data: stats, isLoading: statsLoading } = useWorkflowStats()
     const { data: options } = useWorkflowOptions(workflowScope, subjectType)
-    const statusOptions = options?.statuses ?? EMPTY_STATUS_OPTIONS
+    const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
+    const triggerForm = options?.forms?.find((form) => form.id === triggerConfig.form_id)
+    const isDonorIntakeTrigger = isDonorIntakeWorkflow({ triggerConfig, formLeadKind: triggerForm?.lead_kind })
+    // Intake workflows update the linked surrogate or donor, so their stage and update-field
+    // options come from the pipeline of the trigger form's lead kind (mirrors
+    // workflow_service.resolve_workflow_record_type).
+    const intakeLeadKindKey = INTAKE_LEAD_KIND_CONFIG_KEYS[triggerType]
+    const configuredIntakeLeadKind = intakeLeadKindKey ? triggerConfig[intakeLeadKindKey] : undefined
+    const intakeLeadKind =
+        isDonorLeadKind(triggerForm?.lead_kind) && isDonorLeadKind(configuredIntakeLeadKind)
+            ? configuredIntakeLeadKind
+            : triggerForm?.lead_kind ?? configuredIntakeLeadKind
+    const recordSubjectType: WorkflowSubjectType =
+        intakeLeadKindKey && !isDonorSubject(subjectType) && isDonorLeadKind(intakeLeadKind)
+            ? intakeLeadKind
+            : subjectType
+    const isSharedDonorTriggerForm =
+        Boolean(intakeLeadKindKey) && (triggerForm?.lead_kinds?.filter(isDonorLeadKind).length ?? 0) > 1
+    // A form shared by both donor types has no single pipeline, so its workflows cannot
+    // reference stages unless the trigger names one donor type.
+    const hasSharedDonorRecord = isSharedDonorTriggerForm && !isDonorLeadKind(configuredIntakeLeadKind)
+    const setIntakeApplicantType = (value: string | null) => {
+        if (!intakeLeadKindKey) return
+        setTriggerConfig((currentConfig) => {
+            const nextConfig: JsonObject = { ...currentConfig }
+            if (isDonorLeadKind(value)) nextConfig[intakeLeadKindKey] = value
+            else delete nextConfig[intakeLeadKindKey]
+            return nextConfig
+        })
+    }
+    const { data: recordOptions } = useWorkflowOptions(workflowScope, recordSubjectType)
+    const statusOptions = recordOptions?.statuses ?? EMPTY_STATUS_OPTIONS
     const activeStatusOptions = statusOptions.filter((status) => status.is_active !== false)
+    const recordUpdateFields = recordOptions?.update_fields ?? []
+    const updateFields = hasSharedDonorRecord
+        ? recordUpdateFields.filter((field) => field !== "stage_id")
+        : recordUpdateFields
     const actionTypeOptions = options?.action_types ?? []
     const actionTypeValuesForTrigger = triggerType && options?.action_types_by_trigger?.[triggerType]
         ? new Set(options.action_types_by_trigger[triggerType])
@@ -1036,8 +1118,6 @@ function useAutomationPageView({
             }),
         ]
         : EMAIL_RECIPIENT_OPTIONS
-    const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
-    const updateFields = options?.update_fields ?? []
     const conditionOperators = options?.condition_operators ?? []
     const { data: executions } = useWorkflowExecutions(selectedWorkflowId || "", { limit: 20 })
     const historyWorkflowName = workflows?.find((workflow) => workflow.id === selectedWorkflowId)?.name
@@ -1102,7 +1182,10 @@ function useAutomationPageView({
     const selectedTriggerFields = Array.isArray(triggerConfig.fields)
         ? triggerConfig.fields.filter((field): field is string => typeof field === "string")
         : []
-    const availableConditionFields = options?.condition_fields ?? []
+    const optionConditionFields = options?.condition_fields ?? []
+    const availableConditionFields = hasSharedDonorRecord
+        ? optionConditionFields.filter((field) => field !== "stage_id")
+        : optionConditionFields
 
     const getActionsValidationError = (): string | null => {
         if (actions.length === 0) return "Add at least one action."
@@ -1185,7 +1268,16 @@ function useAutomationPageView({
             const triggerError = getTriggerConfigValidationError()
             if (triggerError) return triggerError
         }
+        if (step === 2 && hasSharedDonorRecord && conditions.some((condition) => condition.field === "stage_id")) {
+            return SHARED_DONOR_STAGE_ERROR
+        }
         if (step === 3) {
+            if (
+                hasSharedDonorRecord &&
+                actions.some((action) => action.action_type === "update_field" && action.field === "stage_id")
+            ) {
+                return SHARED_DONOR_STAGE_ERROR
+            }
             return getActionsValidationError()
         }
         return null
@@ -1339,12 +1431,12 @@ function useAutomationPageView({
             ) {
                 return { ...action, recipients: "donor" }
             }
-            return action
+            return isDonorIntakeTrigger ? stripDonorPromotionOptions(action) : action
         })
 
         const data: WorkflowCreate = {
             name: workflowName,
-            subject_type: subjectType,
+            subject_type: savedSubjectType,
             trigger_type: triggerType,
             trigger_config: buildTriggerConfig(),
             conditions: normalizeConditionsForSave(conditions),
@@ -1417,8 +1509,7 @@ function useAutomationPageView({
     const updateActionType = (index: number, actionType: string) => {
         updateAction(index, {
             action_type: actionType,
-            ...(isDonorSubject(subjectType) &&
-            (actionType === "send_email" || actionType === "send_message")
+            ...(isDonorSubject(subjectType) && actionType === "send_message"
                 ? { requires_approval: true }
                 : {}),
         })
@@ -1739,7 +1830,7 @@ function useAutomationPageView({
                                                 </SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {CREATE_WORKFLOW_SUBJECT_OPTIONS.map((option) => (
+                                                {createWorkflowSubjectOptions.map((option) => (
                                                     <SelectItem key={option.value} value={option.value}>
                                                         {option.label}
                                                     </SelectItem>
@@ -1929,7 +2020,9 @@ function useAutomationPageView({
                                         <Select
                                             value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                                             onValueChange={(value) =>
-                                                setTriggerConfig((currentConfig) => ({ ...currentConfig, form_id: value }))
+                                                setTriggerConfig((currentConfig) =>
+                                                    withIntakeTriggerForm(triggerType, currentConfig, value),
+                                                )
                                             }
                                         >
                                             <SelectTrigger className="mt-1.5">
@@ -1962,7 +2055,9 @@ function useAutomationPageView({
                                         <Select
                                             value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                                             onValueChange={(value) =>
-                                                setTriggerConfig((currentConfig) => ({ ...currentConfig, form_id: value }))
+                                                setTriggerConfig((currentConfig) =>
+                                                    withIntakeTriggerForm(triggerType, currentConfig, value),
+                                                )
                                             }
                                         >
                                             <SelectTrigger className="mt-1.5">
@@ -1987,6 +2082,31 @@ function useAutomationPageView({
                                                 Publish a form to use this trigger.
                                             </p>
                                         )}
+                                    </div>
+                                )}
+                                {isSharedDonorTriggerForm && (
+                                    <div>
+                                        <Label>Applicant Type</Label>
+                                        <Select
+                                            aria-label="Applicant Type"
+                                            value={
+                                                isDonorLeadKind(configuredIntakeLeadKind)
+                                                    ? configuredIntakeLeadKind
+                                                    : APPLICANT_TYPE_BOTH
+                                            }
+                                            onValueChange={setIntakeApplicantType}
+                                        >
+                                            <SelectTrigger aria-label="Applicant Type" className="mt-1.5">
+                                                <SelectValue>{getApplicantTypeLabel}</SelectValue>
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {APPLICANT_TYPE_OPTIONS.map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                        {getApplicantTypeLabel(option.value)}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 )}
                                 {triggerType === "task_due" && (
@@ -2543,10 +2663,11 @@ function useAutomationPageView({
                                                 {action.action_type === "update_field" && (
                                                     <div className="space-y-3">
                                                         <Select
+                                                            aria-label={`Field to update ${index + 1}`}
                                                             value={typeof action.field === "string" ? action.field : ""}
                                                             onValueChange={(value) => value && updateAction(index, { field: value, value: "" })}
                                                         >
-                                                            <SelectTrigger>
+                                                            <SelectTrigger aria-label={`Field to update ${index + 1}`}>
                                                                 <SelectValue placeholder="Select field" />
                                                             </SelectTrigger>
                                                             <SelectContent>
@@ -2559,10 +2680,11 @@ function useAutomationPageView({
                                                         </Select>
                                                         {action.field === "stage_id" ? (
                                                             <Select
+                                                                aria-label={`Stage value ${index + 1}`}
                                                                 value={typeof action.value === "string" ? action.value : ""}
                                                                 onValueChange={(value) => value && updateAction(index, { value })}
                                                             >
-                                                                <SelectTrigger>
+                                                                <SelectTrigger aria-label={`Stage value ${index + 1}`}>
                                                                     <SelectValue placeholder="Select stage" />
                                                                 </SelectTrigger>
                                                                 <SelectContent>
@@ -2584,6 +2706,25 @@ function useAutomationPageView({
                                                                 <SelectContent>
                                                                     <SelectItem value="true">Priority</SelectItem>
                                                                     <SelectItem value="false">Normal</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        ) : action.field === "source" ? (
+                                                            <Select
+                                                                aria-label={`Source value ${index + 1}`}
+                                                                value={typeof action.value === "string" ? action.value : ""}
+                                                                onValueChange={(value) => value && updateAction(index, { value })}
+                                                            >
+                                                                <SelectTrigger aria-label={`Source value ${index + 1}`}>
+                                                                    <SelectValue placeholder="Select source">
+                                                                        {getUpdateSourceLabel}
+                                                                    </SelectValue>
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    {UPDATE_SOURCE_OPTIONS.map((source) => (
+                                                                        <SelectItem key={source.value} value={source.value}>
+                                                                            {source.label}
+                                                                        </SelectItem>
+                                                                    ))}
                                                                 </SelectContent>
                                                             </Select>
                                                         ) : action.field === "owner_type" ? (
@@ -2670,24 +2811,28 @@ function useAutomationPageView({
                                                             value={typeof action.source === "string" ? action.source : ""}
                                                             onChange={(e) => updateAction(index, { source: e.target.value })}
                                                         />
-                                                        <div className="flex items-center justify-between rounded-md border p-3">
-                                                            <div className="text-sm">Mark as priority</div>
-                                                            <Switch
-                                                                checked={typeof action.is_priority === "boolean" ? action.is_priority : false}
-                                                                onCheckedChange={(checked) =>
-                                                                    updateAction(index, { is_priority: checked })
-                                                                }
-                                                            />
-                                                        </div>
-                                                        <div className="flex items-center justify-between rounded-md border p-3">
-                                                            <div className="text-sm">Assign to workflow owner if available</div>
-                                                            <Switch
-                                                                checked={typeof action.assign_to_user === "boolean" ? action.assign_to_user : false}
-                                                                onCheckedChange={(checked) =>
-                                                                    updateAction(index, { assign_to_user: checked })
-                                                                }
-                                                            />
-                                                        </div>
+                                                        {!isDonorIntakeTrigger && (
+                                                            <>
+                                                                <div className="flex items-center justify-between rounded-md border p-3">
+                                                                    <div className="text-sm">Mark as priority</div>
+                                                                    <Switch
+                                                                        checked={typeof action.is_priority === "boolean" ? action.is_priority : false}
+                                                                        onCheckedChange={(checked) =>
+                                                                            updateAction(index, { is_priority: checked })
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                                <div className="flex items-center justify-between rounded-md border p-3">
+                                                                    <div className="text-sm">Assign to workflow owner if available</div>
+                                                                    <Switch
+                                                                        checked={typeof action.assign_to_user === "boolean" ? action.assign_to_user : false}
+                                                                        onCheckedChange={(checked) =>
+                                                                            updateAction(index, { assign_to_user: checked })
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 )}
                                                 {/* Requires Approval Toggle */}
@@ -2712,8 +2857,7 @@ function useAutomationPageView({
                                                             onCheckedChange={(checked) => updateAction(index, { requires_approval: checked })}
                                                             disabled={
                                                                 isDonorSubject(subjectType) &&
-                                                                (action.action_type === "send_email" ||
-                                                                    action.action_type === "send_message")
+                                                                action.action_type === "send_message"
                                                             }
                                                         />
                                                     </div>
@@ -2738,7 +2882,7 @@ function useAutomationPageView({
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">Record Type:</span>
                                             <span className="font-medium">
-                                                {WORKFLOW_SUBJECT_LABELS[subjectType]}
+                                                {WORKFLOW_SUBJECT_LABELS[savedSubjectType]}
                                             </span>
                                         </div>
                                         <div className="flex justify-between">

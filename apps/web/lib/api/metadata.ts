@@ -1,6 +1,6 @@
 import api from '../api'
 import type { MatchStatus } from "./matches"
-import type { StageType } from "./pipelines"
+import type { StageSemantics, StageType } from "./pipelines"
 
 export interface StageMetadataOption {
     id: string
@@ -11,6 +11,7 @@ export interface StageMetadataOption {
     stage_type: StageType
     color: string
     order: number
+    semantics: StageSemantics
 }
 
 export interface MatchStatusMetadata {
@@ -19,6 +20,7 @@ export interface MatchStatusMetadata {
     color: string
     order: number
     allowed_transitions: MatchStatus[]
+    system_transitions: MatchStatus[]
 }
 
 export async function getIntendedParentStatuses(): Promise<{ statuses: StageMetadataOption[] }> {

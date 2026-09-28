@@ -4,7 +4,7 @@ import { useReducer } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from "@/components/app-link";
 import { useRouter } from 'next/navigation';
-import { getPlatformStats, listOrganizations } from '@/lib/api/platform';
+import { listOrganizations } from '@/lib/api/platform';
 import { buttonVariants } from '@/components/ui/button-variants';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/empty-state';
@@ -86,13 +86,6 @@ export default function AgenciesPage() {
         retry: false,
         staleTime: 30_000,
     });
-    // Same query the ops layout uses for the nav badge, so this reads from cache.
-    const statsQuery = useQuery({
-        queryKey: ['platform', 'stats'],
-        queryFn: getPlatformStats,
-        retry: false,
-        staleTime: 60_000,
-    });
     const agencies = agenciesQuery.data?.items ?? [];
     const isLoading = agenciesQuery.isFetching;
     const hasActiveFilters = search.trim() !== '' || statusFilter !== '';
@@ -109,9 +102,6 @@ export default function AgenciesPage() {
         <div>
             <PageHeader
                 title="Agencies"
-                count={agenciesQuery.isSuccess ? agencies.length : null}
-                countTotal={statsQuery.data?.agency_count}
-                countLabel="agencies"
                 actions={createAgencyLink}
             />
 

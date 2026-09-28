@@ -10,13 +10,14 @@ from typing import Any
 
 from fastapi import UploadFile
 from pydantic import EmailStr, TypeAdapter
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.enums import (
     AuditEventType,
     FormSubmissionStatus,
+    IntakeLeadStatus,
     JobStatus,
     JobType,
     SurrogateActivityType,
@@ -27,6 +28,7 @@ from app.db.models import (
     FormFieldMapping,
     FormSubmission,
     FormSubmissionFile,
+    IntakeLead,
     Job,
     Surrogate,
 )
@@ -48,6 +50,7 @@ from app.services.surrogate_input_normalization_service import (
 )
 from app.utils.normalization import normalize_phone
 
+DONOR_LEAD_KINDS = {"egg_donor", "sperm_donor"}
 DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_FILE_COUNT = 10
 PER_FILE_FIELD_MAX_COUNT = 5
@@ -239,6 +242,35 @@ def get_donor_numbers_for_submissions(
         )
         .all()
     }
+
+
+def list_donor_submissions(
+    db: Session,
+    org_id: uuid.UUID,
+    donor_id: uuid.UUID,
+    *,
+    session=None,
+) -> list[tuple[FormSubmission, str]]:
+    """Applications linked to one donor, newest first, with their form names."""
+    query = (
+        db.query(FormSubmission, Form.name)
+        .join(
+            Form,
+            (Form.id == FormSubmission.form_id) & (Form.organization_id == org_id),
+        )
+        .filter(
+            FormSubmission.organization_id == org_id,
+            FormSubmission.donor_id == donor_id,
+        )
+    )
+    if session is not None:
+        from app.services import form_submission_access
+
+        query = query.filter(form_submission_access.visibility_filter(db, session))
+    return [
+        (submission, form_name)
+        for submission, form_name in query.order_by(FormSubmission.submitted_at.desc()).all()
+    ]
 
 
 def get_submission_by_surrogate(
@@ -667,20 +699,189 @@ def mark_submission_file_scanned(
     record.scan_status = status
     record.quarantined = status in ("infected", "error")
     db.flush()
-    if status == "clean":
-        from app.services import donor_intake_service
+    if status not in ("clean", "infected"):
+        return record
+    from app.services import donor_intake_service
 
-        submission = (
-            db.query(FormSubmission)
-            .filter(
-                FormSubmission.organization_id == record.organization_id,
-                FormSubmission.id == record.submission_id,
-            )
-            .first()
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == record.organization_id,
+            FormSubmission.id == record.submission_id,
         )
-        if submission:
-            donor_intake_service.enqueue_promotion(db, submission=submission)
+        .first()
+    )
+    if not submission:
+        return record
+    if status == "clean":
+        donor_intake_service.enqueue_promotion(db, submission=submission)
+        donor_intake_service.apply_linked_photo_after_scan(db, submission)
+    elif donor_intake_service.is_profile_photo(db, submission, record.id):
+        donor_intake_service.hold_for_photo_review(db, submission)
     return record
+
+
+# Transient scanner failures retry after these delays before the file is marked "error".
+SUBMISSION_FILE_SCAN_RETRY_DELAYS_SECONDS = (60, 300, 900)
+
+
+def _in_flight_submission_file_scan_jobs(
+    db: Session, org_id: uuid.UUID, submission_file_id: uuid.UUID
+) -> list[Job]:
+    return (
+        db.query(Job)
+        .filter(
+            Job.organization_id == org_id,
+            Job.job_type == JobType.FORM_SUBMISSION_FILE_SCAN.value,
+            Job.status.in_([JobStatus.PENDING.value, JobStatus.RUNNING.value]),
+            Job.payload["submission_file_id"].as_string() == str(submission_file_id),
+        )
+        .all()
+    )
+
+
+def schedule_submission_file_scan_retry(db: Session, file_id: uuid.UUID) -> bool:
+    """Keep a transiently failed scan pending and enqueue the next attempt; caller commits.
+
+    Returns False when the attempts are exhausted and the caller must mark the file "error".
+    """
+    record = (
+        db.query(FormSubmissionFile)
+        .filter(FormSubmissionFile.id == file_id)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if record is None or record.scan_status != "pending":
+        return False
+    jobs = _in_flight_submission_file_scan_jobs(db, record.organization_id, record.id)
+    if any(job.status == JobStatus.PENDING.value for job in jobs):
+        return True
+    # The running job is the attempt that just failed; a rescan starts again at attempt 1.
+    attempt = max(
+        (
+            int((job.payload or {}).get("scan_attempt") or 1)
+            for job in jobs
+            if job.status == JobStatus.RUNNING.value
+        ),
+        default=1,
+    )
+    if attempt > len(SUBMISSION_FILE_SCAN_RETRY_DELAYS_SECONDS):
+        return False
+    job_service.enqueue_job(
+        db=db,
+        org_id=record.organization_id,
+        job_type=JobType.FORM_SUBMISSION_FILE_SCAN,
+        payload={"submission_file_id": str(record.id), "scan_attempt": attempt + 1},
+        run_at=datetime.now(UTC)
+        + timedelta(seconds=SUBMISSION_FILE_SCAN_RETRY_DELAYS_SECONDS[attempt - 1]),
+        commit=False,
+    )
+    return True
+
+
+def request_submission_file_rescan(
+    db: Session,
+    *,
+    submission: FormSubmission,
+    file_record: FormSubmissionFile,
+    user_id: uuid.UUID,
+) -> FormSubmissionFile:
+    """Reset a file whose scan failed and queue a fresh bounded scan cycle."""
+    from app.services import audit_service
+
+    record = (
+        db.query(FormSubmissionFile)
+        .filter(
+            FormSubmissionFile.organization_id == submission.organization_id,
+            FormSubmissionFile.submission_id == submission.id,
+            FormSubmissionFile.id == file_record.id,
+            FormSubmissionFile.deleted_at.is_(None),
+        )
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if record is None:
+        raise LookupError("File not found")
+    if record.scan_status != "error":
+        raise ValueError("Only files whose scan failed can be rescanned")
+    try:
+        record.scan_status = "pending"
+        record.quarantined = False
+        audit_service.log_event(
+            db=db,
+            org_id=submission.organization_id,
+            event_type=AuditEventType.FORM_SUBMISSION_FILE_RESCAN_REQUESTED,
+            actor_user_id=user_id,
+            target_type="form_submission_file",
+            target_id=record.id,
+            details={"submission_id": str(submission.id)},
+        )
+        ensure_submission_file_scan_job(db, submission.organization_id, record.id, commit=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(record)
+    return record
+
+
+def _approve_donor_submission(
+    db: Session,
+    submission: FormSubmission,
+    reviewer_id: uuid.UUID,
+    review_notes: str | None,
+) -> FormSubmission:
+    from app.services import audit_service, donor_intake_service
+
+    submission = (
+        db.query(FormSubmission)
+        .filter(
+            FormSubmission.organization_id == submission.organization_id,
+            FormSubmission.id == submission.id,
+        )
+        .with_for_update()
+        .populate_existing()
+        .one()
+    )
+    if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
+        raise ValueError("Submission is not pending review")
+    if not submission.donor_id:
+        raise ValueError("Submission is not linked to a donor")
+    donor = (
+        db.query(Donor)
+        .filter(
+            Donor.organization_id == submission.organization_id,
+            Donor.id == submission.donor_id,
+        )
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if not donor:
+        raise ValueError("Donor not found")
+    try:
+        donor_intake_service.apply_linked_submission(
+            db, submission=submission, donor=donor, actor_user_id=reviewer_id
+        )
+        donor_intake_service.mark_submission_approved(submission, reviewer_id=reviewer_id)
+        submission.review_notes = review_notes
+        audit_service.log_event(
+            db=db,
+            org_id=submission.organization_id,
+            event_type=AuditEventType.FORM_SUBMISSION_APPROVED,
+            actor_user_id=reviewer_id,
+            target_type="form_submission",
+            target_id=submission.id,
+            details={"form_id": str(submission.form_id), "donor_id": str(donor.id)},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(submission)
+    return submission
 
 
 def approve_submission(
@@ -689,6 +890,8 @@ def approve_submission(
     reviewer_id: uuid.UUID,
     review_notes: str | None,
 ) -> FormSubmission:
+    if submission.lead_kind in DONOR_LEAD_KINDS:
+        return _approve_donor_submission(db, submission, reviewer_id, review_notes)
     if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
         raise ValueError("Submission is not pending review")
     if not submission.surrogate_id:
@@ -741,6 +944,39 @@ def approve_submission(
     return submission
 
 
+def _close_rejected_submission_lead(db: Session, submission: FormSubmission) -> None:
+    """A rejected application closes its pending intake lead so it leaves promotion."""
+    if not submission.intake_lead_id:
+        return
+    lead = (
+        db.query(IntakeLead)
+        .filter(
+            IntakeLead.organization_id == submission.organization_id,
+            IntakeLead.id == submission.intake_lead_id,
+        )
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if lead is None or lead.status != IntakeLeadStatus.PENDING_REVIEW.value:
+        return
+    still_open = (
+        db.query(FormSubmission.id)
+        .filter(
+            FormSubmission.organization_id == submission.organization_id,
+            or_(
+                FormSubmission.intake_lead_id == lead.id,
+                FormSubmission.id == lead.form_submission_id,
+            ),
+            FormSubmission.id != submission.id,
+            FormSubmission.status != FormSubmissionStatus.REJECTED.value,
+        )
+        .first()
+    )
+    if still_open is None:
+        lead.status = IntakeLeadStatus.REJECTED.value
+
+
 def reject_submission(
     db: Session,
     submission: FormSubmission,
@@ -754,6 +990,7 @@ def reject_submission(
     submission.reviewed_at = datetime.now(UTC)
     submission.reviewed_by_user_id = reviewer_id
     submission.review_notes = review_notes
+    _close_rejected_submission_lead(db, submission)
 
     from app.services import audit_service
 
@@ -766,7 +1003,11 @@ def reject_submission(
         target_id=submission.id,
         details={
             "form_id": str(submission.form_id),
-            "surrogate_id": str(submission.surrogate_id),
+            **(
+                {"donor_id": str(submission.donor_id) if submission.donor_id else None}
+                if submission.lead_kind in DONOR_LEAD_KINDS
+                else {"surrogate_id": str(submission.surrogate_id)}
+            ),
         },
     )
 

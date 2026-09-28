@@ -78,8 +78,9 @@ def test_worker_env_flags_and_backoff(monkeypatch):
     assert worker._rate_limit_backoff_seconds(10) <= 3630
 
 
-def test_worker_claimed_job_types_exclude_remote_scan_jobs(monkeypatch):
-    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+@pytest.mark.parametrize("worker_job_types", [None, [JobType.FORM_SUBMISSION_FILE_SCAN.value]])
+def test_worker_claimed_job_types_include_remote_scan_jobs(monkeypatch, worker_job_types):
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", worker_job_types)
     monkeypatch.setattr(
         worker.scan_dispatch_service,
         "remote_scan_dispatch_configured",
@@ -88,11 +89,73 @@ def test_worker_claimed_job_types_exclude_remote_scan_jobs(monkeypatch):
 
     claimed = worker._claimed_job_types()
 
-    assert claimed is not None
-    assert JobType.ATTACHMENT_SCAN.value not in claimed
-    assert JobType.FORM_SUBMISSION_FILE_SCAN.value not in claimed
-    assert JobType.MESSAGE_MEDIA_SCAN.value not in claimed
-    assert JobType.SEND_EMAIL.value in claimed
+    if worker_job_types is None:
+        # None means every job type, including scans the worker hands to Cloud Run.
+        assert claimed is None
+    else:
+        assert claimed == [JobType.FORM_SUBMISSION_FILE_SCAN.value]
+
+
+@pytest.mark.asyncio
+async def test_worker_dispatches_due_scan_retry_to_remote_scan_job(monkeypatch, db, test_org):
+    from app.services import scan_dispatch_service
+
+    submission_file_id = uuid4()
+    retry = Job(
+        organization_id=test_org.id,
+        job_type=JobType.FORM_SUBMISSION_FILE_SCAN.value,
+        payload={"submission_file_id": str(submission_file_id), "scan_attempt": 2},
+        run_at=datetime.now(UTC) - timedelta(seconds=1),
+        status=JobStatus.PENDING.value,
+    )
+    db.add(retry)
+    db.commit()
+    retry_id = retry.id
+    stop_event = asyncio.Event()
+    dispatched: list[dict] = []
+    claim_pending_jobs = worker.job_service.claim_pending_jobs
+
+    async def _dispatch(**kwargs):
+        dispatched.append(kwargs)
+
+    def _claim(session, *, limit, job_types):
+        jobs = claim_pending_jobs(session, limit=limit, job_types=job_types)
+        if not jobs:
+            stop_event.set()
+        return jobs
+
+    monkeypatch.setattr(worker, "WORKER_CUTOVER_HOLD", False)
+    monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "SESSION_CLEANUP_INTERVAL_SECONDS", 10**12)
+    monkeypatch.setattr(worker, "_start_claim_heartbeat", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_google_calendar_sync_jobs",
+        lambda *args, **kwargs: datetime.now(UTC),
+    )
+    monkeypatch.setattr(
+        worker,
+        "maybe_schedule_gmail_sync_jobs",
+        lambda *args, **kwargs: datetime.now(UTC),
+    )
+    monkeypatch.setattr(scan_dispatch_service, "remote_scan_dispatch_configured", lambda: True)
+    monkeypatch.setattr(scan_dispatch_service, "dispatch_form_submission_file_scan_job", _dispatch)
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
+
+    await worker.worker_loop(stop_event)
+
+    db.expire_all()
+    claimed = db.get(Job, retry_id)
+    assert claimed.status == JobStatus.RUNNING.value
+    assert claimed.claim_token is not None
+    assert dispatched == [
+        {
+            "job_id": retry_id,
+            "submission_file_id": submission_file_id,
+            "claim_token": claimed.claim_token,
+        }
+    ]
 
 
 @pytest.mark.asyncio

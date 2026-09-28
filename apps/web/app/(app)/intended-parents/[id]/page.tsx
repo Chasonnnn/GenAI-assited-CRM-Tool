@@ -39,7 +39,7 @@ import { useTasks } from "@/lib/hooks/use-tasks"
 import { EntityTasksSection } from "@/components/tasks/EntityTasksSection"
 import { useSetAIContext } from "@/lib/context/ai-context"
 import { ProposeMatchFromIPDialog } from "@/components/matches/ProposeMatchFromIPDialog"
-import { ChangeStageModal } from "@/components/surrogates/ChangeStageModal"
+import { ChangeStageModal, type StageOptionsState } from "@/components/surrogates/ChangeStageModal"
 import {
     getIntendedParentStageOptionById,
     getIntendedParentStatusLabel,
@@ -144,6 +144,9 @@ export default function IntendedParentDetailPage() {
     const { user } = useAuth()
     const permissionsQuery = useEffectivePermissions(user?.user_id ?? null)
     const canEdit = user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("edit_intended_parents")
+    const canChangeStage = user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("change_intended_parent_status")
+    // The API applies a regression directly for anyone who may approve status corrections.
+    const canSelfApproveRegression = user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("approve_status_change_requests")
 
     const canViewTasks = user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("view_tasks")
     const canCreateTasks = user?.role === "developer" || (permissionsQuery.data?.permissions ?? []).includes("create_tasks")
@@ -186,6 +189,15 @@ export default function IntendedParentDetailPage() {
     )
 
     const statusStages = toPipelineStages(stageOptionsResponse?.statuses)
+    const stageOptionsState: StageOptionsState = stageOptionsQuery.isLoading
+        ? { status: "loading" }
+        : stageOptionsQuery.isError && !stageOptionsResponse
+          ? {
+              status: "error",
+              onRetry: () => { void stageOptionsQuery.refetch() },
+              isRetrying: stageOptionsQuery.isFetching,
+          }
+          : { status: "ready" }
 
     const handleEdit = () => {
         if (!ip) return
@@ -328,6 +340,7 @@ export default function IntendedParentDetailPage() {
                     ip.stage_key ?? ip.status,
                 )}
                 isStatusPending={statusMutation.isPending}
+                canChangeStage={canChangeStage}
                 onProposeMatch={() => dispatch({ type: "proposeMatch.set", open: true })}
                 onChangeStage={() => dispatch({ type: "changeStatus.set", open: true })}
                 onEdit={handleEdit}
@@ -424,6 +437,7 @@ export default function IntendedParentDetailPage() {
                             onRetry={() => {
                                 void historyQuery.refetch()
                                 void activityQuery.refetch()
+                                if (stageOptionsQuery.isError) void stageOptionsQuery.refetch()
                             }}
                             historyHref={`/intended-parents/${id}/history`}
                         />
@@ -435,10 +449,12 @@ export default function IntendedParentDetailPage() {
                 open={detailState.changeStatusModalOpen}
                 onOpenChange={(open) => dispatch({ type: "changeStatus.set", open })}
                 stages={statusStages}
+                stageOptionsState={stageOptionsState}
+                entityType="intended_parent"
                 currentStageId={ip.stage_id ?? ""}
                 currentStageLabel={currentStageLabel}
                 entityLabel="Stage"
-                canSelfApproveRegression={["admin", "developer"].includes(user?.role ?? "")}
+                canSelfApproveRegression={canSelfApproveRegression}
                 onSubmit={handleStatusChange}
                 isPending={statusMutation.isPending}
             />

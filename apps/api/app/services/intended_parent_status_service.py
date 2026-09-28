@@ -4,12 +4,14 @@ from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 from uuid import UUID
 
+from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.permissions import PermissionKey as P
 from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
-from app.db.enums import Role
+from app.db.enums import AuditEventType, Role
 from app.db.models import (
     IntendedParent,
     IntendedParentStatusHistory,
@@ -18,6 +20,7 @@ from app.db.models import (
     StatusChangeRequest,
     User,
 )
+from app.services import permission_service, pipeline_semantics_service
 from app.utils.datetime_parsing import normalize_effective_at
 
 
@@ -80,11 +83,26 @@ def change_status(
     user_role: Role | str | None,
     reason: str | None = None,
     effective_at: datetime | None = None,
+    request: Request | None = None,
 ) -> StatusChangeResult:
-    """Change intended parent stage with backdating and regression support."""
+    """Change intended parent stage with backdating and regression support.
+
+    Enforces the actor's stage-change authority and the target stage's rules.
+    The stage change or approval request commits together with its audit event.
+    """
+    previous_status = ip.status
     current_stage = get_current_stage(db, ip)
     if new_stage.id == current_stage.id:
         raise ValueError("Target stage is same as current stage")
+
+    role_str = user_role.value if hasattr(user_role, "value") else user_role
+    if not role_str:
+        raise ValueError("User role is required to change status")
+    _authorize_stage_change(db, ip=ip, new_stage=new_stage, user_id=user_id, role=role_str)
+    reason = reason.strip() if reason else None
+    target_semantics = pipeline_semantics_service.get_stage_semantics(new_stage)
+    if target_semantics.requires_reason_on_enter and not reason:
+        raise ValueError(f"Reason required when moving to {new_stage.label}")
 
     now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, ip.organization_id)
@@ -98,10 +116,6 @@ def change_status(
 
     if ip.created_at and normalized_effective_at < ip.created_at:
         raise ValueError("Cannot set date before intended parent was created")
-
-    role_str = user_role.value if hasattr(user_role, "value") else user_role
-    if not role_str:
-        raise ValueError("User role is required to change status")
 
     if is_regression:
         last_history = (
@@ -121,15 +135,17 @@ def change_status(
         )
 
         if within_grace_period:
-            return apply_status_change(
-                db=db,
+            return _apply_with_audit(
+                db,
                 ip=ip,
-                old_stage=current_stage,
+                current_stage=current_stage,
                 new_stage=new_stage,
                 user_id=user_id,
                 reason=reason,
                 effective_at=normalized_effective_at,
                 recorded_at=now,
+                previous_status=previous_status,
+                request=request,
                 is_undo=True,
             )
 
@@ -137,22 +153,26 @@ def change_status(
         raise ValueError("Reason required for backdated or regressed status changes")
 
     if is_regression:
-        if role_str in {Role.ADMIN.value, Role.DEVELOPER.value}:
-            return apply_status_change(
-                db=db,
+        # Whoever may approve status corrections applies their own regression directly.
+        if permission_service.check_permission(
+            db, ip.organization_id, user_id, role_str, P.APPROVE_STATUS_CHANGE_REQUESTS.value
+        ):
+            return _apply_with_audit(
+                db,
                 ip=ip,
-                old_stage=current_stage,
+                current_stage=current_stage,
                 new_stage=new_stage,
                 user_id=user_id,
                 reason=reason,
                 effective_at=normalized_effective_at,
                 recorded_at=now,
-                is_undo=False,
+                previous_status=previous_status,
+                request=request,
                 approved_by_user_id=user_id,
                 approved_at=now,
             )
 
-        request = StatusChangeRequest(
+        status_request = StatusChangeRequest(
             organization_id=ip.organization_id,
             entity_type="intended_parent",
             entity_id=ip.id,
@@ -163,60 +183,180 @@ def change_status(
             requested_at=now,
             status="pending",
         )
-        db.add(request)
-        db.flush()
+        db.add(status_request)
         from app.services import entity_activity_service
 
-        entity_activity_service.record_activity(
-            db,
-            org_id=ip.organization_id,
-            entity_type="intended_parent",
-            entity_id=ip.id,
-            activity_type="status_change_requested",
-            actor_user_id=user_id,
-            details={
-                "status_request_id": str(request.id),
-                "target_stage_id": str(new_stage.id),
-            },
-            occurred_at=now,
-        )
         try:
+            # The partial unique index on pending requests fires on this flush.
+            db.flush()
+            result = StatusChangeResult(
+                status="pending_approval",
+                intended_parent=ip,
+                request_id=status_request.id,
+                message="Regression requires admin approval. Request submitted.",
+            )
+            entity_activity_service.record_activity(
+                db,
+                org_id=ip.organization_id,
+                entity_type="intended_parent",
+                entity_id=ip.id,
+                activity_type="status_change_requested",
+                actor_user_id=user_id,
+                details={
+                    "status_request_id": str(status_request.id),
+                    "target_stage_id": str(new_stage.id),
+                },
+                occurred_at=now,
+            )
+            _log_status_change_audit(
+                db,
+                ip=ip,
+                new_stage=new_stage,
+                user_id=user_id,
+                previous_status=previous_status,
+                result=result,
+                request=request,
+            )
             db.commit()
         except IntegrityError:
             db.rollback()
             raise ValueError("A pending regression request already exists for this stage and date.")
-        db.refresh(request)
+        except Exception:
+            db.rollback()
+            raise
+        db.refresh(status_request)
 
         from app.services import notification_service
 
         requester = _get_org_user(db, ip.organization_id, user_id)
         notification_service.notify_ip_status_change_request_pending(
             db=db,
-            request=request,
+            request=status_request,
             intended_parent=ip,
             target_status_label=new_stage.label,
             current_status_label=current_stage.label,
             requester_name=requester.display_name if requester else "Someone",
         )
 
-        return StatusChangeResult(
-            status="pending_approval",
-            intended_parent=ip,
-            request_id=request.id,
-            message="Regression requires admin approval. Request submitted.",
-        )
+        return result
 
-    return apply_status_change(
-        db=db,
+    return _apply_with_audit(
+        db,
         ip=ip,
-        old_stage=current_stage,
+        current_stage=current_stage,
         new_stage=new_stage,
         user_id=user_id,
         reason=reason,
         effective_at=normalized_effective_at,
         recorded_at=now,
-        is_undo=False,
+        previous_status=previous_status,
+        request=request,
     )
+
+
+def _authorize_stage_change(
+    db: Session,
+    *,
+    ip: IntendedParent,
+    new_stage: PipelineStage,
+    user_id: UUID,
+    role: str,
+) -> None:
+    """Permission v2 authority and record scope, or the pipeline's role mutation rules."""
+    from app.services import approval_handoff_service
+
+    uses_record_policy = approval_handoff_service.authorize_stage_change(
+        db,
+        record=ip,
+        kind="intended_parent",
+        target_stage=new_stage,
+        user_id=user_id,
+    )
+    if not uses_record_policy and not pipeline_semantics_service.can_role_access_stage(
+        role,
+        new_stage,
+        feature_config=pipeline_semantics_service.get_pipeline_feature_config(new_stage.pipeline),
+        mutation=True,
+    ):
+        raise ValueError("Role not permitted to change intended parent stage")
+
+
+def _log_status_change_audit(
+    db: Session,
+    *,
+    ip: IntendedParent,
+    new_stage: PipelineStage,
+    user_id: UUID,
+    previous_status: str | None,
+    result: StatusChangeResult,
+    request: Request | None,
+) -> None:
+    from app.services import audit_service
+
+    audit_service.log_event(
+        db=db,
+        org_id=ip.organization_id,
+        event_type=AuditEventType.INTENDED_PARENT_STATUS_CHANGED,
+        actor_user_id=user_id,
+        target_type="intended_parent",
+        target_id=ip.id,
+        details={
+            "from_status": previous_status,
+            "requested_stage_id": str(new_stage.id),
+            "requested_stage_key": new_stage.stage_key,
+            "result": result["status"],
+            "request_id": str(result["request_id"]) if result["request_id"] else None,
+        },
+        request=request,
+    )
+
+
+def _apply_with_audit(
+    db: Session,
+    *,
+    ip: IntendedParent,
+    current_stage: PipelineStage,
+    new_stage: PipelineStage,
+    user_id: UUID,
+    reason: str | None,
+    effective_at: datetime,
+    recorded_at: datetime,
+    previous_status: str | None,
+    request: Request | None,
+    is_undo: bool = False,
+    approved_by_user_id: UUID | None = None,
+    approved_at: datetime | None = None,
+) -> StatusChangeResult:
+    try:
+        result = apply_status_change(
+            db=db,
+            ip=ip,
+            old_stage=current_stage,
+            new_stage=new_stage,
+            user_id=user_id,
+            reason=reason,
+            effective_at=effective_at,
+            recorded_at=recorded_at,
+            is_undo=is_undo,
+            approved_by_user_id=approved_by_user_id,
+            approved_at=approved_at,
+            commit=False,
+        )
+        _log_status_change_audit(
+            db,
+            ip=ip,
+            new_stage=new_stage,
+            user_id=user_id,
+            previous_status=previous_status,
+            result=result,
+            request=request,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(ip)
+    return result
 
 
 def apply_status_change(

@@ -12,12 +12,74 @@ const mockUseIntendedParentNotes = vi.fn()
 const mockUseTasks = vi.fn()
 const mockUseIPAttachments = vi.fn()
 const mockUseEntityActivity = vi.fn()
+const mockUseAuth = vi.fn()
+const mockUseEffectivePermissions = vi.fn()
+const mockUseIntendedParentStatuses = vi.fn()
+const mockUpdateIntendedParentStatus = vi.fn()
+
+const DEFAULT_PERMISSIONS = ["edit_intended_parents", "view_tasks", "create_tasks", "edit_tasks", "delete_tasks"]
+
+function stageSemantics(overrides: Record<string, unknown> = {}) {
+    return {
+        capabilities: {
+            counts_as_contacted: false,
+            eligible_for_matching: false,
+            locks_match_state: false,
+            shows_pregnancy_tracking: false,
+            requires_delivery_details: false,
+            tracks_interview_outcome: false,
+        },
+        pause_behavior: "none",
+        terminal_outcome: "none",
+        integration_bucket: "none",
+        analytics_bucket: null,
+        suggestion_profile_key: null,
+        requires_reason_on_enter: false,
+        ...overrides,
+    }
+}
+
+const IP_STAGE_STATUSES = [
+    {
+        id: 'stage-new',
+        value: 'new',
+        label: 'New',
+        stage_key: 'new',
+        stage_slug: 'new',
+        stage_type: 'intake',
+        color: '#3B82F6',
+        order: 1,
+        semantics: stageSemantics(),
+    },
+    {
+        id: 'stage-ready',
+        value: 'ready_to_match',
+        label: 'Ready to Match',
+        stage_key: 'ready_to_match',
+        stage_slug: 'ready_to_match',
+        stage_type: 'post_approval',
+        color: '#F59E0B',
+        order: 2,
+        semantics: stageSemantics({ capabilities: { ...stageSemantics().capabilities, eligible_for_matching: true } }),
+    },
+    {
+        id: 'stage-matched',
+        value: 'matched',
+        label: 'Matched',
+        stage_key: 'matched',
+        stage_slug: 'matched',
+        stage_type: 'post_approval',
+        color: '#10B981',
+        order: 3,
+        semantics: stageSemantics({ capabilities: { ...stageSemantics().capabilities, locks_match_state: true } }),
+    },
+]
 
 vi.mock("@/components/rich-text-editor", () => ({
     RichTextEditor: ({ content, onChange, ariaLabel }: { content: string; onChange: (html: string) => void; ariaLabel: string }) => <textarea aria-label={ariaLabel} value={content} onChange={(event) => onChange(event.target.value)} />,
 }))
 vi.mock("@/lib/hooks/use-permissions", () => ({
-    useEffectivePermissions: () => ({ data: { permissions: ["edit_intended_parents", "view_tasks", "create_tasks", "edit_tasks", "delete_tasks"] } }),
+    useEffectivePermissions: () => mockUseEffectivePermissions(),
 }))
 
 vi.mock('next/link', () => ({
@@ -32,12 +94,7 @@ vi.mock('next/navigation', () => ({
 }))
 
 vi.mock('@/lib/auth-context', () => ({
-    useAuth: () => ({
-        user: { role: 'developer', user_id: 'user-1' },
-        isLoading: false,
-        error: null,
-        refetch: vi.fn(),
-    }),
+    useAuth: () => mockUseAuth(),
 }))
 
 const mockUseIntendedParent = vi.fn()
@@ -47,7 +104,7 @@ vi.mock('@/lib/hooks/use-intended-parents', () => ({
     useIntendedParentHistory: (id: string | null) => mockUseIntendedParentHistory(id),
     useIntendedParentNotes: () => mockUseIntendedParentNotes(),
     useUpdateIntendedParent: () => ({ mutateAsync: mockUpdateIntendedParent, isPending: false }),
-    useUpdateIntendedParentStatus: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useUpdateIntendedParentStatus: () => ({ mutateAsync: mockUpdateIntendedParentStatus, isPending: false }),
     useArchiveIntendedParent: () => ({ mutateAsync: mockArchiveIntendedParent, isPending: false }),
     useRestoreIntendedParent: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useDeleteIntendedParent: () => ({ mutateAsync: mockDeleteIntendedParent, isPending: false }),
@@ -56,42 +113,7 @@ vi.mock('@/lib/hooks/use-intended-parents', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-metadata', () => ({
-    useIntendedParentStatuses: () => ({
-        data: {
-            statuses: [
-                {
-                    id: 'stage-new',
-                    value: 'new',
-                    label: 'New',
-                    stage_key: 'new',
-                    stage_slug: 'new',
-                    stage_type: 'intake',
-                    color: '#3B82F6',
-                    order: 1,
-                },
-                {
-                    id: 'stage-ready',
-                    value: 'ready_to_match',
-                    label: 'Ready to Match',
-                    stage_key: 'ready_to_match',
-                    stage_slug: 'ready_to_match',
-                    stage_type: 'post_approval',
-                    color: '#F59E0B',
-                    order: 2,
-                },
-                {
-                    id: 'stage-matched',
-                    value: 'matched',
-                    label: 'Matched',
-                    stage_key: 'matched',
-                    stage_slug: 'matched',
-                    stage_type: 'post_approval',
-                    color: '#10B981',
-                    order: 3,
-                },
-            ],
-        },
-    }),
+    useIntendedParentStatuses: () => mockUseIntendedParentStatuses(),
 }))
 
 vi.mock('@/lib/hooks/use-tasks', () => ({
@@ -117,8 +139,28 @@ vi.mock('@/lib/hooks/use-attachments', () => ({
     useIPAttachments: (...args: unknown[]) => mockUseIPAttachments(...args),
 }))
 
+function setUser(role: string, permissions: string[]) {
+    mockUseAuth.mockReturnValue({
+        user: { role, user_id: 'user-1' },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+    })
+    mockUseEffectivePermissions.mockReturnValue({ data: { permissions } })
+}
+
 describe('IntendedParentDetailPage', () => {
     beforeEach(() => {
+        setUser('developer', DEFAULT_PERMISSIONS)
+        mockUseIntendedParentStatuses.mockReturnValue({
+            data: { statuses: IP_STAGE_STATUSES },
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+        mockUpdateIntendedParentStatus.mockReset()
+        mockUpdateIntendedParentStatus.mockResolvedValue({ status: 'applied' })
         mockUpdateIntendedParent.mockReset()
         mockUpdateIntendedParent.mockResolvedValue({})
         mockUseIntendedParentHistory.mockReturnValue({ data: [] })
@@ -862,6 +904,182 @@ describe('IntendedParentDetailPage', () => {
         expect(screen.getByRole("heading", { level: 1, name: "Couldn't load intended parent" })).toBeInTheDocument()
         expect(screen.queryByText("boom")).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(refetch).toHaveBeenCalledOnce()
+    })
+})
+
+describe('IntendedParentDetailPage stage changes', () => {
+    beforeEach(() => {
+        setUser('developer', DEFAULT_PERMISSIONS)
+        mockUseIntendedParentStatuses.mockReturnValue({
+            data: { statuses: IP_STAGE_STATUSES },
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+        mockUpdateIntendedParentStatus.mockReset()
+        mockUpdateIntendedParentStatus.mockResolvedValue({ status: 'applied' })
+        mockUseIntendedParentHistory.mockReturnValue({ data: [] })
+        mockUseIntendedParentNotes.mockReturnValue({ data: [] })
+        mockUseTasks.mockReturnValue({ data: { items: [] } })
+        mockUseIPAttachments.mockReturnValue({ data: [] })
+        mockUseEntityActivity.mockReturnValue({
+            data: { items: [], total: 0, page: 1, pages: 1 },
+            isLoading: false,
+            isError: false,
+            refetch: vi.fn(),
+        })
+        setIntendedParentStage('stage-new', 'new', 'New')
+    })
+
+    function setIntendedParentStage(stageId: string, stageKey: string, label: string) {
+        mockUseIntendedParent.mockReturnValue({
+            data: {
+                id: 'ip1',
+                intended_parent_number: 'I10001',
+                full_name: 'Bob Parent',
+                email: 'bob@example.com',
+                marital_status: null,
+                status: stageKey,
+                stage_id: stageId,
+                stage_key: stageKey,
+                stage_slug: stageKey,
+                status_label: label,
+                is_archived: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            },
+            isLoading: false,
+            error: null,
+        })
+    }
+
+    function openChangeStage() {
+        render(<IntendedParentDetailPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Change Stage' }))
+        return screen.getByTestId('change-stage-dialog')
+    }
+
+    it('prompts for a reason when the intended parent stage requires one', async () => {
+        mockUseIntendedParentStatuses.mockReturnValue({
+            data: {
+                statuses: IP_STAGE_STATUSES.map((status) =>
+                    status.id === 'stage-matched'
+                        ? { ...status, semantics: { ...status.semantics, requires_reason_on_enter: true } }
+                        : status,
+                ),
+            },
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+        const dialog = openChangeStage()
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /matched/i }))
+
+        expect(within(dialog).getByRole('button', { name: 'Save Change' })).toBeDisabled()
+        fireEvent.change(within(dialog).getByLabelText(/reason/i), { target: { value: 'Contract signed' } })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Save Change' }))
+
+        await waitFor(() => {
+            expect(mockUpdateIntendedParentStatus).toHaveBeenCalledWith({
+                id: 'ip1',
+                data: { stage_id: 'stage-matched', reason: 'Contract signed' },
+            })
+        })
+    })
+
+    it('does not apply surrogate on-hold behavior to an intended parent stage with the same key', async () => {
+        mockUseIntendedParentStatuses.mockReturnValue({
+            data: {
+                statuses: [
+                    ...IP_STAGE_STATUSES,
+                    {
+                        id: 'stage-on-hold',
+                        value: 'on_hold',
+                        label: 'Paused Search',
+                        stage_key: 'on_hold',
+                        stage_slug: 'on_hold',
+                        stage_type: 'post_approval',
+                        color: '#6B7280',
+                        order: 4,
+                        semantics: stageSemantics(),
+                    },
+                ],
+            },
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+        const dialog = openChangeStage()
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /paused search/i }))
+
+        expect(within(dialog).queryByText('Follow-up reminder')).not.toBeInTheDocument()
+        expect(within(dialog).queryByLabelText(/reason/i)).not.toBeInTheDocument()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Save Change' }))
+        await waitFor(() => {
+            expect(mockUpdateIntendedParentStatus).toHaveBeenCalledWith({
+                id: 'ip1',
+                data: { stage_id: 'stage-on-hold' },
+            })
+        })
+    })
+
+    it.each([
+        ['case_manager', ['change_intended_parent_status', 'approve_status_change_requests'], 'Save Change'],
+        ['admin', ['change_intended_parent_status'], 'Request Approval'],
+    ])('decides regression self-approval for %s from approve_status_change_requests', (role, permissions, action) => {
+        setUser(role, permissions)
+        setIntendedParentStage('stage-ready', 'ready_to_match', 'Ready to Match')
+        const dialog = openChangeStage()
+
+        fireEvent.click(within(dialog).getByRole('button', { name: /^new$/i }))
+
+        expect(within(dialog).getByRole('button', { name: action })).toBeInTheDocument()
+    })
+
+    it('hides Change Stage without change_intended_parent_status', () => {
+        setUser('case_manager', ['view_intended_parents', 'edit_intended_parents'])
+
+        render(<IntendedParentDetailPage />)
+
+        expect(screen.queryByRole('button', { name: 'Change Stage' })).not.toBeInTheDocument()
+    })
+
+    it('shows a loading state instead of built-in stages while stages load', () => {
+        mockUseIntendedParentStatuses.mockReturnValue({
+            data: undefined,
+            isLoading: true,
+            isError: false,
+            isFetching: true,
+            refetch: vi.fn(),
+        })
+        const dialog = openChangeStage()
+
+        expect(within(dialog).getByRole('status')).toHaveTextContent('Loading stages')
+        expect(within(dialog).queryByRole('button', { name: /ready to match/i })).not.toBeInTheDocument()
+        expect(within(dialog).getByRole('button', { name: 'Save Change' })).toBeDisabled()
+    })
+
+    it('shows a retryable error instead of built-in stages when stages fail to load', () => {
+        const refetch = vi.fn()
+        mockUseIntendedParentStatuses.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            isError: true,
+            isFetching: false,
+            refetch,
+        })
+        const dialog = openChangeStage()
+
+        expect(within(dialog).getByText("Couldn't load stages")).toBeInTheDocument()
+        expect(within(dialog).queryByRole('button', { name: /ready to match/i })).not.toBeInTheDocument()
+        expect(within(dialog).getByRole('button', { name: 'Save Change' })).toBeDisabled()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Try again' }))
         expect(refetch).toHaveBeenCalledOnce()
     })
 })

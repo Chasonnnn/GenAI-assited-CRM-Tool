@@ -210,7 +210,7 @@ export interface PolicyConfiguration {
     protected_roles: string[]
 }
 
-export type MatchPermissionAction = "propose" | "accept" | "decline" | "request_cancel" | "withdraw_cancel" | "complete"
+export type MatchPermissionAction = "propose" | "accept" | "decline" | "request_cancel" | "withdraw_cancel"
 
 export interface PolicyPreview {
     digest: string

@@ -1,4 +1,10 @@
-"""Shared fixed match lifecycle definitions."""
+"""Shared fixed match lifecycle definitions.
+
+``allowed_transitions`` are the moves a user action offers. ``system_transitions``
+happen only as a side effect of another change and no user action offers them:
+a surrogate entering the Delivered stage completes her accepted match, and
+undoing that stage change restores it.
+"""
 
 from __future__ import annotations
 
@@ -14,16 +20,15 @@ MATCH_STATUS_DEFINITIONS = [
             MatchStatus.ACCEPTED.value,
             MatchStatus.DECLINED.value,
         ],
+        "system_transitions": [],
     },
     {
         "value": MatchStatus.ACCEPTED.value,
         "label": "Accepted",
         "color": "#059669",
         "order": 3,
-        "allowed_transitions": [
-            MatchStatus.CANCELLATION_PENDING.value,
-            MatchStatus.COMPLETED.value,
-        ],
+        "allowed_transitions": [MatchStatus.CANCELLATION_PENDING.value],
+        "system_transitions": [MatchStatus.COMPLETED.value],
     },
     {
         "value": MatchStatus.CANCELLATION_PENDING.value,
@@ -31,6 +36,7 @@ MATCH_STATUS_DEFINITIONS = [
         "color": "#B45309",
         "order": 4,
         "allowed_transitions": [MatchStatus.ACCEPTED.value, MatchStatus.CANCELLED.value],
+        "system_transitions": [],
     },
     {
         "value": MatchStatus.DECLINED.value,
@@ -38,6 +44,7 @@ MATCH_STATUS_DEFINITIONS = [
         "color": "#DC2626",
         "order": 5,
         "allowed_transitions": [],
+        "system_transitions": [],
     },
     {
         "value": MatchStatus.CANCELLED.value,
@@ -45,6 +52,7 @@ MATCH_STATUS_DEFINITIONS = [
         "color": "#6B7280",
         "order": 6,
         "allowed_transitions": [],
+        "system_transitions": [],
     },
     {
         "value": MatchStatus.COMPLETED.value,
@@ -52,6 +60,7 @@ MATCH_STATUS_DEFINITIONS = [
         "color": "#059669",
         "order": 7,
         "allowed_transitions": [],
+        "system_transitions": [MatchStatus.ACCEPTED.value],
     },
 ]
 

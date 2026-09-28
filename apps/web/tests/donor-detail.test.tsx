@@ -9,6 +9,7 @@ const mockUseDonorProfile = vi.fn()
 const mockRevealDonor = vi.fn()
 const mockUseDonor = vi.fn()
 const mockUseDonorNotes = vi.fn()
+const mockUseDonorMetaLead = vi.fn()
 const mockCreateDonorNote = vi.fn()
 const mockDeleteDonorNote = vi.fn()
 const mockUpdateDonor = vi.fn()
@@ -27,6 +28,7 @@ const mockDownloadAttachment = vi.fn()
 const mockDeleteDonorAttachment = vi.fn()
 const mockUseAttachmentPreviewUrl = vi.fn()
 const mockUseAuth = vi.fn()
+const mockUseDonorSubmissions = vi.fn()
 const mockDetailSearchParams = new URLSearchParams()
 
 vi.mock("@/components/rich-text-editor", () => ({
@@ -80,6 +82,7 @@ vi.mock("@/lib/hooks/use-donors", () => ({
     useDonorOwnerOptions: () => ({ data: { users: [], queues: [] }, isLoading: false, isError: false }),
     useDonor: (id: string) => mockUseDonor(id),
     useDonorNotes: () => mockUseDonorNotes(),
+    useDonorMetaLead: (id: string | null) => mockUseDonorMetaLead(id),
     useDonorHistory: () => ({
         data: [
             {
@@ -107,6 +110,11 @@ vi.mock("@/lib/hooks/use-donors", () => ({
     useRestoreDonor: () => ({ mutateAsync: mockRestoreDonor, isPending: false }),
     useCreateDonorNote: () => ({ mutateAsync: mockCreateDonorNote, isPending: false }),
     useDeleteDonorNote: () => ({ mutateAsync: mockDeleteDonorNote, isPending: false }),
+}))
+
+vi.mock("@/lib/hooks/use-forms", async (importOriginal) => ({
+    ...await importOriginal<typeof import("@/lib/hooks/use-forms")>(),
+    useDonorSubmissions: (donorId: string | null) => mockUseDonorSubmissions(donorId),
 }))
 
 vi.mock("@/lib/hooks/use-pipelines", () => ({
@@ -177,9 +185,24 @@ describe("DonorDetailPage", () => {
         mockUseAuth.mockReset()
         mockUseAuth.mockReturnValue({ user: { user_id: "user-1", role: "admin" } })
         mockDetailSearchParams.delete("tab")
+        mockUseDonorSubmissions.mockReset().mockReturnValue({
+            data: [{
+                id: "submission-1",
+                form_id: "form-7",
+                form_name: "Donor follow-up",
+                status: "approved",
+                submitted_at: "2026-09-20T15:00:00Z",
+                reviewed_at: "2026-09-21T15:00:00Z",
+            }],
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
         mockUseDonorProfile.mockReset().mockReturnValue({ data: donorProfileFixture, isPending: false, isError: false, refetch: vi.fn() })
         mockRevealDonor.mockReset().mockResolvedValue({ ssn: null, partner_ssn: null })
         mockUseDonor.mockReset()
+        mockUseDonorMetaLead.mockReset().mockReturnValue({ data: undefined, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() })
         mockUseDonorNotes.mockReset()
         mockUseDonorNotes.mockReturnValue({
             data: [{
@@ -354,7 +377,7 @@ describe("DonorDetailPage", () => {
 
     it("uses the surrogate overview cards and keeps notes, tasks and attachments in their tabs", () => {
         render(<DonorDetailPage />)
-        expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Overview", "Notes", "Tasks", "History"])
+        expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Overview", "Notes", "Tasks", "Applications", "History"])
         const overview = screen.getByRole("tabpanel", { name: "Overview" })
         for (const title of ["Contact Information", "Demographics", "Personal Information", "Medical & Insurance", "Activity", "Eligibility Checklist"]) {
             expect(within(overview).getByText(title)).toBeInTheDocument()
@@ -379,8 +402,9 @@ describe("DonorDetailPage", () => {
 
     it.each([
         ["manual", "Manual"],
-        ["shared_intake", "Intake form"],
-        ["spring_campaign", "Spring campaign"],
+        ["meta", "Meta"],
+        ["website", "Website"],
+        ["spring_campaign", "Unknown source"],
     ])("labels the %s source through the donor source helper", (source, label) => {
         const query = mockUseDonor("donor-1")
         mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, source } })
@@ -388,6 +412,65 @@ describe("DonorDetailPage", () => {
         const row = screen.getByText("Source:").parentElement as HTMLElement
         expect(within(row).getByText(label)).toHaveAttribute("data-slot", "badge")
         expect(row).not.toHaveTextContent(source)
+    })
+
+    it("shows the source Meta lead answers only for Meta donors", () => {
+        const query = mockUseDonor("donor-1")
+        const manual = render(<DonorDetailPage />)
+        expect(mockUseDonorMetaLead).toHaveBeenLastCalledWith(null)
+        expect(screen.queryByText("Meta Lead")).not.toBeInTheDocument()
+        manual.unmount()
+
+        mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, source: "meta" } })
+        mockUseDonorMetaLead.mockReturnValue({
+            data: {
+                id: "lead-1",
+                form_name: "Egg donor intake",
+                meta_created_time: null,
+                received_at: "2026-09-20T15:30:00Z",
+                answers: [
+                    { key: "why_donate", label: "Why do you want to donate?", value: "To help a family" },
+                    { key: "preferred_contact_time", label: null, value: "Evenings" },
+                ],
+                dropped_fields: ["date_of_birth"],
+            },
+            isLoading: false,
+            isError: false,
+            isFetching: false,
+            refetch: vi.fn(),
+        })
+        render(<DonorDetailPage />)
+
+        expect(mockUseDonorMetaLead).toHaveBeenLastCalledWith("donor-1")
+        const overview = screen.getByRole("tabpanel", { name: "Overview" })
+        expect(within(overview).getByText("Meta Lead")).toBeInTheDocument()
+        expect(within(overview).getByText("Egg donor intake")).toBeInTheDocument()
+        expect(within(overview).getByText("Not saved (invalid value)").nextElementSibling).toHaveTextContent("Date of Birth")
+        const answers = within(overview).getByLabelText("Meta lead answers")
+        expect(within(answers).getByText("Why do you want to donate?").nextElementSibling).toHaveTextContent("To help a family")
+        expect(within(answers).getByText("Preferred contact time").nextElementSibling).toHaveTextContent("Evenings")
+    })
+
+    it("renders Meta lead loading, error/retry, and missing states", () => {
+        const query = mockUseDonor("donor-1")
+        mockUseDonor.mockReturnValue({ ...query, data: { ...query.data, source: "meta" } })
+        mockUseDonorMetaLead.mockReturnValue({ data: undefined, isLoading: true, isError: false, isFetching: true, refetch: vi.fn() })
+        const loading = render(<DonorDetailPage />)
+        const loadingCard = screen.getByText("Meta Lead").closest("[data-slot=card]") as HTMLElement
+        expect(within(loadingCard).getByRole("status")).toHaveTextContent("Loading")
+        loading.unmount()
+
+        const refetch = vi.fn()
+        mockUseDonorMetaLead.mockReturnValue({ data: undefined, isLoading: false, isError: true, isFetching: false, refetch })
+        const errored = render(<DonorDetailPage />)
+        expect(screen.getByText("Couldn't load the Meta lead.")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+        expect(refetch).toHaveBeenCalledTimes(1)
+        errored.unmount()
+
+        mockUseDonorMetaLead.mockReturnValue({ data: null, isLoading: false, isError: false, isFetching: false, refetch: vi.fn() })
+        render(<DonorDetailPage />)
+        expect(screen.queryByText("Meta Lead")).not.toBeInTheDocument()
     })
 
     it.each([null, "", "  "])("shows the empty token for a %j source", (source) => {
@@ -848,6 +931,27 @@ describe("DonorDetailPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Actions for Maya Thompson" }))
         expect(await screen.findByRole("menuitem", { name: state === "archived" ? "Restore" : "Archive" })).toBeInTheDocument()
         expect(screen.queryByRole("menuitem", { name: "Assign" })).not.toBeInTheDocument()
+    })
+
+    it("lists linked applications only when the Applications tab opens", () => {
+        render(<DonorDetailPage />)
+        expect(mockUseDonorSubmissions).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole("tab", { name: "Applications" }))
+        expect(mockUseDonorSubmissions).toHaveBeenCalledWith("donor-1")
+        const table = screen.getByRole("table", { name: "Donor applications" })
+        expect(within(table).getByText("Donor follow-up")).toBeInTheDocument()
+        expect(within(table).getByText("Approved")).toBeInTheDocument()
+        expect(within(table).queryByRole("link")).not.toBeInTheDocument()
+    })
+
+    it("links applications to the submission view for form reviewers", () => {
+        mockDetailSearchParams.set("tab", "applications")
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_donors", "view_form_submissions"] } })
+        render(<DonorDetailPage />)
+        expect(screen.getByRole("link", { name: "Donor follow-up" })).toHaveAttribute(
+            "href",
+            "/automation/form-submissions?form=form-7",
+        )
     })
 
     it("keeps donor attachment mutations behind edit permission", () => {

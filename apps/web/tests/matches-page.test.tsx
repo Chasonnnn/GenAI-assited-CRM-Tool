@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import MatchesPage from '../app/(app)/intended-parents/matches/page'
 import { ApiError } from '@/lib/api'
+import { stageBadgeStyle } from '@/lib/stage-colors'
 
 vi.mock('next/link', () => ({
     default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -123,7 +124,7 @@ describe('MatchesPage', () => {
     it('renders the default match list, summary, and filters', () => {
         render(<MatchesPage />)
         expect(screen.getByRole('heading', { level: 1, name: 'Matches' })).toBeInTheDocument()
-        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('2')
+        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
         expect(screen.queryByText('Total')).not.toBeInTheDocument()
         expect(screen.getAllByText('Proposed').length).toBeGreaterThan(0)
         expect(screen.getAllByText('Accepted').length).toBeGreaterThan(0)
@@ -158,10 +159,10 @@ describe('MatchesPage', () => {
         expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
     })
 
-    it('shows filtered and unfiltered counts when a filter is active', () => {
+    it('shows no header count when a filter is active', () => {
         mockSearchParams.set('status', 'accepted')
         render(<MatchesPage />)
-        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('2 of 42')
+        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
     })
 
     it('shows New Match only with propose_matches', () => {
@@ -385,6 +386,16 @@ describe('MatchesPage', () => {
         })
         render(<MatchesPage />)
         expect(screen.getByText('Showing 1 to 20 of 50')).toBeInTheDocument()
+    })
+
+    it('renders the participant stage in its stage color with white text', () => {
+        mockUseMatches.mockReturnValue({ data: { ...mockMatchData, items: [
+            { ...mockMatchData.items[0], id: 'colored', surrogate_stage_label: 'Heartbeat Confirmed', surrogate_stage_color: '#10B981' },
+            { ...mockMatchData.items[0], id: 'plain', surrogate_stage_label: 'Unknown Color', surrogate_stage_color: null },
+        ] }, isLoading: false })
+        render(<MatchesPage />)
+        expect(screen.getByText('Heartbeat Confirmed')).toHaveStyle({ backgroundColor: stageBadgeStyle('#10B981').backgroundColor, color: '#FFFFFF' })
+        expect(screen.getByText('Unknown Color').getAttribute('style')).toBeNull()
     })
 
     it('renders donor cases without surrogate fields and restores the kind filter from URL', () => {

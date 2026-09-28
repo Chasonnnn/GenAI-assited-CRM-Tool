@@ -122,6 +122,58 @@ class DefaultWorkflowDomainAdapter:
         WorkflowActionType.UPDATE_FIELD.value,
         WorkflowActionType.ADD_NOTE.value,
     }
+    # Record actions an intake workflow runs against the donor its source is linked to.
+    INTAKE_DONOR_RECORD_ACTIONS = SURROGATE_ONLY_ACTIONS | {
+        WorkflowActionType.SEND_NOTIFICATION.value,
+    }
+
+    def _intake_donor_link(self, entity_type: str, entity: Any) -> tuple[str, UUID | None] | None:
+        """Return (donor subject, linked donor id) for donor-kind intake sources."""
+        if entity_type == "form_submission" and isinstance(entity, FormSubmission):
+            kind, donor_id = entity.lead_kind, entity.donor_id
+        elif entity_type == "intake_lead" and isinstance(entity, IntakeLead):
+            kind, donor_id = entity.lead_type, entity.promoted_donor_id
+        else:
+            return None
+        if kind not in {"egg_donor", "sperm_donor"}:
+            return None
+        return kind, donor_id
+
+    def intake_linked_stage_id(self, db: Session, entity: Any) -> UUID | None:
+        """Return the current stage of the record an intake source is linked to.
+
+        A donor link counts only for the source's donor subtype; links outside the
+        source organization are ignored.
+        """
+        if isinstance(entity, FormSubmission):
+            kind, surrogate_id, donor_id = entity.lead_kind, entity.surrogate_id, entity.donor_id
+        elif isinstance(entity, IntakeLead):
+            kind = entity.lead_type
+            surrogate_id, donor_id = entity.promoted_surrogate_id, entity.promoted_donor_id
+        else:
+            return None
+        if kind in {"egg_donor", "sperm_donor"}:
+            if donor_id is None:
+                return None
+            return (
+                db.query(Donor.stage_id)
+                .filter(
+                    Donor.id == donor_id,
+                    Donor.organization_id == entity.organization_id,
+                    Donor.donor_type == kind.removesuffix("_donor"),
+                )
+                .scalar()
+            )
+        if surrogate_id is None:
+            return None
+        return (
+            db.query(Surrogate.stage_id)
+            .filter(
+                Surrogate.id == surrogate_id,
+                Surrogate.organization_id == entity.organization_id,
+            )
+            .scalar()
+        )
 
     def resolve_donor_subject(
         self, db: Session, org_id: UUID, subject_type: str, subject_id: UUID | None
@@ -409,10 +461,56 @@ class DefaultWorkflowDomainAdapter:
                     {"success": False, "error": "Donor subject not found", "skipped": True}
                 )
 
-        # Validate entity type for Surrogate-only actions, map tasks to surrogates when possible
+        intake_donor_link = (
+            self._intake_donor_link(entity_type, entity)
+            if action_type in self.INTAKE_DONOR_RECORD_ACTIONS
+            else None
+        )
+        if intake_donor_link is not None:
+            donor_subject_type, linked_donor_id = intake_donor_link
+            entity_label = entity_type.replace("_", " ")
+            # Unlinked leads keep notifying on the lead itself, as surrogate intake does.
+            if (
+                linked_donor_id is None
+                and action_type != WorkflowActionType.SEND_NOTIFICATION.value
+            ):
+                return _with_action_type(
+                    {
+                        "success": False,
+                        "error": f"{entity_label.title()} is not linked to a donor",
+                        "skipped": True,
+                    }
+                )
+            if linked_donor_id is not None:
+                if action_type not in self.DONOR_COMPATIBLE_ACTIONS:
+                    return _with_action_type(
+                        {
+                            "success": False,
+                            "error": f"Action '{action_type}' does not support donor subjects",
+                            "skipped": True,
+                        }
+                    )
+                action_entity = self.resolve_donor_subject(
+                    db, entity.organization_id, donor_subject_type, linked_donor_id
+                )
+                if action_entity is None:
+                    return _with_action_type(
+                        {
+                            "success": False,
+                            "error": f"Donor not found for {entity_label}",
+                            "skipped": True,
+                        }
+                    )
+
+        # Validate entity type for Surrogate-only actions; map tasks, submissions and
+        # promoted intake leads to their surrogate when possible.
         if action_type in self.SURROGATE_ONLY_ACTIONS and not isinstance(action_entity, Donor):
-            if entity_type in {"task", "form_submission"}:
-                surrogate_id = getattr(entity, "surrogate_id", None)
+            if entity_type in {"task", "form_submission", "intake_lead"}:
+                surrogate_id = getattr(
+                    entity,
+                    "promoted_surrogate_id" if entity_type == "intake_lead" else "surrogate_id",
+                    None,
+                )
                 if not surrogate_id:
                     return _with_action_type(
                         {
@@ -594,7 +692,18 @@ class DefaultWorkflowDomainAdapter:
                 return _with_action_type(result)
 
             if action_type == "promote_intake_lead":
-                result = workflow_intake_actions.promote_intake_lead(db, action, entity)
+                promote_action = action
+                if isinstance(entity, IntakeLead) and entity.lead_type in {
+                    "egg_donor",
+                    "sperm_donor",
+                }:
+                    # Priority and owner assignment are surrogate-only promotion options.
+                    promote_action = {
+                        key: value
+                        for key, value in action.items()
+                        if key not in {"is_priority", "assign_to_user"}
+                    }
+                result = workflow_intake_actions.promote_intake_lead(db, promote_action, entity)
                 return _with_action_type(result)
 
             if action_type == WorkflowActionType.AUTO_MATCH_SUBMISSION.value:

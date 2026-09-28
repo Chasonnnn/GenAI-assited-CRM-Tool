@@ -169,7 +169,7 @@ def _match_actions(permissions: set[str], *, legacy: bool) -> set[str]:
     if "decide_matches" in permissions:
         actions.update({"accept", "decline"})
     if "close_matches" in permissions:
-        actions.update({"request_cancel", "withdraw_cancel", "complete"})
+        actions.update({"request_cancel", "withdraw_cancel"})
     return actions
 
 

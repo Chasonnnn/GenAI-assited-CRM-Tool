@@ -182,10 +182,10 @@ describe('IntendedParentsPage', () => {
         expect(screen.queryByRole("button", { name: "New Intended Parent" })).not.toBeInTheDocument()
     })
 
-    it('renders the header count, toolbar and a list row without stat cards', () => {
+    it('renders the header without a count, the toolbar and a list row without stat cards', () => {
         render(<IntendedParentsPage />)
         expect(screen.getByRole('heading', { level: 1, name: 'Intended Parents' })).toBeInTheDocument()
-        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('1')
+        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
         expect(screen.queryByText('Total')).not.toBeInTheDocument()
         expect(screen.getByText('Bob Parent')).toBeInTheDocument()
         expect(screen.getByText('bob@example.com')).toBeInTheDocument()
@@ -225,7 +225,7 @@ describe('IntendedParentsPage', () => {
         mockSearchParams.set('range', 'month')
         render(<IntendedParentsPage />)
 
-        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('1')
+        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
         expect(screen.getByRole('button', { name: 'Remove filter: Stage: Ready to Match' })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'Remove filter: Date: This Month' })).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Remove filter: Search: smith' }))

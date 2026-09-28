@@ -19,7 +19,15 @@ from app.db.enums import (
     WorkflowExecutionStatus,
     WorkflowTriggerType,
 )
-from app.db.models import AutomationWorkflow, Membership, Task, User, WorkflowExecution
+from app.db.models import (
+    AutomationWorkflow,
+    FormSubmission,
+    IntakeLead,
+    Membership,
+    Task,
+    User,
+    WorkflowExecution,
+)
 from app.services import workflow_execution_authority, workflow_service
 from app.services.workflow_engine_adapters import WorkflowDomainAdapter
 
@@ -420,6 +428,7 @@ class WorkflowEngineCore:
             workflow.conditions,
             workflow.condition_logic,
             condition_entity,
+            db,
         )
 
         # Check user opt-out (for owner of entity)
@@ -1327,6 +1336,7 @@ class WorkflowEngineCore:
         conditions: list[dict],
         logic: str,
         entity: Any,
+        db: Session | None = None,
     ) -> bool:
         """Evaluate condition list with AND/OR logic."""
         if not conditions:
@@ -1338,7 +1348,7 @@ class WorkflowEngineCore:
             operator = condition.get("operator")
             value = condition.get("value")
 
-            entity_value = getattr(entity, field, None)
+            entity_value = self.condition_value(db, entity, field)
             result = self._evaluate_condition(operator, entity_value, value)
             results.append(result)
 
@@ -1346,6 +1356,20 @@ class WorkflowEngineCore:
             return all(results)
         else:  # OR
             return any(results)
+
+    def condition_value(self, db: Session | None, entity: Any, field: str | None) -> Any:
+        """Read a condition field from the entity a workflow runs on.
+
+        Form submissions and intake leads have no stage: a stage condition reads the
+        linked record's current stage, and None when nothing is linked. Intake leads
+        store their kind as lead_type.
+        """
+        if isinstance(entity, (FormSubmission, IntakeLead)):
+            if field == "stage_id":
+                return self.adapter.intake_linked_stage_id(db, entity) if db else None
+            if field == "lead_kind" and isinstance(entity, IntakeLead):
+                return entity.lead_type
+        return getattr(entity, field, None) if field else None
 
     def _evaluate_condition(
         self,

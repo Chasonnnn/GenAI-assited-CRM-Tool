@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { getIntendedParentStatuses, getMatchStatuses } from "@/lib/api/metadata"
 
-const metadataKeys = {
+export const metadataKeys = {
     all: ["metadata"] as const,
     intendedParentStatuses: () => [...metadataKeys.all, "intended-parent-statuses"] as const,
     matchStatuses: () => [...metadataKeys.all, "match-statuses"] as const,

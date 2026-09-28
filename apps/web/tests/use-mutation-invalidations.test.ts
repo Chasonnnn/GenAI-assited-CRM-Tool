@@ -82,6 +82,7 @@ import { entityActivityKeys } from '@/lib/hooks/use-entity-activity'
 import { useCreateZoomMeeting, useSendZoomInvite, useSyncGoogleCalendarNow } from '@/lib/hooks/use-user-integrations'
 import { useDeleteWorkflow, useDuplicateWorkflow, useToggleWorkflow, useUpdateWorkflow } from '@/lib/hooks/use-workflows'
 import {
+    useReplayZapierOutboundEvent,
     useZapierFieldPaste,
     useZapierOutboundTest,
     useZapierTestLead,
@@ -749,6 +750,19 @@ describe('mutation invalidation contracts', () => {
         expect(invalidateQueries).toHaveBeenCalledWith({
             queryKey: [...zapierKeys.all, 'outbound-events-summary'],
             exact: false,
+        })
+    })
+
+    it('refreshes Zapier outbound event monitors after replaying a skipped event', () => {
+        useReplayZapierOutboundEvent()
+
+        capturedOptions?.onSuccess?.({}, { eventId: 'event-1' })
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: zapierKeys.outboundEventsSummary(24),
+        })
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: [...zapierKeys.all, 'outbound-events'],
         })
     })
 

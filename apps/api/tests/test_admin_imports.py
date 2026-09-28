@@ -36,6 +36,7 @@ from app.db.models import (
     OrgCounter,
     Pipeline,
     PipelineStage,
+    Queue,
     Surrogate,
     User,
     UserNotificationSettings,
@@ -523,9 +524,7 @@ class TestAdminImports:
         assert stage.allowed_next_slugs == ["available"]
 
         workflow = (
-            db.query(AutomationWorkflow)
-            .filter(AutomationWorkflow.id == donor_workflow_id)
-            .one()
+            db.query(AutomationWorkflow).filter(AutomationWorkflow.id == donor_workflow_id).one()
         )
         assert workflow.subject_type == "sperm_donor"
 
@@ -741,9 +740,7 @@ class TestAdminImports:
         assert imported_sperm.stage_id == sperm_stage.id
         assert imported_sperm.is_archived is True
         egg_history = (
-            db.query(DonorStatusHistory)
-            .filter(DonorStatusHistory.donor_id == egg_id)
-            .one()
+            db.query(DonorStatusHistory).filter(DonorStatusHistory.donor_id == egg_id).one()
         )
         assert egg_history.organization_id == test_org.id
         assert egg_history.changed_by_user_id == test_user.id
@@ -1379,9 +1376,7 @@ class TestAdminImports:
         )
         db.commit()
         source_history = (
-            db.query(DonorStatusHistory)
-            .filter(DonorStatusHistory.donor_id == donor.id)
-            .one()
+            db.query(DonorStatusHistory).filter(DonorStatusHistory.donor_id == donor.id).one()
         )
         source_history_id = source_history.id
         source_history_effective_at = source_history.effective_at
@@ -1392,23 +1387,20 @@ class TestAdminImports:
         config_zip = admin_export_service.build_org_config_zip(db, source_org.id)
         with zipfile.ZipFile(io.BytesIO(config_zip)) as archive:
             config_payload = {
-                name: json.loads(archive.read(name).decode("utf-8"))
-                for name in archive.namelist()
+                name: json.loads(archive.read(name).decode("utf-8")) for name in archive.namelist()
             }
         config_payload["organization.json"]["slug"] = test_org.slug
         config_zip = _build_config_zip(config_payload)
-        donors_csv = "".join(
-            admin_export_service.stream_donors_csv(db, source_org.id)
-        ).encode("utf-8")
+        donors_csv = "".join(admin_export_service.stream_donors_csv(db, source_org.id)).encode(
+            "utf-8"
+        )
         exported_row = next(csv.DictReader(io.StringIO(donors_csv.decode("utf-8"))))
         assert exported_row["profile_photo_filename"] == "profile.png"
         assert base64.b64decode(exported_row["profile_photo_bytes_base64"], validate=True) == (
             exported_photo
         )
         exported_history = json.loads(exported_row["status_history_json"])
-        assert [event["id"] for event in exported_history["events"]] == [
-            str(source_history_id)
-        ]
+        assert [event["id"] for event in exported_history["events"]] == [str(source_history_id)]
 
         donor_id = donor.id
         attachment_id = attachment.id
@@ -1422,6 +1414,9 @@ class TestAdminImports:
             db.query(Pipeline).filter(Pipeline.organization_id == source_org.id).all()
         ):
             db.delete(source_pipeline)
+        # The donor was created without an owner, so it sits in the source org's default queue.
+        for source_queue in db.query(Queue).filter(Queue.organization_id == source_org.id).all():
+            db.delete(source_queue)
         db.commit()
 
         response = await authed_client.post(
@@ -1454,11 +1449,7 @@ class TestAdminImports:
         restored_image = Image.open(io.BytesIO(restored_photo))
         assert restored_image.size == (6, 6)
         assert restored_image.getpixel((0, 0)) == (32, 96, 192)
-        history = (
-            db.query(DonorStatusHistory)
-            .filter(DonorStatusHistory.donor_id == donor_id)
-            .one()
-        )
+        history = db.query(DonorStatusHistory).filter(DonorStatusHistory.donor_id == donor_id).one()
         assert history.id == source_history_id
         assert history.organization_id == test_org.id
         assert history.changed_by_user_id == source_user.id
@@ -1523,9 +1514,7 @@ class TestAdminImports:
         assert attachment is not None
         assert attachment.organization_id == test_org.id
         assert attachment.donor_id == donor_id
-        assert attachment.storage_key.startswith(
-            f"{test_org.id}/donors/{donor_id}/profile/"
-        )
+        assert attachment.storage_key.startswith(f"{test_org.id}/donors/{donor_id}/profile/")
         assert not (tmp_path / "outside.png").exists()
         attachment_service.delete_file(attachment.storage_key)
         db.delete(db.get(Donor, donor_id))
@@ -1741,9 +1730,7 @@ class TestAdminImports:
                 },
             ]
         )
-        expected_storage_key = (
-            f"{test_org_id}/donors/{valid_donor_id}/profile/{attachment_id}.png"
-        )
+        expected_storage_key = f"{test_org_id}/donors/{valid_donor_id}/profile/{attachment_id}.png"
         failure_savepoint = db.begin_nested()
 
         def rollback_failure_savepoint() -> None:
@@ -1772,16 +1759,21 @@ class TestAdminImports:
         assert db.get(Donor, invalid_donor_id) is None
         assert db.get(DonorStatusHistory, status_history_id) is None
         assert db.get(Attachment, attachment_id) is None
-        assert db.scalar(
-            db.query(OrgCounter)
-            .filter(
-                OrgCounter.organization_id == test_org_id,
-                OrgCounter.counter_type == "donor_number",
+        assert (
+            db.scalar(
+                db.query(OrgCounter)
+                .filter(
+                    OrgCounter.organization_id == test_org_id,
+                    OrgCounter.counter_type == "donor_number",
+                )
+                .exists()
+                .select()
             )
-            .exists()
-            .select()
-        ) is False
-        assert not os.path.exists(attachment_service.resolve_local_storage_path(expected_storage_key))
+            is False
+        )
+        assert not os.path.exists(
+            attachment_service.resolve_local_storage_path(expected_storage_key)
+        )
 
 
 @pytest.mark.asyncio

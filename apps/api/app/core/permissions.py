@@ -62,6 +62,7 @@ class PermissionKey(str, Enum):
     INTENDED_PARENTS_VIEW = "view_intended_parents"
     INTENDED_PARENTS_CREATE = "create_intended_parents"
     INTENDED_PARENTS_EDIT = "edit_intended_parents"
+    INTENDED_PARENTS_CHANGE_STATUS = "change_intended_parent_status"
     DONORS_VIEW = "view_donors"
     DONORS_CREATE = "create_donors"
     DONORS_EDIT = "edit_donors"
@@ -209,6 +210,12 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
         "Modify intended parent information",
         PermissionCategory.INTENDED_PARENTS,
     ),
+    "change_intended_parent_status": PermissionDef(
+        "change_intended_parent_status",
+        "Change Intended Parent Status",
+        "Move intended parents between pipeline stages",
+        PermissionCategory.INTENDED_PARENTS,
+    ),
     "propose_matches": PermissionDef(
         "propose_matches",
         "Propose Matches",
@@ -224,7 +231,7 @@ PERMISSION_REGISTRY: dict[str, PermissionDef] = {
     "close_matches": PermissionDef(
         "close_matches",
         "Close Matches",
-        "Request cancellation or complete matches",
+        "Cancel matches",
         PermissionCategory.INTENDED_PARENTS,
     ),
     # Donors
@@ -633,6 +640,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "import_surrogates",
         "view_intended_parents",
         "edit_intended_parents",
+        "change_intended_parent_status",
         "view_donors",
         "edit_donors",
         "archive_donors",
@@ -666,6 +674,7 @@ ROLE_DEFAULTS: dict[str, set[str]] = {
         "approve_status_change_requests",
         "view_intended_parents",
         "edit_intended_parents",
+        "change_intended_parent_status",
         "view_donors",
         "edit_donors",
         "archive_donors",
@@ -807,6 +816,7 @@ PERMISSION_BUNDLES: dict[str, set[str]] = {
     "intended_parents_manage": {
         "view_intended_parents",
         "edit_intended_parents",
+        "change_intended_parent_status",
         "view_matches",
         "propose_matches",
     },
@@ -916,6 +926,7 @@ PERMISSION_TOPIC_SECTIONS: dict[str, dict[str, dict[str, str]]] = {
             "create_intended_parents": "Create",
             "edit_intended_parents": "Edit",
         },
+        "Progress & ownership": {"change_intended_parent_status": "Change status"},
     },
     "Matches": {
         "Actions": {

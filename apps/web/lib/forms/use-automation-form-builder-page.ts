@@ -826,8 +826,8 @@ export function useAutomationFormBuilderPage() {
             toast.success("Submission linked to surrogate")
             clearSubmissionSelection()
             await refreshSubmissionQueues()
-        } catch {
-            toast.error("Failed to link submission")
+        } catch (error) {
+            toast.error(error instanceof Error && error.message ? error.message : "Failed to link submission")
         }
     }
 

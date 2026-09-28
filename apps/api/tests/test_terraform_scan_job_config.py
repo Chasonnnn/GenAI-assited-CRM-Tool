@@ -30,6 +30,17 @@ def test_api_service_account_can_execute_attachment_scan_job() -> None:
     assert 'member  = "serviceAccount:${google_service_account.api.email}"' in content
 
 
+def test_worker_service_account_can_execute_attachment_scan_job_with_overrides() -> None:
+    content = _read("infra/terraform/clamav-iam.tf")
+    grant = content.split(
+        'resource "google_cloud_run_v2_job_iam_member" "worker_attachment_scan_executor"', 1
+    )[1].split("\n}", 1)[0]
+    assert "count    = var.attachment_scan_job_enabled ? 1 : 0" in grant
+    assert "name     = google_cloud_run_v2_job.attachment_scan[0].name" in grant
+    assert 'role     = "roles/run.jobsExecutorWithOverrides"' in grant
+    assert 'member   = "serviceAccount:${google_service_account.worker.email}"' in grant
+
+
 def test_worker_scale_scheduler_uses_dedicated_scaler_identity() -> None:
     service_accounts = _read("infra/terraform/service-accounts.tf")
     schedule = _read("infra/terraform/worker-schedule.tf")

@@ -167,6 +167,11 @@ def update_field(
                 emit_workflow_events=False,
                 **({"execution_permissions": execution_permissions} if v2_authority else {}),
             )
+            if result["status"] != "applied":
+                return {
+                    "success": False,
+                    "error": "Workflow stage change requires regression approval",
+                }
             updated = result["donor"]
             if updated is None:
                 return {"success": False, "error": "Donor stage change was not applied"}
@@ -283,9 +288,14 @@ def update_field(
                     "error": "Workflow stage change requires regression approval",
                 }
         else:
+            from app.services import match_lifecycle
+
+            now = datetime.now(UTC)
+            # Legacy direct write: keep the Delivered match completion of apply_status_change.
+            match_lifecycle.complete_on_delivery(db, entity, stage, actor_user_id=None, now=now)
             entity.stage_id = stage.id
             entity.status_label = stage.label
-            entity.updated_at = datetime.now(UTC)
+            entity.updated_at = now
 
             history = SurrogateStatusHistory(
                 surrogate_id=entity.id,
@@ -296,6 +306,8 @@ def update_field(
                 to_label_snapshot=stage.label,
                 changed_by_user_id=None,
                 reason="Workflow update",
+                # The undo finds the completed match by closed_at >= recorded_at; use one clock.
+                recorded_at=now,
             )
             db.add(history)
             db.commit()

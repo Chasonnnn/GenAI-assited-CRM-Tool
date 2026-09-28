@@ -7,7 +7,7 @@ from itertools import count
 from app.core.deps import COOKIE_NAME
 from app.core.encryption import hash_email
 from app.core.security import decode_session_token
-from app.db.models import IntendedParent, Match, Surrogate
+from app.db.models import IntendedParent, Match, MatchAttempt, Surrogate
 from app.services import pipeline_service
 
 _numbers = count(90000)
@@ -71,3 +71,19 @@ def seed_surrogate_match(db, client, *, status="under_review") -> Match:
     db.flush()
     db.commit()
     return match
+
+
+def seed_attempt(db, match_id, *, attempt_type="embryo_transfer", status="planned") -> MatchAttempt:
+    """Attempts have no write API; existing open rows still close when their match closes."""
+    match = db.get(Match, uuid.UUID(str(match_id)))
+    sequence = db.query(MatchAttempt).filter(MatchAttempt.match_id == match.id).count() + 1
+    attempt = MatchAttempt(
+        organization_id=match.organization_id,
+        match_id=match.id,
+        sequence=sequence,
+        attempt_type=attempt_type,
+        status=status,
+    )
+    db.add(attempt)
+    db.flush()
+    return attempt

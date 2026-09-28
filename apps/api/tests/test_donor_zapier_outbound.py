@@ -120,18 +120,25 @@ def _configure_reporting(db, org_id, *, donor_type, pipeline, stage, event_name=
     return settings
 
 
-def _attach_meta_lead(db, donor, *, org_id=None):
+def _attach_meta_lead(db, donor, *, org_id=None, meta_lead_id=None, meta_created_time=None):
     lead = MetaLead(
         organization_id=org_id or donor.organization_id,
-        meta_lead_id=f"meta-{uuid.uuid4().hex}",
+        meta_lead_id=meta_lead_id or f"meta-{uuid.uuid4().hex}",
+        meta_created_time=meta_created_time,
         meta_form_id="meta-form-1",
         meta_page_id="meta-page-1",
         field_data_raw={
             "email": "must-not-leak@example.com",
             "medical_condition": "must-not-leak",
-            "ad_id": "sensitive-ad-answer",
-            "campaign_id": "sensitive-campaign-answer",
-            "fbc": "sensitive-fbc-answer",
+            # Tracking keys written by the Zapier inbound handler, read like surrogate leads.
+            "meta_ad_id": "ad-123",
+            "meta_ad_name": "Donor ad",
+            "meta_adset_id": "adset-123",
+            "meta_adset_name": "Donor ad set",
+            "meta_campaign_id": "campaign-123",
+            "meta_campaign_name": "Donor campaign",
+            "meta_platform": "facebook",
+            "fbc": "fb.1.1772942400.meta-donor-click",
             "nested_answers": {
                 "meta_ad_id": "sensitive-nested-meta-ad",
                 "meta_adset_id": "sensitive-nested-meta-adset",
@@ -159,7 +166,7 @@ async def test_donor_reporting_defaults_off_and_validates_exact_pipeline_mapping
     initial = await authed_client.get("/integrations/zapier/settings")
     assert initial.status_code == 200
     assert initial.json()["donor_outbound_enabled"] is False
-    assert initial.json()["donor_event_mapping"] == []
+    assert initial.json()["donor_event_mapping"] is None
 
     payload = {
         "donor_outbound_enabled": True,
@@ -204,6 +211,30 @@ async def test_donor_reporting_defaults_off_and_validates_exact_pipeline_mapping
         },
     )
     assert unsupported.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_saved_mapping_without_tracked_donor_stages_stays_saved(authed_client, db, test_org):
+    _seed_donor_pipeline(db, test_org.id, "egg")
+    db.commit()
+    settings_url = "/integrations/zapier/settings"
+
+    never_saved = await authed_client.get(settings_url)
+    saved = await authed_client.post(
+        f"{settings_url}/outbound",
+        json={"donor_outbound_enabled": True, "donor_event_mapping": []},
+    )
+    unrelated = await authed_client.post(f"{settings_url}/outbound", json={"send_hashed_pii": True})
+    reloaded = await authed_client.get(settings_url)
+
+    assert never_saved.json()["donor_event_mapping"] is None
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["donor_event_mapping"] == []
+    assert unrelated.status_code == 200, unrelated.text
+    assert reloaded.json()["donor_event_mapping"] == []
+    settings = zapier_settings_service.get_settings(db, test_org.id)
+    db.refresh(settings)
+    assert settings.donor_outbound_event_mapping == []
 
 
 @pytest.mark.asyncio
@@ -269,41 +300,39 @@ def test_applied_donor_stage_queues_one_minimal_meta_payload(db, test_org, test_
     payload = job.payload["data"]
     assert "url" not in job.payload
     assert "headers" not in job.payload
-    assert event.event_id == f"zapier_donor_stage:{history.id}"
-    assert job.idempotency_key == event.event_id
+    assert event.event_id == f"zapier_donor:{donor.id}:qualified"
+    assert payload["event_id"] == event.event_id
+    assert job.idempotency_key == f"zapier_donor_stage:{history.id}"
     assert payload["lead_id"] == meta_lead.meta_lead_id
     assert payload["event_name"] == "Qualified"
+    assert payload["record_type"] == "egg_donor"
     assert payload["meta_form_id"] == meta_lead.meta_form_id
     assert payload["meta_page_id"] == meta_lead.meta_page_id
-    for excluded_key in (
-        "meta_ad_id",
-        "meta_adset_id",
-        "meta_campaign_id",
-        "ad_id",
-        "adset_id",
-        "campaign_id",
-        "fbc",
-        "fbp",
-        "fbclid",
-    ):
+    assert payload["meta_ad_id"] == "ad-123"
+    assert payload["meta_ad_name"] == "Donor ad"
+    assert payload["meta_adset_id"] == "adset-123"
+    assert payload["meta_adset_name"] == "Donor ad set"
+    assert payload["meta_campaign_id"] == "campaign-123"
+    assert payload["meta_campaign_name"] == "Donor campaign"
+    assert payload["meta_platform"] == "facebook"
+    assert payload["fbc"] == "fb.1.1772942400.meta-donor-click"
+    assert payload["facebook_click_id"] == "fb.1.1772942400.meta-donor-click"
+    for excluded_key in ("ad_id", "adset_id", "campaign_id", "fbp", "fbclid"):
         assert excluded_key not in payload
+    # Hashed PII on: the same contact fields surrogate payloads carry.
+    assert payload["customer_email"] == donor.email
+    assert payload["customer_phone_number"] == donor.phone
     assert set(payload["user_data"]) == {"email_hash", "phone_hash"}
     serialized = str(payload)
     for forbidden in (
         donor.full_name,
-        donor.email,
-        donor.phone,
         "medical_condition",
         "must-not-leak",
-        "sensitive-ad-answer",
-        "sensitive-campaign-answer",
-        "sensitive-fbc-answer",
         "sensitive-nested-meta-ad",
         "sensitive-nested-meta-adset",
         "sensitive-nested-meta-campaign",
         "sensitive-nested-meta-fbc",
         ready_stage.label,
-        "egg",
     ):
         assert forbidden not in serialized
 
@@ -320,6 +349,90 @@ def test_applied_donor_stage_queues_one_minimal_meta_payload(db, test_org, test_
         .count()
         == 1
     )
+
+
+def test_donor_payload_hashes_meta_normalized_phone_and_skips_placeholder_email(
+    db, test_org, test_user
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    donor.email = "meta-1234567890abcdef@placeholder.invalid"
+    db.commit()
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+
+    result = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.donor_status_history_id == result["history"].id)
+        .one()
+    )
+    payload = db.get(Job, event.job_id).payload["data"]
+    # sha256("16075550102"): digits with country code and no "+", as Meta expects.
+    assert payload["user_data"] == {
+        "phone_hash": "7515397f91001442b8a497e2562bc8e7ee3c914396f7da402a59cc40f66dd0d1"
+    }
+    assert "placeholder" not in str(payload)
+
+
+@pytest.mark.parametrize(
+    ("lead_kwargs", "reason"),
+    [
+        ({"meta_lead_id": f"zapier-{uuid.uuid4()}"}, "synthetic_meta_lead_id"),
+        (
+            {"meta_created_time": datetime.now(UTC) - timedelta(days=91)},
+            "stale_meta_lead",
+        ),
+    ],
+    ids=["synthetic-lead-id", "older-than-90-days"],
+)
+def test_meta_donor_events_skip_unreportable_leads_like_surrogates(
+    db, test_org, test_user, lead_kwargs, reason
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor, **lead_kwargs)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+
+    result = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.donor_status_history_id == result["history"].id)
+        .one()
+    )
+    assert event.status == "skipped"
+    assert event.reason == reason
+    assert event.job_id is None
+    assert event.effective_at == result["history"].effective_at
+    assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 0
 
 
 @pytest.mark.asyncio
@@ -385,6 +498,69 @@ async def test_dispatch_uses_positive_payload_allowlist(db, test_org, test_user,
     assert "stage_label" not in sent_payload
     assert "raw_email" not in sent_payload["user_data"]
     assert set(sent_payload["user_data"]) == {"email_hash", "phone_hash"}
+    assert sent_payload["record_type"] == "egg_donor"
+    assert sent_payload["customer_email"] == donor.email
+    assert sent_payload["customer_phone_number"] == donor.phone
+    assert sent_payload["meta_ad_id"] == "ad-123"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_drops_contact_fields_when_hashed_pii_turned_off(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    settings = _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+    donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    job = db.query(Job).filter(Job.organization_id == test_org.id).one()
+    assert job.payload["data"]["customer_email"] == donor.email
+    settings.outbound_send_hashed_pii = False
+    db.commit()
+
+    sent: dict[str, object] = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, *, json, headers):
+            sent.update({"json": json})
+            return Response()
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", Client)
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    sent_payload = sent["json"]
+    assert isinstance(sent_payload, dict)
+    for contact_key in ("customer_email", "customer_phone_number", "user_data"):
+        assert contact_key not in sent_payload
+    assert sent_payload["lead_id"] == job.payload["data"]["lead_id"]
 
 
 def test_website_donor_uses_first_party_submission_not_meta_lead_id(db, test_org, test_user):
@@ -455,9 +631,265 @@ def test_website_donor_uses_first_party_submission_not_meta_lead_id(db, test_org
     )
     payload = job.payload["data"]
     assert payload["first_party_submission_id"] == str(submission.id)
+    assert payload["record_type"] == "sperm_donor"
+    assert payload["attribution_source"] == "website"
     assert "lead_id" not in payload
     assert "facebook_lead_id" not in payload
     assert "medical_answer" not in str(payload)
+
+
+def _backdated_donor_job(db, test_org, test_user, *, effective_days_ago, lead_days_ago):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    now = datetime.now(UTC)
+    donor.created_at = now - timedelta(days=lead_days_ago)
+    db.commit()
+    _attach_meta_lead(db, donor, meta_created_time=now - timedelta(days=lead_days_ago))
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+    effective_at = (now - timedelta(days=effective_days_ago)).replace(
+        hour=15, minute=30, second=0, microsecond=0
+    )
+
+    result = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        reason="Recorded late",
+        effective_at=effective_at,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    history = result["history"]
+    assert history.effective_at == effective_at
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.donor_status_history_id == history.id)
+        .one()
+    )
+    assert event.status == "queued"
+    assert event.effective_at == effective_at
+    job = db.get(Job, event.job_id)
+    assert job.payload["data"]["event_time"] == effective_at.isoformat()
+    return job, event, effective_at
+
+
+@pytest.mark.asyncio
+async def test_backdated_donor_change_reports_its_effective_time(
+    db, test_org, test_user, monkeypatch
+):
+    # Inside Meta's event window the backdated effective time is sent unchanged.
+    from app.jobs.handlers import zapier as zapier_handler
+
+    job, _event, effective_at = _backdated_donor_job(
+        db, test_org, test_user, effective_days_ago=2, lead_days_ago=5
+    )
+    sent = _capture_webhook(monkeypatch, zapier_handler)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    assert sent["json"]["event_time"] == effective_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_donor_event_older_than_meta_window_is_sent_as_six_days_ago(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    job, _event, effective_at = _backdated_donor_job(
+        db, test_org, test_user, effective_days_ago=10, lead_days_ago=20
+    )
+    sent = _capture_webhook(monkeypatch, zapier_handler)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    sent_time = datetime.fromisoformat(sent["json"]["event_time"])
+    assert abs(sent_time - (datetime.now(UTC) - timedelta(days=6))) < timedelta(minutes=1)
+    db.refresh(job)
+    assert job.payload["data"]["event_time"] == effective_at.isoformat()
+
+
+@pytest.mark.asyncio
+async def test_donor_event_is_skipped_when_the_moved_time_makes_the_lead_stale(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    # 87-88 days after the lead at enqueue; more than 90 days once moved to six days ago.
+    job, event, _effective_at = _backdated_donor_job(
+        db, test_org, test_user, effective_days_ago=10, lead_days_ago=97
+    )
+    sent = _capture_webhook(monkeypatch, zapier_handler)
+
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    assert sent == {}
+    db.refresh(event)
+    assert event.status == "skipped"
+    assert event.reason == "stale_meta_lead"
+
+
+def _hosted_submission(db, org_id, donor, *, submitted_at, **ad_fields):
+    form = Form(
+        organization_id=org_id,
+        name=f"Hosted donor form {uuid.uuid4().hex[:6]}",
+        status="published",
+        purpose="shared_intake",
+        lead_kind="egg_donor",
+    )
+    db.add(form)
+    db.flush()
+    link = FormIntakeLink(
+        organization_id=org_id,
+        form_id=form.id,
+        slug=f"hosted-{uuid.uuid4().hex[:8]}",
+    )
+    db.add(link)
+    db.flush()
+    submission = FormSubmission(
+        organization_id=org_id,
+        form_id=form.id,
+        donor_id=donor.id,
+        intake_link_id=link.id,
+        lead_kind="egg_donor",
+        answers_json={},
+        submitted_at=submitted_at,
+    )
+    db.add(submission)
+    db.flush()
+    # The hosted page sends landing_url on every submit, so every submission gets a row.
+    db.add(
+        LeadAttribution(
+            organization_id=org_id,
+            form_submission_id=submission.id,
+            intake_link_id=link.id,
+            source_surface="hosted_intake",
+            landing_url=f"https://app.surrogacyforce.com/intake/{link.slug}",
+            **ad_fields,
+        )
+    )
+    db.commit()
+    return submission
+
+
+def _website_stage_event(db, test_org, test_user, donor, pipeline, ready_stage):
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+    )
+    result = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    return _history_event(db, result["history"])
+
+
+def test_website_donor_uses_latest_attributed_submission(db, test_org, test_user):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    now = datetime.now(UTC)
+    _hosted_submission(
+        db, test_org.id, donor, submitted_at=now - timedelta(days=3), fbc="fb.1.1.first-click"
+    )
+    attributed = _hosted_submission(
+        db, test_org.id, donor, submitted_at=now - timedelta(days=2), fbc="fb.1.2.second-click"
+    )
+    _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=1))
+
+    event = _website_stage_event(db, test_org, test_user, donor, pipeline, ready_stage)
+
+    assert event.first_party_submission_id == attributed.id
+    payload = db.get(Job, event.job_id).payload["data"]
+    assert payload["first_party_submission_id"] == str(attributed.id)
+    assert payload["fbc"] == "fb.1.2.second-click"
+
+
+@pytest.mark.parametrize(
+    "ad_fields",
+    [
+        {"fbc": "fb.1.1.ad-click"},
+        {"fbp": "fb.1.1.browser"},
+        {"fbclid": "ad-click"},
+        {"ad_id": "ad-1"},
+        {"adset_id": "adset-1"},
+        {"campaign_id": "campaign-1"},
+        {"source": "facebook", "medium": "paid_social", "campaign": "donors"},
+    ],
+    ids=lambda fields: next(iter(fields)),
+)
+def test_website_donor_prefers_an_earlier_ad_click_over_a_later_plain_visit(
+    db, test_org, test_user, ad_fields
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    now = datetime.now(UTC)
+    clicked = _hosted_submission(
+        db, test_org.id, donor, submitted_at=now - timedelta(days=2), **ad_fields
+    )
+    _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=1))
+
+    event = _website_stage_event(db, test_org, test_user, donor, pipeline, ready_stage)
+
+    assert event.first_party_submission_id == clicked.id
+    if "fbc" in ad_fields:
+        payload = db.get(Job, event.job_id).payload["data"]
+        assert payload["fbc"] == "fb.1.1.ad-click"
+
+
+@pytest.mark.parametrize(
+    "later_fields",
+    [
+        {"source": "google", "medium": "cpc", "campaign": "donors"},
+        {"campaign_id": "campaign-1"},
+        {"ad_id": "ad-1", "adset_id": "adset-1"},
+        {"fbclid": "later-click"},
+    ],
+    ids=lambda fields: next(iter(fields)),
+)
+def test_website_donor_prefers_an_earlier_matchable_click_over_a_later_tagged_visit(
+    db, test_org, test_user, later_fields
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    now = datetime.now(UTC)
+    clicked = _hosted_submission(
+        db, test_org.id, donor, submitted_at=now - timedelta(days=2), fbc="fb.1.1.ad-click"
+    )
+    _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=1), **later_fields)
+
+    event = _website_stage_event(db, test_org, test_user, donor, pipeline, ready_stage)
+
+    assert event.first_party_submission_id == clicked.id
+    payload = db.get(Job, event.job_id).payload["data"]
+    assert payload["fbc"] == "fb.1.1.ad-click"
+
+
+def test_website_donor_without_attribution_uses_latest_submission(db, test_org, test_user):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    now = datetime.now(UTC)
+    _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=2))
+    latest = _hosted_submission(db, test_org.id, donor, submitted_at=now - timedelta(days=1))
+
+    event = _website_stage_event(db, test_org, test_user, donor, pipeline, ready_stage)
+
+    assert event.first_party_submission_id == latest.id
+    assert event.status == "queued"
 
 
 def test_pending_and_rejected_donor_changes_do_not_enqueue_but_approved_change_does(
@@ -579,7 +1011,261 @@ def test_undo_records_history_but_does_not_queue_conversion(db, test_org, test_u
     assert db.query(DonorStatusHistory).filter_by(donor_id=donor.id).count() == 3
 
 
-def test_repeated_non_undo_stage_visits_get_distinct_occurrence_ids(db, test_org, test_user):
+def _history_event(db, history):
+    return (
+        db.query(ZapierOutboundEvent)
+        .filter(ZapierOutboundEvent.donor_status_history_id == history.id)
+        .one()
+    )
+
+
+def _add_stage(db, pipeline, *, stage_key, stage_type, order, label=None):
+    stage = PipelineStage(
+        id=uuid.uuid4(),
+        pipeline_id=pipeline.id,
+        stage_key=stage_key,
+        slug=stage_key.replace("_", "-"),
+        label=label or stage_key.replace("_", " ").title(),
+        color="#64748B",
+        stage_type=stage_type,
+        order=order,
+        is_active=True,
+        is_intake_stage=False,
+    )
+    db.add(stage)
+    db.flush()
+    return stage
+
+
+def _add_mapping(db, settings, pipeline, stage, event_name):
+    settings.donor_outbound_event_mapping = [
+        *settings.donor_outbound_event_mapping,
+        {
+            "donor_type": "egg",
+            "pipeline_id": str(pipeline.id),
+            "stage_id": str(stage.id),
+            "event_name": event_name,
+            "enabled": True,
+        },
+    ]
+    db.commit()
+
+
+@pytest.mark.asyncio
+async def test_undo_withdraws_the_undone_event_before_dispatch(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+
+    forward = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    donor_service.change_status(
+        db,
+        donor,
+        new_stage.id,
+        test_user.id,
+        reason="Undo accidental change",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    forward_event = _history_event(db, forward["history"])
+    assert forward_event.status == "skipped"
+    assert forward_event.reason == "donor_stage_undone"
+
+    class UnexpectedClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("An undone donor event must not be sent")
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", UnexpectedClient)
+    await zapier_handler.process_zapier_stage_event(db, db.get(Job, forward_event.job_id))
+    db.refresh(forward_event)
+    assert forward_event.status == "skipped"
+    assert forward_event.reason == "donor_stage_undone"
+
+    # Nothing reached Meta, so the next real entry is still the first Converted event.
+    reentry = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    reentry_event = _history_event(db, reentry["history"])
+    assert reentry_event.status == "queued"
+    assert reentry_event.event_id == forward_event.event_id
+
+
+def test_undo_keeps_an_event_already_claimed_for_delivery(db, test_org, test_user):
+    pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+    forward = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    forward_event = _history_event(db, forward["history"])
+    job = db.get(Job, forward_event.job_id)
+    job.status = JobStatus.RUNNING.value
+    db.commit()
+
+    undo = donor_service.change_status(
+        db,
+        donor,
+        new_stage.id,
+        test_user.id,
+        reason="Undo accidental change",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    assert undo["history"].is_undo is True
+    db.refresh(forward_event)
+    assert forward_event.status == "queued"
+    assert forward_event.reason is None
+
+
+def test_undo_does_not_count_toward_the_actionable_skip_rate(db, test_org, test_user):
+    from app.services import zapier_monitor_service
+
+    pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+    donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    donor_service.change_status(
+        db,
+        donor,
+        new_stage.id,
+        test_user.id,
+        reason="Undo accidental change",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    summary = zapier_monitor_service.get_summary(db, org_id=test_org.id)
+
+    assert summary["skipped_count"] == 2
+    assert summary["actionable_skipped_count"] == 0
+    assert summary["skipped_rate"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_failed_attempt_bookkeeping_keeps_an_undo_withdrawal(
+    db, test_org, test_user, monkeypatch
+):
+    from app import worker
+    from app.jobs.handlers import zapier as zapier_handler
+    from app.services import job_service
+
+    pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+    forward = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    forward_event = _history_event(db, forward["history"])
+    job = db.get(Job, forward_event.job_id)
+    claim_token = uuid.uuid4()
+    job.status = JobStatus.RUNNING.value
+    job.claim_token = claim_token
+    job.attempts = 1
+    db.commit()
+
+    # The worker returns the failed attempt to the queue before it records the failure;
+    # an undo that lands in between withdraws the event.
+    job = job_service.fail_claimed_job(
+        db,
+        job_id=job.id,
+        claim_token=claim_token,
+        error="Zapier webhook returned HTTP 500",
+    )
+    assert job.status == JobStatus.PENDING.value
+    donor_service.change_status(
+        db,
+        donor,
+        new_stage.id,
+        test_user.id,
+        reason="Undo accidental change",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    worker._record_job_failure(db, job, "Zapier webhook returned HTTP 500")
+
+    db.refresh(forward_event)
+    assert (forward_event.status, forward_event.reason) == ("skipped", "donor_stage_undone")
+    assert forward_event.attempts == 1
+    assert forward_event.last_error == "Zapier webhook returned HTTP 500"
+
+    class UnexpectedClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("An undone donor event must not be sent")
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", UnexpectedClient)
+    await zapier_handler.process_zapier_stage_event(db, db.get(Job, forward_event.job_id))
+    db.refresh(forward_event)
+    assert (forward_event.status, forward_event.reason) == ("skipped", "donor_stage_undone")
+
+
+def test_repeated_stage_visit_reports_the_event_once(db, test_org, test_user):
     pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
     donor = _create_donor(db, test_org.id, test_user.id)
     _attach_meta_lead(db, donor)
@@ -591,17 +1277,7 @@ def test_repeated_non_undo_stage_visits_get_distinct_occurrence_ids(db, test_org
         stage=ready_stage,
         event_name="Converted",
     )
-    settings.donor_outbound_event_mapping = [
-        *settings.donor_outbound_event_mapping,
-        {
-            "donor_type": "egg",
-            "pipeline_id": str(pipeline.id),
-            "stage_id": str(new_stage.id),
-            "event_name": "Qualified",
-            "enabled": True,
-        },
-    ]
-    db.commit()
+    _add_mapping(db, settings, pipeline, new_stage, "Qualified")
 
     first = donor_service.change_status(
         db,
@@ -632,18 +1308,110 @@ def test_repeated_non_undo_stage_visits_get_distinct_occurrence_ids(db, test_org
     )
 
     assert second["history"].is_undo is False
-    event_ids = {
-        row.event_id
-        for row in db.query(ZapierOutboundEvent)
-        .filter(
-            ZapierOutboundEvent.donor_status_history_id.in_(
-                [first["history"].id, second["history"].id, third["history"].id]
-            )
-        )
-        .all()
-    }
-    assert len(event_ids) == 3
-    assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 3
+    first_event = _history_event(db, first["history"])
+    second_event = _history_event(db, second["history"])
+    third_event = _history_event(db, third["history"])
+    assert first_event.status == "queued"
+    assert second_event.status == "queued"
+    assert third_event.status == "skipped"
+    assert third_event.reason == "duplicate"
+    assert third_event.event_id == first_event.event_id == f"zapier_donor:{donor.id}:converted"
+    assert third_event.job_id is None
+    assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 2
+
+
+def test_two_stages_mapped_to_one_event_report_it_once(db, test_org, test_user):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    matched_stage = _add_stage(
+        db, pipeline, stage_key="cycle_in_progress", stage_type="post_approval", order=3
+    )
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    settings = _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+    _add_mapping(db, settings, pipeline, matched_stage, "Converted")
+
+    first = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    second = donor_service.change_status(
+        db,
+        donor,
+        matched_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    assert _history_event(db, first["history"]).status == "queued"
+    second_event = _history_event(db, second["history"])
+    assert second_event.status == "skipped"
+    assert second_event.reason == "duplicate"
+    assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 1
+
+
+def test_resuming_from_on_hold_does_not_resend_the_event(db, test_org, test_user):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    on_hold_stage = _add_stage(db, pipeline, stage_key="on_hold", stage_type="paused", order=4)
+    donor = _create_donor(db, test_org.id, test_user.id)
+    _attach_meta_lead(db, donor)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage,
+        event_name="Converted",
+    )
+
+    first = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    donor_service.change_status(
+        db,
+        donor,
+        on_hold_stage.id,
+        test_user.id,
+        reason="Travelling",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+    db.query(DonorStatusHistory).filter_by(donor_id=donor.id).update(
+        {DonorStatusHistory.recorded_at: datetime.now(UTC) - timedelta(minutes=10)}
+    )
+    db.commit()
+    resumed = donor_service.change_status(
+        db,
+        donor,
+        ready_stage.id,
+        test_user.id,
+        reason="Back from travel",
+        user_role=Role.DEVELOPER,
+        emit_workflow_events=False,
+    )
+
+    assert resumed["history"].is_undo is False
+    assert _history_event(db, first["history"]).status == "queued"
+    resumed_event = _history_event(db, resumed["history"])
+    assert resumed_event.status == "skipped"
+    assert resumed_event.reason == "duplicate"
+    assert db.query(Job).filter(Job.organization_id == test_org.id).count() == 1
 
 
 @pytest.mark.asyncio
@@ -905,3 +1673,423 @@ def test_delivery_job_failure_rolls_back_stage_history_and_audit(
     )
     assert db.query(AuditLog).filter_by(target_id=donor_id).count() == initial_audit_count
     assert db.query(ZapierOutboundEvent).filter_by(donor_id=donor_id).count() == 0
+
+
+META_DONOR_MAPPING_RULES = [
+    {
+        "csv_column": column,
+        "surrogate_field": field,
+        "transformation": None,
+        "action": "map",
+        "custom_field_key": None,
+    }
+    for column, field in (
+        ("full_name", "full_name"),
+        ("email", "email"),
+        ("phone_number", "phone"),
+    )
+]
+
+
+@pytest.fixture
+def donor_storage(monkeypatch, tmp_path):
+    from app.core.config import settings
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local")
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path))
+    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
+
+
+def _creation_events(db, org_id):
+    return (
+        db.query(ZapierOutboundEvent)
+        .join(
+            DonorStatusHistory,
+            DonorStatusHistory.id == ZapierOutboundEvent.donor_status_history_id,
+        )
+        .filter(
+            ZapierOutboundEvent.organization_id == org_id,
+            DonorStatusHistory.old_stage_id.is_(None),
+        )
+        .all()
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("donor_type", ["egg", "sperm"])
+async def test_website_donor_creation_reports_mapped_entry_stage(
+    authed_client, db, test_org, donor_storage, donor_type
+):
+    from app.jobs.handlers.form_submissions import process_donor_intake_promote
+    from app.services import form_intake_service
+    from tests.test_hosted_donor_forms import _create_donor_form, _submit_donor_form
+
+    pipeline, new_stage, _ready_stage = _seed_donor_pipeline(db, test_org.id, donor_type)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type=donor_type,
+        pipeline=pipeline,
+        stage=new_stage,
+        event_name="Lead",
+    )
+    _, slug = await _create_donor_form(authed_client, lead_kind=f"{donor_type}_donor")
+    response = await _submit_donor_form(
+        authed_client, slug=slug, email=f"website-{donor_type}@example.com"
+    )
+    assert response.status_code == 200, response.text
+    submission = db.query(FormSubmission).filter_by(id=uuid.UUID(response.json()["id"])).one()
+    db.add(
+        LeadAttribution(
+            organization_id=test_org.id,
+            form_submission_id=submission.id,
+            intake_link_id=submission.intake_link_id,
+            source_surface="hosted_intake",
+            source="meta",
+            fbc="fb.1.1772942400.website-click",
+        )
+    )
+    db.commit()
+    form_intake_service.auto_match_submission(db, submission=submission)
+    form_intake_service.create_intake_lead_for_submission(
+        db, submission=submission, user_id=None, source="website", auto_promote=True
+    )
+    promote_job = (
+        db.query(Job).filter_by(organization_id=test_org.id, job_type="donor_intake_promote").one()
+    )
+
+    await process_donor_intake_promote(db, promote_job)
+
+    db.refresh(submission)
+    assert submission.donor_id is not None
+    events = _creation_events(db, test_org.id)
+    assert len(events) == 1
+    event = events[0]
+    assert event.status == "queued"
+    assert event.donor_id == submission.donor_id
+    assert event.stage_id == new_stage.id
+    assert event.event_name == "Lead"
+    assert event.attribution_source == "website"
+    assert event.first_party_submission_id == submission.id
+    payload = db.get(Job, event.job_id).payload["data"]
+    assert payload["event_name"] == "Lead"
+    assert payload["record_type"] == f"{donor_type}_donor"
+    assert payload["fbc"] == "fb.1.1772942400.website-click"
+
+
+@pytest.mark.parametrize("donor_type", ["egg", "sperm"])
+def test_meta_donor_conversion_reports_mapped_entry_stage(db, test_org, donor_type):
+    from app.services import meta_lead_service
+
+    pipeline, new_stage, _ready_stage = _seed_donor_pipeline(db, test_org.id, donor_type)
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type=donor_type,
+        pipeline=pipeline,
+        stage=new_stage,
+        event_name="Lead",
+    )
+    lead = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id=f"{donor_type}-lead-1001",
+        meta_form_id="meta-form-1",
+        meta_page_id="meta-page-1",
+        field_data_raw={
+            "full_name": "Meta Donor",
+            "email": f"meta-{donor_type}@example.com",
+            "phone_number": "+1 607 555 0198",
+        },
+        meta_created_time=datetime.now(UTC),
+    )
+    db.add(lead)
+    db.commit()
+
+    donor, error = meta_lead_service.convert_to_donor_with_mapping(
+        db, lead, META_DONOR_MAPPING_RULES, donor_type=donor_type
+    )
+
+    assert error is None
+    events = _creation_events(db, test_org.id)
+    assert len(events) == 1
+    event = events[0]
+    assert (event.status, event.reason) == ("queued", None)
+    assert event.donor_id == donor.id
+    assert event.event_name == "Lead"
+    assert event.attribution_source == "meta"
+    assert event.lead_id == f"{donor_type}-lead-1001"
+    payload = db.get(Job, event.job_id).payload["data"]
+    assert payload["lead_id"] == f"{donor_type}-lead-1001"
+    assert payload["record_type"] == f"{donor_type}_donor"
+
+
+@pytest.mark.parametrize("mapping_state", ["unmapped", "disabled"])
+def test_donor_creation_skips_when_entry_stage_is_not_reported(db, test_org, mapping_state):
+    from app.services import meta_lead_service
+
+    pipeline, new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    settings = _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=ready_stage if mapping_state == "unmapped" else new_stage,
+        event_name="Lead",
+    )
+    if mapping_state == "disabled":
+        settings.donor_outbound_event_mapping = [
+            {**settings.donor_outbound_event_mapping[0], "enabled": False}
+        ]
+        db.commit()
+    lead = MetaLead(
+        organization_id=test_org.id,
+        meta_lead_id="egg-lead-2002",
+        meta_form_id="meta-form-1",
+        meta_page_id="meta-page-1",
+        field_data_raw={"full_name": "Meta Donor", "email": "meta-unmapped@example.com"},
+        meta_created_time=datetime.now(UTC),
+    )
+    db.add(lead)
+    db.commit()
+
+    donor, error = meta_lead_service.convert_to_donor_with_mapping(
+        db, lead, META_DONOR_MAPPING_RULES, donor_type="egg"
+    )
+
+    assert error is None
+    assert donor is not None
+    events = _creation_events(db, test_org.id)
+    assert [(event.status, event.reason, event.job_id) for event in events] == [
+        ("skipped", "unmapped_donor_stage", None)
+    ]
+
+
+def test_manual_donor_creation_sends_nothing(db, test_org, test_user):
+    pipeline, new_stage, _ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    _configure_reporting(
+        db,
+        test_org.id,
+        donor_type="egg",
+        pipeline=pipeline,
+        stage=new_stage,
+        event_name="Lead",
+    )
+
+    _create_donor(db, test_org.id, test_user.id)
+
+    assert db.query(ZapierOutboundEvent).filter_by(organization_id=test_org.id).count() == 0
+
+
+def _capture_webhook(monkeypatch, zapier_handler):
+    sent: dict[str, object] = {}
+
+    class Response:
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, *, json, headers):
+            sent.update({"url": url, "json": json, "headers": headers})
+            return Response()
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", Client)
+    return sent
+
+
+@pytest.mark.asyncio
+async def test_donor_test_event_sends_a_meta_sample_through_the_donor_worker(
+    authed_client, db, test_org, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "sperm")
+    settings = _configure_reporting(
+        db, test_org.id, donor_type="sperm", pipeline=pipeline, stage=ready_stage
+    )
+    settings.outbound_webhook_secret_encrypted = zapier_settings_service.encrypt_secret(
+        "donor-test-secret"
+    )
+    db.commit()
+
+    response = await authed_client.post(
+        "/integrations/zapier/test-outbound/donor",
+        json={
+            "donor_type": "sperm",
+            "event_name": "Qualified",
+            "attribution_source": "meta",
+            "lead_id": "real-meta-lead-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "queued"
+    assert body["event_name"] == "Qualified"
+    assert body["lead_id"] == "real-meta-lead-1"
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter_by(organization_id=test_org.id, event_id=body["event_id"])
+        .one()
+    )
+    assert (event.source, event.status, event.donor_type) == ("test", "queued", "sperm")
+    assert event.attribution_source == "meta"
+    job = db.get(Job, event.job_id)
+    assert job.organization_id == test_org.id
+    assert job.payload["delivery_kind"] == "donor_test"
+    assert "headers" not in job.payload
+    assert "url" not in job.payload
+
+    sent = _capture_webhook(monkeypatch, zapier_handler)
+    await zapier_handler.process_zapier_stage_event(db, job)
+
+    payload = sent["json"]
+    assert sent["url"] == settings.outbound_webhook_url
+    assert sent["headers"] == {"X-Webhook-Token": "donor-test-secret"}
+    assert payload["test_mode"] is True
+    assert payload["record_type"] == "sperm_donor"
+    assert payload["event_name"] == "Qualified"
+    assert payload["attribution_source"] == "meta"
+    assert payload["lead_id"] == "real-meta-lead-1"
+    assert payload["fbc"]
+    assert set(payload["user_data"]) == {"email_hash", "phone_hash"}
+
+
+@pytest.mark.asyncio
+async def test_donor_test_event_sends_a_website_sample_without_a_lead_id(
+    authed_client, db, test_org, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    settings = _configure_reporting(
+        db, test_org.id, donor_type="egg", pipeline=pipeline, stage=ready_stage
+    )
+    settings.outbound_send_hashed_pii = False
+    db.commit()
+
+    response = await authed_client.post(
+        "/integrations/zapier/test-outbound/donor",
+        json={"donor_type": "egg", "event_name": "Lead", "attribution_source": "website"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["lead_id"] is None
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter_by(organization_id=test_org.id, event_id=response.json()["event_id"])
+        .one()
+    )
+    sent = _capture_webhook(monkeypatch, zapier_handler)
+    await zapier_handler.process_zapier_stage_event(db, db.get(Job, event.job_id))
+
+    payload = sent["json"]
+    assert payload["attribution_source"] == "website"
+    assert payload["record_type"] == "egg_donor"
+    assert payload["first_party_submission_id"]
+    assert payload["fbc"]
+    for absent in ("lead_id", "facebook_lead_id", "customer_email", "user_data"):
+        assert absent not in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("configure", "detail"),
+    [
+        ("no_webhook", "Outbound webhook URL not configured."),
+        ("donor_disabled", "Donor stage events are disabled."),
+    ],
+)
+async def test_donor_test_event_requires_donor_reporting_setup(
+    authed_client, db, test_org, configure, detail
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    settings = _configure_reporting(
+        db, test_org.id, donor_type="egg", pipeline=pipeline, stage=ready_stage
+    )
+    if configure == "no_webhook":
+        settings.outbound_webhook_url = None
+    else:
+        settings.donor_outbound_enabled = False
+    db.commit()
+
+    response = await authed_client.post(
+        "/integrations/zapier/test-outbound/donor",
+        json={"donor_type": "egg", "event_name": "Lead", "attribution_source": "meta"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == detail
+    assert db.query(ZapierOutboundEvent).filter_by(organization_id=test_org.id).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_donor_test_event_rejects_unsupported_event_names(authed_client, db, test_org):
+    response = await authed_client.post(
+        "/integrations/zapier/test-outbound/donor",
+        json={"donor_type": "egg", "event_name": "Purchase", "attribution_source": "meta"},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_donor_test_event_rejects_a_lead_id_longer_than_the_stored_column(
+    authed_client, db, test_org
+):
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    _configure_reporting(db, test_org.id, donor_type="egg", pipeline=pipeline, stage=ready_stage)
+    url = "/integrations/zapier/test-outbound/donor"
+    body = {"donor_type": "egg", "event_name": "Lead", "attribution_source": "meta"}
+
+    too_long = await authed_client.post(url, json={**body, "lead_id": "x" * 121})
+    longest = await authed_client.post(url, json={**body, "lead_id": "x" * 120})
+
+    assert too_long.status_code == 422
+    assert longest.status_code == 200, longest.text
+    assert longest.json()["lead_id"] == "x" * 120
+    assert db.query(ZapierOutboundEvent).filter_by(organization_id=test_org.id).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_donor_test_job_skips_when_donor_reporting_is_disabled_before_dispatch(
+    authed_client, db, test_org, monkeypatch
+):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    pipeline, _new_stage, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    settings = _configure_reporting(
+        db, test_org.id, donor_type="egg", pipeline=pipeline, stage=ready_stage
+    )
+    response = await authed_client.post(
+        "/integrations/zapier/test-outbound/donor",
+        json={"donor_type": "egg", "event_name": "Lead", "attribution_source": "meta"},
+    )
+    assert response.status_code == 200, response.text
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter_by(organization_id=test_org.id, event_id=response.json()["event_id"])
+        .one()
+    )
+    settings.donor_outbound_enabled = False
+    db.commit()
+
+    class UnexpectedClient:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("A disabled donor test must not be sent")
+
+    monkeypatch.setattr(zapier_handler.httpx, "AsyncClient", UnexpectedClient)
+    await zapier_handler.process_zapier_stage_event(db, db.get(Job, event.job_id))
+
+    db.refresh(event)
+    assert (event.status, event.reason) == ("skipped", "donor_dispatch_disabled")

@@ -126,6 +126,17 @@ def _get_embed_origin(request: Request) -> str | None:
     return f"{parsed.scheme}://{parsed.hostname}{port}"
 
 
+def _parse_attribution_part(raw: str | None) -> dict[str, object]:
+    """Attribution is optional landing context, so a malformed part never rejects the application."""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def _get_active_embed_link_or_404(
     *,
     db: Session,
@@ -218,6 +229,9 @@ def get_shared_public_form(
     agency_name, agency_logo_url = form_intake_service.get_public_agency_branding(
         db, intake_link.organization_id
     )
+    mapping_snapshot = form_intake_service.get_intake_mapping_snapshot(
+        db, form=form, published_version=version
+    )
     return FormIntakePublicRead(
         form_id=form.id,
         intake_link_id=intake_link.id,
@@ -229,15 +243,18 @@ def get_shared_public_form(
         max_file_count=form.max_file_count,
         allowed_mime_types=form.allowed_mime_types
         or form_submission_service.DEFAULT_ALLOWED_FORM_UPLOAD_MIME_TYPES,
+        field_allowed_mime_types=form_intake_service.get_public_field_allowed_mime_types(
+            form=form,
+            lead_kind=version.lead_kind_snapshot,
+            mapping_snapshot=mapping_snapshot,
+        ),
         campaign_name=intake_link.campaign_name,
         event_name=intake_link.event_name,
         messaging_consent=form_intake_service.get_messaging_consent_options(
             db,
             intake_link.organization_id,
             schema=schema,
-            mapping_snapshot=form_intake_service.get_intake_mapping_snapshot(
-                db, form=form, published_version=version
-            ),
+            mapping_snapshot=mapping_snapshot,
         ),
         agency_name=agency_name,
         agency_logo_url=agency_logo_url,
@@ -270,6 +287,12 @@ def get_embed_public_form(
         form=form,
         link=intake_link,
     )
+    try:
+        form_intake_service.ensure_embed_can_submit(
+            db, link=intake_link, form=form, version=version
+        )
+    except form_intake_service.EmbedUnavailableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     schema = _public_schema_for_version(form, version)
     if not schema:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -342,6 +365,8 @@ def create_embed_session(
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except form_intake_service.EmbedUnavailableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return FormEmbedSessionRead(
@@ -363,7 +388,7 @@ def submit_embed_public_form(
     if not form or form.status != FormStatus.PUBLISHED.value:
         raise HTTPException(status_code=404, detail="Form not found")
     try:
-        submission, outcome = form_intake_service.submit_lead_capture_embed(
+        submission, _outcome = form_intake_service.submit_lead_capture_embed(
             db=db,
             link=intake_link,
             form=form,
@@ -383,16 +408,11 @@ def submit_embed_public_form(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except form_intake_service.DuplicateApplicantSubmissionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except form_intake_service.EmbedUnavailableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return FormSubmissionSharedResponse(
-        id=submission.id,
-        status=submission.status,
-        outcome=outcome,
-        surrogate_id=submission.surrogate_id,
-        donor_id=submission.donor_id,
-        intake_lead_id=submission.intake_lead_id,
-    )
+    return FormSubmissionSharedResponse(id=submission.id)
 
 
 @router.get("/intake/{slug}/draft/{draft_session_id}", response_model=FormIntakeDraftPublicRead)
@@ -581,6 +601,7 @@ def submit_shared_public_form(
     sms_operational: Annotated[bool, "fastapi_param"] = Form(default=False),
     sms_promotional: Annotated[bool, "fastapi_param"] = Form(default=False),
     sms_phone_field_key: Annotated[str | None, "fastapi_param"] = Form(default=None),
+    attribution: Annotated[str | None, "fastapi_param"] = Form(default=None),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     if not settings.FORMS_SHARED_INTAKE:
@@ -620,7 +641,6 @@ def submit_shared_public_form(
     source_metadata = {
         "campaign_name": intake_link.campaign_name,
         "event_name": intake_link.event_name,
-        "utm": {**(intake_link.utm_defaults or {}), **utm_fields},
         "client_ip": get_client_ip(request),
         "user_agent": request.headers.get("user-agent"),
     }
@@ -632,7 +652,7 @@ def submit_shared_public_form(
     )
 
     try:
-        submission, outcome = form_intake_service.create_shared_submission(
+        submission, _outcome = form_intake_service.create_shared_submission(
             db=db,
             link=intake_link,
             form=form,
@@ -641,6 +661,7 @@ def submit_shared_public_form(
             file_field_keys=parsed_keys,
             published_version_id=published_version_id,
             source_metadata=source_metadata,
+            attribution={**utm_fields, **_parse_attribution_part(attribution)},
             challenge_token=challenge_token,
             idempotency_key=resolved_idempotency_key,
             sms_operational=sms_operational,
@@ -654,11 +675,4 @@ def submit_shared_public_form(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return FormSubmissionSharedResponse(
-        id=submission.id,
-        status=submission.status,
-        outcome=outcome,
-        surrogate_id=submission.surrogate_id,
-        donor_id=submission.donor_id,
-        intake_lead_id=submission.intake_lead_id,
-    )
+    return FormSubmissionSharedResponse(id=submission.id)

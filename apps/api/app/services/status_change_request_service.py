@@ -1,11 +1,13 @@
 """Service for handling status change requests (admin approval workflow)."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import and_, false, or_
 from sqlalchemy.orm import Session
 
+from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
 from app.db.enums import MatchStatus, Role
 from app.db.models import (
     Donor,
@@ -311,6 +313,7 @@ def approve_request(
     now = datetime.now(UTC)
     surrogate_stage_event = None
     donor_stage_event: tuple[Donor, PipelineStage, PipelineStage] | None = None
+    donor_stage_effects: list[tuple[str, Callable[[], None]]] = []
 
     if request.entity_type == "surrogate":
         # Get surrogate
@@ -375,16 +378,32 @@ def approve_request(
                 IntendedParent.id == request.entity_id,
                 IntendedParent.organization_id == org_id,
             )
+            .with_for_update()
             .first()
         )
         if not intended_parent:
             raise ValueError("Intended parent not found")
+        if intended_parent.is_archived:
+            raise ValueError("Cannot approve a stage change for an archived intended parent")
         if not request.target_stage_id:
             raise ValueError("Target stage not found")
-        target_stage = pipeline_service.get_stage_by_id(db, request.target_stage_id)
+        target_stage = (
+            db.query(PipelineStage)
+            .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+            .filter(
+                PipelineStage.id == request.target_stage_id,
+                PipelineStage.is_active.is_(True),
+                Pipeline.organization_id == org_id,
+                Pipeline.entity_type == INTENDED_PARENT_PIPELINE_ENTITY,
+                Pipeline.is_default.is_(True),
+            )
+            .first()
+        )
         if not target_stage:
             raise ValueError("Target stage not found")
         old_stage = intended_parent_status_service.get_current_stage(db, intended_parent)
+        if old_stage.id == target_stage.id:
+            raise ValueError("Intended parent is already in the requested target stage")
         intended_parent_status_service.apply_status_change(
             db=db,
             ip=intended_parent,
@@ -455,6 +474,7 @@ def approve_request(
         if changed_donor is None:
             raise ValueError("Donor stage change was not applied")
         donor_stage_event = (changed_donor, old_stage, target_stage)
+        donor_stage_effects = list(result.get("after_commit_effects", []))
     elif request.entity_type == "match":
         match = match_queries.get_match(db, request.entity_id, org_id)
         if not match:
@@ -519,6 +539,8 @@ def approve_request(
 
     if donor_stage_event:
         changed_donor, old_stage, target_stage = donor_stage_event
+        for _name, run in donor_stage_effects:
+            run()
         donor_service.dispatch_stage_changed_workflow(
             db,
             donor=changed_donor,

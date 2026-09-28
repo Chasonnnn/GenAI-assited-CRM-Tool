@@ -30,8 +30,31 @@ NON_ACTIONABLE_SKIP_REASONS = {
     "donor_outbound_disabled",
     "donor_stage_inactive",
     "donor_stage_undo",
+    "donor_stage_undone",
     "unmapped_donor_stage",
 }
+# Skips that a configuration or data fix can clear. Other reasons, including reasons added
+# later, are final: replay could double-send or report an event Meta should never receive.
+REPLAYABLE_SKIP_REASONS = frozenset(
+    {
+        "outbound_disabled",
+        "donor_outbound_disabled",
+        "missing_webhook_url",
+        "unmapped_stage",
+        "unmapped_donor_stage",
+        "missing_matching_data",
+        "enqueue_failed",
+        "donor_dispatch_disabled",
+        "donor_dispatch_url_missing",
+        "donor_mapping_changed",
+        "donor_config_changed",
+        "missing_meta_lead",
+        "missing_meta_lead_fk",
+        "missing_meta_lead_id",
+        "missing_donor_attribution",
+        "donor_attribution_missing",
+    }
+)
 
 
 def _now_utc() -> datetime:
@@ -85,6 +108,7 @@ def _create_event_record(
     attribution_source: str | None = None,
     first_party_submission_id: UUID | None = None,
     config_fingerprint: str | None = None,
+    effective_at: datetime | None = None,
     attempts: int = 0,
     last_error: str | None = None,
 ) -> ZapierOutboundEvent:
@@ -110,6 +134,7 @@ def _create_event_record(
         attribution_source=attribution_source,
         first_party_submission_id=first_party_submission_id,
         config_fingerprint=config_fingerprint,
+        effective_at=effective_at,
         attempts=attempts,
         last_error=last_error,
         created_at=now,
@@ -144,6 +169,7 @@ def create_donor_event(
     first_party_submission_id: UUID | None = None,
     config_fingerprint: str | None = None,
     job_id: UUID | None = None,
+    effective_at: datetime | None = None,
 ) -> ZapierOutboundEvent:
     """Create a donor delivery record inside the caller-owned transaction."""
     return _create_event_record(
@@ -167,6 +193,31 @@ def create_donor_event(
         attribution_source=attribution_source,
         first_party_submission_id=first_party_submission_id,
         config_fingerprint=config_fingerprint,
+        effective_at=effective_at,
+    )
+
+
+def create_donor_test_event(
+    db: Session,
+    *,
+    org_id: UUID,
+    event_id: str,
+    event_name: str,
+    lead_id: str | None,
+    donor_type: str,
+    attribution_source: str,
+) -> ZapierOutboundEvent:
+    """Create a donor sample-event record inside the caller-owned transaction."""
+    return _create_event_record(
+        db,
+        org_id=org_id,
+        source="test",
+        status="queued",
+        event_id=event_id,
+        event_name=event_name,
+        lead_id=lead_id,
+        donor_type=donor_type,
+        attribution_source=attribution_source,
     )
 
 
@@ -181,6 +232,8 @@ def record_skipped_event(
     stage_key: str | None = None,
     stage_slug: str | None = None,
     stage_label: str | None = None,
+    stage_id: UUID | None = None,
+    effective_at: datetime | None = None,
     surrogate_id: UUID | None = None,
     db: Session | None = None,
 ) -> None:
@@ -197,6 +250,8 @@ def record_skipped_event(
             stage_key=stage_key,
             stage_slug=stage_slug,
             stage_label=stage_label,
+            stage_id=stage_id,
+            effective_at=effective_at,
             surrogate_id=surrogate_id,
         ),
         db=db,
@@ -214,6 +269,8 @@ def record_queued_event(
     stage_key: str | None = None,
     stage_slug: str | None = None,
     stage_label: str | None = None,
+    stage_id: UUID | None = None,
+    effective_at: datetime | None = None,
     surrogate_id: UUID | None = None,
     db: Session | None = None,
 ) -> None:
@@ -230,6 +287,8 @@ def record_queued_event(
             stage_key=stage_key,
             stage_slug=stage_slug,
             stage_label=stage_label,
+            stage_id=stage_id,
+            effective_at=effective_at,
             surrogate_id=surrogate_id,
         ),
         db=db,
@@ -296,11 +355,20 @@ def mark_job_failed(
     db: Session | None = None,
 ) -> None:
     def _update(db: Session) -> None:
-        event = db.query(ZapierOutboundEvent).filter(ZapierOutboundEvent.job_id == job_id).first()
+        # Lock and re-read the row: an undo can withdraw the event after the worker returns
+        # the job to PENDING and before this bookkeeping runs.
+        event = (
+            db.query(ZapierOutboundEvent)
+            .filter(ZapierOutboundEvent.job_id == job_id)
+            .with_for_update()
+            .populate_existing()
+            .first()
+        )
         if not event:
             return
         now = _now_utc()
-        event.status = "failed" if job_status == JobStatus.FAILED.value else "queued"
+        if event.status != "skipped":
+            event.status = "failed" if job_status == JobStatus.FAILED.value else "queued"
         event.attempts = attempts
         event.last_error = error_message[:1000]
         event.updated_at = now
@@ -413,6 +481,54 @@ def is_donor_event(event: ZapierOutboundEvent) -> bool:
         value is not None
         for value in (event.donor_id, event.donor_status_history_id, event.donor_type)
     )
+
+
+def can_replay_event(event: ZapierOutboundEvent) -> bool:
+    """True when a skipped event can re-run enqueue against current configuration."""
+    if (
+        event.status != "skipped"
+        or event.source == "test"
+        or event.reason not in REPLAYABLE_SKIP_REASONS
+    ):
+        return False
+    if is_donor_event(event):
+        return event.donor_id is not None and event.donor_status_history_id is not None
+    # Rows written before effective_at was recorded cannot rebuild the original event time.
+    return bool(event.surrogate_id and event.stage_key and event.effective_at)
+
+
+def lock_event(db: Session, *, org_id: UUID, event_id: UUID) -> ZapierOutboundEvent | None:
+    return (
+        db.query(ZapierOutboundEvent)
+        .filter(
+            ZapierOutboundEvent.id == event_id,
+            ZapierOutboundEvent.organization_id == org_id,
+        )
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+
+
+def record_replay_result(
+    event: ZapierOutboundEvent,
+    *,
+    status: str,
+    reason: str | None,
+    job_id: UUID | None,
+    **fields: Any,
+) -> None:
+    """Overwrite a replayed row with the outcome of its new enqueue attempt."""
+    for name, value in fields.items():
+        setattr(event, name, value)
+    event.status = status
+    event.reason = reason
+    event.job_id = job_id
+    event.attempts = 0
+    event.last_error = None
+    event.last_attempt_at = None
+    event.delivered_at = None
+    event.updated_at = _now_utc()
 
 
 def get_event(

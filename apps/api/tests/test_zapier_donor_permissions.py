@@ -499,6 +499,94 @@ async def test_zapier_surrogate_retry_remains_available_without_donor_permission
     assert job.status == JobStatus.PENDING.value
 
 
+DONOR_TEST_REQUEST = {"donor_type": "egg", "event_name": "Lead", "attribution_source": "meta"}
+
+
+@pytest.mark.asyncio
+async def test_zapier_donor_test_event_requires_view_and_edit_permissions(db, test_org):
+    _configure_donor_export(db, test_org.id)
+    no_view = _integration_user(db, test_org.id, can_view_donors=False, can_edit_donors=False)
+    view_only = _integration_user(db, test_org.id, can_view_donors=True, can_edit_donors=False)
+    editor = _integration_user(db, test_org.id, can_view_donors=True, can_edit_donors=True)
+    csrf_editor = _integration_user(db, test_org.id, can_view_donors=True, can_edit_donors=True)
+
+    async with _client_for(db, test_org.id, no_view) as client:
+        denied_view = await client.post(
+            "/integrations/zapier/test-outbound/donor", json=DONOR_TEST_REQUEST
+        )
+    async with _client_for(db, test_org.id, view_only) as client:
+        denied_edit = await client.post(
+            "/integrations/zapier/test-outbound/donor", json=DONOR_TEST_REQUEST
+        )
+    async with _client_for(db, test_org.id, csrf_editor, include_csrf=False) as client:
+        missing_csrf = await client.post(
+            "/integrations/zapier/test-outbound/donor", json=DONOR_TEST_REQUEST
+        )
+
+    assert denied_view.status_code == 403
+    assert denied_view.json()["detail"] == "Missing permission: view_donors"
+    assert denied_edit.status_code == 403
+    assert denied_edit.json()["detail"] == "Missing permission: edit_donors"
+    assert missing_csrf.status_code == 403
+    assert db.query(ZapierOutboundEvent).filter_by(organization_id=test_org.id).count() == 0
+
+    async with _client_for(db, test_org.id, editor) as client:
+        allowed = await client.post(
+            "/integrations/zapier/test-outbound/donor", json=DONOR_TEST_REQUEST
+        )
+    assert allowed.status_code == 200, allowed.text
+
+
+@pytest.mark.asyncio
+async def test_zapier_donor_test_event_uses_only_the_member_organization(db, test_org):
+    from app.jobs.handlers import zapier as zapier_handler
+
+    _configure_donor_export(db, test_org.id)
+    other_org = Organization(
+        id=uuid4(),
+        name="Other donor test tenant",
+        slug=f"other-donor-test-{uuid4().hex[:8]}",
+        ai_enabled=True,
+    )
+    db.add(other_org)
+    db.commit()
+    other_editor = _integration_user(db, other_org.id, can_view_donors=True, can_edit_donors=True)
+    editor = _integration_user(db, test_org.id, can_view_donors=True, can_edit_donors=True)
+
+    async with _client_for(db, other_org.id, other_editor) as client:
+        other_response = await client.post(
+            "/integrations/zapier/test-outbound/donor",
+            json=DONOR_TEST_REQUEST | {"organization_id": str(test_org.id)},
+        )
+    assert other_response.status_code == 400
+    assert other_response.json()["detail"] == "Outbound webhook URL not configured."
+    assert db.query(ZapierOutboundEvent).filter_by(organization_id=test_org.id).count() == 0
+
+    async with _client_for(db, test_org.id, editor) as client:
+        response = await client.post(
+            "/integrations/zapier/test-outbound/donor", json=DONOR_TEST_REQUEST
+        )
+    assert response.status_code == 200, response.text
+    event = (
+        db.query(ZapierOutboundEvent)
+        .filter_by(organization_id=test_org.id, event_id=response.json()["event_id"])
+        .one()
+    )
+    foreign_job = Job(
+        organization_id=other_org.id,
+        job_type=JobType.ZAPIER_STAGE_EVENT.value,
+        payload={"delivery_kind": "donor_test", "event_record_id": str(event.id), "data": {}},
+        status=JobStatus.RUNNING.value,
+    )
+    db.add(foreign_job)
+    db.commit()
+
+    with pytest.raises(RuntimeError, match="unavailable"):
+        await zapier_handler.process_zapier_stage_event(db, foreign_job)
+    db.refresh(event)
+    assert event.status == "queued"
+
+
 @pytest.mark.asyncio
 async def test_zapier_donor_settings_update_keeps_csrf_guard(db, test_org):
     _configure_donor_export(db, test_org.id)

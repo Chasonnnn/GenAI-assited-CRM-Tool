@@ -46,6 +46,7 @@ from app.services import (
     match_queries,
     permission_policy_service,
     pipeline_service,
+    surrogate_status_service,
     template_seeder,
 )
 from app.utils.height import total_inches_to_height_ft
@@ -1058,6 +1059,33 @@ def _build_match_targets(count: int, mode: str) -> list[str]:
     return _repeat_balanced(MATCH_STATUS_FLOW, count)
 
 
+def _deliver_surrogate(db, surrogate: Surrogate, user_id: UUID) -> None:
+    """Move a matched surrogate to Delivered, which completes her accepted match.
+
+    Skips the stage change's after-commit effects, like the match seeds.
+    """
+    db.refresh(surrogate)
+    current = surrogate.stage
+    delivered = pipeline_service.get_stage_by_system_role(db, current.pipeline_id, "delivered")
+    now = datetime.now(UTC)
+    surrogate_status_service.apply_status_change(
+        db=db,
+        surrogate=surrogate,
+        new_stage=delivered,
+        current_stage=current,
+        old_stage_id=current.id,
+        old_label=surrogate.status_label,
+        old_slug=current.slug,
+        user_id=user_id,
+        reason=None,
+        effective_at=now,
+        recorded_at=now,
+        trigger_workflows=False,
+        commit=False,
+    )
+    db.commit()
+
+
 def _promote_surrogate_to_ready(
     db, org_id: UUID, candidates: list, accepted: list, used: set[UUID]
 ) -> Surrogate | None:
@@ -1128,14 +1156,6 @@ def create_matches(
         fallback=proposer,
     )
     targets = _build_match_targets(count, mode=mode)
-    if not match_lifecycle.expansion_enabled():
-        # complete() is fenced behind MATCH_CASE_EXPANSION_ENABLED; seed accepted instead.
-        skipped = targets.count(MatchStatus.COMPLETED.value)
-        targets = [
-            MatchStatus.ACCEPTED.value if t == MatchStatus.COMPLETED.value else t for t in targets
-        ]
-        if skipped:
-            print(f"  - match expansion disabled: seeding {skipped} completed matches as accepted")
     used_pairs: set[tuple[UUID, UUID]] = set()
     used_accepted_surrogates: set[UUID] = set()
     created_matches: list[Match] = []
@@ -1291,14 +1311,8 @@ def create_matches(
                         dispatch_effects=False,
                     )
                 if target_status == MatchStatus.COMPLETED.value:
-                    match = match_lifecycle.transition(
-                        db,
-                        match,
-                        "complete",
-                        actor_user_id=decider.id,
-                        outcome="Seed completed match",
-                        dispatch_effects=False,
-                    )
+                    _deliver_surrogate(db, surrogate, decider.id)
+                    db.refresh(match)
                 if target_status in {
                     MatchStatus.ACCEPTED.value,
                     MatchStatus.CANCELLATION_PENDING.value,

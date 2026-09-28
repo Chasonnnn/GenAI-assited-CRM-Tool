@@ -474,6 +474,8 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
     """
     Find and repair records marked matched without an accepted Match row.
 
+    An intended parent whose match completed at delivery stays at Matched and is not repaired.
+
     Preview by default. Use --apply to reset affected records back to ready_to_match.
 
     Example:
@@ -483,7 +485,7 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
     from sqlalchemy import and_, or_
     from sqlalchemy.orm import aliased
 
-    from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY
+    from app.core.stage_definitions import INTENDED_PARENT_PIPELINE_ENTITY, get_system_stage_key
     from app.db.enums import MatchStatus
     from app.db.models import (
         IntendedParent,
@@ -496,6 +498,7 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
     from app.services import pipeline_service
 
     repair_reason = "Repair orphaned matched record without accepted Match"
+    ip_matched_key = get_system_stage_key(INTENDED_PARENT_PIPELINE_ENTITY, "matched")
 
     db = SessionLocal()
     try:
@@ -541,14 +544,17 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
                 and_(
                     accepted_ip_match.organization_id == IntendedParent.organization_id,
                     accepted_ip_match.intended_parent_id == IntendedParent.id,
-                    accepted_ip_match.status == MatchStatus.ACCEPTED.value,
+                    # Delivery completes the match and leaves the intended parent at Matched.
+                    accepted_ip_match.status.in_(
+                        (MatchStatus.ACCEPTED.value, MatchStatus.COMPLETED.value)
+                    ),
                 ),
             )
             .outerjoin(PipelineStage, IntendedParent.stage_id == PipelineStage.id)
             .filter(
                 or_(
-                    PipelineStage.stage_key == "matched",
-                    IntendedParent.status == "matched",
+                    PipelineStage.stage_key == ip_matched_key,
+                    IntendedParent.status == ip_matched_key,
                 ),
                 IntendedParent.is_archived.is_(False),
                 accepted_ip_match.id.is_(None),
@@ -632,11 +638,15 @@ def repair_matched_without_match(org_slug: str | None, apply: bool):
                 intended_parent.organization_id,
                 entity_type=INTENDED_PARENT_PIPELINE_ENTITY,
             )
-            ready_stage = pipeline_service.get_stage_by_key(db, ip_pipeline.id, "ready_to_match")
-            matched_stage = pipeline_service.get_stage_by_key(db, ip_pipeline.id, "matched")
+            ready_stage = pipeline_service.get_stage_by_system_role(
+                db, ip_pipeline.id, "handoff", INTENDED_PARENT_PIPELINE_ENTITY
+            )
+            matched_stage = pipeline_service.get_stage_by_system_role(
+                db, ip_pipeline.id, "matched", INTENDED_PARENT_PIPELINE_ENTITY
+            )
             current_stage = pipeline_service.get_stage_by_id(db, intended_parent.stage_id)
-            if not current_stage or not pipeline_service.stage_matches_key(
-                current_stage, "matched"
+            if not current_stage or not pipeline_service.stage_matches_system_role(
+                current_stage, "matched", INTENDED_PARENT_PIPELINE_ENTITY
             ):
                 current_stage = matched_stage or current_stage
             if not ready_stage or not current_stage:

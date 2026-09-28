@@ -81,3 +81,4 @@ class IntakeLeadStatus(str, Enum):
 
     PENDING_REVIEW = "pending_review"
     PROMOTED = "promoted"
+    REJECTED = "rejected"

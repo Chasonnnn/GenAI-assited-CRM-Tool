@@ -25,6 +25,9 @@ import {
     resolveSubmissionMatch,
     retrySubmissionMatch,
     listSubmissionMatchCandidates,
+    listSubmissionDonorCandidates,
+    listDonorSubmissions,
+    rescanSubmissionFile,
     listFormSubmissions,
     promoteIntakeLead,
     getIntakeLead,
@@ -55,10 +58,13 @@ import {
     type PromoteIntakeLeadPayload,
     type SubmissionAnswersUpdateResponse,
     type ListFormSubmissionsParams,
+    type FormSubmissionRead,
 } from '@/lib/api/forms'
 import { ApiError } from '@/lib/api'
 import { invalidateSurrogateCrmCaches, surrogateKeys } from './use-surrogates'
 import { donorKeys } from './use-donors'
+import { donorAttachmentKeys } from './use-attachments'
+import { entityActivityKeys } from './use-entity-activity'
 
 export const formKeys = {
     all: ['forms'] as const,
@@ -72,6 +78,9 @@ export const formKeys = {
     intakeLead: (leadId: string) => [...formKeys.all, 'intake-lead', leadId] as const,
     submissionMatchCandidates: (submissionId: string) =>
         [...formKeys.all, 'submission-match-candidates', submissionId] as const,
+    submissionDonorCandidates: (submissionId: string) =>
+        [...formKeys.all, 'submission-donor-candidates', submissionId] as const,
+    donorSubmissions: (donorId: string) => [...formKeys.all, 'donor-submissions', donorId] as const,
     submissionLists: (formId: string) =>
         [...formKeys.detail(formId), 'submissions'] as const,
     submissions: (formId: string, params?: ListFormSubmissionsParams) =>
@@ -82,6 +91,18 @@ export const formKeys = {
         [...formKeys.detail(formId), 'surrogate-draft', surrogateId] as const,
     templates: () => [...formKeys.all, 'templates'] as const,
     templateDetail: (id: string) => [...formKeys.templates(), id] as const,
+}
+
+function invalidateLinkedDonorCaches(
+    queryClient: ReturnType<typeof useQueryClient>,
+    submission: Pick<FormSubmissionRead, 'donor_id'>,
+) {
+    if (!submission.donor_id) return
+    void queryClient.invalidateQueries({ queryKey: donorKeys.detail(submission.donor_id) })
+    void queryClient.invalidateQueries({ queryKey: donorKeys.lists() })
+    void queryClient.invalidateQueries({ queryKey: donorAttachmentKeys.list(submission.donor_id) })
+    void queryClient.invalidateQueries({ queryKey: entityActivityKeys.entity('donor', submission.donor_id) })
+    void queryClient.invalidateQueries({ queryKey: formKeys.donorSubmissions(submission.donor_id) })
 }
 
 export function useForms(options: { enabled?: boolean } = {}) {
@@ -400,6 +421,8 @@ export function useApproveFormSubmission() {
                     queryKey: formKeys.intakeLead(submission.intake_lead_id),
                 })
             }
+
+            invalidateLinkedDonorCaches(queryClient, submission)
         },
     })
 }
@@ -434,6 +457,8 @@ export function useRejectFormSubmission() {
                     queryKey: formKeys.intakeLead(submission.intake_lead_id),
                 })
             }
+
+            invalidateLinkedDonorCaches(queryClient, submission)
         },
     })
 }
@@ -443,6 +468,36 @@ export function useSubmissionMatchCandidates(submissionId: string | null) {
         queryKey: submissionId ? formKeys.submissionMatchCandidates(submissionId) : ['forms', 'submission-match-candidates', 'missing'],
         queryFn: () => listSubmissionMatchCandidates(submissionId!),
         enabled: !!submissionId,
+    })
+}
+
+export function useSubmissionDonorCandidates(submissionId: string | null) {
+    return useQuery({
+        queryKey: submissionId
+            ? formKeys.submissionDonorCandidates(submissionId)
+            : ['forms', 'submission-donor-candidates', 'missing'],
+        queryFn: () => listSubmissionDonorCandidates(submissionId!),
+        enabled: !!submissionId,
+    })
+}
+
+export function useDonorSubmissions(donorId: string | null) {
+    return useQuery({
+        queryKey: donorId ? formKeys.donorSubmissions(donorId) : ['forms', 'donor-submissions', 'missing'],
+        queryFn: () => listDonorSubmissions(donorId!),
+        enabled: !!donorId,
+    })
+}
+
+export function useRescanSubmissionFile() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ submissionId, fileId }: { submissionId: string; fileId: string; formId: string }) =>
+            rescanSubmissionFile(submissionId, fileId),
+        onSuccess: (_file, { formId }) => {
+            void queryClient.invalidateQueries({ queryKey: formKeys.submissionLists(formId), exact: false })
+        },
     })
 }
 
@@ -482,6 +537,8 @@ export function useResolveSubmissionMatch() {
                     queryKey: formKeys.intakeLead(submission.intake_lead_id),
                 })
             }
+
+            invalidateLinkedDonorCaches(queryClient, submission)
 
             void queryClient.invalidateQueries({
                 queryKey: formKeys.submissionMatchCandidates(submission.id),
@@ -526,6 +583,8 @@ export function useRetrySubmissionMatch() {
                     queryKey: formKeys.intakeLead(submission.intake_lead_id),
                 })
             }
+
+            invalidateLinkedDonorCaches(queryClient, submission)
 
             void queryClient.invalidateQueries({
                 queryKey: formKeys.submissionMatchCandidates(submission.id),
