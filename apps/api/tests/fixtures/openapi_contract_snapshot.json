@@ -1976,6 +1976,12 @@
       "422"
     ]
   },
+  "/integrations/zapier/events/{event_id}/replay": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/integrations/zapier/events/{event_id}/retry": {
     "POST": [
       "200",

@@ -33,6 +33,28 @@ NON_ACTIONABLE_SKIP_REASONS = {
     "donor_stage_undone",
     "unmapped_donor_stage",
 }
+# Skips that a configuration or data fix can clear. Other reasons, including reasons added
+# later, are final: replay could double-send or report an event Meta should never receive.
+REPLAYABLE_SKIP_REASONS = frozenset(
+    {
+        "outbound_disabled",
+        "donor_outbound_disabled",
+        "missing_webhook_url",
+        "unmapped_stage",
+        "unmapped_donor_stage",
+        "missing_matching_data",
+        "enqueue_failed",
+        "donor_dispatch_disabled",
+        "donor_dispatch_url_missing",
+        "donor_mapping_changed",
+        "donor_config_changed",
+        "missing_meta_lead",
+        "missing_meta_lead_fk",
+        "missing_meta_lead_id",
+        "missing_donor_attribution",
+        "donor_attribution_missing",
+    }
+)
 
 
 def _now_utc() -> datetime:
@@ -459,6 +481,54 @@ def is_donor_event(event: ZapierOutboundEvent) -> bool:
         value is not None
         for value in (event.donor_id, event.donor_status_history_id, event.donor_type)
     )
+
+
+def can_replay_event(event: ZapierOutboundEvent) -> bool:
+    """True when a skipped event can re-run enqueue against current configuration."""
+    if (
+        event.status != "skipped"
+        or event.source == "test"
+        or event.reason not in REPLAYABLE_SKIP_REASONS
+    ):
+        return False
+    if is_donor_event(event):
+        return event.donor_id is not None and event.donor_status_history_id is not None
+    # Rows written before effective_at was recorded cannot rebuild the original event time.
+    return bool(event.surrogate_id and event.stage_key and event.effective_at)
+
+
+def lock_event(db: Session, *, org_id: UUID, event_id: UUID) -> ZapierOutboundEvent | None:
+    return (
+        db.query(ZapierOutboundEvent)
+        .filter(
+            ZapierOutboundEvent.id == event_id,
+            ZapierOutboundEvent.organization_id == org_id,
+        )
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+
+
+def record_replay_result(
+    event: ZapierOutboundEvent,
+    *,
+    status: str,
+    reason: str | None,
+    job_id: UUID | None,
+    **fields: Any,
+) -> None:
+    """Overwrite a replayed row with the outcome of its new enqueue attempt."""
+    for name, value in fields.items():
+        setattr(event, name, value)
+    event.status = status
+    event.reason = reason
+    event.job_id = job_id
+    event.attempts = 0
+    event.last_error = None
+    event.last_attempt_at = None
+    event.delivered_at = None
+    event.updated_at = _now_utc()
 
 
 def get_event(

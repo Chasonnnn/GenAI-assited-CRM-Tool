@@ -165,6 +165,7 @@ class ZapierOutboundEventResponse(BaseModel):
     delivered_at: datetime | None = None
     last_attempt_at: datetime | None = None
     can_retry: bool
+    can_replay: bool
 
 
 class ZapierOutboundEventsResponse(BaseModel):
@@ -727,6 +728,34 @@ def retry_outbound_event(
     return _serialize_outbound_event(event)
 
 
+@router.post("/events/{event_id}/replay", response_model=ZapierOutboundEventResponse)
+def replay_outbound_event(
+    event_id: UUID,
+    _csrf: Annotated[None, "fastapi_param"] = Depends(csrf_header_dependency),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(P.INTEGRATIONS_MANAGE)
+    ),
+):
+    event = zapier_monitor_service.get_event(db, org_id=session.org_id, event_id=event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if zapier_monitor_service.is_donor_event(event):
+        _require_donor_view(db, session)
+        _require_donor_edit(db, session)
+
+    try:
+        event = zapier_outbound_service.replay_skipped_event(
+            db,
+            org_id=session.org_id,
+            event_id=event_id,
+        )
+    except ValueError as exc:
+        status_code = 404 if str(exc) == "Event not found" else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    return _serialize_outbound_event(event)
+
+
 def _serialize_settings(
     db: Session,
     organization_id: UUID,
@@ -807,4 +836,5 @@ def _serialize_outbound_event(event) -> ZapierOutboundEventResponse:
         delivered_at=event.delivered_at,
         last_attempt_at=event.last_attempt_at,
         can_retry=event.status == "failed" and event.job_id is not None,
+        can_replay=zapier_monitor_service.can_replay_event(event),
     )

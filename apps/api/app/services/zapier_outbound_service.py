@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import case, exists, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -44,6 +44,8 @@ PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid"
 SURROGATE_RECORD_TYPE = "surrogate"
 # A donor event in these states was sent or will be; later occurrences are duplicates.
 DONOR_REPORTED_EVENT_STATUSES = ("queued", "delivered", "failed")
+# A replayed event whose previous job is in these states could be delivered twice.
+ACTIVE_JOB_STATUSES = (JobStatus.PENDING.value, JobStatus.RUNNING.value)
 # Browser ids that let Meta match a website event; they rank above other ad fields.
 MATCHABLE_ATTRIBUTION_COLUMNS = (LeadAttribution.fbc, LeadAttribution.fbp)
 # Click and campaign fields; source, medium and campaign hold the utm_* values.
@@ -307,8 +309,12 @@ def enqueue_stage_event(
     stage_label: str | None,
     effective_at: datetime | None = None,
     source: str = "automatic",
+    replay_event: ZapierOutboundEvent | None = None,
 ) -> dict[str, object]:
-    """Enqueue a Zapier stage event if configured and applicable."""
+    """Enqueue a Zapier stage event if configured and applicable.
+
+    With replay_event, the outcome overwrites that skipped row instead of adding a row.
+    """
     event_time = _coerce_utc(effective_at) or _now_utc()
     stage_uuid = _parse_stage_id(stage_id)
 
@@ -319,6 +325,24 @@ def enqueue_stage_event(
         event_name: str | None = None,
         lead_id: str | None = None,
     ) -> dict[str, object]:
+        if replay_event is not None:
+            zapier_monitor_service.record_replay_result(
+                replay_event,
+                status="skipped",
+                reason=reason,
+                job_id=None,
+                event_id=event_id,
+                event_name=event_name,
+                lead_id=lead_id,
+            )
+            db.commit()
+            return {
+                "queued": False,
+                "reason": reason,
+                "event_name": event_name,
+                "event_id": event_id,
+                "lead_id": lead_id,
+            }
         return _skip_event(
             db,
             surrogate=surrogate,
@@ -421,9 +445,35 @@ def enqueue_stage_event(
         idempotency_key=idempotency_key,
     )
     if existing_job:
-        return skip("duplicate", **duplicate_fields) | {"idempotency_key": idempotency_key}
+        if replay_event is None or existing_job.id != replay_event.job_id:
+            return skip("duplicate", **duplicate_fields) | {"idempotency_key": idempotency_key}
+        # The key belongs to this row's own finished attempt; the payload event_id stays.
+        idempotency_key = _replay_job_key(idempotency_key)
 
     try:
+        if replay_event is not None:
+            job = job_service.enqueue_job(
+                db,
+                org_id=surrogate.organization_id,
+                job_type=JobType.ZAPIER_STAGE_EVENT,
+                payload=job_payload,
+                idempotency_key=idempotency_key,
+                commit=False,
+            )
+            zapier_monitor_service.record_replay_result(
+                replay_event,
+                status="queued",
+                reason=None,
+                job_id=job.id,
+                **duplicate_fields,
+            )
+            db.commit()
+            return {
+                "queued": True,
+                "reason": None,
+                **duplicate_fields,
+                "idempotency_key": idempotency_key,
+            }
         job = job_service.schedule_job(
             db=db,
             org_id=surrogate.organization_id,
@@ -671,8 +721,12 @@ def enqueue_donor_stage_event(
     history: DonorStatusHistory,
     new_stage: PipelineStage,
     source: str = "automatic",
+    replay_event: ZapierOutboundEvent | None = None,
 ) -> dict[str, object]:
-    """Atomically attach a donor stage occurrence to its delivery job."""
+    """Atomically attach a donor stage occurrence to its delivery job.
+
+    With replay_event (that occurrence's skipped row), the outcome overwrites the row.
+    """
     existing = (
         db.query(ZapierOutboundEvent)
         .filter(
@@ -681,7 +735,7 @@ def enqueue_donor_stage_event(
         )
         .first()
     )
-    if existing is not None:
+    if existing is not None and (replay_event is None or existing.id != replay_event.id):
         return {
             "queued": existing.status == "queued",
             "reason": "duplicate",
@@ -696,6 +750,22 @@ def enqueue_donor_stage_event(
 
     def skip(reason: str, *, event_name: str | None = None, attribution=None):
         attribution = attribution or {}
+        if replay_event is not None:
+            zapier_monitor_service.record_replay_result(
+                replay_event,
+                status="skipped",
+                reason=reason,
+                job_id=None,
+                event_id=event_id,
+                event_name=event_name,
+                lead_id=attribution.get("lead_id"),
+                attribution_source=attribution.get("source"),
+                first_party_submission_id=attribution.get("first_party_submission_id"),
+                config_fingerprint=None,
+                effective_at=history.effective_at,
+            )
+            db.flush()
+            return {"queued": False, "reason": reason, "event_id": event_id}
         event = zapier_monitor_service.create_donor_event(
             db,
             org_id=donor.organization_id,
@@ -765,16 +835,17 @@ def enqueue_donor_stage_event(
 
     # Stage changes lock the donor row before this point, so concurrent changes for one
     # donor serialize here and the later one sees the earlier event.
-    already_reported = (
-        db.query(ZapierOutboundEvent.id)
-        .filter(
-            ZapierOutboundEvent.organization_id == donor.organization_id,
-            ZapierOutboundEvent.donor_id == donor.id,
-            ZapierOutboundEvent.event_id == event_id,
-            ZapierOutboundEvent.status.in_(DONOR_REPORTED_EVENT_STATUSES),
-        )
-        .first()
+    already_reported_query = db.query(ZapierOutboundEvent.id).filter(
+        ZapierOutboundEvent.organization_id == donor.organization_id,
+        ZapierOutboundEvent.donor_id == donor.id,
+        ZapierOutboundEvent.event_id == event_id,
+        ZapierOutboundEvent.status.in_(DONOR_REPORTED_EVENT_STATUSES),
     )
+    if replay_event is not None:
+        already_reported_query = already_reported_query.filter(
+            ZapierOutboundEvent.id != replay_event.id
+        )
+    already_reported = already_reported_query.first()
     if already_reported is not None:
         return skip("duplicate", event_name=event_name, attribution=attribution)
 
@@ -795,28 +866,50 @@ def enqueue_donor_stage_event(
         email=donor.email,
         phone=donor.phone,
     )
-    event = zapier_monitor_service.create_donor_event(
-        db,
-        org_id=donor.organization_id,
-        source=source,
-        status="queued",
-        reason=None,
-        event_id=event_id,
-        event_name=event_name,
-        lead_id=attribution.get("lead_id"),
-        stage_key=new_stage.stage_key,
-        stage_slug=new_stage.slug,
-        stage_label=new_stage.label,
-        donor_id=donor.id,
-        donor_status_history_id=history.id,
-        donor_type=donor.donor_type,
-        pipeline_id=pipeline_id,
-        stage_id=new_stage.id,
-        attribution_source=str(attribution["source"]),
-        first_party_submission_id=attribution.get("first_party_submission_id"),
-        config_fingerprint=fingerprint,
-        effective_at=history.effective_at,
-    )
+    job_key = occurrence_key
+    if replay_event is not None:
+        # A skip at dispatch completes the occurrence's job; the replay needs its own key.
+        if job_service.get_job_by_idempotency_key(
+            db, org_id=donor.organization_id, idempotency_key=occurrence_key
+        ):
+            job_key = _replay_job_key(occurrence_key)
+        zapier_monitor_service.record_replay_result(
+            replay_event,
+            status="queued",
+            reason=None,
+            job_id=None,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=attribution.get("lead_id"),
+            attribution_source=str(attribution["source"]),
+            first_party_submission_id=attribution.get("first_party_submission_id"),
+            config_fingerprint=fingerprint,
+            effective_at=history.effective_at,
+        )
+        event = replay_event
+    else:
+        event = zapier_monitor_service.create_donor_event(
+            db,
+            org_id=donor.organization_id,
+            source=source,
+            status="queued",
+            reason=None,
+            event_id=event_id,
+            event_name=event_name,
+            lead_id=attribution.get("lead_id"),
+            stage_key=new_stage.stage_key,
+            stage_slug=new_stage.slug,
+            stage_label=new_stage.label,
+            donor_id=donor.id,
+            donor_status_history_id=history.id,
+            donor_type=donor.donor_type,
+            pipeline_id=pipeline_id,
+            stage_id=new_stage.id,
+            attribution_source=str(attribution["source"]),
+            first_party_submission_id=attribution.get("first_party_submission_id"),
+            config_fingerprint=fingerprint,
+            effective_at=history.effective_at,
+        )
     job = job_service.enqueue_job(
         db,
         org_id=donor.organization_id,
@@ -827,7 +920,7 @@ def enqueue_donor_stage_event(
             "config_fingerprint": fingerprint,
             "data": payload,
         },
-        idempotency_key=occurrence_key,
+        idempotency_key=job_key,
         commit=False,
     )
     event.job_id = job.id
@@ -839,6 +932,125 @@ def enqueue_donor_stage_event(
         "event_name": event_name,
         "job_id": str(job.id),
     }
+
+
+def _replay_job_key(key: str) -> str:
+    return f"{key}:replay:{uuid4().hex}"
+
+
+def _replay_surrogate_event(db: Session, *, event: ZapierOutboundEvent) -> None:
+    surrogate = (
+        db.query(Surrogate)
+        .filter(
+            Surrogate.id == event.surrogate_id,
+            Surrogate.organization_id == event.organization_id,
+        )
+        .first()
+    )
+    if surrogate is None:
+        raise ValueError("Surrogate is unavailable")
+    enqueue_stage_event(
+        db,
+        surrogate,
+        stage_key=str(event.stage_key),
+        stage_slug=event.stage_slug,
+        stage_id=str(event.stage_id) if event.stage_id else None,
+        stage_label=event.stage_label,
+        effective_at=event.effective_at,
+        source=event.source,
+        replay_event=event,
+    )
+
+
+def _replay_donor_event(db: Session, *, event: ZapierOutboundEvent, donor: Donor | None) -> None:
+    if donor is None:
+        raise ValueError("Donor is unavailable")
+    history = (
+        db.query(DonorStatusHistory)
+        .filter(
+            DonorStatusHistory.id == event.donor_status_history_id,
+            DonorStatusHistory.organization_id == event.organization_id,
+            DonorStatusHistory.donor_id == donor.id,
+        )
+        .first()
+    )
+    if history is None or history.is_undo or history.new_stage_id is None:
+        raise ValueError("Donor stage change is unavailable")
+    undone_later = (
+        db.query(DonorStatusHistory.id)
+        .filter(
+            DonorStatusHistory.organization_id == event.organization_id,
+            DonorStatusHistory.donor_id == donor.id,
+            DonorStatusHistory.is_undo.is_(True),
+            DonorStatusHistory.old_stage_id == history.new_stage_id,
+            DonorStatusHistory.new_stage_id == history.old_stage_id,
+            DonorStatusHistory.recorded_at > history.recorded_at,
+        )
+        .first()
+    )
+    if undone_later is not None:
+        raise ValueError("A later undo reversed this stage change")
+    stage = (
+        db.query(PipelineStage)
+        .join(Pipeline, Pipeline.id == PipelineStage.pipeline_id)
+        .filter(
+            Pipeline.organization_id == event.organization_id,
+            PipelineStage.id == history.new_stage_id,
+        )
+        .first()
+    )
+    if stage is None:
+        raise ValueError("Donor stage is unavailable")
+    enqueue_donor_stage_event(
+        db,
+        donor=donor,
+        history=history,
+        new_stage=stage,
+        source=event.source,
+        replay_event=event,
+    )
+    db.commit()
+
+
+def replay_skipped_event(db: Session, *, org_id: UUID, event_id: UUID) -> ZapierOutboundEvent:
+    """Re-run enqueue for a skipped event against current settings and data, in place.
+
+    The row keeps its id; it ends queued with a new job, or skipped with the new reason.
+    Refusals raise ValueError before any write; the caller's session end releases locks.
+    """
+    event = zapier_monitor_service.get_event(db, org_id=org_id, event_id=event_id)
+    if event is None:
+        raise ValueError("Event not found")
+    donor = None
+    if zapier_monitor_service.is_donor_event(event) and event.donor_id is not None:
+        # Lock the donor before the event, in the order stage changes use, so a replay
+        # serializes with stage changes and other replays for the same donor.
+        donor = (
+            db.query(Donor)
+            .filter(Donor.id == event.donor_id, Donor.organization_id == org_id)
+            .populate_existing()
+            .with_for_update(key_share=True)
+            .first()
+        )
+    event = zapier_monitor_service.lock_event(db, org_id=org_id, event_id=event_id)
+    if event is None:
+        raise ValueError("Event not found")
+    if not zapier_monitor_service.can_replay_event(event):
+        raise ValueError("This event cannot be replayed")
+    if event.job_id is not None:
+        job_status = (
+            db.query(Job.status)
+            .filter(Job.id == event.job_id, Job.organization_id == org_id)
+            .scalar()
+        )
+        if job_status in ACTIVE_JOB_STATUSES:
+            raise ValueError("Event delivery is still in progress")
+    if zapier_monitor_service.is_donor_event(event):
+        _replay_donor_event(db, event=event, donor=donor)
+    else:
+        _replay_surrogate_event(db, event=event)
+    db.refresh(event)
+    return event
 
 
 def enqueue_donor_created_event(db: Session, *, donor: Donor) -> dict[str, object] | None:
