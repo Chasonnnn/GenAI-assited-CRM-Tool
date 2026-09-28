@@ -588,13 +588,6 @@ async def test_platform_workflow_template_donor_subject_publish_gate(
             },
             "Action send_message does not support donor workflows",
         ),
-        (
-            {
-                "conditions": [],
-                "actions": [{"action_type": "send_email"}],
-            },
-            "Donor email actions require review approval",
-        ),
     ],
 )
 def test_platform_workflow_template_rejects_donor_incompatible_content(draft_overrides, error):

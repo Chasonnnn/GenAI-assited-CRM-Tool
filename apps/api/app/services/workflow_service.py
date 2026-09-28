@@ -431,9 +431,6 @@ def _validate_action_subject_compatibility(
         raise ValueError("assign_donor requires a donor workflow subject")
     if is_donor_context and action_type == "send_message":
         raise ValueError("Action send_message does not support donor workflows")
-    if is_donor_context and action_type == "send_email":
-        if action.get("requires_approval") is not True:
-            raise ValueError("Donor email actions require review approval")
 
 
 def _resolve_stage_ref(

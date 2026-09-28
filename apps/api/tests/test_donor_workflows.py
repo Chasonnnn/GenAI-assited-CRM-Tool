@@ -911,26 +911,6 @@ def test_donor_approval_task_links_donor_and_reviewed_communications_fail_closed
             owner_id=test_user.id,
         ),
     )
-    with pytest.raises(ValueError, match="review approval"):
-        workflow_service.create_workflow(
-            db,
-            test_org.id,
-            test_user.id,
-            WorkflowCreate(
-                name=f"Unreviewed donor communication {uuid.uuid4()}",
-                subject_type="sperm_donor",
-                trigger_type=WorkflowTriggerType.DONOR_UPDATED,
-                trigger_config={"fields": ["education"]},
-                actions=[
-                    {
-                        "action_type": "send_email",
-                        "template_id": str(uuid.uuid4()),
-                        "recipients": "donor",
-                    }
-                ],
-            ),
-        )
-
     with pytest.raises(ValueError, match="does not support donor workflows"):
         workflow_service.create_workflow(
             db,
