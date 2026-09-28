@@ -3538,6 +3538,18 @@ def _retry_submission_match(
         submission, outcome = auto_match_submission(
             db=db, submission=submission, session=session, commit=False
         )
+        if (
+            submission.lead_kind in DONOR_LEAD_KINDS
+            and outcome == FormSubmissionMatchStatus.LEAD_CREATED.value
+            and submission.intake_lead_id
+        ):
+            from app.services import donor_intake_service
+
+            # The retained lead keeps its queue state, and a failed auto-promotion is replayed.
+            submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
+            submission.match_reason = "existing_lead_retained"
+            db.flush()
+            donor_intake_service.enqueue_promotion(db, submission=submission)
 
     if (
         create_intake_lead_if_unmatched

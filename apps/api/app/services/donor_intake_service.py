@@ -12,6 +12,7 @@ from app.db.enums import (
     AuditEventType,
     FormSubmissionStatus,
     IntakeLeadStatus,
+    JobStatus,
     JobType,
 )
 from app.db.models import Attachment, Donor, FormSubmission, FormSubmissionFile, IntakeLead
@@ -425,7 +426,25 @@ def enqueue_promotion(db: Session, *, submission: FormSubmission) -> None:
     ):
         return
     key = f"donor_intake_promote:{lead.id}"
-    if job_service.get_job_by_idempotency_key(db, org_id=lead.organization_id, idempotency_key=key):
+    existing = job_service.get_job_by_idempotency_key(
+        db, org_id=lead.organization_id, idempotency_key=key
+    )
+    if existing is not None:
+        if existing.status == JobStatus.FAILED.value:
+            # A failed promotion owns the idempotency key; replay it instead of stranding the lead.
+            try:
+                job_service.replay_failed_job(
+                    db,
+                    org_id=lead.organization_id,
+                    job_id=existing.id,
+                    reason="donor_intake_requeued",
+                    commit=False,
+                )
+            except ValueError:
+                logger.warning(
+                    "Failed donor promotion job cannot be replayed",
+                    extra={"job_id": str(existing.id), "intake_lead_id": str(lead.id)},
+                )
         return
     job_service.enqueue_job(
         db,

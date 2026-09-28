@@ -524,3 +524,34 @@ async def test_donor_link_and_candidates_require_donor_permissions(authed_client
 
     db.refresh(submission)
     assert submission.donor_id is None
+
+
+@pytest.mark.asyncio
+async def test_retry_match_replays_failed_donor_promotion(authed_client, db, test_org):
+    from app.jobs.handlers.form_submissions import process_donor_intake_promote
+
+    _, slug = await _create_donor_form(authed_client)
+    response = await _submit_donor_form(authed_client, slug=slug, email="replay@example.com")
+    assert response.status_code == 200, response.text
+    submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
+    job = _promote_job(db, test_org.id)
+    job.status = "failed"
+    job.last_error = "Donor intake promotion failed"
+    db.commit()
+
+    retried = await authed_client.post(
+        f"/forms/submissions/{submission.id}/match/retry",
+        json={
+            "unlink_surrogate": False,
+            "rerun_auto_match": True,
+            "create_intake_lead_if_unmatched": False,
+        },
+    )
+
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["submission"]["match_status"] == "lead_created"
+    db.refresh(job)
+    assert job.status == "pending"
+    await process_donor_intake_promote(db, job)
+    db.refresh(submission)
+    assert submission.donor_id is not None
