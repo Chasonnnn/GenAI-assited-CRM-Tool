@@ -247,3 +247,22 @@ def test_match_action_catalog_metadata_and_v2_defaults(permission, label):
         assert (permission in resolve_effective_permissions(role, policy_version=2)) is (
             role in {"case_manager", "admin", "developer"}
         )
+
+
+@pytest.mark.parametrize(
+    "permission,topic,label",
+    [
+        ("change_surrogate_status", "Surrogates", "Change Surrogate Status"),
+        ("change_donor_status", "Donors", "Change Donor Status"),
+        ("change_intended_parent_status", "Intended Parents", "Change Intended Parent Status"),
+    ],
+)
+def test_change_status_permissions_share_their_presentation(permission, topic, label):
+    from app.core.permissions import PERMISSION_PRESENTATION, PERMISSION_REGISTRY
+
+    assert PERMISSION_PRESENTATION[permission] == {
+        "topic": topic,
+        "section": "Progress & ownership",
+        "short_label": "Change status",
+    }
+    assert PERMISSION_REGISTRY[permission].label == label
