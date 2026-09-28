@@ -258,6 +258,20 @@ def build_pipeline_dependency_graph(
                 normalized = _normalize_stage_key(item.get("stage_key") or item.get("stage_slug"))
                 if normalized:
                     integration_refs[normalized].add("meta_crm_dataset")
+    elif pipeline.entity_type in {EGG_DONOR_PIPELINE_ENTITY, SPERM_DONOR_PIPELINE_ENTITY}:
+        zapier_settings = (
+            db.query(ZapierWebhookSettings)
+            .filter(ZapierWebhookSettings.organization_id == pipeline.organization_id)
+            .first()
+        )
+        donor_mapping = zapier_settings.donor_outbound_event_mapping if zapier_settings else None
+        stage_key_by_id = {str(stage.id): stage.stage_key for stage in stages}
+        for item in donor_mapping if isinstance(donor_mapping, list) else []:
+            if not isinstance(item, dict) or str(item.get("pipeline_id")) != str(pipeline.id):
+                continue
+            stage_key = stage_key_by_id.get(str(item.get("stage_id")))
+            if stage_key:
+                integration_refs[stage_key].add("zapier_outbound")
 
     for stage_key, refs in integration_refs.items():
         if stage_key in stage_map:

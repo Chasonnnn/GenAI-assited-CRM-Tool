@@ -1057,6 +1057,52 @@ def test_donor_dependency_graph_includes_only_same_subtype_workflows(db, test_or
     assert {item["id"] for item in contacted["workflow_refs"]} == {str(egg_workflow.id)}
 
 
+def test_donor_dependency_graph_includes_its_own_zapier_mappings(db, test_org, test_user):
+    egg_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=EGG_DONOR_PIPELINE_ENTITY
+    )
+    sperm_pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, test_org.id, test_user.id, entity_type=SPERM_DONOR_PIPELINE_ENTITY
+    )
+    egg_contacted = next(
+        stage
+        for stage in pipeline_service.get_stages(db, egg_pipeline.id)
+        if stage.stage_key == "contacted"
+    )
+    sperm_approved = next(
+        stage
+        for stage in pipeline_service.get_stages(db, sperm_pipeline.id)
+        if stage.stage_key == "approved"
+    )
+    zapier_settings = zapier_settings_service.get_or_create_settings(db, test_org.id)
+    zapier_settings.outbound_event_mapping = [
+        {"stage_key": "approved", "event_name": "Qualified", "enabled": True}
+    ]
+    zapier_settings.donor_outbound_event_mapping = [
+        {
+            "donor_type": "egg",
+            "pipeline_id": str(egg_pipeline.id),
+            "stage_id": str(egg_contacted.id),
+            "event_name": "Lead",
+            "enabled": True,
+        },
+        {
+            "donor_type": "sperm",
+            "pipeline_id": str(sperm_pipeline.id),
+            "stage_id": str(sperm_approved.id),
+            "event_name": "Qualified",
+            "enabled": True,
+        },
+    ]
+    db.commit()
+
+    graph = pipeline_dependency_service.build_pipeline_dependency_graph(db, egg_pipeline)
+    refs = {stage["stage_key"]: stage["integration_refs"] for stage in graph["stages"]}
+
+    assert refs["contacted"] == ["zapier_outbound"]
+    assert all(value == [] for key, value in refs.items() if key != "contacted")
+
+
 def test_surrogate_dependency_graph_does_not_reuse_donor_workflow_references(
     db, test_org, test_user
 ):
