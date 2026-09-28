@@ -132,6 +132,7 @@ export function AutomationFormBuilderScreen({
             <ShareApplicationDialog
                 open={controller.state.showSharePrompt}
                 selectedQrLink={controller.settingsPanelProps.selectedQrLink}
+                formLeadKind={controller.state.formLeadKind}
                 onOpenChange={controller.onShareDialogOpenChange}
                 onCopyLink={controller.handleCopySharedLink}
                 onDownloadQrSvg={controller.handleDownloadQrSvg}

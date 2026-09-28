@@ -31,11 +31,13 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { formatUtcDateLabel } from "@/components/ui/time-display-utils"
-import type { FormEmbedHealthRead, FormIntakeLinkRead, TrackingMode } from "@/lib/api/forms"
+import type { FormEmbedHealthRead, FormIntakeLinkRead, FormLeadKind, TrackingMode } from "@/lib/api/forms"
+import { isDonorFormLeadKind } from "@/lib/forms/form-lead-kind"
 
 type ShareApplicationDialogProps = {
     open: boolean
     selectedQrLink: FormIntakeLinkRead | null
+    formLeadKind?: FormLeadKind
     onOpenChange: (open: boolean) => void
     onCopyLink: (link: FormIntakeLinkRead) => Promise<void>
     onDownloadQrSvg: () => void
@@ -88,6 +90,7 @@ function buildEmbedSettingsFromLink(link: FormIntakeLinkRead | null): EmbedSetti
 export function ShareApplicationDialog({
     open,
     selectedQrLink,
+    formLeadKind = "surrogate",
     onOpenChange,
     onCopyLink,
     onDownloadQrSvg,
@@ -184,18 +187,26 @@ export function ShareApplicationDialog({
                         value="embed"
                         className="mt-4 max-h-[min(48vh,32rem)] min-w-0 space-y-3 overflow-y-auto overflow-x-hidden pr-1"
                     >
-                        <EmbedTabContent
-                            link={selectedQrLink}
-                            health={embedHealth}
-                            isHealthFetching={isEmbedHealthFetching}
-                            onRefreshHealth={onRefreshEmbedHealth}
-                            settings={{ embedEnabled, originText, trackingMode, consentText }}
-                            isSettingsPending={isEmbedSettingsPending}
-                            onSettingsChange={updateEmbedSettings}
-                            embedSnippet={embedSnippet}
-                            onCopyEmbedSnippet={copyEmbedSnippet}
-                            onSaveEmbedSettings={saveEmbedSettings}
-                        />
+                        {isDonorFormLeadKind(formLeadKind) ? (
+                            <DonorEmbedUnavailable
+                                link={selectedQrLink}
+                                isSettingsPending={isEmbedSettingsPending}
+                                onUpdateEmbedSettings={onUpdateEmbedSettings}
+                            />
+                        ) : (
+                            <EmbedTabContent
+                                link={selectedQrLink}
+                                health={embedHealth}
+                                isHealthFetching={isEmbedHealthFetching}
+                                onRefreshHealth={onRefreshEmbedHealth}
+                                settings={{ embedEnabled, originText, trackingMode, consentText }}
+                                isSettingsPending={isEmbedSettingsPending}
+                                onSettingsChange={updateEmbedSettings}
+                                embedSnippet={embedSnippet}
+                                onCopyEmbedSnippet={copyEmbedSnippet}
+                                onSaveEmbedSettings={saveEmbedSettings}
+                            />
+                        )}
                     </TabsContent>
                 </Tabs>
                 <ShareApplicationDialogFooter
@@ -229,6 +240,41 @@ function QrTabContent() {
     return (
         <div className="min-w-0 max-w-full rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
             Use the QR download actions below for the selected hosted link.
+        </div>
+    )
+}
+
+// The embed flow submits no files, so donor forms (which need a profile photo) stay on the hosted link.
+function DonorEmbedUnavailable({
+    link,
+    isSettingsPending,
+    onUpdateEmbedSettings,
+}: {
+    link: FormIntakeLinkRead | null
+    isSettingsPending: boolean
+    onUpdateEmbedSettings: ShareApplicationDialogProps["onUpdateEmbedSettings"]
+}) {
+    return (
+        <div className="min-w-0 max-w-full space-y-3 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
+            <p>Donor forms can only be shared with the hosted link.</p>
+            {link?.embed_enabled ? (
+                <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSettingsPending}
+                    onClick={() =>
+                        void onUpdateEmbedSettings({
+                            link,
+                            embedEnabled: false,
+                            allowedOrigins: link.allowed_embed_origins,
+                            trackingMode: link.tracking_mode,
+                            consentText: link.consent_text ?? null,
+                        })
+                    }
+                >
+                    Disable Embed
+                </Button>
+            ) : null}
         </div>
     )
 }

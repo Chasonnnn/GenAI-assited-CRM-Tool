@@ -202,4 +202,57 @@ describe("ShareApplicationDialog", () => {
         expect(screen.getByLabelText("Consent text")).toHaveValue("Use my information for application follow-up.")
         expect(screen.getAllByText("Privacy-safe Lead").length).toBeGreaterThan(0)
     })
+
+    it.each(["egg_donor", "sperm_donor"] as const)("keeps %s forms on the hosted link", (formLeadKind) => {
+        render(
+            <ShareApplicationDialog
+                open
+                selectedQrLink={{ ...link, embed_enabled: false }}
+                formLeadKind={formLeadKind}
+                onOpenChange={vi.fn()}
+                onCopyLink={vi.fn()}
+                onDownloadQrSvg={vi.fn()}
+                onDownloadQrPng={vi.fn()}
+                onUpdateEmbedSettings={vi.fn()}
+                embedHealth={health}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("tab", { name: "Embed" }))
+
+        expect(screen.getByText("Donor forms can only be shared with the hosted link.")).toBeInTheDocument()
+        expect(screen.queryByLabelText("Enable iframe embed")).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Copy Embed" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Disable Embed" })).not.toBeInTheDocument()
+        expect(screen.queryByText("Ready to embed")).not.toBeInTheDocument()
+    })
+
+    it("lets admins turn off an embed that is already enabled on a donor link", () => {
+        const onUpdateEmbedSettings = vi.fn().mockResolvedValue(undefined)
+
+        render(
+            <ShareApplicationDialog
+                open
+                selectedQrLink={link}
+                formLeadKind="egg_donor"
+                onOpenChange={vi.fn()}
+                onCopyLink={vi.fn()}
+                onDownloadQrSvg={vi.fn()}
+                onDownloadQrPng={vi.fn()}
+                onUpdateEmbedSettings={onUpdateEmbedSettings}
+                embedHealth={health}
+            />,
+        )
+
+        fireEvent.click(screen.getByRole("tab", { name: "Embed" }))
+        fireEvent.click(screen.getByRole("button", { name: "Disable Embed" }))
+
+        expect(onUpdateEmbedSettings).toHaveBeenCalledWith({
+            link,
+            embedEnabled: false,
+            allowedOrigins: ["https://www.ewisurrogacy.com"],
+            trackingMode: "enhanced_match_lead",
+            consentText: "I agree to be contacted.",
+        })
+    })
 })
