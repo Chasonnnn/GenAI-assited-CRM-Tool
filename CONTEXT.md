@@ -26,7 +26,7 @@ _Avoid_: Rejected, denied, withdrawn
 
 **Cancelled**: An accepted match ended through an approved cancellation request.
 
-**Completed**: An accepted match that reached its outcome and closed normally.
+**Completed**: An accepted surrogate match closed when the surrogate entered the Delivered stage. No user action completes a match.
 
 ## Match work
 

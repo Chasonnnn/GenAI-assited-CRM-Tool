@@ -1,8 +1,8 @@
 """Party rules for a match: one class per party kind.
 
-Each party owns its row lock, accept eligibility, stage moves on accept and on
-approved cancellation, and the attempt types it allows. Stage moves return the
-after-commit effects of the underlying stage service.
+Each party owns its row lock, accept eligibility, and stage moves on accept and
+on approved cancellation. Stage moves return the after-commit effects of the
+underlying stage service.
 """
 
 from collections.abc import Callable

@@ -4,8 +4,8 @@
 
 - Existing match IDs, numbers, table, side-by-side party profiles, work tabs, and Calendar remain.
 - Each case contains one IP and either one surrogate or one donor. IPs and donors can overlap across cases; a surrogate has one accepted or cancellation-pending case.
-- Cases have no manual completion action; `completed` is reached only as a system transition. Another relationship after closure uses a new case.
-- New attempts are not recorded; the attempt routes and UI are removed. Existing `match_attempts` rows stay attached to their case and close when the case is cancelled.
+- Cases have no manual completion action. A surrogate entering the Delivered stage completes her accepted case, and undoing that stage change restores it (ADR 0005). Another relationship after closure uses a new case.
+- New attempts are not recorded; the attempt routes and UI are removed. Existing `match_attempts` rows stay attached to their case and close when the case is cancelled or completed.
 - New tasks, notes, files, and appointments persist exact case and optional attempt IDs. Participant attribution stays within that case.
 - IP and donor pages share Related Matches, Appointments, and Correspondence cards within their existing light layouts.
 - Correspondence includes explicitly linked conversations and recorded outbound email. Current email addresses never infer historical ownership.
@@ -26,7 +26,7 @@ Each migration sets a three-second lock acquisition timeout and a 60-second per-
 1. Verify the deployed revision, production table sizes, long transactions, and cancellation-pending surrogate conflicts. Reconcile conflicts before changing the active-case constraint.
 2. Rehearse the exact migration and application revision on a representative sanitized copy. Record lock duration, upgrade duration, row counts, preserved links, and query latency. Retain the normal database recovery backup.
 3. Use the explicit expansion release path below. It preflights the schema before changing services, opens a temporary exact-head readiness compatibility window for old binaries, then migrates and updates workers/API with new case writes disabled. The old application cannot safely read donor or completed cases. Do not activate new writes while old API or worker revisions still serve or process work.
-4. Validate an internal tenant: surrogate and donor proposals, concurrent acceptance, cancellation approval, repeat pairs, scoped work, appointment changes, and record correspondence.
+4. Validate an internal tenant: surrogate and donor proposals, concurrent acceptance, cancellation approval, Delivered completion and its undo, repeat pairs, scoped work, appointment changes, and record correspondence.
 5. Activate new case writes only after API/worker verification, then roll out the frontend. Monitor errors, database waits, case counts, and record visibility. Existing record-wide history remains available from participant profiles and the case workspace.
 6. Retain the expanded schema for rollback. Do not run the guarded downgrade against new production data.
 
