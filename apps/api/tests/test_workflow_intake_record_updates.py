@@ -693,3 +693,26 @@ def test_pipeline_remaps_move_intake_stage_references_only_in_the_form_pipeline(
     assert egg_workflow.actions[0]["value"] == str(egg_contacted.id)
     assert egg_workflow.actions[0]["value_stage_key"] == "contacted"
     assert egg_workflow.conditions[0]["value"] == [str(egg_contacted.id)]
+
+
+def test_workflow_options_list_the_lead_kinds_each_form_produces(db, test_org, test_user):
+    surrogate_form = _form(db, test_org.id, test_user.id, "surrogate")
+    egg_form = _form(db, test_org.id, test_user.id, "egg_donor")
+    shared_form = _form(db, test_org.id, test_user.id, "egg_donor")
+    db.add(
+        FormFieldMapping(
+            form_id=shared_form.id,
+            field_key="donor_type",
+            surrogate_field="donor_type",
+        )
+    )
+    db.flush()
+
+    options = workflow_service.get_workflow_options(
+        db, test_org.id, subject_type="form_submission", include_donor_forms=True
+    )
+
+    lead_kinds = {form["id"]: form["lead_kinds"] for form in options.forms}
+    assert lead_kinds[str(surrogate_form.id)] == ["surrogate"]
+    assert lead_kinds[str(egg_form.id)] == ["egg_donor"]
+    assert lead_kinds[str(shared_form.id)] == ["egg_donor", "sperm_donor"]

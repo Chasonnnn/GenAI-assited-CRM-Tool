@@ -2043,7 +2043,17 @@ def get_workflow_options(
     elif not include_donor_forms:
         forms_query = forms_query.filter(Form.lead_kind == "surrogate")
     published_forms = forms_query.order_by(Form.name.asc()).all()
-    forms = [{"id": str(f.id), "name": f.name, "lead_kind": f.lead_kind} for f in published_forms]
+    # lead_kinds lists both donor types for a shared donor form, whose workflows cannot
+    # reference stages (see resolve_workflow_record_type).
+    forms = [
+        {
+            "id": str(f.id),
+            "name": f.name,
+            "lead_kind": f.lead_kind,
+            "lead_kinds": sorted(form_intake_lead_kinds(db, f)),
+        }
+        for f in published_forms
+    ]
 
     return WorkflowOptions(
         trigger_types=trigger_types,

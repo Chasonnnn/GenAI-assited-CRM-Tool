@@ -580,7 +580,7 @@ class WorkflowOptions(BaseModel):
     users: list[dict]  # {id, display_name}
     queues: list[dict]  # {id, name}
     statuses: list[dict]  # {id, value, label, is_active}
-    forms: list[dict] = []  # {id, name, lead_kind}
+    forms: list[dict] = []  # {id, name, lead_kind, lead_kinds}
 
 
 # =============================================================================
