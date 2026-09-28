@@ -56,22 +56,25 @@ def test_any_active_staff_can_receive_only_the_explicit_record(db, context, kind
 
 @pytest.mark.parametrize("kind", ["surrogate", "donor"])
 @pytest.mark.parametrize("role", [Role.CASE_MANAGER, Role.INTAKE_SPECIALIST, Role.OPERATIONS])
-@pytest.mark.parametrize("operation", ["grant", "remove", "options"])
-def test_record_owner_cannot_manage_collaboration_without_admin(db, context, kind, role, operation):
+def test_record_owner_cannot_manage_collaboration_without_admin(db, context, kind, role, subtests):
     actor, _ = _member(db, context.org.id, role.value)
     record = _record(db, actor, kind, key="approved" if role == Role.CASE_MANAGER else None)
     scopes.grant_collaborator(db, context.admin, kind, record.id, context.intake.user_id)
     assert get_record_with_access(db, actor, kind, record.id).id == record.id
 
-    with pytest.raises(PermissionError):
-        if operation == "options":
-            scopes.collaborator_options(db, actor, kind, record.id)
-        elif operation == "grant":
-            scopes.grant_collaborator(db, actor, kind, record.id, actor.user_id)
-        else:
-            scopes.remove_collaborator(db, actor, kind, record.id, context.intake.user_id)
-    assert db.query(RecordCollaborator).filter_by(user_id=context.intake.user_id).count() == 1
-    assert db.query(RecordCollaborator).filter_by(user_id=actor.user_id).count() == 0
+    for operation in ["grant", "remove", "options"]:
+        with subtests.test(operation=operation):
+            with pytest.raises(PermissionError):
+                if operation == "options":
+                    scopes.collaborator_options(db, actor, kind, record.id)
+                elif operation == "grant":
+                    scopes.grant_collaborator(db, actor, kind, record.id, actor.user_id)
+                else:
+                    scopes.remove_collaborator(db, actor, kind, record.id, context.intake.user_id)
+            assert (
+                db.query(RecordCollaborator).filter_by(user_id=context.intake.user_id).count() == 1
+            )
+            assert db.query(RecordCollaborator).filter_by(user_id=actor.user_id).count() == 0
 
 
 @pytest.mark.parametrize("kind", ["surrogate", "donor"])
@@ -148,8 +151,7 @@ def test_remove_collaboration_preserves_role_access(db, context, kind):
 
 
 @pytest.mark.parametrize("change", ["role", "membership", "user"])
-@pytest.mark.parametrize("operation", ["grant", "remove", "options"])
-def test_collaborator_management_rechecks_stale_admin(db, context, change, operation):
+def test_collaborator_management_rechecks_stale_admin(db, context, change, subtests):
     record = _record(db, context.manager, "surrogate", key="approved")
     scopes.grant_collaborator(db, context.admin, "surrogate", record.id, context.intake.user_id)
     membership = db.query(Membership).filter_by(user_id=context.admin.user_id).one()
@@ -160,17 +162,19 @@ def test_collaborator_management_rechecks_stale_admin(db, context, change, opera
     else:
         db.get(User, context.admin.user_id).is_active = False
     db.flush()
-    with pytest.raises(PermissionError):
-        if operation == "options":
-            scopes.collaborator_options(db, context.admin, "surrogate", record.id)
-        elif operation == "grant":
-            scopes.grant_collaborator(
-                db, context.admin, "surrogate", record.id, context.manager.user_id
-            )
-        else:
-            scopes.remove_collaborator(
-                db, context.admin, "surrogate", record.id, context.intake.user_id
-            )
+    for operation in ["grant", "remove", "options"]:
+        with subtests.test(operation=operation):
+            with pytest.raises(PermissionError):
+                if operation == "options":
+                    scopes.collaborator_options(db, context.admin, "surrogate", record.id)
+                elif operation == "grant":
+                    scopes.grant_collaborator(
+                        db, context.admin, "surrogate", record.id, context.manager.user_id
+                    )
+                else:
+                    scopes.remove_collaborator(
+                        db, context.admin, "surrogate", record.id, context.intake.user_id
+                    )
 
 
 @pytest.mark.asyncio
@@ -194,23 +198,26 @@ async def test_record_and_member_views_share_the_same_grant(db, context, kind):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", list(Role))
-async def test_member_collaboration_capabilities_are_independent_of_role_edit(db, context, role):
-    target, member = _member(db, context.org.id, role.value)
+async def test_member_collaboration_capabilities_are_independent_of_role_edit(
+    db, context, subtests
+):
     admin = db.get(User, context.admin.user_id)
     async with authed_client_for_user(db, context.org.id, admin, Role.ADMIN) as client:
-        response = await client.get(f"/settings/permissions/members/{member.id}")
-        assert response.status_code == 200, response.text
-        capabilities = response.json()["capabilities"]
-        assert capabilities["can_manage_collaborations"] is True
-        assert capabilities["can_receive_collaboration"] is True
-        member.is_active = False
-        db.flush()
-        response = await client.get(f"/settings/permissions/members/{member.id}")
-        assert response.status_code == 200, response.text
-        capabilities = response.json()["capabilities"]
-        assert capabilities["can_manage_collaborations"] is True
-        assert capabilities["can_receive_collaboration"] is False
+        for role in list(Role):
+            with subtests.test(role=repr(role)):
+                target, member = _member(db, context.org.id, role.value)
+                response = await client.get(f"/settings/permissions/members/{member.id}")
+                assert response.status_code == 200, response.text
+                capabilities = response.json()["capabilities"]
+                assert capabilities["can_manage_collaborations"] is True
+                assert capabilities["can_receive_collaboration"] is True
+                member.is_active = False
+                db.flush()
+                response = await client.get(f"/settings/permissions/members/{member.id}")
+                assert response.status_code == 200, response.text
+                capabilities = response.json()["capabilities"]
+                assert capabilities["can_manage_collaborations"] is True
+                assert capabilities["can_receive_collaboration"] is False
 
 
 @pytest.mark.asyncio

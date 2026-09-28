@@ -64,6 +64,7 @@ function getStringAttribute(
 }
 
 describe("design-system primitive boundary", () => {
+    // Repository-wide AST parsing exceeds the default 5s under CI coverage.
     it("uses shared Base UI-backed primitives for visible interactive controls", () => {
         const violations: string[] = []
         const nativeInputExceptions: string[] = []
@@ -115,7 +116,7 @@ describe("design-system primitive boundary", () => {
 
         expect(violations, violations.join("\n")).toEqual([])
         expect(nativeInputExceptions.sort()).toEqual(expectedNativeInputExceptions)
-    })
+    }, 10_000)
 
     it("backs the shared Button and Input wrappers with installed Base UI primitives", () => {
         const buttonSource = readFileSync(path.join(webRoot, "components/ui/button.tsx"), "utf8")

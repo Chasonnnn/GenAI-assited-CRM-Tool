@@ -285,7 +285,6 @@ describe('SurrogatesPage', () => {
         })
 
         const { container, rerender } = render(<SurrogatesPage />)
-
         expect(container.querySelector('.animate-spin')).toBeInTheDocument()
         expect(screen.queryByText('No surrogates yet')).not.toBeInTheDocument()
         expect(screen.queryByRole('table')).not.toBeInTheDocument()
@@ -296,7 +295,6 @@ describe('SurrogatesPage', () => {
             error: null,
         })
         rerender(<SurrogatesPage />)
-
         expect(container.querySelector('.animate-spin')).not.toBeInTheDocument()
         expect(screen.getByText('No surrogates yet')).toBeInTheDocument()
     })

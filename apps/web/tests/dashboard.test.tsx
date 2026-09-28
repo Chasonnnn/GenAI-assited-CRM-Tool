@@ -199,7 +199,7 @@ describe('DashboardPage', () => {
         })
     })
 
-    it('renders stats cards with surrogate data', async () => {
+    it('renders dashboard summaries, empty trend, and accessible controls', async () => {
         render(<DashboardPage />)
 
         expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument()
@@ -213,6 +213,21 @@ describe('DashboardPage', () => {
         // Check chart sections exist
         expect(await screen.findByText('Surrogates Trend')).toBeInTheDocument()
         expect(await screen.findByText('Pipeline Distribution')).toBeInTheDocument()
+        expect(await screen.findByText('No new surrogates in the last 30 days')).toBeInTheDocument()
+        expect(await screen.findByText('View surrogates')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /Attention Needed/i })).toHaveClass(
+            'focus-visible:ring-2',
+            'focus-visible:ring-ring',
+            'focus-visible:ring-offset-2'
+        )
+        expect(screen.getByRole('button', { name: /Upcoming This Week/i })).toHaveClass(
+            'focus-visible:ring-2',
+            'focus-visible:ring-ring',
+            'focus-visible:ring-offset-2'
+        )
+        expect(screen.queryByRole('button', { name: 'Egg Donors' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Sperm Donors' })).not.toBeInTheDocument()
+        expect(mockUseDonorsByStatus).not.toHaveBeenCalled()
     })
 
     it('shows restricted state for charts without reports access', async () => {
@@ -233,13 +248,6 @@ describe('DashboardPage', () => {
 
         const unavailable = await screen.findAllByText('Analytics unavailable')
         expect(unavailable.length).toBeGreaterThan(0)
-    })
-
-    it('shows contextual empty state when trend has no new surrogates', async () => {
-        render(<DashboardPage />)
-
-        expect(await screen.findByText('No new surrogates in the last 30 days')).toBeInTheDocument()
-        expect(await screen.findByText('View surrogates')).toBeInTheDocument()
     })
 
     it('links attention surrogate cards to dynamic filters', async () => {
@@ -280,21 +288,6 @@ describe('DashboardPage', () => {
 
         expect(await screen.findByText('No surrogates match your filters')).toBeInTheDocument()
         expect(await screen.findByText('Reset filters')).toBeInTheDocument()
-    })
-
-    it('adds focus-visible styles to dashboard section toggles', () => {
-        render(<DashboardPage />)
-
-        expect(screen.getByRole('button', { name: /Attention Needed/i })).toHaveClass(
-            'focus-visible:ring-2',
-            'focus-visible:ring-ring',
-            'focus-visible:ring-offset-2'
-        )
-        expect(screen.getByRole('button', { name: /Upcoming This Week/i })).toHaveClass(
-            'focus-visible:ring-2',
-            'focus-visible:ring-ring',
-            'focus-visible:ring-offset-2'
-        )
     })
 
     it('uses consistent dashboard filters for all trend queries', async () => {
@@ -499,15 +492,6 @@ describe('DashboardPage', () => {
         fireEvent.click(screen.getByRole('button', { name: /Upcoming This Week/i }))
 
         expect(await screen.findByText('D10001')).toBeInTheDocument()
-    })
-
-    it('keeps pipeline distribution surrogate-only when donor access is granted', async () => {
-        render(<DashboardPage />)
-
-        expect(await screen.findByText('Pipeline Distribution')).toBeInTheDocument()
-        expect(screen.queryByRole('button', { name: 'Egg Donors' })).not.toBeInTheDocument()
-        expect(screen.queryByRole('button', { name: 'Sperm Donors' })).not.toBeInTheDocument()
-        expect(mockUseDonorsByStatus).not.toHaveBeenCalled()
     })
 
     it('uses donor detail and subtype-filtered links for stuck donors', async () => {

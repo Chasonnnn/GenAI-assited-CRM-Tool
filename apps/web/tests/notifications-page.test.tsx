@@ -90,17 +90,18 @@ describe('NotificationsPage', () => {
         mockUseMarkAllRead.mockReturnValue({ mutate: mockMarkAllRead, isPending: false })
     })
 
-    it('renders notifications page with header', () => {
+    it('renders notification counts, overdue tasks, and default filters', () => {
         const { container } = render(<NotificationsPage />)
         const heading = screen.getByRole('heading', { level: 1, name: 'Notifications' })
         expect(heading.closest('[data-slot="page-header"]')).not.toBeNull()
         expect(heading.querySelector('svg')).toBeNull()
         expect(container.querySelector('.text-teal-500.bg-teal-500\\/10')).toBeNull()
-    })
-
-    it('shows unread count badge', () => {
-        render(<NotificationsPage />)
         expect(screen.getByText('2 unread')).toBeInTheDocument()
+        expect(screen.getByText('Overdue Tasks')).toBeInTheDocument()
+        expect(screen.getByText('Overdue task')).toBeInTheDocument()
+        expect(mockUseNotifications).toHaveBeenCalledWith(
+            expect.objectContaining({ limit: 50 })
+        )
     })
 
     it('can mark all as read', () => {
@@ -114,51 +115,6 @@ describe('NotificationsPage', () => {
         fireEvent.click(screen.getByText('Surrogate assigned'))
         expect(mockMarkRead).toHaveBeenCalledWith('n1')
         expect(mockPush).toHaveBeenCalledWith('/surrogates/s1')
-    })
-
-    it('renders overdue tasks section', () => {
-        render(<NotificationsPage />)
-        expect(screen.getByText('Overdue Tasks')).toBeInTheDocument()
-        expect(screen.getByText('Overdue task')).toBeInTheDocument()
-    })
-
-    it('renders type filter dropdown', () => {
-        render(<NotificationsPage />)
-        expect(screen.getByRole('combobox')).toBeInTheDocument()
-    })
-
-    it('passes notification_types to hook when filter is selected', async () => {
-        render(<NotificationsPage />)
-
-        expect(mockUseNotifications.mock.lastCall?.[0]).not.toHaveProperty('notification_types')
-
-        fireEvent.mouseDown(screen.getByRole('combobox'))
-        const appointmentsOption = await screen.findByRole('option', { name: 'Appointments' })
-        fireEvent.mouseMove(appointmentsOption)
-        fireEvent.click(appointmentsOption)
-
-        expect(screen.getByRole('combobox')).toHaveTextContent('Appointments')
-        expect(mockUseNotifications).toHaveBeenLastCalledWith(
-            expect.objectContaining({
-                limit: 50,
-                notification_types: [
-                    'appointment_requested',
-                    'appointment_confirmed',
-                    'appointment_cancelled',
-                    'appointment_reminder',
-                ],
-            })
-        )
-        // Reopening before the first popup unmounts lets the click hit a stale option under load.
-        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
-
-        fireEvent.mouseDown(screen.getByRole('combobox'))
-        const allOption = await screen.findByRole('option', { name: 'All' })
-        fireEvent.mouseMove(allOption)
-        fireEvent.click(allOption)
-
-        expect(screen.getByRole('combobox')).toHaveTextContent('All')
-        expect(mockUseNotifications.mock.lastCall?.[0]).not.toHaveProperty('notification_types')
     })
 
     it("enables polling fallback when websocket is disconnected", () => {
@@ -334,16 +290,44 @@ describe('NotificationsPage', () => {
         expect(mockMarkAllRead).toHaveBeenCalledTimes(1)
     })
 
-    it('filters match updates to match conflict notifications', async () => {
+    it('applies match and appointment filters and restores All', async () => {
         render(<NotificationsPage />)
+        expect(mockUseNotifications.mock.lastCall?.[0]).not.toHaveProperty('notification_types')
         fireEvent.click(screen.getByRole('combobox'))
         const option = await screen.findByRole('option', { name: 'Match Updates' })
         fireEvent.mouseMove(option)
         fireEvent.click(option)
         expect(mockUseNotifications).toHaveBeenLastCalledWith(
-            expect.objectContaining({ notification_types: ['match_conflict'] })
+            expect.objectContaining({ limit: 50, notification_types: ['match_conflict'] })
         )
         expect(screen.getByRole('combobox')).toHaveTextContent('Match Updates')
+        // Reopening before the previous popup unmounts lets the click hit a stale option under load.
+        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+
+        fireEvent.click(screen.getByRole('combobox'))
+        const appointments = await screen.findByRole('option', { name: 'Appointments' })
+        fireEvent.mouseMove(appointments)
+        fireEvent.click(appointments)
+        expect(screen.getByRole('combobox')).toHaveTextContent('Appointments')
+        expect(mockUseNotifications).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                limit: 50,
+                notification_types: [
+                    'appointment_requested',
+                    'appointment_confirmed',
+                    'appointment_cancelled',
+                    'appointment_reminder',
+                ],
+            })
+        )
+        await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+
+        fireEvent.click(screen.getByRole('combobox'))
+        const all = await screen.findByRole('option', { name: 'All', exact: true })
+        fireEvent.mouseMove(all)
+        fireEvent.click(all)
+        expect(screen.getByRole('combobox')).toHaveTextContent('All')
+        expect(mockUseNotifications.mock.lastCall?.[0]).not.toHaveProperty('notification_types')
     })
 
     it('routes match conflict notifications to the match detail with the match icon', () => {

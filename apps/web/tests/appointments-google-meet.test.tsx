@@ -248,15 +248,7 @@ describe("Appointments Google Meet UI", () => {
     it("shows Google Meet as an appointment format option", () => {
         render(<AppointmentSettings />)
         expect(screen.getByText(/Google Meet/i)).toBeInTheDocument()
-    })
-
-    it("labels the booking link copy button", () => {
-        render(<AppointmentSettings />)
         expect(screen.getByRole("button", { name: "Copy booking link" })).toBeInTheDocument()
-    })
-
-    it("labels the readonly booking link field", () => {
-        render(<AppointmentSettings />)
         expect(screen.getByRole("textbox", { name: "Your booking link" })).toHaveAttribute("readonly")
         expect(screen.getByRole("textbox", { name: "Your booking link" })).toHaveValue("https://example.com/book/abc")
     })

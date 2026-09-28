@@ -61,25 +61,26 @@ async def test_v2_protected_roles_resolve_cancellation(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("path", ["{id}/approve", "{id}/reject", "{id}"])
 @pytest.mark.parametrize("role", [Role.CASE_MANAGER, Role.OPERATIONS, Role.INTAKE_SPECIALIST])
 async def test_v2_roles_without_approval_permission_cannot_reach_cancellation_request(
-    authed_client, db, v2_org, role, path
+    authed_client, db, v2_org, role, subtests
 ):
     match, request = await _pending_cancellation(authed_client, db)
-    method = "GET" if path == "{id}" else "POST"
+    for path in ["{id}/approve", "{id}/reject", "{id}"]:
+        with subtests.test(path=repr(path)):
+            method = "GET" if path == "{id}" else "POST"
 
-    async with _client_for(db, v2_org.id, role=role) as (_user, client):
-        response = await client.request(
-            method,
-            f"/status-change-requests/{path.format(id=request.id)}",
-            json=None if method == "GET" else {},
-        )
+            async with _client_for(db, v2_org.id, role=role) as (_user, client):
+                response = await client.request(
+                    method,
+                    f"/status-change-requests/{path.format(id=request.id)}",
+                    json=None if method == "GET" else {},
+                )
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Missing permission: approve_status_change_requests"
-    assert _request_row(db, request.id).status == "pending"
-    assert _match_row(db, match["id"]).status == "cancellation_pending"
+            assert response.status_code == 403
+            assert response.json()["detail"] == "Missing permission: approve_status_change_requests"
+            assert _request_row(db, request.id).status == "pending"
+            assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 @pytest.mark.asyncio
@@ -125,18 +126,23 @@ async def test_v2_admin_ignores_approval_permission_denials(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action", ["approve", "reject"])
-async def test_v2_granted_approver_without_view_matches_gets_404(authed_client, db, v2_org, action):
+async def test_v2_granted_approver_without_view_matches_gets_404(
+    authed_client, db, v2_org, subtests
+):
     match, request = await _pending_cancellation(authed_client, db)
     _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "approve_status_change_requests", True)
     _set_role_permission(db, v2_org.id, Role.CASE_MANAGER, "view_matches", False)
 
-    async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_user, client):
-        response = await client.post(f"/status-change-requests/{request.id}/{action}", json={})
+    for action in ["approve", "reject"]:
+        with subtests.test(action=repr(action)):
+            async with _client_for(db, v2_org.id, role=Role.CASE_MANAGER) as (_user, client):
+                response = await client.post(
+                    f"/status-change-requests/{request.id}/{action}", json={}
+                )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Request not found"
-    assert _match_row(db, match["id"]).status == "cancellation_pending"
+            assert response.status_code == 404
+            assert response.json()["detail"] == "Request not found"
+            assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 @pytest.mark.asyncio
@@ -216,9 +222,8 @@ async def test_v2_withdraw_by_non_requester_admin_returns_403(authed_client, db,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", [Role.ADMIN, Role.CASE_MANAGER])
-@pytest.mark.parametrize("action", ["approve", "reject", "cancel", "detail"])
 async def test_v2_other_org_user_gets_404_for_match_cancellation_request(
-    authed_client, db, v2_org, role, action
+    authed_client, db, v2_org, role, subtests
 ):
     match, request = await _pending_cancellation(authed_client, db)
     other_org = _v2_other_org(db)
@@ -227,16 +232,20 @@ async def test_v2_other_org_user_gets_404_for_match_cancellation_request(
             db, other_org.id, Role.CASE_MANAGER, "approve_status_change_requests", True
         )
 
-    async with _client_for(db, other_org.id, role=role) as (_user, client):
-        if action == "detail":
-            response = await client.get(f"/status-change-requests/{request.id}")
-        else:
-            response = await client.post(f"/status-change-requests/{request.id}/{action}", json={})
+    for action in ["approve", "reject", "cancel", "detail"]:
+        with subtests.test(action=repr(action)):
+            async with _client_for(db, other_org.id, role=role) as (_user, client):
+                if action == "detail":
+                    response = await client.get(f"/status-change-requests/{request.id}")
+                else:
+                    response = await client.post(
+                        f"/status-change-requests/{request.id}/{action}", json={}
+                    )
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Request not found"
-    assert _request_row(db, request.id).status == "pending"
-    assert _match_row(db, match["id"]).status == "cancellation_pending"
+            assert response.status_code == 404
+            assert response.json()["detail"] == "Request not found"
+            assert _request_row(db, request.id).status == "pending"
+            assert _match_row(db, match["id"]).status == "cancellation_pending"
 
 
 # =============================================================================
@@ -267,20 +276,20 @@ async def _listed_requests(db, org_id, role, **params):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", [Role.CASE_MANAGER, Role.OPERATIONS, Role.INTAKE_SPECIALIST])
-async def test_v2_request_list_requires_approval_permission(authed_client, db, v2_org, role):
+async def test_v2_request_list_requires_approval_permission(authed_client, db, v2_org, subtests):
     await _pending_cancellation(authed_client, db)
 
-    response = await _listed_requests(db, v2_org.id, role)
+    for role in [Role.CASE_MANAGER, Role.OPERATIONS, Role.INTAKE_SPECIALIST]:
+        with subtests.test(role=repr(role)):
+            response = await _listed_requests(db, v2_org.id, role)
 
-    assert response.status_code == 403
-    assert response.json()["detail"] == "Missing permission: approve_status_change_requests"
+            assert response.status_code == 403
+            assert response.json()["detail"] == "Missing permission: approve_status_change_requests"
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("per_page", [20, 1])
 async def test_v2_request_list_shows_only_requests_in_the_callers_scope(
-    authed_client, db, v2_org, per_page
+    authed_client, db, v2_org, subtests
 ):
     _visible_match, visible = await _pending_cancellation(authed_client, db)
     _donor_match, donor = await _pending_cancellation(authed_client, db, donor=True)
@@ -292,30 +301,39 @@ async def test_v2_request_list_shows_only_requests_in_the_callers_scope(
     for org_id in (v2_org.id, other_org.id):
         _set_role_permission(db, org_id, Role.CASE_MANAGER, "approve_status_change_requests", True)
 
-    manager = await _listed_requests(db, v2_org.id, Role.CASE_MANAGER, per_page=per_page)
-    admin = await _listed_requests(db, v2_org.id, Role.ADMIN)
-    foreign_admin = await _listed_requests(db, other_org.id, Role.ADMIN)
+    for per_page in [20, 1]:
+        with subtests.test(per_page=repr(per_page)):
+            manager = await _listed_requests(db, v2_org.id, Role.CASE_MANAGER, per_page=per_page)
+            admin = await _listed_requests(db, v2_org.id, Role.ADMIN)
+            foreign_admin = await _listed_requests(db, other_org.id, Role.ADMIN)
 
-    assert manager.status_code == 200, manager.text
-    expected = {str(visible.id), str(donor.id)}
-    listed = {item["request"]["id"] for item in manager.json()["items"]}
-    assert listed <= expected
-    assert len(listed) == min(per_page, 2)
-    assert manager.json()["total"] == 2
-    if per_page == 1:
-        second_page = await _listed_requests(db, v2_org.id, Role.CASE_MANAGER, per_page=1, page=2)
-        assert listed | {item["request"]["id"] for item in second_page.json()["items"]} == expected
-    else:
-        assert listed == expected
-    assert admin.status_code == 200, admin.text
-    assert {item["request"]["id"] for item in admin.json()["items"]} == {
-        str(visible.id),
-        str(donor.id),
-        str(intake.id),
-    }
-    assert admin.json()["total"] == 3
-    assert {item["request"]["id"] for item in foreign_admin.json()["items"]} == {str(foreign.id)}
-    assert foreign_admin.json()["total"] == 1
+            assert manager.status_code == 200, manager.text
+            expected = {str(visible.id), str(donor.id)}
+            listed = {item["request"]["id"] for item in manager.json()["items"]}
+            assert listed <= expected
+            assert len(listed) == min(per_page, 2)
+            assert manager.json()["total"] == 2
+            if per_page == 1:
+                second_page = await _listed_requests(
+                    db, v2_org.id, Role.CASE_MANAGER, per_page=1, page=2
+                )
+                assert (
+                    listed | {item["request"]["id"] for item in second_page.json()["items"]}
+                    == expected
+                )
+            else:
+                assert listed == expected
+            assert admin.status_code == 200, admin.text
+            assert {item["request"]["id"] for item in admin.json()["items"]} == {
+                str(visible.id),
+                str(donor.id),
+                str(intake.id),
+            }
+            assert admin.json()["total"] == 3
+            assert {item["request"]["id"] for item in foreign_admin.json()["items"]} == {
+                str(foreign.id)
+            }
+            assert foreign_admin.json()["total"] == 1
 
 
 # =============================================================================

@@ -410,19 +410,8 @@ describe('TasksPage', () => {
         expect(screen.getByText('Pending Approvals')).toBeInTheDocument()
         expect(screen.getByText('Approve: Assign surrogate to John')).toBeInTheDocument()
         expect(screen.getByText('Assign surrogate to John Smith')).toBeInTheDocument()
-    })
-
-    it('shows approve and deny buttons for surrogate owner', () => {
-        render(<TasksPage />)
-
         expect(screen.getByRole('button', { name: /approve/i })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: /deny/i })).toBeInTheDocument()
-    })
-
-    it('shows time remaining for approval', () => {
-        render(<TasksPage />)
-
-        // Should show hours remaining (24h from now = "24h remaining" or "1d 0h remaining")
         expect(screen.getByText(/remaining/i)).toBeInTheDocument()
     })
 

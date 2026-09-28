@@ -120,25 +120,13 @@ describe('MatchesPage', () => {
         expect(screen.queryByText('Under Review')).not.toBeInTheDocument()
     })
 
-    it('renders page header and title', () => {
+    it('renders the default match list, summary, and filters', () => {
         render(<MatchesPage />)
         expect(screen.getByRole('heading', { level: 1, name: 'Matches' })).toBeInTheDocument()
-    })
-
-    it('shows the count in the header instead of stat cards', () => {
-        render(<MatchesPage />)
         expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('2')
         expect(screen.queryByText('Total')).not.toBeInTheDocument()
-    })
-
-    it('shows filtered and unfiltered counts when a filter is active', () => {
-        mockSearchParams.set('status', 'accepted')
-        render(<MatchesPage />)
-        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('2 of 42')
-    })
-
-    it('orders the toolbar Stage, Date, More Filters, then search', () => {
-        render(<MatchesPage />)
+        expect(screen.getAllByText('Proposed').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('Accepted').length).toBeGreaterThan(0)
         const stage = screen.getByRole('combobox', { name: 'Filter by stage' })
         const date = screen.getByRole('button', { name: 'Proposed date range' })
         const more = screen.getByRole('button', { name: 'More Filters' })
@@ -148,6 +136,32 @@ describe('MatchesPage', () => {
         expect(date.compareDocumentPosition(more) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
         expect(more.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
         expect(search).toHaveAttribute('placeholder', 'Search matches')
+        expect(screen.getByText('Participant')).toBeInTheDocument()
+        expect(screen.getByText('Participant #')).toBeInTheDocument()
+        expect(screen.getByText('Intended Parents')).toBeInTheDocument()
+        expect(screen.queryByText('Compatibility')).not.toBeInTheDocument()
+        expect(screen.getByText('Match Stage')).toBeInTheDocument()
+        expect(screen.getByText('Participant Stage')).toBeInTheDocument()
+        expect(screen.getByText('Jane Doe')).toBeInTheDocument()
+        expect(screen.getByText('S10001')).toBeInTheDocument()
+        expect(screen.getByText('John Smith')).toBeInTheDocument()
+        expect(screen.getByText('Mary Johnson')).toBeInTheDocument()
+        expect(screen.getByText('S10002')).toBeInTheDocument()
+        expect(screen.getByText('Bob Williams')).toBeInTheDocument()
+        expect(mockUseMatches).toHaveBeenCalledWith({
+            status: undefined,
+            page: 1,
+            per_page: 20,
+            sort_by: 'match_number',
+            sort_order: 'desc',
+        })
+        expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
+    })
+
+    it('shows filtered and unfiltered counts when a filter is active', () => {
+        mockSearchParams.set('status', 'accepted')
+        render(<MatchesPage />)
+        expect(document.querySelector('[data-slot="page-header-count"]')).toHaveTextContent('2 of 42')
     })
 
     it('shows New Match only with propose_matches', () => {
@@ -228,26 +242,6 @@ describe('MatchesPage', () => {
         expect(kind).toHaveTextContent('All Kinds')
     })
 
-    it('renders match table with data', () => {
-        render(<MatchesPage />)
-        // Table headers
-        expect(screen.getByText('Participant')).toBeInTheDocument()
-        expect(screen.getByText('Participant #')).toBeInTheDocument()
-        expect(screen.getByText('Intended Parents')).toBeInTheDocument()
-        expect(screen.queryByText('Compatibility')).not.toBeInTheDocument()
-        expect(screen.getByText('Match Stage')).toBeInTheDocument()
-        expect(screen.getByText('Participant Stage')).toBeInTheDocument()
-
-        // Match data
-        expect(screen.getByText('Jane Doe')).toBeInTheDocument()
-        expect(screen.getByText('S10001')).toBeInTheDocument()
-        expect(screen.getByText('John Smith')).toBeInTheDocument()
-
-        expect(screen.getByText('Mary Johnson')).toBeInTheDocument()
-        expect(screen.getByText('S10002')).toBeInTheDocument()
-        expect(screen.getByText('Bob Williams')).toBeInTheDocument()
-    })
-
     it('shows loading state', () => {
         mockUseMatches.mockReturnValue({
             data: null,
@@ -323,17 +317,6 @@ describe('MatchesPage', () => {
         expect(maryLink).toHaveAttribute('href', '/intended-parents/matches/match2')
     })
 
-    it('calls useMatches with correct filter params', () => {
-        render(<MatchesPage />)
-        expect(mockUseMatches).toHaveBeenCalledWith({
-            status: undefined,
-            page: 1,
-            per_page: 20,
-            sort_by: 'match_number',
-            sort_order: 'desc',
-        })
-    })
-
     it('uses page from URL params', () => {
         mockSearchParams.set('page', '2')
         mockUseMatches.mockReturnValue({
@@ -404,10 +387,6 @@ describe('MatchesPage', () => {
         expect(screen.getByText('Showing 1 to 20 of 50')).toBeInTheDocument()
     })
 
-    it('hides pagination when not needed', () => {
-        render(<MatchesPage />)
-        expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
-    })
     it('renders donor cases without surrogate fields and restores the kind filter from URL', () => {
         mockSearchParams.set('match_kind', 'donor')
         mockUseMatches.mockReturnValue({ data: { ...mockMatchData, items: [{ ...mockMatchData.items[0], match_kind: 'donor', donor_id: 'donor1', donor_name: 'Taylor Donor', donor_number: 'D10001', donor_stage_label: 'Ready', surrogate_id: null, surrogate_name: null, surrogate_number: null, status: 'completed' }] }, isLoading: false })

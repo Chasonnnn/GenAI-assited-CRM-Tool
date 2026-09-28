@@ -34,80 +34,84 @@ def record_context(request, db, test_org, test_user):
     return record, builder
 
 
-@pytest.mark.parametrize(
-    "owner_state",
-    [
+def test_record_email_context_scopes_owner_identity(
+    db, test_org, test_user, record_context, subtests
+):
+    record, builder = record_context
+    for owner_state in [
         "active_user",
         "foreign_user",
         "inactive_membership",
         "inactive_user",
         "local_queue",
         "foreign_queue",
-    ],
-)
-def test_record_email_context_scopes_owner_identity(
-    db, test_org, test_user, record_context, owner_state
-):
-    record, builder = record_context
-    expected_owner = test_user.display_name
-    if owner_state in {"foreign_user", "foreign_queue"}:
-        other_org = Organization(name="Synthetic Other Org", slug=f"context-{uuid4()}")
-        db.add(other_org)
-        db.flush()
-        expected_owner = ""
-        if owner_state == "foreign_user":
-            other_user = User(
-                email=f"foreign-{uuid4()}@example.com",
-                display_name="Foreign Owner",
-                token_version=1,
-            )
-            db.add(other_user)
-            db.flush()
-            db.add(
-                Membership(
-                    organization_id=other_org.id,
-                    user_id=other_user.id,
-                    role="admin",
-                    is_active=True,
+    ]:
+        with subtests.test(owner_state=repr(owner_state)):
+            # Each row starts with the same active tenant owner; denials cannot leak into later rows.
+            record.owner_type, record.owner_id = "user", test_user.id
+            test_user.is_active = True
+            db.query(Membership).filter_by(
+                organization_id=test_org.id, user_id=test_user.id
+            ).one().is_active = True
+            expected_owner = test_user.display_name
+            if owner_state in {"foreign_user", "foreign_queue"}:
+                other_org = Organization(name="Synthetic Other Org", slug=f"context-{uuid4()}")
+                db.add(other_org)
+                db.flush()
+                expected_owner = ""
+                if owner_state == "foreign_user":
+                    other_user = User(
+                        email=f"foreign-{uuid4()}@example.com",
+                        display_name="Foreign Owner",
+                        token_version=1,
+                    )
+                    db.add(other_user)
+                    db.flush()
+                    db.add(
+                        Membership(
+                            organization_id=other_org.id,
+                            user_id=other_user.id,
+                            role="admin",
+                            is_active=True,
+                        )
+                    )
+                    record.owner_id = other_user.id
+                else:
+                    queue = Queue(organization_id=other_org.id, name="Foreign Queue")
+                    db.add(queue)
+                    db.flush()
+                    record.owner_type = "queue"
+                    record.owner_id = queue.id
+            elif owner_state == "inactive_membership":
+                membership = (
+                    db.query(Membership)
+                    .filter(
+                        Membership.organization_id == test_org.id,
+                        Membership.user_id == test_user.id,
+                    )
+                    .one()
                 )
-            )
-            record.owner_id = other_user.id
-        else:
-            queue = Queue(organization_id=other_org.id, name="Foreign Queue")
-            db.add(queue)
-            db.flush()
-            record.owner_type = "queue"
-            record.owner_id = queue.id
-    elif owner_state == "inactive_membership":
-        membership = (
-            db.query(Membership)
-            .filter(
-                Membership.organization_id == test_org.id,
-                Membership.user_id == test_user.id,
-            )
-            .one()
-        )
-        membership.is_active = False
-        expected_owner = ""
-    elif owner_state == "inactive_user":
-        test_user.is_active = False
-        expected_owner = ""
-    elif owner_state == "local_queue":
-        queue = Queue(organization_id=test_org.id, name="Local Queue")
-        db.add(queue)
-        db.flush()
-        record.owner_type = "queue"
-        record.owner_id = queue.id
-        expected_owner = queue.name
-    db.commit()
+                membership.is_active = False
+                expected_owner = ""
+            elif owner_state == "inactive_user":
+                test_user.is_active = False
+                expected_owner = ""
+            elif owner_state == "local_queue":
+                queue = Queue(organization_id=test_org.id, name="Local Queue")
+                db.add(queue)
+                db.flush()
+                record.owner_type = "queue"
+                record.owner_id = queue.id
+                expected_owner = queue.name
+            db.commit()
 
-    variables = builder(db, record)
+            variables = builder(db, record)
 
-    assert variables["owner_name"] == expected_owner
-    assert variables["first_name"] == "Synthetic"
-    assert variables["full_name"] == record.full_name
-    assert variables["email"] == record.email
-    assert variables["org_name"] == test_org.name
-    assert variables["unsubscribe_url"].startswith(
-        f"https://{test_org.slug}.surrogacyforce.com/email/unsubscribe/"
-    )
+            assert variables["owner_name"] == expected_owner
+            assert variables["first_name"] == "Synthetic"
+            assert variables["full_name"] == record.full_name
+            assert variables["email"] == record.email
+            assert variables["org_name"] == test_org.name
+            assert variables["unsubscribe_url"].startswith(
+                f"https://{test_org.slug}.surrogacyforce.com/email/unsubscribe/"
+            )

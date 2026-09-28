@@ -41,83 +41,90 @@ def _payload(module):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("module", MODULES)
 @pytest.mark.parametrize("create,edit", [(True, False), (False, True), (False, False)])
-async def test_v2_create_permission_is_independent(db, context, module, create, edit):
-    _rule(db, context.org.id, module, "create", create)
-    _rule(db, context.org.id, module, "edit", edit)
+async def test_v2_create_permission_is_independent(db, context, create, edit, subtests):
     user = db.get(User, context.manager.user_id)
-    before = db.query(MODELS[module]).filter_by(organization_id=context.org.id).count()
     async with authed_client_for_user(db, context.org.id, user, Role.CASE_MANAGER) as client:
-        response = await client.post(f"/{module.replace('_', '-')}", json=_payload(module))
-        assert response.status_code == (201 if create else 403), response.text
-        if create:
-            record = db.get(MODELS[module], UUID(response.json()["id"]))
-            assert record.organization_id == context.org.id
-            if module in {"surrogates", "donors"}:
-                assert record.owner_type == "user"
-                assert record.owner_id == user.id
-            else:
-                assert record.owner_type is None  # Existing IP creation remains unassigned.
-                assert record.owner_id is None
-    assert db.query(MODELS[module]).filter_by(
-        organization_id=context.org.id
-    ).count() == before + int(create)
+        for module in MODULES:
+            with subtests.test(module=repr(module)):
+                _rule(db, context.org.id, module, "create", create)
+                _rule(db, context.org.id, module, "edit", edit)
+                before = db.query(MODELS[module]).filter_by(organization_id=context.org.id).count()
+                response = await client.post(f"/{module.replace('_', '-')}", json=_payload(module))
+                assert response.status_code == (201 if create else 403), response.text
+                if create:
+                    record = db.get(MODELS[module], UUID(response.json()["id"]))
+                    assert record.organization_id == context.org.id
+                    if module in {"surrogates", "donors"}:
+                        assert record.owner_type == "user"
+                        assert record.owner_id == user.id
+                    else:
+                        assert record.owner_type is None  # Existing IP creation remains unassigned.
+                        assert record.owner_id is None
+                assert db.query(MODELS[module]).filter_by(
+                    organization_id=context.org.id
+                ).count() == before + int(create)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("module", MODULES)
-async def test_legacy_create_still_uses_edit(db, context, module):
+async def test_legacy_create_still_uses_edit(db, context, subtests):
     db.query(OrganizationPermissionPolicy).filter_by(organization_id=context.org.id).delete()
-    _rule(db, context.org.id, module, "create", False)
     user = db.get(User, context.manager.user_id)
     async with authed_client_for_user(db, context.org.id, user, Role.CASE_MANAGER) as client:
-        response = await client.post(f"/{module.replace('_', '-')}", json=_payload(module))
-    assert response.status_code == 201, response.text
+        for module in MODULES:
+            with subtests.test(module=repr(module)):
+                _rule(db, context.org.id, module, "create", False)
+                response = await client.post(f"/{module.replace('_', '-')}", json=_payload(module))
+                assert response.status_code == 201, response.text
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("module", MODULES)
-async def test_create_keeps_csrf_and_authenticated_org(db, context, module):
-    other = Organization(id=uuid4(), name="Other agency", slug=uuid4().hex)
-    db.add(other)
-    db.flush()
+async def test_create_keeps_csrf_and_authenticated_org(db, context, subtests):
     user = db.get(User, context.manager.user_id)
     async with authed_client_for_user(db, context.org.id, user, Role.CASE_MANAGER) as client:
-        payload = {**_payload(module), "organization_id": str(other.id)}
-        client.headers.pop("X-CSRF-Token", None)
-        response = await client.post(f"/{module.replace('_', '-')}", json=payload)
-        assert response.status_code == 403, response.text
-        response = await client.post(
-            f"/{module.replace('_', '-')}",
-            json=payload,
-            headers={"X-CSRF-Token": client.cookies.get("crm_csrf")},
-        )
-        assert response.status_code in {201, 422}, response.text
-    assert db.query(MODELS[module]).filter_by(organization_id=other.id).count() == 0
+        for module in MODULES:
+            with subtests.test(module=repr(module)):
+                other = Organization(id=uuid4(), name="Other agency", slug=uuid4().hex)
+                db.add(other)
+                db.flush()
+                payload = {**_payload(module), "organization_id": str(other.id)}
+                client.headers.pop("X-CSRF-Token", None)
+                response = await client.post(f"/{module.replace('_', '-')}", json=payload)
+                assert response.status_code == 403, response.text
+                response = await client.post(
+                    f"/{module.replace('_', '-')}",
+                    json=payload,
+                    headers={"X-CSRF-Token": client.cookies.get("crm_csrf")},
+                )
+                assert response.status_code in {201, 422}, response.text
+                assert db.query(MODELS[module]).filter_by(organization_id=other.id).count() == 0
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "module,kind",
-    [("surrogates", "surrogate"), ("donors", "donor"), ("intended_parents", "intended_parent")],
-)
-async def test_create_does_not_expand_existing_record_scope(db, context, module, kind):
-    db.add(
-        RoleRecordScope(
-            organization_id=context.org.id,
-            role="case_manager",
-            module=module,
-            assignment="assigned",
-            phase="all",
-            stage_ids=[],
-        )
-    )
-    record = _record(db, context.intake, kind)
+async def test_create_does_not_expand_existing_record_scope(db, context, subtests):
     user = db.get(User, context.manager.user_id)
     async with authed_client_for_user(db, context.org.id, user, Role.CASE_MANAGER) as client:
-        response = await client.get(f"/{module.replace('_', '-')}/{record.id}")
-    assert response.status_code == (404 if module == "intended_parents" else 403), response.text
+        for module, kind in [
+            ("surrogates", "surrogate"),
+            ("donors", "donor"),
+            ("intended_parents", "intended_parent"),
+        ]:
+            with subtests.test(module=repr(module), kind=repr(kind)):
+                db.add(
+                    RoleRecordScope(
+                        organization_id=context.org.id,
+                        role="case_manager",
+                        module=module,
+                        assignment="assigned",
+                        phase="all",
+                        stage_ids=[],
+                    )
+                )
+                record = _record(db, context.intake, kind)
+                response = await client.get(f"/{module.replace('_', '-')}/{record.id}")
+                assert response.status_code == (404 if module == "intended_parents" else 403), (
+                    response.text
+                )
 
 
 @pytest.mark.asyncio
@@ -143,8 +150,7 @@ async def test_create_rejects_invalid_owner_relationships(db, context, module, o
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("operation", ["approve", "retry", "run-inline"])
-async def test_import_execution_requires_create_before_queueing(db, context, operation):
+async def test_import_execution_requires_create_before_queueing(db, context, subtests):
     _rule(db, context.org.id, "surrogates", "create", False, role="intake_specialist")
     for permission in ["import_surrogates", "manage_org"]:
         db.add(
@@ -158,9 +164,11 @@ async def test_import_execution_requires_create_before_queueing(db, context, ope
     db.flush()
     user = db.get(User, context.intake.user_id)
     async with authed_client_for_user(db, context.org.id, user, Role.INTAKE_SPECIALIST) as client:
-        response = await client.post(f"/surrogates/import/{uuid4()}/{operation}")
-    assert response.status_code == 403, response.text
-    assert "create_surrogates" in response.json()["detail"]
+        for operation in ["approve", "retry", "run-inline"]:
+            with subtests.test(operation=repr(operation)):
+                response = await client.post(f"/surrogates/import/{uuid4()}/{operation}")
+                assert response.status_code == 403, response.text
+                assert "create_surrogates" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

@@ -363,12 +363,14 @@ describe("EmailTemplatesPage", () => {
         })
     })
 
-    it("renders updated tabs", () => {
+    it("renders template tabs and ownership labels", () => {
         render(<EmailTemplatesPage />)
         expect(screen.getByRole("tab", { name: "My Email Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "Organization Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "Platform Templates" })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "My Signature" })).toBeInTheDocument()
+        expect(screen.getByRole("combobox")).toHaveTextContent("My Templates")
+        expect(screen.getByRole("combobox")).not.toHaveTextContent(/^mine$/)
     })
 
     it("scrolls the template tabs and wraps the list filters at narrow widths", () => {
@@ -381,13 +383,6 @@ describe("EmailTemplatesPage", () => {
         const filters = screen.getByRole("combobox").closest("div.flex-wrap")
         expect(filters).not.toBe(row)
         expect(row).toContainElement(filters as HTMLElement)
-    })
-
-    it("shows a friendly label for the personal-template ownership filter", () => {
-        render(<EmailTemplatesPage />)
-
-        expect(screen.getByRole("combobox")).toHaveTextContent("My Templates")
-        expect(screen.getByRole("combobox")).not.toHaveTextContent(/^mine$/)
     })
 
     it("shows send test email action and opens dialog", async () => {

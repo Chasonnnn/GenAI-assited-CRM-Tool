@@ -196,10 +196,29 @@ describe('IntendedParentDetailPage', () => {
         })
     })
 
-    it('renders primary details', () => {
+    it('renders intended-parent identity, controls, and medical details', () => {
         render(<IntendedParentDetailPage />)
         expect(screen.getByText('Bob Parent')).toBeInTheDocument()
         expect(screen.getAllByText('bob@example.com').length).toBeGreaterThan(0)
+        expect(screen.getByRole("link", { name: "Back to intended parents" })).toBeInTheDocument()
+        expect(
+            screen.getByRole("button", { name: "Actions for Bob Parent" })
+        ).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
+        expect(screen.queryByRole("heading", { name: "Status" })).not.toBeInTheDocument()
+        expect(screen.getByText("Activity")).toBeInTheDocument()
+        expect(screen.queryByText("Stage History")).not.toBeInTheDocument()
+        expect(screen.queryByText("Created:")).not.toBeInTheDocument()
+        expect(screen.queryByText("Last Activity:")).not.toBeInTheDocument()
+        expect(screen.getByText("Marital Status")).toBeInTheDocument()
+        expect(screen.getByText("Married")).toBeInTheDocument()
+        expect(screen.getByText("May 15, 1989")).toBeInTheDocument()
+        expect(screen.getByText("Aug 9, 1991")).toBeInTheDocument()
+        expect(screen.getByRole("heading", { name: "Embryo Status" })).toBeInTheDocument()
+        expect(screen.getByText("Intended Mother")).toBeInTheDocument()
+        expect(screen.getByText("Sperm Donor")).toBeInTheDocument()
+        expect(screen.getByText("Yes")).toBeInTheDocument()
+        expect(screen.getByTestId("ip-medical-sections-grid")).toHaveClass("grid", "gap-4", "md:grid-cols-2")
     })
 
     it("sanitizes intended-parent note HTML at the render boundary", () => {
@@ -220,15 +239,6 @@ describe('IntendedParentDetailPage', () => {
         expect(container.querySelector("img")).toBeNull()
         expect(container.querySelector("script")).toBeNull()
         expect(container.querySelector("[onerror]")).toBeNull()
-    })
-
-    it("adds accessible labels to the back link and actions menu", () => {
-        render(<IntendedParentDetailPage />)
-
-        expect(screen.getByRole("link", { name: "Back to intended parents" })).toBeInTheDocument()
-        expect(
-            screen.getByRole("button", { name: "Actions for Bob Parent" })
-        ).toBeInTheDocument()
     })
 
     it("confirms archive and permanent delete in app dialogs that name the record", async () => {
@@ -265,17 +275,6 @@ describe('IntendedParentDetailPage', () => {
         await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/intended-parents"))
         expect(confirmSpy).not.toHaveBeenCalled()
         confirmSpy.mockRestore()
-    })
-
-    it("moves Change Stage into the header and removes old status terminology from the detail page", () => {
-        render(<IntendedParentDetailPage />)
-
-        expect(screen.getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
-        expect(screen.queryByRole("heading", { name: "Status" })).not.toBeInTheDocument()
-        expect(screen.getByText("Activity")).toBeInTheDocument()
-        expect(screen.queryByText("Stage History")).not.toBeInTheDocument()
-        expect(screen.queryByText("Created:")).not.toBeInTheDocument()
-        expect(screen.queryByText("Last Activity:")).not.toBeInTheDocument()
     })
 
     it("renders intended-parent activity in the same staged journey format as surrogate details", () => {
@@ -385,15 +384,6 @@ describe('IntendedParentDetailPage', () => {
         expect(activity.getByText("Legal packet.pdf")).toBeInTheDocument()
         expect(activity.getByText("Next Steps")).toBeInTheDocument()
         expect(activity.getByText("Confirm embryo paperwork")).toBeInTheDocument()
-    })
-
-    it("renders marital status and per-person DOB on detail cards", () => {
-        render(<IntendedParentDetailPage />)
-
-        expect(screen.getByText("Marital Status")).toBeInTheDocument()
-        expect(screen.getByText("Married")).toBeInTheDocument()
-        expect(screen.getByText("May 15, 1989")).toBeInTheDocument()
-        expect(screen.getByText("Aug 9, 1991")).toBeInTheDocument()
     })
 
     it("renders partner details above marital status in the detail tab", () => {
@@ -802,21 +792,6 @@ describe('IntendedParentDetailPage', () => {
                 },
             })
         })
-    })
-
-    it("shows friendly labels for embryo source values", () => {
-        render(<IntendedParentDetailPage />)
-
-        expect(screen.getByRole("heading", { name: "Embryo Status" })).toBeInTheDocument()
-        expect(screen.getByText("Intended Mother")).toBeInTheDocument()
-        expect(screen.getByText("Sperm Donor")).toBeInTheDocument()
-        expect(screen.getByText("Yes")).toBeInTheDocument()
-    })
-
-    it("lays out medical subsections in the same two-column grid pattern as surrogate details", () => {
-        render(<IntendedParentDetailPage />)
-
-        expect(screen.getByTestId("ip-medical-sections-grid")).toHaveClass("grid", "gap-4", "md:grid-cols-2")
     })
 
     it("shows a permission state, not Not Found, when the intended parent is forbidden", () => {

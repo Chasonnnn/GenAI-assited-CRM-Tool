@@ -94,6 +94,7 @@ function findFirstInteractiveDescendant(node: ts.Node): { tagName: string; node:
 }
 
 describe("navigation markup", () => {
+  // Repository-wide AST parsing exceeds the default 5s under CI coverage.
   it("does not nest interactive elements", () => {
     const violations: string[] = []
     const files = collectTsxFiles(ROOT)
@@ -134,5 +135,5 @@ describe("navigation markup", () => {
     }
 
     expect(violations).toEqual([])
-  })
+  }, 10_000)
 })

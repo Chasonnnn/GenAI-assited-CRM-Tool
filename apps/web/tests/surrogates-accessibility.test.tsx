@@ -174,9 +174,14 @@ describe('SurrogatesPage Accessibility', () => {
         mockUseRestoreSurrogate.mockReturnValue({ mutateAsync: vi.fn(), isPending: false })
     })
 
-    it('renders search input with aria-label', () => {
+    it('labels search, selection, and owner controls', () => {
         render(<SurrogatesPage />)
         expect(screen.getByLabelText('Search surrogates')).toBeInTheDocument()
+        expect(screen.getByLabelText('Select all surrogates')).toBeInTheDocument()
+        expect(screen.getByLabelText('Select John Doe')).toBeInTheDocument()
+        expect(
+            screen.getByRole('button', { name: 'Assigned to Casey Manager' })
+        ).toBeInTheDocument()
     })
 
     it('names secondary filters independently of their selected values', async () => {
@@ -204,20 +209,6 @@ describe('SurrogatesPage Accessibility', () => {
         fireEvent.click(screen.getByRole('button', { name: 'More Filters' }))
         expect(await screen.findByRole('combobox', { name: 'Filter by source' })).toBeVisible()
         expect(screen.queryByRole('combobox', { name: 'Filter by queue' })).not.toBeInTheDocument()
-    })
-
-    it('renders table checkboxes with aria-labels', () => {
-        render(<SurrogatesPage />)
-        expect(screen.getByLabelText('Select all surrogates')).toBeInTheDocument()
-        expect(screen.getByLabelText('Select John Doe')).toBeInTheDocument()
-    })
-
-    it('gives the surrogate owner trigger a descriptive accessible name', () => {
-        render(<SurrogatesPage />)
-
-        expect(
-            screen.getByRole('button', { name: 'Assigned to Casey Manager' })
-        ).toBeInTheDocument()
     })
 
     it('renders assign dropdown with aria-label when items selected', async () => {

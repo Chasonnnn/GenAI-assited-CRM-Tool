@@ -918,6 +918,7 @@ describe('SurrogateDetailPage', () => {
 
         expect(screen.getByText('Medical & Insurance')).toBeInTheDocument()
         expect(screen.getByText('Activity')).toBeInTheDocument()
+        expect(screen.queryByText('Pregnancy Tracker')).not.toBeInTheDocument()
     })
 
     it("renders surrogate header and triggers back", () => {
@@ -1311,17 +1312,6 @@ describe('SurrogateDetailPage', () => {
 
         expect(screen.getByText('Height:')).toBeInTheDocument()
         expect(screen.getByText('5 ft 0 in')).toBeInTheDocument()
-    })
-
-    it('shows Medical & Insurance but hides Pregnancy Tracker before ready_to_match', () => {
-        render(
-            <SurrogateDetailLayoutClient>
-                <SurrogateOverviewTab />
-            </SurrogateDetailLayoutClient>
-        )
-
-        expect(screen.getByText('Medical & Insurance')).toBeInTheDocument()
-        expect(screen.queryByText('Pregnancy Tracker')).not.toBeInTheDocument()
     })
 
     it('shows Medical Information and Pregnancy Tracker at heartbeat_confirmed', () => {

@@ -179,6 +179,10 @@ describe("PlatformSystemEmailTemplatePage", () => {
         expect(await screen.findByPlaceholderText("Paste or edit the HTML for this template...")).toHaveValue(
             mocks.state.templateBody
         )
+        expect(screen.getByLabelText("Platform branding logo upload")).toHaveAttribute(
+            "accept",
+            "image/png,image/jpeg"
+        )
     })
 
     it("shows a retryable terminal state when system template loading fails", () => {
@@ -546,15 +550,6 @@ describe("PlatformSystemEmailTemplatePage", () => {
                 systemKey: "org_invite",
                 payload: expect.objectContaining({ org_id: "org-2", to_email: "qa@example.com" }),
             })
-        )
-    })
-
-    it("labels the platform branding logo upload control", () => {
-        render(<PlatformSystemEmailTemplatePage />)
-
-        expect(screen.getByLabelText("Platform branding logo upload")).toHaveAttribute(
-            "accept",
-            "image/png,image/jpeg"
         )
     })
 })

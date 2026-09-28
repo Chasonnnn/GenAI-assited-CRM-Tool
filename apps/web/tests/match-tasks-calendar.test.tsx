@@ -64,17 +64,6 @@ describe('MatchTasksCalendar', () => {
         })
     })
 
-    it('renders calendar header with current month', () => {
-        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
-        const currentMonthYear = format(new Date(), 'MMMM yyyy')
-        expect(screen.getByText(currentMonthYear)).toBeInTheDocument()
-    })
-
-    it('renders navigation buttons', () => {
-        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
-        expect(screen.getByText('Today')).toBeInTheDocument()
-    })
-
     it('labels calendar navigation controls and announces period changes politely', () => {
         render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         const currentMonthYear = format(new Date(), 'MMMM yyyy')
@@ -87,13 +76,7 @@ describe('MatchTasksCalendar', () => {
         )
     })
 
-    it('renders filter buttons', () => {
-        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
-        expect(screen.getByText('All')).toBeInTheDocument()
-        expect(screen.getByText('Surrogate')).toBeInTheDocument()
-    })
-
-    it('renders day of week headers in month view', () => {
+    it('renders month headers and legend with participant history', () => {
         render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(screen.getByText('Sun')).toBeInTheDocument()
         expect(screen.getByText('Mon')).toBeInTheDocument()
@@ -102,25 +85,8 @@ describe('MatchTasksCalendar', () => {
         expect(screen.getByText('Thu')).toBeInTheDocument()
         expect(screen.getByText('Fri')).toBeInTheDocument()
         expect(screen.getByText('Sat')).toBeInTheDocument()
-    })
-
-    it('renders legend with color indicators', () => {
-        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(screen.getByText('Surrogate / Match Tasks')).toBeInTheDocument()
         expect(screen.getByText('IP Tasks')).toBeInTheDocument()
-    })
-
-    it('shows loading spinner when loading', () => {
-        mockUseTasks.mockReturnValue({
-            data: null,
-            isLoading: true,
-        })
-        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
-        expect(document.querySelector('.animate-spin')).toBeInTheDocument()
-    })
-
-    it('requests unassigned participant history in the unfiltered match calendar', () => {
-        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(mockUseTasks).toHaveBeenCalledWith({
             match_id: 'match1',
             include_record_history: true,
@@ -130,9 +96,13 @@ describe('MatchTasksCalendar', () => {
         })
     })
 
-    it('displays tasks on calendar', () => {
+    it('shows loading spinner when loading', () => {
+        mockUseTasks.mockReturnValue({
+            data: null,
+            isLoading: true,
+        })
         render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
-        expect(screen.getByText(/Medical Appointment/)).toBeInTheDocument()
+        expect(document.querySelector('.animate-spin')).toBeInTheDocument()
     })
 
     it('shows appointment status labels in day view', () => {
@@ -237,13 +207,10 @@ describe('MatchTasksCalendar with empty state', () => {
         // Should still show day headers
         expect(screen.getByText('Sun')).toBeInTheDocument()
         expect(screen.getByText('Mon')).toBeInTheDocument()
-    })
-
-    it('still shows filter buttons when no tasks', () => {
-        render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         expect(screen.getByText('All')).toBeInTheDocument()
         expect(screen.getByText('Surrogate')).toBeInTheDocument()
     })
+
     it('keeps calendar requests scoped to the selected treatment attempt', () => {
         render(<MatchTasksCalendar matchId="match1" attemptId="attempt2" />)
         expect(mockUseTasks).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', attempt_id: 'attempt2' }))

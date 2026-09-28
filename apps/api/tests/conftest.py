@@ -113,6 +113,16 @@ def _use_temp_local_storage(tmp_path_factory):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _isolate_request_metrics(request, monkeypatch):
+    """Keep unrelated HTTP tests from writing metrics outside their rollback transaction."""
+    if request.node.get_closest_marker("request_metrics"):
+        return
+    from app import main
+
+    monkeypatch.setattr(main, "_record_metrics", lambda *_args, **_kwargs: False)
+
+
 # =============================================================================
 # Entity Fixtures
 # =============================================================================

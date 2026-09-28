@@ -47,9 +47,12 @@ def _stage(db, record, key):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("policy", [1, 2])
-@pytest.mark.parametrize(
-    "kind,blocked,stage",
-    [
+async def test_accept_eligibility_warning_names_ineligible_party_and_stage(
+    authed_client, db, test_auth, policy, subtests
+):
+    if policy == 2:
+        _activate_v2(db, test_auth.org.id)
+    for kind, blocked, stage in [
         ("surrogate", "party", "new_unread"),
         ("surrogate", "party", "approved"),
         ("surrogate", "party", "matched"),
@@ -62,46 +65,41 @@ def _stage(db, record, key):
         ("surrogate", "ip", "new"),
         ("egg", "ip", "delivered"),
         ("sperm", "ip", "new"),
-    ],
-)
-async def test_accept_eligibility_warning_names_ineligible_party_and_stage(
-    authed_client, db, test_auth, kind, blocked, stage, policy
-):
-    if policy == 2:
-        _activate_v2(db, test_auth.org.id)
-    donor = kind != "surrogate"
-    party = (
-        await _donor(authed_client, donor_type=kind)
-        if donor
-        else await _create_surrogate(authed_client)
-    )
-    ip = await _create_intended_parent(authed_client)
-    record = db.get(
-        IntendedParent if blocked == "ip" else Donor if donor else Surrogate,
-        uuid.UUID(ip["id"] if blocked == "ip" else party["id"]),
-    )
-    target = _stage(db, record, stage)
-    match = await _case(authed_client, ip, **{"donor" if donor else "surrogate": party})
-    label = "Intended parent" if blocked == "ip" else "Donor" if donor else "Surrogate"
-    expected = f"{label} at {target.label} is not eligible to accept"
-    assert match["status"] == "under_review"
-    assert match["accept_eligibility_warnings"] == [expected]
-    assert "accept" not in match["allowed_actions"]
-    assert match["blocked_reasons"]["accept"] == expected
-    assert match["surrogate_has_accepted_match"] is False
-    response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
-    assert response.status_code == 400, response.text
-    assert response.json()["detail"] == expected
-    assert _match_row(db, match["id"]).status == "under_review"
-    assert db.get(type(record), record.id).stage_id == target.id
-    with pytest.raises(match_lifecycle.TransitionError, match="is not eligible to accept"):
-        match_lifecycle.transition(
-            db,
-            _match_row(db, match["id"]),
-            "accept",
-            actor_user_id=test_auth.user.id,
-            actor_role=Role.DEVELOPER,
-        )
+    ]:
+        with subtests.test(kind=kind, blocked=blocked, stage=stage):
+            donor = kind != "surrogate"
+            party = (
+                await _donor(authed_client, donor_type=kind)
+                if donor
+                else await _create_surrogate(authed_client)
+            )
+            ip = await _create_intended_parent(authed_client)
+            record = db.get(
+                IntendedParent if blocked == "ip" else Donor if donor else Surrogate,
+                uuid.UUID(ip["id"] if blocked == "ip" else party["id"]),
+            )
+            target = _stage(db, record, stage)
+            match = await _case(authed_client, ip, **{"donor" if donor else "surrogate": party})
+            label = "Intended parent" if blocked == "ip" else "Donor" if donor else "Surrogate"
+            expected = f"{label} at {target.label} is not eligible to accept"
+            assert match["status"] == "under_review"
+            assert match["accept_eligibility_warnings"] == [expected]
+            assert "accept" not in match["allowed_actions"]
+            assert match["blocked_reasons"]["accept"] == expected
+            assert match["surrogate_has_accepted_match"] is False
+            response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
+            assert response.status_code == 400, response.text
+            assert response.json()["detail"] == expected
+            assert _match_row(db, match["id"]).status == "under_review"
+            assert db.get(type(record), record.id).stage_id == target.id
+            with pytest.raises(match_lifecycle.TransitionError, match="is not eligible to accept"):
+                match_lifecycle.transition(
+                    db,
+                    _match_row(db, match["id"]),
+                    "accept",
+                    actor_user_id=test_auth.user.id,
+                    actor_role=Role.DEVELOPER,
+                )
 
 
 @pytest.mark.asyncio
@@ -222,100 +220,110 @@ async def test_conflict_notification_failure_is_audited_and_later_recipient_stil
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind,handoff", [("egg", "ready_to_match"), ("sperm", "available")])
 @pytest.mark.parametrize("policy", [1, 2])
-@pytest.mark.parametrize("first_status", ["accepted", "cancellation_pending"])
 async def test_donor_two_active_matches_keep_stage_until_last_cancellation(
-    authed_client, db, test_auth, kind, handoff, policy, first_status
+    authed_client, db, test_auth, policy, subtests
 ):
     if policy == 2:
         _activate_v2(db, test_auth.org.id)
-    donor = await _donor(authed_client, donor_type=kind)
-    first = await _accept(
-        authed_client,
-        await _case(authed_client, await _create_intended_parent(authed_client), donor=donor),
-    )
-    if first_status == "cancellation_pending":
-        assert (
-            await authed_client.post(
-                f"/matches/{first['id']}/cancel-request", json={"reason": "Ended"}
-            )
-        ).status_code == 200
-    second = await _case(authed_client, await _create_intended_parent(authed_client), donor=donor)
-    assert second["accept_eligibility_warnings"] == []
-    await _accept(authed_client, second)
-    row = db.get(Donor, uuid.UUID(donor["id"]))
-    assert row.stage.stage_key == "matched"
+    for kind, handoff in [("egg", "ready_to_match"), ("sperm", "available")]:
+        for first_status in ["accepted", "cancellation_pending"]:
+            with subtests.test(
+                kind=repr(kind), handoff=repr(handoff), first_status=repr(first_status)
+            ):
+                donor = await _donor(authed_client, donor_type=kind)
+                first = await _accept(
+                    authed_client,
+                    await _case(
+                        authed_client, await _create_intended_parent(authed_client), donor=donor
+                    ),
+                )
+                if first_status == "cancellation_pending":
+                    assert (
+                        await authed_client.post(
+                            f"/matches/{first['id']}/cancel-request", json={"reason": "Ended"}
+                        )
+                    ).status_code == 200
+                second = await _case(
+                    authed_client, await _create_intended_parent(authed_client), donor=donor
+                )
+                assert second["accept_eligibility_warnings"] == []
+                await _accept(authed_client, second)
+                row = db.get(Donor, uuid.UUID(donor["id"]))
+                assert row.stage.stage_key == "matched"
 
-    def histories():
-        return db.query(DonorStatusHistory).filter_by(donor_id=row.id).count()
+                def histories():
+                    return db.query(DonorStatusHistory).filter_by(donor_id=row.id).count()
 
-    before = histories()
-    async with _client_for(db, test_auth.org.id) as (approver, client):
-        if first_status == "accepted":
-            await _cancel(client, db, first)
-        else:
-            request = (
-                db.query(StatusChangeRequest)
-                .filter_by(entity_id=uuid.UUID(first["id"]), status="pending")
-                .one()
-            )
-            assert (
-                await client.post(f"/status-change-requests/{request.id}/approve")
-            ).status_code == 200
-        db.refresh(row)
-        assert row.stage.stage_key == "matched"
-        assert histories() == before
-        request = await _cancel(client, db, second)
-        db.refresh(row)
-        assert row.stage.stage_key == handoff
-        history = db.query(DonorStatusHistory).filter_by(request_id=request.id).one()
-        assert history.changed_by_user_id == approver.id
-        assert history.approved_by_user_id == approver.id
-        assert histories() == before + 1
+                before = histories()
+                async with _client_for(db, test_auth.org.id) as (approver, client):
+                    if first_status == "accepted":
+                        await _cancel(client, db, first)
+                    else:
+                        request = (
+                            db.query(StatusChangeRequest)
+                            .filter_by(entity_id=uuid.UUID(first["id"]), status="pending")
+                            .one()
+                        )
+                        assert (
+                            await client.post(f"/status-change-requests/{request.id}/approve")
+                        ).status_code == 200
+                    db.refresh(row)
+                    assert row.stage.stage_key == "matched"
+                    assert histories() == before
+                    request = await _cancel(client, db, second)
+                    db.refresh(row)
+                    assert row.stage.stage_key == handoff
+                    history = db.query(DonorStatusHistory).filter_by(request_id=request.id).one()
+                    assert history.changed_by_user_id == approver.id
+                    assert history.approved_by_user_id == approver.id
+                    assert histories() == before + 1
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind,handoff", [("egg", "ready_to_match"), ("sperm", "available")])
 async def test_donor_manual_matched_requires_active_match_and_protects_system_stages(
-    authed_client, db, test_auth, kind, handoff
+    authed_client, db, test_auth, subtests
 ):
-    donor = await _donor(authed_client, donor_type=kind)
-    pipeline = (
-        await authed_client.get(
-            "/settings/pipelines/default", params={"entity_type": f"{kind}_donor"}
-        )
-    ).json()
-    stages = {s["stage_key"]: s for s in pipeline["stages"]}
-    for key, role in [(handoff, "handoff"), ("matched", "matched")]:
-        assert stages[key]["is_locked"] is True
-        assert stages[key]["system_role"] == role
-        assert {"delete", "duplicate", "semantics", "is_active"} <= set(
-            stages[key]["locked_fields"]
-        )
-        with pytest.raises(ValueError, match="protected"):
-            pipeline_service.delete_stage(
-                db,
-                pipeline_service.get_stage_by_id(db, uuid.UUID(stages[key]["id"])),
-                test_auth.user.id,
+    for kind, handoff in [("egg", "ready_to_match"), ("sperm", "available")]:
+        with subtests.test(kind=repr(kind), handoff=repr(handoff)):
+            donor = await _donor(authed_client, donor_type=kind)
+            pipeline = (
+                await authed_client.get(
+                    "/settings/pipelines/default", params={"entity_type": f"{kind}_donor"}
+                )
+            ).json()
+            stages = {s["stage_key"]: s for s in pipeline["stages"]}
+            for key, role in [(handoff, "handoff"), ("matched", "matched")]:
+                assert stages[key]["is_locked"] is True
+                assert stages[key]["system_role"] == role
+                assert {"delete", "duplicate", "semantics", "is_active"} <= set(
+                    stages[key]["locked_fields"]
+                )
+                with pytest.raises(ValueError, match="protected"):
+                    pipeline_service.delete_stage(
+                        db,
+                        pipeline_service.get_stage_by_id(db, uuid.UUID(stages[key]["id"])),
+                        test_auth.user.id,
+                    )
+            refused = await authed_client.patch(
+                f"/donors/{donor['id']}/status", json={"stage_id": stages["matched"]["id"]}
             )
-    refused = await authed_client.patch(
-        f"/donors/{donor['id']}/status", json={"stage_id": stages["matched"]["id"]}
-    )
-    assert refused.status_code == 400, refused.text
-    assert refused.json()["detail"] == "Cannot set to Matched without an accepted Match."
-    row = db.get(Donor, uuid.UUID(donor["id"]))
-    assert row.stage.stage_key == handoff
-    match = await _accept(
-        authed_client,
-        await _case(authed_client, await _create_intended_parent(authed_client), donor=donor),
-    )
-    _stage(db, row, handoff)
-    allowed = await authed_client.patch(
-        f"/donors/{donor['id']}/status", json={"stage_id": stages["matched"]["id"]}
-    )
-    assert allowed.status_code == 200, allowed.text
-    assert _match_row(db, match["id"]).status == "accepted"
+            assert refused.status_code == 400, refused.text
+            assert refused.json()["detail"] == "Cannot set to Matched without an accepted Match."
+            row = db.get(Donor, uuid.UUID(donor["id"]))
+            assert row.stage.stage_key == handoff
+            match = await _accept(
+                authed_client,
+                await _case(
+                    authed_client, await _create_intended_parent(authed_client), donor=donor
+                ),
+            )
+            _stage(db, row, handoff)
+            allowed = await authed_client.patch(
+                f"/donors/{donor['id']}/status", json={"stage_id": stages["matched"]["id"]}
+            )
+            assert allowed.status_code == 200, allowed.text
+            assert _match_row(db, match["id"]).status == "accepted"
 
 
 @pytest.mark.asyncio
@@ -356,112 +364,123 @@ async def test_eligibility_fields_require_view_permission_and_org_scope(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("policy", [1, 2])
-@pytest.mark.parametrize("kind", ["surrogate", "egg", "sperm"])
 async def test_accept_requires_ip_stage_permission_and_rolls_back_primary_move(
-    authed_client, db, test_auth, policy, kind
+    authed_client, db, test_auth, policy, subtests
 ):
     if policy == 2:
         _activate_v2(db, test_auth.org.id)
         _set_role_permission(
             db, test_auth.org.id, Role.CASE_MANAGER, "edit_intended_parents", False
         )
-    is_donor = kind != "surrogate"
-    party = (
-        await _donor(authed_client, donor_type=kind)
-        if is_donor
-        else await _create_surrogate(authed_client)
-    )
-    match = await _case(
-        authed_client,
-        await _create_intended_parent(authed_client),
-        **{"donor" if is_donor else "surrogate": party},
-    )
-    model = Donor if is_donor else Surrogate
-    before = db.get(model, uuid.UUID(party["id"])).stage_id
-    async with _client_for(
-        db,
-        test_auth.org.id,
-        role=Role.CASE_MANAGER if policy == 2 else Role.ADMIN,
-        revoke=("edit_intended_parents",) if policy == 1 else (),
-    ) as (_, client):
-        response = await client.put(f"/matches/{match['id']}/accept", json={})
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Missing permission: edit_intended_parents"
-    assert _match_row(db, match["id"]).status == "under_review"
-    assert db.get(model, uuid.UUID(party["id"])).stage_id == before
-    assert (
-        db.query(AuditLog)
-        .filter_by(organization_id=test_auth.org.id, event_type="match_accepted")
-        .count()
-        == 0
-    )
+    for kind in ["surrogate", "egg", "sperm"]:
+        with subtests.test(kind=repr(kind)):
+            is_donor = kind != "surrogate"
+            party = (
+                await _donor(authed_client, donor_type=kind)
+                if is_donor
+                else await _create_surrogate(authed_client)
+            )
+            match = await _case(
+                authed_client,
+                await _create_intended_parent(authed_client),
+                **{"donor" if is_donor else "surrogate": party},
+            )
+            model = Donor if is_donor else Surrogate
+            before = db.get(model, uuid.UUID(party["id"])).stage_id
+            async with _client_for(
+                db,
+                test_auth.org.id,
+                role=Role.CASE_MANAGER if policy == 2 else Role.ADMIN,
+                revoke=("edit_intended_parents",) if policy == 1 else (),
+            ) as (_, client):
+                response = await client.put(f"/matches/{match['id']}/accept", json={})
+            assert response.status_code == 400
+            assert response.json()["detail"] == "Missing permission: edit_intended_parents"
+            assert _match_row(db, match["id"]).status == "under_review"
+            assert db.get(model, uuid.UUID(party["id"])).stage_id == before
+            assert (
+                db.query(AuditLog)
+                .filter_by(organization_id=test_auth.org.id, event_type="match_accepted")
+                .count()
+                == 0
+            )
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["egg", "sperm"])
-@pytest.mark.parametrize("denied", ["permission", "cross_org"])
 async def test_manual_donor_matched_guard_preserves_permission_and_org_scope(
-    authed_client, db, test_auth, kind, denied
+    authed_client, db, test_auth, subtests
 ):
-    donor = await _donor(authed_client, donor_type=kind)
-    row = db.get(Donor, uuid.UUID(donor["id"]))
-    before = row.stage_id
-    matched = pipeline_service.get_stage_by_key(db, row.stage.pipeline_id, "matched")
-    org_id = _other_org(db).id if denied == "cross_org" else test_auth.org.id
-    async with _client_for(
-        db, org_id, revoke=("change_donor_status",) if denied == "permission" else ()
-    ) as (_, client):
-        response = await client.patch(
-            f"/donors/{donor['id']}/status", json={"stage_id": str(matched.id)}
-        )
-    assert response.status_code == (403 if denied == "permission" else 404)
-    db.refresh(row)
-    assert row.stage_id == before
+    for kind in ["egg", "sperm"]:
+        for denied in ["permission", "cross_org"]:
+            with subtests.test(kind=repr(kind), denied=repr(denied)):
+                donor = await _donor(authed_client, donor_type=kind)
+                row = db.get(Donor, uuid.UUID(donor["id"]))
+                before = row.stage_id
+                matched = pipeline_service.get_stage_by_key(db, row.stage.pipeline_id, "matched")
+                org_id = _other_org(db).id if denied == "cross_org" else test_auth.org.id
+                async with _client_for(
+                    db, org_id, revoke=("change_donor_status",) if denied == "permission" else ()
+                ) as (_, client):
+                    response = await client.patch(
+                        f"/donors/{donor['id']}/status", json={"stage_id": str(matched.id)}
+                    )
+                assert response.status_code == (403 if denied == "permission" else 404)
+                db.refresh(row)
+                assert row.stage_id == before
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["egg", "sperm"])
-async def test_donor_complete_keeps_participant_stages(authed_client, db, kind):
-    donor = await _donor(authed_client, donor_type=kind)
-    ip = await _create_intended_parent(authed_client)
-    match = await _accept(authed_client, await _case(authed_client, ip, donor=donor))
-    before = db.query(DonorStatusHistory).filter_by(donor_id=uuid.UUID(donor["id"])).count()
-    response = await authed_client.put(
-        f"/matches/{match['id']}/complete", json={"outcome": "Completed"}
-    )
-    assert response.status_code == 200
-    assert response.json()["status"] == "completed"
-    assert db.get(Donor, uuid.UUID(donor["id"])).stage.stage_key == "matched"
-    assert db.get(IntendedParent, uuid.UUID(ip["id"])).stage.stage_key == "matched"
-    assert db.query(DonorStatusHistory).filter_by(donor_id=uuid.UUID(donor["id"])).count() == before
-    later = await _case(authed_client, await _create_intended_parent(authed_client), donor=donor)
-    assert "Donor at Matched is not" in later["accept_eligibility_warnings"][0]
+async def test_donor_complete_keeps_participant_stages(authed_client, db, subtests):
+    for kind in ["egg", "sperm"]:
+        with subtests.test(kind=repr(kind)):
+            donor = await _donor(authed_client, donor_type=kind)
+            ip = await _create_intended_parent(authed_client)
+            match = await _accept(authed_client, await _case(authed_client, ip, donor=donor))
+            before = db.query(DonorStatusHistory).filter_by(donor_id=uuid.UUID(donor["id"])).count()
+            response = await authed_client.put(
+                f"/matches/{match['id']}/complete", json={"outcome": "Completed"}
+            )
+            assert response.status_code == 200
+            assert response.json()["status"] == "completed"
+            assert db.get(Donor, uuid.UUID(donor["id"])).stage.stage_key == "matched"
+            assert db.get(IntendedParent, uuid.UUID(ip["id"])).stage.stage_key == "matched"
+            assert (
+                db.query(DonorStatusHistory).filter_by(donor_id=uuid.UUID(donor["id"])).count()
+                == before
+            )
+            later = await _case(
+                authed_client, await _create_intended_parent(authed_client), donor=donor
+            )
+            assert "Donor at Matched is not" in later["accept_eligibility_warnings"][0]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["surrogate", "egg", "sperm"])
-async def test_missing_matched_stage_cannot_partially_accept(authed_client, db, monkeypatch, kind):
-    is_donor = kind != "surrogate"
-    party = (
-        await _donor(authed_client, donor_type=kind)
-        if is_donor
-        else await _create_surrogate(authed_client)
-    )
-    ip = await _create_intended_parent(authed_client)
-    match = await _case(authed_client, ip, **{"donor" if is_donor else "surrogate": party})
-    original = pipeline_service.get_stage_by_system_role
+async def test_missing_matched_stage_cannot_partially_accept(
+    authed_client, db, monkeypatch, subtests
+):
+    for kind in ["surrogate", "egg", "sperm"]:
+        with subtests.test(kind=repr(kind)), monkeypatch.context() as patch:
+            is_donor = kind != "surrogate"
+            party = (
+                await _donor(authed_client, donor_type=kind)
+                if is_donor
+                else await _create_surrogate(authed_client)
+            )
+            ip = await _create_intended_parent(authed_client)
+            match = await _case(authed_client, ip, **{"donor" if is_donor else "surrogate": party})
+            original = pipeline_service.get_stage_by_system_role
 
-    def missing(db, pipeline_id, role, *args, **kwargs):
-        if role == "matched":
-            return None
-        return original(db, pipeline_id, role, *args, **kwargs)
+            def missing(db, pipeline_id, role, *args, **kwargs):
+                if role == "matched":
+                    return None
+                return original(db, pipeline_id, role, *args, **kwargs)
 
-    monkeypatch.setattr(pipeline_service, "get_stage_by_system_role", missing)
-    response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
-    assert response.status_code == 400
-    assert "stage not found" in response.json()["detail"]
-    assert _match_row(db, match["id"]).status == "under_review"
-    assert db.get(IntendedParent, uuid.UUID(ip["id"])).stage.stage_key == "ready_to_match"
+            patch.setattr(pipeline_service, "get_stage_by_system_role", missing)
+            response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
+            assert response.status_code == 400
+            assert "stage not found" in response.json()["detail"]
+            assert _match_row(db, match["id"]).status == "under_review"
+            assert db.get(IntendedParent, uuid.UUID(ip["id"])).stage.stage_key == "ready_to_match"
 
 
 @pytest.mark.asyncio
@@ -499,117 +518,119 @@ async def test_donor_stage_effect_failure_is_audited_and_match_trigger_still_run
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "kind,stage",
-    [
+async def test_cancellation_preserves_donor_stage_outside_matched(authed_client, db, subtests):
+    for kind, stage in [
         ("egg", "cycle_in_progress"),
         ("egg", "retrieval_complete"),
         ("sperm", "collection_in_progress"),
         ("sperm", "donation_complete"),
-    ],
-)
-async def test_cancellation_preserves_donor_stage_outside_matched(authed_client, db, kind, stage):
-    donor = await _donor(authed_client, donor_type=kind)
-    match = await _accept(
-        authed_client,
-        await _case(authed_client, await _create_intended_parent(authed_client), donor=donor),
-    )
-    row = db.get(Donor, uuid.UUID(donor["id"]))
-    target = _stage(db, row, stage)
-    before = db.query(DonorStatusHistory).filter_by(donor_id=row.id).count()
+    ]:
+        with subtests.test(kind=repr(kind), stage=repr(stage)):
+            donor = await _donor(authed_client, donor_type=kind)
+            match = await _accept(
+                authed_client,
+                await _case(
+                    authed_client, await _create_intended_parent(authed_client), donor=donor
+                ),
+            )
+            row = db.get(Donor, uuid.UUID(donor["id"]))
+            target = _stage(db, row, stage)
+            before = db.query(DonorStatusHistory).filter_by(donor_id=row.id).count()
 
-    await _cancel(authed_client, db, match)
+            await _cancel(authed_client, db, match)
 
-    db.refresh(row)
-    assert row.stage_id == target.id
-    assert _match_row(db, match["id"]).status == "cancelled"
-    assert db.query(DonorStatusHistory).filter_by(donor_id=row.id).count() == before
+            db.refresh(row)
+            assert row.stage_id == target.id
+            assert _match_row(db, match["id"]).status == "cancelled"
+            assert db.query(DonorStatusHistory).filter_by(donor_id=row.id).count() == before
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["surrogate", "egg", "sperm"])
 async def test_accept_denied_by_pipeline_role_rule_changes_nothing(
-    authed_client, db, test_auth, kind
+    authed_client, db, test_auth, subtests
 ):
-    is_donor = kind != "surrogate"
-    party = (
-        await _donor(authed_client, donor_type=kind)
-        if is_donor
-        else await _create_surrogate(authed_client)
-    )
-    ip = await _create_intended_parent(authed_client)
-    match = await _case(authed_client, ip, **{"donor" if is_donor else "surrogate": party})
-    model = Donor if is_donor else Surrogate
-    row = db.get(model, uuid.UUID(party["id"]))
-    pipeline = row.stage.pipeline
-    pipeline.feature_config = {
-        **pipeline.feature_config,
-        "role_mutation": {
-            Role.DEVELOPER.value: {
-                "stage_keys": [row.stage.stage_key],
-                "stage_types": [],
-                "capabilities": [],
+    for kind in ["surrogate", "egg", "sperm"]:
+        with subtests.test(kind=repr(kind)):
+            is_donor = kind != "surrogate"
+            party = (
+                await _donor(authed_client, donor_type=kind)
+                if is_donor
+                else await _create_surrogate(authed_client)
+            )
+            ip = await _create_intended_parent(authed_client)
+            match = await _case(authed_client, ip, **{"donor" if is_donor else "surrogate": party})
+            model = Donor if is_donor else Surrogate
+            row = db.get(model, uuid.UUID(party["id"]))
+            pipeline = row.stage.pipeline
+            pipeline.feature_config = {
+                **pipeline.feature_config,
+                "role_mutation": {
+                    Role.DEVELOPER.value: {
+                        "stage_keys": [row.stage.stage_key],
+                        "stage_types": [],
+                        "capabilities": [],
+                    }
+                },
             }
-        },
-    }
-    db.commit()
-    before_stage = row.stage_id
-    before_ip_stage = db.get(IntendedParent, uuid.UUID(ip["id"])).stage_id
-    read = await authed_client.get(f"/matches/{match['id']}")
-    assert "accept" not in read.json()["allowed_actions"]
-    before_history = _snapshot(db, test_auth.org.id)
+            db.commit()
+            before_stage = row.stage_id
+            before_ip_stage = db.get(IntendedParent, uuid.UUID(ip["id"])).stage_id
+            read = await authed_client.get(f"/matches/{match['id']}")
+            assert "accept" not in read.json()["allowed_actions"]
+            before_history = _snapshot(db, test_auth.org.id)
 
-    response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
+            response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
 
-    assert response.status_code == 400, response.text
-    party_kind = "donor" if is_donor else "surrogate"
-    assert (
-        response.json()["detail"]
-        == read.json()["blocked_reasons"]["accept"]
-        == f"Role not permitted to change {party_kind} stage"
-    )
-    assert _match_row(db, match["id"]).status == "under_review"
-    assert db.get(model, row.id).stage_id == before_stage
-    assert db.get(IntendedParent, uuid.UUID(ip["id"])).stage_id == before_ip_stage
-    # Keep the rejected HTTP request's fallback audit; no domain history changes.
-    assert _diff(before_history, _snapshot(db, test_auth.org.id)) == {
-        "audit": {("api_mutation_fallback", "api_route"): 1},
-        "surrogate_activity": {},
-        "entity_activity": {},
-        "stage_history": {},
-    }
+            assert response.status_code == 400, response.text
+            party_kind = "donor" if is_donor else "surrogate"
+            assert (
+                response.json()["detail"]
+                == read.json()["blocked_reasons"]["accept"]
+                == f"Role not permitted to change {party_kind} stage"
+            )
+            assert _match_row(db, match["id"]).status == "under_review"
+            assert db.get(model, row.id).stage_id == before_stage
+            assert db.get(IntendedParent, uuid.UUID(ip["id"])).stage_id == before_ip_stage
+            # Keep the rejected HTTP request's fallback audit; no domain history changes.
+            assert _diff(before_history, _snapshot(db, test_auth.org.id)) == {
+                "audit": {("api_mutation_fallback", "api_route"): 1},
+                "surrogate_activity": {},
+                "entity_activity": {},
+                "stage_history": {},
+            }
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("policy", [1, 2])
-@pytest.mark.parametrize("kind", ["surrogate", "egg", "sperm"])
 async def test_accept_reports_all_ineligible_parties_in_preview_and_http(
-    authed_client, db, test_auth, policy, kind
+    authed_client, db, test_auth, policy, subtests
 ):
     if policy == 2:
         _activate_v2(db, test_auth.org.id)
-    is_donor = kind != "surrogate"
-    party = (
-        await _donor(authed_client, donor_type=kind)
-        if is_donor
-        else await _create_surrogate(authed_client)
-    )
-    ip = await _create_intended_parent(authed_client)
-    primary = db.get(Donor if is_donor else Surrogate, uuid.UUID(party["id"]))
-    intended_parent = db.get(IntendedParent, uuid.UUID(ip["id"]))
-    primary_stage = _stage(db, primary, "new" if is_donor else "new_unread")
-    ip_stage = _stage(db, intended_parent, "new")
-    match = await _case(authed_client, ip, **{"donor" if is_donor else "surrogate": party})
-    warnings = match["accept_eligibility_warnings"]
-    assert len(warnings) == 2
-    assert warnings[0].startswith("Donor at" if is_donor else "Surrogate at")
-    assert warnings[1].startswith("Intended parent at")
-    expected = "; ".join(warnings)
-    assert match["blocked_reasons"]["accept"] == expected
-    assert "accept" not in match["allowed_actions"]
-    response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
-    assert response.status_code == 400
-    assert response.json()["detail"] == expected
-    assert _match_row(db, match["id"]).status == "under_review"
-    assert primary.stage_id == primary_stage.id
-    assert intended_parent.stage_id == ip_stage.id
+    for kind in ["surrogate", "egg", "sperm"]:
+        with subtests.test(kind=repr(kind)):
+            is_donor = kind != "surrogate"
+            party = (
+                await _donor(authed_client, donor_type=kind)
+                if is_donor
+                else await _create_surrogate(authed_client)
+            )
+            ip = await _create_intended_parent(authed_client)
+            primary = db.get(Donor if is_donor else Surrogate, uuid.UUID(party["id"]))
+            intended_parent = db.get(IntendedParent, uuid.UUID(ip["id"]))
+            primary_stage = _stage(db, primary, "new" if is_donor else "new_unread")
+            ip_stage = _stage(db, intended_parent, "new")
+            match = await _case(authed_client, ip, **{"donor" if is_donor else "surrogate": party})
+            warnings = match["accept_eligibility_warnings"]
+            assert len(warnings) == 2
+            assert warnings[0].startswith("Donor at" if is_donor else "Surrogate at")
+            assert warnings[1].startswith("Intended parent at")
+            expected = "; ".join(warnings)
+            assert match["blocked_reasons"]["accept"] == expected
+            assert "accept" not in match["allowed_actions"]
+            response = await authed_client.put(f"/matches/{match['id']}/accept", json={})
+            assert response.status_code == 400
+            assert response.json()["detail"] == expected
+            assert _match_row(db, match["id"]).status == "under_review"
+            assert primary.stage_id == primary_stage.id
+            assert intended_parent.stage_id == ip_stage.id
