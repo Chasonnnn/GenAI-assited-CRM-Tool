@@ -684,6 +684,40 @@ async def test_rescan_is_permissioned_and_org_scoped(authed_client, db, test_org
     assert photo.scan_status == "error"
 
 
+@pytest.mark.asyncio
+async def test_rescan_requires_edit_access_to_the_submission_subject(db, test_org, test_user):
+    from tests.test_form_submission_local_download import _submission_file
+    from tests.test_record_capability_access import _record
+
+    surrogate = _record(db, test_org.id, test_user.id, "surrogate")
+    donor = _record(db, test_org.id, test_user.id, "donor")
+    surrogate_file = _submission_file(
+        db, org_id=test_org.id, surrogate_id=surrogate.id, scan_status="error", quarantined=True
+    )
+    donor_file = _submission_file(
+        db, org_id=test_org.id, donor_id=donor.id, scan_status="error", quarantined=True
+    )
+    db.commit()
+
+    def rescan(client, file_record):
+        return client.post(
+            f"/forms/submissions/{file_record.submission_id}/files/{file_record.id}/rescan"
+        )
+
+    async with _restricted_client(db, test_org.id, "edit_surrogates") as donor_editor:
+        assert (await rescan(donor_editor, surrogate_file)).status_code == 403
+    async with _restricted_client(db, test_org.id, "edit_donors") as surrogate_editor:
+        assert (await rescan(surrogate_editor, donor_file)).status_code == 403
+    db.refresh(surrogate_file)
+    db.refresh(donor_file)
+    assert (surrogate_file.scan_status, donor_file.scan_status) == ("error", "error")
+
+    async with _restricted_client(db, test_org.id, "edit_surrogates") as donor_editor:
+        assert (await rescan(donor_editor, donor_file)).status_code == 200
+    async with _restricted_client(db, test_org.id, "edit_donors") as surrogate_editor:
+        assert (await rescan(surrogate_editor, surrogate_file)).status_code == 200
+
+
 class _SessionProxy:
     """Lets the scan job use the test transaction without closing it."""
 

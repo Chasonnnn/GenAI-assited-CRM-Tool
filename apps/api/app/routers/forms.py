@@ -135,11 +135,24 @@ def _require_donor_lead_access(
         raise HTTPException(status_code=403, detail=f"Missing permission: {permission.value}")
 
 
+def _require_subject_edit_permission(db: Session, session: UserSession, lead_kind: str | None):
+    """Donor submissions need donor edit; every other submission needs surrogate edit."""
+    if lead_kind in DONOR_LEAD_KINDS:
+        _require_donor_lead_access(db, session, lead_kind, require_write=True)
+        return
+    permission = POLICIES["surrogates"].actions["edit"]
+    role = getattr(session.role, "value", session.role)
+    if not permission_service.check_permission(
+        db, session.org_id, session.user_id, role, permission.value
+    ):
+        raise HTTPException(status_code=403, detail=f"Missing permission: {permission.value}")
+
+
 def _authorize_submission_decision(db: Session, session: UserSession, submission, *, action: str):
     """Approve and reject require edit access to the submission's surrogate or donor subject."""
     form_submission_access.check_submission(db, session, submission, write=True)
+    _require_subject_edit_permission(db, session, submission.lead_kind)
     if submission.lead_kind in DONOR_LEAD_KINDS:
-        _require_donor_lead_access(db, session, submission.lead_kind, require_write=True)
         if submission.donor_id:
             if not donor_service.get_donor(db, session.org_id, submission.donor_id):
                 raise HTTPException(status_code=404, detail="Donor not found")
@@ -149,12 +162,6 @@ def _authorize_submission_decision(db: Session, session: UserSession, submission
                 detail="Submission is not linked to a donor. Resolve matching first.",
             )
         return
-    permission = POLICIES["surrogates"].actions["edit"]
-    role = getattr(session.role, "value", session.role)
-    if not permission_service.check_permission(
-        db, session.org_id, session.user_id, role, permission.value
-    ):
-        raise HTTPException(status_code=403, detail=f"Missing permission: {permission.value}")
     if not submission.surrogate_id:
         raise HTTPException(
             status_code=409,
@@ -1960,6 +1967,7 @@ def rescan_submission_file(
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
     _check_submission_subject_access(db, submission, session, require_write=True)
+    _require_subject_edit_permission(db, session, submission.lead_kind)
     file_record = form_submission_service.get_submission_file(
         db, session.org_id, submission_id, file_id
     )
