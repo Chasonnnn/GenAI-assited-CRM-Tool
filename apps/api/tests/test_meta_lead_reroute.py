@@ -102,18 +102,19 @@ async def test_reroute_rejects_converted_lead(authed_client, db, test_org):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("revoked", ["view_donors", "edit_donors"])
 @pytest.mark.parametrize(
     ("current_kind", "target_kind"),
     [("surrogate", "egg_donor"), ("sperm_donor", "surrogate")],
 )
-async def test_reroute_touching_a_donor_kind_requires_donor_edit(
-    db, test_org, current_kind, target_kind
+async def test_reroute_touching_a_donor_kind_requires_donor_view_and_edit(
+    db, test_org, current_kind, target_kind, revoked
 ):
     form = _mapped_form(
         db, test_org.id, suffix=f"reroute-denied-{current_kind}", lead_kind="surrogate"
     )
     lead = _unconverted_lead(db, test_org.id, form, lead_kind=current_kind)
-    user = _admin_with_revokes(db, test_org.id, "edit_donors")
+    user = _admin_with_revokes(db, test_org.id, revoked)
     db.commit()
 
     async with _client_for(db, test_org.id, user) as client:
@@ -122,6 +123,43 @@ async def test_reroute_touching_a_donor_kind_requires_donor_edit(
     assert response.status_code == 403
     db.refresh(lead)
     assert lead.lead_kind == current_kind
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("revoked", ["view_donors", "edit_donors"])
+async def test_reroute_of_an_unclassified_lead_on_a_donor_form_requires_donor_access(
+    db, test_org, revoked
+):
+    # A lead stored before its form was mapped keeps a null kind; the form's kind applies.
+    form = _mapped_form(db, test_org.id, suffix=f"reroute-null-{revoked}", lead_kind="egg_donor")
+    lead = _unconverted_lead(db, test_org.id, form)
+    lead.lead_kind = None
+    user = _admin_with_revokes(db, test_org.id, revoked)
+    db.commit()
+
+    async with _client_for(db, test_org.id, user) as client:
+        response = await client.post(_reroute_url(form, lead), json={"lead_kind": "surrogate"})
+
+    assert response.status_code == 403
+    db.refresh(lead)
+    assert lead.lead_kind is None
+    assert _reprocess_jobs(db, test_org.id) == []
+
+
+@pytest.mark.asyncio
+async def test_donor_editor_can_reroute_an_unclassified_lead_on_a_donor_form(
+    authed_client, db, test_org
+):
+    form = _mapped_form(db, test_org.id, suffix="reroute-null-allowed", lead_kind="egg_donor")
+    lead = _unconverted_lead(db, test_org.id, form)
+    lead.lead_kind = None
+    db.commit()
+
+    response = await authed_client.post(_reroute_url(form, lead), json={"lead_kind": "surrogate"})
+
+    assert response.status_code == 200, response.text
+    db.refresh(lead)
+    assert lead.lead_kind == "surrogate"
 
 
 @pytest.mark.asyncio

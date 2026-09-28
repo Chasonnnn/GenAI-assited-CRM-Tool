@@ -466,8 +466,20 @@ def reroute_meta_form_lead(
     lead = meta_form_mapping_service.get_form_lead(db, form, lead_id)
     if not lead:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found")
-    for lead_kind in (lead.lead_kind, data.lead_kind):
-        _require_donor_form_access(db, session, lead_kind, require_write=True)
+    # A lead stored before its form was mapped has no kind; the form's kind applies to it.
+    donor_access_checks = (
+        (lead.lead_kind or form.lead_kind, form.form_external_id),
+        (data.lead_kind, None),
+    )
+    for lead_kind, form_external_id in donor_access_checks:
+        for require_write in (False, True):
+            _require_donor_form_access(
+                db,
+                session,
+                lead_kind,
+                form_external_id=form_external_id,
+                require_write=require_write,
+            )
 
     try:
         queued, block_reason = meta_form_mapping_service.reroute_unconverted_lead(
