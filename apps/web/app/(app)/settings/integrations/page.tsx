@@ -3328,8 +3328,8 @@ function ZapierMonitoringSection({
             } else {
                 toast.success("Replay queued")
             }
-        } catch {
-            toast.error("Failed to replay outbound event")
+        } catch (error) {
+            toast.error(error instanceof Error && error.message ? error.message : "Failed to replay outbound event")
         }
     }
 

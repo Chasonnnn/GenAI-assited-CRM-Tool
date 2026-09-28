@@ -2889,7 +2889,8 @@ describe('IntegrationsPage', () => {
         mockReplayZapierOutboundEvent
             .mockResolvedValueOnce({ ...zapierEventsData.items[0], status: 'queued', reason: null, can_replay: false })
             .mockResolvedValueOnce({ ...zapierEventsData.items[0], reason: 'unmapped_stage', can_replay: true })
-            .mockRejectedValueOnce(new Error('network'))
+            .mockRejectedValueOnce(new Error('Event delivery is still in progress'))
+            .mockRejectedValueOnce(new Error(''))
 
         render(<IntegrationsPage />)
         fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
@@ -2908,6 +2909,9 @@ describe('IntegrationsPage', () => {
 
         fireEvent.click(replayButtons[0])
         await waitFor(() => expect(warning).toHaveBeenCalledWith('Replay skipped: Stage not mapped'))
+
+        fireEvent.click(replayButtons[0])
+        await waitFor(() => expect(error).toHaveBeenCalledWith('Event delivery is still in progress'))
 
         fireEvent.click(replayButtons[0])
         await waitFor(() => expect(error).toHaveBeenCalledWith('Failed to replay outbound event'))
