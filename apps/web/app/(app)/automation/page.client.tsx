@@ -1430,8 +1430,7 @@ function useAutomationPageView({
     const updateActionType = (index: number, actionType: string) => {
         updateAction(index, {
             action_type: actionType,
-            ...(isDonorSubject(subjectType) &&
-            (actionType === "send_email" || actionType === "send_message")
+            ...(isDonorSubject(subjectType) && actionType === "send_message"
                 ? { requires_approval: true }
                 : {}),
         })
@@ -2725,8 +2724,7 @@ function useAutomationPageView({
                                                             onCheckedChange={(checked) => updateAction(index, { requires_approval: checked })}
                                                             disabled={
                                                                 isDonorSubject(subjectType) &&
-                                                                (action.action_type === "send_email" ||
-                                                                    action.action_type === "send_message")
+                                                                action.action_type === "send_message"
                                                             }
                                                         />
                                                     </div>

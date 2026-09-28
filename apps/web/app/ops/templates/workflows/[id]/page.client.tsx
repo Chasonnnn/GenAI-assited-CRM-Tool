@@ -345,9 +345,6 @@ function getWorkflowActionSubjectValidationError(
     if (!isDonorSubject && action.action_type === "assign_donor") {
         return "Assign Donor requires a donor subject."
     }
-    if (isDonorSubject && action.action_type === "send_email" && action.requires_approval !== true) {
-        return "Donor email actions require review approval."
-    }
     return null
 }
 

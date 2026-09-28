@@ -1274,6 +1274,87 @@ describe('AutomationPage', () => {
         )
     })
 
+    it('keeps approval optional for donor email actions', () => {
+        mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['view_donors'] } })
+        mockUseWorkflowOptions.mockImplementation(
+            (_scope: string, subjectType: string) => ({
+                data: {
+                    trigger_types: subjectType === 'egg_donor'
+                        ? [{ value: 'donor_created', label: 'Donor Created', description: '' }]
+                        : [{ value: 'surrogate_created', label: 'Surrogate Created', description: '' }],
+                    action_types: [{ value: 'send_email', label: 'Send Email', description: '' }],
+                    action_types_by_trigger: subjectType === 'egg_donor'
+                        ? { donor_created: ['send_email'] }
+                        : { surrogate_created: ['send_email'] },
+                    trigger_entity_types: subjectType === 'egg_donor'
+                        ? { donor_created: 'egg_donor' }
+                        : { surrogate_created: 'surrogate' },
+                    condition_fields: [],
+                    condition_operators: [],
+                    update_fields: [],
+                    email_variables: [],
+                    email_templates: [{ id: 'email-template-1', name: 'Donor welcome' }],
+                    users: [],
+                    queues: [],
+                    statuses: [],
+                },
+                isLoading: false,
+            }),
+        )
+
+        renderAutomationPage()
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a create workflow button',
+            ),
+        )
+        fireEvent.change(screen.getByRole('combobox', { name: 'Record type' }), {
+            target: { value: 'egg_donor' },
+        })
+        fireEvent.change(screen.getByPlaceholderText('e.g., Welcome New Egg Donors'), {
+            target: { value: 'Egg donor welcome email' },
+        })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Trigger type' }), {
+            target: { value: 'donor_created' },
+        })
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(screen.getByRole('button', { name: /add action/i }))
+        fireEvent.change(screen.getByRole('combobox', { name: 'Action type 1' }), {
+            target: { value: 'send_email' },
+        })
+        const templateSelect = getFirstElement(
+            screen.getAllByTestId('select').filter((select) =>
+                select.querySelector('option[value="email-template-1"]'),
+            ),
+            'Expected an email template select',
+        )
+        fireEvent.change(templateSelect, { target: { value: 'email-template-1' } })
+        const approval = screen.getByRole('switch', { name: 'Requires Approval' })
+        expect(approval).not.toHaveAttribute('aria-disabled', 'true')
+        expect(approval).toHaveAttribute('aria-checked', 'false')
+        fireEvent.click(screen.getByRole('button', { name: /next/i }))
+        fireEvent.click(
+            getLastElement(
+                screen.getAllByRole('button', { name: /create workflow/i }),
+                'Expected a save workflow button',
+            ),
+        )
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'egg_donor',
+                actions: [{
+                    action_type: 'send_email',
+                    template_id: 'email-template-1',
+                    recipients: 'donor',
+                }],
+            }),
+            expect.any(Object),
+        )
+    })
+
     it('names the workflow in its history dialog and shows the shared empty state', () => {
         mockUseWorkflows.mockReturnValue({
             data: [{
