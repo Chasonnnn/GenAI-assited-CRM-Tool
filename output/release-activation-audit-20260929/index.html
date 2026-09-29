@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Release activation audit — 2026-09-29</title>
+  <style>
+    :root{color-scheme:light;--ink:#17232b;--muted:#53636d;--line:#dce3e7;--paper:#fff;--bg:#f3f6f8;--blue:#165478;--green:#1f6747;--amber:#86531c}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1180px;margin:auto;padding:38px 24px 64px}header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:26px}h1{font-size:30px;line-height:1.2;margin:0 0 8px;font-weight:700;letter-spacing:-.6px}h2{font-size:19px;line-height:1.3;margin:0 0 14px}p{margin:8px 0}.date,.muted{color:var(--muted)}.status{display:inline-block;border:1px solid #e7d0af;background:#fff4e4;color:var(--amber);border-radius:6px;padding:6px 10px;font-weight:650;white-space:nowrap}.good{color:var(--green);font-weight:650}.pending{color:var(--amber);font-weight:650}.static{color:var(--blue);font-weight:650}section{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:22px;margin-top:18px}.table{overflow:auto}table{width:100%;border-collapse:collapse;text-align:left}th{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:#f7f9fa}th,td{padding:11px 12px;vertical-align:top;border-bottom:1px solid var(--line)}tr:last-child td{border-bottom:0}th:first-child,td:first-child{padding-left:0}th:last-child,td:last-child{padding-right:0}a{color:var(--blue);text-underline-offset:3px}a:hover{text-decoration-thickness:2px}a:focus-visible,summary:focus-visible{outline:3px solid #79b7d8;outline-offset:4px}code{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere;background:#f3f6f8;border-radius:3px;padding:2px 4px}.refs{font-size:12px;color:var(--muted);margin-top:6px}.refs a{display:inline-block;margin-right:7px}ul,ol{padding-left:22px;margin:8px 0}li{margin:6px 0}summary{font-size:19px;font-weight:650;cursor:pointer}details[open] summary{margin-bottom:14px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.grid section{margin-top:18px}.nowrap{white-space:nowrap}@media(max-width:740px){main{padding:24px 14px 40px}header{display:block}header .status{margin-top:12px}h1{font-size:26px}section{padding:16px}.grid{display:block}th,td{padding:10px 8px;min-width:125px}.table table{min-width:650px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>Release activation audit</h1><div class="date">2026-09-29 · Surrogacy Force · 0.91.77</div></div>
+    <span class="status">Focused local QA — launch proof incomplete</span>
+  </header>
+
+  <section aria-labelledby="release"><h2 id="release">Release evidence</h2>
+    <div class="table"><table>
+      <thead><tr><th>Check</th><th>Observed result</th><th>Proof boundary</th></tr></thead>
+      <tbody>
+        <tr><td>Source</td><td>Release base and observed remote <code>main</code>: <code>1e94b0a0f779d89bc339f1d0590473a09e242527</code>.</td><td>Exact release source verified. Local fixes are committed separately; no push or deployment.</td></tr>
+        <tr><td>Local fix commits</td><td><code>c60d7337</code> CAPI<br><code>57f35aab</code> scheduling<br><code>620176bd</code> appointment labels</td><td>Four defects fixed locally. These commits are outside the verified deployed release.</td></tr>
+        <tr><td>Published release</td><td><code>surrogacy-crm-platform-v0.91.77</code><br>2026-09-28 15:37:01 UTC</td><td><a href="https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/releases/tag/surrogacy-crm-platform-v0.91.77">Published tag</a></td></tr>
+        <tr><td>Release commit checks</td><td><span class="good">20 / 20 success</span><br>API deploy: 15:43:10 UTC · Web deploy: 15:44:40 UTC, September 28</td><td><a href="https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/36444917801">CI run</a><br>Provider activation and runtime flags remain unverified.</td></tr>
+        <tr><td>API health</td><td><span class="good">HTTP 200</span> · status <code>ok</code> · production · version <code>0.91.77</code> · Redis <code>ok</code></td><td><a href="https://api.surrogacyforce.com/health">/health</a>; <a href="https://api.surrogacyforce.com/health/live">/health/live</a> also returned <code>ok</code>.</td></tr>
+        <tr><td>Migration head</td><td>Current and expected: <code>20260928_1340_zapier_event_effective_at</code></td><td>Health-reported schema head matches the release.</td></tr>
+        <tr><td>Origins</td><td>API: <code>api.surrogacyforce.com</code><br>App, ops and tenant subdomains derive from the configured base domain.</td><td>No distinct staging target found in the audited sources; absence is unproven.<div class="refs"><a href="../../infra/terraform/locals.tf">locals.tf:2–4</a></div></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section aria-labelledby="changes"><h2 id="changes">Recent changes</h2>
+    <div class="table"><table>
+      <thead><tr><th>Release</th><th>Changes</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>0.91.77</td><td>Donor website, Zapier and workflow readiness; intended-parent stage rules; match delivery completion. Latest increment: 282 files changed.</td><td><a href="../../CHANGELOG.md">CHANGELOG:5</a></td></tr>
+        <tr><td>0.91.76</td><td>Saved form edits can be republished.</td><td><a href="../../CHANGELOG.md">CHANGELOG:12</a></td></tr>
+        <tr><td>0.91.75</td><td>Zapier task sync off the request loop; WebSocket disconnect logging; runtime Error Reporting; build caches.</td><td><a href="../../CHANGELOG.md">CHANGELOG:19</a></td></tr>
+        <tr><td>0.91.74</td><td>Shared UI; permission gates; accepted-match stage guards; all bulk-stage choices; mobile fixes.</td><td><a href="../../CHANGELOG.md">CHANGELOG:35</a></td></tr>
+        <tr><td>0.91.73</td><td>Phone-bound public SMS consent; toll-free readiness.</td><td><a href="../../CHANGELOG.md">CHANGELOG:82</a></td></tr>
+        <tr><td>0.91.72</td><td>Permission v2; match lifecycle, eligibility and permissions; unified scheduling.</td><td><a href="../../CHANGELOG.md">CHANGELOG:91</a></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section aria-labelledby="gates"><h2 id="gates">Activation gates</h2>
+    <div class="table"><table>
+      <thead><tr><th>Feature</th><th>Code or default</th><th>Required evidence</th></tr></thead>
+      <tbody>
+        <tr><td>Scheduling v2</td><td>Global default <code>false</code>; no infrastructure enable declaration found.</td><td>Inventory every affected organization; configure explicit bindings and review legacy appointment ownership. Confirm writable destination. Missing bindings stop legacy sync; missing destination stops delivery; Zoom is rejected in v2.<div class="refs"><a href="../../apps/api/app/core/config.py">config.py:238</a><a href="../../apps/api/docs/scheduling-v2.md">scheduling-v2.md:44–57</a><a href="../../apps/api/app/services/google_calendar_sync_service.py">legacy sync:39–92</a><a href="../../apps/api/app/services/appointment_google_sync_service.py">delivery:314–337</a><a href="../../apps/api/app/services/scheduling_v2_service.py">v2:424, 569, 894, 990</a></div></td></tr>
+        <tr><td>Match expansion</td><td>Global default <code>false</code>; ordinary deploy updates preserve existing environment values.</td><td>Verify API and worker values, migration readiness, permissions and match journeys.<div class="refs"><a href="../../apps/api/app/core/config.py">config.py:123</a><a href="../../cloudbuild/api.yaml">api.yaml:191–216</a></div></td></tr>
+        <tr><td>Permission v2</td><td>Activated per organization.</td><td>Review effective grants and five-role allow/deny behavior in each target organization.<div class="refs"><a href="../../apps/api/app/db/models/permission_policy.py">permission_policy.py:23</a><a href="../../apps/api/app/services/permission_policy_service.py">permission_policy_service.py:64–75, 405</a></div></td></tr>
+        <tr><td>Fixed-subject workflows</td><td>Migration repairs and disables affected workflows.</td><td>Review repaired subjects and authority before re-enabling selected workflows.<div class="refs"><a href="../../apps/api/alembic/versions/20260928_1300_workflow_fixed_trigger_subjects.py">migration:49</a></div></td></tr>
+        <tr><td>Donor Zapier</td><td>Organization default <code>donor_outbound_enabled=false</code>.</td><td>Verify mappings, attribution, controlled receiver, deduplication and Meta acceptance.<div class="refs"><a href="../../apps/api/app/db/models/integrations.py">integrations.py:138–140</a><a href="../../apps/api/app/services/zapier_settings_service.py">zapier_settings_service.py:375</a></div></td></tr>
+        <tr><td>SMS dispatch</td><td>Dispatch default <code>false</code>; provider and consent gates apply.</td><td>Verify provider readiness, sender, consent and reviewed content before any send.<div class="refs"><a href="../../apps/api/app/worker.py">worker.py:129–132</a><a href="../../infra/terraform/variables.tf">variables.tf:138–142</a></div></td></tr>
+        <tr><td>Maintenance / expiry sweeps</td><td>Fallback defaults <code>false</code>.</td><td>Controlled canary, bounded job counts and observed effects before activation.<div class="refs"><a href="../../apps/api/app/worker.py">worker.py:89–109</a><a href="../../infra/terraform/variables.tf">variables.tf:145–154</a></div></td></tr>
+      </tbody>
+    </table></div>
+    <p class="pending">Production runtime flag values are unverified.</p>
+  </section>
+
+  <section aria-labelledby="ledger"><h2 id="ledger">Live test ledger</h2>
+    <div class="table"><table>
+      <thead><tr><th>Test</th><th>Status</th><th>Evidence or gap</th></tr></thead>
+      <tbody>
+        <tr><td>API health and schema</td><td class="good">Passed</td><td>Production health, liveness, version, Redis and migration head.</td></tr>
+        <tr><td>Chrome root / login</td><td class="good">Rendered</td><td>Unauthenticated pages rendered; authenticated workflows remain pending.</td></tr>
+        <tr><td>Production calendar bindings</td><td class="good">Denied without session</td><td>HTTP 401, <code>Not authenticated</code>. This does not reveal the scheduling runtime flag.</td></tr>
+        <tr><td>Production SSO</td><td class="pending">Deferred</td><td>Local QA selected first. Earlier automatic approval review rejected sign-in without specific account authorization; production account approval remains pending.</td></tr>
+        <tr><td>Cloud runtime inspection</td><td class="pending">Deferred</td><td>Earlier Gcloud auth refresh failed; external authmux login is still needed for production runtime inspection.</td></tr>
+        <tr><td>QA environment / test organization</td><td class="good">Local QA completed</td><td>Synthetic local browser QA used a disposable database and provider transports; task resources were removed afterward.</td></tr>
+        <tr><td>Frontend regression tests</td><td class="good">98 passed / 8 files</td><td>Scheduling: 29 / 5 files (2.07 seconds). Appointment labels: failing donor regression before fix, then 69 / 3 distinct files passed. Typecheck and focused ESLint passed. Full frontend suite not run.</td></tr>
+        <tr><td>Backend regression tests</td><td class="good">509 passed / 33 files</td><td>Distinct focused tests: scheduling 269 / 20 files (15.25 seconds); CAPI 37 / 2 files; recent features 203 / 11 files (28.72 seconds). Task-owned PostgreSQL 18.1; unique disposable databases. Full backend suite not run.</td></tr>
+        <tr><td>Meta stage CAPI regression</td><td class="good">Local fix verified</td><td>Implementer runs: missing-context regression first failed (1 failed, 26 passed); foreign-account regression then failed (1 failed, 28 passed). Final affected suites: 37 passed; Ruff/format/diff checks clean. Database fixtures and mocked provider HTTP; no real Meta send. Independent review of the two changed files found no actionable issue.<div class="refs"><a href="../../apps/api/tests/test_meta_capi.py">test_meta_capi.py:185, 241</a><a href="../../apps/api/tests/test_meta_integration_audit.py">test_meta_integration_audit.py</a></div></td></tr>
+        <tr><td>Local browser baseline</td><td class="good">Passed</td><td>Synthetic onboarding profile, populated dashboard, availability, appointment types, booking link, public booking page and explicit owner binding / Meet readiness.</td></tr>
+        <tr><td>Availability recovery</td><td class="good">Passed</td><td>Unsynced calendar returned 503 with error and Retry. Restricted worker drain established a fresh synthetic snapshot; Retry recovered available slots.</td></tr>
+        <tr><td>Repeated calendar sync</td><td class="good">Fixed and retested</td><td>Old server returned 409 on repeat; fixed server accepted repeat without an error. Scheduling review finding resolved; 269 affected tests passed.</td></tr>
+        <tr><td>Booking / provider state</td><td class="good">Passed locally</td><td>Required-field errors; confirmed public Meet booking; Google Updating → Synced with synthetic Meet URL. External provider network blocked; email jobs not executed.</td></tr>
+        <tr><td>Reschedule / token rotation</td><td class="good">Passed locally</td><td>Staff reschedule 10 am → 11 am; public self-service 11 am → 1 pm. Reloading the old self-service token showed Unable to Manage / Appointment not found.</td></tr>
+        <tr><td>Staff cancellation</td><td class="good">Passed locally</td><td>Database status <code>cancelled</code>; Google sync <code>completed</code>; synthetic provider event removed; zero failed calendar jobs.</td></tr>
+        <tr><td>Mobile / linked donor</td><td class="good">Passed at 390 × 844</td><td>Appointment list and dialog readable. Donor row shows Donor / QA Donor and Edit after the fix.</td></tr>
+        <tr><td>Override validation</td><td class="good">Passed locally</td><td>Custom 20:00 time with a blank override reason keeps Save disabled.</td></tr>
+        <tr><td>Full role matrix</td><td class="pending">Not verified</td><td>This round used the synthetic admin. Full multi-role browser validation remains pending.</td></tr>
+        <tr><td>QA service cleanup</td><td class="good">Completed</td><td>API and web exited; no listeners on 8017 / 3047 / 5553. Task container stopped and auto-removed; no unique <code>crm_test_</code> databases remained. Task temporary logs, shims/cache, private environment/metadata and synthetic provider state removed; QA tabs closed and viewport restored.</td></tr>
+        <tr><td>Report preview</td><td class="good">Reviewed and stopped</td><td>Final visual review passed. Preview process exited; no listener on 8876. All task-owned servers stopped. Pre-existing <code>crm_db</code> and <code>aiw-demo-postgres</code> remain running; Docker Desktop remains open.</td></tr>
+        <tr><td>Real provider flows</td><td class="pending">Pending</td><td>Google OAuth/invitations/push, Zoom, SMS, Zapier receiver and Meta acceptance need controlled verification.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section aria-labelledby="local-incident"><h2 id="local-incident">Local QA incident</h2>
+    <p class="pending">An unintended migration changed the pre-existing local development database.</p>
+    <p>Harness setup failed because the sandbox blocked the uv cache. The next shell continued after the missing environment file failed to load and Alembic used <code>apps/api/.env</code>: <code>localhost:5432/crm</code> in the pre-existing <code>crm_db</code> container.</p>
+    <p>The migration advanced from <code>20260830_0100</code> to <code>20260928_1340_zapier_event_effective_at</code>. Aggregate checks afterward found 7 organizations, 13 appointments and 550 surrogates. Record contents were not read. Production was not targeted.</p>
+    <p>The applied chain includes data migrations for match status, donor stages/source and workflow settings, including disabling repaired workflows. Exact row changes are unverified; the aggregate counts do not establish that record values stayed unchanged.</p>
+    <p>The user was informed. No downgrade was performed because it could erase data. Subsequent harness commands fail fast and assert <code>ENV=test</code> plus the disposable database URL <code>127.0.0.1:5553/crm_scheduling_qa</code> before mutation. Guarded disposable migration and seeding completed. Focused tests use unique disposable databases.</p>
+  </section>
+
+  <section aria-labelledby="findings"><h2 id="findings">Four defects fixed locally</h2>
+    <div class="table"><table>
+      <thead><tr><th>Finding</th><th>Impact</th><th>Proof needed</th></tr></thead>
+      <tbody>
+        <tr><td><span class="good">Fixed locally; not deployed</span><br>Duplicate manual binding sync returned 409.</td><td>Repeats reuse queued work. The browser reproduced the old error and accepted repeats after the fix.</td><td>Frozen scheduling suite: 269 passed / 20 files; independent review finding resolved.<div class="refs"><a href="../../apps/api/app/routers/calendar_bindings.py">calendar_bindings.py:112–125</a><a href="../../apps/api/app/services/calendar_binding_service.py">calendar_binding_service.py:471</a><a href="../../apps/api/tests/test_scheduling_v2_api.py">test_scheduling_v2_api.py</a></div></td></tr>
+        <tr><td><span class="good">Fixed locally; not deployed</span><br>API accepted a read-only booking destination.</td><td>API now rejects a destination without write access; writable owner/editor destinations remain valid.</td><td>Regression covered in the 269-test scheduling suite. Production account permissions remain unverified.<div class="refs"><a href="../../apps/api/app/services/calendar_binding_service.py">calendar_binding_service.py:169</a><a href="../../apps/api/tests/test_calendar_binding_service.py">test_calendar_binding_service.py</a></div></td></tr>
+        <tr><td><span class="good">Fixed locally; not deployed</span><br>Meta stage CAPI handler omitted <code>db</code>.</td><td>The old path reported no-op success. The fix passes database context and rejects an ad linked to another organization's account.</td><td>37 affected tests passed with mocked provider HTTP; independent two-file review found no actionable issue. Real provider acceptance remains pending.<div class="refs"><a href="../../apps/api/app/jobs/handlers/meta.py">meta.py:386, 428</a><a href="../../apps/api/tests/test_meta_capi.py">test_meta_capi.py:185, 241</a></div></td></tr>
+        <tr><td><span class="good">Fixed locally; not deployed</span><br>Donor-linked appointments displayed Not linked.</td><td>Link detection includes donor, match and attempt. Donor names/fallbacks, Match case / Match attempt badges and surrogate/IP fallback labels render correctly.</td><td>Donor regression failed before the fix; 69 affected frontend tests passed. Independent review and mobile donor-row rendering passed.<div class="refs"><a href="../../apps/web/components/appointments/AppointmentLinkSection.tsx">AppointmentLinkSection.tsx:63, 145</a></div></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section><details><summary>Controlled QA matrix</summary>
+    <div class="table"><table>
+      <thead><tr><th>Priority</th><th>Journey</th><th>Required checks</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Donor intake / review</td><td>Egg and sperm; photo requirement; attribution; duplicate holding/linking; rejected resubmission; scan recovery; approval applying answers/photo; private public response; foreign-org denial.<div class="refs"><a href="../../apps/api/tests/test_donor_intake_review.py">donor review tests:214, 328, 549, 605</a><a href="../../apps/api/tests/test_public_submit_response_privacy.py">response privacy tests:115</a></div></td></tr>
+        <tr><td>2</td><td>Form / workflow</td><td>Save and republish; paused route stays paused; generated workflow authority; fixed subject; applicant subtype; linked-record stage actions; template email and AI review.<div class="refs"><a href="../../docs/donor-readiness-audit-2026-09-27.md">donor audit:131, 147, 162</a></div></td></tr>
+        <tr><td>3</td><td>Zapier</td><td>Mapping normalization; test lead preserves schema; missing/synthetic IDs; replay; canonical source; Lead event; send-once events; undo withdrawal; controlled receiver.<div class="refs"><a href="../../apps/api/tests/test_zapier_event_replay.py">replay tests:381, 408</a></div></td></tr>
+        <tr><td>4</td><td>Stages / matches</td><td>Change-status permission; required reasons; foreign stage/record denial; Delivered completion; undo; pending cancellation; postpartum work.<div class="refs"><a href="../../apps/api/tests/test_intended_parent_stage_rules.py">IP stage tests:94, 116, 155, 173</a><a href="../../apps/api/tests/test_match_delivery_completion.py">completion tests:119, 225, 378, 494, 616</a></div></td></tr>
+        <tr><td>5</td><td>Five-role permissions</td><td>Admin, Developer, Intake, Case Manager, Operations; direct routes; allowed/denied actions; assigned scope; handoff; revocation; archived nested reads; loading/error recovery.<div class="refs"><a href="../role-qa-20260925/report.md">historical role QA:3, 23</a></div></td></tr>
+        <tr><td>6</td><td>Scheduling / UI</td><td>Public token rotation; override reason; stale recovery; provider retry; incoming conflicts; interview cancel/replacement; desktop and 390px; loading, empty, error and populated states.<div class="refs"><a href="../../apps/api/docs/scheduling-v2-qa.md">scheduling QA:7, 41</a></div></td></tr>
+      </tbody>
+    </table></div>
+    <p>Historical role findings need retest: Case Manager create/reopen access, Operations SMS template reads, archived donor nested access and same-second login collision.</p>
+    <p>Documented donor gaps need reproduction: publishing without create permission leaves routing without a grant; status-label conditions read the intake object; switching donor subtype retains prior stage picks.</p>
+  </details></section>
+
+  <section aria-labelledby="isolation"><h2 id="isolation">QA isolation</h2>
+    <ul>
+      <li>Use an approved synthetic organization for writable production QA. Confirm its workflows, recipients and provider transports before creating records.</li>
+      <li>Creating a production organization queues an admin invite. Donor creation triggers workflows; promotion queues a Zapier event. Template emails can target applicants or staff.</li>
+      <li>Use the disposable local scheduling harness for provider failures. It blocks external HTTP and drains only scheduling jobs. Add five roles and a foreign organization for permission checks.</li>
+      <li>Production dev seed and login bypass are blocked by the environment guard.</li>
+    </ul>
+    <div class="refs"><a href="../../apps/api/app/services/platform_service.py">platform_service.py:565</a><a href="../../apps/api/app/services/donor_service.py">donor_service.py:707</a><a href="../../apps/api/app/services/form_intake_service.py">form_intake_service.py:4080</a><a href="../../apps/api/app/services/workflow_communication_actions.py">email actions:39, 173</a><a href="../../apps/api/tests/support/README.md">harness README:3, 40</a><a href="../../apps/api/app/routers/dev.py">dev.py:34</a></div>
+  </section>
+
+  <section aria-labelledby="cleanup"><h2 id="cleanup">Repository cleanup candidates — no removals</h2>
+    <div class="table"><table>
+      <thead><tr><th>Candidate</th><th>Measured size</th><th>Condition</th></tr></thead>
+      <tbody>
+        <tr><td><code>apps/web/.next</code></td><td class="nowrap">23 GB</td><td>Rebuildable; check active frontend processes first.</td></tr>
+        <tr><td><code>output/test-runtime-20260927.local</code></td><td>753 MB</td><td>Keep summaries and decision evidence before removing raw coverage/probes.</td></tr>
+        <tr><td><code>output/test-reduction-audit-20260925.local</code></td><td>49 MB</td><td>Keep removal justifications and coverage baseline.</td></tr>
+        <tr><td><code>infra/terraform/.terraform</code></td><td>225 MB</td><td>Rebuildable cache; preserve lockfile, state and configuration.</td></tr>
+        <tr><td><code>apps/web/coverage</code></td><td>11 MB</td><td>Remove only if audit evidence no longer needs it.</td></tr>
+        <tr><td>Dependency environments</td><td>Web 1.1 GB<br>API 459 MB</td><td>Lower priority; removal adds setup time.</td></tr>
+      </tbody>
+    </table></div>
+    <p>Keep environment/auth files, Terraform state, attachments, exports and unresolved QA evidence. One worktree found; 86 tracked output files.</p>
+    <ul>
+      <li>Code cleanup candidate: unused <code>FORMS_AUTO_MATCH</code> and <code>FORMS_TOKEN_LOCK</code> settings. Remove declarations and stale documentation together after checking callers and configuration consumers. <a href="../../apps/api/app/core/config.py">config.py:277–278</a>; <a href="../../apps/api/.env.example">.env.example:270</a>.</li>
+      <li>Documentation cleanup candidate: stale developer-only donor rollout claims. Update them to the current permission model after runtime QA. <a href="../../docs/donor-launch-plan-20260920.md">Donor launch plan</a>.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="activation"><h2 id="activation">Staged activation recommendation</h2>
+    <ol>
+      <li>Record API/worker runtime flags, organization policy versions, workflow grants and provider readiness after authenticated access is restored.</li>
+      <li>Run controlled QA against isolated synthetic records and receivers. Reproduce static findings and verify failure, retry, denied and cross-org states.</li>
+      <li>Approve each named switch and its actual scope after evidence passes. Scheduling v2 is global: inventory every affected organization before activation; a per-organization canary is not available for this switch.</li>
+      <li>Verify the saved switch, worker behavior, user journey, delivery outcome and rollback path after activation.</li>
+    </ol>
+    <p>Call a launch complete only after recording source/CI, live revisions, migration, required runtime and organization activation, controlled journey results and rollback. Each default-off exception needs a reason and explicit follow-up. Provider, consent and security gates remain subject to their requirements.</p>
+    <p class="muted">Recommendation only; release policy is unchanged. Local QA includes the unintended development-database migration recorded above. Task temporary artifacts were removed; no production activation or repository cache cleanup was performed.</p>
+  </section>
+</main>
+</body>
+</html>
