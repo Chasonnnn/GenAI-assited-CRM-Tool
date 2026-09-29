@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { CalendarClockIcon, Loader2Icon } from "lucide-react"
 import { SchedulingTimePicker } from "@/components/appointments/SchedulingTimePicker"
-import { formatSchedulingDate, formatSchedulingTime, localDateTimeToIso as parseLocalDateTime, schedulingCalendarRange, schedulingDateKey, schedulingTimezoneLabel } from "@/lib/scheduling-time"
+import { formatSchedulingDate, formatSchedulingTime, localDateTimeToIso, schedulingCalendarRange, schedulingDateKey, schedulingTimezoneLabel } from "@/lib/scheduling-time"
 import { parseDateInput } from "@/lib/utils/date"
 import { addMonths, startOfMonth } from "date-fns"
 
@@ -86,10 +86,6 @@ export function nextBusinessHour(now = new Date()): Date {
         next.setHours(BUSINESS_DAY_START_HOUR)
     }
     return next
-}
-
-export function localDateTimeToIso(value: string): string | null {
-    return parseLocalDateTime(value)
 }
 
 type View = "manage" | "book" | "cancel"

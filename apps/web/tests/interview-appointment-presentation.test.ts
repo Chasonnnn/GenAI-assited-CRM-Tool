@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { appointmentBadgeStatus, localDateTimeToIso } from "@/components/surrogates/InterviewAppointmentManager"
+import { appointmentBadgeStatus } from "@/components/surrogates/InterviewAppointmentManager"
 import { stageBadgeStyle } from "@/lib/stage-colors"
 import type { InterviewAppointment } from "@/lib/api/interview-appointment"
 
@@ -25,12 +25,6 @@ describe("interview appointment presentation", () => {
     it("uses the exact end boundary for Past", () => {
         expect(appointmentBadgeStatus(appointment(), new Date("2026-09-19T11:59:59.999Z"))).toBe("Ongoing")
         expect(appointmentBadgeStatus(appointment(), new Date("2026-09-19T12:00:00.000Z"))).toBe("Past")
-    })
-
-    it("converts a browser-local date-time to a timezone-aware ISO instant", () => {
-        const result = localDateTimeToIso("2026-09-24T17:00")
-        expect(result).toMatch(/^2026-09-2[45]T\d{2}:00:00\.000Z$/)
-        expect(localDateTimeToIso("")).toBeNull()
     })
 
     it("keeps white text and colors that already reach AA contrast", () => {
