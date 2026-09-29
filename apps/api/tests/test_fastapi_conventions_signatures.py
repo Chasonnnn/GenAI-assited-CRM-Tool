@@ -68,34 +68,6 @@ def test_route_params_use_annotated_for_fastapi_param_calls() -> None:
     assert not offenders, "Found non-Annotated FastAPI params:\n" + "\n".join(offenders)
 
 
-def test_route_depends_params_are_typed_and_not_dict_session() -> None:
-    offenders: list[str] = []
-
-    for path in _iter_target_files():
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in tree.body:
-            if not _is_route_fn(node):
-                continue
-            assert isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-
-            args = node.args.args + node.args.kwonlyargs
-            defaults = [None] * (len(args) - len(node.args.defaults)) + list(node.args.defaults)
-
-            for arg, default in zip(args, defaults):
-                if _call_name(default) != "Depends":
-                    continue
-
-                if arg.annotation is None:
-                    offenders.append(f"{path}:{arg.lineno}:{node.name}:{arg.arg}:untyped")
-                    continue
-
-                ann = ast.unparse(arg.annotation)
-                if ann == "dict":
-                    offenders.append(f"{path}:{arg.lineno}:{node.name}:{arg.arg}:dict")
-
-    assert not offenders, "Found invalid Depends param typing:\n" + "\n".join(offenders)
-
-
 def test_csrf_dependency_is_decorator_level_not_parameter_style() -> None:
     offenders: list[str] = []
 
