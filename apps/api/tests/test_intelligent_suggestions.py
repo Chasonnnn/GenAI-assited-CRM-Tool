@@ -60,14 +60,19 @@ def _ensure_intelligent_schema(db) -> None:
             """
         )
     )
-    db.execute(
-        text(
-            """
-            ALTER TABLE user_notification_settings
-            ADD COLUMN IF NOT EXISTS intelligent_suggestion_digest BOOLEAN NOT NULL DEFAULT TRUE
-            """
+    try:
+        db.execute(
+            text(
+                """
+                ALTER TABLE user_notification_settings
+                ADD COLUMN IF NOT EXISTS intelligent_suggestion_digest BOOLEAN NOT NULL DEFAULT TRUE
+                """
+            )
         )
-    )
+    except Exception:
+        # Ignore deadlocks during parallel tests
+        db.rollback()
+        pass
     db.commit()
 
 
