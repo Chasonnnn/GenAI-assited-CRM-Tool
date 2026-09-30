@@ -1,3 +1,0 @@
-## 2025-03-05 - SQLAlchemy Vectorized Query Updates
-**Learning:** For batched database lookups in Python, replacing internal-loop queries with `.in_()` effectively eliminates O(N) database round-trips. When creating a dictionary mapped by multi-part keys (like `(role, permission)`), the `datetime.now(UTC)` should be pre-computed outside the loop so that the update receives exactly the same timestamp, minimizing discrepancies and reducing micro-overhead inside the loop itself.
-**Action:** When diagnosing N+1 bottlenecks, specifically scan for loops wrapping ORM read/write logic via tools like AST parsers or regexes, extract the primary keys to a bulk `.in_()` query, and create a single shared external timestamp.
