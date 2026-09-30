@@ -2,7 +2,6 @@
 
 import hashlib
 import logging
-import re
 import uuid
 from typing import Any
 
@@ -36,25 +35,23 @@ def _header_value(request: Any, name: str) -> str | None:
     return None
 
 
-# Capitalized words allowed in a logged error message. Any other capitalized word after the
-# first may be a person's name or a stage label, so the message is not logged.
-_ERROR_MESSAGE_PROPER_NOUNS = frozenset({"CRM", "Google", "Calendar", "Zoom", "Meet", "API"})
-_ERROR_MESSAGE_ALLOWED = re.compile(r"^[A-Za-z' ,;:.()/-]{1,120}$")
+# Only audited, exact messages may produce detail-specific codes. Unknown details can
+# contain user data regardless of capitalization and must use the HTTP status fallback.
+_STATIC_ERROR_CODES = {
+    "Appointment not found": "appointment_not_found",
+    "Google event changed; review before editing": "google_event_changed_review_before_editing",
+    "Reconnect the appointment owner's Google Calendar": (
+        "reconnect_the_appointment_owner_s_google_calendar"
+    ),
+    "Cannot cancel appointment with status cancelled": "cannot_cancel_appointment_with_status_cancelled",
+}
 
 
 def static_error_code(message: object) -> str | None:
-    """Return a log-safe code for a fixed client error message, or None.
-
-    Only messages made of plain words qualify: no digits, emails, quotes around user
-    input, or capitalized words other than the first and a few product names.
-    """
-    if not isinstance(message, str) or not _ERROR_MESSAGE_ALLOWED.match(message.strip()):
+    """Return an allowlisted code without deriving log content from arbitrary details."""
+    if not isinstance(message, str):
         return None
-    words = re.findall(r"[A-Za-z']+", message)
-    if any(w[0].isupper() and w not in _ERROR_MESSAGE_PROPER_NOUNS for w in words[1:]):
-        return None
-    code = re.sub(r"[^a-z]+", "_", message.lower()).strip("_")
-    return code or None
+    return _STATIC_ERROR_CODES.get(message)
 
 
 def hash_email_for_log(email: str | None) -> str | None:

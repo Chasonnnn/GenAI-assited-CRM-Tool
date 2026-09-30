@@ -564,7 +564,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 async def _log_client_error_code(request: Request, exc: StarletteHTTPException):
     """Record why a client error happened in the request log, when the message is log-safe."""
     if 400 <= exc.status_code < 500 and not getattr(request.state, "error_code", None):
-        request.state.error_code = static_error_code(exc.detail) or f"http_{exc.status_code}"
+        request.state.error_code = static_error_code(exc.detail)
     return await http_exception_handler(request, exc)
 
 
@@ -659,6 +659,8 @@ async def structured_request_logging_middleware(request: Request, call_next):
         raise
     finally:
         latency_ms = int((perf_counter() - start) * 1000)
+        if 400 <= status_code < 500 and not getattr(request.state, "error_code", None):
+            request.state.error_code = f"http_{status_code}"
         if response is not None:
             response.headers["X-Request-ID"] = request.state.request_id
         log_structured_event(
