@@ -101,7 +101,7 @@ describe("Dependency security guards", () => {
         const undiciOverride = readPnpmOverrides().undici
 
         expect(undiciOverride).toBeDefined()
-        expect(compareVersions(undiciOverride!, "7.29.0")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(undiciOverride!, "7.29.1")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins DOMPurify to a non-vulnerable version", () => {
@@ -260,7 +260,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "7.29.0")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "7.29.1")).toBeGreaterThanOrEqual(0)
         }
     })
 
