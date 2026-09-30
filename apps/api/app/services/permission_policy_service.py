@@ -380,26 +380,38 @@ def get_execution_review(db: Session, org_id: UUID) -> list[dict]:
 
 
 def _apply_role_changes(db: Session, org_id: UUID, changes: dict[str, dict[str, bool]]) -> None:
+    roles_to_update = [role for role in changes.keys() if role not in PROTECTED_ROLES]
+    if not roles_to_update:
+        return
+
+    existing_rows = (
+        db.query(RolePermission)
+        .filter(
+            RolePermission.organization_id == org_id,
+            RolePermission.role.in_(roles_to_update)
+        )
+        .all()
+    )
+
+    rows_by_role_perm = {
+        (row.role, row.permission): row for row in existing_rows
+    }
+
+    now = datetime.now(UTC)
+
     for role, permissions in changes.items():
         if role in PROTECTED_ROLES:
             continue
-        rows = {
-            row.permission: row
-            for row in db.query(RolePermission)
-            .filter(RolePermission.organization_id == org_id, RolePermission.role == role)
-            .all()
-        }
         for permission, granted in permissions.items():
-            row = rows.get(permission)
+            row = rows_by_role_perm.get((role, permission))
             if row:
                 row.is_granted = granted
-                row.updated_at = datetime.now(UTC)
+                row.updated_at = now
             else:
-                db.add(
-                    RolePermission(
-                        organization_id=org_id, role=role, permission=permission, is_granted=granted
-                    )
+                new_row = RolePermission(
+                    organization_id=org_id, role=role, permission=permission, is_granted=granted
                 )
+                db.add(new_row)
 
 
 def activate(
