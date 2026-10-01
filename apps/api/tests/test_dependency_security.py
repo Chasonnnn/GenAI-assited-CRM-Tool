@@ -1,6 +1,8 @@
 import tomllib
 from pathlib import Path
 
+import jwt
+import pytest
 from packaging.requirements import Requirement
 from packaging.version import Version
 
@@ -9,6 +11,17 @@ def _requirements_map(dependencies: list[str]) -> dict[str, Requirement]:
     return {
         Requirement(dependency).name.lower(): Requirement(dependency) for dependency in dependencies
     }
+
+
+@pytest.mark.parametrize("claim", ["exp", "nbf", "iat"])
+def test_session_token_rejects_invalid_time_claim_as_invalid_token(claim):
+    """Malformed signed JSON stays within the decoder's documented auth-error contract."""
+    from app.core.config import settings
+    from app.core.security import decode_session_token
+
+    token = jwt.encode({claim: []}, settings.JWT_SECRET.get_secret_value(), algorithm="HS256")
+    with pytest.raises(jwt.InvalidTokenError):
+        decode_session_token(token)
 
 
 def test_dependency_pins_match_security_fixes():
@@ -24,10 +37,10 @@ def test_dependency_pins_match_security_fixes():
     expected_minimum_pins = {
         "cryptography": "50.0.0",
         "mako": "1.3.12",
-        "pyjwt": "2.14.0",
+        "pyjwt": "2.15.1",
         "python-dotenv": "1.2.2",
         "requests": "2.33.0",
-        "urllib3": "2.7.0",
+        "urllib3": "2.8.0",
     }
     expected_exact_pins = {
         "fastapi": "0.136.3",

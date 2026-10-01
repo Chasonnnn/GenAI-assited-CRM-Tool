@@ -29,11 +29,11 @@ dependencies = [
     "python-multipart==0.0.31",
     # Auth dependencies
     "httpx==0.28.1",
-    "pyjwt==2.14.0",
+    "pyjwt==2.15.1",
     "google-auth==2.57.1",
     "google-genai==2.22.0",
     "requests==2.33.0",
-    "urllib3==2.7.0",
+    "urllib3==2.8.0",
     "email-validator==2.3.0",
     # Security
     "nh3==0.3.2",
