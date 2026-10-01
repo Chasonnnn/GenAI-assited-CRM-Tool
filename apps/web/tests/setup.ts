@@ -91,7 +91,6 @@ class MockResizeObserver {
     disconnect() {}
 }
 
-// @ts-expect-error - test environment polyfill
 globalThis.ResizeObserver = globalThis.ResizeObserver ?? MockResizeObserver
 
 class MockIntersectionObserver {
@@ -100,7 +99,6 @@ class MockIntersectionObserver {
     disconnect() {}
 }
 
-// @ts-expect-error - test environment polyfill
 globalThis.IntersectionObserver = globalThis.IntersectionObserver ?? MockIntersectionObserver
 
 class MockWebSocket {
@@ -143,7 +141,6 @@ if (!Element.prototype.scrollIntoView) {
 
 // Base UI ScrollArea uses getAnimations() for smooth updates.
 if (!Element.prototype.getAnimations) {
-    // @ts-expect-error - minimal Web Animations API polyfill for tests
     Element.prototype.getAnimations = () => []
 }
 

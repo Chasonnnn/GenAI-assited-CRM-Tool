@@ -268,6 +268,7 @@ describe('MetaIntegrationsPage (OAuth)', () => {
         render(<MetaIntegrationsPage />)
 
         const checkbox = screen.getAllByRole('checkbox')[0]
+        if (!checkbox) throw new Error('Expected Meta connection checkbox')
         fireEvent.click(checkbox)
 
         fireEvent.click(screen.getByRole('button', { name: /connect selected/i }))

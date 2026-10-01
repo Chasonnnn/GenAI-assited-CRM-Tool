@@ -15,6 +15,12 @@ vi.mock('@/lib/hooks/use-appointments', () => ({
     useAppointments: (params: unknown) => mockUseAppointments(params),
 }))
 
+function requiredAt<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
+
 describe('MatchTasksCalendar', () => {
     const mockTasks = {
         items: [
@@ -123,7 +129,7 @@ describe('MatchTasksCalendar', () => {
 
     it('navigates to previous month', () => {
         render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
-        const prevButton = screen.getAllByRole('button')[0] // First button is prev
+        const prevButton = requiredAt(screen.getAllByRole('button'), 0) // First button is prev
         fireEvent.click(prevButton)
         // Should now show previous month
         const previousMonth = format(subMonths(new Date(), 1), 'MMMM yyyy')
@@ -133,7 +139,7 @@ describe('MatchTasksCalendar', () => {
     it('navigates to next month', () => {
         render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
         const buttons = screen.getAllByRole('button')
-        const nextButton = buttons[1] // Second button is next
+        const nextButton = requiredAt(buttons, 1) // Second button is next
         fireEvent.click(nextButton)
         // Should now show next month
         const nextMonth = format(addMonths(new Date(), 1), 'MMMM yyyy')
@@ -144,7 +150,7 @@ describe('MatchTasksCalendar', () => {
         render(<MatchTasksCalendar matchId="match1" surrogateId="surrogate1" />)
 
         // Navigate away first
-        const nextButton = screen.getAllByRole('button')[1]
+        const nextButton = requiredAt(screen.getAllByRole('button'), 1)
         fireEvent.click(nextButton)
 
         // Click today button
@@ -206,11 +212,11 @@ describe('MatchTasksCalendar with empty state', () => {
     it('requests the whole match with its record history', () => {
         render(<MatchTasksCalendar matchId="match1" />)
         expect(mockUseTasks).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', include_record_history: true }))
-        expect(mockUseTasks.mock.calls[0][0]).not.toHaveProperty('attempt_id')
+        expect(requiredAt(mockUseTasks.mock.calls, 0)[0]).not.toHaveProperty('attempt_id')
         expect(mockUseAppointments).toHaveBeenCalledWith(expect.objectContaining({ match_id: 'match1', include_record_history: true }))
-        expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('attempt_id')
-        expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('surrogate_id')
-        expect(mockUseAppointments.mock.calls[0][0]).not.toHaveProperty('intended_parent_id')
+        expect(requiredAt(mockUseAppointments.mock.calls, 0)[0]).not.toHaveProperty('attempt_id')
+        expect(requiredAt(mockUseAppointments.mock.calls, 0)[0]).not.toHaveProperty('surrogate_id')
+        expect(requiredAt(mockUseAppointments.mock.calls, 0)[0]).not.toHaveProperty('intended_parent_id')
     })
 
 })

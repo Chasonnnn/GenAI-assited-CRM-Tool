@@ -25,12 +25,12 @@ vi.mock("@/components/surrogates/tabs/SurrogateTasksTab", () => ({ SurrogateTask
     <button disabled={!canToggleTask(fullTask)} onClick={() => onTaskToggle(fullTask.id, false)}>Complete listed task</button>
 </> }))
 
-const fullTask: TaskRead = {
+const fullTask = {
     id: "task-1", title: "Review screening", description: "Existing screening instructions", task_type: "review",
     surrogate_id: "surrogate-1", surrogate_number: "S10001", intended_parent_id: null, donor_id: null, donor_number: null, donor_type: null, donor_name: null,
     owner_type: "user", owner_id: "another-owner", owner_name: "Owner", created_by_user_id: "user-1", created_by_name: "Creator",
     due_date: "2026-09-10", due_time: null, duration_minutes: null, is_completed: false, completed_at: null, completed_by_name: null, completed_by_user_id: null, created_at: "2026-09-01T00:00:00Z", updated_at: "2026-09-01T00:00:00Z",
-}
+} satisfies TaskRead
 const props = { taskId: fullTask.id, onClose: mocks.close, onSave: mocks.save, onDelete: mocks.remove, isDeleting: false }
 
 describe("TaskDetailDialog", () => {

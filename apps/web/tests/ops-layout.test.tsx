@@ -29,17 +29,10 @@ vi.mock("@/components/app-link", () => ({
     ),
 }))
 
-vi.mock("@/lib/api", () => ({
-    __esModule: true,
-    default: { post: vi.fn() },
-    ApiError: class ApiError extends Error {
-        status: number
-        constructor(message = "", status = 0) {
-            super(message)
-            this.status = status
-        }
-    },
-}))
+vi.mock("@/lib/api", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/lib/api")>()
+    return { ...actual, default: { ...actual.default, post: vi.fn() } }
+})
 
 function renderOpsLayout(queryClient: QueryClient) {
     return render(
@@ -76,7 +69,7 @@ describe("OpsLayout", () => {
 
     it("sends a signed-in user without platform access to the login page with a reason", async () => {
         const { ApiError } = await import("@/lib/api")
-        mockGetPlatformMe.mockRejectedValue(new ApiError("Platform admin access required", 403))
+        mockGetPlatformMe.mockRejectedValue(new ApiError(403, "Forbidden", "Platform admin access required"))
         mockGetPlatformStats.mockResolvedValue({ open_alerts: 0 })
 
         renderOpsLayout(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
@@ -88,7 +81,7 @@ describe("OpsLayout", () => {
 
     it("still sends an MFA-gated 403 to the MFA page", async () => {
         const { ApiError } = await import("@/lib/api")
-        mockGetPlatformMe.mockRejectedValue(new ApiError("MFA required", 403))
+        mockGetPlatformMe.mockRejectedValue(new ApiError(403, "Forbidden", "MFA required"))
         mockGetPlatformStats.mockResolvedValue({ open_alerts: 0 })
 
         renderOpsLayout(new QueryClient({ defaultOptions: { queries: { retry: false } } }))

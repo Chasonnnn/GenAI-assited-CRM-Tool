@@ -1,6 +1,8 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react"
 import { Activity, type ImgHTMLAttributes } from "react"
+import type { FormSchema } from "@/lib/api/forms"
+import type { PlatformFormTemplate } from "@/lib/api/platform"
 import PlatformFormTemplatePage from "../app/ops/templates/forms/[id]/page.client"
 
 const mockUpdate = vi.fn()
@@ -12,7 +14,7 @@ const navigationState = vi.hoisted(() => ({
 }))
 const routerReplace = vi.hoisted(() => vi.fn())
 
-const buildTemplateData = (id = "tpl_form_1", name = "Surrogate Application Form") => ({
+const buildTemplateData = (id = "tpl_form_1", name = "Surrogate Application Form"): PlatformFormTemplate => ({
     id,
     status: "draft",
     current_version: 1,
@@ -59,6 +61,12 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
     useDeletePlatformFormTemplate: () => ({ mutateAsync: mockDelete, isPending: false }),
 }))
 
+function requiredAt<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
+
 describe("PlatformFormTemplatePage", () => {
     beforeEach(() => {
         navigationState.templateId = "tpl_form_1"
@@ -78,13 +86,13 @@ describe("PlatformFormTemplatePage", () => {
     it("lets OPS choose donor templates without changing existing surrogate defaults", async () => {
         mockUpdate.mockResolvedValue({ ...mockTemplateData, current_version: 2 })
         render(<PlatformFormTemplatePage />)
-        fireEvent.click(await screen.findByRole("button", { name: "Add Name field", exact: true }))
-        fireEvent.click(await screen.findByRole("tab", { name: "Settings", exact: true }))
+        fireEvent.click(await screen.findByRole("button", { name: "Add Name field" }))
+        fireEvent.click(await screen.findByRole("tab", { name: "Settings" }))
         const typeSelect = screen.getByRole("combobox", { name: "Template type" })
         expect(typeSelect).toHaveTextContent("Surrogate")
         expect(mockUpdate).not.toHaveBeenCalled()
         fireEvent.mouseDown(typeSelect)
-        const donorOption = await screen.findByRole("option", { name: "Donor", exact: true })
+        const donorOption = await screen.findByRole("option", { name: "Donor" })
         fireEvent.mouseMove(donorOption)
         fireEvent.click(donorOption)
         await waitFor(() => expect(mockUpdate).toHaveBeenLastCalledWith({
@@ -146,10 +154,10 @@ describe("PlatformFormTemplatePage", () => {
         mockUpdate.mockResolvedValue({ ...mockTemplateData, current_version: 2 })
         render(<PlatformFormTemplatePage />)
         fireEvent.click(await screen.findByRole("button", { name: "Select Medical history field" }))
-        fireEvent.click(screen.getByRole("tab", { name: "Advanced", exact: true }))
+        fireEvent.click(screen.getByRole("tab", { name: "Advanced" }))
         const classification = screen.getByRole("combobox", { name: "Data classification" })
         fireEvent.mouseDown(classification)
-        const healthOption = await screen.findByRole("option", { name: "Health", exact: true })
+        const healthOption = await screen.findByRole("option", { name: "Health" })
         fireEvent.mouseMove(healthOption)
         fireEvent.click(healthOption)
         await waitFor(() => expect(mockUpdate).toHaveBeenLastCalledWith({
@@ -341,7 +349,7 @@ describe("PlatformFormTemplatePage", () => {
         const logicSection = screen.getByText("Logic").closest("section")
         expect(logicSection).not.toBeNull()
 
-        const displayRuleSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[0]
+        const displayRuleSelect = requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 0)
         expect(displayRuleSelect).toHaveTextContent("Always show")
         expect(displayRuleSelect).not.toHaveTextContent("none")
 
@@ -350,16 +358,16 @@ describe("PlatformFormTemplatePage", () => {
         fireEvent.mouseMove(nameFieldOption)
         fireEvent.click(nameFieldOption)
 
-        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[0]).toHaveTextContent("Name")
+        expect(requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 0)).toHaveTextContent("Name")
 
-        const operatorSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[1]
+        const operatorSelect = requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 1)
         fireEvent.mouseDown(operatorSelect)
         const notEqualsOption = await screen.findByRole("option", { name: "Does not equal" })
         fireEvent.mouseMove(notEqualsOption)
         fireEvent.click(notEqualsOption)
 
-        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[1]).toHaveTextContent("Does not equal")
-        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[1]).not.toHaveTextContent("not_equals")
+        expect(requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 1)).toHaveTextContent("Does not equal")
+        expect(requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 1)).not.toHaveTextContent("not_equals")
 
         const mappingSection = screen.getByText("Mapping").closest("section")
         expect(mappingSection).not.toBeNull()
@@ -382,7 +390,7 @@ describe("PlatformFormTemplatePage", () => {
         const columnsSection = screen.getByText("Table setup").closest("section")
         expect(columnsSection).not.toBeNull()
 
-        const columnTypeSelect = within(columnsSection as HTMLElement).getAllByRole("combobox")[0]
+        const columnTypeSelect = requiredAt(within(columnsSection as HTMLElement).getAllByRole("combobox"), 0)
         expect(columnTypeSelect).toHaveTextContent("Yes / No")
         expect(columnTypeSelect).not.toHaveTextContent("radio")
 
@@ -391,8 +399,8 @@ describe("PlatformFormTemplatePage", () => {
         fireEvent.mouseMove(longTextOption)
         fireEvent.click(longTextOption)
 
-        expect(within(columnsSection as HTMLElement).getAllByRole("combobox")[0]).toHaveTextContent("Long text")
-        expect(within(columnsSection as HTMLElement).getAllByRole("combobox")[0]).not.toHaveTextContent("textarea")
+        expect(requiredAt(within(columnsSection as HTMLElement).getAllByRole("combobox"), 0)).toHaveTextContent("Long text")
+        expect(requiredAt(within(columnsSection as HTMLElement).getAllByRole("combobox"), 0)).not.toHaveTextContent("textarea")
     })
 
     it("separates template delete in the overflow menu from the page toolbar's Delete page", async () => {
@@ -500,7 +508,7 @@ describe("PlatformFormTemplatePage", () => {
 
         fireEvent.change(screen.getByLabelText("Form name"), { target: { value: "Renamed twice" } })
         await advance(3000)
-        saves[0].finish()
+        requiredAt(saves, 0).finish()
         await advance(10)
         await advance(3000)
         await settleStartedSaves()
@@ -569,7 +577,7 @@ describe("PlatformFormTemplatePage", () => {
             await advance(10)
             expect(screen.queryByRole("dialog", { name: "Publish Form Template" })).not.toBeInTheDocument()
 
-            creates[0].finish()
+            requiredAt(creates, 0).finish()
             await advance(10)
             await advance(5000)
 
@@ -660,7 +668,7 @@ describe("PlatformFormTemplatePage", () => {
 
             view.rerender(renderBuilder("hidden"))
             await advance(10)
-            creates[0].finish()
+            requiredAt(creates, 0).finish()
             await advance(10)
             expect(routerReplace).not.toHaveBeenCalled()
 
@@ -697,7 +705,7 @@ describe("PlatformFormTemplatePage", () => {
             await advance(10)
             view.rerender(renderBuilder("visible"))
             await advance(10)
-            saves[0].finish()
+            requiredAt(saves, 0).finish()
             await advance(10)
             await advance(5000)
 
@@ -709,20 +717,20 @@ describe("PlatformFormTemplatePage", () => {
     })
 
     describe("publish state", () => {
-        const liveSchema = {
+        const liveSchema: FormSchema = {
             pages: [{ title: "Application", fields: [
                 { key: "full_name", label: "Full Name", type: "text", required: true },
             ] }],
             public_title: "Apply today",
         }
         // Same content as liveSchema, with every object's keys in a different order.
-        const reorderedLiveSchema = {
+        const reorderedLiveSchema: FormSchema = {
             public_title: "Apply today",
             pages: [{ fields: [
                 { required: true, type: "text", label: "Full Name", key: "full_name" },
             ], title: "Application" }],
         }
-        const buildPublishedTemplate = (draftSchema: Record<string, unknown>) => ({
+        const buildPublishedTemplate = (draftSchema: FormSchema): PlatformFormTemplate => ({
             ...buildTemplateData(),
             status: "published",
             published_version: 1,

@@ -1781,7 +1781,7 @@ describe('SurrogateDetailPage', () => {
         const dateButton = screen
             .getAllByText('10')
             .map((element) => element.closest('button'))
-            .find((button): button is HTMLButtonElement => Boolean(button) && !button.disabled)
+            .find((button): button is HTMLButtonElement => button !== null && !button.disabled)
         expect(dateButton).toBeDefined()
         fireEvent.click(dateButton!)
         fireEvent.click(screen.getByRole('button', { name: 'Save Date of Birth' }))

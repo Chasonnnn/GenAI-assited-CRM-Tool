@@ -115,7 +115,7 @@ vi.mock('@/lib/hooks/use-import', () => ({
 }))
 
 vi.mock('@/lib/hooks/use-status-change-requests', () => ({
-    useStatusChangeRequests: (...args: unknown[]) => mockUseStatusChangeRequests(...args),
+    useStatusChangeRequests: (...args: Parameters<typeof mockUseStatusChangeRequests>) => mockUseStatusChangeRequests(...args),
     useApproveStatusChangeRequest: () => ({ mutateAsync: mockApproveStatusChange, isPending: false }),
     useRejectStatusChangeRequest: () => ({ mutateAsync: mockRejectStatusChange, isPending: false }),
 }))

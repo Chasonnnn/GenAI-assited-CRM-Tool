@@ -12,11 +12,12 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
+    "typecheck:tests": "tsc --noEmit --incremental false -p tests/tsconfig.json",
     "typecheck:compat": "tsc6 --noEmit",
     "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run",
     "test:watch": "NODE_OPTIONS=--no-experimental-webstorage vitest",
     "test:all": "pnpm run test",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
+    "check": "pnpm run typecheck && pnpm run typecheck:tests && pnpm run lint && pnpm run test",
     "analyze": "next experimental-analyze"
   },
   "dependencies": {
@@ -39,7 +40,7 @@
     "emoji-picker-react": "^4.19.1",
     "lucide-react": "^1.22.0",
     "markdown-it": "14.3.1",
-    "next": "16.3.7",
+    "next": "16.3.8",
     "next-themes": "^0.4.6",
     "qrcode.react": "^4.2.0",
     "react": "19.2.7",
@@ -54,7 +55,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@next/bundle-analyzer": "16.3.7",
+    "@next/bundle-analyzer": "16.3.8",
     "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/react-query-devtools": "^5.101.2",
     "@testing-library/jest-dom": "^6.9.1",

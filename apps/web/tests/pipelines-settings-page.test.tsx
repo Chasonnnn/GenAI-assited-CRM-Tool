@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { assert, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import PipelinesSettingsPage from "../app/(app)/settings/pipelines/page"
 import { DEFAULT_STAGE_SEMANTICS_BY_KEY, STAGE_DEFS } from "@/lib/constants/stages.generated"
+import type { Pipeline, PipelineFeatureConfig, PipelineStage } from "@/lib/api/pipelines"
 
 const mockUseAuth = vi.fn()
 const mockUsePipelines = vi.fn()
@@ -197,7 +198,7 @@ const pipelineFixture = {
                 requires_reason_on_enter: false,
             },
         },
-    ],
+    ] satisfies [PipelineStage, PipelineStage, PipelineStage, PipelineStage],
     feature_config: {
         schema_version: 1,
         journey: {
@@ -210,7 +211,7 @@ const pipelineFixture = {
                     mapped_stage_keys: ["new_unread", "contacted"],
                     is_soft: false,
                 },
-            ],
+            ] satisfies [PipelineFeatureConfig["journey"]["milestones"][number]],
         },
         analytics: {
             funnel_stage_keys: ["new_unread", "contacted"],
@@ -226,7 +227,7 @@ const pipelineFixture = {
     updated_at: new Date().toISOString(),
 }
 
-let currentSurrogatePipeline = pipelineFixture
+let currentSurrogatePipeline: Pipeline = pipelineFixture
 
 const intendedParentPipelineFixture = {
     id: "ip-p1",
@@ -655,16 +656,20 @@ describe("PipelinesSettingsPage", () => {
     it("locks the interview stages in order and hides their removal actions", () => {
         const interviewStages = STAGE_DEFS.filter((stage) =>
             ["interview_scheduled", "reschedule_needed"].includes(stage.stageKey),
-        ).map((stage) => ({
-            ...pipelineFixture.stages[0],
-            id: stage.stageKey,
-            stage_key: stage.stageKey,
-            slug: stage.slug,
-            label: stage.label,
-            color: stage.color,
-            semantics: DEFAULT_STAGE_SEMANTICS_BY_KEY[stage.stageKey],
-            system_role: stage.stageKey,
-        }))
+        ).map((stage) => {
+            const semantics = DEFAULT_STAGE_SEMANTICS_BY_KEY[stage.stageKey]
+            assert.isDefined(semantics)
+            return {
+                ...pipelineFixture.stages[0],
+                id: stage.stageKey,
+                stage_key: stage.stageKey,
+                slug: stage.slug,
+                label: stage.label,
+                color: stage.color,
+                semantics,
+                system_role: stage.stageKey,
+            }
+        })
         currentSurrogatePipeline = {
             ...pipelineFixture,
             stages: [
@@ -1005,6 +1010,7 @@ describe("PipelinesSettingsPage", () => {
             expect(mockApplyPipelineDraft).toHaveBeenCalled()
         })
 
+        assert.isDefined(mockApplyPipelineDraft.mock.calls[0])
         const call = mockApplyPipelineDraft.mock.calls[0][0]
         expect(call.id).toBe("p1")
         expect(call.data.expected_version).toBe(2)
@@ -1355,7 +1361,7 @@ describe("PipelinesSettingsPage", () => {
                     },
                 },
                 pipelineFixture.stages[3],
-            ],
+            ] satisfies [PipelineStage, PipelineStage, PipelineStage, PipelineStage, PipelineStage],
             feature_config: {
                 ...pipelineFixture.feature_config,
                 journey: {
@@ -1520,6 +1526,7 @@ describe("PipelinesSettingsPage", () => {
             expect(mockApplyPipelineDraft).toHaveBeenCalled()
         })
 
+        assert.isDefined(mockApplyPipelineDraft.mock.calls[0])
         const call = mockApplyPipelineDraft.mock.calls[0][0]
         expect(call.data.remaps).toEqual([
             {
@@ -1595,6 +1602,7 @@ describe("PipelinesSettingsPage", () => {
             expect(mockApplyPipelineDraft).toHaveBeenCalled()
         })
 
+        assert.isDefined(mockApplyPipelineDraft.mock.calls[0])
         const call = mockApplyPipelineDraft.mock.calls[0][0]
         expect(call.data.remaps).toEqual([
             {
@@ -1650,6 +1658,7 @@ describe("PipelinesSettingsPage", () => {
             expect(mockApplyPipelineDraft).toHaveBeenCalled()
         })
 
+        assert.isDefined(mockApplyPipelineDraft.mock.calls[0])
         const call = mockApplyPipelineDraft.mock.calls[0][0]
         expect(call.data.remaps).toEqual([
             {

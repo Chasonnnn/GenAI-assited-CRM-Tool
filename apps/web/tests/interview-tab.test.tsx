@@ -1,5 +1,5 @@
 import type { ReactNode, ButtonHTMLAttributes } from 'react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { assert, describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SurrogateInterviewTab } from '../components/surrogates/interviews/InterviewTab'
 import SurrogateInterviewsPage from '@/app/(app)/surrogates/[id]/interviews/page'
@@ -287,19 +287,27 @@ describe('SurrogateInterviewTab', () => {
         permissionState.version = 2
         render(<SurrogateInterviewsPage />)
         expect(screen.queryByRole('button', { name: 'Add Interview' })).not.toBeInTheDocument()
-        fireEvent.click(screen.getAllByText('Phone')[0])
+        const phoneEntry = screen.getAllByText('Phone')[0]
+        assert.isDefined(phoneEntry)
+        fireEvent.click(phoneEntry)
         expect(await screen.findByText('Phone Interview')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /^Edit$/ })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /^Delete$/ })).not.toBeInTheDocument()
-        fireEvent.click(screen.getAllByRole('button', { name: 'General Notes' })[0])
+        const generalNotesButton = screen.getAllByRole('button', { name: 'General Notes' })[0]
+        assert.isDefined(generalNotesButton)
+        fireEvent.click(generalNotesButton)
         expect(screen.queryByRole('button', { name: 'Add general note' })).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'AI Summary' })).toBeDisabled()
-        fireEvent.click(screen.getAllByRole('button', { name: /^Attachments/ })[0])
+        const attachmentsButton = screen.getAllByRole('button', { name: /^Attachments/ })[0]
+        assert.isDefined(attachmentsButton)
+        fireEvent.click(attachmentsButton)
         expect(await screen.findByText('audio.mp3')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Upload' })).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'Transcribe' })).toBeDisabled()
         fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-        fireEvent.click(screen.getAllByRole('button', { name: 'Version History' })[0])
+        const versionHistoryButton = screen.getAllByRole('button', { name: 'Version History' })[0]
+        assert.isDefined(versionHistoryButton)
+        fireEvent.click(versionHistoryButton)
         expect(screen.getByRole('button', { name: 'Restore version' })).toBeDisabled()
     })
 
@@ -308,14 +316,22 @@ describe('SurrogateInterviewTab', () => {
         permissionState.version = 2
         permissionState.permissions.push('edit_surrogates')
         const view = render(<SurrogateInterviewsPage />)
-        fireEvent.click(screen.getAllByText('Phone')[0])
+        const phoneEntry = screen.getAllByText('Phone')[0]
+        assert.isDefined(phoneEntry)
+        fireEvent.click(phoneEntry)
         expect(await screen.findByText('Phone Interview')).toBeInTheDocument()
         expect(screen.getAllByRole('button', { name: /^Delete$/ }).length).toBeGreaterThan(0)
-        fireEvent.click(screen.getAllByRole('button', { name: 'General Notes' })[0])
-        fireEvent.click(screen.getAllByRole('button', { name: 'Add general note' })[0])
+        const generalNotesButton = screen.getAllByRole('button', { name: 'General Notes' })[0]
+        assert.isDefined(generalNotesButton)
+        fireEvent.click(generalNotesButton)
+        const addNoteButton = screen.getAllByRole('button', { name: 'Add general note' })[0]
+        assert.isDefined(addNoteButton)
+        fireEvent.click(addNoteButton)
         expect(screen.getByPlaceholderText('Add a note...')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'AI Summary' })).toBeDisabled()
-        fireEvent.click(screen.getAllByRole('button', { name: /^Edit$/ })[0])
+        const editButton = screen.getAllByRole('button', { name: /^Edit$/ })[0]
+        assert.isDefined(editButton)
+        fireEvent.click(editButton)
         expect(await screen.findByRole('combobox', { name: /interview type/i })).toBeInTheDocument()
         permissionState.permissions = ['view_surrogates']
         view.rerender(<SurrogateInterviewsPage />)
@@ -338,13 +354,19 @@ describe('SurrogateInterviewTab', () => {
         permissionState.version = 2
         permissionState.permissions.push('edit_surrogates', 'use_ai_assistant')
         render(<SurrogateInterviewsPage />)
-        fireEvent.click(screen.getAllByText('Phone')[0])
+        const phoneEntry = screen.getAllByText('Phone')[0]
+        assert.isDefined(phoneEntry)
+        fireEvent.click(phoneEntry)
         expect(await screen.findByRole('button', { name: 'AI Summary' })).toBeEnabled()
-        fireEvent.click(screen.getAllByRole('button', { name: /^Attachments/ })[0])
+        const attachmentsButton = screen.getAllByRole('button', { name: /^Attachments/ })[0]
+        assert.isDefined(attachmentsButton)
+        fireEvent.click(attachmentsButton)
         expect(await screen.findByRole('button', { name: 'Upload' })).toBeEnabled()
         expect(screen.getByRole('button', { name: 'Transcribe' })).toBeEnabled()
         fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-        fireEvent.click(screen.getAllByRole('button', { name: 'Version History' })[0])
+        const versionHistoryButton = screen.getAllByRole('button', { name: 'Version History' })[0]
+        assert.isDefined(versionHistoryButton)
+        fireEvent.click(versionHistoryButton)
         expect(screen.getByRole('button', { name: 'Restore version' })).toBeEnabled()
     })
 
@@ -416,7 +438,9 @@ describe('SurrogateInterviewTab', () => {
     it('requests transcription for audio attachments', async () => {
         render(<SurrogateInterviewTab surrogateId="c1" />)
 
-        fireEvent.click(screen.getAllByText('Phone')[0])
+        const phoneEntry = screen.getAllByText('Phone')[0]
+        assert.isDefined(phoneEntry)
+        fireEvent.click(phoneEntry)
 
         await waitFor(() => {
             expect(screen.getByRole("button", { name: "Interview actions" })).toBeInTheDocument()
@@ -427,7 +451,9 @@ describe('SurrogateInterviewTab', () => {
             expect(screen.getByText('Phone Interview')).toBeDefined()
         })
 
-        fireEvent.click(screen.getAllByRole('button', { name: /^Attachments/ })[0])
+        const attachmentsButton = screen.getAllByRole('button', { name: /^Attachments/ })[0]
+        assert.isDefined(attachmentsButton)
+        fireEvent.click(attachmentsButton)
 
         const transcribeButton = await screen.findByRole('button', { name: /transcribe/i })
         fireEvent.click(transcribeButton)
@@ -450,13 +476,17 @@ describe('SurrogateInterviewTab', () => {
 
         render(<SurrogateInterviewTab surrogateId="c1" />)
 
-        fireEvent.click(screen.getAllByText('Phone')[0])
+        const phoneEntry = screen.getAllByText('Phone')[0]
+        assert.isDefined(phoneEntry)
+        fireEvent.click(phoneEntry)
 
         await waitFor(() => {
             expect(screen.getByText('Phone Interview')).toBeDefined()
         })
 
-        fireEvent.click(screen.getAllByRole('button', { name: /^Attachments/ })[0])
+        const attachmentsButton = screen.getAllByRole('button', { name: /^Attachments/ })[0]
+        assert.isDefined(attachmentsButton)
+        fireEvent.click(attachmentsButton)
 
         const firstFile = new File(["first"], "first.pdf", { type: "application/pdf" })
         const secondFile = new File(["second"], "second.pdf", { type: "application/pdf" })

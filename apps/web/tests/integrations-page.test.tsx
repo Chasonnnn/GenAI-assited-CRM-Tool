@@ -3,8 +3,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within, act, waitFor } from '@testing-library/react'
 import IntegrationsPage from '../app/(app)/settings/integrations/page'
 import { ApiError } from '../lib/api'
+import type { getZapierSettings, getZapierOutboundEvents, ZapierEventMappingItem, ZapierDonorEventMappingItem } from '../lib/api/zapier'
+import type { getMetaCrmDatasetSettings, getMetaCrmDatasetEvents } from '../lib/api/meta-crm-dataset'
+import type { MetaFormSummary } from '../lib/api/meta-forms'
+import type { MetaOAuthConnection } from '../lib/api/meta-oauth'
+import type { MetaAdAccount } from '../lib/api/admin-meta'
 import type { ResendSettings } from '../lib/api/resend'
 import { toast } from '../components/ui/toast'
+
+function requiredItem<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -53,7 +64,7 @@ const mockUpdateResendSettings = vi.fn()
 const mockTestResendKey = vi.fn()
 const mockRotateWebhook = vi.fn()
 
-const createZapierSettingsData = () => ({
+const createZapierSettingsData = (): Awaited<ReturnType<typeof getZapierSettings>> => ({
     webhook_url: 'https://api.test/webhooks/zapier/abc',
     is_active: true,
     secret_configured: true,
@@ -81,7 +92,7 @@ const createZapierSettingsData = () => ({
     donor_event_mapping: null,
 })
 
-const recommendedZapierMapping = [
+const recommendedZapierMapping: ZapierEventMappingItem[] = [
     { stage_key: 'pre_qualified', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
     { stage_key: 'interview_scheduled', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
     { stage_key: 'application_submitted', event_name: 'Qualified', enabled: true, bucket: 'qualified' },
@@ -101,7 +112,7 @@ const recommendedZapierMapping = [
     { stage_key: 'disqualified', event_name: 'Not Qualified', enabled: true, bucket: 'not_qualified' },
 ]
 
-const createMetaCrmDatasetSettingsData = () => ({
+const createMetaCrmDatasetSettingsData = (): Awaited<ReturnType<typeof getMetaCrmDatasetSettings>> => ({
     dataset_id: '1428122951556949',
     access_token_configured: true,
     enabled: true,
@@ -131,7 +142,7 @@ let zapierEventsSummaryData = {
     warning_messages: ['Failure rate is elevated for Zapier outbound events.'],
     window_hours: 24,
 }
-let zapierEventsData = {
+let zapierEventsData: Awaited<ReturnType<typeof getZapierOutboundEvents>> = {
     items: [
         {
             id: 'event-1',
@@ -150,11 +161,12 @@ let zapierEventsData = {
             delivered_at: null,
             last_attempt_at: '2026-03-07T18:05:00Z',
             can_retry: true,
+            can_replay: false,
         },
     ],
     total: 1,
 }
-let metaFormsData = [
+let metaFormsData: MetaFormSummary[] = [
     {
         id: 'meta-form-1',
         form_external_id: 'zapier-abc',
@@ -174,8 +186,8 @@ let metaFormsData = [
         last_lead_at: null,
     },
 ]
-let metaConnectionsData = []
-let metaAdAccountsData = []
+let metaConnectionsData: MetaOAuthConnection[] = []
+let metaAdAccountsData: MetaAdAccount[] = []
 let metaCrmDatasetSettingsData = createMetaCrmDatasetSettingsData()
 let metaCrmDatasetEventsSummaryData = {
     total_count: 4,
@@ -191,7 +203,7 @@ let metaCrmDatasetEventsSummaryData = {
     warning_messages: ['Failure rate is elevated for direct Meta CRM dataset events.'],
     window_hours: 24,
 }
-let metaCrmDatasetEventsData = {
+let metaCrmDatasetEventsData: Awaited<ReturnType<typeof getMetaCrmDatasetEvents>> = {
     items: [
         {
             id: 'meta-event-1',
@@ -616,6 +628,7 @@ describe('IntegrationsPage', () => {
                     delivered_at: null,
                     last_attempt_at: '2026-03-07T18:05:00Z',
                     can_retry: true,
+                    can_replay: false,
                 },
             ],
             total: 1,
@@ -1882,7 +1895,7 @@ describe('IntegrationsPage', () => {
         expect(within(zapierCard as HTMLElement).getByText('Donor mapping configured')).toBeInTheDocument()
     })
 
-    it.each([
+    it.each<[string, ZapierDonorEventMappingItem[]]>([
         ['empty', []],
         ['stale', [
             {
@@ -2057,9 +2070,9 @@ describe('IntegrationsPage', () => {
 
     it('lists every active form as a Zapier route and links to mappings only with manage_meta_leads', () => {
         metaFormsData = [
-            metaFormsData[0],
-            { ...metaFormsData[0], id: 'meta-form-2', form_external_id: '1234567890', form_name: 'Page Intake', page_id: '555', lead_kind: 'egg_donor' as const },
-            { ...metaFormsData[0], id: 'meta-form-3', form_external_id: '999', form_name: 'Retired Intake', page_id: '555', is_active: false },
+            requiredItem(metaFormsData, 0),
+            { ...requiredItem(metaFormsData, 0), id: 'meta-form-2', form_external_id: '1234567890', form_name: 'Page Intake', page_id: '555', lead_kind: 'egg_donor' as const },
+            { ...requiredItem(metaFormsData, 0), id: 'meta-form-3', form_external_id: '999', form_name: 'Retired Intake', page_id: '555', is_active: false },
         ]
         const view = render(<IntegrationsPage />)
         fireEvent.click(screen.getByRole('button', { name: /configure zapier/i }))
@@ -2124,7 +2137,7 @@ describe('IntegrationsPage', () => {
     })
 
     it('defaults the test lead to the only active form when its page is not Zapier', async () => {
-        metaFormsData = [{ ...metaFormsData[0], form_external_id: '1234567890', page_id: '555' }]
+        metaFormsData = [{ ...requiredItem(metaFormsData, 0), form_external_id: '1234567890', page_id: '555' }]
         mockZapierTestLead.mockResolvedValue({
             status: 'converted',
             duplicate: false,
@@ -2162,9 +2175,9 @@ describe('IntegrationsPage', () => {
 
     it('shows real surrogate, egg donor, and sperm donor form routes', () => {
         metaFormsData = [
-            { ...metaFormsData[0], id: 'route-surrogate', form_name: 'Surrogate application', lead_kind: 'surrogate' },
-            { ...metaFormsData[0], id: 'route-egg', form_name: 'Egg donor inquiry', lead_kind: 'egg_donor' },
-            { ...metaFormsData[0], id: 'route-sperm', form_name: 'Sperm donor intake', lead_kind: 'sperm_donor' },
+            { ...requiredItem(metaFormsData, 0), id: 'route-surrogate', form_name: 'Surrogate application', lead_kind: 'surrogate' },
+            { ...requiredItem(metaFormsData, 0), id: 'route-egg', form_name: 'Egg donor inquiry', lead_kind: 'egg_donor' },
+            { ...requiredItem(metaFormsData, 0), id: 'route-sperm', form_name: 'Sperm donor intake', lead_kind: 'sperm_donor' },
         ]
         mockUseEffectivePermissions.mockReturnValue({
             data: { permissions: ['manage_integrations', 'manage_meta_leads', 'view_donors', 'edit_donors'] },
@@ -2291,7 +2304,7 @@ describe('IntegrationsPage', () => {
     })
 
     it('requires an explicit repair before removing stale donor mappings and preserves live entries', async () => {
-        const validMapping = {
+        const validMapping: ZapierDonorEventMappingItem = {
             donor_type: 'sperm', pipeline_id: 'sperm-pipeline-1', stage_id: 'sperm-stage-new',
             event_name: 'Qualified', enabled: true,
         }
@@ -2313,7 +2326,7 @@ describe('IntegrationsPage', () => {
         expect(mockZapierOutboundUpdate.mock.calls[0]?.[0]).not.toHaveProperty('donor_event_mapping')
         mockZapierOutboundUpdate.mockClear()
         fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
-        fireEvent.click(within(dialog).getAllByRole('button', { name: 'Remove unavailable mappings' })[0])
+        fireEvent.click(requiredItem(within(dialog).getAllByRole('button', { name: 'Remove unavailable mappings' }), 0))
         await act(async () => {
             fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
         })
@@ -2341,7 +2354,7 @@ describe('IntegrationsPage', () => {
         const dialog = screen.getByRole('dialog')
         fireEvent.click(within(dialog).getByRole('tab', { name: /stage reporting/i }))
         fireEvent.click(within(dialog).getByRole('tab', { name: 'Egg donors' }))
-        fireEvent.click(within(dialog).getAllByRole('button', { name: 'Remove unavailable mappings' })[0])
+        fireEvent.click(requiredItem(within(dialog).getAllByRole('button', { name: 'Remove unavailable mappings' }), 0))
         await act(async () => {
             fireEvent.click(within(dialog).getByRole('button', { name: 'Save configuration' }))
         })
@@ -2667,7 +2680,7 @@ describe('IntegrationsPage', () => {
     })
 
     it('labels donor skip reasons, sources and test events in zapier activity', () => {
-        const baseEvent = zapierEventsData.items[0]
+        const baseEvent = requiredItem(zapierEventsData.items, 0)
         zapierEventsData = {
             items: [
                 {
@@ -2792,7 +2805,7 @@ describe('IntegrationsPage', () => {
 
     it('uses the active zapier form when sending a test lead', async () => {
         metaFormsData = [{
-            ...metaFormsData[0],
+            ...requiredItem(metaFormsData, 0),
             form_name: 'Egg donor inquiry',
             lead_kind: 'egg_donor',
         }]
@@ -2821,7 +2834,7 @@ describe('IntegrationsPage', () => {
     it('shows zapier monitoring and retries failed events', async () => {
         zapierEventsData = {
             items: [{
-                ...zapierEventsData.items[0],
+                ...requiredItem(zapierEventsData.items, 0),
                 lead_id: null,
                 donor_id: 'donor-1',
                 donor_type: 'egg',
@@ -2834,7 +2847,7 @@ describe('IntegrationsPage', () => {
             total: 1,
         }
         mockRetryZapierOutboundEvent.mockResolvedValue({
-            ...zapierEventsData.items[0],
+            ...requiredItem(zapierEventsData.items, 0),
             status: 'queued',
             can_retry: false,
             attempts: 0,
@@ -2859,7 +2872,7 @@ describe('IntegrationsPage', () => {
     })
 
     it('replays skipped zapier events only when the event allows it', async () => {
-        const baseEvent = zapierEventsData.items[0]
+        const baseEvent = requiredItem(zapierEventsData.items, 0)
         zapierEventsData = {
             items: [
                 {
@@ -2887,8 +2900,8 @@ describe('IntegrationsPage', () => {
         const warning = vi.spyOn(toast, 'warning')
         const error = vi.spyOn(toast, 'error')
         mockReplayZapierOutboundEvent
-            .mockResolvedValueOnce({ ...zapierEventsData.items[0], status: 'queued', reason: null, can_replay: false })
-            .mockResolvedValueOnce({ ...zapierEventsData.items[0], reason: 'unmapped_stage', can_replay: true })
+            .mockResolvedValueOnce({ ...requiredItem(zapierEventsData.items, 0), status: 'queued', reason: null, can_replay: false })
+            .mockResolvedValueOnce({ ...requiredItem(zapierEventsData.items, 0), reason: 'unmapped_stage', can_replay: true })
             .mockRejectedValueOnce(new Error('Event delivery is still in progress'))
             .mockRejectedValueOnce(new Error(''))
 
@@ -2899,21 +2912,21 @@ describe('IntegrationsPage', () => {
 
         const replayButtons = within(dialog).getAllByRole('button', { name: /^replay$/i })
         expect(replayButtons).toHaveLength(2)
-        expect(replayButtons[0]).toBeEnabled()
+        expect(requiredItem(replayButtons, 0)).toBeEnabled()
         expect(replayButtons[1]).toBeDisabled()
         expect(within(dialog).queryByRole('button', { name: /^retry$/i })).not.toBeInTheDocument()
 
-        fireEvent.click(replayButtons[0])
+        fireEvent.click(requiredItem(replayButtons, 0))
         await waitFor(() => expect(success).toHaveBeenCalledWith('Replay queued'))
         expect(mockReplayZapierOutboundEvent).toHaveBeenCalledWith({ eventId: 'event-replayable' })
 
-        fireEvent.click(replayButtons[0])
+        fireEvent.click(requiredItem(replayButtons, 0))
         await waitFor(() => expect(warning).toHaveBeenCalledWith('Replay skipped: Stage not mapped'))
 
-        fireEvent.click(replayButtons[0])
+        fireEvent.click(requiredItem(replayButtons, 0))
         await waitFor(() => expect(error).toHaveBeenCalledWith('Event delivery is still in progress'))
 
-        fireEvent.click(replayButtons[0])
+        fireEvent.click(requiredItem(replayButtons, 0))
         await waitFor(() => expect(error).toHaveBeenCalledWith('Failed to replay outbound event'))
         success.mockRestore()
         warning.mockRestore()
