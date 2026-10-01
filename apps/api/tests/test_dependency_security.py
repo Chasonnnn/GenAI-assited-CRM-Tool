@@ -43,7 +43,7 @@ def test_dependency_pins_match_security_fixes():
         "urllib3": "2.8.0",
     }
     expected_exact_pins = {
-        "fastapi": "0.136.3",
+        "fastapi": "0.142.2",
         "idna": "3.18",
         "pillow": "12.3.0",
         "pydantic-settings": "2.14.2",
