@@ -94,14 +94,14 @@ describe("Dependency security guards", () => {
         const braceExpansionOverride = readPnpmOverrides()["brace-expansion"]
 
         expect(braceExpansionOverride).toBeDefined()
-        expect(compareVersions(braceExpansionOverride!, "5.0.9")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(braceExpansionOverride!, "5.0.12")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins undici to a non-vulnerable version in pnpm overrides", () => {
         const undiciOverride = readPnpmOverrides().undici
 
         expect(undiciOverride).toBeDefined()
-        expect(compareVersions(undiciOverride!, "7.29.0")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(undiciOverride!, "7.29.1")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins DOMPurify to a non-vulnerable version", () => {
@@ -190,8 +190,8 @@ describe("Dependency security guards", () => {
 
         expect(nextVersion).toBeDefined()
         expect(bundleAnalyzerVersion).toBeDefined()
-        expect(compareVersions(nextVersion!, "16.3.3")).toBeGreaterThanOrEqual(0)
-        expect(compareVersions(bundleAnalyzerVersion!, "16.3.3")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(nextVersion!, "16.3.8")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(bundleAnalyzerVersion!, "16.3.8")).toBeGreaterThanOrEqual(0)
     })
 
     it("holds React and TypeScript on the validated compatibility line", () => {
@@ -246,7 +246,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "5.0.9")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "5.0.12")).toBeGreaterThanOrEqual(0)
         }
     })
 
@@ -260,7 +260,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "7.29.0")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "7.29.1")).toBeGreaterThanOrEqual(0)
         }
     })
 
