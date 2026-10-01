@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import String, and_, cast, exists, func, or_
 from sqlalchemy.orm import Session
 
-from app.db.enums import OwnerType, WorkflowExecutionStatus, WorkflowTriggerType
+from app.db.enums import ContactStatus, OwnerType, WorkflowExecutionStatus, WorkflowTriggerType
 from app.db.models import (
     AutomationWorkflow,
     Donor,
@@ -30,11 +30,12 @@ from app.db.models import (
 )
 from app.schemas.donor import normalize_donor_source
 from app.schemas.workflow import (
-    ALLOWED_CONDITION_FIELDS,
     ALLOWED_EMAIL_VARIABLES,
+    CONDITION_FIELDS_BY_ENTITY,
     DONOR_ALLOWED_CONDITION_FIELDS,
     DONOR_ALLOWED_UPDATE_FIELDS,
     SURROGATE_ALLOWED_UPDATE_FIELDS,
+    SURROGATE_CONDITION_FIELDS,
     AddNoteActionConfig,
     AssignDonorActionConfig,
     AssignSurrogateActionConfig,
@@ -513,16 +514,29 @@ def _validate_subject_trigger(
         raise ValueError(f"Subject {subject_type} does not support trigger {trigger_type.value}")
 
 
-def _validate_subject_conditions(subject_type: str, conditions: list[dict]) -> None:
-    if subject_type not in DONOR_SUBJECT_TYPES:
-        return
+def condition_fields_for_trigger(trigger_type: str, subject_type: str) -> frozenset[str]:
+    """Return the condition fields readable on the record a trigger's conditions evaluate."""
+    if subject_type in DONOR_SUBJECT_TYPES:
+        return DONOR_ALLOWED_CONDITION_FIELDS
+    entity_type = TRIGGER_ENTITY_TYPES.get(trigger_type, "surrogate")
+    return CONDITION_FIELDS_BY_ENTITY.get(entity_type, SURROGATE_CONDITION_FIELDS)
+
+
+def _validate_trigger_conditions(
+    trigger_type: WorkflowTriggerType, subject_type: str, conditions: list[dict]
+) -> None:
+    allowed = condition_fields_for_trigger(trigger_type.value, subject_type)
     invalid = sorted(
-        condition.get("field")
-        for condition in conditions
-        if condition.get("field") not in DONOR_ALLOWED_CONDITION_FIELDS
+        {
+            str(condition.get("field"))
+            for condition in conditions
+            if condition.get("field") not in allowed
+        }
     )
     if invalid:
-        raise ValueError(f"Condition fields do not support {subject_type}: {', '.join(invalid)}")
+        raise ValueError(
+            f"Condition fields do not apply to {trigger_type.value}: {', '.join(invalid)}"
+        )
 
 
 def _validate_action_subject_compatibility(
@@ -984,7 +998,7 @@ def create_workflow(
     conditions = _canonicalize_conditions(
         db, org_id, data.conditions, entity_type=stage_entity_type
     )
-    _validate_subject_conditions(subject_type, conditions)
+    _validate_trigger_conditions(data.trigger_type, subject_type, conditions)
 
     # Validate trigger config
     _validate_trigger_config(data.trigger_type, trigger_config)
@@ -1121,7 +1135,10 @@ def update_workflow(
             entity_type=stage_entity_type,
         )
     )
-    _validate_subject_conditions(subject_type, normalized_conditions)
+    # Stored conditions are revalidated only when they or the trigger change, so a
+    # rename does not fail on fields that an older field list allowed.
+    if data.conditions is not None or data.trigger_type is not None:
+        _validate_trigger_conditions(effective_trigger_type, subject_type, normalized_conditions)
 
     if data.trigger_type is not None or data.trigger_config is not None:
         _validate_trigger_config(trigger_type, trigger_config)
@@ -2117,9 +2134,13 @@ def get_workflow_options(
         action_types_by_trigger=action_types_by_trigger,
         trigger_entity_types=trigger_entity_types,
         condition_operators=condition_operators,
-        condition_fields=list(
-            DONOR_ALLOWED_CONDITION_FIELDS if is_donor_subject else ALLOWED_CONDITION_FIELDS
+        condition_fields=sorted(
+            DONOR_ALLOWED_CONDITION_FIELDS if is_donor_subject else SURROGATE_CONDITION_FIELDS
         ),
+        condition_fields_by_trigger={
+            item["value"]: sorted(condition_fields_for_trigger(item["value"], subject_type))
+            for item in trigger_types
+        },
         update_fields=list(
             DONOR_ALLOWED_UPDATE_FIELDS if is_donor_subject else SURROGATE_ALLOWED_UPDATE_FIELDS
         ),
@@ -2683,6 +2704,10 @@ def _validate_action_config(
         )
         if config.field not in allowed_fields:
             raise ValueError(f"Field '{config.field}' is not allowed for {record_type}")
+        if config.field == "contact_status" and config.value not in {
+            status.value for status in ContactStatus
+        }:
+            raise ValueError("Contact status must be reached or unreached")
         if config.field == "stage_id":
             stage_entity_type = _stage_pipeline_entity_type(record_type)
             resolved = _resolve_stage_ref(

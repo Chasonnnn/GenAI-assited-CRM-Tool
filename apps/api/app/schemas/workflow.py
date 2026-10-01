@@ -17,72 +17,116 @@ from app.db.enums import (
 # Field Registry (Whitelist for conditions and updates)
 # =============================================================================
 
-ALLOWED_CONDITION_FIELDS = {
-    # Basic fields
-    "status_label",
-    "stage_id",
-    "source",
-    "is_priority",
-    "state",
-    "created_at",
-    # Owner fields
-    "owner_type",
-    "owner_id",
-    "form_id",
-    "status",
-    "source_mode",
-    "lead_kind",
-    "match_status",
-    # Contact fields
-    "email",
-    "phone",
-    "full_name",
-    # Demographics
-    "age",
-    "bmi",
-    "date_of_birth",
-    "race",
-    # Eligibility flags
-    "has_child",
-    "is_citizen_or_pr",
-    "is_non_smoker",
-    "has_surrogate_experience",
-    "is_age_eligible",
-    "journey_timing_preference",
-    # Physical measurements
-    "height_ft",
-    "weight_lb",
-    "num_deliveries",
-    "num_csections",
-    # Meta tracking
-    "meta_lead_id",
-    "meta_ad_external_id",
-    "meta_form_id",
-    # Donor fields
-    "education",
-    "donor_type",
-    "donor_number",
+# Condition fields by the record a workflow's conditions read. Task, note, and document
+# triggers read their linked surrogate or donor, so they use the subject's fields.
+SURROGATE_CONDITION_FIELDS = frozenset(
+    {
+        "status_label",
+        "stage_id",
+        "source",
+        "is_priority",
+        "state",
+        "created_at",
+        "owner_type",
+        "owner_id",
+        "email",
+        "phone",
+        "full_name",
+        "date_of_birth",
+        "race",
+        "marital_status",
+        "has_child",
+        "is_citizen_or_pr",
+        "is_non_smoker",
+        "has_surrogate_experience",
+        "is_age_eligible",
+        "journey_timing_preference",
+        "height_ft",
+        "weight_lb",
+        "num_deliveries",
+        "num_csections",
+        "contact_status",
+        "last_contacted_at",
+        "assigned_at",
+        "is_archived",
+        "embryo_stage",
+        "pregnancy_due_date",
+        "actual_delivery_date",
+        "meta_lead_id",
+        "meta_ad_external_id",
+        "meta_form_id",
+    }
+)
+
+DONOR_ALLOWED_CONDITION_FIELDS = frozenset(
+    {
+        "status_label",
+        "stage_id",
+        "source",
+        "state",
+        "created_at",
+        "owner_type",
+        "owner_id",
+        "email",
+        "phone",
+        "full_name",
+        "education",
+        "donor_type",
+        "donor_number",
+        "date_of_birth",
+        "race",
+        "marital_status",
+        "height_ft",
+        "weight_lb",
+        "college",
+        "nicotine",
+        "cannabis",
+        "infectious_disease",
+        "previous_donation",
+        "is_archived",
+    }
+)
+
+FORM_SUBMISSION_CONDITION_FIELDS = frozenset(
+    {"form_id", "status", "source_mode", "lead_kind", "match_status", "stage_id", "submitted_at"}
+)
+
+INTAKE_LEAD_CONDITION_FIELDS = frozenset(
+    {
+        "form_id",
+        "status",
+        "lead_kind",
+        "source",
+        "full_name",
+        "email",
+        "phone",
+        "stage_id",
+        "created_at",
+    }
+)
+
+MATCH_CONDITION_FIELDS = frozenset({"status", "match_kind", "outcome", "created_at"})
+
+APPOINTMENT_CONDITION_FIELDS = frozenset(
+    {"status", "appointment_type_id", "meeting_mode", "scheduled_start", "created_at"}
+)
+
+CONDITION_FIELDS_BY_ENTITY: dict[str, frozenset[str]] = {
+    "surrogate": SURROGATE_CONDITION_FIELDS,
+    "form_submission": FORM_SUBMISSION_CONDITION_FIELDS,
+    "intake_lead": INTAKE_LEAD_CONDITION_FIELDS,
+    "match": MATCH_CONDITION_FIELDS,
+    "appointment": APPOINTMENT_CONDITION_FIELDS,
 }
 
-DONOR_ALLOWED_CONDITION_FIELDS = {
-    "status_label",
-    "stage_id",
-    "source",
-    "state",
-    "created_at",
-    "owner_type",
-    "owner_id",
-    "email",
-    "phone",
-    "full_name",
-    "education",
-    "donor_type",
-    "donor_number",
-}
+ALLOWED_CONDITION_FIELDS = frozenset().union(
+    DONOR_ALLOWED_CONDITION_FIELDS, *CONDITION_FIELDS_BY_ENTITY.values()
+)
 
 SURROGATE_ALLOWED_UPDATE_FIELDS = {
     "stage_id",
     "is_priority",
+    "contact_status",
     "owner_type",
     "owner_id",
 }
@@ -567,6 +611,7 @@ class WorkflowOptions(BaseModel):
     trigger_entity_types: dict[str, str] | None = None
     condition_operators: list[dict]
     condition_fields: list[str]
+    condition_fields_by_trigger: dict[str, list[str]]
     update_fields: list[str]
     email_variables: list[str]
     email_templates: list[dict]  # {id, name}

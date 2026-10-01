@@ -396,6 +396,12 @@ class WorkflowEngineCore:
                 logger.warning(f"Donor subject {subject_type}:{subject_id} is invalid")
                 return None
             condition_entity = donor
+        elif subject_type == "surrogate" and entity_type in {"task", "note", "document"}:
+            # Conditions describe the subject record, as they do for donor subjects. An
+            # unlinked legacy task keeps evaluating against itself.
+            surrogate = self.adapter.get_entity(db, "surrogate", subject_id)
+            if surrogate is not None and surrogate.organization_id == workflow.organization_id:
+                condition_entity = surrogate
 
         try:
             authority_snapshot = workflow_execution_authority.execution_snapshot(db, workflow)

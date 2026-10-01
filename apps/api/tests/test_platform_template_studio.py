@@ -608,10 +608,10 @@ async def test_platform_workflow_template_donor_subject_publish_gate(
     [
         (
             {
-                "conditions": [{"field": "age", "operator": "greater_than", "value": 21}],
+                "conditions": [{"field": "num_deliveries", "operator": "greater_than", "value": 1}],
                 "actions": [{"action_type": "add_note", "content": "Review donor"}],
             },
-            "Condition fields do not support egg_donor",
+            "Condition fields do not apply to",
         ),
         (
             {

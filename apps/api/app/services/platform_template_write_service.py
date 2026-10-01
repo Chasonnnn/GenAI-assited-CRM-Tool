@@ -221,8 +221,8 @@ def validate_template(kind, draft, *, publishing=True, portable=True):
         )
         canonical["subject_type"] = resolved_subject_type
         try:
-            workflow_service._validate_subject_conditions(
-                resolved_subject_type, canonical["conditions"]
+            workflow_service._validate_trigger_conditions(
+                trigger, resolved_subject_type, canonical["conditions"]
             )
         except ValueError as exc:
             raise TemplateInputError(f"draft.conditions: {exc}") from None
