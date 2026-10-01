@@ -208,6 +208,19 @@ def _raise_if_source_ineligible(db: Session, delivery: EmailDelivery) -> None:
                 "invite_ineligible",
                 "invite_ineligible",
             )
+    elif email_log.source_type == "notification_email":
+        from app.services import notification_email_service
+
+        if not notification_email_service.is_notification_email_delivery_eligible(
+            db,
+            delivery.organization_id,
+            email_log.source_id,
+            email_log.recipient_email,
+        ):
+            raise DeliveryNoLongerEligible(
+                "notification_email_ineligible",
+                "notification_email_ineligible",
+            )
     elif email_log.source_type == "appointment_email":
         if email_log.source_id is None:
             raise DeliveryConfigurationError("Appointment email delivery source is missing")
