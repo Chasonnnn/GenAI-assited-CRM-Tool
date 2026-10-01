@@ -88,7 +88,7 @@ class EmailTemplateLibraryDetail(EmailTemplateLibraryItem):
 
 
 class PlatformFormTemplateDraft(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(validate_by_name=True, validate_by_alias=True)
     name: str = Field(max_length=150)
     description: str | None = None
     form_schema: FormSchema | None = Field(default=None, alias="schema_json")
@@ -100,7 +100,7 @@ class PlatformFormTemplateCreate(PlatformFormTemplateDraft):
 
 
 class PlatformFormTemplateUpdate(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(validate_by_name=True, validate_by_alias=True)
     name: str | None = Field(default=None, max_length=150)
     description: str | None = None
     form_schema: FormSchema | None = Field(default=None, alias="schema_json")
@@ -142,7 +142,7 @@ class FormTemplateLibraryItem(BaseModel):
 
 
 class FormTemplateLibraryDetail(FormTemplateLibraryItem):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(validate_by_name=True, validate_by_alias=True)
     form_schema: FormSchema | None = Field(alias="schema_json")
     settings_json: dict | None
 

@@ -6,7 +6,45 @@ from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
 from app.core.deps import COOKIE_NAME
 from app.core.security import create_session_token
 from app.db.enums import Role
+from app.schemas.platform_templates import (
+    FormTemplateLibraryDetail,
+    PlatformFormTemplateDraft,
+    PlatformFormTemplateUpdate,
+)
 from app.services import session_service
+
+
+@pytest.mark.parametrize(
+    "schema_type,base_values",
+    [
+        (PlatformFormTemplateDraft, {"name": "Synthetic template"}),
+        (PlatformFormTemplateUpdate, {"expected_version": 1}),
+        (
+            FormTemplateLibraryDetail,
+            {
+                "id": uuid.uuid4(),
+                "name": "Synthetic template",
+                "description": None,
+                "published_at": None,
+                "updated_at": "2026-09-30T00:00:00Z",
+                "settings_json": None,
+            },
+        ),
+    ],
+)
+def test_form_template_schema_accepts_alias_and_name(schema_type, base_values):
+    """Inputs accept both spellings; the public alias retains precedence and serialization."""
+    form_schema = {"pages": [{"title": "Synthetic page", "fields": []}]}
+    for key in ("form_schema", "schema_json"):
+        model = schema_type.model_validate({**base_values, key: form_schema})
+        assert model.form_schema.pages[0].title == "Synthetic page"
+        public = model.model_dump(by_alias=True)
+        assert public["schema_json"]["pages"][0]["title"] == "Synthetic page"
+        assert "form_schema" not in public
+    model = schema_type.model_validate(
+        {**base_values, "schema_json": form_schema, "form_schema": {"pages": []}}
+    )
+    assert model.form_schema.pages[0].title == "Synthetic page"
 
 
 async def _make_authed_client(db, user_id, org_id):
