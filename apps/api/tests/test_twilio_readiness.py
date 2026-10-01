@@ -300,6 +300,8 @@ async def test_operational_only_toll_free_readiness_is_scoped_to_authenticated_o
     assert operational["sender_type"] == "toll_free"
     assert operational["toll_free_verification_status"] == "TWILIO_APPROVED"
     assert ready["provider"]["routes"]["promotional"]["status"] == "not_configured"
+    assert {gate["status"] for gate in ready["gates"]} <= {"pass", "skipped"}
+    assert [gate["key"] for gate in ready["gates"] if gate["route"] == "promotional"] == []
 
     other = Organization(id=uuid4(), name="Other Agency", slug=f"other-{uuid4().hex}")
     db.add(other)
@@ -780,3 +782,105 @@ async def test_settings_version_change_invalidates_cached_provider_readiness(
     assert readiness.checked_at is None
     assert readiness.provider.checked_at is None
     assert readiness.provider.credentials_valid is False
+
+
+def _operational_gates(settings, **overrides):
+    from app.services.twilio_readiness_service import build_readiness_gates, route_send_blockers
+
+    route = _route_by_purpose(settings, "operational")
+    kwargs = {
+        "route_blockers": {"operational": route_send_blockers(settings, route)},
+        "snapshot": {"credentials_valid": True},
+        "credentials_valid": True,
+        "account_status": "active",
+    }
+    kwargs.update(overrides)
+    return {gate.key: gate for gate in build_readiness_gates(settings, **kwargs)}
+
+
+def test_readiness_gates_mirror_toll_free_blockers(toll_free_settings):
+    route = _route_by_purpose(toll_free_settings, "operational")
+    route.sender_phone_last4 = "0199"
+
+    gates = _operational_gates(toll_free_settings)
+
+    assert list(gates) == [
+        "messaging_enabled",
+        "connection",
+        "consent_record",
+        "counsel_approval",
+        "dispatch_worker",
+        "operational_route",
+        "operational_sender_registration",
+        "operational_advanced_opt_out",
+        "operational_consent_api",
+        "operational_provider_evidence",
+    ]
+    assert gates["operational_consent_api"].status == "skipped"
+    assert all(
+        gate.status == "pass" for key, gate in gates.items() if key != "operational_consent_api"
+    )
+    assert gates["operational_sender_registration"].label == "Toll-free verification"
+    assert gates["operational_route"].detail == "+1•••0199 · toll-free"
+    assert gates["connection"].detail == "Account AC11...1111 is active."
+    assert all(
+        gate.route == "operational" for key, gate in gates.items() if key.startswith("operational_")
+    )
+
+
+@pytest.mark.parametrize("status", ["IN_REVIEW", "TWILIO_REJECTED"])
+def test_readiness_gates_flag_unapproved_toll_free(toll_free_settings, status):
+    route = _route_by_purpose(toll_free_settings, "operational")
+    route.capability_evidence["provider"]["toll_free_verification_status"] = status
+
+    gates = _operational_gates(toll_free_settings)
+
+    assert gates["operational_sender_registration"].status == "fail"
+    assert "TWILIO_APPROVED" in str(gates["operational_sender_registration"].detail)
+    assert gates["operational_provider_evidence"].status == "pass"
+
+
+def test_readiness_gates_pend_until_evidence_matches_the_settings_version(toll_free_settings):
+    route = _route_by_purpose(toll_free_settings, "operational")
+    route.capability_evidence["provider"]["settings_version"] = 0
+
+    gates = _operational_gates(toll_free_settings, snapshot=None, credentials_valid=False)
+
+    assert gates["connection"].status == "pending"
+    assert gates["operational_sender_registration"].status == "pending"
+    assert gates["operational_provider_evidence"].status == "pending"
+    assert gates["operational_advanced_opt_out"].status == "pass"
+
+
+def test_readiness_gates_flag_disabled_dispatch_worker(toll_free_settings, monkeypatch):
+    monkeypatch.setenv("MESSAGING_DELIVERY_DISPATCH_ENABLED", "false")
+
+    gates = _operational_gates(toll_free_settings)
+
+    assert gates["dispatch_worker"].status == "fail"
+    assert gates["dispatch_worker"].detail == "The messaging dispatch worker is disabled."
+
+
+def test_readiness_gates_use_a2p_and_consent_api_for_10dlc(toll_free_settings):
+    route = _route_by_purpose(toll_free_settings, "operational")
+    provider = route.capability_evidence["provider"]
+    provider.update(
+        {"sender_type": "10dlc", "a2p_status": "VERIFIED", "toll_free_verification_status": None}
+    )
+    route.consent_management_status = "unavailable"
+
+    gates = _operational_gates(toll_free_settings)
+
+    assert gates["operational_sender_registration"].label == "A2P campaign"
+    assert gates["operational_sender_registration"].status == "pass"
+    assert gates["operational_consent_api"].status == "fail"
+
+
+def test_readiness_gates_include_an_enabled_but_unconfigured_promotional_route(toll_free_settings):
+    _route_by_purpose(toll_free_settings, "promotional").enabled = True
+
+    gates = _operational_gates(toll_free_settings)
+
+    assert gates["promotional_route"].status == "fail"
+    assert gates["promotional_route"].route == "promotional"
+    assert "promotional_sender_registration" not in gates
