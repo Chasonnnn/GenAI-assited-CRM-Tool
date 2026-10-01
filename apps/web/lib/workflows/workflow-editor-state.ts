@@ -613,3 +613,56 @@ export function workflowBuilderReducer(state: WorkflowBuilderState, action: Work
             return state
     }
 }
+
+// Trigger types that fire on time rather than on a record event; the editor groups them under
+// "Date or scheduled" like the reference layout.
+export const TIME_TRIGGER_TYPES = new Set(["scheduled", "inactivity", "task_due", "task_overdue"])
+
+export type ScheduleFrequency = "daily" | "weekdays" | "weekly" | "custom"
+
+export type SimpleSchedule = {
+    frequency: ScheduleFrequency
+    /** HH:MM, 24-hour. */
+    time: string
+    /** 0 (Sunday) to 6; used when frequency is weekly. */
+    dayOfWeek: number
+}
+
+export const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const
+
+/**
+ * Reads a cron string into the presets the editor offers. The presets stay inside the subset
+ * that schemas.workflow.is_supported_simple_cron accepts; anything else is "custom".
+ */
+export function parseSimpleCron(cron: string): SimpleSchedule | null {
+    const trimmed = cron.trim()
+    if (!trimmed) return null
+    const match = /^(\d{1,2}) (\d{1,2}) \* \* (\*|1-5|[0-7])$/.exec(trimmed)
+    if (!match) return { frequency: "custom", time: "09:00", dayOfWeek: 1 }
+    const [, minuteText = "0", hourText = "0", dayText = "*"] = match
+    const minute = Number(minuteText)
+    const hour = Number(hourText)
+    if (minute > 59 || hour > 23) return { frequency: "custom", time: "09:00", dayOfWeek: 1 }
+    const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+    if (dayText === "*") return { frequency: "daily", time, dayOfWeek: 1 }
+    if (dayText === "1-5") return { frequency: "weekdays", time, dayOfWeek: 1 }
+    return { frequency: "weekly", time, dayOfWeek: Number(dayText) % 7 }
+}
+
+export function buildSimpleCron(schedule: SimpleSchedule): string {
+    const [hourText = "9", minuteText = "0"] = schedule.time.split(":")
+    const hour = Math.min(Math.max(Number(hourText) || 0, 0), 23)
+    const minute = Math.min(Math.max(Number(minuteText) || 0, 0), 59)
+    const day =
+        schedule.frequency === "weekdays" ? "1-5" : schedule.frequency === "weekly" ? String(schedule.dayOfWeek) : "*"
+    return `${minute} ${hour} * * ${day}`
+}
+
+export function describeSchedule(cron: string): string | null {
+    const schedule = parseSimpleCron(cron)
+    if (!schedule) return null
+    if (schedule.frequency === "custom") return `Cron ${cron.trim()}`
+    if (schedule.frequency === "daily") return `Every day at ${schedule.time}`
+    if (schedule.frequency === "weekdays") return `Every weekday at ${schedule.time}`
+    return `Every ${WEEKDAY_LABELS[schedule.dayOfWeek]} at ${schedule.time}`
+}
