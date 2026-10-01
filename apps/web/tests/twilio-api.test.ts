@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
     getTwilioReadiness,
     getTwilioSettings,
+    queueTwilioReadinessCheck,
     testTwilioCredentials,
     updateTwilioSettings,
 } from "@/lib/api/twilio"
@@ -81,5 +82,14 @@ describe("Twilio configuration API", () => {
         await testTwilioCredentials(request)
 
         expect(mockPost).toHaveBeenCalledWith("/twilio/settings/test", request)
+    })
+
+    it("queues a provider readiness check without a request body", async () => {
+        mockPost.mockResolvedValue({ check_status: "queued", queued_at: "2026-09-30T06:12:00Z" })
+
+        const response = await queueTwilioReadinessCheck()
+
+        expect(mockPost).toHaveBeenCalledWith("/twilio/readiness")
+        expect(response.check_status).toBe("queued")
     })
 })

@@ -123,6 +123,8 @@ const readiness: TwilioReadiness = {
                 can_send_sms: true,
                 can_send_mms: true,
                 can_receive: true,
+                sender_type: "10dlc",
+                toll_free_verification_status: null,
                 issues: [],
             },
             promotional: {
@@ -130,6 +132,8 @@ const readiness: TwilioReadiness = {
                 can_send_sms: false,
                 can_send_mms: false,
                 can_receive: true,
+                sender_type: "10dlc",
+                toll_free_verification_status: null,
                 issues: ["A2P registration is pending."],
             },
         },
@@ -157,6 +161,7 @@ const readiness: TwilioReadiness = {
             route: "promotional",
         },
     ],
+    gates: [],
 }
 
 describe("Messaging integration settings page", () => {

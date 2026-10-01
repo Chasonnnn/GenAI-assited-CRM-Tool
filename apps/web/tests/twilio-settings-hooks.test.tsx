@@ -6,11 +6,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
     getTwilioReadiness,
     getTwilioSettings,
+    queueTwilioReadinessCheck,
     updateTwilioSettings,
+    type TwilioReadiness,
     type TwilioSettings,
 } from "@/lib/api/twilio"
 import {
+    READINESS_POLL_INTERVAL_MS,
+    READINESS_POLL_TIMEOUT_MS,
+    readinessPollInterval,
     twilioKeys,
+    useQueueTwilioReadinessCheck,
     useTwilioReadiness,
     useTwilioSettings,
     useUpdateTwilioSettings,
@@ -24,6 +30,7 @@ vi.mock("@/lib/api/twilio", async (importOriginal) => {
         ...actual,
         getTwilioSettings: vi.fn(),
         getTwilioReadiness: vi.fn(),
+        queueTwilioReadinessCheck: vi.fn(),
         updateTwilioSettings: vi.fn(),
     }
 })
@@ -101,6 +108,7 @@ describe("Twilio settings hooks", () => {
     beforeEach(() => {
         vi.mocked(getTwilioSettings).mockReset()
         vi.mocked(getTwilioReadiness).mockReset()
+        vi.mocked(queueTwilioReadinessCheck).mockReset()
         vi.mocked(updateTwilioSettings).mockReset()
     })
 
@@ -148,5 +156,88 @@ describe("Twilio settings hooks", () => {
         })
 
         expect(queryClient.getQueryData(twilioKeys.settings())).toEqual(savedSettings)
+    })
+
+    it("replaces cached readiness with the snapshot returned when a check is queued", async () => {
+        const queuedReadiness = {
+            overall_status: "unknown",
+            checked_at: null,
+            provider: {
+                status: "unknown",
+                credentials_valid: false,
+                account_status: null,
+                checked_at: null,
+                capabilities: {
+                    send_sms: false,
+                    send_mms: false,
+                    receive_sms: false,
+                    receive_mms: false,
+                    status_callbacks: false,
+                },
+                routes: {},
+            },
+            local: {
+                queue: {
+                    status: "ready",
+                    queued_count: 0,
+                    processing_count: 0,
+                    failed_count: 0,
+                    oldest_queued_at: null,
+                },
+                reconciliation: {
+                    status: "ready",
+                    action_required_count: 0,
+                    unresolved_event_count: 0,
+                    last_reconciled_at: null,
+                },
+            },
+            issues: [],
+            gates: [],
+        } as unknown as TwilioReadiness
+        vi.mocked(queueTwilioReadinessCheck).mockResolvedValue({
+            check_status: "queued",
+            queued_at: "2026-09-30T06:12:00Z",
+            readiness: queuedReadiness,
+        })
+        const queryClient = createQueryClient()
+        const view = renderHook(() => useQueueTwilioReadinessCheck(), {
+            wrapper: wrapperFor(queryClient),
+        })
+
+        await act(async () => {
+            await view.result.current.mutateAsync()
+        })
+
+        expect(queueTwilioReadinessCheck).toHaveBeenCalledTimes(1)
+        expect(queryClient.getQueryData(twilioKeys.readiness())).toEqual(queuedReadiness)
+    })
+})
+
+describe("readinessPollInterval", () => {
+    const queuedAt = "2026-09-30T06:12:00Z"
+    const now = Date.parse(queuedAt) + 10 * 1000
+    const readinessCheckedAt = (checkedAt: string | null) =>
+        ({ provider: { checked_at: checkedAt } }) as TwilioReadiness
+
+    it("does not poll unless a check is outstanding", () => {
+        expect(readinessPollInterval(readinessCheckedAt(null), null, now)).toBe(false)
+    })
+
+    it("polls until evidence checked after the queue time arrives", () => {
+        expect(readinessPollInterval(undefined, queuedAt, now)).toBe(READINESS_POLL_INTERVAL_MS)
+        expect(readinessPollInterval(readinessCheckedAt(null), queuedAt, now)).toBe(
+            READINESS_POLL_INTERVAL_MS,
+        )
+        expect(
+            readinessPollInterval(readinessCheckedAt("2026-09-30T06:11:00Z"), queuedAt, now),
+        ).toBe(READINESS_POLL_INTERVAL_MS)
+        expect(
+            readinessPollInterval(readinessCheckedAt("2026-09-30T06:12:05Z"), queuedAt, now),
+        ).toBe(false)
+    })
+
+    it("stops polling a check that never reported back", () => {
+        const later = Date.parse(queuedAt) + READINESS_POLL_TIMEOUT_MS + 1
+        expect(readinessPollInterval(readinessCheckedAt(null), queuedAt, later)).toBe(false)
     })
 })
