@@ -1,7 +1,7 @@
 "use client"
 
 import type * as React from "react"
-import type { Editor } from "@tiptap/react"
+import { useEditorState, type Editor } from "@tiptap/react"
 import {
     AlignCenterIcon,
     AlignLeftIcon,
@@ -56,6 +56,23 @@ export function RichTextEditorToolbar({
     submitLabel,
     isSubmitting,
 }: RichTextEditorToolbarProps) {
+    const toolbarState = useEditorState({
+        editor,
+        selector: ({ editor: currentEditor }) => ({
+            isBold: currentEditor.isActive("bold"),
+            isItalic: currentEditor.isActive("italic"),
+            isUnderline: currentEditor.isActive("underline"),
+            isBulletList: currentEditor.isActive("bulletList"),
+            isOrderedList: currentEditor.isActive("orderedList"),
+            isLink: currentEditor.isActive("link"),
+            isAlignLeft: currentEditor.isActive({ textAlign: "left" }),
+            isAlignCenter: currentEditor.isActive({ textAlign: "center" }),
+            isAlignRight: currentEditor.isActive({ textAlign: "right" }),
+            canUndo: currentEditor.can().undo(),
+            canRedo: currentEditor.can().redo(),
+        }),
+    })
+
     const addLink = () => {
         const previousUrl = editor.getAttributes("link").href || ""
         const url = window.prompt("Enter URL:", previousUrl)
@@ -86,7 +103,7 @@ export function RichTextEditorToolbar({
                     <Toggle
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
-                        pressed={editor.isActive("bold")}
+                        pressed={toolbarState.isBold}
                         onPressedChange={() => editor.chain().focus().toggleBold().run()}
                         aria-label="Bold"
                     >
@@ -95,7 +112,7 @@ export function RichTextEditorToolbar({
                     <Toggle
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
-                        pressed={editor.isActive("italic")}
+                        pressed={toolbarState.isItalic}
                         onPressedChange={() => editor.chain().focus().toggleItalic().run()}
                         aria-label="Italic"
                     >
@@ -104,7 +121,7 @@ export function RichTextEditorToolbar({
                     <Toggle
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
-                        pressed={editor.isActive("underline")}
+                        pressed={toolbarState.isUnderline}
                         onPressedChange={() => editor.chain().focus().toggleUnderline().run()}
                         aria-label="Underline"
                     >
@@ -115,7 +132,7 @@ export function RichTextEditorToolbar({
                     <Toggle
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
-                        pressed={editor.isActive("bulletList")}
+                        pressed={toolbarState.isBulletList}
                         onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
                         aria-label="Bullet List"
                     >
@@ -124,7 +141,7 @@ export function RichTextEditorToolbar({
                     <Toggle
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
-                        pressed={editor.isActive("orderedList")}
+                        pressed={toolbarState.isOrderedList}
                         onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
                         aria-label="Ordered List"
                     >
@@ -135,7 +152,7 @@ export function RichTextEditorToolbar({
                     <Toggle
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
-                        pressed={editor.isActive("link")}
+                        pressed={toolbarState.isLink}
                         onPressedChange={addLink}
                         aria-label="Add Link"
                     >
@@ -164,7 +181,7 @@ export function RichTextEditorToolbar({
                     <Toggle
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
-                        pressed={editor.isActive({ textAlign: "left" })}
+                        pressed={toolbarState.isAlignLeft}
                         onPressedChange={() => editor.chain().focus().setTextAlign("left").run()}
                         aria-label="Align Left"
                     >
@@ -173,7 +190,7 @@ export function RichTextEditorToolbar({
                     <Toggle
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
-                        pressed={editor.isActive({ textAlign: "center" })}
+                        pressed={toolbarState.isAlignCenter}
                         onPressedChange={() => editor.chain().focus().setTextAlign("center").run()}
                         aria-label="Align Center"
                     >
@@ -182,7 +199,7 @@ export function RichTextEditorToolbar({
                     <Toggle
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
-                        pressed={editor.isActive({ textAlign: "right" })}
+                        pressed={toolbarState.isAlignRight}
                         onPressedChange={() => editor.chain().focus().setTextAlign("right").run()}
                         aria-label="Align Right"
                     >
@@ -194,7 +211,7 @@ export function RichTextEditorToolbar({
                         variant="ghost"
                         size="sm"
                         onClick={() => editor.chain().focus().undo().run()}
-                        disabled={!editor.can().undo()}
+                        disabled={!toolbarState.canUndo}
                         className={TOOLBAR_ITEM_CLASS}
                         aria-label="Undo"
                     >
@@ -204,7 +221,7 @@ export function RichTextEditorToolbar({
                         variant="ghost"
                         size="sm"
                         onClick={() => editor.chain().focus().redo().run()}
-                        disabled={!editor.can().redo()}
+                        disabled={!toolbarState.canRedo}
                         className={TOOLBAR_ITEM_CLASS}
                         aria-label="Redo"
                     >

@@ -14,7 +14,7 @@
  * - Returns TipTap JSON (canonical format)
  */
 
-import { useEditor, EditorContent, Mark, mergeAttributes, type JSONContent } from '@tiptap/react'
+import { useEditor, useEditorState, EditorContent, Mark, mergeAttributes, type JSONContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -187,6 +187,24 @@ export function TranscriptEditor({
 
     useSyncTipTapJsonContent(editor, content)
 
+    const toolbarState = useEditorState({
+        editor,
+        selector: ({ editor: currentEditor }) => ({
+            isHeading1: currentEditor?.isActive('heading', { level: 1 }) ?? false,
+            isHeading2: currentEditor?.isActive('heading', { level: 2 }) ?? false,
+            isHeading3: currentEditor?.isActive('heading', { level: 3 }) ?? false,
+            isBold: currentEditor?.isActive('bold') ?? false,
+            isItalic: currentEditor?.isActive('italic') ?? false,
+            isUnderline: currentEditor?.isActive('underline') ?? false,
+            isBulletList: currentEditor?.isActive('bulletList') ?? false,
+            isOrderedList: currentEditor?.isActive('orderedList') ?? false,
+            isLink: currentEditor?.isActive('link') ?? false,
+            canUndo: currentEditor?.can().undo() ?? false,
+            canRedo: currentEditor?.can().redo() ?? false,
+            hasSelection: currentEditor ? !currentEditor.state.selection.empty : false,
+        }),
+    })
+
     const addLink = () => {
         if (!editor) return
         const previousUrl = editor.getAttributes('link').href || ''
@@ -223,10 +241,7 @@ export function TranscriptEditor({
         onAddComment(selectedText, commentId)
     }
 
-    // Check if user has selected text
-    const hasSelection = editor?.state.selection && !editor.state.selection.empty
-
-    if (!editor) return null
+    if (!editor || !toolbarState) return null
 
     if (readOnly) {
         return (
@@ -243,7 +258,7 @@ export function TranscriptEditor({
                 {/* Headings */}
                 <Toggle
                     size="sm"
-                    pressed={editor.isActive('heading', { level: 1 })}
+                    pressed={toolbarState.isHeading1}
                     onPressedChange={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
                     aria-label="Heading 1"
                     title="Heading 1"
@@ -252,7 +267,7 @@ export function TranscriptEditor({
                 </Toggle>
                 <Toggle
                     size="sm"
-                    pressed={editor.isActive('heading', { level: 2 })}
+                    pressed={toolbarState.isHeading2}
                     onPressedChange={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
                     aria-label="Heading 2"
                     title="Heading 2"
@@ -261,7 +276,7 @@ export function TranscriptEditor({
                 </Toggle>
                 <Toggle
                     size="sm"
-                    pressed={editor.isActive('heading', { level: 3 })}
+                    pressed={toolbarState.isHeading3}
                     onPressedChange={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
                     aria-label="Heading 3"
                     title="Heading 3"
@@ -274,7 +289,7 @@ export function TranscriptEditor({
                 {/* Text formatting */}
                 <Toggle
                     size="sm"
-                    pressed={editor.isActive('bold')}
+                    pressed={toolbarState.isBold}
                     onPressedChange={() => editor.chain().focus().toggleBold().run()}
                     aria-label="Bold"
                     title="Bold (Ctrl+B)"
@@ -283,7 +298,7 @@ export function TranscriptEditor({
                 </Toggle>
                 <Toggle
                     size="sm"
-                    pressed={editor.isActive('italic')}
+                    pressed={toolbarState.isItalic}
                     onPressedChange={() => editor.chain().focus().toggleItalic().run()}
                     aria-label="Italic"
                     title="Italic (Ctrl+I)"
@@ -292,7 +307,7 @@ export function TranscriptEditor({
                 </Toggle>
                 <Toggle
                     size="sm"
-                    pressed={editor.isActive('underline')}
+                    pressed={toolbarState.isUnderline}
                     onPressedChange={() => editor.chain().focus().toggleUnderline().run()}
                     aria-label="Underline"
                     title="Underline (Ctrl+U)"
@@ -305,7 +320,7 @@ export function TranscriptEditor({
                 {/* Lists */}
                 <Toggle
                     size="sm"
-                    pressed={editor.isActive('bulletList')}
+                    pressed={toolbarState.isBulletList}
                     onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
                     aria-label="Bullet List"
                     title="Bullet List"
@@ -314,7 +329,7 @@ export function TranscriptEditor({
                 </Toggle>
                 <Toggle
                     size="sm"
-                    pressed={editor.isActive('orderedList')}
+                    pressed={toolbarState.isOrderedList}
                     onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
                     aria-label="Ordered List"
                     title="Numbered List"
@@ -327,7 +342,7 @@ export function TranscriptEditor({
                 {/* Link */}
                 <Toggle
                     size="sm"
-                    pressed={editor.isActive('link')}
+                    pressed={toolbarState.isLink}
                     onPressedChange={addLink}
                     aria-label="Add Link"
                     title="Add Link"
@@ -342,7 +357,7 @@ export function TranscriptEditor({
                     variant="ghost"
                     size="sm"
                     onClick={() => editor.chain().focus().undo().run()}
-                    disabled={!editor.can().undo()}
+                    disabled={!toolbarState.canUndo}
                     className="size-8 p-0"
                     aria-label="Undo"
                     title="Undo (Ctrl+Z)"
@@ -353,7 +368,7 @@ export function TranscriptEditor({
                     variant="ghost"
                     size="sm"
                     onClick={() => editor.chain().focus().redo().run()}
-                    disabled={!editor.can().redo()}
+                    disabled={!toolbarState.canRedo}
                     className="size-8 p-0"
                     aria-label="Redo"
                     title="Redo (Ctrl+Shift+Z)"
@@ -369,7 +384,7 @@ export function TranscriptEditor({
                             variant="ghost"
                             size="sm"
                             onClick={addComment}
-                            disabled={!hasSelection}
+                            disabled={!toolbarState.hasSelection}
                             className="size-8 p-0"
                             aria-label="Add Comment"
                             title="Add Comment (select text first)"
