@@ -23,7 +23,7 @@ export default function WorkflowEditorPageClient({ workflowId, initialScope }: W
 
     if (access.status === "loading") {
         return (
-            <div className="flex h-dvh items-center justify-center bg-background" role="status">
+            <div className="flex h-[calc(100dvh-4rem)] items-center justify-center bg-background" role="status">
                 <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2Icon className="size-5 animate-spin" aria-hidden="true" />
                     <span>Loading workflow…</span>

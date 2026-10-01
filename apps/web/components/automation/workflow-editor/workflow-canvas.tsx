@@ -9,6 +9,7 @@ import {
     WORKFLOW_SUBJECT_PLURAL_LABELS,
     getConditionFieldLabel,
     getTriggerLabel,
+    isDonorSubject,
 } from "@/lib/workflows/workflow-editor-state"
 import { getEmailRecipientKind, getEmailRecipientUserId, type EditableAction } from "@/components/automation/workflow-editor/shared"
 import { cn } from "@/lib/utils"
@@ -49,11 +50,13 @@ function getTriggerCriteria(state: CanvasState, options: CanvasOptions): string[
     return lines
 }
 
-function getActionSummary(action: EditableAction, options: CanvasOptions): string | null {
+function getActionSummary(action: EditableAction, options: CanvasOptions, state: CanvasState): string | null {
     switch (action.action_type) {
         case "send_email": {
             const template = options.emailTemplates.find((option) => option.id === action.template_id)
-            const kind = getEmailRecipientKind(action)
+            // Donor workflows save the default surrogate recipient as "donor" (mirrors the action panel).
+            const storedKind = getEmailRecipientKind(action)
+            const kind = isDonorSubject(state.subjectType) && storedKind === "surrogate" ? "donor" : storedKind
             const recipient =
                 kind === "user"
                     ? options.userOptions.find((option) => option.id === getEmailRecipientUserId(action))?.display_name
@@ -114,7 +117,8 @@ function NodeCard({
 }) {
     return (
         <div className="group/node relative w-full">
-            <button
+            <Button
+                unstyled
                 type="button"
                 aria-label={label}
                 aria-pressed={selected}
@@ -126,7 +130,7 @@ function NodeCard({
                 )}
             >
                 {children}
-            </button>
+            </Button>
             {trailing}
         </div>
     )
@@ -221,7 +225,7 @@ export function WorkflowCanvas({
                         ? options.actionTypeOptions.find((option) => option.value === action.action_type)?.label ??
                         action.action_type
                         : "Choose an action"
-                    const summary = getActionSummary(action, options)
+                    const summary = getActionSummary(action, options, state)
                     const selected = selection.kind === "action" && selection.clientId === action.clientId
                     return (
                         <div key={action.clientId} className="flex w-full flex-col items-center">

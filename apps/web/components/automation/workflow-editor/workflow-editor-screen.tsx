@@ -197,7 +197,7 @@ export function WorkflowEditorScreen({ controller }: { controller: WorkflowEdito
     }
 
     return (
-        <div className="flex h-dvh min-h-0 flex-col bg-background">
+        <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col bg-background">
             <WorkflowEditorHeader controller={controller} />
             <WorkflowEditorAlerts controller={controller} />
             {isCompact ? (

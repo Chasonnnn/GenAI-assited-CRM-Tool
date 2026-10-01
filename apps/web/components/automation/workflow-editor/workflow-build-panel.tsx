@@ -3,6 +3,7 @@
 import { GripVerticalIcon, SparklesIcon } from "lucide-react"
 
 import Link from "@/components/app-link"
+import { Button } from "@/components/ui/button"
 import type { WorkflowEditorController } from "@/lib/workflows/use-workflow-editor"
 import { InspectorPanel, InspectorSection } from "./inspector-section"
 import { ACTION_GROUP_ORDER, NodeIcon, getActionMeta, type ActionGroup } from "./node-meta"
@@ -52,7 +53,8 @@ export function WorkflowBuildPanel({
                                 const meta = getActionMeta(actionType.value)
                                 return (
                                     <li key={actionType.value}>
-                                        <button
+                                        <Button
+                                            unstyled
                                             type="button"
                                             title={actionType.description || undefined}
                                             onClick={() => onAddAction(actionType.value)}
@@ -60,7 +62,7 @@ export function WorkflowBuildPanel({
                                         >
                                             <NodeIcon icon={meta.icon} tone={meta.tone} size="sm" />
                                             <span className="truncate">{actionType.label}</span>
-                                        </button>
+                                        </Button>
                                     </li>
                                 )
                             })}
