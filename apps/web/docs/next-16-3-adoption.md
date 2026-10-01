@@ -1,10 +1,12 @@
 # Next.js 16.3 adoption
 
-Next.js and `@next/bundle-analyzer` are pinned to 16.3.0. React remains on 19.2.7. TypeScript uses the supported split toolchain described below.
+Next.js and `@next/bundle-analyzer` are pinned to 16.3.7. React remains on 19.2.7. TypeScript uses the supported split toolchain described below.
 
 ## Package maturation gate
 
 The repository's 24-hour `minimumReleaseAge` policy accepts the frozen 16.3.0 lockfile as of 2026-08-06. A clean CI-equivalent Linux image build completed with the policy intact. Do not add a package-age exclusion or bypass the policy in CI.
+
+The 2026-10-01 dependency audit validated 16.3.7 with the full frontend check, Webpack build and Linux amd64 standalone image. Next 16.3.8 clears the same policy at 2026-10-01 12:07:21 EDT and remains a security follow-up; see the [dependency audit](../../../output/dependency-modernization-20260930/audit.md).
 
 ## Production defaults
 
@@ -81,8 +83,24 @@ The standalone application type-check uses TypeScript 7's native CLI, while ESLi
 }
 ```
 
-`pnpm run typecheck` invokes the native `tsc` binary. Run `pnpm run typecheck:compat` during the adoption period and compare diagnostics before merging. ESLint continues to resolve the `typescript` package name to the supported TypeScript 6 API.
+`pnpm run typecheck` generates Next route types and invokes the native `tsc` binary. ESLint and source-scanning tests resolve the `typescript` package name to the TypeScript 6 API. The compatibility package is version 6.0.2; its compiler and API report version 6.0.3.
 
-Next 16.3 resolves the `typescript` package name directly during a production build. Because the compatibility package exposes `tsc6` instead of `tsc`, `experimental.useTypeScriptCli: false` intentionally keeps Next on its JavaScript API checker. Do not set it to `true` under this split layout.
+Next 16.3 resolves the `typescript` package name directly during a production build and recognizes the compatibility package's `tsc6` executable. Enabling `experimental.useTypeScriptCli` under this alias layout would run the TypeScript 6 CLI, not the native TypeScript 7 CLI. Keep `experimental.useTypeScriptCli: false` to retain Next's JavaScript API checker and its diagnostic handling; the separate `typecheck` command provides native application checking. Docker builds currently run the API checker through `pnpm build`.
 
-Do not replace the compatibility alias with TypeScript 7 until `typescript-eslint` supports its stable JavaScript compiler API. The temporary cost is carrying two compiler packages, checking diagnostic parity, and retaining the slower duplicate check inside `next build`; the benefit is using the native compiler for the main application type-check without disabling either type-aware linting or Next's build validation.
+TypeScript 7 enables stable type ordering by default. Compare compatibility diagnostics with the same ordering after route generation:
+
+```sh
+cd apps/web
+mise exec -- pnpm run typecheck
+mise exec -- pnpm run typecheck:compat --stableTypeOrdering --incremental false
+```
+
+For continuous native application checking after route generation:
+
+```sh
+mise exec -- pnpm exec tsc --noEmit --watch
+```
+
+The application project excludes test files. The separate `tests/tsconfig.json` is not a CI gate. On 2026-09-30, adopting the official `@testing-library/jest-dom/vitest` entrypoint removed 5,129 missing matcher diagnostics; 358 existing test-source diagnostics across 75 files remain. Resolve those errors before adding the test project to required checks; see [the TypeScript audit](../../../output/dependency-modernization-20260930/typescript.md).
+
+Retain the compatibility alias until `typescript-eslint` and source-scanning tests support TypeScript 7's API. Carrying both compiler packages preserves typed linting and Next build validation while the application check uses the native compiler. The split follows [Microsoft's side-by-side guidance](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/); Next's checker selection follows [its TypeScript CLI contract](https://nextjs.org/docs/app/api-reference/config/next-config-js/useTypeScriptCli).
