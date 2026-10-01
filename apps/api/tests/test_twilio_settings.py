@@ -468,3 +468,58 @@ async def test_twilio_admin_apis_reject_non_admin_even_with_permission_grant(
 
     assert get_response.status_code == 403
     assert patch_response.status_code == 403
+
+
+async def test_patch_twilio_settings_without_changes_keeps_version(authed_client):
+    initial = (await authed_client.get("/twilio/settings")).json()
+    payload = {
+        "expected_version": initial["current_version"],
+        "enabled": True,
+        "legal_messaging_brand": "EWI Surrogacy",
+        "account_sid": "AC" + "1" * 32,
+        "auth_token": "4" * 32,
+        "routes": {
+            "operational": {
+                "messaging_service_sid": "MG" + "5" * 32,
+                "sender_phone_e164": "+14155550101",
+                "enabled": True,
+            }
+        },
+    }
+    first = await authed_client.patch("/twilio/settings", json=payload)
+    assert first.status_code == 200
+    version = first.json()["current_version"]
+    assert version == initial["current_version"] + 1
+
+    # The settings form resubmits every saved value; identical values are not a change.
+    second = await authed_client.patch(
+        "/twilio/settings", json={**payload, "expected_version": version}
+    )
+    assert second.status_code == 200
+    assert second.json()["current_version"] == version
+    assert second.json()["account_sid_masked"] == first.json()["account_sid_masked"]
+
+    # Omitted credentials and an unchanged route flag keep the version too.
+    third = await authed_client.patch(
+        "/twilio/settings",
+        json={
+            "expected_version": version,
+            "enabled": True,
+            "routes": {"operational": {"enabled": True}},
+        },
+    )
+    assert third.status_code == 200
+    assert third.json()["current_version"] == version
+
+    # A real change still advances the version and the concurrency fence.
+    fourth = await authed_client.patch(
+        "/twilio/settings",
+        json={"expected_version": version, "legal_messaging_brand": "EWI Family Global"},
+    )
+    assert fourth.status_code == 200
+    assert fourth.json()["current_version"] == version + 1
+    stale = await authed_client.patch(
+        "/twilio/settings",
+        json={"expected_version": version, "legal_messaging_brand": "EWI Family Global"},
+    )
+    assert stale.status_code == 409
