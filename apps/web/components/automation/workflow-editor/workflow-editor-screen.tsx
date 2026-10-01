@@ -2,7 +2,19 @@
 
 import { useState } from "react"
 import type * as React from "react"
-import { AlertCircleIcon, ArrowLeftIcon, Loader2Icon, PlusIcon, RocketIcon, SlidersHorizontalIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
+import {
+    AlertCircleIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
+    FolderIcon,
+    Loader2Icon,
+    PlusIcon,
+    SaveIcon,
+    SendIcon,
+    SlidersHorizontalIcon,
+    WorkflowIcon,
+} from "lucide-react"
 
 import Link from "@/components/app-link"
 import { Badge } from "@/components/ui/badge"
@@ -12,11 +24,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import type { WorkflowEditorController, WorkflowEditorSelection } from "@/lib/workflows/use-workflow-editor"
-import { WORKFLOW_SUBJECT_LABELS } from "@/lib/workflows/workflow-editor-state"
 import { WorkflowActionPanel } from "./workflow-action-panel"
 import { WorkflowBuildPanel } from "./workflow-build-panel"
 import { WorkflowCanvas } from "./workflow-canvas"
-import { WorkflowConditionsPanel } from "./workflow-conditions-panel"
 import { WorkflowTriggerPanel } from "./workflow-trigger-panel"
 
 // Side panels stack into sheets below the lg breakpoint, where three columns no longer fit.
@@ -24,12 +34,49 @@ const COMPACT_LAYOUT_QUERY = "(max-width: 1023px)"
 
 function WorkflowInspector({ controller }: { controller: WorkflowEditorController }) {
     const { selection, selectedActionIndex, state } = controller
-    if (selection.kind === "conditions") return <WorkflowConditionsPanel controller={controller} />
     if (selection.kind === "action") {
         const action = state.actions[selectedActionIndex]
         if (action) return <WorkflowActionPanel controller={controller} action={action} index={selectedActionIndex} />
     }
     return <WorkflowTriggerPanel controller={controller} />
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const
+
+/** "Jan 28, 2026 09:00AM", the reference's header timestamp format, in local time. */
+function formatEditorTimestamp(date: Date): string {
+    const hours = date.getHours()
+    const hour12 = String(hours % 12 === 0 ? 12 : hours % 12).padStart(2, "0")
+    const minutes = String(date.getMinutes()).padStart(2, "0")
+    return `${MONTHS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()} ${hour12}:${minutes}${hours < 12 ? "AM" : "PM"}`
+}
+
+function WorkflowBreadcrumb({ controller }: { controller: WorkflowEditorController }) {
+    const router = useRouter()
+    const { isEditing, listHref, state } = controller
+    return (
+        <nav aria-label="Breadcrumb" className="flex h-9 items-center gap-1 text-xs text-muted-foreground">
+            <Button variant="ghost" size="icon-sm" className="size-6" aria-label="Go back" onClick={() => router.back()}>
+                <ChevronLeftIcon aria-hidden="true" className="size-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon-sm" className="size-6" aria-label="Go forward" onClick={() => router.forward()}>
+                <ChevronRightIcon aria-hidden="true" className="size-3.5" />
+            </Button>
+            <span aria-hidden="true" className="mx-1.5 h-3.5 w-px bg-border" />
+            <ol className="flex min-w-0 items-center gap-1.5">
+                <li className="flex items-center gap-1.5">
+                    <WorkflowIcon aria-hidden="true" className="size-3.5" />
+                    <Link href={listHref} className="hover:text-foreground">
+                        {state.workflowScope === "org" ? "Org Workflows" : "My Workflows"}
+                    </Link>
+                </li>
+                <li aria-hidden="true">/</li>
+                <li aria-current="page" className="truncate font-medium text-foreground">
+                    {isEditing ? "Workflow Edit" : "Workflow Create"}
+                </li>
+            </ol>
+        </nav>
+    )
 }
 
 /** Save button that stays focusable while disabled so the blocking reason shows in a tooltip. */
@@ -67,66 +114,62 @@ function SaveButton({
 }
 
 function WorkflowEditorHeader({ controller }: { controller: WorkflowEditorController }) {
-    const { state, handlers, isEditing, editingWorkflow, listHref } = controller
-    const { workflowName, workflowScope, savedSubjectType, isSaving, hasServerErrors, workflowValidationError } = state
+    const { state, handlers, isEditing, editingWorkflow } = controller
+    const { workflowName, isSaving, hasServerErrors, workflowValidationError } = state
     const saveDisabled = isSaving || hasServerErrors || Boolean(workflowValidationError)
     const statusLabel = !isEditing ? "Draft" : editingWorkflow?.is_enabled ? "Enabled" : "Disabled"
+    const [openedAt] = useState(() => new Date())
+    const timestamp = formatEditorTimestamp(editingWorkflow ? new Date(editingWorkflow.created_at) : openedAt)
 
     return (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6 lg:h-14 lg:flex-nowrap lg:py-0">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5 sm:gap-3">
-                <Button variant="ghost" size="icon" aria-label="Back to workflows" render={<Link href={listHref} />}>
-                    <ArrowLeftIcon className="size-5" />
-                </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+            <div className="min-w-0 flex-1">
                 <Input
                     aria-label="Workflow name"
                     value={workflowName}
                     onChange={(event) => handlers.setWorkflowName(event.target.value)}
-                    placeholder="New workflow"
-                    className="h-8 min-w-0 flex-1 border-none bg-transparent px-0 text-base font-medium focus-visible:ring-0 sm:max-w-xs lg:w-72 lg:flex-none"
+                    placeholder="New Workflow"
+                    className="h-7 w-full max-w-md border-none bg-transparent px-0 text-base font-semibold shadow-none focus-visible:ring-0 dark:bg-transparent"
                 />
-                <Badge
-                    variant={statusLabel === "Enabled" ? "default" : "secondary"}
-                    className="h-5 rounded-full px-2 text-[11px]"
-                >
-                    {statusLabel}
-                </Badge>
-                <Badge variant="outline" className="h-5 rounded-full px-2 text-[11px]">
-                    {workflowScope === "org" ? "Organization" : "Personal"}
-                </Badge>
-                <Badge variant="outline" className="h-5 rounded-full px-2 text-[11px]">
-                    {WORKFLOW_SUBJECT_LABELS[savedSubjectType]}
-                </Badge>
+                <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <span>{timestamp}</span>
+                    <Badge variant="outline" className="h-4 rounded px-1.5 text-[10px] font-medium">
+                        {statusLabel}
+                    </Badge>
+                </div>
             </div>
-            <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
+            <div className="flex flex-wrap items-center gap-2">
                 {isEditing ? (
                     <SaveButton
                         reason={workflowValidationError}
+                        variant="outline"
                         onClick={() => handlers.saveWorkflow({ isEnabled: true })}
                         disabled={saveDisabled}
                     >
-                        {isSaving ? <Loader2Icon className="animate-spin" aria-hidden="true" /> : null}
+                        {isSaving ? <Loader2Icon className="animate-spin" aria-hidden="true" /> : <SaveIcon aria-hidden="true" />}
                         Save changes
                     </SaveButton>
                 ) : (
                     <>
                         <SaveButton
                             reason={workflowValidationError}
-                            variant="secondary"
+                            variant="outline"
                             onClick={() => handlers.saveWorkflow({ isEnabled: false })}
                             disabled={saveDisabled}
                         >
+                            <FolderIcon aria-hidden="true" />
                             Save draft
                         </SaveButton>
                         <SaveButton
                             reason={workflowValidationError}
+                            variant="outline"
                             onClick={() => handlers.saveWorkflow({ isEnabled: true })}
                             disabled={saveDisabled}
                         >
                             {isSaving ? (
                                 <Loader2Icon className="animate-spin" aria-hidden="true" />
                             ) : (
-                                <RocketIcon aria-hidden="true" />
+                                <SendIcon aria-hidden="true" />
                             )}
                             Launch workflow
                         </SaveButton>
@@ -141,7 +184,7 @@ function WorkflowEditorAlerts({ controller }: { controller: WorkflowEditorContro
     const { serverErrors, validationError } = controller.state
     if (serverErrors.length === 0 && !validationError) return null
     return (
-        <div className="space-y-2 px-4 pt-4 sm:px-6">
+        <div className="space-y-2">
             {serverErrors.length > 0 ? (
                 <div
                     role="alert"
@@ -197,30 +240,31 @@ export function WorkflowEditorScreen({ controller }: { controller: WorkflowEdito
     }
 
     return (
-        <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col bg-background">
+        <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col gap-3 bg-background px-4 pt-2 pb-4 sm:px-6">
+            <WorkflowBreadcrumb controller={controller} />
             <WorkflowEditorHeader controller={controller} />
             <WorkflowEditorAlerts controller={controller} />
             {isCompact ? (
                 <>
-                    <div className="flex items-center justify-between gap-2 px-4 pt-4 sm:px-6">
+                    <div className="flex items-center justify-between gap-2">
                         <Button variant="outline" size="sm" onClick={() => setCompactPanel("inspector")}>
                             <SlidersHorizontalIcon aria-hidden="true" />
                             Configure
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => setCompactPanel("build")}>
                             <PlusIcon aria-hidden="true" />
-                            Add action
+                            Add step
                         </Button>
                     </div>
-                    <div className="flex min-h-0 flex-1 flex-col p-4 sm:p-6">
+                    <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-border">
                         <WorkflowCanvas controller={controller} onSelect={selectNode} onRequestAddAction={requestAddAction} />
                     </div>
                     <Sheet open={compactPanel === "inspector"} onOpenChange={(open) => !open && setCompactPanel(null)}>
-                        <SheetContent side="left" className="w-[min(100vw-2rem,22rem)] p-0 [&>div]:h-full">
+                        <SheetContent side="left" className="w-[min(100vw-2rem,22rem)] bg-muted/40 p-0">
                             <SheetHeader className="sr-only">
                                 <SheetTitle>Configure step</SheetTitle>
                             </SheetHeader>
-                            <div className="flex h-full flex-col p-3 pt-12">
+                            <div className="flex h-full min-h-0 flex-col p-2.5 pt-12">
                                 <WorkflowInspector controller={controller} />
                             </div>
                         </SheetContent>
@@ -228,16 +272,20 @@ export function WorkflowEditorScreen({ controller }: { controller: WorkflowEdito
                     <Sheet open={compactPanel === "build"} onOpenChange={(open) => !open && setCompactPanel(null)}>
                         <SheetContent side="right" className="w-[min(100vw-2rem,20rem)] p-0">
                             <SheetHeader className="sr-only">
-                                <SheetTitle>Add action</SheetTitle>
+                                <SheetTitle>Add step</SheetTitle>
                             </SheetHeader>
-                            <div className="flex h-full flex-col p-3 pt-12">
-                                <WorkflowBuildPanel controller={controller} onAddAction={addActionFromPalette} />
+                            <div className="flex h-full min-h-0 flex-col p-2.5 pt-12">
+                                <WorkflowBuildPanel
+                                    controller={controller}
+                                    onAddAction={addActionFromPalette}
+                                    className="border-0 bg-transparent p-0"
+                                />
                             </div>
                         </SheetContent>
                     </Sheet>
                 </>
             ) : (
-                <div className="grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)_16rem] gap-4 p-6">
+                <div className="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)_15rem] gap-2.5 rounded-xl border border-border bg-muted/30 p-2.5">
                     <WorkflowInspector controller={controller} />
                     <WorkflowCanvas controller={controller} onSelect={selectNode} onRequestAddAction={requestAddAction} />
                     <WorkflowBuildPanel controller={controller} onAddAction={addActionFromPalette} />

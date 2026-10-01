@@ -57,7 +57,6 @@ const EMPTY_STATUS_OPTIONS: StatusOption[] = []
 
 export type WorkflowEditorSelection =
     | { kind: "trigger" }
-    | { kind: "conditions" }
     | { kind: "action"; clientId: string }
 
 export type WorkflowEditorAccess =

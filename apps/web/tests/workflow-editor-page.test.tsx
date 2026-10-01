@@ -79,16 +79,26 @@ vi.mock('@/components/ui/select', () => ({
 
 vi.mock('@/components/ui/radio-group', async () => {
     const React = await import('react')
-    const RadioContext = React.createContext<{ value?: string | undefined; onValueChange?: ((value: string) => void) | undefined }>({})
+    const RadioContext = React.createContext<{
+        value?: string | undefined
+        onValueChange?: ((value: string) => void) | undefined
+        disabled?: boolean | undefined
+    }>({})
     return {
         RadioGroup: ({
             value,
             onValueChange,
             children,
+            disabled,
             "aria-label": ariaLabel,
-        }: PropsWithChildren<{ value?: string; onValueChange?: (value: string) => void; "aria-label"?: string }>) => (
-            <RadioContext.Provider value={{ value, onValueChange }}>
-                <div role="radiogroup" aria-label={ariaLabel}>{children}</div>
+        }: PropsWithChildren<{
+            value?: string
+            onValueChange?: (value: string) => void
+            disabled?: boolean
+            "aria-label"?: string
+        }>) => (
+            <RadioContext.Provider value={{ value, onValueChange, disabled }}>
+                <div role="radiogroup" aria-label={ariaLabel} aria-disabled={disabled || undefined}>{children}</div>
             </RadioContext.Provider>
         ),
         RadioGroupItem: ({ value, "aria-label": ariaLabel }: { value: string; "aria-label"?: string }) => {
@@ -99,6 +109,7 @@ vi.mock('@/components/ui/radio-group', async () => {
                     aria-label={ariaLabel}
                     value={value}
                     checked={context.value === value}
+                    disabled={context.disabled}
                     onChange={() => context.onValueChange?.(value)}
                 />
             )
@@ -206,6 +217,11 @@ const chooseRecordType = (label: string) => {
     fireEvent.click(screen.getByRole('radio', { name: label }))
 }
 
+const radioLabels = (groupName: string) =>
+    Array.from(screen.getByRole('radiogroup', { name: groupName }).querySelectorAll('label')).map(
+        (label) => label.textContent,
+    )
+
 const formSelect = (formId: string) =>
     getFirstElement(
         screen.getAllByTestId('select').filter((select) =>
@@ -245,12 +261,14 @@ describe('WorkflowEditorPage', () => {
         mockUpdateWorkflow.mutate.mockReset()
     })
 
-    it('renders the trigger, conditions, and end nodes with the build palette', () => {
+    it('renders the trigger and exit nodes with the trigger panel and build palette', () => {
         renderNewWorkflow()
 
         expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveAttribute('aria-pressed', 'true')
-        expect(screen.getByRole('button', { name: 'Conditions step' })).toBeInTheDocument()
-        expect(screen.getByText('End')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Every matching record')
+        expect(screen.getByText('Exit')).toBeInTheDocument()
+        expect(radioLabels('Trigger kind')).toEqual(['Trigger event', 'Date or scheduled'])
+        expect(screen.getByRole('button', { name: 'Add filter' })).toBeInTheDocument()
         expect(screen.getByTestId('workflow-build-panel')).toHaveTextContent('Add Note')
         expect(screen.getByText('Draft')).toBeInTheDocument()
     })
@@ -331,7 +349,7 @@ describe('WorkflowEditorPage', () => {
 
         renderNewWorkflow('org')
 
-        expect(screen.getByText('Organization')).toBeInTheDocument()
+        expect(screen.getByRole('link', { name: 'Org Workflows' })).toBeInTheDocument()
         fireEvent.change(nameInput(), { target: { value: 'Org Workflow' } })
         fireEvent.change(triggerSelect(), { target: { value: 'surrogate_created' } })
         addNoteAction('Note')
@@ -367,22 +385,21 @@ describe('WorkflowEditorPage', () => {
         fireEvent.change(nameInput(), { target: { value: 'Conditional Workflow' } })
         fireEvent.change(triggerSelect(), { target: { value: 'surrogate_created' } })
 
-        fireEvent.click(screen.getByRole('button', { name: 'Conditions step' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-        expect(screen.getByRole('button', { name: 'All conditions match' })).toHaveAttribute('aria-pressed', 'true')
-        expect(screen.getByRole('button', { name: 'Conditions step' })).toHaveTextContent('2 conditions')
+        fireEvent.click(screen.getByRole('button', { name: 'Add filter' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Add filter' }))
+        expect(screen.getAllByRole('button', { name: 'Remove condition' })).toHaveLength(2)
+        expect(screen.getByRole('radio', { name: 'All filters match' })).toBeChecked()
 
         addNoteAction('Record the condition result')
         fireEvent.click(launchButton())
         expect(mockCreateWorkflow.mutate).toHaveBeenCalledTimes(1)
         expect(screen.getByText(/Action 1: title is required/i)).toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Conditions step' }))
-        fireEvent.click(screen.getByRole('button', { name: 'Any condition matches' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Trigger step' }))
+        fireEvent.click(screen.getByRole('radio', { name: 'Any filter matches' }))
 
         expect(screen.queryByText(/Action 1: title is required/i)).not.toBeInTheDocument()
-        expect(screen.getByRole('button', { name: 'Conditions step' })).toHaveTextContent('Any can match')
+        expect(screen.getByRole('radio', { name: 'Any filter matches' })).toBeChecked()
     })
 
     it('preserves server errors when late status options only normalize legacy config', () => {
@@ -522,14 +539,20 @@ describe('WorkflowEditorPage', () => {
 
         fireEvent.change(nameInput(), { target: { value: 'Task Due Reminder' } })
 
+        expect(optionLabels(triggerSelect())).toEqual(['Surrogate Created'])
+        fireEvent.click(screen.getByRole('radio', { name: 'Date or scheduled' }))
+        expect(optionLabels(triggerSelect())).toEqual(['Scheduled', 'Task Due'])
+
         fireEvent.change(triggerSelect(), { target: { value: 'scheduled' } })
+        fireEvent.click(screen.getByRole('radio', { name: 'Custom cron' }))
         fireEvent.change(screen.getByPlaceholderText('0 9 * * 1'), {
             target: { value: '0 8 * * *' },
         })
         fireEvent.change(screen.getByPlaceholderText('America/Los_Angeles'), {
             target: { value: 'America/New_York' },
         })
-        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Cron 0 8 * * *')
+        expect(screen.getByRole('radio', { name: 'Custom cron' })).toBeChecked()
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Every day at 08:00')
 
         fireEvent.change(triggerSelect(), { target: { value: 'task_due' } })
         fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '48' } })
@@ -566,10 +589,7 @@ describe('WorkflowEditorPage', () => {
 
         renderNewWorkflow()
 
-        const recordTypeOptions = Array.from(
-            screen.getByRole('radiogroup', { name: 'Record type' }).querySelectorAll('input'),
-        ).map((option) => option.getAttribute('aria-label'))
-        expect(recordTypeOptions).toEqual(labels)
+        expect(radioLabels('Record type')).toEqual(labels)
     })
 
     it('creates an egg donor workflow from subject-specific options', () => {
@@ -700,8 +720,8 @@ describe('WorkflowEditorPage', () => {
         renderExistingWorkflow('workflow-egg')
 
         expect(screen.getByDisplayValue('Egg donor follow-up')).toBeInTheDocument()
-        expect(screen.queryByRole('radiogroup', { name: 'Record type' })).not.toBeInTheDocument()
-        expect(screen.getAllByText('Egg Donor').length).toBeGreaterThan(0)
+        expect(radioLabels('Record type')).toEqual(['Egg Donor'])
+        expect(screen.getByRole('radio', { name: 'Egg Donor' })).toBeDisabled()
         expect(screen.getByText('Enabled')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Runs for egg donors')
     })
@@ -841,8 +861,9 @@ describe('WorkflowEditorPage', () => {
         fireEvent.change(triggerSelect(), { target: { value: 'form_submitted' } })
         fireEvent.change(formSelect('form-surrogate'), { target: { value: 'form-surrogate' } })
         expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Form: Surrogate Application')
+        expect(radioLabels('Record type')).toEqual(['Form Submission'])
+        expect(screen.getByRole('radio', { name: 'Form Submission' })).toBeDisabled()
         fireEvent.click(screen.getByRole('button', { name: 'Create Intake Lead' }))
-        expect(screen.getByText('Form Submission')).toBeInTheDocument()
         fireEvent.click(launchButton())
 
         expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
@@ -974,8 +995,7 @@ describe('WorkflowEditorPage', () => {
         it('offers no stage references for a form shared by both donor types', () => {
             startIntakeWorkflow('form_submitted', 'form-shared-donor')
 
-            fireEvent.click(screen.getByRole('button', { name: 'Conditions step' }))
-            fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+            fireEvent.click(screen.getByRole('button', { name: 'Add filter' }))
             const conditionFieldSelect = getFirstElement(
                 screen.getAllByTestId('select').filter((select) =>
                     select.querySelector('option[value="lead_kind"]'),

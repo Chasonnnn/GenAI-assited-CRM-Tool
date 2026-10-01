@@ -1,36 +1,163 @@
 "use client"
 
-import { XIcon, ZapIcon } from "lucide-react"
+import { useState } from "react"
+import {
+    CalendarClockIcon,
+    CrosshairIcon,
+    FileTextIcon,
+    FilterIcon,
+    PlusIcon,
+    WorkflowIcon,
+    XIcon,
+} from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { WorkflowSubjectType } from "@/lib/api/workflows"
 import type { WorkflowEditorController } from "@/lib/workflows/use-workflow-editor"
 import {
+    TIME_TRIGGER_TYPES,
+    WEEKDAY_LABELS,
     WORKFLOW_SUBJECT_LABELS,
+    buildSimpleCron,
     getConditionFieldLabel,
     getTriggerLabel,
+    parseSimpleCron,
     withIntakeTriggerForm,
+    type ScheduleFrequency,
 } from "@/lib/workflows/workflow-editor-state"
 import {
     APPLICANT_TYPE_BOTH,
     APPLICANT_TYPE_OPTIONS,
+    ConditionValueInput,
     getApplicantTypeLabel,
     isDonorLeadKind,
 } from "@/components/automation/workflow-editor/shared"
-import { InspectorPanel, InspectorSection } from "./inspector-section"
-import { NodeIcon } from "./node-meta"
+import { DotOptionGroup, EditorColumn, PanelCard, PanelHeading, PanelSection } from "./inspector-section"
+
+type TriggerMode = "event" | "time"
+
+const TRIGGER_MODE_OPTIONS: { value: TriggerMode; label: string }[] = [
+    { value: "event", label: "Trigger event" },
+    { value: "time", label: "Date or scheduled" },
+]
+
+const SCHEDULE_FREQUENCY_OPTIONS: { value: ScheduleFrequency; label: string }[] = [
+    { value: "daily", label: "Run every day" },
+    { value: "weekdays", label: "Run every weekday" },
+    { value: "weekly", label: "Run every week" },
+    { value: "custom", label: "Custom cron" },
+]
+
+function FieldRow({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
+    return (
+        <div className="grid gap-1">
+            <Label htmlFor={htmlFor} className="font-normal text-muted-foreground">
+                {label}
+            </Label>
+            {children}
+        </div>
+    )
+}
 
 export function WorkflowTriggerPanel({ controller }: { controller: WorkflowEditorController }) {
-    const { state, options, handlers, isEditing, createWorkflowSubjectOptions } = controller
-    const { subjectType, triggerType, triggerConfig, workflowDescription } = state
+    const { state, handlers, isEditing, createWorkflowSubjectOptions } = controller
+    const { subjectType, savedSubjectType, triggerType, workflowDescription } = state
+    const { setSubjectType, setTriggerType, setWorkflowDescription } = handlers
+    const [selectedMode, setSelectedMode] = useState<TriggerMode>("event")
+    const mode: TriggerMode = triggerType ? (TIME_TRIGGER_TYPES.has(triggerType) ? "time" : "event") : selectedMode
+    const triggerOptions = controller.options.triggerTypeOptions.filter(
+        (option) => TIME_TRIGGER_TYPES.has(option.value) === (mode === "time"),
+    )
+    // Editing and fixed-subject triggers lock the record type to the one that will be saved.
+    const subjectLocked = isEditing || savedSubjectType !== subjectType
+    const subjectOptions = subjectLocked
+        ? [{ value: savedSubjectType, label: WORKFLOW_SUBJECT_LABELS[savedSubjectType] }]
+        : createWorkflowSubjectOptions
+
+    return (
+        <EditorColumn aria-label="Triggers">
+            <PanelHeading title="Triggers" />
+
+            <PanelSection title="Run this workflow">
+                <PanelCard icon={WorkflowIcon} title="Workflow run">
+                    <DotOptionGroup
+                        ariaLabel="Trigger kind"
+                        value={mode}
+                        options={TRIGGER_MODE_OPTIONS}
+                        onValueChange={(value) => {
+                            const nextMode = value as TriggerMode
+                            setSelectedMode(nextMode)
+                            if (triggerType && TIME_TRIGGER_TYPES.has(triggerType) !== (nextMode === "time")) {
+                                setTriggerType("")
+                            }
+                        }}
+                    />
+                    <Select aria-label="Trigger type" value={triggerType} onValueChange={(value) => value && setTriggerType(value)}>
+                        <SelectTrigger aria-label="Trigger type" className="w-full">
+                            <SelectValue placeholder={mode === "time" ? "Select schedule" : "Select event"}>
+                                {(value: string | null) => {
+                                    if (!value) return mode === "time" ? "Select schedule" : "Select event"
+                                    return triggerOptions.find((option) => option.value === value)?.label ?? getTriggerLabel(value)
+                                }}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="min-w-[260px]">
+                            {triggerOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <TriggerConfigFields controller={controller} />
+                </PanelCard>
+            </PanelSection>
+
+            <PanelSection title="Workflow will target">
+                <PanelCard icon={CrosshairIcon} title="Target by">
+                    <DotOptionGroup
+                        ariaLabel="Record type"
+                        value={subjectLocked ? savedSubjectType : subjectType}
+                        options={subjectOptions}
+                        onValueChange={(value) => setSubjectType(value as WorkflowSubjectType)}
+                        disabled={subjectLocked}
+                    />
+                </PanelCard>
+            </PanelSection>
+
+            {triggerType === "scheduled" ? (
+                <PanelSection title="Start workflow">
+                    <ScheduleCard controller={controller} />
+                </PanelSection>
+            ) : null}
+
+            <FiltersSection controller={controller} />
+
+            <PanelSection title="Details" defaultOpen={Boolean(workflowDescription)}>
+                <PanelCard icon={FileTextIcon} title="Description">
+                    <Textarea
+                        id="workflow-description"
+                        aria-label="Description"
+                        placeholder="Describe what this workflow does"
+                        value={workflowDescription}
+                        onChange={(event) => setWorkflowDescription(event.target.value)}
+                        rows={3}
+                    />
+                </PanelCard>
+            </PanelSection>
+        </EditorColumn>
+    )
+}
+
+function TriggerConfigFields({ controller }: { controller: WorkflowEditorController }) {
+    const { state, options, handlers } = controller
+    const { triggerType, triggerConfig } = state
     const {
-        triggerTypeOptions,
         formOptions,
         statusOptions,
         activeStatusOptions,
@@ -40,347 +167,431 @@ export function WorkflowTriggerPanel({ controller }: { controller: WorkflowEdito
         isSharedDonorTriggerForm,
         configuredIntakeLeadKind,
     } = options
-    const { setSubjectType, setTriggerType, setTriggerConfig, setIntakeApplicantType, setWorkflowDescription } = handlers
+    const { setTriggerConfig, setIntakeApplicantType } = handlers
 
     return (
-        <InspectorPanel title="Triggers" icon={<NodeIcon icon={ZapIcon} tone="violet" size="sm" />}>
-            <InspectorSection title="Workflow will target">
-                {isEditing ? (
-                    <div className="flex items-center gap-2 text-sm">
-                        <Badge variant="outline">{WORKFLOW_SUBJECT_LABELS[subjectType]}</Badge>
-                    </div>
-                ) : (
-                    <RadioGroup
-                        aria-label="Record type"
-                        value={subjectType}
-                        onValueChange={(value) => value && setSubjectType(value as WorkflowSubjectType)}
-                        className="gap-2"
-                    >
-                        {createWorkflowSubjectOptions.map((option) => (
-                            <label key={option.value} className="flex cursor-pointer items-center gap-2.5 text-sm">
-                                <RadioGroupItem value={option.value} aria-label={option.label} />
-                                <span>{option.label}</span>
-                            </label>
-                        ))}
-                    </RadioGroup>
-                )}
-            </InspectorSection>
+        <>
+            {(triggerType === "status_changed" || triggerType === "donor_stage_changed") && (
+                <div className="grid grid-cols-2 gap-2">
+                    <FieldRow label="From">
+                        <Select
+                            aria-label="From stage"
+                            value={typeof triggerConfig.from_stage_id === "string" ? triggerConfig.from_stage_id : ""}
+                            onValueChange={(value) =>
+                                setTriggerConfig((currentConfig) => ({ ...currentConfig, from_stage_id: value }))
+                            }
+                        >
+                            <SelectTrigger aria-label="From stage" className="w-full">
+                                <SelectValue placeholder="Any stage">
+                                    {(value: string | null) => {
+                                        if (!value) return "Any stage"
+                                        return statusOptions.find((option) => option.id === value)?.label ?? "Unknown stage"
+                                    }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="">Any stage</SelectItem>
+                                {statusOptions.map((option) => (
+                                    <SelectItem key={option.id ?? option.value} value={option.id ?? option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FieldRow>
+                    <FieldRow label="To">
+                        <Select
+                            aria-label="To stage"
+                            value={typeof triggerConfig.to_stage_id === "string" ? triggerConfig.to_stage_id : ""}
+                            onValueChange={(value) =>
+                                setTriggerConfig((currentConfig) => ({ ...currentConfig, to_stage_id: value }))
+                            }
+                        >
+                            <SelectTrigger aria-label="To stage" className="w-full">
+                                <SelectValue placeholder="Any stage">
+                                    {(value: string | null) => {
+                                        if (!value) return "Any stage"
+                                        return statusOptions.find((option) => option.id === value)?.label ?? "Unknown stage"
+                                    }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="">Any stage</SelectItem>
+                                {activeStatusOptions.map((option) => (
+                                    <SelectItem key={option.id ?? option.value} value={option.id ?? option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FieldRow>
+                </div>
+            )}
 
-            <InspectorSection title="Run this workflow">
-                <div className="grid gap-1.5">
-                    <Label htmlFor="workflow-trigger-type">Trigger</Label>
-                    <Select aria-label="Trigger type" value={triggerType} onValueChange={(value) => value && setTriggerType(value)}>
-                        <SelectTrigger id="workflow-trigger-type" aria-label="Trigger type" className="w-full">
-                            <SelectValue placeholder="Select trigger">
+            {triggerType === "inactivity" && (
+                <FieldRow label="Days inactive" htmlFor="workflow-trigger-days">
+                    <Input
+                        id="workflow-trigger-days"
+                        type="number"
+                        min={1}
+                        max={90}
+                        value={typeof triggerConfig.days === "number" ? triggerConfig.days : 7}
+                        onChange={(event) =>
+                            setTriggerConfig((currentConfig) => ({ ...currentConfig, days: Number(event.target.value) }))
+                        }
+                    />
+                </FieldRow>
+            )}
+
+            {triggerType === "task_due" && (
+                <FieldRow label="Hours before due" htmlFor="workflow-trigger-hours">
+                    <Input
+                        id="workflow-trigger-hours"
+                        type="number"
+                        min={1}
+                        max={168}
+                        value={typeof triggerConfig.hours_before === "number" ? triggerConfig.hours_before : 24}
+                        onChange={(event) =>
+                            setTriggerConfig((currentConfig) => ({
+                                ...currentConfig,
+                                hours_before: Number(event.target.value),
+                            }))
+                        }
+                    />
+                </FieldRow>
+            )}
+
+            {(triggerType === "form_started" || triggerType === "form_submitted" || triggerType === "intake_lead_created") && (
+                <FieldRow label="Form">
+                    <Select
+                        aria-label="Form"
+                        value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
+                        onValueChange={(value) =>
+                            setTriggerConfig((currentConfig) =>
+                                triggerType === "form_started"
+                                    ? { ...currentConfig, form_id: value }
+                                    : withIntakeTriggerForm(triggerType, currentConfig, value),
+                            )
+                        }
+                    >
+                        <SelectTrigger aria-label="Form" className="w-full">
+                            <SelectValue placeholder="Select form">
                                 {(value: string | null) => {
-                                    if (!value) return "Select trigger"
-                                    const trigger = triggerTypeOptions.find((option) => option.value === value)
-                                    return trigger?.label ?? getTriggerLabel(value)
+                                    if (!value) return "Select form"
+                                    return formOptions.find((option) => option.value === value)?.label ?? "Unknown form"
                                 }}
                             </SelectValue>
                         </SelectTrigger>
-                        <SelectContent className="min-w-[280px]">
-                            {triggerTypeOptions.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                    {option.label}
+                        <SelectContent>
+                            {formOptions.map((form) => (
+                                <SelectItem key={form.value} value={form.value}>
+                                    {form.label}
                                 </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
-                </div>
+                    {formOptions.length === 0 && (
+                        <p className="text-[11px] text-muted-foreground">Publish a form to use this trigger.</p>
+                    )}
+                </FieldRow>
+            )}
 
-                {(triggerType === "status_changed" || triggerType === "donor_stage_changed") && (
-                    <>
-                        <div className="grid gap-1.5">
-                            <Label>To Stage (Optional)</Label>
-                            <Select
-                                value={typeof triggerConfig.to_stage_id === "string" ? triggerConfig.to_stage_id : ""}
-                                onValueChange={(value) =>
-                                    setTriggerConfig((currentConfig) => ({ ...currentConfig, to_stage_id: value }))
-                                }
-                            >
-                                <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Any stage">
-                                        {(value: string | null) => {
-                                            if (!value) return "Any stage"
-                                            const status = statusOptions.find((option) => option.id === value)
-                                            return status?.label ?? "Unknown stage"
-                                        }}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="">Any stage</SelectItem>
-                                    {activeStatusOptions.map((option) => (
-                                        <SelectItem key={option.id ?? option.value} value={option.id ?? option.value}>
-                                            {option.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+            {isSharedDonorTriggerForm && (
+                <FieldRow label="Applicant type">
+                    <Select
+                        aria-label="Applicant Type"
+                        value={isDonorLeadKind(configuredIntakeLeadKind) ? configuredIntakeLeadKind : APPLICANT_TYPE_BOTH}
+                        onValueChange={setIntakeApplicantType}
+                    >
+                        <SelectTrigger aria-label="Applicant Type" className="w-full">
+                            <SelectValue>{getApplicantTypeLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {APPLICANT_TYPE_OPTIONS.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                    {getApplicantTypeLabel(option.value)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </FieldRow>
+            )}
+
+            {(triggerType === "surrogate_updated" || triggerType === "donor_updated") && (
+                <FieldRow label="Fields to watch">
+                    <Select
+                        aria-label="Fields to watch"
+                        value=""
+                        onValueChange={(value) => {
+                            if (!value || selectedTriggerFields.includes(value)) return
+                            setTriggerConfig((currentConfig) => {
+                                const currentFields = Array.isArray(currentConfig.fields)
+                                    ? currentConfig.fields.filter((field): field is string => typeof field === "string")
+                                    : []
+                                return { ...currentConfig, fields: [...currentFields, value] }
+                            })
+                        }}
+                    >
+                        <SelectTrigger aria-label="Fields to watch" className="w-full">
+                            <SelectValue placeholder="Select field to add">
+                                {(value: string | null) => (value ? getConditionFieldLabel(value) : "Select field to add")}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {availableConditionFields.map((field) => (
+                                <SelectItem key={field} value={field}>
+                                    {getConditionFieldLabel(field)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {selectedTriggerFields.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                            {selectedTriggerFields.map((field) => (
+                                <Badge key={field} variant="outline" className="gap-1 bg-card">
+                                    {getConditionFieldLabel(field)}
+                                    <Button
+                                        unstyled
+                                        type="button"
+                                        aria-label="Remove field"
+                                        onClick={() =>
+                                            setTriggerConfig((currentConfig) => {
+                                                const currentFields = Array.isArray(currentConfig.fields)
+                                                    ? currentConfig.fields.filter(
+                                                        (item): item is string => typeof item === "string" && item !== field,
+                                                    )
+                                                    : []
+                                                return { ...currentConfig, fields: currentFields }
+                                            })
+                                        }
+                                    >
+                                        <XIcon className="size-3" />
+                                    </Button>
+                                </Badge>
+                            ))}
                         </div>
-                        <div className="grid gap-1.5">
-                            <Label>From Stage (Optional)</Label>
-                            <Select
-                                value={typeof triggerConfig.from_stage_id === "string" ? triggerConfig.from_stage_id : ""}
-                                onValueChange={(value) =>
-                                    setTriggerConfig((currentConfig) => ({ ...currentConfig, from_stage_id: value }))
-                                }
-                            >
-                                <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Any stage">
-                                        {(value: string | null) => {
-                                            if (!value) return "Any stage"
-                                            const status = statusOptions.find((option) => option.id === value)
-                                            return status?.label ?? "Unknown stage"
-                                        }}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="">Any stage</SelectItem>
-                                    {statusOptions.map((option) => (
-                                        <SelectItem key={option.id ?? option.value} value={option.id ?? option.value}>
-                                            {option.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </>
-                )}
+                    )}
+                </FieldRow>
+            )}
 
-                {triggerType === "scheduled" && (
-                    <>
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="workflow-trigger-cron">Cron Schedule *</Label>
-                            <Input
-                                id="workflow-trigger-cron"
-                                placeholder="0 9 * * 1"
-                                value={typeof triggerConfig.cron === "string" ? triggerConfig.cron : ""}
-                                onChange={(event) =>
-                                    setTriggerConfig((currentConfig) => ({ ...currentConfig, cron: event.target.value }))
-                                }
-                            />
-                        </div>
-                        <div className="grid gap-1.5">
-                            <Label htmlFor="workflow-trigger-timezone">Timezone</Label>
-                            <Input
-                                id="workflow-trigger-timezone"
-                                placeholder="America/Los_Angeles"
-                                value={
-                                    typeof triggerConfig.timezone === "string"
-                                        ? triggerConfig.timezone
-                                        : "America/Los_Angeles"
-                                }
-                                onChange={(event) =>
-                                    setTriggerConfig((currentConfig) => ({
-                                        ...currentConfig,
-                                        timezone: event.target.value,
-                                    }))
-                                }
-                            />
-                        </div>
-                    </>
-                )}
+            {(triggerType === "surrogate_assigned" || triggerType === "donor_assigned") && (
+                <FieldRow label="Assigned to">
+                    <Select
+                        aria-label="Assigned to"
+                        value={typeof triggerConfig.to_user_id === "string" ? triggerConfig.to_user_id : ""}
+                        onValueChange={(value) =>
+                            setTriggerConfig((currentConfig) => ({ ...currentConfig, to_user_id: value || null }))
+                        }
+                    >
+                        <SelectTrigger aria-label="Assigned to" className="w-full">
+                            <SelectValue placeholder="Any user">
+                                {(value: string | null) => {
+                                    if (!value) return "Any user"
+                                    return userOptions.find((option) => option.id === value)?.display_name ?? "Unknown user"
+                                }}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="">Any user</SelectItem>
+                            {userOptions.map((user) => (
+                                <SelectItem key={user.id} value={user.id}>
+                                    {user.display_name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </FieldRow>
+            )}
+        </>
+    )
+}
 
-                {triggerType === "inactivity" && (
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="workflow-trigger-days">Days Inactive *</Label>
-                        <Input
-                            id="workflow-trigger-days"
-                            type="number"
-                            min={1}
-                            max={90}
-                            value={typeof triggerConfig.days === "number" ? triggerConfig.days : 7}
-                            onChange={(event) =>
-                                setTriggerConfig((currentConfig) => ({
-                                    ...currentConfig,
-                                    days: Number(event.target.value),
-                                }))
-                            }
-                        />
-                    </div>
-                )}
+function ScheduleCard({ controller }: { controller: WorkflowEditorController }) {
+    const { triggerConfig } = controller.state
+    const { setTriggerConfig } = controller.handlers
+    const cron = typeof triggerConfig.cron === "string" ? triggerConfig.cron : ""
+    const parsed = parseSimpleCron(cron)
+    // "Custom cron" is a view choice: a preset-shaped cron still edits as raw text once chosen.
+    const [customChosen, setCustomChosen] = useState(false)
+    const frequency: ScheduleFrequency | "" = customChosen ? "custom" : parsed?.frequency ?? ""
+    const schedule = parsed ?? { frequency: "daily" as const, time: "09:00", dayOfWeek: 1 }
+    const setCron = (value: string) => setTriggerConfig((currentConfig) => ({ ...currentConfig, cron: value }))
 
-                {(triggerType === "form_started" ||
-                    triggerType === "form_submitted" ||
-                    triggerType === "intake_lead_created") && (
-                    <div className="grid gap-1.5">
-                        <Label>Form *</Label>
-                        <Select
-                            value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
-                            onValueChange={(value) =>
-                                setTriggerConfig((currentConfig) =>
-                                    triggerType === "form_started"
-                                        ? { ...currentConfig, form_id: value }
-                                        : withIntakeTriggerForm(triggerType, currentConfig, value),
-                                )
-                            }
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select form">
-                                    {(value: string | null) => {
-                                        if (!value) return "Select form"
-                                        const form = formOptions.find((option) => option.value === value)
-                                        return form?.label ?? "Unknown form"
-                                    }}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {formOptions.map((form) => (
-                                    <SelectItem key={form.value} value={form.value}>
-                                        {form.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        {formOptions.length === 0 && (
-                            <p className="text-xs text-muted-foreground">Publish a form to use this trigger.</p>
-                        )}
-                    </div>
-                )}
-
-                {isSharedDonorTriggerForm && (
-                    <div className="grid gap-1.5">
-                        <Label>Applicant Type</Label>
-                        <Select
-                            aria-label="Applicant Type"
-                            value={isDonorLeadKind(configuredIntakeLeadKind) ? configuredIntakeLeadKind : APPLICANT_TYPE_BOTH}
-                            onValueChange={setIntakeApplicantType}
-                        >
-                            <SelectTrigger aria-label="Applicant Type" className="w-full">
-                                <SelectValue>{getApplicantTypeLabel}</SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {APPLICANT_TYPE_OPTIONS.map((option) => (
-                                    <SelectItem key={option.value} value={option.value}>
-                                        {getApplicantTypeLabel(option.value)}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                )}
-
-                {triggerType === "task_due" && (
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="workflow-trigger-hours">Hours Before Due *</Label>
-                        <Input
-                            id="workflow-trigger-hours"
-                            type="number"
-                            min={1}
-                            max={168}
-                            value={typeof triggerConfig.hours_before === "number" ? triggerConfig.hours_before : 24}
-                            onChange={(event) =>
-                                setTriggerConfig((currentConfig) => ({
-                                    ...currentConfig,
-                                    hours_before: Number(event.target.value),
-                                }))
-                            }
-                        />
-                    </div>
-                )}
-
-                {(triggerType === "surrogate_updated" || triggerType === "donor_updated") && (
-                    <div className="grid gap-2">
-                        <Label>Fields to Watch *</Label>
-                        <Select
-                            value=""
-                            onValueChange={(value) => {
-                                if (!value || selectedTriggerFields.includes(value)) return
-                                setTriggerConfig((currentConfig) => {
-                                    const currentFields = Array.isArray(currentConfig.fields)
-                                        ? currentConfig.fields.filter((field): field is string => typeof field === "string")
-                                        : []
-                                    return { ...currentConfig, fields: [...currentFields, value] }
-                                })
-                            }}
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select field to add">
-                                    {(value: string | null) => (value ? getConditionFieldLabel(value) : "Select field to add")}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {availableConditionFields.map((field) => (
-                                    <SelectItem key={field} value={field}>
-                                        {getConditionFieldLabel(field)}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                        {selectedTriggerFields.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                                {selectedTriggerFields.map((field) => (
-                                    <Badge key={field} variant="secondary" className="gap-1">
-                                        {getConditionFieldLabel(field)}
-                                        <Button
-                                            unstyled
-                                            type="button"
-                                            className="ml-0.5 text-xs"
-                                            aria-label="Remove field"
-                                            onClick={() =>
-                                                setTriggerConfig((currentConfig) => {
-                                                    const currentFields = Array.isArray(currentConfig.fields)
-                                                        ? currentConfig.fields.filter(
-                                                            (item): item is string => typeof item === "string" && item !== field,
-                                                        )
-                                                        : []
-                                                    return { ...currentConfig, fields: currentFields }
-                                                })
-                                            }
-                                        >
-                                            <XIcon className="size-3" />
-                                        </Button>
-                                    </Badge>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {(triggerType === "surrogate_assigned" || triggerType === "donor_assigned") && (
-                    <div className="grid gap-1.5">
-                        <Label>Assigned To (Optional)</Label>
-                        <Select
-                            value={typeof triggerConfig.to_user_id === "string" ? triggerConfig.to_user_id : ""}
-                            onValueChange={(value) =>
-                                setTriggerConfig((currentConfig) => ({ ...currentConfig, to_user_id: value || null }))
-                            }
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Any user">
-                                    {(value: string | null) => {
-                                        if (!value) return "Any user"
-                                        const user = userOptions.find((option) => option.id === value)
-                                        return user?.display_name ?? "Unknown user"
-                                    }}
-                                </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="">Any user</SelectItem>
-                                {userOptions.map((user) => (
-                                    <SelectItem key={user.id} value={user.id}>
-                                        {user.display_name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                )}
-            </InspectorSection>
-
-            <InspectorSection title="Details" defaultOpen={Boolean(workflowDescription)}>
-                <div className="grid gap-1.5">
-                    <Label htmlFor="workflow-description">Description</Label>
-                    <Textarea
-                        id="workflow-description"
-                        placeholder="Describe what this workflow does"
-                        value={workflowDescription}
-                        onChange={(event) => setWorkflowDescription(event.target.value)}
-                        rows={3}
+    return (
+        <PanelCard icon={CalendarClockIcon} title="Schedule">
+            <DotOptionGroup
+                ariaLabel="Schedule frequency"
+                value={frequency}
+                options={SCHEDULE_FREQUENCY_OPTIONS}
+                onValueChange={(value) => {
+                    const next = value as ScheduleFrequency
+                    if (next === "custom") {
+                        setCustomChosen(true)
+                        return
+                    }
+                    setCustomChosen(false)
+                    setCron(buildSimpleCron({ ...schedule, frequency: next }))
+                }}
+            />
+            {frequency === "custom" ? (
+                <FieldRow label="Cron schedule" htmlFor="workflow-trigger-cron">
+                    <Input
+                        id="workflow-trigger-cron"
+                        placeholder="0 9 * * 1"
+                        value={cron}
+                        onChange={(event) => setCron(event.target.value)}
                     />
+                </FieldRow>
+            ) : frequency ? (
+                <div className="grid grid-cols-2 gap-2">
+                    {frequency === "weekly" ? (
+                        <FieldRow label="On">
+                            <Select
+                                aria-label="Day of week"
+                                value={String(schedule.dayOfWeek)}
+                                onValueChange={(value) =>
+                                    value && setCron(buildSimpleCron({ ...schedule, frequency, dayOfWeek: Number(value) }))
+                                }
+                            >
+                                <SelectTrigger aria-label="Day of week" className="w-full">
+                                    <SelectValue>{(value: string | null) => WEEKDAY_LABELS[Number(value ?? 1)]}</SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {WEEKDAY_LABELS.map((label, day) => (
+                                        <SelectItem key={label} value={String(day)}>
+                                            {label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </FieldRow>
+                    ) : null}
+                    <FieldRow label="At" htmlFor="workflow-trigger-time">
+                        <Input
+                            id="workflow-trigger-time"
+                            type="time"
+                            value={schedule.time}
+                            onChange={(event) =>
+                                event.target.value &&
+                                setCron(buildSimpleCron({ ...schedule, frequency, time: event.target.value }))
+                            }
+                        />
+                    </FieldRow>
                 </div>
-            </InspectorSection>
-        </InspectorPanel>
+            ) : null}
+            <FieldRow label="Timezone" htmlFor="workflow-trigger-timezone">
+                <Input
+                    id="workflow-trigger-timezone"
+                    placeholder="America/Los_Angeles"
+                    value={typeof triggerConfig.timezone === "string" ? triggerConfig.timezone : "America/Los_Angeles"}
+                    onChange={(event) =>
+                        setTriggerConfig((currentConfig) => ({ ...currentConfig, timezone: event.target.value }))
+                    }
+                />
+            </FieldRow>
+        </PanelCard>
+    )
+}
+
+function FiltersSection({ controller }: { controller: WorkflowEditorController }) {
+    const { state, options, handlers } = controller
+    const { conditions, conditionLogic } = state
+    const { availableConditionFields, conditionOperators, getConditionOptions } = options
+    const { addCondition, removeCondition, updateCondition, setConditionLogic } = handlers
+
+    return (
+        <PanelSection
+            title="Others filter"
+            actions={
+                conditions.length > 0 ? (
+                    <Button size="icon-sm" variant="ghost" className="size-6" aria-label="Add filter" onClick={addCondition}>
+                        <PlusIcon aria-hidden="true" className="size-3.5" />
+                    </Button>
+                ) : undefined
+            }
+        >
+            {conditions.length > 1 ? (
+                <DotOptionGroup
+                    ariaLabel="Condition logic"
+                    value={conditionLogic}
+                    options={[
+                        { value: "AND", label: "All filters match" },
+                        { value: "OR", label: "Any filter matches" },
+                    ]}
+                    onValueChange={(value) => (value === "AND" || value === "OR") && setConditionLogic(value)}
+                />
+            ) : null}
+            {conditions.map((condition, index) => (
+                <PanelCard
+                    key={condition.clientId}
+                    icon={FilterIcon}
+                    title={condition.field ? getConditionFieldLabel(condition.field) : `Filter ${index + 1}`}
+                    actions={
+                        <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            className="size-6"
+                            aria-label="Remove condition"
+                            onClick={() => removeCondition(index)}
+                        >
+                            <XIcon aria-hidden="true" className="size-3.5" />
+                        </Button>
+                    }
+                >
+                    <Select value={condition.field} onValueChange={(value) => value && updateCondition(index, { field: value })}>
+                        <SelectTrigger aria-label={`Condition ${index + 1} field`} className="w-full">
+                            <SelectValue placeholder="Field">
+                                {(value: string | null) => (value ? getConditionFieldLabel(value) : "Field")}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {availableConditionFields.map((field) => (
+                                <SelectItem key={field} value={field}>
+                                    {getConditionFieldLabel(field)}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select
+                        value={condition.operator}
+                        onValueChange={(value) => value && updateCondition(index, { operator: value })}
+                    >
+                        <SelectTrigger aria-label={`Condition ${index + 1} operator`} className="w-full">
+                            <SelectValue placeholder="Operator">
+                                {(value: string | null) => {
+                                    if (!value) return "Operator"
+                                    return conditionOperators.find((option) => option.value === value)?.label ?? "Unknown operator"
+                                }}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {conditionOperators.map((operator) => (
+                                <SelectItem key={operator.value} value={operator.value}>
+                                    {operator.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <div className="flex min-w-0">
+                        <ConditionValueInput
+                            condition={condition}
+                            options={getConditionOptions(condition.field)}
+                            onChange={(value) => updateCondition(index, { value })}
+                        />
+                    </div>
+                </PanelCard>
+            ))}
+            {conditions.length === 0 ? (
+                <Button
+                    unstyled
+                    type="button"
+                    onClick={addCondition}
+                    className="flex h-8 w-full items-center gap-2 rounded-md border border-dashed border-border px-2.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                >
+                    <PlusIcon aria-hidden="true" className="size-3.5" />
+                    Add filter
+                </Button>
+            ) : null}
+        </PanelSection>
     )
 }

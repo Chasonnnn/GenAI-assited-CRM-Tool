@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDownIcon, ChevronUpIcon, Trash2Icon } from "lucide-react"
+import { ChevronDownIcon, ChevronUpIcon, ShieldCheckIcon, Trash2Icon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,8 +20,8 @@ import {
     getEmailRecipientUserId,
     type EditableAction,
 } from "@/components/automation/workflow-editor/shared"
-import { InspectorPanel, InspectorSection } from "./inspector-section"
-import { NodeIcon, getActionMeta } from "./node-meta"
+import { EditorColumn, PanelCard, PanelHeading, PanelSection } from "./inspector-section"
+import { getActionMeta } from "./node-meta"
 
 export function WorkflowActionPanel({
     controller,
@@ -38,45 +38,48 @@ export function WorkflowActionPanel({
     const { updateActionType, removeAction, moveAction } = handlers
     const meta = getActionMeta(action.action_type)
     const actionLabel = actionTypeOptions.find((option) => option.value === action.action_type)?.label ?? "Action"
+    const approvalLocked = isDonorSubject(subjectType) && action.action_type === "send_message"
 
     return (
-        <InspectorPanel
-            title={actionLabel}
-            icon={<NodeIcon icon={meta.icon} tone={meta.tone} size="sm" />}
-            actions={
-                <div className="flex items-center gap-0.5">
-                    <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label="Move action up"
-                        disabled={index === 0}
-                        onClick={() => moveAction(index, -1)}
-                    >
-                        <ChevronUpIcon aria-hidden="true" />
-                    </Button>
-                    <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label="Move action down"
-                        disabled={index >= actions.length - 1}
-                        onClick={() => moveAction(index, 1)}
-                    >
-                        <ChevronDownIcon aria-hidden="true" />
-                    </Button>
-                    <Button
-                        size="icon-sm"
-                        variant="destructive-ghost"
-                        aria-label="Remove action"
-                        onClick={() => removeAction(index)}
-                    >
-                        <Trash2Icon aria-hidden="true" />
-                    </Button>
-                </div>
-            }
-        >
-            <InspectorSection title={`Step ${index + 1}`}>
-                <div className="grid gap-1.5">
-                    <Label>Action</Label>
+        <EditorColumn aria-label="Action settings">
+            <PanelHeading
+                title={actionLabel}
+                actions={
+                    <div className="flex items-center">
+                        <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            className="size-7"
+                            aria-label="Move action up"
+                            disabled={index === 0}
+                            onClick={() => moveAction(index, -1)}
+                        >
+                            <ChevronUpIcon aria-hidden="true" />
+                        </Button>
+                        <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            className="size-7"
+                            aria-label="Move action down"
+                            disabled={index >= actions.length - 1}
+                            onClick={() => moveAction(index, 1)}
+                        >
+                            <ChevronDownIcon aria-hidden="true" />
+                        </Button>
+                        <Button
+                            size="icon-sm"
+                            variant="destructive-ghost"
+                            className="size-7"
+                            aria-label="Remove action"
+                            onClick={() => removeAction(index)}
+                        >
+                            <Trash2Icon aria-hidden="true" />
+                        </Button>
+                    </div>
+                }
+            />
+            <PanelSection title={`Step ${index + 1}`}>
+                <PanelCard icon={meta.icon} title="Action">
                     <Select
                         aria-label={`Action type ${index + 1}`}
                         value={action.action_type}
@@ -99,33 +102,31 @@ export function WorkflowActionPanel({
                             ))}
                         </SelectContent>
                     </Select>
-                </div>
-                <WorkflowActionFields controller={controller} action={action} index={index} />
-            </InspectorSection>
+                    <WorkflowActionFields controller={controller} action={action} index={index} />
+                </PanelCard>
+            </PanelSection>
 
             {action.action_type && action.action_type !== "promote_intake_lead" ? (
-                <InspectorSection title="Approval">
-                    <div className="flex items-center justify-between gap-3">
-                        <div className="flex flex-col">
-                            <Label htmlFor={`approval-${action.clientId}`} className="text-sm font-medium">
-                                Requires Approval
-                            </Label>
-                            <span className="text-xs text-muted-foreground">
-                                {isDonorSubject(subjectType)
-                                    ? "Donor owner must approve before this action runs"
-                                    : "A reviewer must approve before this action runs"}
-                            </span>
-                        </div>
-                        <Switch
-                            id={`approval-${action.clientId}`}
-                            checked={!!action.requires_approval}
-                            onCheckedChange={(checked) => handlers.updateAction(index, { requires_approval: checked })}
-                            disabled={isDonorSubject(subjectType) && action.action_type === "send_message"}
-                        />
-                    </div>
-                </InspectorSection>
+                <PanelSection title="Approval">
+                    <PanelCard
+                        icon={ShieldCheckIcon}
+                        title="Requires Approval"
+                        actions={
+                            <Switch
+                                aria-label="Requires Approval"
+                                checked={!!action.requires_approval}
+                                onCheckedChange={(checked) => handlers.updateAction(index, { requires_approval: checked })}
+                                disabled={approvalLocked}
+                            />
+                        }
+                    >
+                        {approvalLocked ? (
+                            <p className="text-xs text-muted-foreground">Required for donor SMS</p>
+                        ) : null}
+                    </PanelCard>
+                </PanelSection>
             ) : null}
-        </InspectorPanel>
+        </EditorColumn>
     )
 }
 
