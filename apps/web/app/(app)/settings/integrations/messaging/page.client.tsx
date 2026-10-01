@@ -634,7 +634,7 @@ function RouteCard({
                 </div>
 
                 {editing ? (
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-4">
                         <CredentialField
                             id={`${purpose}-messaging-service-sid`}
                             label={`${prefix} Messaging Service SID`}
