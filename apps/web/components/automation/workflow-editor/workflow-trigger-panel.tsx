@@ -33,6 +33,7 @@ import {
     APPLICANT_TYPE_BOTH,
     APPLICANT_TYPE_OPTIONS,
     ConditionValueInput,
+    FORM_TRIGGER_TYPES,
     getApplicantTypeLabel,
     isDonorLeadKind,
 } from "@/components/automation/workflow-editor/shared"
@@ -249,17 +250,13 @@ function TriggerConfigFields({ controller }: { controller: WorkflowEditorControl
                 </FieldRow>
             )}
 
-            {(triggerType === "form_started" || triggerType === "form_submitted" || triggerType === "intake_lead_created") && (
+            {FORM_TRIGGER_TYPES.has(triggerType) && (
                 <FieldRow label="Form">
                     <Select
                         aria-label="Form"
                         value={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
                         onValueChange={(value) =>
-                            setTriggerConfig((currentConfig) =>
-                                triggerType === "form_started"
-                                    ? { ...currentConfig, form_id: value }
-                                    : withIntakeTriggerForm(triggerType, currentConfig, value),
-                            )
+                            setTriggerConfig((currentConfig) => withIntakeTriggerForm(triggerType, currentConfig, value))
                         }
                     >
                         <SelectTrigger aria-label="Form" className="w-full">

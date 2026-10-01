@@ -1383,4 +1383,118 @@ describe('WorkflowEditorPage', () => {
         )
         expect(mockPush).toHaveBeenCalledWith('/automation?tab=workflows&scope=org')
     })
+
+    describe('staff email recipients and per-trigger fields', () => {
+        const EMAIL_OPTIONS = {
+            ...DEFAULT_OPTIONS,
+            trigger_types: [
+                ...DEFAULT_OPTIONS.trigger_types,
+                { value: 'intake_lead_created', label: 'Intake Lead Created', description: '' },
+            ],
+            action_types: [{ value: 'send_email', label: 'Send Email', description: '' }],
+            action_types_by_trigger: { surrogate_created: ['send_email'], intake_lead_created: ['send_email'] },
+            trigger_entity_types: { ...DEFAULT_OPTIONS.trigger_entity_types, intake_lead_created: 'intake_lead' },
+            email_templates: [{ id: 'template-1', name: 'Staff Alert' }],
+            queues: [{ id: 'queue-1', name: 'Intake Queue' }],
+            forms: [{ id: 'form-1', name: 'Application', lead_kind: 'surrogate' }],
+        }
+        const selectWith = (value: string) =>
+            getFirstElement(
+                screen.getAllByTestId('select').filter((select) => select.querySelector(`option[value="${value}"]`)),
+                `Expected a select offering ${value}`,
+            )
+
+        it('saves a Send Email action addressed to a queue', () => {
+            mockUseWorkflowOptions.mockReturnValue({ data: EMAIL_OPTIONS, isLoading: false })
+            renderNewWorkflow()
+
+            fireEvent.change(nameInput(), { target: { value: 'Queue alert' } })
+            fireEvent.change(triggerSelect(), { target: { value: 'surrogate_created' } })
+            fireEvent.click(screen.getByRole('button', { name: 'Send Email' }))
+            fireEvent.change(selectWith('template-1'), { target: { value: 'template-1' } })
+            fireEvent.change(selectWith('queue'), { target: { value: 'queue' } })
+
+            expect(launchButton()).toHaveAttribute('aria-disabled', 'true')
+            fireEvent.change(selectWith('queue-1'), { target: { value: 'queue-1' } })
+            fireEvent.click(launchButton())
+
+            expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    actions: [
+                        expect.objectContaining({
+                            action_type: 'send_email',
+                            template_id: 'template-1',
+                            recipients: 'queue',
+                            recipient_queue_id: 'queue-1',
+                            recipient_role: null,
+                            recipient_emails: null,
+                        }),
+                    ],
+                }),
+                expect.any(Object),
+            )
+        })
+
+        it('requires valid custom email addresses', () => {
+            mockUseWorkflowOptions.mockReturnValue({ data: EMAIL_OPTIONS, isLoading: false })
+            renderNewWorkflow()
+
+            fireEvent.change(nameInput(), { target: { value: 'Address alert' } })
+            fireEvent.change(triggerSelect(), { target: { value: 'surrogate_created' } })
+            fireEvent.click(screen.getByRole('button', { name: 'Send Email' }))
+            fireEvent.change(selectWith('template-1'), { target: { value: 'template-1' } })
+            fireEvent.change(selectWith('custom'), { target: { value: 'custom' } })
+            const addresses = screen.getByRole('textbox', { name: 'Email addresses' })
+
+            fireEvent.change(addresses, { target: { value: 'intake@agency.test, not-an-address' } })
+            expect(screen.getAllByTestId('tooltip')[0]).toHaveTextContent('Enter valid email addresses.')
+
+            fireEvent.change(addresses, { target: { value: 'intake@agency.test, ops@agency.test' } })
+            fireEvent.click(launchButton())
+            expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    actions: [
+                        expect.objectContaining({
+                            recipients: 'custom',
+                            recipient_emails: ['intake@agency.test', 'ops@agency.test'],
+                        }),
+                    ],
+                }),
+                expect.any(Object),
+            )
+        })
+
+        it('offers only staff recipients for intake lead emails', () => {
+            mockUseWorkflowOptions.mockReturnValue({ data: EMAIL_OPTIONS, isLoading: false })
+            renderNewWorkflow()
+
+            fireEvent.change(triggerSelect(), { target: { value: 'intake_lead_created' } })
+            fireEvent.click(screen.getByRole('button', { name: 'Send Email' }))
+
+            const recipients = selectWith('all_admins')
+            expect(recipients).toHaveValue('all_admins')
+            expect(optionLabels(recipients)).not.toContain('Surrogate')
+            expect(optionLabels(recipients)).toContain('Queue')
+        })
+
+        it('lists the condition fields of the selected trigger with their values', () => {
+            mockUseWorkflowOptions.mockReturnValue({
+                data: {
+                    ...DEFAULT_OPTIONS,
+                    condition_fields: ['state'],
+                    condition_fields_by_trigger: { surrogate_created: ['contact_status', 'is_archived'] },
+                },
+                isLoading: false,
+            })
+            renderNewWorkflow()
+
+            fireEvent.change(triggerSelect(), { target: { value: 'surrogate_created' } })
+            fireEvent.click(screen.getByRole('button', { name: 'Add filter' }))
+            const field = selectWith('contact_status')
+            expect(optionLabels(field)).toEqual(['Contact Status', 'Is Archived'])
+
+            fireEvent.change(field, { target: { value: 'contact_status' } })
+            expect(optionLabels(selectWith('reached'))).toEqual(['Unreached', 'Reached'])
+        })
+    })
 })

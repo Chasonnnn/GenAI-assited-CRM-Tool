@@ -11,6 +11,7 @@ import { isPermissionError } from "@/lib/error-utils"
 import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
 import {
+    FORM_TRIGGER_TYPES,
     INTAKE_LEAD_KIND_CONFIG_KEYS,
     LIST_OPERATORS,
     MULTISELECT_FIELDS,
@@ -57,6 +58,8 @@ export const CREATE_WORKFLOW_SUBJECT_OPTIONS: Array<{ value: CreateWorkflowSubje
 // Mirrors workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES; the engine matches on subject_type.
 export const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubjectType>> = {
     form_submitted: "form_submission",
+    form_submission_approved: "form_submission",
+    form_submission_rejected: "form_submission",
     intake_lead_created: "intake_lead",
     match_proposed: "match",
     match_accepted: "match",
@@ -64,15 +67,18 @@ export const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubject
     match_cancelled: "match",
     appointment_scheduled: "appointment",
     appointment_completed: "appointment",
+    appointment_cancelled: "appointment",
+    appointment_no_show: "appointment",
 }
 
 export const TRIGGER_LABELS: Record<string, string> = {
     surrogate_created: "Surrogate Created",
     status_changed: "Status Changed",
     surrogate_assigned: "Surrogate Assigned",
-    surrogate_updated: "Field Updated",
-    form_started: "Form Started",
+    surrogate_updated: "Surrogate Updated",
     form_submitted: "Application Submitted",
+    form_submission_approved: "Application Approved",
+    form_submission_rejected: "Application Rejected",
     intake_lead_created: "Intake Lead Created",
     task_due: "Task Due",
     task_overdue: "Task Overdue",
@@ -84,6 +90,8 @@ export const TRIGGER_LABELS: Record<string, string> = {
     match_cancelled: "Match Cancelled",
     appointment_scheduled: "Appointment Scheduled",
     appointment_completed: "Appointment Completed",
+    appointment_cancelled: "Appointment Cancelled",
+    appointment_no_show: "Appointment No-Show",
     note_added: "Note Added",
     document_uploaded: "Document Uploaded",
     donor_created: "Donor Created",
@@ -108,7 +116,7 @@ export const DONOR_TYPE_OPTIONS: SelectOption[] = [
     { value: "sperm", label: "Sperm Donor" },
 ]
 
-const CONDITION_FIELD_LABELS: Record<string, string> = {
+export const CONDITION_FIELD_LABELS: Record<string, string> = {
     status_label: "Stage",
     stage_id: "Stage",
     source: "Source",
@@ -128,8 +136,6 @@ const CONDITION_FIELD_LABELS: Record<string, string> = {
     match_status: "Match Status",
     created_at: "Created At",
     date_of_birth: "Date of Birth",
-    age: "Age",
-    bmi: "BMI",
     height_ft: "Height (ft)",
     weight_lb: "Weight (lb)",
     journey_timing_preference: "Journey Timing",
@@ -142,6 +148,24 @@ const CONDITION_FIELD_LABELS: Record<string, string> = {
     education: "Education",
     donor_type: "Donor Type",
     donor_number: "Donor Number",
+    marital_status: "Marital Status",
+    contact_status: "Contact Status",
+    last_contacted_at: "Last Contacted",
+    assigned_at: "Assigned At",
+    embryo_stage: "Embryo Stage",
+    pregnancy_due_date: "Due Date",
+    actual_delivery_date: "Delivery Date",
+    college: "College",
+    nicotine: "Nicotine",
+    cannabis: "Cannabis",
+    infectious_disease: "Infectious Disease",
+    previous_donation: "Previous Donation",
+    submitted_at: "Submitted At",
+    match_kind: "Match Type",
+    outcome: "Outcome",
+    appointment_type_id: "Appointment Type",
+    meeting_mode: "Meeting Mode",
+    scheduled_start: "Scheduled Start",
 }
 
 export function getConditionFieldLabel(value: string): string {
@@ -217,11 +241,7 @@ export function normalizeTriggerConfigForUi(
             next.hours_before = 24
         }
     }
-    if (
-        triggerType === "form_started" ||
-        triggerType === "form_submitted" ||
-        triggerType === "intake_lead_created"
-    ) {
+    if (FORM_TRIGGER_TYPES.has(triggerType)) {
         if (typeof next.form_id !== "string") next.form_id = ""
     }
     if (triggerType === "surrogate_updated" || triggerType === "donor_updated") {
@@ -254,11 +274,7 @@ export function buildTriggerConfigForSave(triggerType: string, triggerConfig: Js
         const hours = Number(next.hours_before)
         next.hours_before = Number.isFinite(hours) ? hours : 24
     }
-    if (
-        triggerType === "form_started" ||
-        triggerType === "form_submitted" ||
-        triggerType === "intake_lead_created"
-    ) {
+    if (FORM_TRIGGER_TYPES.has(triggerType)) {
         if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
     }
     if (triggerType === "surrogate_updated" || triggerType === "donor_updated") {
@@ -283,11 +299,7 @@ export function getTriggerConfigValidationError(triggerType: string, triggerConf
         const hours = triggerConfig.hours_before
         if (!hours || typeof hours !== "number") return "Hours before due is required."
     }
-    if (
-        triggerType === "form_started" ||
-        triggerType === "form_submitted" ||
-        triggerType === "intake_lead_created"
-    ) {
+    if (FORM_TRIGGER_TYPES.has(triggerType)) {
         const formId = triggerConfig.form_id
         if (!formId || typeof formId !== "string") return "Select a form."
     }
@@ -297,6 +309,8 @@ export function getTriggerConfigValidationError(triggerType: string, triggerConf
     }
     return null
 }
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function getActionValidationError(action: ActionConfig): string | null {
     const title = typeof action.title === "string" ? action.title : ""
@@ -311,6 +325,20 @@ export function getActionValidationError(action: ActionConfig): string | null {
         action.recipients.length === 0
     ) {
         return "Select at least one email recipient."
+    }
+    if (action.action_type === "send_email" && action.recipients === "queue" && !action.recipient_queue_id) {
+        return "Select a queue for queue email recipients."
+    }
+    if (action.action_type === "send_email" && action.recipients === "role" && !action.recipient_role) {
+        return "Select a role for role email recipients."
+    }
+    if (action.action_type === "send_email" && action.recipients === "custom") {
+        const emails = Array.isArray(action.recipient_emails) ? action.recipient_emails : []
+        if (emails.length === 0) return "Enter at least one email address."
+        if (emails.length > 10) return "Enter at most 10 email addresses."
+        if (emails.some((email) => typeof email !== "string" || !EMAIL_PATTERN.test(email))) {
+            return "Enter valid email addresses."
+        }
     }
     if (action.action_type === "send_message" && !action.purpose) {
         return "Select a message purpose for all messaging actions."

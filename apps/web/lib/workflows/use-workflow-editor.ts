@@ -21,12 +21,17 @@ import type { JsonObject } from "@/lib/types/json"
 import { completeWorkflowSetup, startWorkflowSetup } from "@/lib/workflow-metrics"
 import { toast } from "@/components/ui/toast"
 import {
+    CONTACT_STATUS_OPTIONS,
     EMAIL_RECIPIENT_OPTIONS,
     FORM_MATCH_STATUS_OPTIONS,
     FORM_SOURCE_MODE_OPTIONS,
     INTAKE_LEAD_KIND_CONFIG_KEYS,
+    MATCH_KIND_OPTIONS,
+    MEETING_MODE_OPTIONS,
     OWNER_TYPE_OPTIONS,
     SOURCE_OPTIONS,
+    STATUS_OPTIONS_BY_ENTITY,
+    SUBJECT_EMAIL_RECIPIENTS,
     areJsonObjectsEqual,
     createClientRowId,
     isDonorIntakeWorkflow,
@@ -168,7 +173,8 @@ export function useWorkflowEditor({
     const queueOptions = options?.queues ?? []
     const messageTemplates = options?.message_templates ?? []
     const emailTemplates = options?.email_templates ?? []
-    const emailRecipientOptions: SelectOption[] = isDonorSubject(subjectType)
+    const triggerEntityType = triggerType ? options?.trigger_entity_types?.[triggerType] : undefined
+    const baseEmailRecipientOptions: SelectOption[] = isDonorSubject(subjectType)
         ? [
             { value: "donor", label: "Donor" },
             ...EMAIL_RECIPIENT_OPTIONS.flatMap((option) => {
@@ -177,6 +183,12 @@ export function useWorkflowEditor({
             }),
         ]
         : EMAIL_RECIPIENT_OPTIONS
+    // A new intake lead is not a surrogate or donor yet, so only staff can be emailed
+    // (mirrors workflow_service._validate_action_config).
+    const emailRecipientOptions =
+        triggerEntityType === "intake_lead"
+            ? baseEmailRecipientOptions.filter((option) => !SUBJECT_EMAIL_RECIPIENTS.has(option.value))
+            : baseEmailRecipientOptions
     const conditionOperators = options?.condition_operators ?? []
     const triggerTypeOptions: WorkflowOptions["trigger_types"] = options?.trigger_types ?? []
 
@@ -197,7 +209,10 @@ export function useWorkflowEditor({
     const selectedTriggerFields = Array.isArray(triggerConfig.fields)
         ? triggerConfig.fields.filter((field): field is string => typeof field === "string")
         : []
-    const optionConditionFields = options?.condition_fields ?? []
+    const optionConditionFields =
+        (triggerType ? options?.condition_fields_by_trigger?.[triggerType] : undefined) ??
+        options?.condition_fields ??
+        []
     const availableConditionFields = hasSharedDonorRecord
         ? optionConditionFields.filter((field) => field !== "stage_id")
         : optionConditionFields
@@ -250,6 +265,10 @@ export function useWorkflowEditor({
         if (field === "source_mode") return FORM_SOURCE_MODE_OPTIONS
         if (field === "match_status") return FORM_MATCH_STATUS_OPTIONS
         if (field === "donor_type") return DONOR_TYPE_OPTIONS
+        if (field === "contact_status") return CONTACT_STATUS_OPTIONS
+        if (field === "match_kind") return MATCH_KIND_OPTIONS
+        if (field === "meeting_mode") return MEETING_MODE_OPTIONS
+        if (field === "status") return (triggerEntityType && STATUS_OPTIONS_BY_ENTITY[triggerEntityType]) || null
         return null
     }
 
@@ -303,6 +322,7 @@ export function useWorkflowEditor({
     const buildNewAction = (actionType: string): Partial<ActionConfig> => ({
         action_type: actionType,
         ...(isDonorSubject(subjectType) && actionType === "send_message" ? { requires_approval: true } : {}),
+        ...(actionType === "send_email" && triggerEntityType === "intake_lead" ? { recipients: "all_admins" } : {}),
     })
     const addAction = (actionType = "") => {
         const clientId = createClientRowId()

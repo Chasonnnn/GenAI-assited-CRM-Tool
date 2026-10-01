@@ -12,7 +12,13 @@ import {
     getTriggerLabel,
     isDonorSubject,
 } from "@/lib/workflows/workflow-editor-state"
-import { getEmailRecipientKind, getEmailRecipientUserId, type EditableAction } from "@/components/automation/workflow-editor/shared"
+import {
+    STAFF_ROLE_OPTIONS,
+    getEmailRecipientEmails,
+    getEmailRecipientKind,
+    getEmailRecipientUserId,
+    type EditableAction,
+} from "@/components/automation/workflow-editor/shared"
 import { cn } from "@/lib/utils"
 import { NodeIcon, getActionMeta, getTriggerIcon, type ActionTone } from "./node-meta"
 
@@ -77,7 +83,13 @@ function getActionSummary(action: EditableAction, options: CanvasOptions, state:
             const recipient =
                 kind === "user"
                     ? options.userOptions.find((option) => option.id === getEmailRecipientUserId(action))?.display_name
-                    : options.emailRecipientOptions.find((option) => option.value === kind)?.label
+                    : kind === "queue"
+                        ? options.queueOptions.find((queue) => queue.id === action.recipient_queue_id)?.name
+                        : kind === "role"
+                            ? STAFF_ROLE_OPTIONS.find((role) => role.value === action.recipient_role)?.label
+                            : kind === "custom"
+                                ? getEmailRecipientEmails(action).join(", ") || null
+                                : options.emailRecipientOptions.find((option) => option.value === kind)?.label
             return [template?.name, recipient ? `to ${recipient}` : null].filter(Boolean).join(" ") || null
         }
         case "send_message": {

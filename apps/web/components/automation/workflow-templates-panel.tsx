@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { listForms, type FormSummary } from "@/lib/api/forms"
 import type { WorkflowScope } from "@/lib/api/workflows"
+import { getTriggerLabel } from "@/lib/workflows/workflow-editor-state"
 
 interface TemplateAction {
     action_type?: string
@@ -148,21 +149,6 @@ const DEFAULT_CATEGORIES = Object.entries(DEFAULT_CATEGORY_LABELS).map(([value, 
     value,
     label,
 }))
-
-const TRIGGER_LABELS: Record<string, string> = {
-    surrogate_created: "Surrogate Created",
-    status_changed: "Status Changed",
-    surrogate_assigned: "Surrogate Assigned",
-    surrogate_updated: "Field Updated",
-    task_due: "Task Due",
-    task_overdue: "Task Overdue",
-    scheduled: "Scheduled",
-    inactivity: "Inactivity",
-    match_proposed: "Match Proposed",
-    match_accepted: "Match Accepted",
-    match_declined: "Match Declined",
-    match_cancelled: "Match Cancelled",
-}
 
 const WORKFLOW_SCOPE_LABELS: Record<WorkflowScope, string> = {
     personal: "Personal Workflow",
@@ -888,9 +874,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
         typeof triggerConfig.form_id === "string" ? triggerConfig.form_id.trim() : ""
     const templateRequiresPublishedForm =
         !!selectedTemplateDetail &&
-        (selectedTemplateDetail.trigger_type === "form_started" ||
-            !!triggerFormName ||
-            !!triggerFormId)
+        (!!triggerFormName || !!triggerFormId)
     const publishedForms = forms.filter((form: FormSummary) => form.status === "published")
     const autoSelectedForm = getAutoSelectedForm(triggerFormId, triggerFormName, publishedForms)
     const selectedPublishedForm = selectedTriggerFormId
@@ -1097,7 +1081,7 @@ function TemplateCard({
                 </CardDescription>
                 <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
                     <span className="min-w-0 pr-3 break-words">
-                        Trigger: {TRIGGER_LABELS[template.trigger_type] || template.trigger_type}
+                        Trigger: {getTriggerLabel(template.trigger_type)}
                     </span>
                     <span>{template.usage_count} uses</span>
                 </div>

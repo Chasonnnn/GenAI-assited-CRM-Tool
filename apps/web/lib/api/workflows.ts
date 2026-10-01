@@ -151,6 +151,7 @@ export interface WorkflowOptions {
     trigger_entity_types?: Record<string, string>
     condition_operators: { value: string; label: string }[]
     condition_fields: string[]
+    condition_fields_by_trigger?: Record<string, string[]>
     update_fields: string[]
     email_variables: string[]
     email_templates: { id: string; name: string }[]

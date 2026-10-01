@@ -16,6 +16,9 @@ import {
     isDonorSubject,
 } from "@/lib/workflows/workflow-editor-state"
 import {
+    CONTACT_STATUS_OPTIONS,
+    STAFF_ROLE_OPTIONS,
+    getEmailRecipientEmails,
     getEmailRecipientKind,
     getEmailRecipientUserId,
     type EditableAction,
@@ -188,16 +191,31 @@ function WorkflowActionFields({
                                 : getEmailRecipientKind(action)
                         }
                         onValueChange={(value) => {
+                            if (!value) return
+                            // Clear the other kinds' targets so a saved action carries only its own.
+                            const targets = {
+                                recipient_queue_id: value === "queue" ? (action.recipient_queue_id ?? null) : null,
+                                recipient_role: value === "role" ? (action.recipient_role ?? null) : null,
+                                recipient_emails: value === "custom" ? (action.recipient_emails ?? null) : null,
+                            }
                             if (value === "user") {
                                 const currentUser = getEmailRecipientUserId(action)
-                                updateAction(index, { recipients: currentUser ? [currentUser] : [] })
+                                updateAction(index, { recipients: currentUser ? [currentUser] : [], ...targets })
                                 return
                             }
-                            updateAction(index, { recipients: value })
+                            updateAction(index, { recipients: value, ...targets })
                         }}
                     >
                         <SelectTrigger id={fieldId("email-recipient")} className="w-full">
-                            <SelectValue placeholder="Select recipient" />
+                            <SelectValue placeholder="Select recipient">
+                                {(value: string | null) => {
+                                    if (!value) return "Select recipient"
+                                    return (
+                                        emailRecipientOptions.find((option) => option.value === value)?.label ??
+                                        "Unknown recipient"
+                                    )
+                                }}
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                             {emailRecipientOptions.map((option) => (
@@ -231,6 +249,73 @@ function WorkflowActionFields({
                                 ))}
                             </SelectContent>
                         </Select>
+                    </FieldRow>
+                )}
+                {getEmailRecipientKind(action) === "queue" && (
+                    <FieldRow label="Queue" htmlFor={fieldId("email-queue")}>
+                        <Select
+                            value={typeof action.recipient_queue_id === "string" ? action.recipient_queue_id : ""}
+                            onValueChange={(value) => value && updateAction(index, { recipient_queue_id: value })}
+                        >
+                            <SelectTrigger id={fieldId("email-queue")} className="w-full">
+                                <SelectValue placeholder="Select queue">
+                                    {(value: string | null) => {
+                                        if (!value) return "Select queue"
+                                        return queueOptions.find((queue) => queue.id === value)?.name ?? "Unknown queue"
+                                    }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {queueOptions.map((queue) => (
+                                    <SelectItem key={queue.id} value={queue.id}>
+                                        {queue.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FieldRow>
+                )}
+                {getEmailRecipientKind(action) === "role" && (
+                    <FieldRow label="Role" htmlFor={fieldId("email-role")}>
+                        <Select
+                            value={typeof action.recipient_role === "string" ? action.recipient_role : ""}
+                            onValueChange={(value) => value && updateAction(index, { recipient_role: value })}
+                        >
+                            <SelectTrigger id={fieldId("email-role")} className="w-full">
+                                <SelectValue placeholder="Select role">
+                                    {(value: string | null) => {
+                                        if (!value) return "Select role"
+                                        return STAFF_ROLE_OPTIONS.find((role) => role.value === value)?.label ?? "Unknown role"
+                                    }}
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {STAFF_ROLE_OPTIONS.map((role) => (
+                                    <SelectItem key={role.value} value={role.value}>
+                                        {role.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FieldRow>
+                )}
+                {getEmailRecipientKind(action) === "custom" && (
+                    <FieldRow label="Email addresses" htmlFor={fieldId("email-addresses")}>
+                        <Input
+                            id={fieldId("email-addresses")}
+                            type="text"
+                            inputMode="email"
+                            placeholder="name@agency.com, team@agency.com"
+                            value={getEmailRecipientEmails(action).join(", ")}
+                            onChange={(event) =>
+                                updateAction(index, {
+                                    recipient_emails: event.target.value
+                                        .split(",")
+                                        .map((email) => email.trim())
+                                        .filter(Boolean),
+                                })
+                            }
+                        />
                     </FieldRow>
                 )}
             </>
@@ -518,6 +603,22 @@ function WorkflowActionFields({
                                     {UPDATE_SOURCE_OPTIONS.map((source) => (
                                         <SelectItem key={source.value} value={source.value}>
                                             {source.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        ) : action.field === "contact_status" ? (
+                            <Select
+                                value={typeof action.value === "string" ? action.value : ""}
+                                onValueChange={(value) => value && updateAction(index, { value })}
+                            >
+                                <SelectTrigger id={fieldId("update-value")} className="w-full">
+                                    <SelectValue placeholder="Select contact status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {CONTACT_STATUS_OPTIONS.map((status) => (
+                                        <SelectItem key={status.value} value={status.value}>
+                                            {status.label}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
