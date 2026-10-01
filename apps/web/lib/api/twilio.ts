@@ -115,11 +115,20 @@ export interface TwilioProviderCapabilities {
     status_callbacks: boolean
 }
 
+export type TwilioSenderType = "10dlc" | "toll_free" | "unknown"
+export type TwilioTollFreeVerificationStatus =
+    | "PENDING_REVIEW"
+    | "IN_REVIEW"
+    | "TWILIO_APPROVED"
+    | "TWILIO_REJECTED"
+
 export interface TwilioRouteReadiness {
     status: TwilioReadinessStatus
     can_send_sms: boolean
     can_send_mms: boolean
     can_receive: boolean
+    sender_type: TwilioSenderType | null
+    toll_free_verification_status: TwilioTollFreeVerificationStatus | null
     issues: string[]
 }
 
@@ -154,6 +163,17 @@ export interface TwilioReadinessIssue {
     route: TwilioMessagingPurpose | null
 }
 
+export type TwilioReadinessGateStatus = "pass" | "fail" | "pending" | "skipped"
+
+/** One launch requirement, projected server-side from the same codes that gate sending. */
+export interface TwilioReadinessGate {
+    key: string
+    label: string
+    status: TwilioReadinessGateStatus
+    detail: string | null
+    route: TwilioMessagingPurpose | null
+}
+
 export interface TwilioReadiness {
     overall_status: TwilioReadinessStatus
     checked_at: string | null
@@ -163,6 +183,13 @@ export interface TwilioReadiness {
         reconciliation: TwilioReconciliationReadiness
     }
     issues: TwilioReadinessIssue[]
+    gates: TwilioReadinessGate[]
+}
+
+export interface TwilioReadinessCheckResponse {
+    check_status: "queued" | "running"
+    queued_at: string
+    readiness: TwilioReadiness
 }
 
 export interface MessagingTemplateVersion {
@@ -195,6 +222,11 @@ export function testTwilioCredentials(
 
 export function getTwilioReadiness(): Promise<TwilioReadiness> {
     return api.get<TwilioReadiness>("/twilio/readiness")
+}
+
+/** Queue a no-send provider check on the worker; the fresh evidence arrives via getTwilioReadiness. */
+export function queueTwilioReadinessCheck(): Promise<TwilioReadinessCheckResponse> {
+    return api.post<TwilioReadinessCheckResponse>("/twilio/readiness")
 }
 
 export function listMessagingTemplates(params?: {
