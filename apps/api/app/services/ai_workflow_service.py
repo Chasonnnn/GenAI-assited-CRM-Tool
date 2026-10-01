@@ -107,7 +107,6 @@ class WorkflowSaveRequest(BaseModel):
 AVAILABLE_TRIGGERS = {
     "surrogate_created": "When a new surrogate is created",
     "status_changed": "When a surrogate status changes (use conditions for specific statuses)",
-    "form_started": "When an applicant starts a form draft (trigger_config.form_id required)",
     "form_submitted": "When an applicant submits a form (trigger_config.form_id required)",
     "form_submission_approved": "When a submitted application is approved (trigger_config.form_id optional)",
     "form_submission_rejected": "When a submitted application is rejected (trigger_config.form_id optional)",

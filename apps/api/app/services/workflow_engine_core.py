@@ -280,12 +280,6 @@ class WorkflowEngineCore:
             changed_fields = set(event_data.get("changed_fields", []))
             return bool(required_fields & changed_fields)
 
-        if trigger_type == WorkflowTriggerType.FORM_STARTED:
-            form_id = config.get("form_id")
-            if form_id and str(event_data.get("form_id")) != str(form_id):
-                return False
-            return True
-
         if trigger_type in {
             WorkflowTriggerType.FORM_SUBMITTED,
             WorkflowTriggerType.FORM_SUBMISSION_APPROVED,

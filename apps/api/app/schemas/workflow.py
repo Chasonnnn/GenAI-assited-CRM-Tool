@@ -245,12 +245,6 @@ class SurrogateAssignedTriggerConfig(BaseModel):
     to_user_id: UUID | None = None  # Optional: only trigger for specific user
 
 
-class FormStartedTriggerConfig(BaseModel):
-    """Config for form_started trigger."""
-
-    form_id: UUID
-
-
 class FormSubmittedTriggerConfig(BaseModel):
     """Config for form_submitted trigger."""
 

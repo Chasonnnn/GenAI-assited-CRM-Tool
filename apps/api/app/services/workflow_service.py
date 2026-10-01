@@ -79,7 +79,6 @@ TRIGGER_ENTITY_TYPES = {
     "donor_stage_changed": "donor",
     "donor_assigned": "donor",
     "donor_updated": "donor",
-    "form_started": "surrogate",
     "form_submitted": "form_submission",
     "form_submission_approved": "form_submission",
     "form_submission_rejected": "form_submission",
@@ -1701,11 +1700,6 @@ def get_workflow_options(
             "value": "surrogate_updated",
             "label": "Surrogate Updated",
             "description": "When specific fields change",
-        },
-        {
-            "value": "form_started",
-            "label": "Form Started",
-            "description": "When an applicant starts a form draft",
         },
         {
             "value": "form_submitted",

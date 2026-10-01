@@ -109,7 +109,7 @@ class DefaultWorkflowDomainAdapter:
         WorkflowActionType.UPDATE_FIELD.value,
         WorkflowActionType.ADD_NOTE.value,
     }
-    INTAKE_LEAD_ONLY_ACTIONS = {"promote_intake_lead"}
+    INTAKE_LEAD_ONLY_ACTIONS = {WorkflowActionType.PROMOTE_INTAKE_LEAD.value}
     FORM_SUBMISSION_ONLY_ACTIONS = {
         WorkflowActionType.AUTO_MATCH_SUBMISSION.value,
         WorkflowActionType.CREATE_INTAKE_LEAD.value,
@@ -691,7 +691,7 @@ class DefaultWorkflowDomainAdapter:
                 )
                 return _with_action_type(result)
 
-            if action_type == "promote_intake_lead":
+            if action_type == WorkflowActionType.PROMOTE_INTAKE_LEAD.value:
                 promote_action = action
                 if isinstance(entity, IntakeLead) and entity.lead_type in {
                     "egg_donor",

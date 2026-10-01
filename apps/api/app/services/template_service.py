@@ -11,7 +11,6 @@ from app.db.enums import FormStatus
 from app.db.models import AutomationWorkflow, Form, WorkflowTemplate, WorkflowTemplateTarget
 
 FORM_TRIGGER_TYPES = {
-    "form_started",
     "form_submitted",
     "form_submission_approved",
     "form_submission_rejected",

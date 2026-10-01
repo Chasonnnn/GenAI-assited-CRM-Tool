@@ -237,7 +237,6 @@ def validate_template(kind, draft, *, publishing=True, portable=True):
             trigger_config=config,
         )
         if trigger.value in {
-            "form_started",
             "form_submitted",
             "form_submission_approved",
             "form_submission_rejected",
@@ -246,12 +245,7 @@ def validate_template(kind, draft, *, publishing=True, portable=True):
             bindings.append(
                 "trigger_config.form_name: select a matching published form in the organization"
             )
-        if trigger.value == "form_started" and not config.get("form_id"):
-            bindings.append(
-                "trigger_config.form_id: select a published form when adopting the template"
-            )
-        else:
-            workflow_service._validate_trigger_config(trigger, config)
+        workflow_service._validate_trigger_config(trigger, config)
         models = {
             get_args(model.model_fields["action_type"].annotation)[0]: model
             for model in get_args(schemas.ActionConfig)

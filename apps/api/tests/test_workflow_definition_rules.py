@@ -74,10 +74,6 @@ def test_form_submission_rejects_create_before_match_without_mutating_input():
         (WorkflowTriggerType.INACTIVITY, {"days": "90"}),
         (WorkflowTriggerType.SURROGATE_UPDATED, {"fields": ["status_label"]}),
         (WorkflowTriggerType.DONOR_UPDATED, {"fields": ["donor_type"]}),
-        (
-            WorkflowTriggerType.FORM_STARTED,
-            {"form_id": "00000000-0000-0000-0000-000000000001"},
-        ),
         (WorkflowTriggerType.FORM_SUBMITTED, {"lead_kind": "egg_donor"}),
         (WorkflowTriggerType.INTAKE_LEAD_CREATED, {"lead_type": "sperm_donor"}),
     ],
@@ -134,7 +130,6 @@ def test_trigger_validation_does_not_normalize_or_add_defaults(trigger_type, con
             "fields",
             "Field 'unknown_field' is not allowed",
         ),
-        (WorkflowTriggerType.FORM_STARTED, {}, "form_id", "Field required"),
         (
             WorkflowTriggerType.FORM_SUBMITTED,
             {"lead_kind": "unknown"},
@@ -178,3 +173,11 @@ def test_trigger_without_config_schema_leaves_arbitrary_config_unchanged():
 
     assert validate_trigger_config(WorkflowTriggerType.TASK_OVERDUE, config) is None
     assert config == original
+
+
+def test_retired_form_started_trigger_is_rejected():
+    with pytest.raises(ValueError, match="form_started is no longer available"):
+        validate_trigger_config(
+            WorkflowTriggerType.FORM_STARTED,
+            {"form_id": "00000000-0000-0000-0000-000000000001"},
+        )

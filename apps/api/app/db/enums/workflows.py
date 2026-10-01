@@ -14,6 +14,8 @@ class WorkflowTriggerType(str, Enum):
     DONOR_STAGE_CHANGED = "donor_stage_changed"
     DONOR_ASSIGNED = "donor_assigned"
     DONOR_UPDATED = "donor_updated"
+    # Retired: never emitted. Kept so stored rows still load; new workflows reject it.
+    # Remove once production has no form_started workflows or templates.
     FORM_STARTED = "form_started"
     FORM_SUBMITTED = "form_submitted"
     FORM_SUBMISSION_APPROVED = "form_submission_approved"
@@ -60,6 +62,7 @@ class WorkflowActionType(str, Enum):
     ADD_NOTE = "add_note"
     AUTO_MATCH_SUBMISSION = "auto_match_submission"
     CREATE_INTAKE_LEAD = "create_intake_lead"
+    PROMOTE_INTAKE_LEAD = "promote_intake_lead"
 
 
 class WorkflowConditionOperator(str, Enum):
