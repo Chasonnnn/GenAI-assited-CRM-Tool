@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { ChevronUpIcon, GripVerticalIcon } from "lucide-react"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
 
@@ -146,5 +147,17 @@ export function DotOptionGroup({
                 </label>
             ))}
         </RadioGroup>
+    )
+}
+
+/** A visible field label above its control. */
+export function FieldRow({ label, htmlFor, children }: { label: string; htmlFor?: string; children: ReactNode }) {
+    return (
+        <div className="grid gap-1">
+            <Label htmlFor={htmlFor} className="font-normal text-muted-foreground">
+                {label}
+            </Label>
+            {children}
+        </div>
     )
 }

@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ReactNode } from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import WorkflowEditorPageClient from '../app/(app)/automation/workflows/[id]/page.client'
 import { ApiError } from '@/lib/api'
 import { getApplicantTypeLabel } from '@/components/automation/workflow-editor/shared'
@@ -281,6 +281,27 @@ describe('WorkflowEditorPage', () => {
         expect(screen.getByRole('combobox', { name: 'Action type 1' })).toHaveValue('add_note')
         expect(screen.getByRole('button', { name: 'Action 1: Add Note' })).toHaveAttribute('aria-pressed', 'true')
         expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('labels every Create Task field visibly', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...DEFAULT_OPTIONS,
+                action_types: [{ value: 'create_task', label: 'Create Task', description: '' }],
+                action_types_by_trigger: { surrogate_created: ['create_task'] },
+            },
+            isLoading: false,
+        })
+
+        renderNewWorkflow()
+        fireEvent.change(triggerSelect(), { target: { value: 'surrogate_created' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Create Task' }))
+
+        const settings = screen.getByRole('complementary', { name: 'Action settings' })
+        for (const label of ['Task title', 'Task description', 'Due in days', 'Assignee']) {
+            expect(within(settings).getByText(label, { selector: 'label' })).toBeInTheDocument()
+        }
+        expect(screen.getByRole('spinbutton', { name: 'Due in days' })).toHaveValue(1)
     })
 
     it('blocks launching an incomplete workflow and names the reason', () => {
@@ -667,7 +688,7 @@ describe('WorkflowEditorPage', () => {
             target: { value: 'source' },
         })
 
-        expect(screen.queryByPlaceholderText('Value')).not.toBeInTheDocument()
+        expect(screen.queryByRole('textbox', { name: 'Value' })).not.toBeInTheDocument()
         const sourceSelect = screen.getByRole('combobox', { name: 'Source value 1' })
         const sourceOptions = Array.from(sourceSelect.querySelectorAll('option'))
             .filter((option) => option.value)
@@ -1109,7 +1130,7 @@ describe('WorkflowEditorPage', () => {
             const fieldSelect = screen.getByRole('combobox', { name: 'Field to update 1' })
             expect(optionLabels(fieldSelect)).toEqual(['Education', 'Source'])
             fireEvent.change(fieldSelect, { target: { value: 'education' } })
-            fireEvent.change(screen.getByPlaceholderText('Value'), { target: { value: 'Bachelor' } })
+            fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), { target: { value: 'Bachelor' } })
             fireEvent.click(launchButton())
 
             expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(

@@ -14,7 +14,6 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { WorkflowSubjectType } from "@/lib/api/workflows"
@@ -37,7 +36,7 @@ import {
     getApplicantTypeLabel,
     isDonorLeadKind,
 } from "@/components/automation/workflow-editor/shared"
-import { DotOptionGroup, EditorColumn, PanelCard, PanelHeading, PanelSection } from "./inspector-section"
+import { DotOptionGroup, EditorColumn, FieldRow, PanelCard, PanelHeading, PanelSection } from "./inspector-section"
 
 type TriggerMode = "event" | "time"
 
@@ -52,17 +51,6 @@ const SCHEDULE_FREQUENCY_OPTIONS: { value: ScheduleFrequency; label: string }[] 
     { value: "weekly", label: "Run every week" },
     { value: "custom", label: "Custom cron" },
 ]
-
-function FieldRow({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
-    return (
-        <div className="grid gap-1">
-            <Label htmlFor={htmlFor} className="font-normal text-muted-foreground">
-                {label}
-            </Label>
-            {children}
-        </div>
-    )
-}
 
 export function WorkflowTriggerPanel({ controller }: { controller: WorkflowEditorController }) {
     const { state, handlers, isEditing, createWorkflowSubjectOptions } = controller
