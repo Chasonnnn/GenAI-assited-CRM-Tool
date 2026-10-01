@@ -31,6 +31,7 @@ from app.db.models import (
     User,
     WorkflowExecution,
 )
+from app.schemas.workflow import is_subject_email_recipient
 from app.services import (
     notification_service,
     workflow_communication_actions,
@@ -461,6 +462,15 @@ class DefaultWorkflowDomainAdapter:
                     {"success": False, "error": "Donor subject not found", "skipped": True}
                 )
 
+        # Staff emails and notifications about an unlinked submission or lead run on that
+        # record itself; record actions need the surrogate or donor it became.
+        staff_alert_on_intake = entity_type in {"form_submission", "intake_lead"} and (
+            action_type == WorkflowActionType.SEND_NOTIFICATION.value
+            or (
+                action_type == WorkflowActionType.SEND_EMAIL.value
+                and not is_subject_email_recipient(action.get("recipients"))
+            )
+        )
         intake_donor_link = (
             self._intake_donor_link(entity_type, entity)
             if action_type in self.INTAKE_DONOR_RECORD_ACTIONS
@@ -469,11 +479,7 @@ class DefaultWorkflowDomainAdapter:
         if intake_donor_link is not None:
             donor_subject_type, linked_donor_id = intake_donor_link
             entity_label = entity_type.replace("_", " ")
-            # Unlinked leads keep notifying on the lead itself, as surrogate intake does.
-            if (
-                linked_donor_id is None
-                and action_type != WorkflowActionType.SEND_NOTIFICATION.value
-            ):
+            if linked_donor_id is None and not staff_alert_on_intake:
                 return _with_action_type(
                     {
                         "success": False,
@@ -511,7 +517,7 @@ class DefaultWorkflowDomainAdapter:
                     "promoted_surrogate_id" if entity_type == "intake_lead" else "surrogate_id",
                     None,
                 )
-                if not surrogate_id:
+                if not surrogate_id and not staff_alert_on_intake:
                     return _with_action_type(
                         {
                             "success": False,
@@ -519,22 +525,23 @@ class DefaultWorkflowDomainAdapter:
                             "skipped": True,
                         }
                     )
-                action_entity = (
-                    db.query(Surrogate)
-                    .filter(
-                        Surrogate.id == surrogate_id,
-                        Surrogate.organization_id == entity.organization_id,
+                if surrogate_id:
+                    action_entity = (
+                        db.query(Surrogate)
+                        .filter(
+                            Surrogate.id == surrogate_id,
+                            Surrogate.organization_id == entity.organization_id,
+                        )
+                        .first()
                     )
-                    .first()
-                )
-                if not action_entity:
-                    return _with_action_type(
-                        {
-                            "success": False,
-                            "error": f"Surrogate not found for {entity_type.replace('_', ' ')}",
-                            "skipped": True,
-                        }
-                    )
+                    if not action_entity:
+                        return _with_action_type(
+                            {
+                                "success": False,
+                                "error": f"Surrogate not found for {entity_type.replace('_', ' ')}",
+                                "skipped": True,
+                            }
+                        )
             elif entity_type != "surrogate":
                 return _with_action_type(
                     {

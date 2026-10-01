@@ -134,6 +134,13 @@ def _preview_send_email(db: Session, action: dict, entity: Any) -> str:
         recipient_desc = "case creator"
     elif recipients == "all_admins":
         recipient_desc = "all admins"
+    elif recipients == "queue":
+        recipient_desc = "queue members"
+    elif recipients == "role":
+        role = str(action.get("recipient_role") or "")
+        recipient_desc = f"{role.replace('_', ' ')} members" if role else "role members"
+    elif recipients == "custom":
+        recipient_desc = f"{len(action.get('recipient_emails') or [])} address(es)"
     elif isinstance(recipients, list):
         recipient_desc = f"{len(recipients)} user(s)"
 

@@ -55,6 +55,7 @@ from app.schemas.workflow import (
     WorkflowRead,
     WorkflowStats,
     WorkflowUpdate,
+    is_subject_email_recipient,
 )
 from app.services import user_service, workflow_execution_authority
 from app.services.workflow_definition_rules import (
@@ -1970,6 +1971,7 @@ def get_workflow_options(
             action_types_by_trigger[trigger] = surrogate_action_values
         elif entity_type == "intake_lead":
             action_types_by_trigger[trigger] = [
+                "send_email",
                 "send_notification",
                 "promote_intake_lead",
                 *(["send_message"] if messaging_available else []),
@@ -2588,6 +2590,25 @@ def _validate_action_config(
             if missing_ids:
                 missing_str = ", ".join(str(uid) for uid in sorted(missing_ids, key=str))
                 raise ValueError(f"Missing recipients in organization: {missing_str}")
+        if config.recipients == "queue":
+            queue = (
+                db.query(Queue.id)
+                .filter(
+                    Queue.id == config.recipient_queue_id,
+                    Queue.organization_id == org_id,
+                    Queue.is_active.is_(True),
+                )
+                .first()
+            )
+            if queue is None:
+                raise ValueError("Recipient queue not found in organization")
+        if (
+            trigger_type is not None
+            and TRIGGER_ENTITY_TYPES.get(trigger_type.value) == "intake_lead"
+            and is_subject_email_recipient(config.recipients)
+        ):
+            # A new lead is not a surrogate or donor yet, so only staff can be emailed.
+            raise ValueError("Intake lead emails must go to staff recipients")
         # Enforce scope rules for workflow email templates
         if workflow_scope == "org":
             if template.scope != "org":

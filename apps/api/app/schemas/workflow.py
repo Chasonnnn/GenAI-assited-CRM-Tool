@@ -5,10 +5,11 @@ from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.db.enums import (
     OwnerType,
+    Role,
     WorkflowConditionOperator,
     WorkflowTriggerType,
 )
@@ -154,6 +155,9 @@ ALLOWED_EMAIL_VARIABLES = {
     "donor_number",
     "donor_type",
     "education",
+    "form_name",
+    "submitted_at",
+    "record_link",
 }
 
 WorkflowSubjectType = Literal[
@@ -314,8 +318,40 @@ class SendEmailActionConfig(BaseModel):
     action_type: Literal["send_email"] = "send_email"
     template_id: UUID
     recipients: (
-        Literal["surrogate", "donor", "subject", "owner", "creator", "all_admins"] | list[UUID]
+        Literal[
+            "surrogate",
+            "donor",
+            "subject",
+            "owner",
+            "creator",
+            "all_admins",
+            "queue",
+            "role",
+            "custom",
+        ]
+        | list[UUID]
     ) = "surrogate"
+    recipient_queue_id: UUID | None = None
+    recipient_role: Role | None = None
+    recipient_emails: list[EmailStr] | None = Field(default=None, min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def _require_recipient_target(self) -> SendEmailActionConfig:
+        if self.recipients == "queue" and self.recipient_queue_id is None:
+            raise ValueError("Queue recipients require a queue")
+        if self.recipients == "role" and self.recipient_role is None:
+            raise ValueError("Role recipients require a role")
+        if self.recipients == "custom" and not self.recipient_emails:
+            raise ValueError("Custom recipients require at least one email address")
+        return self
+
+
+# Recipients that are records' contacts rather than staff.
+SUBJECT_EMAIL_RECIPIENTS = frozenset({"surrogate", "donor", "subject"})
+
+
+def is_subject_email_recipient(recipients: object) -> bool:
+    return isinstance(recipients, str) and recipients in SUBJECT_EMAIL_RECIPIENTS
 
 
 class SendMessageActionConfig(BaseModel):
