@@ -237,6 +237,25 @@ def trigger_surrogate_created(db: Session, surrogate: Surrogate) -> None:
     )
 
 
+def trigger_surrogate_updated(db: Session, surrogate: Surrogate, changed_fields: list[str]) -> None:
+    """Trigger workflows when a user edits surrogate fields; event data carries names only."""
+    if not changed_fields:
+        return
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.SURROGATE_UPDATED,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        event_data={
+            "surrogate_id": str(surrogate.id),
+            "changed_fields": changed_fields,
+        },
+        org_id=surrogate.organization_id,
+        source=WorkflowEventSource.USER,
+        entity_owner_id=_get_entity_owner_id(surrogate),
+    )
+
+
 def trigger_status_changed(
     db: Session,
     surrogate: Surrogate,

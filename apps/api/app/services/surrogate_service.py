@@ -946,6 +946,14 @@ def update_surrogate(
                 else:
                     db.flush()
 
+    # Callers that pass commit=False own the transaction and their own workflow events
+    # (for example, approving a form submission fires its own trigger).
+    changed_fields = sorted({*changes, *(["is_priority"] if priority_changed else [])})
+    if commit and changed_fields:
+        from app.services import workflow_triggers
+
+        workflow_triggers.trigger_surrogate_updated(db, surrogate, changed_fields)
+
     return surrogate
 
 
