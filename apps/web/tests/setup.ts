@@ -1,8 +1,7 @@
 import type { ReactNode } from "react"
-import { expect, afterEach, vi } from 'vitest'
+import { afterEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
-import * as matchers from '@testing-library/jest-dom/matchers'
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 
 vi.mock('@testing-library/react', async (importOriginal) => {
     const testingLibrary = await importOriginal<typeof import('@testing-library/react')>()
@@ -63,7 +62,6 @@ vi.mock('@/lib/context/ai-context', () => ({
     useSetAIContext: () => {},
 }))
 
-expect.extend(matchers)
 
 afterEach(() => {
     cleanup()
