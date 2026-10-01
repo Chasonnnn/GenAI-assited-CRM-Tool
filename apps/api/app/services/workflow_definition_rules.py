@@ -55,6 +55,8 @@ def validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) -> 
         WorkflowTriggerType.DONOR_UPDATED: SurrogateUpdatedTriggerConfig,
         WorkflowTriggerType.FORM_STARTED: FormStartedTriggerConfig,
         WorkflowTriggerType.FORM_SUBMITTED: FormSubmittedTriggerConfig,
+        WorkflowTriggerType.FORM_SUBMISSION_APPROVED: FormSubmittedTriggerConfig,
+        WorkflowTriggerType.FORM_SUBMISSION_REJECTED: FormSubmittedTriggerConfig,
         WorkflowTriggerType.INTAKE_LEAD_CREATED: IntakeLeadCreatedTriggerConfig,
     }
 

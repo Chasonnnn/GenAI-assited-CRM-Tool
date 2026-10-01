@@ -68,6 +68,8 @@ from app.utils.normalization import (
 
 LEGACY_WORKFLOW_SUBJECT_TYPES = {
     "form_submitted": "form_submission",
+    "form_submission_approved": "form_submission",
+    "form_submission_rejected": "form_submission",
     "intake_lead_created": "intake_lead",
     "match_proposed": "match",
     "match_accepted": "match",

@@ -374,6 +374,39 @@ def trigger_form_submitted(
     )
 
 
+def trigger_form_submission_reviewed(
+    db: Session, submission: FormSubmission, trigger_type: WorkflowTriggerType
+) -> list[WorkflowExecution]:
+    """Trigger workflows when staff approve or reject a submitted application."""
+    if trigger_type not in {
+        WorkflowTriggerType.FORM_SUBMISSION_APPROVED,
+        WorkflowTriggerType.FORM_SUBMISSION_REJECTED,
+    }:
+        raise ValueError(f"Not a submission review trigger: {trigger_type.value}")
+    entity_owner_id = _get_owner_id_for_surrogate_id(
+        db, submission.organization_id, submission.surrogate_id
+    )
+    return engine.trigger(
+        db=db,
+        trigger_type=trigger_type,
+        entity_type="form_submission",
+        entity_id=submission.id,
+        event_data={
+            "surrogate_id": str(submission.surrogate_id) if submission.surrogate_id else None,
+            "form_id": str(submission.form_id),
+            "submission_id": str(submission.id),
+            "lead_kind": submission.lead_kind,
+            "status": submission.status,
+            "reviewed_by_user_id": str(submission.reviewed_by_user_id)
+            if submission.reviewed_by_user_id
+            else None,
+        },
+        org_id=submission.organization_id,
+        source=WorkflowEventSource.USER,
+        entity_owner_id=entity_owner_id,
+    )
+
+
 def trigger_intake_lead_created(
     db: Session,
     lead: IntakeLead,

@@ -239,6 +239,8 @@ def validate_template(kind, draft, *, publishing=True, portable=True):
         if trigger.value in {
             "form_started",
             "form_submitted",
+            "form_submission_approved",
+            "form_submission_rejected",
             "intake_lead_created",
         } and config.get("form_name"):
             bindings.append(

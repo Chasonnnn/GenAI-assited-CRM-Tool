@@ -16,6 +16,8 @@ class WorkflowTriggerType(str, Enum):
     DONOR_UPDATED = "donor_updated"
     FORM_STARTED = "form_started"
     FORM_SUBMITTED = "form_submitted"
+    FORM_SUBMISSION_APPROVED = "form_submission_approved"
+    FORM_SUBMISSION_REJECTED = "form_submission_rejected"
     INTAKE_LEAD_CREATED = "intake_lead_created"
     TASK_DUE = "task_due"
     TASK_OVERDUE = "task_overdue"

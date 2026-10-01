@@ -286,7 +286,11 @@ class WorkflowEngineCore:
                 return False
             return True
 
-        if trigger_type == WorkflowTriggerType.FORM_SUBMITTED:
+        if trigger_type in {
+            WorkflowTriggerType.FORM_SUBMITTED,
+            WorkflowTriggerType.FORM_SUBMISSION_APPROVED,
+            WorkflowTriggerType.FORM_SUBMISSION_REJECTED,
+        }:
             form_id = config.get("form_id")
             if form_id and str(event_data.get("form_id")) != str(form_id):
                 return False
@@ -1231,7 +1235,12 @@ class WorkflowEngineCore:
         """Generate deterministic dedupe keys for triggers that must run once per entity."""
         trigger_type = workflow.trigger_type
 
-        if trigger_type in ["form_submitted", "intake_lead_created"]:
+        if trigger_type in [
+            "form_submitted",
+            "form_submission_approved",
+            "form_submission_rejected",
+            "intake_lead_created",
+        ]:
             return f"{workflow.id}:{entity_id}:{trigger_type}"
 
         if trigger_type in ["scheduled", "inactivity", "task_due", "task_overdue"]:

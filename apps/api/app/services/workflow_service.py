@@ -81,6 +81,8 @@ TRIGGER_ENTITY_TYPES = {
     "donor_updated": "donor",
     "form_started": "surrogate",
     "form_submitted": "form_submission",
+    "form_submission_approved": "form_submission",
+    "form_submission_rejected": "form_submission",
     "intake_lead_created": "intake_lead",
     "task_due": "task",
     "task_overdue": "task",
@@ -120,8 +122,16 @@ DONOR_TRIGGER_TYPES = {
     WorkflowTriggerType.NOTE_ADDED,
     WorkflowTriggerType.DOCUMENT_UPLOADED,
 }
+# Triggers whose entity is a form submission; they share form and lead-kind scoping.
+FORM_SUBMISSION_TRIGGER_TYPES = frozenset(
+    {
+        WorkflowTriggerType.FORM_SUBMITTED,
+        WorkflowTriggerType.FORM_SUBMISSION_APPROVED,
+        WorkflowTriggerType.FORM_SUBMISSION_REJECTED,
+    }
+)
 INTAKE_CONTEXT_KEYS = {
-    WorkflowTriggerType.FORM_SUBMITTED.value: "lead_kind",
+    **{trigger.value: "lead_kind" for trigger in FORM_SUBMISSION_TRIGGER_TYPES},
     WorkflowTriggerType.INTAKE_LEAD_CREATED.value: "lead_type",
 }
 
@@ -351,7 +361,9 @@ def _workflow_is_donor_related():
     return or_(
         AutomationWorkflow.subject_type.in_(DONOR_SUBJECT_TYPES),
         and_(
-            AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
+            AutomationWorkflow.trigger_type.in_(
+                [trigger.value for trigger in FORM_SUBMISSION_TRIGGER_TYPES]
+            ),
             or_(
                 AutomationWorkflow.trigger_config["lead_kind"].astext.in_(DONOR_SUBJECT_TYPES),
                 donor_form,
@@ -450,6 +462,8 @@ def _exact_donor_execution_identity_match():
 
 LEGACY_TRIGGER_SUBJECT_TYPES = {
     WorkflowTriggerType.FORM_SUBMITTED.value: "form_submission",
+    WorkflowTriggerType.FORM_SUBMISSION_APPROVED.value: "form_submission",
+    WorkflowTriggerType.FORM_SUBMISSION_REJECTED.value: "form_submission",
     WorkflowTriggerType.INTAKE_LEAD_CREATED.value: "intake_lead",
     WorkflowTriggerType.MATCH_PROPOSED.value: "match",
     WorkflowTriggerType.MATCH_ACCEPTED.value: "match",
@@ -667,7 +681,7 @@ def _canonicalize_trigger_config(
 ) -> dict[str, object]:
     config = deepcopy(trigger_config or {})
     intake_context_key = {
-        WorkflowTriggerType.FORM_SUBMITTED: "lead_kind",
+        **{trigger: "lead_kind" for trigger in FORM_SUBMISSION_TRIGGER_TYPES},
         WorkflowTriggerType.INTAKE_LEAD_CREATED: "lead_type",
     }.get(trigger_type)
     if intake_context_key is not None and config.get("form_id"):
@@ -1699,6 +1713,16 @@ def get_workflow_options(
             "description": "When an applicant submits a form",
         },
         {
+            "value": "form_submission_approved",
+            "label": "Application Approved",
+            "description": "When a submitted application is approved",
+        },
+        {
+            "value": "form_submission_rejected",
+            "label": "Application Rejected",
+            "description": "When a submitted application is rejected",
+        },
+        {
             "value": "intake_lead_created",
             "label": "Intake Lead Created",
             "description": "When shared intake creates a provisional lead",
@@ -1928,8 +1952,11 @@ def get_workflow_options(
             action_types_by_trigger[trigger] = status_changed_action_values
         elif entity_type in ("surrogate", "task"):
             action_types_by_trigger[trigger] = surrogate_action_values
-        elif entity_type == "form_submission":
+        elif trigger == WorkflowTriggerType.FORM_SUBMITTED.value:
             action_types_by_trigger[trigger] = form_submission_action_values
+        elif entity_type == "form_submission":
+            # Reviewed submissions are already routed; act on the linked record only.
+            action_types_by_trigger[trigger] = surrogate_action_values
         elif entity_type == "intake_lead":
             action_types_by_trigger[trigger] = [
                 "send_notification",

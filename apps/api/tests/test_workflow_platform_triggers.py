@@ -232,7 +232,9 @@ def test_v2_approval_and_completion_fire_appointment_workflows_once(
     completed = _notify_workflow(
         db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_COMPLETED
     )
-    no_show = _notify_workflow(db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_NO_SHOW)
+    no_show = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_NO_SHOW
+    )
 
     appointment = _create_booking(
         db, test_org.id, test_user.id, appointment_type.id, start, "trigger-create"
@@ -257,14 +259,18 @@ def test_v2_approval_and_completion_fire_appointment_workflows_once(
 
 def test_v2_no_show_and_cancel_fire_their_own_workflows(db, test_org, test_user, v2_booking_type):
     appointment_type, start = v2_booking_type
-    no_show = _notify_workflow(db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_NO_SHOW)
+    no_show = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_NO_SHOW
+    )
     cancelled = _notify_workflow(
         db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_CANCELLED
     )
 
     first = _approve(
         db,
-        _create_booking(db, test_org.id, test_user.id, appointment_type.id, start, "no-show-create"),
+        _create_booking(
+            db, test_org.id, test_user.id, appointment_type.id, start, "no-show-create"
+        ),
         test_user.id,
         "no-show-approve",
     )
@@ -318,3 +324,60 @@ def test_appointment_workflow_failure_keeps_committed_booking(
 
     db.expire_all()
     assert appointment.status == AppointmentStatus.CONFIRMED.value
+
+
+def _pending_submission(db, org_id, user_id, stage):
+    from tests.test_form_submission_service import (
+        _answers,
+        _create_published_form,
+        _create_shared_submission,
+        _create_surrogate,
+    )
+
+    surrogate = _create_surrogate(db, org_id, user_id, stage)
+    form = _create_published_form(db, org_id, user_id)
+    submission = _create_shared_submission(
+        db, form=form, surrogate=surrogate, user_id=user_id, answers=_answers()
+    )
+    return form, submission
+
+
+@pytest.mark.parametrize(
+    ("review", "trigger_type", "other_trigger_type"),
+    [
+        (
+            "approve",
+            WorkflowTriggerType.FORM_SUBMISSION_APPROVED,
+            WorkflowTriggerType.FORM_SUBMISSION_REJECTED,
+        ),
+        (
+            "reject",
+            WorkflowTriggerType.FORM_SUBMISSION_REJECTED,
+            WorkflowTriggerType.FORM_SUBMISSION_APPROVED,
+        ),
+    ],
+)
+def test_submission_review_fires_matching_form_workflows_only(
+    db, test_org, test_user, default_stage, review, trigger_type, other_trigger_type
+):
+    from app.services import form_submission_service
+
+    form, submission = _pending_submission(db, test_org.id, test_user.id, default_stage)
+    _other_form, other_submission = _pending_submission(
+        db, test_org.id, test_user.id, default_stage
+    )
+    matching = _note_workflow(
+        db, test_org.id, test_user.id, trigger_type, {"form_id": str(form.id)}
+    )
+    opposite = _note_workflow(
+        db, test_org.id, test_user.id, other_trigger_type, {"form_id": str(form.id)}
+    )
+    assert matching.subject_type == "form_submission"
+
+    review_fn = getattr(form_submission_service, f"{review}_submission")
+    review_fn(db=db, submission=submission, reviewer_id=test_user.id, review_notes=None)
+    review_fn(db=db, submission=other_submission, reviewer_id=test_user.id, review_notes=None)
+
+    assert _execution_count(db, test_org.id, matching.id) == 1
+    assert _execution_count(db, test_org.id, opposite.id) == 0
+    assert matching.id in _executed_workflow_ids(db, test_org.id, submission.id)
