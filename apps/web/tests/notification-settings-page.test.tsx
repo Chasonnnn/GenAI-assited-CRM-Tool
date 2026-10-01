@@ -31,6 +31,7 @@ vi.mock("@/lib/hooks/use-notifications", () => ({
             status_change_decisions: true,
             approval_timeouts: true,
             security_alerts: true,
+            email_workflow_notifications: false,
         },
         isLoading: false,
     }),
