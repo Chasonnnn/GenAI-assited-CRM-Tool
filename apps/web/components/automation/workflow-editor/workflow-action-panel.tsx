@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { ChevronDownIcon, ChevronUpIcon, ShieldCheckIcon, Trash2Icon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -130,6 +131,37 @@ export function WorkflowActionPanel({
                 </PanelSection>
             ) : null}
         </EditorColumn>
+    )
+}
+
+/** Keeps the typed text so separators survive while the action stores the parsed list. */
+function EmailAddressListInput({
+    id,
+    initialEmails,
+    onChange,
+}: {
+    id: string
+    initialEmails: string[]
+    onChange: (emails: string[]) => void
+}) {
+    const [text, setText] = useState(() => initialEmails.join(", "))
+    return (
+        <Input
+            id={id}
+            type="text"
+            inputMode="email"
+            placeholder="name@agency.com, team@agency.com"
+            value={text}
+            onChange={(event) => {
+                setText(event.target.value)
+                onChange(
+                    event.target.value
+                        .split(",")
+                        .map((email) => email.trim())
+                        .filter(Boolean),
+                )
+            }}
+        />
     )
 }
 
@@ -301,20 +333,11 @@ function WorkflowActionFields({
                 )}
                 {getEmailRecipientKind(action) === "custom" && (
                     <FieldRow label="Email addresses" htmlFor={fieldId("email-addresses")}>
-                        <Input
+                        <EmailAddressListInput
+                            key={action.clientId}
                             id={fieldId("email-addresses")}
-                            type="text"
-                            inputMode="email"
-                            placeholder="name@agency.com, team@agency.com"
-                            value={getEmailRecipientEmails(action).join(", ")}
-                            onChange={(event) =>
-                                updateAction(index, {
-                                    recipient_emails: event.target.value
-                                        .split(",")
-                                        .map((email) => email.trim())
-                                        .filter(Boolean),
-                                })
-                            }
+                            initialEmails={getEmailRecipientEmails(action)}
+                            onChange={(emails) => updateAction(index, { recipient_emails: emails })}
                         />
                     </FieldRow>
                 )}

@@ -1445,6 +1445,8 @@ describe('WorkflowEditorPage', () => {
             fireEvent.change(selectWith('template-1'), { target: { value: 'template-1' } })
             fireEvent.change(selectWith('custom'), { target: { value: 'custom' } })
             const addresses = screen.getByRole('textbox', { name: 'Email addresses' })
+            fireEvent.change(addresses, { target: { value: 'intake@agency.test, ' } })
+            expect(addresses).toHaveValue('intake@agency.test, ')
 
             fireEvent.change(addresses, { target: { value: 'intake@agency.test, not-an-address' } })
             expect(screen.getAllByTestId('tooltip')[0]).toHaveTextContent('Enter valid email addresses.')
