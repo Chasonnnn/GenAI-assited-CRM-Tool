@@ -1033,7 +1033,7 @@ export default function WorkflowTemplatesPanel({ embedded = false }: WorkflowTem
     return (
         <div className={cn("flex flex-col gap-6", embedded ? "" : "flex-1 p-6")}>
             {embedded ? null : (
-                <WorkflowTemplatesHeader onCreateWorkflow={() => push("/automation?create=true")} />
+                <WorkflowTemplatesHeader onCreateWorkflow={() => push("/automation/workflows/new")} />
             )}
             {content}
         </div>
