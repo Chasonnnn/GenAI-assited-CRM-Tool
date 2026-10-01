@@ -651,16 +651,20 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
         if workflow_data.get("trigger_type") == "status_changed":
             to_slug = trigger_config.pop("to_stage_slug", None)
             from_slug = trigger_config.pop("from_stage_slug", None)
-            if to_slug:
-                to_stage = pipeline_service.resolve_stage(db, pipeline.id, to_slug)
-                if to_stage:
-                    trigger_config["to_stage_id"] = str(to_stage.id)
-                    trigger_config["to_stage_key"] = to_stage.stage_key
-            if from_slug:
-                from_stage = pipeline_service.resolve_stage(db, pipeline.id, from_slug)
-                if from_stage:
-                    trigger_config["from_stage_id"] = str(from_stage.id)
-                    trigger_config["from_stage_key"] = from_stage.stage_key
+            to_stage = pipeline_service.resolve_stage(db, pipeline.id, to_slug) if to_slug else None
+            from_stage = (
+                pipeline_service.resolve_stage(db, pipeline.id, from_slug) if from_slug else None
+            )
+            # Without its stage the trigger would match every stage change. Skip it;
+            # a later idempotent seed creates it once the stage exists.
+            if (to_slug and to_stage is None) or (from_slug and from_stage is None):
+                continue
+            if to_stage:
+                trigger_config["to_stage_id"] = str(to_stage.id)
+                trigger_config["to_stage_key"] = to_stage.stage_key
+            if from_stage:
+                trigger_config["from_stage_id"] = str(from_stage.id)
+                trigger_config["from_stage_key"] = from_stage.stage_key
 
         # Resolve template_key to template_id in actions
         actions = []
