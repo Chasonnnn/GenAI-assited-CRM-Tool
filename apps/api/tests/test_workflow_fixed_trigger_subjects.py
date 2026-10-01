@@ -21,6 +21,8 @@ FIXED_TRIGGER_SUBJECTS = [
     (WorkflowTriggerType.MATCH_CANCELLED, "match"),
     (WorkflowTriggerType.APPOINTMENT_SCHEDULED, "appointment"),
     (WorkflowTriggerType.APPOINTMENT_COMPLETED, "appointment"),
+    (WorkflowTriggerType.APPOINTMENT_CANCELLED, "appointment"),
+    (WorkflowTriggerType.APPOINTMENT_NO_SHOW, "appointment"),
 ]
 
 

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from app.db.enums import (
@@ -17,6 +19,7 @@ from app.db.enums import (
     JobType,
     MeetingMode,
     NotificationType,
+    WorkflowTriggerType,
 )
 from app.db.models import Appointment, AppointmentType, Membership, User
 from app.services import (
@@ -27,9 +30,68 @@ from app.services import (
     org_service,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class SchedulingConflict(ValueError):
     """A request has a stale revision or reuses an idempotency key."""
+
+
+def _fire_appointment_workflows(
+    db: Session, appointment: Appointment, trigger_type: WorkflowTriggerType
+) -> None:
+    """Run appointment workflows after the scheduling change committed.
+
+    Replayed requests return before this runs, so a retry does not fire twice. Workflows run
+    in their own session so a failure cannot roll back or poison the committed booking.
+    Mirrors donor_service._dispatch_side_effect_isolated.
+    """
+    from app.db.enums import AlertSeverity, AlertType
+    from app.db.session import SessionLocal
+    from app.services import alert_service, workflow_triggers
+
+    appointment_id = appointment.id
+    org_id = appointment.organization_id
+    bind = db.get_bind()
+    side_effect_db = (
+        Session(bind=bind, autoflush=False, join_transaction_mode="create_savepoint")
+        if isinstance(bind, Connection)
+        else SessionLocal()
+    )
+    try:
+        side_effect_appointment = (
+            side_effect_db.query(Appointment)
+            .filter(Appointment.id == appointment_id, Appointment.organization_id == org_id)
+            .one()
+        )
+        workflow_triggers.trigger_appointment_event(
+            side_effect_db, side_effect_appointment, trigger_type
+        )
+    except Exception as exc:
+        details = {"appointment_id": str(appointment_id), "trigger_type": trigger_type.value}
+        logger.error(
+            "Appointment workflow trigger failed",
+            extra={**details, "error_class": type(exc).__name__},
+        )
+        try:
+            side_effect_db.rollback()
+        except Exception:
+            logger.error("Appointment workflow rollback failed", extra=details)
+        try:
+            alert_service.record_alert_isolated(
+                org_id=org_id,
+                alert_type=AlertType.WORKFLOW_EXECUTION_FAILED,
+                severity=AlertSeverity.ERROR,
+                title="Appointment workflow trigger failed",
+                message="An appointment workflow trigger failed after the appointment change was saved.",
+                integration_key=f"appointment_{trigger_type.value}",
+                error_class=type(exc).__name__,
+                details=details,
+            )
+        except Exception:
+            logger.error("Appointment workflow failure alert could not be persisted", extra=details)
+    finally:
+        side_effect_db.close()
 
 
 def public_actor_scope(token: str) -> str:
@@ -704,6 +766,8 @@ def create_booking(
     )
     db.commit()
     db.refresh(appointment)
+    if appointment.status == AppointmentStatus.CONFIRMED.value:
+        _fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
     return appointment
 
 
@@ -768,6 +832,7 @@ def approve_booking(
     )
     db.commit()
     db.refresh(appointment)
+    _fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
     return appointment
 
 
@@ -1024,6 +1089,7 @@ def cancel_booking(
     )
     db.commit()
     db.refresh(appointment)
+    _fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_CANCELLED)
     return appointment
 
 
@@ -1080,4 +1146,11 @@ def complete_booking(
     )
     db.commit()
     db.refresh(appointment)
+    _fire_appointment_workflows(
+        db,
+        appointment,
+        WorkflowTriggerType.APPOINTMENT_COMPLETED
+        if status == AppointmentStatus.COMPLETED.value
+        else WorkflowTriggerType.APPOINTMENT_NO_SHOW,
+    )
     return appointment

@@ -341,6 +341,8 @@ def test_ai_workflow_service_triggers():
         "note_added",
         "appointment_scheduled",
         "appointment_completed",
+        "appointment_cancelled",
+        "appointment_no_show",
     ]
 
     for trigger in expected_triggers:

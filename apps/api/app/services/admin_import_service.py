@@ -76,6 +76,8 @@ LEGACY_WORKFLOW_SUBJECT_TYPES = {
     "match_cancelled": "match",
     "appointment_scheduled": "appointment",
     "appointment_completed": "appointment",
+    "appointment_cancelled": "appointment",
+    "appointment_no_show": "appointment",
 }
 
 DONOR_PHOTO_BASE64_FIELD_LIMIT = (

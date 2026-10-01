@@ -580,5 +580,8 @@ def test_migration_backfill_map_matches_service_contract():
     historical = dict(module.LEGACY_TRIGGER_SUBJECT_TYPES)
     historical["match_declined"] = historical.pop("match_rejected")
     historical["match_cancelled"] = "match"
+    # Triggers added after the backfill; no stored rows used them then.
+    historical["appointment_cancelled"] = "appointment"
+    historical["appointment_no_show"] = "appointment"
     assert historical == workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES
     assert set(module.DONOR_ONLY_TRIGGER_TYPES) == template_service.DONOR_ONLY_TRIGGER_TYPES

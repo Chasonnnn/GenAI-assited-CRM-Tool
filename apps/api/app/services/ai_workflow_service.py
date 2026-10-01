@@ -120,6 +120,8 @@ AVAILABLE_TRIGGERS = {
     "note_added": "When a note is added",
     "appointment_scheduled": "When an appointment is scheduled",
     "appointment_completed": "When an appointment is completed",
+    "appointment_cancelled": "When an appointment is cancelled",
+    "appointment_no_show": "When an appointment is marked as a no-show",
 }
 
 AVAILABLE_ACTIONS = {

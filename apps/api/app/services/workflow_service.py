@@ -92,6 +92,8 @@ TRIGGER_ENTITY_TYPES = {
     "match_cancelled": "match",
     "appointment_scheduled": "appointment",
     "appointment_completed": "appointment",
+    "appointment_cancelled": "appointment",
+    "appointment_no_show": "appointment",
     "note_added": "note",
     "document_uploaded": "document",
 }
@@ -455,6 +457,8 @@ LEGACY_TRIGGER_SUBJECT_TYPES = {
     WorkflowTriggerType.MATCH_CANCELLED.value: "match",
     WorkflowTriggerType.APPOINTMENT_SCHEDULED.value: "appointment",
     WorkflowTriggerType.APPOINTMENT_COMPLETED.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_CANCELLED.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_NO_SHOW.value: "appointment",
 }
 FIXED_TRIGGER_SUBJECT_TYPES = frozenset(LEGACY_TRIGGER_SUBJECT_TYPES.values())
 
@@ -1747,7 +1751,17 @@ def get_workflow_options(
         {
             "value": "appointment_completed",
             "label": "Appointment Completed",
-            "description": "When an appointment is completed",
+            "description": "When an appointment is marked completed",
+        },
+        {
+            "value": "appointment_cancelled",
+            "label": "Appointment Cancelled",
+            "description": "When an appointment is cancelled",
+        },
+        {
+            "value": "appointment_no_show",
+            "label": "Appointment No-Show",
+            "description": "When an appointment is marked as a no-show",
         },
         {
             "value": "note_added",

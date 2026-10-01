@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, time, timedelta
 
-from app.db.enums import WorkflowTriggerType
-from app.db.models import WorkflowExecution
+import pytest
+
+from app.core.config import settings
+from app.db.enums import AppointmentStatus, MeetingMode, WorkflowTriggerType
+from app.db.models import AppointmentType, AvailabilityRule, WorkflowExecution
 from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
 from app.schemas.workflow import WorkflowCreate
-from app.services import surrogate_service, workflow_service
+from app.services import scheduling_v2_service, surrogate_service, workflow_service
 
 
 def _note_workflow(db, org_id, user_id, trigger_type, trigger_config=None, **extra):
@@ -115,3 +119,202 @@ def test_unchanged_or_uncommitted_edit_does_not_fire_surrogate_updated(db, test_
     )
 
     assert workflow.id not in _executed_workflow_ids(db, test_org.id, surrogate.id)
+
+
+def _notify_workflow(db, org_id, user_id, trigger_type):
+    return workflow_service.create_workflow(
+        db,
+        org_id,
+        user_id,
+        WorkflowCreate(
+            name=f"{trigger_type.value} {uuid.uuid4()}",
+            trigger_type=trigger_type,
+            actions=[
+                {
+                    "action_type": "send_notification",
+                    "title": "Appointment changed",
+                    "recipients": "all_admins",
+                }
+            ],
+        ),
+    )
+
+
+def _execution_count(db, org_id, workflow_id) -> int:
+    return (
+        db.query(WorkflowExecution)
+        .filter(
+            WorkflowExecution.organization_id == org_id,
+            WorkflowExecution.workflow_id == workflow_id,
+        )
+        .count()
+    )
+
+
+@pytest.fixture
+def v2_booking_type(db, test_org, test_user, monkeypatch):
+    monkeypatch.setattr(settings, "SCHEDULING_V2_ENABLED", True)
+    start = (datetime.now(UTC) + timedelta(days=14)).replace(
+        hour=10, minute=0, second=0, microsecond=0
+    )
+    appointment_type = AppointmentType(
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        name="Workflow trigger phone",
+        slug=f"workflow-trigger-{uuid.uuid4().hex[:8]}",
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=0,
+        meeting_mode=MeetingMode.PHONE.value,
+        meeting_modes=[MeetingMode.PHONE.value],
+        auto_approve=False,
+        reminder_hours_before=0,
+        is_active=True,
+    )
+    db.add_all(
+        [
+            appointment_type,
+            AvailabilityRule(
+                organization_id=test_org.id,
+                user_id=test_user.id,
+                day_of_week=start.weekday(),
+                start_time=time(8),
+                end_time=time(18),
+                timezone="UTC",
+            ),
+        ]
+    )
+    db.commit()
+    return appointment_type, start
+
+
+def _create_booking(db, org_id, owner_id, appointment_type_id, start, request_id):
+    return scheduling_v2_service.create_booking(
+        db,
+        org_id=org_id,
+        user_id=owner_id,
+        appointment_type_id=appointment_type_id,
+        client_name="Workflow Trigger Client",
+        client_email="workflow-trigger-client@example.com",
+        client_phone="555-0100",
+        client_timezone="UTC",
+        scheduled_start=start,
+        client_notes=None,
+        idempotency_key=None,
+        meeting_mode=MeetingMode.PHONE.value,
+        record_links=None,
+        actor_scope="test-public-booking",
+        actor_user_id=None,
+        request_id=request_id,
+        expected_revision=0,
+        override_availability=False,
+        override_reason=None,
+    )
+
+
+def _approve(db, appointment, user_id, request_id):
+    return scheduling_v2_service.approve_booking(
+        db,
+        appointment,
+        approved_by_user_id=user_id,
+        expected_revision=appointment.revision,
+        request_id=request_id,
+    )
+
+
+def test_v2_approval_and_completion_fire_appointment_workflows_once(
+    db, test_org, test_user, v2_booking_type
+):
+    appointment_type, start = v2_booking_type
+    scheduled = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_SCHEDULED
+    )
+    completed = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_COMPLETED
+    )
+    no_show = _notify_workflow(db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_NO_SHOW)
+
+    appointment = _create_booking(
+        db, test_org.id, test_user.id, appointment_type.id, start, "trigger-create"
+    )
+    assert _execution_count(db, test_org.id, scheduled.id) == 0
+
+    appointment = _approve(db, appointment, test_user.id, "trigger-approve")
+    assert _execution_count(db, test_org.id, scheduled.id) == 1
+
+    complete_args = {
+        "status": AppointmentStatus.COMPLETED.value,
+        "actor_user_id": test_user.id,
+        "expected_revision": appointment.revision,
+        "request_id": "trigger-complete",
+    }
+    appointment = scheduling_v2_service.complete_booking(db, appointment, **complete_args)
+    scheduling_v2_service.complete_booking(db, appointment, **complete_args)
+
+    assert _execution_count(db, test_org.id, completed.id) == 1
+    assert _execution_count(db, test_org.id, no_show.id) == 0
+
+
+def test_v2_no_show_and_cancel_fire_their_own_workflows(db, test_org, test_user, v2_booking_type):
+    appointment_type, start = v2_booking_type
+    no_show = _notify_workflow(db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_NO_SHOW)
+    cancelled = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_CANCELLED
+    )
+
+    first = _approve(
+        db,
+        _create_booking(db, test_org.id, test_user.id, appointment_type.id, start, "no-show-create"),
+        test_user.id,
+        "no-show-approve",
+    )
+    scheduling_v2_service.complete_booking(
+        db,
+        first,
+        status=AppointmentStatus.NO_SHOW.value,
+        actor_user_id=test_user.id,
+        expected_revision=first.revision,
+        request_id="no-show-complete",
+    )
+    second = _create_booking(
+        db,
+        test_org.id,
+        test_user.id,
+        appointment_type.id,
+        start + timedelta(hours=1),
+        "cancel-create",
+    )
+    scheduling_v2_service.cancel_booking(
+        db,
+        second,
+        reason=None,
+        by_client=False,
+        token=None,
+        actor_user_id=test_user.id,
+        expected_revision=second.revision,
+        request_id="cancel-one",
+        actor_scope=scheduling_v2_service.staff_actor_scope(test_user.id),
+    )
+
+    assert _execution_count(db, test_org.id, no_show.id) == 1
+    assert _execution_count(db, test_org.id, cancelled.id) == 1
+
+
+def test_appointment_workflow_failure_keeps_committed_booking(
+    db, test_org, test_user, v2_booking_type, monkeypatch
+):
+    from app.services import workflow_triggers
+
+    appointment_type, start = v2_booking_type
+    appointment = _create_booking(
+        db, test_org.id, test_user.id, appointment_type.id, start, "failure-create"
+    )
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("workflow engine unavailable")
+
+    monkeypatch.setattr(workflow_triggers, "trigger_appointment_event", fail)
+    appointment = _approve(db, appointment, test_user.id, "failure-approve")
+
+    db.expire_all()
+    assert appointment.status == AppointmentStatus.CONFIRMED.value

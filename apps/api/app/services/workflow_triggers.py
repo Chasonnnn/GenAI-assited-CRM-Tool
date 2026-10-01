@@ -1015,14 +1015,33 @@ def trigger_note_added(db: Session, note: EntityNote) -> None:
 # =============================================================================
 
 
+APPOINTMENT_TRIGGER_TYPES = frozenset(
+    {
+        WorkflowTriggerType.APPOINTMENT_SCHEDULED,
+        WorkflowTriggerType.APPOINTMENT_COMPLETED,
+        WorkflowTriggerType.APPOINTMENT_CANCELLED,
+        WorkflowTriggerType.APPOINTMENT_NO_SHOW,
+    }
+)
+
+
 def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None:
     """Trigger workflows when an appointment is scheduled/approved."""
+    trigger_appointment_event(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
+
+
+def trigger_appointment_event(
+    db: Session, appointment: Appointment, trigger_type: WorkflowTriggerType
+) -> None:
+    """Trigger workflows for one appointment lifecycle event."""
+    if trigger_type not in APPOINTMENT_TRIGGER_TYPES:
+        raise ValueError(f"Not an appointment trigger: {trigger_type.value}")
     entity_owner_id = _get_owner_id_for_surrogate_id(
         db, appointment.organization_id, appointment.surrogate_id
     )
     engine.trigger(
         db=db,
-        trigger_type=WorkflowTriggerType.APPOINTMENT_SCHEDULED,
+        trigger_type=trigger_type,
         entity_type="appointment",
         entity_id=appointment.id,
         event_data={

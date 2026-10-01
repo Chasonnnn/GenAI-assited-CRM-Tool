@@ -39,6 +39,8 @@ def _default_workflow_subject_type(context) -> str:
         "match_cancelled": "match",
         "appointment_scheduled": "appointment",
         "appointment_completed": "appointment",
+        "appointment_cancelled": "appointment",
+        "appointment_no_show": "appointment",
     }.get(trigger_type, "surrogate")
 
 

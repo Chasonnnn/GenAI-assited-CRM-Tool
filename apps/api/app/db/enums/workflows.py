@@ -33,6 +33,8 @@ class WorkflowTriggerType(str, Enum):
     # Appointment triggers
     APPOINTMENT_SCHEDULED = "appointment_scheduled"
     APPOINTMENT_COMPLETED = "appointment_completed"
+    APPOINTMENT_CANCELLED = "appointment_cancelled"
+    APPOINTMENT_NO_SHOW = "appointment_no_show"
 
 
 class RecurrenceMode(str, Enum):
