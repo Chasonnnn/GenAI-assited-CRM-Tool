@@ -458,22 +458,34 @@ def activate(
         )
         .all()
     )
-    for grant in legacy_grants:
-        for key in MATCH_ACTION_PERMISSIONS:
-            existing = (
-                db.query(UserPermissionOverride)
-                .filter_by(organization_id=org_id, user_id=grant.user_id, permission=key)
-                .first()
+    if legacy_grants:
+        # Bolt optimization: Replaced O(N*M) nested database queries with a single
+        # vectorized .in_() fetch and an in-memory O(1) set lookup.
+        # This significantly speeds up permission policy activation for orgs with many legacy grants.
+        user_ids = [grant.user_id for grant in legacy_grants]
+        existing_overrides = (
+            db.query(UserPermissionOverride.user_id, UserPermissionOverride.permission)
+            .filter(
+                UserPermissionOverride.organization_id == org_id,
+                UserPermissionOverride.user_id.in_(user_ids),
+                UserPermissionOverride.permission.in_(MATCH_ACTION_PERMISSIONS),
             )
-            if existing is None:
-                db.add(
-                    UserPermissionOverride(
-                        organization_id=org_id,
-                        user_id=grant.user_id,
-                        permission=key,
-                        override_type="grant",
+            .all()
+        )
+        existing_set = set(existing_overrides)
+        for user_id in user_ids:
+            for key in MATCH_ACTION_PERMISSIONS:
+                if (user_id, key) not in existing_set:
+                    db.add(
+                        UserPermissionOverride(
+                            organization_id=org_id,
+                            user_id=user_id,
+                            permission=key,
+                            override_type="grant",
+                        )
                     )
-                )
+                    # Actively update the set to handle potential internal duplicates in the batch
+                    existing_set.add((user_id, key))
     policy = db.get(OrganizationPermissionPolicy, org_id)
     if policy is None:
         policy = OrganizationPermissionPolicy(organization_id=org_id, configuration_revision=1)
