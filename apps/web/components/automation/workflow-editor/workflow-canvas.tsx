@@ -88,7 +88,7 @@ function getActionSummary(action: EditableAction, options: CanvasOptions, state:
             const template = options.emailTemplates.find((option) => option.id === action.template_id)
             // Donor workflows save the default surrogate recipient as "donor" (mirrors the action panel).
             const storedKind = getEmailRecipientKind(action)
-            const kind = isDonorSubject(state.subjectType) && storedKind === "surrogate" ? "donor" : storedKind
+            const kind = isDonorSubject(state.actionSubjectType) && storedKind === "surrogate" ? "donor" : storedKind
             const recipient =
                 kind === "user"
                     ? options.userOptions.find((option) => option.id === getEmailRecipientUserId(action))?.display_name
@@ -232,7 +232,11 @@ export function WorkflowCanvas({
                         icon={TriggerIcon}
                         tone="violet"
                         title={triggerLabel}
-                        subtitle={`Runs for ${WORKFLOW_SUBJECT_PLURAL_LABELS[subjectType].toLowerCase()}`}
+                        subtitle={
+                            state.isAppointmentTrigger
+                                ? `Runs on linked ${WORKFLOW_SUBJECT_PLURAL_LABELS[state.actionSubjectType].toLowerCase()}`
+                                : `Runs for ${WORKFLOW_SUBJECT_PLURAL_LABELS[subjectType].toLowerCase()}`
+                        }
                     />
                     <div className="border-t border-border px-3 py-2.5">
                         <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

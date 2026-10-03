@@ -893,6 +893,7 @@ describe('WorkflowEditorPage', () => {
         fireEvent.click(screen.getByRole('radio', { name: 'Egg Donor' }))
         expect(mockUseWorkflowOptions).toHaveBeenCalledWith('org', 'egg_donor')
         expect(screen.getByTestId('workflow-build-panel')).not.toHaveTextContent('Send SMS/MMS')
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Runs on linked egg donors')
 
         const typeSelect = screen.getByRole('combobox', { name: 'Appointment types' })
         fireEvent.change(typeSelect, { target: { value: 'Consultation' } })
@@ -977,6 +978,7 @@ describe('WorkflowEditorPage', () => {
         })
         expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('2 hours after end')
         expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Types: Initial Consultation')
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Runs on linked surrogates')
 
         addNoteAction('Send the consult summary')
         fireEvent.click(launchButton())

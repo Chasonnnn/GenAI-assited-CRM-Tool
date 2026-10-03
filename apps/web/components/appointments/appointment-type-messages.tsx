@@ -100,7 +100,7 @@ export function AppointmentClientMessagesFields({
                                         onValueChange={(value) => value && onReminderHoursChange(Number(value))}
                                         disabled={!message.enabled}
                                     >
-                                        <SelectTrigger aria-label="Reminder timing" size="sm" className="w-36">
+                                        <SelectTrigger aria-label="Reminder timing" size="sm" className="w-40">
                                             <SelectValue>
                                                 {(value: string | null) =>
                                                     value ? formatReminderHours(Number(value)) : "Select timing"
