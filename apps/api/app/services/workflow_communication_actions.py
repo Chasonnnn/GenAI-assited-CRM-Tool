@@ -372,6 +372,8 @@ def send_notification(
     db: Session,
     action: dict,
     entity: Any,
+    *,
+    dedupe_key: str | None = None,
 ) -> dict:
     """Send in-app notification."""
     from app.db.enums import NotificationType, Role
@@ -441,6 +443,8 @@ def send_notification(
             body=body if body else None,
             entity_type=target_entity_type,
             entity_id=getattr(target, "id", None),
+            dedupe_key=dedupe_key,
+            dedupe_window_hours=None,
         )
         if notification:
             created_count += 1

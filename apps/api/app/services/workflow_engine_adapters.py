@@ -128,6 +128,27 @@ class DefaultWorkflowDomainAdapter:
         WorkflowActionType.SEND_NOTIFICATION.value,
     }
 
+    def _notification_occurrence_key(
+        self,
+        db: Session,
+        org_id: UUID,
+        execution_id: UUID | None,
+        action_index: int | None,
+    ) -> str | None:
+        """Key one notification action across an execution and its manual retries."""
+        if execution_id is None or action_index is None:
+            return None
+        trigger_event = (
+            db.query(WorkflowExecution.trigger_event)
+            .filter(
+                WorkflowExecution.id == execution_id,
+                WorkflowExecution.organization_id == org_id,
+            )
+            .scalar()
+        ) or {}
+        root_id = trigger_event.get("retry_root_execution_id") or str(execution_id)
+        return f"workflow-notification:{root_id}:{action_index}"
+
     def _intake_donor_link(self, entity_type: str, entity: Any) -> tuple[str, UUID | None] | None:
         """Return (donor subject, linked donor id) for donor-kind intake sources."""
         if entity_type == "form_submission" and isinstance(entity, FormSubmission):
@@ -665,7 +686,14 @@ class DefaultWorkflowDomainAdapter:
                 return _with_action_type(result)
 
             if action_type == WorkflowActionType.SEND_NOTIFICATION.value:
-                result = workflow_communication_actions.send_notification(db, action, action_entity)
+                result = workflow_communication_actions.send_notification(
+                    db,
+                    action,
+                    action_entity,
+                    dedupe_key=self._notification_occurrence_key(
+                        db, entity.organization_id, workflow_execution_id, workflow_action_index
+                    ),
+                )
                 return _with_action_type(result)
 
             if action_type == WorkflowActionType.SEND_ZAPIER_CONVERSION_EVENT.value:
