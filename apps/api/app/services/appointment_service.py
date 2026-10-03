@@ -35,6 +35,7 @@ from app.db.models import (
     AvailabilityRule,
     BookingLink,
     Donor,
+    EmailTemplate,
     IntendedParent,
     Organization,
     Surrogate,
@@ -44,6 +45,7 @@ from app.db.models import (
 )
 from app.schemas.appointment import (
     AppointmentCapabilities,
+    AppointmentClientMessages,
     AppointmentGoogleSyncRead,
     AppointmentListItem,
     AppointmentRead,
@@ -223,6 +225,54 @@ def _normalize_meeting_modes(
 # =============================================================================
 
 
+def client_message_settings(appt_type: AppointmentType | None) -> AppointmentClientMessages:
+    """Client email settings for a type; untyped appointments use the defaults."""
+    if appt_type is None:
+        return AppointmentClientMessages()
+    return AppointmentClientMessages.model_validate(appt_type.client_messages or {})
+
+
+def _validated_client_messages(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    client_messages: AppointmentClientMessages | dict,
+) -> dict:
+    """Allow only active org templates or the type owner's personal templates."""
+    from app.services import system_email_template_service
+
+    messages = AppointmentClientMessages.model_validate(client_messages)
+    template_ids = {
+        message.template_id
+        for name in AppointmentClientMessages.model_fields
+        if (message := getattr(messages, name)).template_id is not None
+    }
+    if template_ids:
+        platform_keys = set(system_email_template_service.DEFAULT_SYSTEM_TEMPLATES.keys())
+        found = {
+            row[0]
+            for row in db.query(EmailTemplate.id).filter(
+                EmailTemplate.id.in_(template_ids),
+                EmailTemplate.organization_id == org_id,
+                EmailTemplate.is_active.is_(True),
+                or_(
+                    EmailTemplate.system_key.is_(None),
+                    EmailTemplate.system_key.notin_(platform_keys),
+                ),
+                or_(
+                    EmailTemplate.scope == "org",
+                    and_(
+                        EmailTemplate.scope == "personal",
+                        EmailTemplate.owner_user_id == user_id,
+                    ),
+                ),
+            )
+        }
+        if template_ids - found:
+            raise ValueError("Email template not found")
+    return messages.model_dump(mode="json")
+
+
 def create_appointment_type(
     db: Session,
     org_id: UUID,
@@ -238,8 +288,12 @@ def create_appointment_type(
     dial_in_number: str | None = None,
     auto_approve: bool = False,
     reminder_hours_before: int = 24,
+    client_messages: AppointmentClientMessages | dict | None = None,
 ) -> AppointmentType:
     """Create a new appointment type for a user."""
+    stored_messages = _validated_client_messages(
+        db, org_id, user_id, client_messages or AppointmentClientMessages()
+    )
     slug = generate_slug(name)
     # Ensure unique slug for user
     base_slug = slug
@@ -269,6 +323,7 @@ def create_appointment_type(
         dial_in_number=dial_in_number,
         auto_approve=auto_approve,
         reminder_hours_before=reminder_hours_before,
+        client_messages=stored_messages,
         is_active=True,
     )
     db.add(appt_type)
@@ -291,9 +346,14 @@ def update_appointment_type(
     dial_in_number: str | None = None,
     auto_approve: bool | None = None,
     reminder_hours_before: int | None = None,
+    client_messages: AppointmentClientMessages | dict | None = None,
     is_active: bool | None = None,
 ) -> AppointmentType:
     """Update an appointment type."""
+    if client_messages is not None:
+        appt_type.client_messages = _validated_client_messages(
+            db, appt_type.organization_id, appt_type.user_id, client_messages
+        )
     if name is not None:
         appt_type.name = name
         new_slug = generate_slug(name)

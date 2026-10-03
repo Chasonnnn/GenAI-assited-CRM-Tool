@@ -34,7 +34,7 @@ from app.schemas.appointment import (
     AppointmentStatusCounts,
     AppointmentSyncResolve,
     AppointmentTypeCreate,
-    AppointmentTypeRead,
+    AppointmentTypeStaffRead,
     AppointmentTypeUpdate,
     AvailabilityOverrideCreate,
     AvailabilityOverrideRead,
@@ -72,9 +72,9 @@ router = APIRouter(
 # =============================================================================
 
 
-def _type_to_read(appt_type) -> AppointmentTypeRead:
-    """Convert AppointmentType model to read schema."""
-    return AppointmentTypeRead(
+def _type_to_read(appt_type) -> AppointmentTypeStaffRead:
+    """Convert AppointmentType model to the owner's read schema."""
+    return AppointmentTypeStaffRead(
         id=appt_type.id,
         user_id=appt_type.user_id,
         name=appt_type.name,
@@ -89,6 +89,7 @@ def _type_to_read(appt_type) -> AppointmentTypeRead:
         dial_in_number=appt_type.dial_in_number,
         auto_approve=appt_type.auto_approve,
         reminder_hours_before=appt_type.reminder_hours_before,
+        client_messages=appointment_service.client_message_settings(appt_type),
         is_active=appt_type.is_active,
         created_at=appt_type.created_at,
         updated_at=appt_type.updated_at,
@@ -153,7 +154,7 @@ def _read_appointment(
 # =============================================================================
 
 
-@router.get("/types", response_model=list[AppointmentTypeRead])
+@router.get("/types", response_model=list[AppointmentTypeStaffRead])
 def list_appointment_types(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
@@ -171,7 +172,7 @@ def list_appointment_types(
 
 @router.post(
     "/types",
-    response_model=AppointmentTypeRead,
+    response_model=AppointmentTypeStaffRead,
     status_code=201,
     dependencies=[Depends(require_csrf_header)],
 )
@@ -203,6 +204,7 @@ def create_appointment_type(
             dial_in_number=data.dial_in_number,
             auto_approve=data.auto_approve,
             reminder_hours_before=data.reminder_hours_before,
+            client_messages=data.client_messages,
         )
         return _type_to_read(appt_type)
     except ValueError as e:
@@ -211,7 +213,7 @@ def create_appointment_type(
 
 @router.patch(
     "/types/{type_id}",
-    response_model=AppointmentTypeRead,
+    response_model=AppointmentTypeStaffRead,
     dependencies=[Depends(require_csrf_header)],
 )
 def update_appointment_type(
@@ -234,11 +236,14 @@ def update_appointment_type(
     ):
         raise HTTPException(status_code=400, detail="Zoom scheduling is unavailable")
 
-    appt_type = appointment_service.update_appointment_type(
-        db=db,
-        appt_type=appt_type,
-        **data.model_dump(exclude_unset=True),
-    )
+    try:
+        appt_type = appointment_service.update_appointment_type(
+            db=db,
+            appt_type=appt_type,
+            **data.model_dump(exclude_unset=True),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return _type_to_read(appt_type)
 
 
