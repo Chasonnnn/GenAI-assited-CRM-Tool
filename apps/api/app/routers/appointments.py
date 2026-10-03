@@ -1078,7 +1078,7 @@ def resolve_appointment_google_conflict(
     from app.services import appointment_google_sync_service
 
     try:
-        appointment_google_sync_service.resolve_conflict(
+        external_trigger = appointment_google_sync_service.resolve_conflict(
             db,
             appointment,
             resolution=data.resolution,
@@ -1111,4 +1111,6 @@ def resolve_appointment_google_conflict(
             return _read_appointment(db, replay, session, can_edit=True)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.refresh(appointment)
+    if external_trigger is not None:
+        scheduling_v2_service.fire_appointment_workflows(db, appointment, external_trigger)
     return _read_appointment(db, appointment, session, can_edit=True)

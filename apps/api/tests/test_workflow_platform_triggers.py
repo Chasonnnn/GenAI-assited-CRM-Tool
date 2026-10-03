@@ -392,3 +392,111 @@ def test_submission_review_fires_matching_form_workflows_only(
     assert _execution_count(db, test_org.id, matching.id) == 1
     assert _execution_count(db, test_org.id, opposite.id) == 0
     assert matching.id in _executed_workflow_ids(db, test_org.id, submission.id)
+
+
+def test_v2_request_reschedule_and_expiry_fire_their_own_workflows(
+    db, test_org, test_user, v2_booking_type
+):
+    appointment_type, start = v2_booking_type
+    requested = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_REQUESTED
+    )
+    scheduled = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_SCHEDULED
+    )
+    rescheduled = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_RESCHEDULED
+    )
+    expired = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_EXPIRED
+    )
+
+    appointment = _create_booking(
+        db, test_org.id, test_user.id, appointment_type.id, start, "request-create"
+    )
+    assert _execution_count(db, test_org.id, requested.id) == 1
+    assert _execution_count(db, test_org.id, scheduled.id) == 0
+
+    appointment = scheduling_v2_service.reschedule_booking(
+        db,
+        appointment,
+        start + timedelta(hours=1),
+        by_client=False,
+        token=None,
+        actor_user_id=test_user.id,
+        expected_revision=appointment.revision,
+        request_id="request-reschedule",
+        actor_scope=scheduling_v2_service.staff_actor_scope(test_user.id),
+        override_availability=False,
+        override_reason=None,
+    )
+    assert _execution_count(db, test_org.id, rescheduled.id) == 1
+
+    appointment.pending_expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    db.commit()
+    assert scheduling_v2_service.expire_booking(
+        db, appointment_id=appointment.id, org_id=test_org.id, revision=appointment.revision
+    )
+    assert _execution_count(db, test_org.id, expired.id) == 1
+
+
+def test_stage_booked_interview_changes_fire_appointment_workflows(
+    db, test_org, test_user, v2_booking_type
+):
+    from app.db.enums import Role
+    from app.db.models import Appointment
+    from app.schemas.interview_appointment import SurrogateInterviewAppointmentAction
+    from app.services import (
+        pipeline_service,
+        surrogate_interview_appointment_service,
+        surrogate_status_service,
+    )
+
+    _appointment_type, start = v2_booking_type
+    scheduled = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_SCHEDULED
+    )
+    rescheduled = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_RESCHEDULED
+    )
+    cancelled = _notify_workflow(
+        db, test_org.id, test_user.id, WorkflowTriggerType.APPOINTMENT_CANCELLED
+    )
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
+    stage = pipeline_service.get_stage_by_key(db, pipeline.id, "interview_scheduled")
+
+    surrogate_status_service.change_status(
+        db, surrogate, stage.id, test_user.id, Role.DEVELOPER, interview_scheduled_at=start
+    )
+    appointment = (
+        db.query(Appointment)
+        .filter(
+            Appointment.organization_id == test_org.id, Appointment.surrogate_id == surrogate.id
+        )
+        .one()
+    )
+    assert _execution_count(db, test_org.id, scheduled.id) == 1
+
+    for action, request_id in (("reschedule", "interview-move"), ("cancel", "interview-cancel")):
+        surrogate_interview_appointment_service.manage(
+            db,
+            org_id=test_org.id,
+            surrogate_id=surrogate.id,
+            actor_user_id=test_user.id,
+            actor_role=Role.DEVELOPER,
+            data=SurrogateInterviewAppointmentAction(
+                action=action,
+                scheduled_start=start + timedelta(days=7) if action == "reschedule" else None,
+                move_stage=False,
+                expected_stage_id=surrogate.stage_id,
+                expected_appointment_id=appointment.id,
+                expected_scheduled_start=appointment.scheduled_start,
+                expected_revision=appointment.revision,
+                request_id=request_id,
+            ),
+        )
+        db.refresh(appointment)
+
+    assert _execution_count(db, test_org.id, rescheduled.id) == 1
+    assert _execution_count(db, test_org.id, cancelled.id) == 1
