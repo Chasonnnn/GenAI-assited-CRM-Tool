@@ -88,6 +88,7 @@ class NotificationSettingsRead(BaseModel):
     approval_timeouts: bool
     security_alerts: bool
     email_workflow_notifications: bool
+    email_daily_digest: bool
 
 
 class NotificationSettingsUpdate(BaseModel):
@@ -106,6 +107,7 @@ class NotificationSettingsUpdate(BaseModel):
     approval_timeouts: bool | None = None
     security_alerts: bool | None = None
     email_workflow_notifications: bool | None = None
+    email_daily_digest: bool | None = None
 
 
 # =============================================================================

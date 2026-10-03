@@ -55,3 +55,23 @@ async def process_notification(db, job) -> None:
         dedupe_key=payload.get("dedupe_key"),
     )
     logger.info("Created notification for user %s", user_id)
+
+
+async def process_notification_digest(db, job) -> None:
+    """Queue the daily digest email for each opted-in member of one organization."""
+    from datetime import UTC, date, datetime
+
+    from app.services import notification_digest_service
+
+    payload = job.payload or {}
+    digest_date = date.fromisoformat(payload["digest_date"])
+    stats = notification_digest_service.send_org_digests(
+        db, job.organization_id, digest_date, datetime.now(UTC)
+    )
+    logger.info(
+        "Notification digest job %s complete (queued=%s empty=%s failed=%s)",
+        job.id,
+        stats["queued"],
+        stats["empty"],
+        stats["failed"],
+    )

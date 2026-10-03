@@ -346,10 +346,12 @@ EMAIL_SETTING_BY_TYPE: dict[str, str] = {
     NotificationType.WORKFLOW_NOTIFICATION.value: "email_workflow_notifications",
 }
 EMAIL_SETTING_KEYS: tuple[str, ...] = tuple(EMAIL_SETTING_BY_TYPE.values())
+DIGEST_SETTING_KEY = "email_daily_digest"
 
 DEFAULT_SETTINGS: dict[str, bool] = {
     **{key: True for key in IN_APP_SETTING_KEYS},
     **{key: False for key in EMAIL_SETTING_KEYS},
+    DIGEST_SETTING_KEY: False,
 }
 
 
@@ -544,6 +546,7 @@ def get_notifications(
     unread_only: bool = False,
     notification_types: list[str] | None = None,
     tier: NotificationTier | None = None,
+    created_after: datetime | None = None,
     limit: int = 20,
     offset: int = 0,
     cursor: str | None = None,
@@ -583,6 +586,9 @@ def get_notifications(
 
     if tier is not None:
         query = query.filter(_tier_condition(tier, datetime.now(UTC)))
+
+    if created_after is not None:
+        query = query.filter(Notification.created_at >= created_after)
 
     query = query.order_by(Notification.created_at.desc(), Notification.id.desc())
 
