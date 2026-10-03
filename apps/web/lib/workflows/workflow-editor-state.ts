@@ -10,9 +10,8 @@ import { DONOR_SOURCE_LABELS } from "@/lib/donor-source-labels"
 import { isPermissionError } from "@/lib/error-utils"
 import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
+import { FORM_TRIGGER_TYPES, INTAKE_LEAD_KIND_CONFIG_KEYS } from "@/lib/workflows/form-trigger-types"
 import {
-    FORM_TRIGGER_TYPES,
-    INTAKE_LEAD_KIND_CONFIG_KEYS,
     LIST_OPERATORS,
     MULTISELECT_FIELDS,
     VALUELESS_OPERATORS,
@@ -497,7 +496,7 @@ export type WorkflowBuilderAction =
     | { type: "moveAction"; index: number; direction: -1 | 1 }
     | { type: "updateAction"; index: number; updates: Partial<ActionConfig> }
 
-/** Trigger and filter a new workflow starts on, e.g. when opened from an appointment type or a form. */
+/** Trigger and filter a new workflow starts on, e.g. when opened from an appointment type or a form. Runs in Server Components. */
 export type WorkflowEditorPreset = { triggerType: string; triggerConfig: JsonObject }
 
 export function getWorkflowEditorPreset(
@@ -507,8 +506,7 @@ export function getWorkflowEditorPreset(
     const triggerType = first(searchParams.trigger)
     if (!triggerType) return null
     if (FORM_TRIGGER_TYPES.has(triggerType)) {
-        const formId = first(searchParams.form_id)?.trim()
-        return { triggerType, triggerConfig: normalizeTriggerConfigForUi(triggerType, formId ? { form_id: formId } : {}, []) }
+        return { triggerType, triggerConfig: { form_id: first(searchParams.form_id)?.trim() ?? "" } }
     }
     if (FIXED_TRIGGER_SUBJECT_TYPES[triggerType] !== "appointment") return null
     const typeName = first(searchParams.appointment_type)?.trim()
