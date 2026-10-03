@@ -58,10 +58,27 @@ export interface AppointmentType {
     dial_in_number: string | null;
     auto_approve: boolean;
     reminder_hours_before: number;
+    /** Present on the owner's appointment type endpoints only. */
+    client_messages?: AppointmentClientMessages;
     is_active: boolean;
     created_at: string;
     updated_at: string;
 }
+
+export type AppointmentClientMessageKey =
+    | "request_received"
+    | "confirmed"
+    | "reminder"
+    | "rescheduled"
+    | "cancelled";
+
+export interface AppointmentClientMessage {
+    enabled: boolean;
+    /** Null uses the org default template for the message. */
+    template_id: string | null;
+}
+
+export type AppointmentClientMessages = Record<AppointmentClientMessageKey, AppointmentClientMessage>;
 
 export interface AppointmentTypeCreate {
     name: string;
@@ -75,6 +92,7 @@ export interface AppointmentTypeCreate {
     dial_in_number?: string | null;
     auto_approve?: boolean;
     reminder_hours_before?: number;
+    client_messages?: AppointmentClientMessages;
 }
 
 export interface AvailabilityRule {
