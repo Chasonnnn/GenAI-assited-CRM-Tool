@@ -11,7 +11,7 @@ import {
     type EmailTemplateVisualEditorHandle,
 } from "@/components/email/email-template-visual-editor"
 import { SendTestEmailDialog } from "@/components/email/SendTestEmailDialog"
-import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
+import { TemplateVariableList } from "@/components/email/TemplateVariablePicker"
 import {
     LoadErrorState,
     NotFoundState,
@@ -37,13 +37,6 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { FieldError, ValidatedField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -51,6 +44,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import type {
@@ -112,6 +106,8 @@ const TEMPLATE_NOT_FOUND = {
     backHref: "/automation/email-templates",
     backLabel: "Back to Email Templates",
 }
+
+type StudioSidePanelTab = "preview" | "variables" | "settings"
 
 function fieldsFromTemplate(
     value: EmailTemplateDraft | EmailTemplate | null | undefined,
@@ -453,6 +449,7 @@ function OrganizationEmailTemplateEditor({
     const [discardError, setDiscardError] = useState<string | null>(null)
     const [publishOpen, setPublishOpen] = useState(false)
     const [historyOpen, setHistoryOpen] = useState(false)
+    const [sidePanelTab, setSidePanelTab] = useState<StudioSidePanelTab>("preview")
     const [isPublishing, setIsPublishing] = useState(false)
     const [publishError, setPublishError] = useState<string | null>(null)
     const [pendingNavigation, setPendingNavigation] = useState<string | null>(null)
@@ -817,36 +814,100 @@ function OrganizationEmailTemplateEditor({
         }
     }
 
+    const draftStatusLabel = draft?.is_stale
+        ? "Stale draft"
+        : saveConflict
+          ? "Refresh required"
+          : isDirty
+            ? "Unsaved changes"
+            : draft
+              ? "Saved"
+              : publishedTemplate
+                ? "No draft"
+                : "Not saved"
+    const draftRevisionLabel = draft
+        ? `Revision ${draft.revision}`
+        : publishedTemplate
+          ? "Create on first save"
+          : "Not created"
+    const testStatusLabel = isTestCurrent
+        ? "Test sent for current draft"
+        : isTestQueued
+          ? "Test queued for current draft"
+          : draft
+            ? "Not tested"
+            : "Save draft to test"
+
     return (
-        <main className="mx-auto max-w-7xl space-y-6 p-6">
-            <header className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="-ml-3 mb-2"
-                        onClick={handleBack}
-                    >
-                        <ArrowLeftIcon aria-hidden="true" />
-                        Back to email templates
-                    </Button>
-                    <p className="text-sm font-medium text-primary">
+        <main className="flex min-h-[calc(100vh-4rem)] flex-col bg-background lg:h-[calc(100vh-4rem)]">
+            <header className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border bg-card px-4 py-3 sm:px-6">
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Back to email templates"
+                    onClick={handleBack}
+                >
+                    <ArrowLeftIcon aria-hidden="true" />
+                </Button>
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-muted-foreground">
                         {scope === "personal"
                             ? "Personal template"
                             : "Organization template"}
                     </p>
-                    <h1 className="text-2xl font-semibold tracking-tight">
+                    <h1 className="truncate text-lg font-semibold tracking-tight">
                         {draft || publishedTemplate
                             ? savedFields.name.trim() || "Edit email template"
                             : "New email template"}
                     </h1>
+                    <dl
+                        aria-label="Template status"
+                        className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs"
+                    >
+                        <div className="flex items-center gap-2">
+                            <dt className="sr-only">Draft</dt>
+                            <dd>
+                                <Badge
+                                    variant={
+                                        requiresRefresh
+                                            ? "destructive"
+                                            : isDirty
+                                              ? "secondary"
+                                              : "outline"
+                                    }
+                                >
+                                    {draftStatusLabel}
+                                </Badge>
+                            </dd>
+                            <dd className="text-muted-foreground">{draftRevisionLabel}</dd>
+                        </div>
+                        <div>
+                            <dt className="sr-only">Test status</dt>
+                            <dd>
+                                <Badge variant={isTestCurrent ? "default" : "secondary"}>
+                                    {testStatusLabel}
+                                </Badge>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt className="sr-only">Production</dt>
+                            <dd>
+                                <Badge variant="outline">
+                                    {publishedVersion
+                                        ? `Published version ${publishedVersion}`
+                                        : "Not published"}
+                                </Badge>
+                            </dd>
+                        </div>
+                    </dl>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                     {publishedTemplate ? (
                         <Button
                             type="button"
-                            variant="outline"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setHistoryOpen(true)}
                             disabled={requiresRefresh}
                         >
@@ -857,6 +918,7 @@ function OrganizationEmailTemplateEditor({
                     <Button
                         type="button"
                         variant="outline"
+                        size="sm"
                         onClick={() => setTestOpen(true)}
                         disabled={!canSendTest || !draft || isDirty || requiresRefresh}
                     >
@@ -865,6 +927,7 @@ function OrganizationEmailTemplateEditor({
                     <Button
                         type="button"
                         variant="outline"
+                        size="sm"
                         onClick={(event) =>
                             contentForm.handleSubmit(() => handleSaveDraft())(event)
                         }
@@ -878,6 +941,7 @@ function OrganizationEmailTemplateEditor({
                     </Button>
                     <Button
                         type="button"
+                        size="sm"
                         onClick={() => setPublishOpen(true)}
                         disabled={!canSendTest || !draft || isDirty || requiresRefresh}
                     >
@@ -886,374 +950,317 @@ function OrganizationEmailTemplateEditor({
                 </div>
             </header>
 
-            {saveError ? (
-                <p role="alert" className="text-sm text-destructive">
-                    {saveError}
-                </p>
-            ) : null}
-            {requiresRefresh ? (
-                <Alert variant="destructive">
-                    <h2 className="font-medium">Draft changed elsewhere</h2>
-                    <AlertDescription className="space-y-3">
-                        <p>
-                            {draft?.is_stale
-                                ? "This draft no longer matches the published template. Copy anything you need before discarding it."
-                                : "Your local edits are intact. Copy anything you need before reloading the latest revision."}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={handleCopyLocalDraft}
-                            >
-                                Copy local draft
-                            </Button>
-                            {draft?.is_stale ? (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setDiscardOpen(true)}
-                                >
-                                    Discard stale draft
-                                </Button>
-                            ) : (
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => window.location.reload()}
-                                >
-                                    Reload latest
-                                </Button>
-                            )}
-                        </div>
-                        {copyStatus ? <p aria-live="polite">{copyStatus}</p> : null}
-                    </AlertDescription>
-                </Alert>
-            ) : null}
-
-            {publishedTemplate?.proposed_by_name ? (
-                <details className="rounded-xl border bg-card px-5 py-3">
-                    <summary className="cursor-pointer text-sm font-medium">Details</summary>
-                    <dl className="mt-3 grid gap-1 text-sm">
-                        <dt className="text-muted-foreground">Originally proposed by</dt>
-                        <dd>{publishedTemplate.proposed_by_name}</dd>
-                    </dl>
-                </details>
-            ) : null}
-            <Card>
-                <CardContent className="grid gap-4 py-0 sm:grid-cols-3">
-                    <div className="flex items-center justify-between gap-3 sm:block">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Draft
-                        </p>
-                        <div className="mt-1 flex items-center gap-2">
-                            <Badge
-                                variant={
-                                    requiresRefresh
-                                        ? "destructive"
-                                        : isDirty
-                                          ? "secondary"
-                                          : "outline"
-                                }
-                            >
-                                {draft?.is_stale
-                                    ? "Stale draft"
-                                    : saveConflict
-                                      ? "Refresh required"
-                                      : isDirty
-                                        ? "Unsaved changes"
-                                        : draft
-                                          ? "Saved"
-                                          : publishedTemplate
-                                            ? "No draft"
-                                            : "Not saved"}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">
-                                {draft
-                                    ? `Revision ${draft.revision}`
-                                    : publishedTemplate
-                                      ? "Create on first save"
-                                      : "Not created"}
-                            </span>
-                        </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 sm:block">
-                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                Test status
-                        </p>
-                        <div className="mt-1">
-                            <Badge variant={isTestCurrent ? "default" : "secondary"}>
-                                {isTestCurrent
-                                    ? "Test sent for current draft"
-                                    : isTestQueued
-                                      ? "Test queued for current draft"
-                                    : draft
-                                      ? "Not tested"
-                                      : "Save draft to test"}
-                            </Badge>
-                        </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 sm:block">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Production
-                        </p>
-                        <div className="mt-1">
-                            <Badge variant="outline">
-                                {publishedVersion
-                                    ? `Published version ${publishedVersion}`
-                                    : "Not published"}
-                            </Badge>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <section className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Draft content</CardTitle>
-                        <CardDescription>
-                            Changes stay isolated from production until you publish.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="grid gap-5">
-                        <ValidatedField
-                            id="template-name"
-                            label="Template name"
-                            error={contentForm.errorFor("name")}
-                        >
-                            {(control) => (
-                                <Input
-                                    {...control}
-                                    value={fields.name}
-                                    onBlur={() => contentForm.touch("name")}
-                                    onChange={(event) =>
-                                        setFields((current) => ({
-                                            ...current,
-                                            name: event.target.value,
-                                        }))
-                                    }
-                                />
-                            )}
-                        </ValidatedField>
-                        <ValidatedField
-                            id="template-subject"
-                            label="Subject"
-                            error={contentForm.errorFor("subject")}
-                        >
-                            {(control) => (
-                                <Input
-                                    {...control}
-                                    ref={subjectRef}
-                                    value={fields.subject}
-                                    onFocus={() => {
-                                        activeEditorFieldRef.current = "subject"
-                                    }}
-                                    onBlur={() => contentForm.touch("subject")}
-                                    onChange={(event) =>
-                                        setFields((current) => ({
-                                            ...current,
-                                            subject: event.target.value,
-                                        }))
-                                    }
-                                />
-                            )}
-                        </ValidatedField>
-                        {scope === "org" ? (
-                            <div className="grid gap-2">
-                                <Label htmlFor="template-from-email">
-                                    From email
-                                </Label>
-                                <Input
-                                    id="template-from-email"
-                                    value={fields.from_email ?? ""}
-                                    onChange={(event) =>
-                                        setFields((current) => ({
-                                            ...current,
-                                            from_email:
-                                                event.target.value || null,
-                                        }))
-                                    }
-                                />
-                            </div>
+            <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_24rem]">
+                <div className="min-h-0 min-w-0 overflow-y-auto bg-muted/30 p-4 sm:p-6 xl:p-8">
+                    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+                        {saveError ? (
+                            <p role="alert" className="text-sm text-destructive">
+                                {saveError}
+                            </p>
                         ) : null}
-                        <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-                            <div className="space-y-1">
-                                <Label htmlFor="template-active">
-                                    Template is active
-                                </Label>
-                                <p className="text-xs text-muted-foreground">
-                                    Inactive templates stay available for editing but are hidden from send menus.
-                                </p>
-                            </div>
-                            <Switch
-                                id="template-active"
-                                checked={fields.is_active}
-                                onCheckedChange={(isActive) =>
-                                    setFields((current) => ({
-                                        ...current,
-                                        is_active: isActive,
-                                    }))
-                                }
-                            />
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                            <div className="space-y-1">
-                                <Label
-                                    id="template-body-label"
-                                    className={bodyError ? "text-destructive" : undefined}
+                        {requiresRefresh ? (
+                            <Alert variant="destructive">
+                                <h2 className="font-medium">Draft changed elsewhere</h2>
+                                <AlertDescription className="space-y-3">
+                                    <p>
+                                        {draft?.is_stale
+                                            ? "This draft no longer matches the published template. Copy anything you need before discarding it."
+                                            : "Your local edits are intact. Copy anything you need before reloading the latest revision."}
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={handleCopyLocalDraft}
+                                        >
+                                            Copy local draft
+                                        </Button>
+                                        {draft?.is_stale ? (
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => setDiscardOpen(true)}
+                                            >
+                                                Discard stale draft
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => window.location.reload()}
+                                            >
+                                                Reload latest
+                                            </Button>
+                                        )}
+                                    </div>
+                                    {copyStatus ? <p aria-live="polite">{copyStatus}</p> : null}
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
+
+                        <section
+                            aria-label="Draft content"
+                            className="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+                        >
+                            <div className="grid gap-4 border-b border-border p-5">
+                                <ValidatedField
+                                    id="template-name"
+                                    label="Template name"
+                                    error={contentForm.errorFor("name")}
                                 >
-                                    Email body
-                                </Label>
-                                {!visualEditorSupport.supported ? (
-                                    <p className="text-xs text-muted-foreground">
-                                        {visualEditorSupport.reason}
-                                    </p>
-                                ) : bodyMode === "html" ? (
-                                    <p className="text-xs text-muted-foreground">
-                                        Edit the stored HTML source directly.
-                                    </p>
+                                    {(control) => (
+                                        <Input
+                                            {...control}
+                                            value={fields.name}
+                                            onBlur={() => contentForm.touch("name")}
+                                            onChange={(event) =>
+                                                setFields((current) => ({
+                                                    ...current,
+                                                    name: event.target.value,
+                                                }))
+                                            }
+                                        />
+                                    )}
+                                </ValidatedField>
+                                {scope === "org" ? (
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="template-from-email">
+                                            From email
+                                        </Label>
+                                        <Input
+                                            id="template-from-email"
+                                            value={fields.from_email ?? ""}
+                                            onChange={(event) =>
+                                                setFields((current) => ({
+                                                    ...current,
+                                                    from_email:
+                                                        event.target.value || null,
+                                                }))
+                                            }
+                                        />
+                                    </div>
+                                ) : null}
+                                <ValidatedField
+                                    id="template-subject"
+                                    label="Subject"
+                                    error={contentForm.errorFor("subject")}
+                                >
+                                    {(control) => (
+                                        <Input
+                                            {...control}
+                                            ref={subjectRef}
+                                            value={fields.subject}
+                                            onFocus={() => {
+                                                activeEditorFieldRef.current = "subject"
+                                            }}
+                                            onBlur={() => contentForm.touch("subject")}
+                                            onChange={(event) =>
+                                                setFields((current) => ({
+                                                    ...current,
+                                                    subject: event.target.value,
+                                                }))
+                                            }
+                                        />
+                                    )}
+                                </ValidatedField>
+                            </div>
+
+                            <div className="grid gap-3 p-5">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div className="space-y-1">
+                                        <Label
+                                            id="template-body-label"
+                                            className={bodyError ? "text-destructive" : undefined}
+                                        >
+                                            Email body
+                                        </Label>
+                                        {!visualEditorSupport.supported ? (
+                                            <p className="text-xs text-muted-foreground">
+                                                {visualEditorSupport.reason}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                    <ToggleGroup
+                                        aria-label="Email body editor mode"
+                                        className="rounded-lg bg-muted p-1"
+                                        spacing={1}
+                                        multiple={false}
+                                        value={[bodyMode]}
+                                        onValueChange={(value) => {
+                                            const nextMode = value[0] as
+                                                | EmailTemplateBodyMode
+                                                | undefined
+                                            if (!nextMode) return
+                                            if (nextMode === "visual") {
+                                                if (!visualEditorSupport.supported) return
+                                                setUseStructureEditor(
+                                                    hasAdvancedEmailTemplateHtml(fields.body),
+                                                )
+                                            }
+                                            setBodyMode(nextMode)
+                                        }}
+                                    >
+                                        <ToggleGroupItem
+                                            value="visual"
+                                            disabled={!visualEditorSupport.supported}
+                                            className="h-8 rounded-md px-3 text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-border"
+                                        >
+                                            Visual editor
+                                        </ToggleGroupItem>
+                                        <ToggleGroupItem
+                                            value="html"
+                                            className="h-8 rounded-md px-3 text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-border"
+                                        >
+                                            HTML source
+                                        </ToggleGroupItem>
+                                    </ToggleGroup>
+                                </div>
+                                {bodyMode === "html" ? (
+                                    <Textarea
+                                        ref={htmlBodyRef}
+                                        aria-label="Email HTML"
+                                        aria-invalid={bodyError ? true : undefined}
+                                        aria-describedby={bodyError ? "template-body-error" : undefined}
+                                        value={fields.body}
+                                        onBlur={() => contentForm.touch("body")}
+                                        className="min-h-80 resize-y font-mono text-xs leading-relaxed"
+                                        onFocus={() => {
+                                            activeEditorFieldRef.current = "body"
+                                        }}
+                                        onChange={(event) => {
+                                            const body = event.target.value
+                                            setFields((current) => ({
+                                                ...current,
+                                                body,
+                                            }))
+                                            setVisualEditorSupport(
+                                                getEmailTemplateVisualEditorSupport(body),
+                                            )
+                                        }}
+                                    />
+                                ) : useStructureEditor ? (
+                                    <EmailTemplateVisualEditor
+                                        key={`${draft?.id ?? publishedTemplate?.id ?? "new"}:${draft?.revision ?? 0}`}
+                                        ref={advancedBodyRef}
+                                        content={fields.body}
+                                        onFocus={() => {
+                                            activeEditorFieldRef.current = "body"
+                                        }}
+                                        onChange={(body) =>
+                                            setFields((current) => ({ ...current, body }))
+                                        }
+                                        ariaLabelledBy="template-body-label"
+                                        ariaLabel="Email body"
+                                        minHeight="360px"
+                                        maxHeight="none"
+                                    />
+                                ) : (
+                                    <RichTextEditor
+                                        ref={richTextBodyRef}
+                                        content={prepareTemplateHtmlForVisualEditor(
+                                            fields.body,
+                                        )}
+                                        onFocus={() => {
+                                            activeEditorFieldRef.current = "body"
+                                        }}
+                                        onChange={(body) =>
+                                            setFields((current) => ({ ...current, body }))
+                                        }
+                                        ariaLabelledBy="template-body-label"
+                                        ariaLabel="Email body"
+                                        minHeight="360px"
+                                        maxHeight="none"
+                                        enableImages
+                                        enableEmojiPicker
+                                        {...(bodyError ? { className: "border-destructive" } : {})}
+                                    />
+                                )}
+                                {bodyError ? (
+                                    <FieldError id="template-body-error">{bodyError}</FieldError>
                                 ) : null}
                             </div>
-                            <TemplateVariablePicker
+                        </section>
+                    </div>
+                </div>
+
+                <aside
+                    aria-label="Template tools"
+                    className="flex min-h-0 flex-col border-t border-border bg-card lg:border-t-0 lg:border-l"
+                >
+                    <Tabs
+                        value={sidePanelTab}
+                        onValueChange={(value) => setSidePanelTab(value as StudioSidePanelTab)}
+                        className="flex min-h-0 flex-1 flex-col gap-0"
+                    >
+                        <div className="border-b border-border px-4 py-2">
+                            <TabsList aria-label="Template tools" className="grid w-full grid-cols-3">
+                                <TabsTrigger value="preview">Preview</TabsTrigger>
+                                <TabsTrigger value="variables">Variables</TabsTrigger>
+                                <TabsTrigger value="settings">Settings</TabsTrigger>
+                            </TabsList>
+                        </div>
+                        <TabsContent value="preview" className="mt-0 min-h-0 flex-1 overflow-y-auto p-4">
+                            <h2 className="sr-only">Live preview</h2>
+                            <div className="overflow-hidden rounded-lg border bg-white text-slate-950">
+                                <div className="border-b bg-slate-50 px-4 py-3">
+                                    <p className="text-xs font-medium uppercase tracking-wide text-slate-600">
+                                        Subject
+                                    </p>
+                                    <p className="mt-1 text-sm font-medium">
+                                        {previewSubject || "Your subject will appear here"}
+                                    </p>
+                                </div>
+                                <div className="overflow-auto p-4">
+                                    <TrustedSanitizedHtmlContent
+                                        html={previewHtml}
+                                        className="text-sm"
+                                    />
+                                </div>
+                            </div>
+                        </TabsContent>
+                        <TabsContent value="variables" className="mt-0 min-h-0 flex-1 overflow-y-auto p-4">
+                            <TemplateVariableList
                                 variables={variables ?? []}
                                 onSelect={handleInsertVariable}
                             />
-                        </div>
-                        <ToggleGroup
-                            aria-label="Email body editor mode"
-                            className="rounded-lg bg-muted p-1"
-                            spacing={1}
-                            multiple={false}
-                            value={[bodyMode]}
-                            onValueChange={(value) => {
-                                const nextMode = value[0] as
-                                    | EmailTemplateBodyMode
-                                    | undefined
-                                if (!nextMode) return
-                                if (nextMode === "visual") {
-                                    if (!visualEditorSupport.supported) return
-                                    setUseStructureEditor(
-                                        hasAdvancedEmailTemplateHtml(fields.body),
-                                    )
-                                }
-                                setBodyMode(nextMode)
-                            }}
-                        >
-                            <ToggleGroupItem
-                                value="visual"
-                                disabled={!visualEditorSupport.supported}
-                                className="h-9 min-w-32 rounded-md px-4 text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-border"
-                            >
-                                Visual editor
-                            </ToggleGroupItem>
-                            <ToggleGroupItem
-                                value="html"
-                                className="h-9 min-w-32 rounded-md px-4 text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-border"
-                            >
-                                HTML source
-                            </ToggleGroupItem>
-                        </ToggleGroup>
-                        {bodyMode === "html" ? (
-                            <Textarea
-                                ref={htmlBodyRef}
-                                aria-label="Email HTML"
-                                aria-invalid={bodyError ? true : undefined}
-                                aria-describedby={bodyError ? "template-body-error" : undefined}
-                                value={fields.body}
-                                onBlur={() => contentForm.touch("body")}
-                                className="min-h-80 resize-y font-mono text-xs leading-relaxed"
-                                onFocus={() => {
-                                    activeEditorFieldRef.current = "body"
-                                }}
-                                onChange={(event) => {
-                                    const body = event.target.value
-                                    setFields((current) => ({
-                                        ...current,
-                                        body,
-                                    }))
-                                    setVisualEditorSupport(
-                                        getEmailTemplateVisualEditorSupport(body),
-                                    )
-                                }}
-                            />
-                        ) : useStructureEditor ? (
-                            <EmailTemplateVisualEditor
-                                key={`${draft?.id ?? publishedTemplate?.id ?? "new"}:${draft?.revision ?? 0}`}
-                                ref={advancedBodyRef}
-                                content={fields.body}
-                                onFocus={() => {
-                                    activeEditorFieldRef.current = "body"
-                                }}
-                                onChange={(body) =>
-                                    setFields((current) => ({ ...current, body }))
-                                }
-                                ariaLabelledBy="template-body-label"
-                                ariaLabel="Email body"
-                                minHeight="320px"
-                                maxHeight="560px"
-                            />
-                        ) : (
-                            <RichTextEditor
-                                ref={richTextBodyRef}
-                                content={prepareTemplateHtmlForVisualEditor(
-                                    fields.body,
-                                )}
-                                onFocus={() => {
-                                    activeEditorFieldRef.current = "body"
-                                }}
-                                onChange={(body) =>
-                                    setFields((current) => ({ ...current, body }))
-                                }
-                                ariaLabelledBy="template-body-label"
-                                ariaLabel="Email body"
-                                minHeight="320px"
-                                maxHeight="560px"
-                                enableImages
-                                enableEmojiPicker
-                                {...(bodyError ? { className: "border-destructive" } : {})}
-                            />
-                        )}
-                        {bodyError ? (
-                            <FieldError id="template-body-error">{bodyError}</FieldError>
-                        ) : null}
-                    </CardContent>
-                </Card>
-
-                <Card className="xl:sticky xl:top-6">
-                    <CardHeader>
-                        <CardTitle>
-                            <h2>Live preview</h2>
-                        </CardTitle>
-                        <CardDescription>
-                            {scope === "personal"
-                                ? "Your personal signature and managed unsubscribe footer are included."
-                                : "Organization signature and managed unsubscribe footer included."}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="overflow-hidden rounded-xl border bg-white text-slate-950 shadow-sm">
-                            <div className="border-b bg-slate-50 px-5 py-4">
-                                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                                    Subject
-                                </p>
-                                <p className="mt-1 font-medium">
-                                    {previewSubject || "Your subject will appear here"}
-                                </p>
-                            </div>
-                            <div className="min-h-80 overflow-auto p-5">
-                                <TrustedSanitizedHtmlContent
-                                    html={previewHtml}
-                                    className="text-sm"
+                        </TabsContent>
+                        <TabsContent value="settings" className="mt-0 min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+                            <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                                <div className="space-y-1">
+                                    <Label htmlFor="template-active">
+                                        Template is active
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Inactive templates stay available for editing but are hidden from send menus.
+                                    </p>
+                                </div>
+                                <Switch
+                                    id="template-active"
+                                    checked={fields.is_active}
+                                    onCheckedChange={(isActive) =>
+                                        setFields((current) => ({
+                                            ...current,
+                                            is_active: isActive,
+                                        }))
+                                    }
                                 />
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </section>
+                            <p className="text-xs text-muted-foreground">
+                                Changes stay isolated from production until you publish.
+                            </p>
+                            {publishedTemplate?.proposed_by_name ? (
+                                <dl className="grid gap-1 text-sm">
+                                    <dt className="text-muted-foreground">Originally proposed by</dt>
+                                    <dd>{publishedTemplate.proposed_by_name}</dd>
+                                </dl>
+                            ) : null}
+                        </TabsContent>
+                    </Tabs>
+                </aside>
+            </div>
 
             {publishedTemplate ? (
                 <EmailTemplateHistoryDialog

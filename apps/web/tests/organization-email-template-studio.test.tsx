@@ -98,37 +98,6 @@ vi.mock("@/components/rich-text-editor", () => ({
     ),
 }))
 
-vi.mock("@/components/email/TemplateVariablePicker", () => ({
-    TemplateVariablePicker: ({
-        onSelect,
-    }: {
-        onSelect: (variable: {
-            name: string
-            description: string
-            category: string
-            required: boolean
-            value_type: "text"
-            html_safe: boolean
-        }) => void
-    }) => (
-        <button
-            type="button"
-            onClick={() =>
-                onSelect({
-                    name: "first_name",
-                    description: "Recipient first name",
-                    category: "Recipient",
-                    required: false,
-                    value_type: "text",
-                    html_safe: false,
-                })
-            }
-        >
-            Insert variable
-        </button>
-    ),
-}))
-
 vi.mock("@/lib/hooks/use-email-templates", () => ({
     useEmailTemplate: (id: string | null) => ({
         data: mocks.state.publishedTemplate,
@@ -142,7 +111,19 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
         isFetching: false,
         refetch: mocks.refetchPublished,
     }),
-    useEmailTemplateVariables: () => ({ data: [], isLoading: false }),
+    useEmailTemplateVariables: () => ({
+        data: [
+            {
+                name: "first_name",
+                description: "Recipient first name",
+                category: "Recipient",
+                required: false,
+                value_type: "text",
+                html_safe: false,
+            },
+        ],
+        isLoading: false,
+    }),
     useEmailTemplateVersions: () => ({
         data: mocks.state.versions,
         isLoading: false,
@@ -977,6 +958,7 @@ describe("OrganizationEmailTemplateStudio", () => {
 
         render(<OrganizationEmailTemplateStudio templateId="template-1" />)
 
+        fireEvent.click(screen.getByRole("tab", { name: "Settings" }))
         const activeSwitch = screen.getByRole("switch", {
             name: "Template is active",
         })
@@ -1005,7 +987,8 @@ describe("OrganizationEmailTemplateStudio", () => {
 
         const subject = screen.getByLabelText("Subject")
         fireEvent.focus(subject)
-        fireEvent.click(screen.getByRole("button", { name: "Insert variable" }))
+        fireEvent.click(screen.getByRole("tab", { name: "Variables" }))
+        fireEvent.click(screen.getByRole("button", { name: "Insert {{first_name}}" }))
 
         expect(subject).toHaveValue("Original subject{{first_name}}")
     })
