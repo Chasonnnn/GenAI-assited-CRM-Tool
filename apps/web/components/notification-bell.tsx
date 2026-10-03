@@ -248,7 +248,11 @@ export function NotificationBell() {
                 ) : null}
             </Button>
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
-                <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
+                <SheetContent
+                    side="right"
+                    className="gap-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md"
+                    overlayClassName="bg-black/20 supports-backdrop-filter:backdrop-blur-none"
+                >
                     <div className="flex h-14 shrink-0 items-center gap-2 pr-14 pl-4">
                         <SheetTitle className="text-base font-semibold">Notifications</SheetTitle>
                         {tab === "update" && updatesUnread > 0 && (
