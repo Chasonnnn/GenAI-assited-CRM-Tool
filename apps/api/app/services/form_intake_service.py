@@ -1760,6 +1760,9 @@ def process_form_submission_workflow(
     if submission is None:
         raise ValueError("Form submission not found")
 
+    from app.services import form_routing_service
+
+    form_routing_service.route_submission(db, org_id=org_id, submission_id=submission_id)
     executions = _trigger_form_submitted_workflow(db, submission=submission)
     incomplete_statuses = {
         WorkflowExecutionStatus.FAILED.value,
@@ -1854,6 +1857,7 @@ def _normalize_shared_outcome(match_status: str | None) -> str:
         FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value,
         FormSubmissionMatchStatus.LEAD_CREATED.value,
         FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
+        FormSubmissionMatchStatus.ROUTING_REVIEW.value,
     }:
         return match_status
     return FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
@@ -2911,11 +2915,44 @@ def auto_match_submission(
     return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
 
 
+def can_create_intake_lead(
+    db: Session,
+    submission: FormSubmission,
+    *,
+    allow_ambiguous: bool = False,
+) -> bool:
+    """Shared admission guard for module routing and intake creation."""
+    from app.services import donor_intake_service
+
+    if submission.source_mode != FormLinkMode.SHARED.value:
+        return False
+    if submission.surrogate_id or submission.donor_id:
+        return False
+    if allow_ambiguous:
+        return True
+    if submission.match_reason == "manual_review_required":
+        return False
+    if (
+        submission.lead_kind in DONOR_LEAD_KINDS
+        and submission.match_reason in donor_intake_service.REVIEW_REQUIRED_REASONS
+    ):
+        return False
+    return (
+        not db.query(FormSubmissionMatchCandidate.id)
+        .filter(
+            FormSubmissionMatchCandidate.organization_id == submission.organization_id,
+            FormSubmissionMatchCandidate.submission_id == submission.id,
+        )
+        .first()
+    )
+
+
 def create_intake_lead_for_submission(
     db: Session,
     *,
     submission: FormSubmission,
     user_id: uuid.UUID | None,
+    session=None,
     source: str | None = None,
     allow_ambiguous: bool = False,
     auto_promote: bool = False,
@@ -2942,27 +2979,10 @@ def create_intake_lead_for_submission(
             .one()
         )
         if auto_promote and not submission.intake_lead_id and not submission.donor_id:
-            donor_intake_service.match_submission(db, submission)
-        if (
-            submission.match_reason in donor_intake_service.REVIEW_REQUIRED_REASONS
-            and not allow_ambiguous
-        ):
-            _persist_submission(db, submission, commit=commit)
-            return submission, None
-    if submission.surrogate_id or submission.donor_id:
-        if auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
-            _persist_submission(db, submission, commit=commit)
+            donor_intake_service.match_submission(db, submission, session=session)
+    if not can_create_intake_lead(db, submission, allow_ambiguous=allow_ambiguous):
+        _persist_submission(db, submission, commit=commit)
         return submission, None
-
-    if not allow_ambiguous:
-        has_candidates = (
-            db.query(FormSubmissionMatchCandidate.id)
-            .filter(FormSubmissionMatchCandidate.submission_id == submission.id)
-            .first()
-            is not None
-        )
-        if has_candidates:
-            return submission, None
 
     if submission.intake_lead_id:
         lead = (
@@ -3034,8 +3054,6 @@ def create_intake_lead_for_submission(
         and link.embed_enabled
         and submission.lead_kind == FormLeadKind.SURROGATE.value
     )
-    if auto_promote_website_lead and not commit:
-        raise ValueError("Website promotion must own its transaction")
     if submission.lead_kind in DONOR_LEAD_KINDS:
         lead_source = DONOR_INTAKE_SOURCE
     else:
@@ -3069,23 +3087,23 @@ def create_intake_lead_for_submission(
     _persist_submission(db, submission, commit=commit)
     db.refresh(lead)
 
-    if auto_promote_website_lead:
-        surrogate, _linked_submission_count = promote_intake_lead(
-            db=db,
-            lead=lead,
-            user_id=user_id,
-            source="website",
-            is_priority=False,
-            assign_to_user=False,
-        )
-        submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
-        submission.match_reason = "workflow_website_lead_creation"
-        submission.matched_at = None
-        _persist_submission(db, submission, commit=commit)
-        db.refresh(lead)
-        db.refresh(surrogate)
-
     def trigger_created() -> None:
+        if auto_promote_website_lead:
+            surrogate, _linked_submission_count = promote_intake_lead(
+                db=db,
+                lead=lead,
+                user_id=user_id,
+                source="website",
+                is_priority=False,
+                assign_to_user=False,
+            )
+            submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
+            submission.match_reason = "workflow_website_lead_creation"
+            submission.matched_at = None
+            _persist_submission(db, submission, commit=True)
+            db.refresh(lead)
+            db.refresh(surrogate)
+
         meta_crm_dataset_service.link_website_lead_event_to_intake_lead(
             db,
             organization_id=submission.organization_id,
@@ -3518,6 +3536,8 @@ def resolve_submission_match(
 ) -> tuple[FormSubmission, str]:
     if submission.source_mode != FormLinkMode.SHARED.value:
         raise ValueError("Only shared submissions can be match-resolved")
+    if submission.routing_review_step:
+        raise SubmissionLinkConflictError("Complete routing review before resolving matching")
 
     if donor_id:
         return _link_submission_to_donor(
@@ -3618,6 +3638,9 @@ def retry_submission_match(
     session=None,
 ) -> tuple[FormSubmission, str]:
     """Commit the reset, matching, and lead creation as one retry operation."""
+    # Refuse before the transaction so a pending routing review stays untouched.
+    if submission.routing_review_step:
+        raise SubmissionLinkConflictError("Complete routing review before retrying matching")
     after_commit: list[Callable[[], None]] = []
     try:
         submission, outcome = _retry_submission_match(

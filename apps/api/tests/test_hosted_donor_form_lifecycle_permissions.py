@@ -479,20 +479,19 @@ async def test_admin_with_edit_donors_can_manage_hosted_donor_form_lifecycle(
         assert reclassified.status_code == 200, reclassified.text
         assert reclassified.json()["lead_kind"] == "egg_donor"
 
-    workflow = (
+    assert (
         db.query(AutomationWorkflow)
         .filter(
             AutomationWorkflow.organization_id == test_org.id,
             AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}",
         )
-        .one()
+        .count()
+        == 0
     )
-    assert workflow.actions == [
-        {"action_type": "auto_match_submission", "requires_approval": False},
-        {
-            "action_type": "create_intake_lead",
-            "source": "website",
-            "auto_promote": True,
-            "requires_approval": False,
-        },
-    ]
+    form = db.get(Form, UUID(form_id))
+    assert (
+        form.routing_exact_match,
+        form.routing_no_match,
+        form.routing_lead_source,
+        form.routing_auto_create_donor,
+    ) == ("auto", "auto", "website", True)

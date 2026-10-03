@@ -24,7 +24,7 @@ from app.jobs.handlers import storage as storage_job_handler
 from app.services import (
     attachment_service,
     compliance_service,
-    form_intake_service,
+    form_service,
     workflow_triggers,
 )
 
@@ -642,13 +642,13 @@ async def test_republishing_form_rolls_back_all_link_versions_when_reconciliatio
         .count()
     )
 
-    def fail_routing_reconciliation(*_args, **_kwargs):
-        raise RuntimeError("forced routing reconciliation failure")
+    def fail_default_form_reconciliation(*_args, **_kwargs):
+        raise RuntimeError("forced default form reconciliation failure")
 
     monkeypatch.setattr(
-        form_intake_service,
-        "ensure_default_intake_routing_workflow",
-        fail_routing_reconciliation,
+        form_service,
+        "ensure_default_surrogate_application_form",
+        fail_default_form_reconciliation,
     )
 
     from sqlalchemy.orm import Session
@@ -668,7 +668,7 @@ async def test_republishing_form_rolls_back_all_link_versions_when_reconciliatio
 
     app.dependency_overrides[get_db] = override_publish_db
     try:
-        with pytest.raises(RuntimeError, match="forced routing reconciliation failure"):
+        with pytest.raises(RuntimeError, match="forced default form reconciliation failure"):
             await authed_client.post(f"/forms/{form_id}/publish")
     finally:
         publish_db.close()

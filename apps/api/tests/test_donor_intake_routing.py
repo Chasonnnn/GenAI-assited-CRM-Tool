@@ -1,8 +1,6 @@
 """Website donor routing must preserve identity, tenant and upload boundaries."""
 
-import json
 import uuid
-from pathlib import Path
 
 import pytest
 
@@ -10,13 +8,6 @@ from app.core.config import settings
 from app.db.models import Donor, FormSubmission, FormSubmissionFile, IntakeLead, Job
 from app.services import form_intake_service
 from tests.test_hosted_donor_forms import _create_donor_form, _submit_donor_form
-
-
-def _workflow_template():
-    from app.schemas.platform_templates import PlatformWorkflowTemplateDraft
-
-    path = Path(__file__).resolve().parents[3] / "scripts/fixtures/donor-intake-workflow.json"
-    return PlatformWorkflowTemplateDraft.model_validate(json.loads(path.read_text())).model_dump()
 
 
 @pytest.fixture
@@ -29,21 +20,27 @@ def donor_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", False)
 
 
-def _disable_generated_routing(db, form_id):
-    """These tests drive matching and lead creation by hand, so skip the generated workflow."""
-    from app.db.models import AutomationWorkflow
+def _use_manual_routing(db, form_id):
+    """Hold matching so the identity/scan tests can choose when to run it."""
+    from app.db.models import Form
 
-    db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}"
-    ).update({AutomationWorkflow.is_enabled: False})
+    form = db.get(Form, uuid.UUID(form_id))
+    form.routing_exact_match = "review"
+    form.routing_no_match = "off"
     db.commit()
+
+
+async def _dismiss_review(client, submission_id):
+    response = await client.post(f"/forms/submissions/{submission_id}/routing/dismiss")
+    assert response.status_code == 200, response.text
 
 
 async def _submission(client, db, *, kind="egg_donor", email="routing@example.com"):
     form_id, slug = await _create_donor_form(client, lead_kind=kind)
-    _disable_generated_routing(db, form_id)
+    _use_manual_routing(db, form_id)
     response = await _submit_donor_form(client, slug=slug, email=email)
     assert response.status_code == 200, response.text
+    await _dismiss_review(client, response.json()["id"])
     return db.query(FormSubmission).filter_by(id=uuid.UUID(response.json()["id"])).one()
 
 
@@ -111,12 +108,13 @@ async def test_same_form_repeat_is_held_for_review_without_linking_or_promoting(
         ),
     )
     form_id, slug = await _create_donor_form(authed_client, shared_donor=True)
-    _disable_generated_routing(db, form_id)
+    _use_manual_routing(db, form_id)
     donor_type = "Egg donor" if kind == "egg_donor" else "Sperm donor"
     first_response = await _submit_donor_form(
         authed_client, slug=slug, email="repeat@example.com", donor_type=donor_type
     )
     assert first_response.status_code == 200, first_response.text
+    await _dismiss_review(authed_client, first_response.json()["id"])
     first = db.get(FormSubmission, uuid.UUID(first_response.json()["id"]))
     form_intake_service.auto_match_submission(db, submission=first)
     assert first.donor_id == donor.id
@@ -127,6 +125,7 @@ async def test_same_form_repeat_is_held_for_review_without_linking_or_promoting(
         authed_client, slug=slug, email="repeat@example.com", donor_type=donor_type
     )
     assert repeat_response.status_code == 200, repeat_response.text
+    await _dismiss_review(authed_client, repeat_response.json()["id"])
     repeat = db.get(FormSubmission, uuid.UUID(repeat_response.json()["id"]))
     answers = dict(repeat.answers_json)
     if queued:
@@ -299,81 +298,24 @@ async def test_late_donor_match_reuses_record_instead_of_failing_job(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["egg_donor", "sperm_donor"])
 @pytest.mark.parametrize(
-    "policy_state", ["legacy", "active", "paused", "creator_left", "unbound", "foreign_execution"]
+    "policy_state", ["legacy", "active", "paused", "creator_left", "unbound", "foreign_form"]
 )
-async def test_published_form_workflow_routes_both_donor_types(
+async def test_module_routing_promotes_both_donor_types(
     authed_client, db, test_org, test_user, donor_storage, kind, policy_state
 ):
-    import copy
-    import json
-
-    from app.db.models import Form, FormFieldMapping, Membership, WorkflowExecution
+    from app.db.models import Form, Membership, Organization
     from app.db.models.permission_policy import OrganizationPermissionPolicy
     from app.jobs.handlers.form_submissions import process_donor_intake_promote
-    from app.schemas.workflow import WorkflowCreate
-    from app.services import workflow_service
-    from tests.test_hosted_donor_forms import _png_bytes
 
     if policy_state != "legacy":
         db.add(OrganizationPermissionPolicy(organization_id=test_org.id, version=2))
         db.flush()
-    form_id, slug = await _create_donor_form(authed_client, lead_kind="egg_donor")
-    schema = copy.deepcopy(db.get(Form, uuid.UUID(form_id)).schema_json)
-    schema["pages"][0]["fields"].insert(
-        0,
-        {
-            "key": "donation_program",
-            "label": "Which donor program are you applying for?",
-            "type": "radio",
-            "required": True,
-            "options": [{"label": value, "value": value} for value in ["Egg donor", "Sperm donor"]],
-        },
-    )
-    update = await authed_client.patch(f"/forms/{form_id}", json={"form_schema": schema})
-    assert update.status_code == 200, update.text
-    mappings = [
-        {"field_key": item.field_key, "surrogate_field": item.surrogate_field}
-        for item in db.query(FormFieldMapping).filter_by(form_id=uuid.UUID(form_id)).all()
-    ]
-    mappings.append({"field_key": "donation_program", "surrogate_field": "donor_type"})
-    update = await authed_client.put(f"/forms/{form_id}/mappings", json={"mappings": mappings})
-    assert update.status_code == 200, update.text
-    assert (await authed_client.post(f"/forms/{form_id}/publish")).status_code == 200
-    # Generated routing is authorized under v2 too; only the workflow under test may route.
-    _disable_generated_routing(db, form_id)
-    workflow = workflow_service.create_workflow(
-        db,
-        test_org.id,
-        test_user.id,
-        WorkflowCreate(
-            **{
-                **_workflow_template(),
-                "subject_type": "form_submission",
-                "trigger_config": {"form_id": form_id},
-                "is_enabled": True,
-            }
-        ),
-    )
-    version = (await authed_client.get(f"/forms/public/intake/{slug}")).json()[
-        "published_version_id"
-    ]
-    response = await authed_client.post(
-        f"/forms/public/intake/{slug}/submit",
-        data={
-            "answers": json.dumps(
-                {
-                    "donation_program": "Egg donor" if kind == "egg_donor" else "Sperm donor",
-                    "applicant_name": "Taylor Donor",
-                    "email_address": "workflow@example.com",
-                    "mobile": "+16075550199",
-                    "home_state": "NY",
-                    "education_background": "College",
-                }
-            ),
-            "file_field_keys": json.dumps(["headshot"]),
-            "published_version_id": version,
-        },
-        files=[("files", ("recent.png", _png_bytes(), "image/png"))],
+    form_id, slug = await _create_donor_form(authed_client, shared_donor=True)
+    response = await _submit_donor_form(
+        authed_client,
+        slug=slug,
+        email="module@example.com",
+        donor_type="Egg donor" if kind == "egg_donor" else "Sperm donor",
     )
     assert response.status_code == 200, response.text
     submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
@@ -381,25 +323,25 @@ async def test_published_form_workflow_routes_both_donor_types(
     jobs = _jobs(db, test_org.id)
     assert len(jobs) == 1
     if policy_state == "paused":
-        workflow.is_enabled = False
+        db.get(Form, uuid.UUID(form_id)).routing_auto_create_donor = False
     elif policy_state == "creator_left":
         db.query(Membership).filter_by(
             organization_id=test_org.id, user_id=test_user.id
         ).one().is_active = False
     elif policy_state == "unbound":
+        # Module authorization does not depend on an old workflow execution id.
         lead = db.get(IntakeLead, submission.intake_lead_id)
         lead.source_metadata = {"auto_create_donor": True}
-    elif policy_state == "foreign_execution":
-        from app.db.models import Organization
-
-        other_org = Organization(name="Other agency", slug=f"foreign-execution-{uuid.uuid4().hex}")
-        db.add(other_org)
+    elif policy_state == "foreign_form":
+        org = Organization(name="Other agency", slug=uuid.uuid4().hex)
+        db.add(org)
         db.flush()
-        db.query(WorkflowExecution).filter_by(
-            workflow_id=workflow.id
-        ).one().organization_id = other_org.id
-    db.flush()
-    if policy_state in {"paused", "unbound", "foreign_execution"}:
+        foreign_form = Form(organization_id=org.id, name="Foreign", lead_kind=kind)
+        db.add(foreign_form)
+        db.flush()
+        db.get(IntakeLead, submission.intake_lead_id).form_id = foreign_form.id
+    db.commit()
+    if policy_state in {"paused", "foreign_form"}:
         with pytest.raises(RuntimeError, match="Donor intake promotion failed"):
             await process_donor_intake_promote(db, jobs[0])
         assert db.query(Donor).filter_by(organization_id=test_org.id).count() == 0

@@ -15,7 +15,7 @@ from app.db.enums import (
     JobStatus,
     JobType,
 )
-from app.db.models import Attachment, Donor, FormSubmission, FormSubmissionFile, IntakeLead
+from app.db.models import Attachment, Donor, Form, FormSubmission, FormSubmissionFile, IntakeLead
 from app.utils.normalization import normalize_phone, normalize_search_text, normalize_state
 
 logger = logging.getLogger(__name__)
@@ -504,9 +504,17 @@ def promote_queued_lead(db: Session, *, org_id: UUID, lead_id: UUID) -> None:
         or submission.status == FormSubmissionStatus.REJECTED.value
     ):
         return
-    from app.services import workflow_execution_authority
-
-    workflow_execution_authority.authorize_donor_intake_promotion(db, lead)
+    form = (
+        db.query(Form)
+        .filter(
+            Form.organization_id == org_id,
+            Form.id == submission.form_id,
+            Form.id == lead.form_id,
+        )
+        .first()
+    )
+    if form is None or not form.routing_auto_create_donor:
+        raise ValueError("Form routing no longer permits donor creation")
     match_submission(db, submission)
     if submission.donor_id:
         lead.status = IntakeLeadStatus.PROMOTED.value
