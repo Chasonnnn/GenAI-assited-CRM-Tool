@@ -68,6 +68,8 @@ const MATCH_REASON_LABELS: Record<string, string> = {
     manual_retry_requires_manual_link: "Previously promoted; link manually",
     existing_lead_retained: "Existing lead kept",
     existing_lead_relinked: "Existing lead relinked",
+    routing_lead_creation: "Lead created by routing",
+    // Rows from before form routing replaced the routing workflow actions keep this reason.
     workflow_lead_creation: "Lead created by workflow",
     workflow_website_lead_creation: "Website lead created by workflow",
     lead_promoted_to_surrogate: "Lead promoted to surrogate",

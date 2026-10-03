@@ -1,7 +1,8 @@
 "use client"
 
 import { Suspense, useState, type ReactNode } from "react"
-import { useSearchParams } from "next/navigation"
+import type { Route } from "next"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
@@ -59,11 +60,19 @@ type SubmissionAccess = {
 }
 
 function SubmissionWorkspace({canReview, canPromoteLead, canReviewRouting, canEditSubject}: SubmissionAccess) {
+    const { replace } = useRouter()
     const searchParams = useSearchParams()
-    const [chosenForm, setChosenForm] = useState<string | null>(() => searchParams.get("form"))
+    // The URL holds the chosen form, so a notification link for another form switches the queue.
+    const chosenForm = searchParams.get("form")
+    const chooseForm = (value: string | null) => {
+        if (!value) return
+        const params = new URLSearchParams(searchParams.toString())
+        params.set("form", value)
+        replace(`/automation/form-submissions?${params.toString()}` as Route, {scroll: false})
+    }
     const forms = useQuery({queryKey: ["forms", "submission-review"], queryFn: listSubmissionReviewForms})
     const formId = forms.data?.find(form => form.id === chosenForm)?.id ?? forms.data?.[0]?.id ?? null
-    const formSelect = <Select value={formId} onValueChange={setChosenForm} disabled={forms.isLoading || !forms.data?.length}>
+    const formSelect = <Select value={formId} onValueChange={chooseForm} disabled={forms.isLoading || !forms.data?.length}>
         <SelectTrigger className="w-full sm:w-72" aria-label="Form"><SelectValue>{() => forms.data?.find(form => form.id === formId)?.name ?? "Select form"}</SelectValue></SelectTrigger>
         <SelectContent>{forms.data?.map(form => <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>)}</SelectContent>
     </Select>

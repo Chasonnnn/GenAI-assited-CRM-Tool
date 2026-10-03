@@ -52,6 +52,8 @@ describe("matchReasonLabel", () => {
         ["phone_dob_name_ambiguous", "Several records share name, date of birth and phone"],
         ["workflow_pending", "Waiting for routing"],
         ["routing_review_dismissed", "Routing review dismissed"],
+        ["routing_lead_creation", "Lead created by routing"],
+        ["workflow_lead_creation", "Lead created by workflow"],
     ])("labels %s", (reason, label) => {
         expect(matchReasonLabel(reason)).toBe(label)
     })

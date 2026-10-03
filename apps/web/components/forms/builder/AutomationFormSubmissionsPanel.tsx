@@ -511,17 +511,23 @@ function RoutingReviewRow({
         }
     }
 
+    // Below sm each row stacks: applicant and step badge, then the submitted time, then the actions.
     return (
-        <TableRow>
-            <TableCell className="font-medium">{applicant}</TableCell>
-            <TableCell className="whitespace-nowrap">{formatSubmissionDateTime(submission.submitted_at)}</TableCell>
-            <TableCell>
+        <TableRow role="row" className="max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-1 max-sm:py-3">
+            <TableCell role="cell" className="font-medium max-sm:col-start-1 max-sm:row-start-1 max-sm:p-0 max-sm:whitespace-normal">
+                {applicant}
+            </TableCell>
+            <TableCell role="cell" className="max-sm:col-span-2 max-sm:row-start-2 max-sm:p-0 max-sm:text-xs max-sm:text-muted-foreground">
+                <span className="sm:hidden">Submitted </span>
+                {formatSubmissionDateTime(submission.submitted_at)}
+            </TableCell>
+            <TableCell role="cell" className="max-sm:col-start-2 max-sm:row-start-1 max-sm:justify-self-end max-sm:p-0">
                 <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
                     {getRoutingReviewStepLabel(step)}
                 </Badge>
             </TableCell>
-            <TableCell>
-                <div className="flex flex-wrap justify-end gap-2">
+            <TableCell role="cell" className="max-sm:col-span-2 max-sm:row-start-3 max-sm:p-0 max-sm:pt-1">
+                <div className="flex flex-wrap gap-2 sm:justify-end">
                     {step === "match" ? (
                         <Button
                             type="button"
@@ -625,18 +631,19 @@ function RoutingReviewQueueCard({
                 ) : routingReviewSubmissions.length === 0 ? (
                     <p className="text-sm text-stone-500">No submissions waiting for routing review.</p>
                 ) : (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Applicant</TableHead>
-                                <TableHead>Submitted</TableHead>
-                                <TableHead>Waiting on</TableHead>
-                                <TableHead>
+                    // Explicit roles keep table semantics where browsers drop them for cells restyled as a grid below sm.
+                    <Table role="table" className="max-sm:block">
+                        <TableHeader role="rowgroup" className="max-sm:sr-only">
+                            <TableRow role="row">
+                                <TableHead role="columnheader">Applicant</TableHead>
+                                <TableHead role="columnheader">Submitted</TableHead>
+                                <TableHead role="columnheader">Waiting on</TableHead>
+                                <TableHead role="columnheader">
                                     <span className="sr-only">Actions</span>
                                 </TableHead>
                             </TableRow>
                         </TableHeader>
-                        <TableBody>
+                        <TableBody role="rowgroup" className="max-sm:block">
                             {routingReviewSubmissions.map((submission) => (
                                 <RoutingReviewRow
                                     key={submission.id}

@@ -349,7 +349,10 @@ function TriggerConfigFields({ controller }: { controller: WorkflowEditorControl
                     href={`/automation/forms/${encodeURIComponent(triggerConfig.form_id)}?tab=routing` as Route}
                     className="text-xs font-medium text-primary hover:underline"
                 >
-                    Matching and lead creation: Routing tab <span aria-hidden="true">→</span>
+                    Matching and lead creation:{" "}
+                    <span className="whitespace-nowrap">
+                        Routing tab<span aria-hidden="true">{"\u00a0→"}</span>
+                    </span>
                 </Link>
             ) : null}
 

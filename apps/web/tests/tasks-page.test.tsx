@@ -896,6 +896,66 @@ describe('TasksListView', () => {
             expect(onClearFilters).toHaveBeenCalledOnce()
         })
     })
+
+    it('links a routing review task to Form Submissions on its form', () => {
+        render(
+            <TasksListView
+                incompleteTasks={[
+                    {
+                        id: 't-review',
+                        title: 'Review submission: Surrogate Application',
+                        task_type: 'review',
+                        is_completed: false,
+                        due_date: null,
+                        surrogate_id: null,
+                        form_submission_id: 'submission-1',
+                        form_id: 'form-1',
+                        form_name: 'Surrogate Application',
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                        owner_name: 'Jane Doe',
+                    } as TaskListItem,
+                    {
+                        id: 't-review-unnamed',
+                        title: 'Review submission',
+                        task_type: 'review',
+                        is_completed: false,
+                        due_date: null,
+                        surrogate_id: null,
+                        form_submission_id: 'submission-2',
+                        form_id: 'form-2',
+                        form_name: null,
+                        owner_type: 'user',
+                        owner_id: 'u1',
+                        owner_name: 'Jane Doe',
+                    } as TaskListItem,
+                ]}
+                status="open"
+                completedTasks={[]}
+                completedTotal={0}
+                onRetryCompleted={() => {}}
+                onClearFilters={null}
+                selectedTaskIds={new Set()}
+                loadingCompleted={false}
+                completedError={false}
+                onTaskToggle={vi.fn()}
+                onTaskClick={vi.fn()}
+                onSelectTask={vi.fn()}
+                onSelectAll={vi.fn()}
+                onBulkCompleteSelected={vi.fn()}
+                bulkCompletePending={false}
+            />
+        )
+
+        expect(screen.getByRole('link', { name: 'Surrogate Application' })).toHaveAttribute(
+            'href',
+            '/automation/form-submissions?form=form-1',
+        )
+        expect(screen.getByRole('link', { name: 'Open submission' })).toHaveAttribute(
+            'href',
+            '/automation/form-submissions?form=form-2',
+        )
+    })
 })
 
 describe('TasksCalendarView', () => {

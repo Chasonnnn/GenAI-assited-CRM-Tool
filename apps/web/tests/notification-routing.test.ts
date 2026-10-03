@@ -43,6 +43,19 @@ describe("getNotificationHref", () => {
         expect(href).toBe("/donors/donor-1")
     })
 
+    it("routes routing review notifications to Form Submissions on their form", () => {
+        expect(getNotificationHref({
+            type: "form_submission_routing_review",
+            entity_type: "form",
+            entity_id: "form-1",
+        })).toBe("/automation/form-submissions?form=form-1")
+        expect(getNotificationHref({
+            type: "form_submission_routing_review",
+            entity_type: "form",
+            entity_id: null,
+        })).toBe("/notifications")
+    })
+
     it("routes intelligent suggestion digests to dynamic surrogate filter", () => {
         const href = getNotificationHref({
             type: "intelligent_suggestion_digest",

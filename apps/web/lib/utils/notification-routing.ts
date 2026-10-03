@@ -27,6 +27,14 @@ export function getNotificationHref(notification: NotificationRouteInput): strin
         return "/surrogates?dynamic_filter=intelligent_any"
     }
 
+    if (
+        notification.type === "form_submission_routing_review" &&
+        notification.entity_type === "form" &&
+        notification.entity_id
+    ) {
+        return `/automation/form-submissions?${new URLSearchParams({ form: notification.entity_id })}`
+    }
+
     if (APPROVAL_NOTIFICATION_TYPES.has(notification.type)) {
         return buildTasksHref("approvals")
     }

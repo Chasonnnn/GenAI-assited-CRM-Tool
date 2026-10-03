@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api"
 import type { FormRoutingRead, FormWorkflowSummary } from "@/lib/api/forms"
 import { getRoutingLeadSourceLabel, getRoutingReviewStepLabel } from "@/lib/forms/form-routing"
 import { formKeys } from "@/lib/hooks/use-forms"
+import { expectStackedTableSemantics } from "./fixtures/stacked-table"
 
 const { getFormRoutingMock, updateFormRoutingMock, listFormWorkflowsMock, toastMock } = vi.hoisted(() => ({
     getFormRoutingMock: vi.fn(),
@@ -83,8 +84,8 @@ function chooseBaseUiOption(trigger: HTMLElement, optionName: string) {
     fireEvent.click(option)
 }
 
-const exactMatchGroup = () => screen.getByRole("group", { name: "One exact match" })
-const noMatchGroup = () => screen.getByRole("group", { name: "Create intake lead" })
+const exactMatchGroup = () => screen.getByRole("radiogroup", { name: "One exact match" })
+const noMatchGroup = () => screen.getByRole("radiogroup", { name: "Create intake lead" })
 const leadSourceSelect = () => screen.getByRole("combobox", { name: "Lead source" })
 const saveButton = () => screen.getByRole("button", { name: "Save routing" })
 
@@ -117,11 +118,46 @@ describe("AutomationFormRoutingPanel", () => {
         expect(screen.getByText("Loading routing…")).toBeInTheDocument()
         expect(await screen.findByRole("heading", { name: "Routing" })).toBeInTheDocument()
         expect(getFormRoutingMock).toHaveBeenCalledWith("form-1")
-        expect(within(exactMatchGroup()).getByRole("button", { name: "Review first" })).toHaveAttribute("aria-pressed", "true")
-        expect(within(noMatchGroup()).getByRole("button", { name: "After review" })).toHaveAttribute("aria-pressed", "true")
+        expect(within(exactMatchGroup()).getByRole("radio", { name: "Review first" })).toHaveAttribute("aria-checked", "true")
+        expect(within(noMatchGroup()).getByRole("radio", { name: "After review" })).toHaveAttribute("aria-checked", "true")
         expect(screen.getByText("Ambiguous match queue")).toBeInTheDocument()
         expect(leadSourceSelect()).toHaveTextContent("Default")
         expect(screen.queryByRole("switch", { name: "Create donor when photo scan passes" })).not.toBeInTheDocument()
+        expect(saveButton()).toBeDisabled()
+    })
+
+    it("uses radio semantics with the tab stop on the selected segment", async () => {
+        renderPanel()
+        await screen.findByRole("heading", { name: "Routing" })
+
+        const automatically = within(noMatchGroup()).getByRole("radio", { name: "Automatically" })
+        const afterReview = within(noMatchGroup()).getByRole("radio", { name: "After review" })
+        const off = within(noMatchGroup()).getByRole("radio", { name: "Off" })
+        expect(afterReview).toHaveAttribute("tabindex", "0")
+        expect(automatically).toHaveAttribute("tabindex", "-1")
+        expect(off).toHaveAttribute("tabindex", "-1")
+
+        afterReview.focus()
+        fireEvent.keyDown(afterReview, { key: "ArrowRight" })
+        await waitFor(() => expect(off).toHaveFocus())
+        expect(off).toHaveAttribute("aria-checked", "true")
+        expect(off).toHaveAttribute("tabindex", "0")
+
+        fireEvent.keyDown(off, { key: "ArrowLeft" })
+        await waitFor(() => expect(afterReview).toHaveFocus())
+        fireEvent.keyDown(afterReview, { key: "ArrowLeft" })
+        await waitFor(() => expect(automatically).toHaveFocus())
+        expect(automatically).toHaveAttribute("aria-checked", "true")
+
+        fireEvent.click(automatically)
+        expect(automatically).toHaveAttribute("aria-checked", "true")
+
+        fireEvent.keyDown(off, { key: " " })
+        fireEvent.keyUp(off, { key: " " })
+        expect(off).toHaveAttribute("aria-checked", "true")
+
+        fireEvent.keyDown(afterReview, { key: "Enter" })
+        expect(afterReview).toHaveAttribute("aria-checked", "true")
         expect(saveButton()).toBeDisabled()
     })
 
@@ -133,8 +169,8 @@ describe("AutomationFormRoutingPanel", () => {
         renderPanel()
         await screen.findByRole("heading", { name: "Routing" })
 
-        fireEvent.click(within(exactMatchGroup()).getByRole("button", { name: "Link automatically" }))
-        fireEvent.click(within(noMatchGroup()).getByRole("button", { name: "Off" }))
+        fireEvent.click(within(exactMatchGroup()).getByRole("radio", { name: "Link automatically" }))
+        fireEvent.click(within(noMatchGroup()).getByRole("radio", { name: "Off" }))
         chooseBaseUiOption(leadSourceSelect(), "Form embed")
         expect(leadSourceSelect()).toHaveTextContent("Form embed")
         fireEvent.click(saveButton())
@@ -149,7 +185,7 @@ describe("AutomationFormRoutingPanel", () => {
         )
         await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Routing saved"))
         await waitFor(() => expect(saveButton()).toBeDisabled())
-        expect(within(noMatchGroup()).getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "true")
+        expect(within(noMatchGroup()).getByRole("radio", { name: "Off" })).toHaveAttribute("aria-checked", "true")
     })
 
     it("sends Default back as a null lead source", async () => {
@@ -174,7 +210,7 @@ describe("AutomationFormRoutingPanel", () => {
         renderPanel()
         await screen.findByRole("heading", { name: "Routing" })
 
-        fireEvent.click(within(exactMatchGroup()).getByRole("button", { name: "Link automatically" }))
+        fireEvent.click(within(exactMatchGroup()).getByRole("radio", { name: "Link automatically" }))
         fireEvent.click(saveButton())
 
         await waitFor(() =>
@@ -182,8 +218,8 @@ describe("AutomationFormRoutingPanel", () => {
                 "Creating surrogates automatically needs the Create Surrogates permission",
             ),
         )
-        expect(within(exactMatchGroup()).getByRole("button", { name: "Link automatically" })).toHaveAttribute(
-            "aria-pressed",
+        expect(within(exactMatchGroup()).getByRole("radio", { name: "Link automatically" })).toHaveAttribute(
+            "aria-checked",
             "true",
         )
         expect(saveButton()).toBeEnabled()
@@ -218,8 +254,28 @@ describe("AutomationFormRoutingPanel", () => {
 
         expect(screen.getByText("Read-only")).toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Save routing" })).not.toBeInTheDocument()
-        for (const button of within(exactMatchGroup()).getAllByRole("button")) expect(button).toBeDisabled()
-        for (const button of within(noMatchGroup()).getAllByRole("button")) expect(button).toBeDisabled()
+        for (const group of [exactMatchGroup(), noMatchGroup()]) {
+            expect(group).toHaveAttribute("aria-disabled", "true")
+            for (const radio of within(group).getAllByRole("radio")) expect(radio).toHaveAttribute("aria-disabled", "true")
+        }
+        // Every way to pick an unselected segment leaves the saved selection.
+        const cases = [
+            { group: exactMatchGroup, selected: "Link automatically", other: "Review first" },
+            { group: noMatchGroup, selected: "Automatically", other: "Off" },
+        ]
+        for (const { group, selected, other } of cases) {
+            const selectedRadio = within(group()).getByRole("radio", { name: selected })
+            const otherRadio = within(group()).getByRole("radio", { name: other })
+            fireEvent.click(otherRadio)
+            fireEvent.keyDown(otherRadio, { key: "Enter" })
+            fireEvent.keyDown(otherRadio, { key: " " })
+            fireEvent.keyUp(otherRadio, { key: " " })
+            selectedRadio.focus()
+            fireEvent.keyDown(selectedRadio, { key: "ArrowRight" })
+            fireEvent.keyDown(selectedRadio, { key: "ArrowLeft" })
+            await waitFor(() => expect(selectedRadio).toHaveAttribute("aria-checked", "true"))
+            expect(otherRadio).toHaveAttribute("aria-checked", "false")
+        }
         expect(leadSourceSelect()).toHaveAttribute("data-disabled")
         expect(screen.getByRole("switch", { name: "Create donor when photo scan passes" })).toHaveAttribute("data-disabled")
     })
@@ -228,14 +284,14 @@ describe("AutomationFormRoutingPanel", () => {
         const refetchRouting = renderPanelWithRefetch()
         await screen.findByRole("heading", { name: "Routing" })
 
-        fireEvent.click(within(noMatchGroup()).getByRole("button", { name: "Automatically" }))
+        fireEvent.click(within(noMatchGroup()).getByRole("radio", { name: "Automatically" }))
         expect(saveButton()).toBeEnabled()
-        fireEvent.click(within(noMatchGroup()).getByRole("button", { name: "After review" }))
+        fireEvent.click(within(noMatchGroup()).getByRole("radio", { name: "After review" }))
         expect(saveButton()).toBeDisabled()
 
         await refetchRouting({ ...SURROGATE_ROUTING, no_match: "off", updated_at: "2026-10-02T13:00:00Z" })
 
-        expect(within(noMatchGroup()).getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "true")
+        expect(within(noMatchGroup()).getByRole("radio", { name: "Off" })).toHaveAttribute("aria-checked", "true")
         expect(saveButton()).toBeDisabled()
     })
 
@@ -243,12 +299,12 @@ describe("AutomationFormRoutingPanel", () => {
         const refetchRouting = renderPanelWithRefetch()
         await screen.findByRole("heading", { name: "Routing" })
 
-        fireEvent.click(within(noMatchGroup()).getByRole("button", { name: "Off" }))
+        fireEvent.click(within(noMatchGroup()).getByRole("radio", { name: "Off" }))
         await refetchRouting({ ...SURROGATE_ROUTING, no_match: "off", updated_at: "2026-10-02T13:00:00Z" })
         expect(saveButton()).toBeDisabled()
 
         await refetchRouting({ ...SURROGATE_ROUTING, no_match: "auto", updated_at: "2026-10-02T14:00:00Z" })
-        expect(within(noMatchGroup()).getByRole("button", { name: "Automatically" })).toHaveAttribute("aria-pressed", "true")
+        expect(within(noMatchGroup()).getByRole("radio", { name: "Automatically" })).toHaveAttribute("aria-checked", "true")
         expect(saveButton()).toBeDisabled()
     })
 
@@ -260,11 +316,11 @@ describe("AutomationFormRoutingPanel", () => {
         const refetchRouting = renderPanelWithRefetch()
         await screen.findByRole("heading", { name: "Routing" })
 
-        fireEvent.click(within(exactMatchGroup()).getByRole("button", { name: "Link automatically" }))
+        fireEvent.click(within(exactMatchGroup()).getByRole("radio", { name: "Link automatically" }))
         await refetchRouting({ ...SURROGATE_ROUTING, no_match: "off", updated_at: "2026-10-02T13:00:00Z" })
 
-        expect(within(exactMatchGroup()).getByRole("button", { name: "Link automatically" })).toHaveAttribute("aria-pressed", "true")
-        expect(within(noMatchGroup()).getByRole("button", { name: "Off" })).toHaveAttribute("aria-pressed", "true")
+        expect(within(exactMatchGroup()).getByRole("radio", { name: "Link automatically" })).toHaveAttribute("aria-checked", "true")
+        expect(within(noMatchGroup()).getByRole("radio", { name: "Off" })).toHaveAttribute("aria-checked", "true")
         fireEvent.click(saveButton())
 
         await waitFor(() =>
@@ -281,12 +337,12 @@ describe("AutomationFormRoutingPanel", () => {
         const refetchRouting = renderPanelWithRefetch()
         await screen.findByRole("heading", { name: "Routing" })
 
-        fireEvent.click(within(exactMatchGroup()).getByRole("button", { name: "Link automatically" }))
+        fireEvent.click(within(exactMatchGroup()).getByRole("radio", { name: "Link automatically" }))
         expect(saveButton()).toBeEnabled()
 
         await refetchRouting({ ...DONOR_ROUTING, exact_match: "review" })
 
-        expect(within(exactMatchGroup()).getByRole("button", { name: "Review first" })).toHaveAttribute("aria-pressed", "true")
+        expect(within(exactMatchGroup()).getByRole("radio", { name: "Review first" })).toHaveAttribute("aria-checked", "true")
         expect(screen.getByRole("switch", { name: "Create donor when photo scan passes" })).toBeChecked()
         expect(saveButton()).toBeDisabled()
     })
@@ -316,6 +372,13 @@ describe("AutomationFormRoutingPanel", () => {
             "href",
             "/automation/workflows/wf-1",
         )
+    })
+
+    it("keeps the workflow column headers exposed when rows stack below sm", async () => {
+        renderPanel()
+
+        expectStackedTableSemantics(await screen.findByRole("table"), ["Name", "Trigger", "Status", "Actions"])
+        expect(within(screen.getByRole("table")).getAllByRole("cell")).toHaveLength(8)
     })
 
     it("opens a new org workflow with the trigger and form preselected", async () => {

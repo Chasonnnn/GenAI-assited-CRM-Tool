@@ -53,6 +53,7 @@ vi.mock("@/components/ui/toast", () => ({ toast: toastMock }))
 
 import { AutomationFormSubmissionsPanel } from "@/components/forms/builder/AutomationFormSubmissionsPanel"
 import type { FormSubmissionRead, MatchCandidateRead } from "@/lib/api/forms"
+import { expectStackedTableSemantics } from "./fixtures/stacked-table"
 
 function makeSubmission(overrides: Partial<FormSubmissionRead>): FormSubmissionRead {
     return {
@@ -827,6 +828,13 @@ describe("AutomationFormSubmissionsPanel routing review", () => {
         expect(within(leadRow).getByText("No match")).toBeInTheDocument()
         expect(within(leadRow).getByRole("button", { name: "Create lead for Ashley Brooks" })).toBeInTheDocument()
         expect(within(leadRow).queryByRole("button", { name: /Run match/ })).not.toBeInTheDocument()
+    })
+
+    it("keeps the routing review column headers exposed when rows stack below sm", () => {
+        renderPanel({ routingReviewSubmissions: [matchStep, leadStep] })
+
+        expectStackedTableSemantics(screen.getByRole("table"), ["Applicant", "Submitted", "Waiting on", "Actions"])
+        expect(within(screen.getByRole("table")).getAllByRole("cell")).toHaveLength(8)
     })
 
     it("runs the match check and reports the outcome", async () => {

@@ -1117,10 +1117,13 @@ describe('WorkflowEditorPage', () => {
 
             expect(triggerSelect()).toHaveValue('form_submission_approved')
             expect(formSelect('form-egg-donor')).toHaveValue('form-egg-donor')
-            expect(screen.getByRole('link', { name: /Matching and lead creation: Routing tab/ })).toHaveAttribute(
-                'href',
-                '/automation/forms/form-egg-donor?tab=routing',
-            )
+            const routingLink = screen.getByRole('link', { name: 'Matching and lead creation: Routing tab' })
+            expect(routingLink).toHaveAttribute('href', '/automation/forms/form-egg-donor?tab=routing')
+            // The arrow stays on the line of its last words.
+            const arrow = routingLink.querySelector('[aria-hidden="true"]')
+            expect(arrow?.textContent).toBe('\u00a0→')
+            expect(arrow?.parentElement).toHaveClass('whitespace-nowrap')
+            expect(arrow?.parentElement?.textContent).toBe('Routing tab\u00a0→')
 
             fireEvent.change(nameInput(), { target: { value: 'Approved donors' } })
             addNoteAction('Approved')

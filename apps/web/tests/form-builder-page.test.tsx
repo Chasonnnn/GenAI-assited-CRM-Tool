@@ -435,16 +435,16 @@ describe("FormBuilderPage", () => {
             expect(screen.getByRole("heading", { name: "Routing" })).toBeInTheDocument()
             expect(screen.queryByText("Read-only")).not.toBeInTheDocument()
 
-            const exactMatch = screen.getByRole("group", { name: "One exact match" })
-            fireEvent.click(within(exactMatch).getByRole("button", { name: "Link automatically" }))
+            const exactMatch = screen.getByRole("radiogroup", { name: "One exact match" })
+            fireEvent.click(within(exactMatch).getByRole("radio", { name: "Link automatically" }))
             fireEvent.click(screen.getByRole("tab", { name: /^edit$/i }))
             fireEvent.click(screen.getByRole("tab", { name: /^routing$/i }))
 
             expect(
-                within(screen.getByRole("group", { name: "One exact match" })).getByRole("button", {
+                within(screen.getByRole("radiogroup", { name: "One exact match" })).getByRole("radio", {
                     name: "Link automatically",
                 }),
-            ).toHaveAttribute("aria-pressed", "true")
+            ).toHaveAttribute("aria-checked", "true")
             expect(screen.getByRole("button", { name: "Save routing" })).toBeEnabled()
         })
 

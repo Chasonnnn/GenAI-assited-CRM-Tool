@@ -37,11 +37,11 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
+import { SegmentedControl, SegmentedControlItem } from "@/components/ui/segmented-control"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { toast } from "@/components/ui/toast"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 type AutomationFormRoutingPanelProps = {
     formId: string | null
@@ -49,8 +49,6 @@ type AutomationFormRoutingPanelProps = {
     canEdit: boolean
     canCreateWorkflows: boolean
 }
-
-const TOGGLE_ITEM_CLASS = "h-9 bg-background text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground"
 
 function StepCard({ step, title, children }: { step: number; title: string; children: ReactNode }) {
     return (
@@ -103,23 +101,21 @@ function OptionToggle<T extends string>({
     onChange: (value: T) => void
 }) {
     return (
-        <ToggleGroup
+        <SegmentedControl<T>
             aria-labelledby={labelledBy}
-            variant="outline"
-            spacing={0}
-            value={[value]}
+            value={value}
             disabled={disabled}
             onValueChange={(next) => {
-                const nextValue = options.find((option) => option.value === next[0])?.value
+                const nextValue = options.find((option) => option.value === next)?.value
                 if (nextValue) onChange(nextValue)
             }}
         >
             {options.map((option) => (
-                <ToggleGroupItem key={option.value} value={option.value} className={TOGGLE_ITEM_CLASS}>
+                <SegmentedControlItem key={option.value} value={option.value}>
                     {option.label}
-                </ToggleGroupItem>
+                </SegmentedControlItem>
             ))}
-        </ToggleGroup>
+        </SegmentedControl>
     )
 }
 
@@ -178,23 +174,33 @@ function FormWorkflowsCard({ formId, canCreateWorkflows }: { formId: string; can
                 ) : workflows.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No workflows for this form.</p>
                 ) : (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Trigger</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>
+                    // Explicit roles keep table semantics where browsers drop them for cells restyled as a grid below sm.
+                    <Table role="table" className="max-sm:block">
+                        <TableHeader role="rowgroup" className="max-sm:sr-only">
+                            <TableRow role="row">
+                                <TableHead role="columnheader">Name</TableHead>
+                                <TableHead role="columnheader">Trigger</TableHead>
+                                <TableHead role="columnheader">Status</TableHead>
+                                <TableHead role="columnheader">
                                     <span className="sr-only">Actions</span>
                                 </TableHead>
                             </TableRow>
                         </TableHeader>
-                        <TableBody>
+                        <TableBody role="rowgroup" className="max-sm:block">
+                            {/* Below sm each row stacks: name and status, then trigger and Open. */}
                             {workflows.map((workflow) => (
-                                <TableRow key={workflow.id}>
-                                    <TableCell className="font-medium">{workflow.name}</TableCell>
-                                    <TableCell>{getTriggerLabel(workflow.trigger_type)}</TableCell>
-                                    <TableCell>
+                                <TableRow
+                                    role="row"
+                                    key={workflow.id}
+                                    className="max-sm:grid max-sm:grid-cols-[minmax(0,1fr)_auto] max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-1 max-sm:py-3"
+                                >
+                                    <TableCell role="cell" className="font-medium max-sm:col-start-1 max-sm:row-start-1 max-sm:p-0 max-sm:whitespace-normal">
+                                        {workflow.name}
+                                    </TableCell>
+                                    <TableCell role="cell" className="max-sm:col-start-1 max-sm:row-start-2 max-sm:p-0 max-sm:whitespace-normal max-sm:text-xs max-sm:text-muted-foreground">
+                                        {getTriggerLabel(workflow.trigger_type)}
+                                    </TableCell>
+                                    <TableCell role="cell" className="max-sm:col-start-2 max-sm:row-start-1 max-sm:justify-self-end max-sm:p-0">
                                         {workflow.is_enabled ? (
                                             <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
                                                 Active
@@ -203,7 +209,7 @@ function FormWorkflowsCard({ formId, canCreateWorkflows }: { formId: string; can
                                             <Badge variant="secondary">Paused</Badge>
                                         )}
                                     </TableCell>
-                                    <TableCell className="text-right">
+                                    <TableCell role="cell" className="text-right max-sm:col-start-2 max-sm:row-start-2 max-sm:justify-self-end max-sm:p-0">
                                         <Button
                                             size="sm"
                                             variant="ghost"

@@ -290,6 +290,17 @@ describe('NotificationsPage', () => {
         expect(mockMarkAllRead).toHaveBeenCalledTimes(1)
     })
 
+    it('includes routing review notifications in Task Updates', async () => {
+        render(<NotificationsPage />)
+        fireEvent.click(screen.getByRole('combobox'))
+        const option = await screen.findByRole('option', { name: 'Task Updates' })
+        fireEvent.mouseMove(option)
+        fireEvent.click(option)
+        expect(mockUseNotifications.mock.lastCall?.[0].notification_types).toEqual(
+            expect.arrayContaining(['workflow_approval_requested', 'form_submission_routing_review']),
+        )
+    })
+
     it('applies match and appointment filters and restores All', async () => {
         render(<NotificationsPage />)
         expect(mockUseNotifications.mock.lastCall?.[0]).not.toHaveProperty('notification_types')

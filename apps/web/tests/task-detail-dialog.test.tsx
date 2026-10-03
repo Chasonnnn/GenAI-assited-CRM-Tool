@@ -13,7 +13,7 @@ vi.mock("@/lib/auth-context", () => ({ useAuth: mocks.auth }))
 vi.mock("@/lib/hooks/use-permissions", () => ({ useEffectivePermissions: () => ({ data: mocks.permissions() }) }))
 vi.mock("@/components/surrogates/detail/SurrogateDetailLayout/context", () => ({ useSurrogateDetailData: () => ({ effectivePermissions: mocks.permissions() }) }))
 vi.mock("@/components/tasks/TaskRelatedRecordPicker", () => ({ TaskRelatedRecordPicker: () => null }))
-vi.mock("next/navigation", () => ({ useParams: () => ({ id: "surrogate-1" }) }))
+vi.mock("next/navigation", () => ({ useParams: () => ({ id: "surrogate-1" }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock("@/lib/hooks/use-surrogates", () => ({ useSurrogate: () => ({ data: { full_name: "Surrogate" } }) }))
 vi.mock("@/lib/hooks/use-task-actions", () => ({ useTaskActions: () => ({ update: mocks.save, remove: mocks.remove, create: vi.fn(), toggle: mocks.toggle, isCreating: false, isDeleting: false }) }))
 vi.mock("@/components/surrogates/AddSurrogateTaskDialog", () => ({ AddSurrogateTaskDialog: () => null }))
@@ -67,6 +67,21 @@ describe("TaskDetailDialog", () => {
         mocks.task.mockReturnValue({ data: fullTask, isError: false })
         rerender(<TaskDetailDialog {...props} />)
         expect(screen.getByLabelText("Description")).toHaveValue(fullTask.description)
+    })
+
+    it("links a review task to its form submission in the edit and read-only views", () => {
+        const reviewTask = { ...fullTask, form_submission_id: "submission-1", form_id: "form-1", form_name: "Surrogate Application" }
+        mocks.task.mockReturnValue({ data: reviewTask, isLoading: false, isError: false })
+        const { unmount } = render(<TaskDetailDialog {...props} />)
+        expect(screen.getByLabelText("Description")).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Surrogate Application" })).toHaveAttribute("href", "/automation/form-submissions?form=form-1")
+        unmount()
+
+        mocks.auth.mockReturnValue({ user: { user_id: "not-owner-or-creator", role: "case_manager" } })
+        mocks.task.mockReturnValue({ data: { ...reviewTask, form_name: null }, isLoading: false, isError: false })
+        render(<TaskDetailDialog {...props} />)
+        expect(screen.queryByLabelText("Description")).not.toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Open submission" })).toHaveAttribute("href", "/automation/form-submissions?form=form-1")
     })
 
     it("uses creator metadata from full details and shows read-only data for others", () => {

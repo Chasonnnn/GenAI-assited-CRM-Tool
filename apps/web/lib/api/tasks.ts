@@ -39,6 +39,10 @@ export interface TaskListItem {
     donor_number: string | null;
     donor_type: 'egg' | 'sperm' | null;
     donor_name: string | null;
+    // Form submission a review task belongs to
+    form_submission_id?: string | null;
+    form_id?: string | null;
+    form_name?: string | null;
     owner_type: 'user' | 'queue';
     owner_id: string;
     owner_name: string | null;
