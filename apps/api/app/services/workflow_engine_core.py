@@ -130,8 +130,10 @@ def complete_paused_executions(
         db.commit()
     except Exception:
         db.rollback()
-        # A terminal decision must survive a routing failure, including actions
-        # already committed by an adapter. A retry must never execute them again.
+        # A set pointer means nothing committed: the rollback leaves the caller's whole
+        # transaction retryable. A cleared pointer means an adapter action committed, so
+        # record the terminal result; a retry must never execute that action again.
+        recovered = False
         for execution_id, org_id, status, error, results in terminal_states:
             execution = (
                 db.query(WorkflowExecution)
@@ -143,12 +145,19 @@ def complete_paused_executions(
                 .populate_existing()
                 .first()
             )
-            if execution is not None and execution.status == WorkflowExecutionStatus.PAUSED.value:
-                cancel_paused_routing_execution(db, execution)
+            if (
+                execution is not None
+                and execution.status == WorkflowExecutionStatus.PAUSED.value
+                and execution.paused_task_id is None
+            ):
                 execution.status = status
                 execution.error_message = error
                 execution.actions_executed = results
-        db.commit()
+                recovered = True
+        if recovered:
+            db.commit()
+        else:
+            db.rollback()
         raise
     for submission, callbacks in routed:
         form_routing_service.run_after_commit(db, submission, callbacks)

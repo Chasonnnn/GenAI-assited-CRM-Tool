@@ -179,7 +179,7 @@ def test_terminal_legacy_approval_routes_paused_retired_action(db, test_org, tes
 
 
 @pytest.mark.parametrize("status", ["denied", "expired", "completed"])
-def test_terminal_routing_failure_keeps_execution_closed(
+def test_terminal_routing_failure_retries_only_when_nothing_committed(
     db, test_org, test_user, monkeypatch, status
 ):
     notice = {**NOTICE, "recipients": [str(test_user.id)]}
@@ -206,11 +206,14 @@ def test_terminal_routing_failure_keeps_execution_closed(
                 resume_db, execution.id, resume_db.get(Task, task.id), "approve"
             )
     db.expire_all()
-    assert (
-        execution.status
-        == {"denied": "canceled", "expired": "expired", "completed": "failed"}[status]
-    )
-    assert execution.paused_task_id is None and execution.paused_at_action_index is None
+    committed_action = status == "completed"
+    if committed_action:
+        # The approved notification committed, so the execution closes and never reruns it.
+        assert execution.status == "failed"
+        assert execution.paused_task_id is None and execution.paused_at_action_index is None
+    else:
+        # Nothing committed, so the resume stays retryable.
+        assert execution.status == "paused" and execution.paused_task_id == task.id
     assert submission.match_status == "workflow_pending" and submission.routing_review_step is None
     assert db.query(Task).filter_by(form_submission_id=submission.id).count() == 0
     assert db.query(AuditLog).filter_by(target_id=submission.id).count() == 0
@@ -219,9 +222,12 @@ def test_terminal_routing_failure_keeps_execution_closed(
     monkeypatch.setattr(engine.adapter, "execute_action", execute)
     engine.continue_execution(db, execution.id, task, "approve")
     execute.assert_not_called()
-    assert db.query(Notification).filter_by(entity_id=submission.id).count() == (
-        status == "completed"
-    )
+    db.expire_all()
+    assert db.query(Notification).filter_by(entity_id=submission.id).count() == committed_action
+    if not committed_action:
+        assert execution.status == {"denied": "canceled", "expired": "expired"}[status]
+        assert submission.match_status == "routing_review"
+        assert db.query(Task).filter_by(form_submission_id=submission.id).count() == 1
 
 
 @pytest.mark.parametrize("path", ["owner_change", "repair"])
@@ -329,9 +335,13 @@ def test_policy_cancellations_share_routing_transaction(
     assert db.query(AuditLog).filter_by(
         organization_id=test_org.id, target_type="permission_policy"
     ).count() == (0 if fail_routing else 1)
-    for submission, _, execution, _ in rows:
-        assert execution.status == "canceled"
-        assert execution.paused_task_id is None and execution.paused_at_action_index is None
+    for submission, _, execution, task in rows:
+        if fail_routing:
+            # Nothing committed, so activation stays retryable with every execution paused.
+            assert execution.status == "paused" and execution.paused_task_id == task.id
+        else:
+            assert execution.status == "canceled"
+            assert execution.paused_task_id is None and execution.paused_at_action_index is None
         assert submission.match_status == ("workflow_pending" if fail_routing else "routing_review")
         assert db.query(Task).filter_by(form_submission_id=submission.id).count() == (
             0 if fail_routing else 1
