@@ -1,7 +1,7 @@
 """Move workflow-owned intake routing into per-form settings.
 
 Revision ID: 20261003_1400_migrate_form_routing
-Revises: 20261003_1300_form_module_routing
+Revises: 20261003_1310_form_module_routing
 
 Literal definitions deliberately survive removal of the former workflow actions.
 """
@@ -18,7 +18,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from alembic import op
 
 revision = "20261003_1400_migrate_form_routing"
-down_revision = "20261003_1300_form_module_routing"
+down_revision = "20261003_1310_form_module_routing"
 branch_labels = None
 depends_on = None
 

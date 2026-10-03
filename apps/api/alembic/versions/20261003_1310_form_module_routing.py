@@ -1,7 +1,7 @@
 """Add module-owned form routing settings and review tasks.
 
-Revision ID: 20261003_1300_form_module_routing
-Revises: 20261003_1200_repair_seeded_system_workflows
+Revision ID: 20261003_1310_form_module_routing
+Revises: 20261003_1300_appointment_type_client_messages
 """
 
 import sqlalchemy as sa
@@ -9,8 +9,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision = "20261003_1300_form_module_routing"
-down_revision = "20261003_1200_repair_seeded_system_workflows"
+revision = "20261003_1310_form_module_routing"
+down_revision = "20261003_1300_appointment_type_client_messages"
 branch_labels = None
 depends_on = None
 

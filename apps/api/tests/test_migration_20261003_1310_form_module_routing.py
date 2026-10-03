@@ -10,8 +10,8 @@ from sqlalchemy.exc import IntegrityError
 
 from alembic import command
 
-PREVIOUS = "20261003_1200_repair_seeded_system_workflows"
-REVISION = "20261003_1300_form_module_routing"
+PREVIOUS = "20261003_1300_appointment_type_client_messages"
+REVISION = "20261003_1310_form_module_routing"
 
 
 def test_upgrade_defaults_invariants_and_downgrade_closes_review_tasks(db_engine):
