@@ -512,6 +512,33 @@ describe('TasksPage', () => {
         await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith({ taskId: "t1", data: expect.objectContaining({ title: "Updated follow-up", description: "Existing follow-up instructions" }) }))
     })
 
+    it('opens the task named in the URL and drops the param on close', () => {
+        mockNavigation.searchParams = new URLSearchParams('filter=my_tasks&focus=tasks&task=t9')
+        mockUseTask.mockReturnValue({ data: {
+            id: "t9", title: "Linked task", description: "From a notification", task_type: "follow_up", surrogate_id: "s1", surrogate_number: "S12345", intended_parent_id: null, donor_id: null,
+            owner_type: "user", owner_id: "u1", created_by_user_id: "u1", due_date: null, due_time: null, is_completed: false,
+        }, isError: false })
+
+        render(<TasksPage />)
+
+        expect(mockUseTask).toHaveBeenCalledWith("t9")
+        expect(screen.getByLabelText("Description")).toHaveValue("From a notification")
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+        expect(mockNavigation.replace).toHaveBeenCalledWith('/tasks?filter=my_tasks&focus=tasks', { scroll: false })
+    })
+
+    it('scrolls to and highlights the approval named in the URL', async () => {
+        mockNavigation.searchParams = new URLSearchParams('focus=approvals&approval=approval-1')
+
+        render(<TasksPage />)
+
+        const row = document.getElementById('approval-approval-1')
+        expect(row).toHaveAttribute('data-highlighted', 'true')
+        await waitFor(() =>
+            expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+        )
+    })
+
     it('updates AI context directly from the task editor lifecycle', () => {
         render(<TasksPage />)
 

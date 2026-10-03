@@ -15,6 +15,7 @@ import { ClockIcon, Loader2Icon, ShieldCheckIcon } from "lucide-react"
 import { RelativeTime } from "@/components/ui/time-display"
 import { formatUtcDateLabel } from "@/components/ui/time-display-utils"
 import { useCurrentMinuteTimestamp } from "@/components/ui/use-current-minute-timestamp"
+import { cn } from "@/lib/utils"
 
 type TasksApprovalsSectionProps = {
     pendingApprovals: TaskListItem[]
@@ -26,6 +27,19 @@ type TasksApprovalsSectionProps = {
     onResolvedStatusRequests: () => void
     onResolvedImportApprovals: () => void
     currentUserId?: string | null
+    highlightedId?: string | null
+}
+
+function approvalRowProps(id: string, highlightedId: string | null | undefined) {
+    const highlighted = id === highlightedId
+    return {
+        id: `approval-${id}`,
+        "data-highlighted": highlighted ? "true" : undefined,
+        className: cn(
+            "group flex flex-col gap-3 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4",
+            highlighted && "bg-primary/5 ring-2 ring-inset ring-primary/40"
+        ),
+    }
 }
 
 function getApprovalDueState(dueAt: string, now: number) {
@@ -87,6 +101,7 @@ export function TasksApprovalsSection({
     onResolvedStatusRequests,
     onResolvedImportApprovals,
     currentUserId,
+    highlightedId,
 }: TasksApprovalsSectionProps) {
     const totalApprovals =
         (pendingApprovals?.length ?? 0) +
@@ -133,7 +148,7 @@ export function TasksApprovalsSection({
                             return (
                                 <div
                                     key={`scr-${item.request.id}`}
-                                    className="group flex flex-col gap-3 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4"
+                                    {...approvalRowProps(item.request.id, highlightedId)}
                                 >
                                     <div className="flex-1 space-y-2">
                                         <div className="flex flex-wrap items-center gap-2">
@@ -239,7 +254,7 @@ export function TasksApprovalsSection({
                             return (
                                 <div
                                     key={approval.id}
-                                    className="group flex flex-col gap-3 p-3 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4"
+                                    {...approvalRowProps(approval.id, highlightedId)}
                                 >
                                     <div className="flex-1 space-y-2">
                                         <div className="flex flex-wrap items-center gap-2">

@@ -17,6 +17,7 @@ export interface Notification {
     entity_id: string | null
     read_at: string | null
     created_at: string
+    request_id?: string | null
 }
 
 export interface NotificationListResponse {
