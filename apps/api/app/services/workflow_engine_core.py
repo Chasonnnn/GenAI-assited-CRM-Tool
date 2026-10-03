@@ -1102,6 +1102,7 @@ class WorkflowEngineCore:
                     db.commit()
             except Exception:
                 db.rollback()
+                self._record_failed_resume_completion(db, execution.id, action_results)
                 raise
 
         elif task.status == TaskStatus.DENIED.value:
@@ -1297,6 +1298,31 @@ class WorkflowEngineCore:
             return None, fallback_admin, None
 
         return None, None, "Workflow requires approval but no approver could be resolved"
+
+    def _record_failed_resume_completion(
+        self, db: Session, execution_id: UUID, action_results: list[dict]
+    ) -> None:
+        """Close an execution whose committed actions can no longer resume."""
+        execution = (
+            db.query(WorkflowExecution)
+            .filter(WorkflowExecution.id == execution_id)
+            .with_for_update()
+            .populate_existing()
+            .first()
+        )
+        # A set pointer means nothing committed, so the resume job can retry. A cleared
+        # pointer means an action committed; retrying must not run it again.
+        if (
+            execution is None
+            or execution.status != WorkflowExecutionStatus.PAUSED.value
+            or execution.paused_task_id is not None
+        ):
+            db.rollback()
+            return
+        execution.status = WorkflowExecutionStatus.FAILED.value
+        execution.actions_executed = action_results
+        execution.error_message = "Form routing failed after workflow actions"
+        db.commit()
 
     def _get_dedupe_key(
         self,

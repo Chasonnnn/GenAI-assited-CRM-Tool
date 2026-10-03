@@ -527,6 +527,12 @@ def test_routing_failure_after_committed_action_does_not_rerun_it(
     # The approved notification committed with the cleared approval pointer, so a
     # retry must not run the approved action again (at-most-once side effects).
     assert execution.paused_task_id is None and execution.paused_at_action_index is None
+    assert execution.status == "failed"
+    assert execution.error_message == "Form routing failed after workflow actions"
+    assert [r["action_type"] for r in execution.actions_executed] == [
+        "send_notification",
+        "auto_match_submission",
+    ]
     assert db.query(Notification).filter_by(entity_id=submission.id).count() == 1
 
     monkeypatch.setattr(form_routing_service, "_audit", original_audit)

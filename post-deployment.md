@@ -13,7 +13,7 @@ Before migrating, run this read-only timezone preflight and fix any organization
 ```sql
 SELECT DISTINCT timezone
 FROM organizations
-WHERE timezone NOT IN (SELECT name FROM pg_timezone_names);
+WHERE COALESCE(NULLIF(timezone, ''), 'UTC') NOT IN (SELECT name FROM pg_timezone_names);
 ```
 
 Migration 1400 uses PostgreSQL `AT TIME ZONE`; an unrecognized organization timezone aborts the migration.
