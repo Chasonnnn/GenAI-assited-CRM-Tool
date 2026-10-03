@@ -265,7 +265,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
     - "5'4" or "5'4\"" (feet and inches)
     - "5 4" (feet and inches, space-separated)
     - "4-5" (feet and inches, dash-separated)
-    - "5 ft 4 in" or "5ft 4in" (spelled out)
+    - "5 ft 4 in", "5ft 4in", or "5 ft 4 ins" (spelled out)
     - "5.4" or "5.33" (decimal feet)
     - "64" or "67 inches" (total inches)
     - "Height: 5-1" (label-prefixed values)
@@ -326,7 +326,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
 
     # Pattern: 5ft 6 / 5ft 6" / 5 feet 4 inches / 5 foot 4 / 5ft 2 1/2 inches
     match = re.match(
-        r"^(\d+)\s*(?:ft|feet|foot)\.?\s*(?:and\s*)?(\d+(?:\s*(?:1/2|\.5))?)?\s*(?:\"|in|inch|inches)?\.?\s*$",
+        r"^(\d+)\s*(?:ft|feet|foot)\.?\s*(?:and\s*)?(\d+(?:\s*(?:1/2|\.5))?)?\s*(?:\"|in|ins|inch|inches)?\.?\s*$",
         lowered,
         re.IGNORECASE,
     )
@@ -342,7 +342,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
         (\d+)
         \s*['"/:*]\s*
         (\d+(?:\s*(?:1/2|\.5))?)
-        \s*(?:["']|in|inch|inches|ft)?\s*:?\s*$
+        \s*(?:["']|in|ins|inch|inches|ft)?\s*:?\s*$
         """,
         lowered,
         re.IGNORECASE | re.VERBOSE,
@@ -375,7 +375,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             )
 
     # Pattern: 67 inches (total inches with explicit unit)
-    match = re.match(r"^(\d+(?:\.\d+)?)\s*(?:in|inch|inches)\.?\s*$", lowered, re.IGNORECASE)
+    match = re.match(r"^(\d+(?:\.\d+)?)\s*(?:in|ins|inch|inches)\.?\s*$", lowered, re.IGNORECASE)
     if match:
         total_inches = Decimal(match.group(1))
         feet_from_inches = total_inches / Decimal("12")

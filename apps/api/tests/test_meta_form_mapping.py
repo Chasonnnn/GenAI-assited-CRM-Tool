@@ -1097,18 +1097,36 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
 
 
 @pytest.mark.parametrize(
-    ("meta_lead_id", "height_value", "expected_height", "num_csections_value"),
+    (
+        "meta_lead_id",
+        "height_value",
+        "expected_height",
+        "num_csections_value",
+        "weight_value",
+        "expected_bmi",
+    ),
     [
-        ("zapier-9c807da9-d5f9-423f-bacd-9732aa39ca5f", "4”ft 11", "4.92", None),
-        ("zapier-71fef5b9-320d-4107-9d97-dcc49dd10a6c", "5’3inch", "5.25", "No"),
+        ("zapier-9c807da9-d5f9-423f-bacd-9732aa39ca5f", "4”ft 11", "4.92", None, None, None),
+        ("zapier-71fef5b9-320d-4107-9d97-dcc49dd10a6c", "5’3inch", "5.25", "No", None, None),
+        ("lead-quoted-height", "5'2\"", "5.17", None, "165", 30.2),
+        ("lead-plural-inch-abbreviation", "5 ft 2 ins", "5.17", None, "240", 43.9),
     ],
 )
 def test_meta_lead_mapping_handles_additional_height_formats(
-    db, test_org, test_user, meta_lead_id, height_value, expected_height, num_csections_value
+    db,
+    test_org,
+    test_user,
+    meta_lead_id,
+    height_value,
+    expected_height,
+    num_csections_value,
+    weight_value,
+    expected_bmi,
 ):
     from decimal import Decimal
 
     from app.db.models import MetaLead
+    from app.routers.surrogates_shared import _surrogate_to_list_item
     from app.services import meta_lead_service
 
     lead = MetaLead(
@@ -1120,12 +1138,14 @@ def test_meta_lead_mapping_handles_additional_height_formats(
             "full_name": "Height Test",
             "email": f"{expected_height.replace('.', '')}@example.com",
             "height": height_value,
+            "weight": weight_value,
             "num_csections": num_csections_value,
         },
         field_data_raw={
             "full_name": "Height Test",
             "email": f"{expected_height.replace('.', '')}@example.com",
             "height": height_value,
+            "weight": weight_value,
             "num_csections": num_csections_value,
         },
         meta_created_time=datetime.now(UTC),
@@ -1156,6 +1176,13 @@ def test_meta_lead_mapping_handles_additional_height_formats(
             "custom_field_key": None,
         },
         {
+            "csv_column": "weight",
+            "surrogate_field": "weight_lb",
+            "transformation": None,
+            "action": "map",
+            "custom_field_key": None,
+        },
+        {
             "csv_column": "num_csections",
             "surrogate_field": "num_csections",
             "transformation": None,
@@ -1174,7 +1201,11 @@ def test_meta_lead_mapping_handles_additional_height_formats(
 
     assert error is None
     assert surrogate is not None
+    db.refresh(surrogate)
     assert surrogate.height_ft == Decimal(expected_height)
+    assert surrogate.weight_lb == (int(weight_value) if weight_value is not None else None)
+    assert _surrogate_to_list_item(surrogate).bmi == expected_bmi
+    assert not (surrogate.import_metadata or {}).get("dropped_invalid_fields")
     if num_csections_value is not None:
         assert surrogate.num_csections == 0
 
