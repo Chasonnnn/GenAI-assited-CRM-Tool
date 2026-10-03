@@ -43,3 +43,33 @@ class NotificationType(str, Enum):
 
     # Attachment notifications
     ATTACHMENT_INFECTED = "attachment_infected"
+
+
+class NotificationTier(str, Enum):
+    """Inbox tier: action items count toward the bell badge; updates do not."""
+
+    ACTION = "action"
+    UPDATE = "update"
+
+
+# Types that ask the recipient to do something. Every other type is an update.
+ACTION_NOTIFICATION_TYPES: frozenset[str] = frozenset(
+    {
+        NotificationType.WORKFLOW_APPROVAL_REQUESTED.value,
+        NotificationType.STATUS_CHANGE_REQUESTED.value,
+        NotificationType.TASK_ASSIGNED.value,
+        NotificationType.TASK_OVERDUE.value,
+        NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
+        NotificationType.SURROGATE_ASSIGNED.value,
+        NotificationType.APPOINTMENT_REQUESTED.value,
+        NotificationType.MATCH_CONFLICT.value,
+        NotificationType.CONTACT_REMINDER.value,
+        NotificationType.ATTACHMENT_INFECTED.value,
+    }
+)
+
+
+def notification_tier(notification_type: str) -> NotificationTier:
+    if notification_type in ACTION_NOTIFICATION_TYPES:
+        return NotificationTier.ACTION
+    return NotificationTier.UPDATE

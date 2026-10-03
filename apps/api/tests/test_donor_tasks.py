@@ -1165,7 +1165,7 @@ async def test_donor_task_notifications_fail_closed_after_donor_permission_revok
 
     counted = await authed_client.get("/me/notifications/count")
     assert counted.status_code == 200, counted.text
-    assert counted.json()["count"] == 0
+    assert counted.json() == {"action_count": 0, "updates_unread": 0}
 
     marked = await authed_client.patch(f"/me/notifications/{existing.id}/read")
     assert marked.status_code == 404
