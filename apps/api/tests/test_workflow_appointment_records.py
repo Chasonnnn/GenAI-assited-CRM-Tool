@@ -283,6 +283,45 @@ def test_type_filter_matches_names_across_hosts_ignoring_case(db, test_org, test
     assert [execution.entity_id for execution in executions] == [matching.id]
 
 
+@pytest.mark.asyncio
+async def test_list_filters_appointment_workflows_by_type_name(
+    authed_client, db, test_org, test_user
+):
+    notify = [{"action_type": "send_notification", "title": "Booked", "recipients": "host"}]
+    named = _workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        notify,
+        trigger_config={"appointment_type_names": ["Initial Interview"]},
+    )
+    _workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        notify,
+        trigger_config={"appointment_type_names": ["Follow-up"]},
+    )
+    _workflow(db, test_org.id, test_user.id, notify)
+    other_org = Organization(name="Other Org", slug=f"other-{uuid.uuid4().hex[:8]}")
+    db.add(other_org)
+    db.flush()
+    _workflow(
+        db,
+        other_org.id,
+        test_user.id,
+        notify,
+        trigger_config={"appointment_type_names": ["Initial Interview"]},
+    )
+
+    response = await authed_client.get(
+        "/workflows", params={"appointment_type_name": " initial INTERVIEW "}
+    )
+
+    assert response.status_code == 200, response.text
+    assert [item["id"] for item in response.json()] == [str(named.id)]
+
+
 def test_appointment_email_describes_the_triggering_appointment(
     db, test_org, test_user, monkeypatch
 ):

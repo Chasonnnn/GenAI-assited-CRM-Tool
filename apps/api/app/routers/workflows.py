@@ -160,6 +160,9 @@ def list_workflows(
     enabled_only: bool = False,
     trigger_type: WorkflowTriggerType | None = None,
     subject_type: str | None = None,
+    appointment_type_name: Annotated[str | None, "fastapi_param"] = Query(
+        default=None, min_length=1, max_length=100
+    ),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
 ):
@@ -183,6 +186,7 @@ def list_workflows(
         enabled_only=enabled_only,
         trigger_type=trigger_type,
         subject_type=subject_type,
+        appointment_type_name=appointment_type_name,
     )
     workflows = [workflow for workflow in workflows if _can_view_workflow(db, session, workflow)]
     from app.services import workflow_execution_authority

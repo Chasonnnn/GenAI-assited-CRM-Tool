@@ -1294,6 +1294,7 @@ def list_workflows(
     enabled_only: bool = False,
     trigger_type: WorkflowTriggerType | None = None,
     subject_type: str | None = None,
+    appointment_type_name: str | None = None,
 ) -> list[AutomationWorkflow]:
     """
     List workflows for an organization with scope-based filtering.
@@ -1354,8 +1355,24 @@ def list_workflows(
         if subject_type not in SUPPORTED_WORKFLOW_SUBJECT_TYPES:
             return []
         query = query.filter(AutomationWorkflow.subject_type == subject_type)
+    if appointment_type_name is None:
+        return query.order_by(AutomationWorkflow.name).all()
 
-    return query.order_by(AutomationWorkflow.name).all()
+    # Matches the engine's type filter: names compare stripped and case-insensitively.
+    wanted = appointment_type_name.strip().casefold()
+    workflows = (
+        query.filter(AutomationWorkflow.subject_type == "appointment")
+        .order_by(AutomationWorkflow.name)
+        .all()
+    )
+    return [
+        workflow
+        for workflow in workflows
+        if any(
+            isinstance(name, str) and name.strip().casefold() == wanted
+            for name in (workflow.trigger_config or {}).get("appointment_type_names") or []
+        )
+    ]
 
 
 def toggle_workflow(
