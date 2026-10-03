@@ -8,7 +8,6 @@ import {
     CheckCircle2Icon,
     ClockIcon,
     FileTextIcon,
-    GitMergeIcon,
     ListChecksIcon,
     MailIcon,
     MessageSquareIcon,
@@ -77,8 +76,6 @@ const ACTION_META: Record<string, ActionMeta> = {
     assign_surrogate: { icon: UserPlusIcon, group: "Records", tone: "emerald" },
     assign_donor: { icon: UserPlusIcon, group: "Records", tone: "emerald" },
     promote_intake_lead: { icon: ArrowUpRightIcon, group: "Records", tone: "emerald" },
-    create_intake_lead: { icon: UserPlusIcon, group: "Records", tone: "emerald" },
-    auto_match_submission: { icon: GitMergeIcon, group: "Records", tone: "rose" },
     create_task: { icon: ListChecksIcon, group: "Tasks", tone: "violet" },
     send_zapier_conversion_event: { icon: PlugZapIcon, group: "Integrations", tone: "slate" },
 }

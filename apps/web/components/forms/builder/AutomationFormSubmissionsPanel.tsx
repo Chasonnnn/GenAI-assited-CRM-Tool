@@ -11,15 +11,20 @@ import {
     type FormLeadKind,
     type FormSubmissionRead,
     type MatchCandidateRead,
+    type ResolveSubmissionMatchResponse,
 } from "@/lib/api/forms"
 import { FORM_LEAD_KIND_LABELS, isDonorFormLeadKind } from "@/lib/forms/form-lead-kind"
+import { getRoutingReviewStepLabel } from "@/lib/forms/form-routing"
 import { matchReasonLabel } from "@/lib/forms/submission-presentation"
 import { useDonors } from "@/lib/hooks/use-donors"
 import {
     useApproveFormSubmission,
+    useCreateSubmissionRoutingLead,
+    useDismissSubmissionRoutingReview,
     useRejectFormSubmission,
     useRescanSubmissionFile,
     useResolveSubmissionMatch,
+    useRunSubmissionRoutingMatch,
     useSubmissionDonorCandidates,
 } from "@/lib/hooks/use-forms"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +33,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 
@@ -40,14 +46,24 @@ type RetryMatchOptions = {
     createIntakeLeadIfUnmatched?: boolean
 }
 
+type RoutingReviewAction = "review" | "create_lead"
+
+type RoutingReviewQueueStatus = "loading" | "error" | "ready"
+
 type AutomationFormSubmissionsPanelProps = {
     canPromoteLead?: ((submission: FormSubmissionRead) => boolean) | undefined
     canEditSubject?: ((submission: FormSubmissionRead) => boolean) | undefined
+    /** Subject and record-creation access for routing review actions; omitted means allowed. */
+    canReviewRouting?: ((submission: FormSubmissionRead, action: RoutingReviewAction) => boolean) | undefined
     canReview?: boolean
-    showWorkflowApprovals?: boolean
     formId: string | null
     pendingSubmissionHistory: FormSubmissionRead[]
     processedSubmissionHistory: FormSubmissionRead[]
+    routingReviewSubmissions: FormSubmissionRead[]
+    /** Load state of the routing review queue; its count and empty state show only when ready. */
+    routingReviewQueueStatus: RoutingReviewQueueStatus
+    isRoutingReviewRetrying: boolean
+    onRetryRoutingReview: () => void
     ambiguousSubmissions: FormSubmissionRead[]
     leadQueueSubmissions: FormSubmissionRead[]
     visibleSubmissionHistory: FormSubmissionRead[]
@@ -67,7 +83,6 @@ type AutomationFormSubmissionsPanelProps = {
     submissionOutcomeBadgeClass: (submission: FormSubmissionRead) => string
     submissionReviewLabel: (submission: FormSubmissionRead) => string
     submissionReviewBadgeClass: (submission: FormSubmissionRead) => string
-    onOpenApprovalQueue: () => void
     onSubmissionHistoryFilterChange: (value: SubmissionHistoryFilter) => void
     onSelectQueueSubmission: (submissionId: string | null) => void
     onManualSurrogateIdChange: (value: string) => void
@@ -381,36 +396,12 @@ function FailedScanFiles({ submission, canRescan }: { submission: FormSubmission
     )
 }
 
-function WorkflowApprovalCard({
-    onOpenApprovalQueue,
-}: {
-    onOpenApprovalQueue: () => void
-}) {
-    return (
-        <Card>
-            <CardContent className="flex flex-col gap-3 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                    <p className="font-medium text-stone-900 dark:text-stone-100">
-                        Workflow approvals for submission routing and lead creation
-                    </p>
-                    <p className="text-stone-600 dark:text-stone-400">
-                        Approval-gated workflow actions appear in the shared approval queue.
-                    </p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={onOpenApprovalQueue}>
-                    Open Approval Queue
-                </Button>
-            </CardContent>
-        </Card>
-    )
-}
-
 function SubmissionMetricCard({
     label,
     value,
 }: {
     label: string
-    value: number
+    value: number | string
 }) {
     return (
         <Card>
@@ -425,19 +416,27 @@ function SubmissionMetricCard({
 function SubmissionMetricsGrid({
     pendingSubmissionHistory,
     processedSubmissionHistory,
+    routingReviewSubmissions,
+    routingReviewQueueStatus,
     ambiguousSubmissions,
     leadQueueSubmissions,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
     | "pendingSubmissionHistory"
     | "processedSubmissionHistory"
+    | "routingReviewSubmissions"
+    | "routingReviewQueueStatus"
     | "ambiguousSubmissions"
     | "leadQueueSubmissions"
 >) {
     return (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <SubmissionMetricCard label="Pending Applications" value={pendingSubmissionHistory.length} />
             <SubmissionMetricCard label="Processed Outcomes" value={processedSubmissionHistory.length} />
+            <SubmissionMetricCard
+                label="Routing Review"
+                value={routingReviewQueueStatus === "ready" ? routingReviewSubmissions.length : "—"}
+            />
             <SubmissionMetricCard label="Ambiguous Queue" value={ambiguousSubmissions.length} />
             <SubmissionMetricCard label="Lead Queue" value={leadQueueSubmissions.length} />
         </div>
@@ -469,6 +468,189 @@ function SubmissionIdentityGrid({
                 ) : null}
             </div>
         </div>
+    )
+}
+
+const ROUTING_MATCH_OUTCOME_MESSAGES: Partial<Record<ResolveSubmissionMatchResponse["outcome"], string>> = {
+    linked: "Submission linked",
+    lead_created: "Intake lead created",
+    ambiguous_review: "Submission moved to the ambiguous match queue",
+    routing_review: "No match found",
+}
+
+function RoutingReviewRow({
+    submission,
+    canReviewRouting,
+    readAnswerValue,
+    formatSubmissionDateTime,
+}: {
+    submission: FormSubmissionRead
+    canReviewRouting: (submission: FormSubmissionRead, action: RoutingReviewAction) => boolean
+    readAnswerValue: SubmissionIdentityReader
+    formatSubmissionDateTime: (isoString: string) => string
+}) {
+    const runMatch = useRunSubmissionRoutingMatch()
+    const createLead = useCreateSubmissionRoutingLead()
+    const dismiss = useDismissSubmissionRoutingReview()
+    const variables = { submissionId: submission.id, formId: submission.form_id }
+    const isPending = runMatch.isPending || createLead.isPending || dismiss.isPending
+    const canReviewSubmission = canReviewRouting(submission, "review")
+    const applicant = readAnswerValue(submission, ["full_name", "name"])
+    const step = submission.routing_review_step
+
+    const perform = async (
+        action: () => Promise<ResolveSubmissionMatchResponse>,
+        successMessage: (result: ResolveSubmissionMatchResponse) => string,
+        errorFallback: string,
+    ) => {
+        try {
+            const result = await action()
+            toast.success(successMessage(result))
+        } catch (error) {
+            toast.error(errorMessage(error, errorFallback))
+        }
+    }
+
+    return (
+        <TableRow>
+            <TableCell className="font-medium">{applicant}</TableCell>
+            <TableCell className="whitespace-nowrap">{formatSubmissionDateTime(submission.submitted_at)}</TableCell>
+            <TableCell>
+                <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                    {getRoutingReviewStepLabel(step)}
+                </Badge>
+            </TableCell>
+            <TableCell>
+                <div className="flex flex-wrap justify-end gap-2">
+                    {step === "match" ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            disabled={isPending || !canReviewSubmission}
+                            aria-label={`Run match for ${applicant}`}
+                            onClick={() =>
+                                void perform(
+                                    () => runMatch.mutateAsync(variables),
+                                    (result) => ROUTING_MATCH_OUTCOME_MESSAGES[result.outcome] ?? "Match check complete",
+                                    "Unable to run match",
+                                )
+                            }
+                        >
+                            Run match
+                        </Button>
+                    ) : null}
+                    {step === "create_lead" ? (
+                        <Button
+                            type="button"
+                            size="sm"
+                            disabled={isPending || !canReviewRouting(submission, "create_lead")}
+                            aria-label={`Create lead for ${applicant}`}
+                            onClick={() =>
+                                void perform(
+                                    () => createLead.mutateAsync(variables),
+                                    () => "Intake lead created",
+                                    "Unable to create intake lead",
+                                )
+                            }
+                        >
+                            Create lead
+                        </Button>
+                    ) : null}
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isPending || !canReviewSubmission}
+                        aria-label={`Dismiss routing review for ${applicant}`}
+                        onClick={() =>
+                            void perform(
+                                () => dismiss.mutateAsync(variables),
+                                () => "Routing review dismissed",
+                                "Unable to dismiss routing review",
+                            )
+                        }
+                    >
+                        Dismiss
+                    </Button>
+                </div>
+            </TableCell>
+        </TableRow>
+    )
+}
+
+const canReviewAnyRouting = () => true
+
+function RoutingReviewQueueCard({
+    routingReviewSubmissions,
+    routingReviewQueueStatus,
+    isRoutingReviewRetrying,
+    onRetryRoutingReview,
+    canReviewRouting = canReviewAnyRouting,
+    readAnswerValue,
+    formatSubmissionDateTime,
+}: Pick<
+    AutomationFormSubmissionsPanelProps,
+    | "routingReviewSubmissions"
+    | "routingReviewQueueStatus"
+    | "isRoutingReviewRetrying"
+    | "onRetryRoutingReview"
+    | "canReviewRouting"
+    | "readAnswerValue"
+    | "formatSubmissionDateTime"
+>) {
+    return (
+        <Card>
+            <CardContent className="space-y-4 p-5">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold">Routing Review</h3>
+                    {routingReviewQueueStatus === "ready" ? (
+                        <Badge variant="outline">{routingReviewSubmissions.length}</Badge>
+                    ) : null}
+                </div>
+                {routingReviewQueueStatus === "loading" ? (
+                    <p className="text-sm text-stone-500" role="status">Loading routing review…</p>
+                ) : routingReviewQueueStatus === "error" ? (
+                    <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
+                        <p>Unable to load routing review.</p>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isRoutingReviewRetrying}
+                            onClick={onRetryRoutingReview}
+                        >
+                            Retry
+                        </Button>
+                    </div>
+                ) : routingReviewSubmissions.length === 0 ? (
+                    <p className="text-sm text-stone-500">No submissions waiting for routing review.</p>
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Applicant</TableHead>
+                                <TableHead>Submitted</TableHead>
+                                <TableHead>Waiting on</TableHead>
+                                <TableHead>
+                                    <span className="sr-only">Actions</span>
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {routingReviewSubmissions.map((submission) => (
+                                <RoutingReviewRow
+                                    key={submission.id}
+                                    submission={submission}
+                                    canReviewRouting={canReviewRouting}
+                                    readAnswerValue={readAnswerValue}
+                                    formatSubmissionDateTime={formatSubmissionDateTime}
+                                />
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </CardContent>
+        </Card>
     )
 }
 
@@ -666,11 +848,17 @@ function LeadPromotionQueueCard({
 
 function SubmissionReviewQueues({
     canEditSubject,
+    canReviewRouting,
     formId,
+    routingReviewSubmissions,
+    routingReviewQueueStatus,
+    isRoutingReviewRetrying,
+    onRetryRoutingReview,
     ambiguousSubmissions,
     leadQueueSubmissions,
     selectedQueueSubmissionId,
     readAnswerValue,
+    formatSubmissionDateTime,
     resolveSubmissionMatchPending,
     promoteIntakeLeadPending,
     onSelectQueueSubmission,
@@ -680,6 +868,12 @@ function SubmissionReviewQueues({
 }: Pick<
     AutomationFormSubmissionsPanelProps,
     | "formId"
+    | "canReviewRouting"
+    | "routingReviewSubmissions"
+    | "routingReviewQueueStatus"
+    | "isRoutingReviewRetrying"
+    | "onRetryRoutingReview"
+    | "formatSubmissionDateTime"
     | "ambiguousSubmissions"
     | "leadQueueSubmissions"
     | "selectedQueueSubmissionId"
@@ -704,23 +898,34 @@ function SubmissionReviewQueues({
     }
 
     return (
-        <div className="grid gap-6 xl:grid-cols-2">
-            <AmbiguousMatchQueueCard
-                canEditSubject={canEditSubject}
-                ambiguousSubmissions={ambiguousSubmissions}
-                selectedQueueSubmissionId={selectedQueueSubmissionId}
+        <div className="space-y-6">
+            <RoutingReviewQueueCard
+                routingReviewSubmissions={routingReviewSubmissions}
+                routingReviewQueueStatus={routingReviewQueueStatus}
+                isRoutingReviewRetrying={isRoutingReviewRetrying}
+                onRetryRoutingReview={onRetryRoutingReview}
+                canReviewRouting={canReviewRouting}
                 readAnswerValue={readAnswerValue}
-                resolveSubmissionMatchPending={resolveSubmissionMatchPending}
-                onSelectQueueSubmission={onSelectQueueSubmission}
-                onResolveSubmissionToLead={onResolveSubmissionToLead}
+                formatSubmissionDateTime={formatSubmissionDateTime}
             />
-            <LeadPromotionQueueCard
-                leadQueueSubmissions={leadQueueSubmissions}
-                readAnswerValue={readAnswerValue}
-                promoteIntakeLeadPending={promoteIntakeLeadPending}
-                onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
-                canPromoteLead={canPromoteLead}
-            />
+            <div className="grid gap-6 xl:grid-cols-2">
+                <AmbiguousMatchQueueCard
+                    canEditSubject={canEditSubject}
+                    ambiguousSubmissions={ambiguousSubmissions}
+                    selectedQueueSubmissionId={selectedQueueSubmissionId}
+                    readAnswerValue={readAnswerValue}
+                    resolveSubmissionMatchPending={resolveSubmissionMatchPending}
+                    onSelectQueueSubmission={onSelectQueueSubmission}
+                    onResolveSubmissionToLead={onResolveSubmissionToLead}
+                />
+                <LeadPromotionQueueCard
+                    leadQueueSubmissions={leadQueueSubmissions}
+                    readAnswerValue={readAnswerValue}
+                    promoteIntakeLeadPending={promoteIntakeLeadPending}
+                    onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
+                    canPromoteLead={canPromoteLead}
+                />
+            </div>
         </div>
     )
 }
@@ -1219,10 +1424,14 @@ function isOpenForReview(submission: FormSubmissionRead) {
 export function AutomationFormSubmissionsPanel({
     canReview = true,
     canEditSubject = canEditNoSubject,
-    showWorkflowApprovals = true,
+    canReviewRouting,
     formId,
     pendingSubmissionHistory,
     processedSubmissionHistory,
+    routingReviewSubmissions,
+    routingReviewQueueStatus,
+    isRoutingReviewRetrying,
+    onRetryRoutingReview,
     ambiguousSubmissions,
     leadQueueSubmissions,
     visibleSubmissionHistory,
@@ -1242,7 +1451,6 @@ export function AutomationFormSubmissionsPanel({
     submissionOutcomeBadgeClass,
     submissionReviewLabel,
     submissionReviewBadgeClass,
-    onOpenApprovalQueue,
     onSubmissionHistoryFilterChange,
     onSelectQueueSubmission,
     onManualSurrogateIdChange,
@@ -1254,20 +1462,28 @@ export function AutomationFormSubmissionsPanel({
     onPromoteLeadFromSubmission,
     canPromoteLead,
 }: AutomationFormSubmissionsPanelProps) {
+    const openRoutingReviewSubmissions = routingReviewSubmissions.filter(isOpenForReview)
     const openAmbiguousSubmissions = ambiguousSubmissions.filter(isOpenForReview)
     const openLeadQueueSubmissions = leadQueueSubmissions.filter(isOpenForReview)
     return (
         <div className="mx-auto max-w-6xl space-y-6">
-            {showWorkflowApprovals && <WorkflowApprovalCard onOpenApprovalQueue={onOpenApprovalQueue} />}
             <SubmissionMetricsGrid
                 pendingSubmissionHistory={pendingSubmissionHistory}
                 processedSubmissionHistory={processedSubmissionHistory}
+                routingReviewSubmissions={openRoutingReviewSubmissions}
+                routingReviewQueueStatus={routingReviewQueueStatus}
                 ambiguousSubmissions={openAmbiguousSubmissions}
                 leadQueueSubmissions={openLeadQueueSubmissions}
             />
             {canReview && <SubmissionReviewQueues
                 canEditSubject={canEditSubject}
+                canReviewRouting={canReviewRouting}
                 formId={formId}
+                routingReviewSubmissions={openRoutingReviewSubmissions}
+                routingReviewQueueStatus={routingReviewQueueStatus}
+                isRoutingReviewRetrying={isRoutingReviewRetrying}
+                onRetryRoutingReview={onRetryRoutingReview}
+                formatSubmissionDateTime={formatSubmissionDateTime}
                 ambiguousSubmissions={openAmbiguousSubmissions}
                 leadQueueSubmissions={openLeadQueueSubmissions}
                 selectedQueueSubmissionId={selectedQueueSubmissionId}

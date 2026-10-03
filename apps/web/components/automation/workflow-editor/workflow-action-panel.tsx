@@ -5,7 +5,6 @@ import { ChevronDownIcon, ChevronUpIcon, ShieldCheckIcon, Trash2Icon } from "luc
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
@@ -724,41 +723,6 @@ function WorkflowActionFields({
                     rows={3}
                 />
             </FieldRow>
-        )
-    }
-
-    if (action.action_type === "auto_match_submission") {
-        return (
-            <p className="rounded-md border p-3 text-sm text-muted-foreground">
-                Matches existing applicants and holds conflicting identities for review.
-            </p>
-        )
-    }
-
-    if (action.action_type === "create_intake_lead") {
-        return (
-            <>
-                <FieldRow label="Source" htmlFor={fieldId("intake-source")}>
-                    <Input
-                        id={fieldId("intake-source")}
-                        placeholder="Optional, e.g. event_qr"
-                        aria-label="Source"
-                        value={typeof action.source === "string" ? action.source : ""}
-                        onChange={(event) => updateAction(index, { source: event.target.value })}
-                    />
-                </FieldRow>
-                <div className="flex items-center justify-between gap-3 rounded-md border p-3">
-                    <Label htmlFor={`auto-promote-donor-${index}`}>Create donor after photo scan</Label>
-                    <Switch
-                        id={`auto-promote-donor-${index}`}
-                        checked={action.auto_promote === true}
-                        onCheckedChange={(checked) => updateAction(index, { auto_promote: checked })}
-                    />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                    Skips automatically if the submission is already linked or has ambiguous match candidates.
-                </p>
-            </>
         )
     }
 

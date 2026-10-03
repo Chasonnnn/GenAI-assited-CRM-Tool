@@ -5,7 +5,7 @@ import FormSubmissionsPage from "@/app/(app)/automation/form-submissions/page"
 
 const mocks = vi.hoisted(() => ({
     access: vi.fn(), forms: vi.fn(), submissions: vi.fn(), candidates: vi.fn(),
-    resolve: vi.fn(), retry: vi.fn(), promote: vi.fn(), refetch: vi.fn(),
+    resolve: vi.fn(), retry: vi.fn(), promote: vi.fn(), refetch: vi.fn(), createLead: vi.fn(),
     searchParams: new URLSearchParams(),
 }))
 vi.mock("next/navigation", () => ({ useSearchParams: () => mocks.searchParams }))
@@ -26,6 +26,9 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useRejectFormSubmission: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useRescanSubmissionFile: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSubmissionDonorCandidates: () => ({ data: [], isLoading: false, isError: false }),
+    useRunSubmissionRoutingMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCreateSubmissionRoutingLead: () => ({ mutateAsync: mocks.createLead, isPending: false }),
+    useDismissSubmissionRoutingReview: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 vi.mock("@/lib/hooks/use-donors", () => ({ useDonors: () => ({ data: undefined, isLoading: false, isError: false }) }))
 vi.mock("@/components/ui/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -118,6 +121,25 @@ describe("standalone form submission access", () => {
         fireEvent.click(screen.getByRole("button", { name: "Keep As Lead" }))
         await waitFor(() => expect(mocks.resolve).toHaveBeenCalledWith({ submissionId: "submission-1", payload: { create_intake_lead: true, review_notes: null } }))
         expect(mocks.refetch).toHaveBeenCalled()
+    })
+
+    it("queues routing review rows and requires the exact Create action for a lead", async () => {
+        mocks.submissions.mockReturnValue({
+            data: [{ ...submission(), match_status: "routing_review", routing_review_step: "create_lead" }],
+            isLoading: false,
+        })
+        mocks.createLead.mockResolvedValue({ submission: submission(), outcome: "lead_created", candidate_count: 0 })
+        mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions", "review_form_submissions", "edit_surrogates"] } })
+        const view = render(<FormSubmissionsPage />)
+        const createLead = () => screen.getByRole("button", { name: "Create lead for Synthetic Applicant" })
+        expect(screen.getByText("No match")).toBeInTheDocument()
+        expect(createLead()).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Dismiss routing review for Synthetic Applicant" })).toBeEnabled()
+
+        mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions", "review_form_submissions", "create_surrogates"] } })
+        view.rerender(<FormSubmissionsPage />)
+        fireEvent.click(createLead())
+        await waitFor(() => expect(mocks.createLead).toHaveBeenCalledWith({ submissionId: "submission-1", formId: "form-1" }))
     })
 
     it("opens the form named in the link", () => {

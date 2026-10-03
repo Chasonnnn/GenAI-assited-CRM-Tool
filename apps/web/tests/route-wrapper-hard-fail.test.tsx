@@ -103,6 +103,7 @@ describe("route wrappers", () => {
     it("form builder bypasses the route check for new forms", async () => {
         const ui = await FormBuilderPage({
             params: Promise.resolve({ id: "new" }),
+            searchParams: Promise.resolve({}),
         })
 
         render(ui)

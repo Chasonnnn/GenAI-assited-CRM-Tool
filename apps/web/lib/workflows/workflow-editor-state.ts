@@ -423,13 +423,6 @@ export function getActionValidationError(action: ActionConfig): string | null {
 
 export function getActionsValidationError(triggerType: string, actions: ActionConfig[]): string | null {
     if (actions.length === 0) return "Add at least one action."
-    if (triggerType === "form_submitted") {
-        const autoMatchIndex = actions.findIndex((action) => action.action_type === "auto_match_submission")
-        const createLeadIndex = actions.findIndex((action) => action.action_type === "create_intake_lead")
-        if (autoMatchIndex >= 0 && createLeadIndex >= 0 && autoMatchIndex > createLeadIndex) {
-            return "Place Auto-Match Submission before Create Intake Lead for form-submitted workflows."
-        }
-    }
     for (const action of actions) {
         const error = getActionValidationError(action)
         if (error) return error
@@ -504,7 +497,7 @@ export type WorkflowBuilderAction =
     | { type: "moveAction"; index: number; direction: -1 | 1 }
     | { type: "updateAction"; index: number; updates: Partial<ActionConfig> }
 
-/** Trigger a new workflow starts on, e.g. when opened from an appointment type. */
+/** Trigger and filter a new workflow starts on, e.g. when opened from an appointment type or a form. */
 export type WorkflowEditorPreset = { triggerType: string; triggerConfig: JsonObject }
 
 export function getWorkflowEditorPreset(
@@ -512,7 +505,12 @@ export function getWorkflowEditorPreset(
 ): WorkflowEditorPreset | null {
     const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value)
     const triggerType = first(searchParams.trigger)
-    if (!triggerType || FIXED_TRIGGER_SUBJECT_TYPES[triggerType] !== "appointment") return null
+    if (!triggerType) return null
+    if (FORM_TRIGGER_TYPES.has(triggerType)) {
+        const formId = first(searchParams.form_id)?.trim()
+        return { triggerType, triggerConfig: normalizeTriggerConfigForUi(triggerType, formId ? { form_id: formId } : {}, []) }
+    }
+    if (FIXED_TRIGGER_SUBJECT_TYPES[triggerType] !== "appointment") return null
     const typeName = first(searchParams.appointment_type)?.trim()
     return { triggerType, triggerConfig: typeName ? { appointment_type_names: [typeName] } : {} }
 }

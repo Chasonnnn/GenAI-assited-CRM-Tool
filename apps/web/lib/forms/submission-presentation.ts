@@ -26,6 +26,7 @@ export function formatSubmissionDateTime(isoString: string) {
 export function submissionOutcomeLabel(submission: FormSubmissionRead) {
     if (submission.match_status === "linked") return "Matched"
     if (submission.match_status === "lead_created") return "Lead Created"
+    if (submission.match_status === "routing_review") return "Routing Review"
     return "Pending Match"
 }
 
@@ -50,7 +51,8 @@ export function submissionReviewLabel(submission: FormSubmissionRead) {
 }
 
 const MATCH_REASON_LABELS: Record<string, string> = {
-    workflow_pending: "Waiting for routing workflow",
+    workflow_pending: "Waiting for routing",
+    routing_review_dismissed: "Routing review dismissed",
     phone_dob_name_exact: "Name, date of birth and phone match",
     email_dob_name_exact: "Name, date of birth and email match",
     phone_dob_name_ambiguous: "Several records share name, date of birth and phone",

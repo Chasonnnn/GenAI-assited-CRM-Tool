@@ -1044,9 +1044,9 @@ describe('WorkflowEditorPage', () => {
                     { value: 'form_submitted', label: 'Application Submitted', description: '' },
                 ],
                 action_types: [
-                    { value: 'create_intake_lead', label: 'Create Intake Lead', description: '' },
+                    { value: 'add_note', label: 'Add Note', description: '' },
                 ],
-                action_types_by_trigger: { form_submitted: ['create_intake_lead'] },
+                action_types_by_trigger: { form_submitted: ['add_note'] },
                 trigger_entity_types: { form_submitted: 'form_submission' },
                 forms: [{ id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' }],
             },
@@ -1060,7 +1060,7 @@ describe('WorkflowEditorPage', () => {
         expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Form: Surrogate Application')
         expect(radioLabels('Record type')).toEqual(['Form Submission'])
         expect(screen.getByRole('radio', { name: 'Form Submission' })).toBeDisabled()
-        fireEvent.click(screen.getByRole('button', { name: 'Create Intake Lead' }))
+        addNoteAction('Review application')
         fireEvent.click(launchButton())
 
         expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
@@ -1068,9 +1068,101 @@ describe('WorkflowEditorPage', () => {
                 subject_type: 'form_submission',
                 trigger_type: 'form_submitted',
                 trigger_config: { form_id: 'form-surrogate' },
+                actions: [expect.objectContaining({ action_type: 'add_note', content: 'Review application' })],
             }),
             expect.any(Object),
         )
+    })
+
+    describe('form routing handoff', () => {
+        const formOptions = {
+            data: {
+                ...DEFAULT_OPTIONS,
+                trigger_types: [
+                    ...DEFAULT_OPTIONS.trigger_types,
+                    { value: 'form_submitted', label: 'Application Submitted', description: '' },
+                    { value: 'form_submission_approved', label: 'Application Approved', description: '' },
+                ],
+                action_types_by_trigger: {
+                    ...DEFAULT_OPTIONS.action_types_by_trigger,
+                    form_submitted: ['add_note'],
+                    form_submission_approved: ['add_note'],
+                },
+                trigger_entity_types: {
+                    ...DEFAULT_OPTIONS.trigger_entity_types,
+                    form_submitted: 'form_submission',
+                    form_submission_approved: 'form_submission',
+                },
+                forms: [
+                    { id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' },
+                    { id: 'form-egg-donor', name: 'Egg Donor Application', lead_kind: 'egg_donor' },
+                ],
+            },
+            isLoading: false,
+        }
+
+        beforeEach(() => {
+            mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['manage_automation'] } })
+            mockUseWorkflowOptions.mockReturnValue(formOptions)
+        })
+
+        it('prefills the trigger and form for a new workflow and links to the form routing tab', () => {
+            render(
+                <WorkflowEditorPageClient
+                    workflowId={null}
+                    initialScope="org"
+                    initialPreset={getWorkflowEditorPreset({ trigger: 'form_submission_approved', form_id: 'form-egg-donor' })}
+                />,
+            )
+
+            expect(triggerSelect()).toHaveValue('form_submission_approved')
+            expect(formSelect('form-egg-donor')).toHaveValue('form-egg-donor')
+            expect(screen.getByRole('link', { name: /Matching and lead creation: Routing tab/ })).toHaveAttribute(
+                'href',
+                '/automation/forms/form-egg-donor?tab=routing',
+            )
+
+            fireEvent.change(nameInput(), { target: { value: 'Approved donors' } })
+            addNoteAction('Approved')
+            fireEvent.click(launchButton())
+
+            expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    scope: 'org',
+                    trigger_type: 'form_submission_approved',
+                    trigger_config: { form_id: 'form-egg-donor' },
+                }),
+                expect.any(Object),
+            )
+        })
+
+        it('hides the routing link until a form is selected', () => {
+            render(
+                <WorkflowEditorPageClient
+                    workflowId={null}
+                    initialScope="org"
+                    initialPreset={getWorkflowEditorPreset({ trigger: 'form_submitted' })}
+                />,
+            )
+
+            expect(triggerSelect()).toHaveValue('form_submitted')
+            expect(screen.queryByRole('link', { name: /Routing tab/ })).not.toBeInTheDocument()
+
+            fireEvent.change(formSelect('form-surrogate'), { target: { value: 'form-surrogate' } })
+            expect(screen.getByRole('link', { name: /Routing tab/ })).toHaveAttribute(
+                'href',
+                '/automation/forms/form-surrogate?tab=routing',
+            )
+        })
+
+        it('ignores an unknown trigger and a form id without a form trigger', () => {
+            expect(getWorkflowEditorPreset({ trigger: 'not_a_trigger', form_id: 'form-surrogate' })).toBeNull()
+            expect(getWorkflowEditorPreset({ trigger: 'surrogate_created', form_id: 'form-surrogate' })).toBeNull()
+            expect(getWorkflowEditorPreset({ trigger: 'form_submitted', form_id: ' form-surrogate ' })).toEqual({
+                triggerType: 'form_submitted',
+                triggerConfig: { form_id: 'form-surrogate' },
+            })
+        })
     })
 
     describe('Application Submitted stage updates', () => {
