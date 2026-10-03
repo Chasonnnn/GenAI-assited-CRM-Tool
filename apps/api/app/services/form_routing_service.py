@@ -361,25 +361,39 @@ def _audit(db: Session, submission: FormSubmission, action: str, user_id: UUID |
     )
 
 
-def route_submission(db: Session, *, org_id: UUID, submission_id: UUID) -> FormSubmission:
-    after_commit: list[Callable[[], None]] = []
+def route_submission(
+    db: Session,
+    *,
+    org_id: UUID,
+    submission_id: UUID,
+    commit: bool = True,
+    after_commit: list[Callable[[], None]] | None = None,
+) -> FormSubmission:
+    if not commit and after_commit is None:
+        raise ValueError("Deferred routing requires an after-commit callback list")
+    callbacks: list[Callable[[], None]] = []
     try:
         submission = lock_submission(db, org_id, submission_id)
-        if submission.source_mode != "shared" or submission.match_status != "workflow_pending":
+        if submission.source_mode == "shared" and submission.match_status == "workflow_pending":
+            form = _form(db, submission)
+            if form.routing_exact_match == "review":
+                _request_review(db, submission, form, "match", callbacks)
+            else:
+                _match_and_route(db, submission, form, callbacks)
+            _audit(db, submission, "route_submission", None)
+        if commit:
             db.commit()
-            return submission
-        form = _form(db, submission)
-        if form.routing_exact_match == "review":
-            _request_review(db, submission, form, "match", after_commit)
         else:
-            _match_and_route(db, submission, form, after_commit)
-        _audit(db, submission, "route_submission", None)
-        db.commit()
+            db.flush()
     except Exception:
-        db.rollback()
+        if commit:
+            db.rollback()
         raise
-    run_after_commit(db, submission, after_commit)
-    db.refresh(submission)
+    if commit:
+        run_after_commit(db, submission, callbacks)
+        db.refresh(submission)
+    else:
+        after_commit.extend(callbacks)
     return submission
 
 

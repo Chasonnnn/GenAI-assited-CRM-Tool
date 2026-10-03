@@ -1797,9 +1797,16 @@ def invalidate_pending_approvals_for_surrogate(
     Returns count of invalidated tasks.
     """
     from app.db.enums import WorkflowExecutionStatus
+    from app.db.models import AutomationWorkflow
+    from app.services.workflow_engine_core import complete_paused_executions
 
     pending_tasks = (
         db.query(Task)
+        .join(
+            Surrogate,
+            (Surrogate.id == Task.surrogate_id)
+            & (Surrogate.organization_id == Task.organization_id),
+        )
         .filter(
             Task.surrogate_id == surrogate_id,
             Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
@@ -1817,13 +1824,34 @@ def invalidate_pending_approvals_for_surrogate(
     executions_by_id: dict[UUID, WorkflowExecution] = {}
     if execution_ids:
         executions = db.scalars(
-            select(WorkflowExecution).where(
+            select(WorkflowExecution)
+            .where(
                 WorkflowExecution.id.in_(execution_ids),
                 WorkflowExecution.organization_id.in_(organization_ids),
             )
+            .order_by(WorkflowExecution.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         ).all()
         executions_by_id = {execution.id: execution for execution in executions}
 
+    workflow_ids = {
+        e.workflow_id for e in executions_by_id.values() if e.entity_type == "form_submission"
+    }
+    workflows_by_id = (
+        {
+            w.id: w
+            for w in db.query(AutomationWorkflow)
+            .filter(
+                AutomationWorkflow.id.in_(workflow_ids),
+                AutomationWorkflow.organization_id.in_(organization_ids),
+            )
+            .all()
+        }
+        if workflow_ids
+        else {}
+    )
+    completions = []
     count = 0
     for task in pending_tasks:
         # Mark task as denied
@@ -1835,7 +1863,18 @@ def invalidate_pending_approvals_for_surrogate(
         if task.workflow_execution_id:
             execution = executions_by_id.get(task.workflow_execution_id)
 
-            if execution and execution.status == WorkflowExecutionStatus.PAUSED.value:
+            if (
+                execution
+                and execution.organization_id == task.organization_id
+                and execution.status == WorkflowExecutionStatus.PAUSED.value
+            ):
+                completions.append(
+                    (
+                        execution,
+                        workflows_by_id.get(execution.workflow_id),
+                        execution.paused_at_action_index,
+                    )
+                )
                 execution.status = WorkflowExecutionStatus.CANCELED.value
                 execution.error_message = reason
                 execution.paused_at_action_index = None
@@ -1844,7 +1883,7 @@ def invalidate_pending_approvals_for_surrogate(
         count += 1
 
     if count > 0:
-        db.commit()
+        complete_paused_executions(db, completions)
         logger.info(
             f"Invalidated {count} pending approval(s) for surrogate {surrogate_id}: {reason}"
         )

@@ -565,7 +565,8 @@ def get_policy_execution_snapshot(db: Session, org_id: UUID) -> list[dict]:
 
 def apply_policy_execution_resolutions(
     db: Session, org_id: UUID, actor_user_id: UUID, resolutions: list[dict]
-) -> None:
+) -> list[tuple[WorkflowExecution, AutomationWorkflow, int | None]]:
+    """Stage cancellations; activation completes their routing with its configuration audit."""
     expected = {item["id"]: item for item in get_policy_execution_snapshot(db, org_id)}
     selected = {
         str(item["id"]): item["action"] for item in resolutions if item["item_type"] == "workflow"
@@ -574,6 +575,7 @@ def apply_policy_execution_resolutions(
         raise WorkflowAuthorityError(
             "Every unreviewed organization workflow must be explicitly paused"
         )
+    completions = []
     for workflow_id, item in expected.items():
         workflow = (
             db.query(AutomationWorkflow)
@@ -595,16 +597,19 @@ def apply_policy_execution_resolutions(
                     WorkflowExecution.organization_id == org_id,
                 )
                 .with_for_update()
+                .populate_existing()
                 .one()
             )
             # Completed actions remain recorded; pending deliveries cannot inherit authority.
             if execution.status == "paused":
+                completions.append((execution, workflow, execution.paused_at_action_index))
                 execution.status = "canceled"
                 execution.error_message = "Paused during permission policy activation"
                 execution.paused_task_id = None
                 execution.paused_at_action_index = None
         audit_configuration(db, workflow, actor_user_id, "pause_for_policy_activation")
     db.flush()
+    return completions
 
 
 def authorize_message_delivery(db, delivery) -> None:

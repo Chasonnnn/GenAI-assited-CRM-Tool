@@ -24,7 +24,10 @@ from app.services import (
     permission_policy_service,
     workflow_execution_authority,
 )
-from app.services.workflow_engine_core import FORM_SUBMISSION_ACTION_SNAPSHOT_KEY
+from app.services.workflow_engine_core import (
+    FORM_SUBMISSION_ACTION_SNAPSHOT_KEY,
+    complete_paused_executions,
+)
 from app.services.workflow_routing_retirement import (
     GENERATED_ROUTING_PREFIX,
     RETIRED_ROUTING_ACTIONS,
@@ -184,13 +187,17 @@ def repair_routing_window(
             )
         if changed:
             permission_policy_service.touch_configuration(db, org_id)
+        completions = []
         for execution, workflow, task in (
             paused.with_for_update(of=WorkflowExecution).populate_existing().all()
         ):
             if _paused_on_retired_action(execution, workflow, task):
+                completions.append((execution, workflow, execution.paused_at_action_index))
                 cancel_paused_routing_execution(db, execution)
                 result["execution_ids"].append(str(execution.id))
-        db.commit()
+        result["submission_ids"].extend(
+            str(submission_id) for submission_id in complete_paused_executions(db, completions)
+        )
     except Exception:
         db.rollback()
         raise
