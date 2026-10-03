@@ -27,6 +27,7 @@ import { useBrowserNotifications } from "@/lib/hooks/use-browser-notifications"
 import { useBrowserNotificationDelivery } from "@/lib/hooks/use-browser-notification-delivery"
 import type { Notification, NotificationTier } from "@/lib/api/notifications"
 import { getNotificationHref } from "@/lib/utils/notification-routing"
+import { NotificationItemActions } from "@/components/notifications/NotificationItemActions"
 import { useMountEffect } from "@/lib/hooks/use-mount-effect"
 import { consumeLoginNotificationReminder } from "@/lib/notifications/login-reminder"
 
@@ -121,13 +122,10 @@ function NotificationList({
             {notifications.map((notification) => {
                 const isUnread = !notification.read_at
                 return (
-                    <li key={notification.id}>
+                    <li key={notification.id} className={cn(isUnread && "bg-muted/50")}>
                         <Button
                             variant="ghost"
-                            className={cn(
-                                "h-auto w-full flex-col items-start justify-start gap-1 rounded-none px-4 py-3 text-left font-normal whitespace-normal",
-                                isUnread && "bg-muted/50"
-                            )}
+                            className="h-auto w-full flex-col items-start justify-start gap-1 rounded-none px-4 py-3 text-left font-normal whitespace-normal"
                             onClick={() => onSelect(notification)}
                         >
                             <span className="flex w-full items-start justify-between gap-2">
@@ -155,6 +153,7 @@ function NotificationList({
                                 })}
                             </span>
                         </Button>
+                        {tier === "action" && <NotificationItemActions notification={notification} />}
                     </li>
                 )
             })}

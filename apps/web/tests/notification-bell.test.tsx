@@ -53,6 +53,12 @@ vi.mock("@/lib/hooks/use-notification-socket", () => ({
     useNotificationSocket: () => mockUseNotificationSocket(),
 }))
 
+vi.mock("@/components/notifications/NotificationItemActions", () => ({
+    NotificationItemActions: ({ notification }: { notification: Notification }) => (
+        <div data-testid={`item-actions-${notification.id}`} />
+    ),
+}))
+
 vi.mock("@/lib/hooks/use-browser-notifications", () => ({
     useBrowserNotifications: () => mockUseBrowserNotifications(),
 }))
@@ -153,10 +159,11 @@ describe("NotificationBell", () => {
             "true"
         )
         expect(within(panel).getByText("Unread")).toBeInTheDocument()
+        expect(within(panel).getByTestId("item-actions-n1")).toBeInTheDocument()
         fireEvent.click(within(panel).getByRole("button", { name: /Approval needed/ }))
 
         expect(mockMarkReadMutate).toHaveBeenCalledWith("n1")
-        expect(mockPush).toHaveBeenCalledWith("/tasks?filter=my_tasks&focus=approvals")
+        expect(mockPush).toHaveBeenCalledWith("/tasks?filter=my_tasks&focus=approvals&approval=t1")
         expect(screen.getByTestId("notification-panel")).toHaveAttribute("data-open", "false")
     })
 
@@ -207,6 +214,7 @@ describe("NotificationBell", () => {
         await waitFor(() => {
             expect(within(panel).getByText("Surrogate #S-1042 moved to Screening")).toBeInTheDocument()
         })
+        expect(within(panel).queryByTestId("item-actions-u1")).toBeNull()
         fireEvent.click(within(panel).getByRole("button", { name: "Mark all read" }))
 
         expect(mockMarkAllReadMutate).toHaveBeenCalledWith("update")
