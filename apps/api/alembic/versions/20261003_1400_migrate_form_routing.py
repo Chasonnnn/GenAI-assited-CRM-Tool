@@ -32,7 +32,7 @@ def _settings(actions: list[dict], *, donor: bool, enabled: bool) -> dict:
     source = create.get("source") if create else None
     return {
         "routing_exact_match": "review"
-        if not enabled or (match and match.get("requires_approval"))
+        if not enabled or match is None or match.get("requires_approval")
         else "auto",
         "routing_no_match": "off"
         if not enabled or create is None
@@ -105,49 +105,20 @@ def _merge(settings: list[dict]) -> dict:
     return result
 
 
-def _generated_defaults(workflow: dict, form: dict) -> dict | None:
-    donor = form["lead_kind"] in {"egg_donor", "sperm_donor"}
-    expected = [
-        {"action_type": "auto_match_submission", "requires_approval": not donor},
-        {
-            "action_type": "create_intake_lead",
-            "requires_approval": not donor,
-            **({"source": "website", "auto_promote": True} if donor else {}),
-        },
-    ]
-    config = workflow["trigger_config"] or {}
-    if (
-        workflow["is_system_workflow"]
-        and workflow["system_key"] == f"shared_intake_routing:{form['id']}"
-        and workflow["actions"]
-        in (
-            [expected, [{"action_type": "create_intake_lead", "requires_approval": True}]]
-            if donor
-            else [expected]
-        )
-        and not workflow["conditions"]
-        and set(config) <= {"form_id", "lead_kind"}
-        and str(config.get("form_id")) == str(form["id"])
-        and config.get("lead_kind", form["lead_kind"]) == form["lead_kind"]
-    ):
-        return _settings(expected, donor=donor, enabled=workflow["is_enabled"])
-    return None
-
-
-def _migrate_paused(connection) -> set:
-    retained = set()
+def _migrate_paused(connection) -> None:
     rows = (
         connection.execute(
             sa.text("""
         SELECT e.*, w.actions AS current_actions, f.name AS form_name,
                f.updated_by_user_id AS form_editor, f.created_by_user_id AS form_creator,
-               s.id AS submission_id, s.surrogate_id, s.donor_id, s.routing_review_step
+               s.id AS submission_id, s.surrogate_id, s.donor_id, s.intake_lead_id
         FROM workflow_executions e
         JOIN automation_workflows w ON w.id = e.workflow_id AND w.organization_id = e.organization_id
         JOIN form_submissions s ON s.id = e.entity_id AND s.organization_id = e.organization_id
         JOIN forms f ON f.id = s.form_id AND f.organization_id = s.organization_id
         WHERE e.status = 'paused' AND e.entity_type = 'form_submission'
         ORDER BY e.executed_at, e.id
+        FOR UPDATE OF e, s, w, f
     """)
         )
         .mappings()
@@ -158,7 +129,7 @@ def _migrate_paused(connection) -> set:
             connection.execute(
                 sa.text("""
             SELECT * FROM tasks WHERE organization_id = :org AND workflow_execution_id = :execution
-              AND id = :task AND task_type = 'workflow_approval'
+              AND id = :task AND task_type = 'workflow_approval' FOR UPDATE
         """),
                 {
                     "org": row["organization_id"],
@@ -170,7 +141,7 @@ def _migrate_paused(connection) -> set:
             .first()
         )
         snapshot = (row["trigger_event"] or {}).get("_form_submission_workflow_actions")
-        actions = snapshot if isinstance(snapshot, list) else row["current_actions"]
+        actions = snapshot if isinstance(snapshot, list) else (row["current_actions"] or [])
         index = row["paused_at_action_index"]
         action = (task["workflow_action_payload"] or {}) if task else {}
         if not action and isinstance(index, int) and 0 <= index < len(actions):
@@ -179,7 +150,11 @@ def _migrate_paused(connection) -> set:
         if action_type not in ROUTING_ACTIONS:
             continue
         # An invalid cross-tenant record link must never be copied to a review task.
-        for table, key in (("surrogates", "surrogate_id"), ("donors", "donor_id")):
+        for table, key in (
+            ("surrogates", "surrogate_id"),
+            ("donors", "donor_id"),
+            ("intake_leads", "intake_lead_id"),
+        ):
             if (
                 row[key]
                 and not connection.execute(
@@ -187,14 +162,61 @@ def _migrate_paused(connection) -> set:
                     {"id": row[key], "org": row["organization_id"]},
                 ).first()
             ):
-                raise RuntimeError(
-                    f"Cannot migrate cross-organization submission {row['submission_id']}"
+                logger.warning(
+                    "Cross-organization submission link skipped: submission_id=%s organization_id=%s",
+                    row["submission_id"],
+                    row["organization_id"],
                 )
+        params = {
+            "org": row["organization_id"],
+            "execution": row["id"],
+            "submission": row["submission_id"],
+        }
+        connection.execute(
+            sa.text("""
+            UPDATE tasks t SET status = 'completed', is_completed = TRUE, completed_at = now(), updated_at = now(),
+                completed_by_user_id = '00000000-0000-0000-0000-000000000001'::uuid
+            WHERE t.organization_id = :org AND t.workflow_execution_id = :execution
+              AND t.task_type = 'workflow_approval' AND t.status IN ('pending', 'in_progress')
+              AND EXISTS (SELECT 1 FROM workflow_executions e WHERE e.id = t.workflow_execution_id
+                AND e.organization_id = t.organization_id AND e.status = 'paused')
+        """),
+            params,
+        )
+        connection.execute(
+            sa.text("""
+            UPDATE workflow_executions SET status = 'canceled', paused_at_action_index = NULL,
+                paused_task_id = NULL, error_message = 'Workflow routing retired'
+            WHERE organization_id = :org AND id = :execution AND status = 'paused'
+        """),
+            params,
+        )
+        logger.info("Workflow %s: canceled routing execution %s", row["workflow_id"], row["id"])
+        step = "match" if action_type == "auto_match_submission" else "create_lead"
+        # The old resume path ignored resolved/rejected submissions and candidate-bearing
+        # create requests. Preserve those decisions rather than reopening their review.
+        review = connection.execute(
+            sa.text("""
+            UPDATE form_submissions s SET match_status = 'routing_review', routing_review_step = :step
+            WHERE s.id = :submission AND s.organization_id = :org
+              AND s.status = 'pending_review' AND s.surrogate_id IS NULL
+              AND s.donor_id IS NULL AND s.intake_lead_id IS NULL
+              AND s.match_status IN ('workflow_pending', 'ambiguous_review')
+              AND (:step = 'match' OR NOT EXISTS (
+                SELECT 1 FROM form_submission_match_candidates c
+                WHERE c.submission_id = s.id AND c.organization_id = s.organization_id))
+            RETURNING s.id
+        """),
+            {**params, "step": step},
+        ).first()
+        if review is None:
+            continue
         members = (
             connection.execute(
                 sa.text("""
             SELECT u.id, m.role FROM memberships m JOIN users u ON u.id = m.user_id
             WHERE m.organization_id = :org AND m.is_active AND u.is_active ORDER BY u.created_at, u.id
+            FOR SHARE OF m, u
         """),
                 {"org": row["organization_id"]},
             )
@@ -217,53 +239,15 @@ def _migrate_paused(connection) -> set:
                 row["submission_id"],
                 row["organization_id"],
             )
-        params = {
-            "org": row["organization_id"],
-            "execution": row["id"],
-            "submission": row["submission_id"],
-        }
-        step = "match" if action_type == "auto_match_submission" else "create_lead"
-        if (
-            connection.execute(
-                sa.text(
-                    "SELECT routing_review_step FROM form_submissions WHERE id = :submission AND organization_id = :org"
-                ),
-                params,
-            ).scalar_one()
-            == "match"
-        ):
-            step = "match"
-        connection.execute(
-            sa.text("""
-            UPDATE form_submissions SET match_status = 'routing_review', routing_review_step = :step
-            WHERE id = :submission AND organization_id = :org
-        """),
-            {**params, "step": step},
-        )
-        connection.execute(
-            sa.text("""
-            UPDATE tasks SET status = 'completed', is_completed = TRUE, completed_at = now(), updated_at = now(),
-                completed_by_user_id = '00000000-0000-0000-0000-000000000001'::uuid
-            WHERE organization_id = :org AND workflow_execution_id = :execution
-              AND task_type = 'workflow_approval' AND status IN ('pending', 'in_progress')
-        """),
-            params,
-        )
-        connection.execute(
-            sa.text("""
-            UPDATE workflow_executions SET status = 'canceled', paused_at_action_index = NULL,
-                paused_task_id = NULL, error_message = 'Routing moved to form submission review'
-            WHERE organization_id = :org AND id = :execution
-        """),
-            params,
-        )
         # Preserve the original approval deadline, including its business-hours calculation.
         connection.execute(
             sa.text("""
             INSERT INTO tasks (id, organization_id, form_submission_id, surrogate_id, donor_id,
-                task_type, title, owner_type, owner_id, status, created_by_user_id, due_at)
+                task_type, title, owner_type, owner_id, status, created_by_user_id, due_at, due_date, due_time)
             SELECT :id, :org, :submission, :surrogate, :donor, 'review', :title, 'user', :owner,
-                'pending', '00000000-0000-0000-0000-000000000001', :due
+                'pending', '00000000-0000-0000-0000-000000000001', :due,
+                (CAST(:due AS timestamptz) AT TIME ZONE 'UTC')::date,
+                (CAST(:due AS timestamptz) AT TIME ZONE 'UTC')::time
             WHERE CAST(:owner AS uuid) IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM tasks WHERE organization_id = :org
                 AND form_submission_id = :submission AND task_type = 'review'
@@ -279,7 +263,6 @@ def _migrate_paused(connection) -> set:
                 "due": task["due_at"] if task else None,
             },
         )
-        retained.add((row["organization_id"], row["workflow_id"]))
         logger.info(
             "Workflow %s: canceled routing execution %s; submission %s awaits %s review",
             row["workflow_id"],
@@ -287,81 +270,37 @@ def _migrate_paused(connection) -> set:
             row["submission_id"],
             step,
         )
-    return retained
 
 
-def _strip_snapshots(connection, workflow):
-    rows = (
-        connection.execute(
-            sa.text("""
-        SELECT e.* FROM workflow_executions e JOIN automation_workflows w
-          ON w.id = e.workflow_id AND w.organization_id = e.organization_id
-        WHERE e.organization_id = :org AND w.id = :workflow
-          AND e.status IN ('running', 'partial', 'failed', 'paused')
+def _preserve_snapshots(connection, workflow):
+    # Terminal history is immutable. Active executions need the original action order
+    # if an older worker did not checkpoint it. Retired actions fail closed on resume.
+    connection.execute(
+        sa.text("""
+        UPDATE workflow_executions e
+        SET trigger_event = COALESCE(e.trigger_event, '{}'::jsonb) ||
+            jsonb_build_object('_form_submission_workflow_actions', CAST(:actions AS jsonb))
+        FROM automation_workflows w
+        WHERE w.id = e.workflow_id AND w.organization_id = e.organization_id
+          AND w.id = :workflow AND w.organization_id = :org
+          AND e.status IN ('running', 'paused')
+          AND NOT (COALESCE(e.trigger_event, '{}'::jsonb) ? '_form_submission_workflow_actions')
     """),
-            {"org": workflow["organization_id"], "workflow": workflow["id"]},
-        )
-        .mappings()
-        .all()
+        {
+            "workflow": workflow["id"],
+            "org": workflow["organization_id"],
+            "actions": json.dumps(workflow["actions"] or []),
+        },
     )
-    for row in rows:
-        event = dict(row["trigger_event"] or {})
-        actions = event.get("_form_submission_workflow_actions", workflow["actions"])
-        if not isinstance(actions, list):
-            continue
-        indices = [
-            i
-            for i, action in enumerate(actions)
-            if action.get("action_type") not in ROUTING_ACTIONS
-        ]
-        if len(indices) == len(actions):
-            continue
-        results = row["actions_executed"] or []
-        event["_form_submission_workflow_actions"] = [actions[i] for i in indices]
-        paused = row["paused_at_action_index"]
-        paused = indices.index(paused) if paused in indices else None
-        params = {
-            "org": row["organization_id"],
-            "id": row["id"],
-            "event": json.dumps(event),
-            "results": json.dumps([results[i] for i in indices if i < len(results)]),
-            "index": paused,
-        }
-        connection.execute(
-            sa.text("""
-            UPDATE workflow_executions SET trigger_event = CAST(:event AS jsonb),
-                actions_executed = CAST(:results AS jsonb), paused_at_action_index = :index
-            WHERE id = :id AND organization_id = :org
-        """),
-            params,
-        )
-        # Clear retired task indices before compacting retained ones; the unique
-        # execution/action index includes completed approvals as well as open ones.
-        connection.execute(
-            sa.text("""
-            UPDATE tasks SET workflow_action_index = NULL
-            WHERE organization_id = :org AND workflow_execution_id = :id
-              AND workflow_action_type IN ('auto_match_submission', 'create_intake_lead')
-        """),
-            params,
-        )
-        for new_index, old_index in enumerate(indices):
-            if new_index != old_index:
-                connection.execute(
-                    sa.text("""
-                    UPDATE tasks SET workflow_action_index = :new_index
-                    WHERE organization_id = :org AND workflow_execution_id = :id
-                      AND workflow_action_index = :old_index
-                """),
-                    {**params, "new_index": new_index, "old_index": old_index},
-                )
 
 
 def _retire_template_actions(connection):
     # Platform-global library templates are explicit; tenant templates stay scoped by org.
     rows = (
         connection.execute(
-            sa.text("SELECT id, organization_id, actions, draft_config FROM workflow_templates")
+            sa.text(
+                "SELECT id, organization_id, actions, draft_config FROM workflow_templates ORDER BY id FOR UPDATE"
+            )
         )
         .mappings()
         .all()
@@ -421,21 +360,27 @@ def _grant_is_current(connection, workflow) -> bool:
 
 
 def upgrade() -> None:
+    op.execute("SET LOCAL lock_timeout = '3s'")
+    op.execute("SET LOCAL statement_timeout = '60s'")
     connection = op.get_bind()
-    retained = _migrate_paused(connection)
+    # Match runtime configuration locking so policy activation cannot change the
+    # authority version while its workflows are being mapped (including v1 orgs
+    # that do not yet have a permission-policy row).
+    connection.execute(sa.text("SELECT id FROM organizations ORDER BY id FOR NO KEY UPDATE")).all()
     rows = (
         connection.execute(
             sa.text("""
         SELECT w.*, COALESCE(p.version, 1) AS permission_policy_version
         FROM automation_workflows w
         LEFT JOIN organization_permission_policies p ON p.organization_id = w.organization_id
-        WHERE w.scope = 'org' AND w.subject_type = 'form_submission' AND w.trigger_type IN ('form_submitted', 'form_submission_approved', 'form_submission_rejected')
         ORDER BY w.organization_id, w.created_at, w.id
+        FOR UPDATE OF w
     """)
         )
         .mappings()
         .all()
     )
+    _migrate_paused(connection)
     mapped = {}
     for row in rows:
         workflow = dict(row)
@@ -446,42 +391,53 @@ def upgrade() -> None:
         target = config.get("form_id")
         if not target and str(workflow["system_key"] or "").startswith("shared_intake_routing:"):
             target = workflow["system_key"].split(":", 1)[1]
+        valid_binding = (
+            workflow["scope"] == "org"
+            and workflow["subject_type"] == "form_submission"
+            and workflow["trigger_type"]
+            in {"form_submitted", "form_submission_approved", "form_submission_rejected"}
+        )
         try:
             target = UUID(str(target)) if target else None
         except ValueError:
-            logger.warning("Workflow %s: invalid form binding; unchanged", workflow["id"])
-            continue
+            valid_binding = False
+            target = None
+            logger.warning(
+                "Workflow %s: invalid form binding; routing actions stripped", workflow["id"]
+            )
         affected = (
-            connection.execute(
-                sa.text("""
+            (
+                connection.execute(
+                    sa.text("""
             SELECT f.* FROM forms f JOIN automation_workflows w ON w.organization_id = f.organization_id
             WHERE w.id = :workflow AND w.organization_id = :org
               AND (CAST(:form AS uuid) IS NULL OR f.id = :form)
               AND (CAST(:kind AS text) IS NULL OR f.lead_kind = :kind)
+            FOR UPDATE OF f
         """),
-                {
-                    "workflow": workflow["id"],
-                    "org": workflow["organization_id"],
-                    "form": target,
-                    "kind": config.get("lead_kind"),
-                },
+                    {
+                        "workflow": workflow["id"],
+                        "org": workflow["organization_id"],
+                        "form": target,
+                        "kind": config.get("lead_kind"),
+                    },
+                )
+                .mappings()
+                .all()
             )
-            .mappings()
-            .all()
+            if valid_binding
+            else []
         )
-        if target and not affected:
+        if not affected:
             logger.warning(
-                "Workflow %s: no same-organization form binding; unchanged", workflow["id"]
+                "Workflow %s: no matching same-organization form binding; routing actions stripped",
+                workflow["id"],
             )
-            continue
-        paused_authority = (
-            workflow["is_system_workflow"]
-            and str(workflow["system_key"] or "").startswith("shared_intake_routing:")
-            and workflow["permission_policy_version"] >= 2
-            and not _grant_is_current(connection, workflow)
+        paused_authority = workflow["permission_policy_version"] >= 2 and not _grant_is_current(
+            connection, workflow
         )
         for form in affected:
-            settings = _generated_defaults(workflow, form) or _settings(
+            settings = _settings(
                 actions,
                 donor=form["lead_kind"] in {"egg_donor", "sperm_donor"},
                 enabled=workflow["is_enabled"],
@@ -493,27 +449,33 @@ def upgrade() -> None:
         condition = (workflows.c.id == workflow["id"]) & (
             workflows.c.organization_id == workflow["organization_id"]
         )
-        _strip_snapshots(connection, workflow)
-        # Legacy execution/task FKs are not composite. Refuse a cascading delete
-        # that could mutate a corrupt relationship owned by another organization.
-        foreign_history = connection.execute(
+        gated_match = next(
+            (
+                i
+                for i, a in enumerate(actions)
+                if a.get("action_type") == "auto_match_submission" and a.get("requires_approval")
+            ),
+            None,
+        )
+        if gated_match is not None and any(
+            a.get("action_type") not in ROUTING_ACTIONS | {"send_email", "send_notification"}
+            for a in actions[gated_match + 1 :]
+        ):
+            logger.warning(
+                "Approval-gated record actions require review: workflow_id=%s", workflow["id"]
+            )
+        _preserve_snapshots(connection, workflow)
+        # Never cascade execution history, including corrupt foreign-org references.
+        # Only read their existence; all mutations remain scoped to this workflow's org.
+        history = connection.execute(
             sa.text("""
             SELECT 1 FROM workflow_executions e
             JOIN automation_workflows w ON w.id = e.workflow_id
-            WHERE w.id = :workflow AND w.organization_id = :org
-              AND (e.organization_id <> w.organization_id OR EXISTS (
-                SELECT 1 FROM tasks t WHERE t.workflow_execution_id = e.id
-                  AND t.organization_id <> w.organization_id)) LIMIT 1
+            WHERE w.id = :workflow AND w.organization_id = :org LIMIT 1
         """),
             {"workflow": workflow["id"], "org": workflow["organization_id"]},
         ).first()
-        if (
-            target
-            and not workflow["conditions"]
-            and not remaining
-            and (workflow["organization_id"], workflow["id"]) not in retained
-            and not foreign_history
-        ):
+        if affected and target and not workflow["conditions"] and not remaining and not history:
             connection.execute(workflows.delete().where(condition))
             change = "mapped routing settings; deleted routing-only workflow"
         else:
@@ -530,8 +492,6 @@ def upgrade() -> None:
                 .values(
                     actions=remaining,
                     is_enabled=bool(remaining) and workflow["is_enabled"],
-                    is_system_workflow=False,
-                    system_key=None,
                     execution_authority=grant,
                     updated_at=datetime.now(UTC),
                 )
@@ -546,6 +506,28 @@ def upgrade() -> None:
             .where(forms.c.organization_id == org_id, forms.c.id == form_id)
             .values(**_merge(settings), updated_at=datetime.now(UTC))
         )
+    # A published form without an applicable old route must remain paused, including
+    # forms whose generated route was deleted or still names an earlier lead kind.
+    published = (
+        connection.execute(
+            sa.text(
+                "SELECT id, organization_id FROM forms WHERE status = 'published' ORDER BY organization_id, id FOR UPDATE"
+            )
+        )
+        .mappings()
+        .all()
+    )
+    for form in published:
+        if (form["organization_id"], form["id"]) not in mapped:
+            connection.execute(
+                forms.update()
+                .where(forms.c.organization_id == form["organization_id"], forms.c.id == form["id"])
+                .values(
+                    routing_exact_match="review",
+                    routing_no_match="off",
+                    updated_at=datetime.now(UTC),
+                )
+            )
     _retire_template_actions(connection)
 
 

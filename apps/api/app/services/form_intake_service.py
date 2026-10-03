@@ -2806,9 +2806,7 @@ def create_intake_lead_for_submission(
     )
     submission.intake_lead_id = lead.id
     submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
-    submission.match_reason = (
-        "workflow_website_lead_creation" if auto_promote_website_lead else "workflow_lead_creation"
-    )
+    submission.match_reason = "routing_lead_creation"
     submission.matched_at = None
     db.query(FormSubmissionMatchCandidate).filter(
         FormSubmissionMatchCandidate.submission_id == submission.id
@@ -2829,7 +2827,7 @@ def create_intake_lead_for_submission(
             assign_to_user=False,
         )
         submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
-        submission.match_reason = "workflow_website_lead_creation"
+        submission.match_reason = "routing_lead_creation"
         submission.matched_at = None
         _persist_submission(db, submission, commit=True)
         db.refresh(lead)

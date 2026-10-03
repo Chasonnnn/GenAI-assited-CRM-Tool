@@ -91,9 +91,9 @@ async def test_workflow_create_and_update_reject_routing_with_422(authed_client,
     assert response.json()["actions"] == payload["actions"]
 
 
-@pytest.mark.parametrize("action", RETIRED)
+@pytest.mark.parametrize("action", ["unknown_action"])
 @pytest.mark.parametrize("entry", ["workflows.json", "workflow_templates.json"])
-def test_admin_import_refuses_retired_actions_before_any_write(monkeypatch, action, entry):
+def test_admin_import_refuses_unknown_actions_before_any_write(monkeypatch, action, entry):
     monkeypatch.setattr(admin_import_service, "_ensure_empty_org", lambda *_: None)
     archive_bytes = io.BytesIO()
     with zipfile.ZipFile(archive_bytes, "w") as archive:
@@ -105,3 +105,96 @@ def test_admin_import_refuses_retired_actions_before_any_write(monkeypatch, acti
     db.add.assert_not_called()
     db.commit.assert_not_called()
     db.rollback.assert_not_called()
+
+
+@pytest.mark.parametrize("action", RETIRED)
+def test_rollout_skips_entire_workflow_before_any_action(action, caplog):
+    from app.db.models import AutomationWorkflow
+    from app.services.workflow_engine_core import WorkflowEngineCore
+
+    workflow = AutomationWorkflow(
+        id=uuid4(),
+        organization_id=uuid4(),
+        subject_type="form_submission",
+        actions=[
+            {"action_type": "update_field", "field": "is_priority", "value": True},
+            {"action_type": action},
+        ],
+    )
+    db, adapter = Mock(), Mock()
+    result = WorkflowEngineCore(adapter).execute_workflow(
+        db,
+        workflow,
+        "form_submission",
+        uuid4(),
+        {"email": "private@example.com"},
+    )
+    assert result is None
+    assert not db.mock_calls
+    assert not adapter.mock_calls
+    assert str(workflow.id) in caplog.text
+    assert str(workflow.organization_id) in caplog.text
+    assert "private@example.com" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_generated_leftovers_hidden_but_execution_history_visible(
+    authed_client, db, test_org, test_user
+):
+    from app.db.models import AutomationWorkflow, WorkflowExecution
+    from tests.test_form_routing import routing_submission
+
+    form, submission = routing_submission(db, test_org.id, test_user.id)
+    leftover = AutomationWorkflow(
+        organization_id=test_org.id,
+        name="Retired route",
+        scope="org",
+        subject_type="form_submission",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": str(form.id)},
+        actions=[],
+        is_enabled=False,
+        is_system_workflow=True,
+        system_key=f"shared_intake_routing:{form.id}",
+    )
+    visible = AutomationWorkflow(
+        organization_id=test_org.id,
+        name="Staff notice",
+        system_key=f"sharedXintakeXrouting:{form.id}",
+        scope="org",
+        subject_type="form_submission",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": str(form.id)},
+        actions=[{"action_type": "send_notification"}],
+    )
+    db.add_all([leftover, visible])
+    db.flush()
+    execution = WorkflowExecution(
+        organization_id=test_org.id,
+        workflow_id=leftover.id,
+        event_id=uuid4(),
+        depth=0,
+        event_source="system",
+        trigger_event={},
+        entity_type="form_submission",
+        entity_id=submission.id,
+        subject_type="form_submission",
+        subject_id=submission.id,
+        status="success",
+        actions_executed=[{"action_type": RETIRED[0], "success": True}],
+        matched_conditions=True,
+    )
+    db.add(execution)
+    db.commit()
+    for path in ("/workflows", f"/forms/{form.id}/workflows"):
+        response = await authed_client.get(path)
+        assert response.status_code == 200, response.text
+        data = response.json()
+        entries = data["items"] if isinstance(data, dict) else data
+        ids = {row["id"] for row in entries}
+        assert str(visible.id) in ids
+        assert str(leftover.id) not in ids
+    for path in ("/workflows/executions", f"/workflows/{leftover.id}/executions"):
+        response = await authed_client.get(path)
+        assert response.status_code == 200, response.text
+        assert str(execution.id) in {row["id"] for row in response.json()["items"]}

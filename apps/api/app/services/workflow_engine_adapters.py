@@ -402,6 +402,7 @@ class DefaultWorkflowDomainAdapter:
             organization_id=execution.organization_id,
             surrogate_id=surrogate.id if surrogate and not donor else None,
             donor_id=donor.id if donor else None,
+            form_submission_id=entity.id if isinstance(entity, FormSubmission) else None,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
             title=f"Approve: {preview}",
             description=f"Workflow '{workflow.name}' requires your approval to proceed.",
@@ -551,6 +552,28 @@ class DefaultWorkflowDomainAdapter:
             if action_type in self.INTAKE_DONOR_RECORD_ACTIONS
             else None
         )
+        if (
+            entity_type == "form_submission"
+            and isinstance(entity, FormSubmission)
+            and not staff_alert_on_intake
+            and (
+                (intake_donor_link is not None and intake_donor_link[1] is None)
+                or (
+                    entity.lead_kind not in {"egg_donor", "sperm_donor"}
+                    and action_type
+                    in self.SURROGATE_ONLY_ACTIONS | {WorkflowActionType.SEND_MESSAGE.value}
+                    and entity.surrogate_id is None
+                )
+            )
+        ):
+            return _with_action_type(
+                {
+                    "success": True,
+                    "skipped": True,
+                    "description": "Skipped record action: submission has no linked record",
+                }
+            )
+
         if intake_donor_link is not None:
             donor_subject_type, linked_donor_id = intake_donor_link
             entity_label = entity_type.replace("_", " ")

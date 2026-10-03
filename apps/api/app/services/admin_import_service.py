@@ -57,6 +57,7 @@ from app.schemas.forms import FormRoutingUpdate
 from app.schemas.workflow import validate_workflow_action_types
 from app.services import attachment_service
 from app.services.import_transformers import transform_height_flexible, transform_int_flexible
+from app.services.workflow_routing_retirement import strip_retired_routing_actions
 from app.utils.height import canonicalize_height_ft
 from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import (
@@ -296,7 +297,7 @@ def import_org_config_zip(
     content: bytes,
     *,
     commit: bool = True,
-) -> dict[str, int]:
+) -> dict[str, int | list[str]]:
     _ensure_empty_org(db, org_id)
 
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
@@ -326,12 +327,29 @@ def import_org_config_zip(
         legal_holds_payload = _load_json(archive, "legal_holds.json", [])
         org_counters_payload = _load_json(archive, "org_counters.json", [])
 
-    # Refuse invalid archives before any configuration writes.
-    for workflow_data in [*workflows_payload, *workflow_templates_payload]:
-        validate_workflow_action_types(workflow_data.get("actions"))
-        draft = workflow_data.get("draft_config")
-        if isinstance(draft, dict):
-            validate_workflow_action_types(draft.get("actions"))
+    # Normalize pre-release archives before any configuration writes. Unknown actions
+    # still fail validation; only the two retired routing actions are discarded.
+    warnings = []
+    for entries, label in (
+        (workflows_payload, "workflow"),
+        (workflow_templates_payload, "workflow template"),
+    ):
+        for workflow_data in entries:
+            changed = False
+            for config in (workflow_data, workflow_data.get("draft_config")):
+                if not isinstance(config, dict):
+                    continue
+                original = config.get("actions") or []
+                actions = strip_retired_routing_actions(original)
+                validate_workflow_action_types(actions)
+                config["actions"] = actions
+                changed = changed or actions != original
+            if changed:
+                warnings.append(
+                    f"Removed retired routing actions from {label} {workflow_data.get('id', 'unknown')}."
+                )
+                if not workflow_data["actions"]:
+                    workflow_data["is_enabled"] = False
 
     for form_data in forms_payload:
         donor = form_data.get("lead_kind", "surrogate") in {"egg_donor", "sperm_donor"}
@@ -914,6 +932,7 @@ def import_org_config_zip(
         "legal_holds": len(legal_holds_payload),
         "org_counters": len(org_counters_payload),
         "integrations_skipped": len(integrations_payload),
+        "warnings": warnings,
     }
 
 

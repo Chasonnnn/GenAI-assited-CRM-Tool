@@ -11,16 +11,19 @@ from app.core.csrf import CSRF_HEADER
 from app.db.enums import Role
 from app.db.models import (
     AuditLog,
+    EntityNote,
     Form,
     FormSubmission,
     IntakeLead,
     Notification,
     Organization,
     Task,
+    WorkflowExecution,
 )
 from app.schemas.donor import DonorCreate
 from app.schemas.forms import FormRoutingUpdate
-from app.services import donor_service, form_intake_service, form_routing_service
+from app.schemas.workflow import WorkflowCreate
+from app.services import donor_service, form_intake_service, form_routing_service, workflow_service
 from tests.test_email_templates_personal_scope import authed_client_for_user, create_user_with_role
 from tests.test_forms import _create_surrogate
 
@@ -70,6 +73,90 @@ def tasks(db, submission):
     return (
         db.query(Task).filter_by(form_submission_id=submission.id).order_by(Task.created_at).all()
     )
+
+
+@pytest.mark.parametrize("linked", [False, True])
+@pytest.mark.parametrize("action_type", ["add_note", "update_field"])
+def test_record_actions_complete_routing_job(
+    db, test_org, test_user, default_stage, linked, action_type
+):
+    form, submission = routing_submission(
+        db, test_org.id, test_user.id, exact="auto" if linked else "review"
+    )
+    record = None
+    if linked:
+        record = _create_surrogate(db, test_org.id, test_user.id, default_stage, **ANSWERS)
+    action = (
+        {"action_type": "add_note", "content": "Application received"}
+        if action_type == "add_note"
+        else {"action_type": "update_field", "field": "is_priority", "value": True}
+    )
+    workflow = workflow_service.create_workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        WorkflowCreate(
+            name="Application record action",
+            subject_type="form_submission",
+            trigger_type="form_submitted",
+            trigger_config={"form_id": str(form.id)},
+            actions=[action],
+        ),
+    )
+    job = form_intake_service._enqueue_form_submission_workflow_job(db, submission=submission)
+    db.commit()
+
+    form_intake_service._attempt_form_submission_workflow_job(db, submission=submission)
+
+    db.refresh(job)
+    db.refresh(workflow)
+    assert job.status == "completed"
+    assert not workflow.last_error
+    execution = (
+        db.query(WorkflowExecution)
+        .filter_by(organization_id=test_org.id, workflow_id=workflow.id, entity_id=submission.id)
+        .one()
+    )
+    assert execution.status == "success"
+    result = execution.actions_executed[0]
+    assert result["success"] is True
+    notes = db.query(EntityNote).filter_by(organization_id=test_org.id, entity_type="surrogate")
+    if linked:
+        assert submission.surrogate_id == record.id
+        assert not result.get("skipped")
+        if action_type == "add_note":
+            assert notes.filter_by(entity_id=record.id).one().content == "Application received"
+        else:
+            db.refresh(record)
+            assert record.is_priority is True
+    else:
+        assert submission.surrogate_id is None
+        assert submission.match_status == "routing_review"
+        assert result["skipped"] is True
+        assert result["description"] == "Skipped record action: submission has no linked record"
+        assert "error" not in result
+        assert notes.count() == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason", ["workflow_lead_creation", "workflow_website_lead_creation"])
+async def test_historical_lead_reason_survives_reads_and_replay(
+    authed_client, db, test_org, test_user, reason
+):
+    form, submission = routing_submission(
+        db, test_org.id, test_user.id, exact="auto", no_match="auto"
+    )
+    form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+    submission.match_reason = reason
+    db.commit()
+
+    form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+    response = await authed_client.get(f"/forms/{form.id}/submissions")
+
+    assert response.status_code == 200, response.text
+    assert response.json()[0]["match_reason"] == reason
+    db.refresh(submission)
+    assert submission.match_reason == reason
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -129,6 +216,7 @@ def test_routing_mode_matrix(db, test_org, test_user, default_stage, kind, exact
         lead = db.get(IntakeLead, submission.intake_lead_id)
         assert lead.organization_id == test_org.id
         assert lead.lead_type == kind
+        assert submission.match_reason == "routing_lead_creation"
     assert (submission.match_status, submission.routing_review_step) == expected
     review_tasks = tasks(db, submission)
     assert len(review_tasks) == int(expected[0] == "routing_review")
@@ -140,8 +228,13 @@ def test_routing_mode_matrix(db, test_org, test_user, default_stage, kind, exact
         assert task.title == "Review submission: Application"
         assert task.due_at is not None
         assert task.due_at > datetime.now(task.due_at.tzinfo)
+        assert task.due_date == task.due_at.date()
+        assert task.due_time == task.due_at.time()
         assert (
-            db.query(Notification).filter_by(entity_id=task.id, user_id=test_user.id).count() == 1
+            db.query(Notification)
+            .filter_by(entity_type="form", entity_id=form.id, user_id=test_user.id)
+            .count()
+            == 1
         )
     snapshot = (submission.match_reason, submission.intake_lead_id, [t.id for t in review_tasks])
     audit_count = db.query(AuditLog).filter_by(target_id=submission.id).count()
@@ -185,6 +278,7 @@ async def test_review_lifecycle(authed_client, db, test_org, test_user, kind):
     assert response.json()["outcome"] == "lead_created"
     assert response.json()["submission"]["routing_review_step"] is None
     assert response.json()["submission"]["intake_lead_id"]
+    assert response.json()["submission"]["match_reason"] == "routing_lead_creation"
     assert all(t.status == "completed" and t.is_completed for t in tasks(db, submission))
     audits = db.query(AuditLog).filter_by(target_id=submission.id).all()
     assert {a.details.get("action") for a in audits} >= {"routing_run_match", "routing_create_lead"}
@@ -479,15 +573,19 @@ def test_routing_notification_has_submission_copy_and_respects_preferences(
     notification_service.update_user_settings(
         db, test_user.id, test_org.id, {"workflow_approvals": enabled}
     )
-    _, submission = routing_submission(db, test_org.id, test_user.id)
+    form, submission = routing_submission(db, test_org.id, test_user.id)
     for _ in range(2):
         form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
-    notifications = db.query(Notification).filter_by(entity_id=tasks(db, submission)[0].id).all()
+    notifications = (
+        db.query(Notification).filter_by(organization_id=test_org.id, user_id=test_user.id).all()
+    )
     assert len(notifications) == int(enabled)
     if enabled:
         assert notifications[0].type == "form_submission_routing_review"
         assert notifications[0].title == "Submission waiting for routing review"
         assert notifications[0].body == "Review the submission routing task"
+        assert notifications[0].entity_type == "form"
+        assert notifications[0].entity_id == form.id
 
 
 def test_website_promotion_failure_does_not_suppress_attribution_or_staff_workflows(
@@ -522,6 +620,7 @@ def test_website_promotion_failure_does_not_suppress_attribution_or_staff_workfl
         )
         assert result.intake_lead_id is not None
         assert result.match_status == "lead_created"
+        assert result.match_reason == "routing_lead_creation"
     promotion.assert_called_once()
     attribution.assert_called_once()
     staff_workflows.assert_called_once()

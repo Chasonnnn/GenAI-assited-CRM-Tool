@@ -249,8 +249,11 @@ def test_unlinked_donor_form_submission_skips_record_actions(db, test_org, test_
     execution = _submit(db, test_org.id, form, submission)
 
     task_result, notification_result = execution.actions_executed
+    assert execution.status == "success"
     assert task_result["skipped"] is True
-    assert task_result["error"] == "Form Submission is not linked to a donor"
+    assert task_result["success"] is True
+    assert task_result["description"] == "Skipped record action: submission has no linked record"
+    assert "error" not in task_result
     assert notification_result["success"] is True
     assert db.query(Task).filter(Task.title == "Unlinked donor task").count() == 0
 

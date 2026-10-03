@@ -67,6 +67,7 @@ from app.services.workflow_definition_rules import (
     validate_trigger_config as _validate_trigger_config,
 )
 from app.services.workflow_email_provider import validate_email_provider
+from app.services.workflow_routing_retirement import GENERATED_ROUTING_PREFIX
 from app.utils.pagination import paginate_query_by_offset
 
 # =============================================================================
@@ -1306,7 +1307,13 @@ def list_workflows(
     Returns:
         List of workflows the user can see
     """
-    query = db.query(AutomationWorkflow).filter(AutomationWorkflow.organization_id == org_id)
+    query = db.query(AutomationWorkflow).filter(
+        AutomationWorkflow.organization_id == org_id,
+        or_(
+            AutomationWorkflow.system_key.is_(None),
+            ~AutomationWorkflow.system_key.startswith(GENERATED_ROUTING_PREFIX, autoescape=True),
+        ),
+    )
 
     # Apply scope filter
     if scope_filter == "org":

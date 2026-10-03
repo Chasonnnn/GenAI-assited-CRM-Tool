@@ -1817,3 +1817,77 @@ async def test_import_config_normalizes_legacy_match_rejected(
         stored = db.get(model, identifier)
         assert stored.trigger_type == "match_declined"
         assert stored.subject_type == "match"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mixed", [False, True])
+async def test_import_prebranch_archive_strips_routing_and_reports_warnings(
+    authed_client, db, test_org, mixed
+):
+    workflow_id, template_id = uuid.uuid4(), uuid.uuid4()
+    retained = (
+        [{"action_type": "send_notification", "title": "Application received"}] if mixed else []
+    )
+    definition = {
+        "name": "Legacy route",
+        "subject_type": "form_submission",
+        "trigger_type": "form_submitted",
+        "actions": [
+            {"action_type": "auto_match_submission"},
+            {"action_type": "create_intake_lead"},
+            *retained,
+        ],
+        "is_enabled": True,
+    }
+    archive = _build_config_zip(
+        {
+            "organization.json": {
+                "id": str(test_org.id),
+                "name": test_org.name,
+                "slug": test_org.slug,
+            },
+            "workflows.json": [{**definition, "id": str(workflow_id)}],
+            "workflow_templates.json": [
+                {
+                    **definition,
+                    "id": str(template_id),
+                    "draft_config": {"actions": definition["actions"]},
+                }
+            ],
+        }
+    )
+    response = await authed_client.post(
+        "/admin/imports/config", files={"config_zip": ("config.zip", archive, "application/zip")}
+    )
+    assert response.status_code == 200, response.text
+    warnings = response.json()["config"]["warnings"]
+    assert len(warnings) == 2
+    assert any(str(workflow_id) in warning for warning in warnings)
+    assert any(str(template_id) in warning for warning in warnings)
+    assert all("Removed retired routing actions" in warning for warning in warnings)
+    assert db.get(AutomationWorkflow, workflow_id).actions == retained
+    assert db.get(AutomationWorkflow, workflow_id).is_enabled is mixed
+    assert db.get(WorkflowTemplate, template_id).actions == retained
+
+
+@pytest.mark.asyncio
+async def test_import_unknown_action_keeps_400_error_convention(authed_client, db, test_org):
+    workflow_id = uuid.uuid4()
+    archive = _build_config_zip(
+        {
+            "workflows.json": [
+                {
+                    "id": str(workflow_id),
+                    "name": "Invalid",
+                    "trigger_type": "form_submitted",
+                    "actions": [{"action_type": "unsupported_action"}],
+                }
+            ]
+        }
+    )
+    response = await authed_client.post(
+        "/admin/imports/config", files={"config_zip": ("config.zip", archive, "application/zip")}
+    )
+    assert response.status_code == 400, response.text
+    assert "Unknown workflow action type: unsupported_action" in response.json()["detail"]
+    assert db.get(AutomationWorkflow, workflow_id) is None

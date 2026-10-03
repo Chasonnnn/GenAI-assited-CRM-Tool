@@ -711,3 +711,52 @@ class TestAdminExports:
             assert download.status_code == 404
         finally:
             settings.EXPORT_STORAGE_BACKEND = original_storage_backend
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_export_skips_retired_routing_without_mutating_definitions(db, test_org, mixed):
+    retained = (
+        [{"action_type": "update_field", "field": "is_priority", "value": True}] if mixed else []
+    )
+    actions = [
+        {"action_type": "auto_match_submission"},
+        {"action_type": "create_intake_lead"},
+        *retained,
+    ]
+    workflow = AutomationWorkflow(
+        organization_id=test_org.id,
+        name="Pre-release route",
+        subject_type="form_submission",
+        trigger_type="form_submitted",
+        actions=actions,
+        is_enabled=True,
+    )
+    template = WorkflowTemplate(
+        organization_id=test_org.id,
+        name="Pre-release template",
+        subject_type="form_submission",
+        trigger_type="form_submitted",
+        actions=actions,
+    )
+    db.add_all([workflow, template])
+    db.flush()
+    with zipfile.ZipFile(
+        io.BytesIO(admin_export_service.build_org_config_zip(db, test_org.id))
+    ) as archive:
+        exported = next(
+            row
+            for row in json.loads(archive.read("workflows.json"))
+            if row["id"] == str(workflow.id)
+        )
+        assert exported["actions"] == retained
+        assert exported["is_enabled"] is mixed
+        exported = next(
+            row
+            for row in json.loads(archive.read("workflow_templates.json"))
+            if row["id"] == str(template.id)
+        )
+        assert exported["actions"] == retained
+    db.refresh(workflow)
+    db.refresh(template)
+    assert workflow.actions == actions
+    assert template.actions == actions

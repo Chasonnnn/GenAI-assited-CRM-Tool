@@ -35,6 +35,7 @@ from app.services.workflow_definition_rules import (
     appointment_timing_key,
 )
 from app.services.workflow_engine_adapters import WorkflowDomainAdapter
+from app.services.workflow_routing_retirement import has_retired_routing_actions
 
 logger = logging.getLogger(__name__)
 
@@ -337,6 +338,13 @@ class WorkflowEngineCore:
         """Execute a single workflow and log the result."""
         from app.services import permission_policy_service
 
+        if has_retired_routing_actions(workflow.actions):
+            logger.warning(
+                "Skipped retired routing workflow: workflow_id=%s organization_id=%s",
+                workflow.id,
+                workflow.organization_id,
+            )
+            return None
         permission_policy_service.lock_configuration(db, workflow.organization_id)
         start_time = time.time()
         if subject_type is None or subject_id is None or subject_type != workflow.subject_type:
@@ -810,6 +818,15 @@ class WorkflowEngineCore:
 
         if not workflow:
             logger.error(f"Workflow {execution.workflow_id} not found for resume")
+            return
+
+        if has_retired_routing_actions(workflow.actions):
+            logger.warning(
+                "Skipped retired routing workflow resume: workflow_id=%s organization_id=%s execution_id=%s",
+                workflow.id,
+                workflow.organization_id,
+                execution.id,
+            )
             return
 
         # Get entity

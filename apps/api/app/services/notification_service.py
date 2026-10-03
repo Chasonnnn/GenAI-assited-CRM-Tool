@@ -1197,7 +1197,7 @@ def notify_task_assigned(
 
 
 def notify_submission_routing_review(
-    db: Session, task_id: UUID, org_id: UUID, assignee_id: UUID
+    db: Session, task_id: UUID, form_id: UUID, org_id: UUID, assignee_id: UUID
 ) -> None:
     """Routing review shares the user's existing review/approval notification preference."""
     if not should_notify(db, assignee_id, org_id, "workflow_approvals"):
@@ -1209,8 +1209,8 @@ def notify_submission_routing_review(
         type=NotificationType.FORM_SUBMISSION_ROUTING_REVIEW,
         title="Submission waiting for routing review",
         body="Review the submission routing task",
-        entity_type="task",
-        entity_id=task_id,
+        entity_type="form",
+        entity_id=form_id,
         dedupe_key=f"submission_routing_review:{task_id}:{assignee_id}",
     )
 

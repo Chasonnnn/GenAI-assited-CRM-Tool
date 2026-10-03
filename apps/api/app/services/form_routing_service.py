@@ -264,6 +264,12 @@ def _request_review(
         )
         return
     org = db.get(Organization, form.organization_id)
+    due_at = calculate_approval_due_date(
+        start_utc=datetime.now(UTC),
+        owner=owner,
+        org=org,
+        timeout_hours=WORKFLOW_APPROVAL_TIMEOUT_HOURS,
+    )
     task = Task(
         organization_id=submission.organization_id,
         form_submission_id=submission.id,
@@ -275,12 +281,9 @@ def _request_review(
         owner_id=owner.id,
         status=TaskStatus.PENDING.value,
         created_by_user_id=SYSTEM_USER_ID,
-        due_at=calculate_approval_due_date(
-            start_utc=datetime.now(UTC),
-            owner=owner,
-            org=org,
-            timeout_hours=WORKFLOW_APPROVAL_TIMEOUT_HOURS,
-        ),
+        due_at=due_at,
+        due_date=due_at.date(),
+        due_time=due_at.time(),
     )
     db.add(task)
     db.flush()
@@ -289,6 +292,7 @@ def _request_review(
         lambda: notification_service.notify_submission_routing_review(
             db=db,
             task_id=task.id,
+            form_id=form.id,
             org_id=submission.organization_id,
             assignee_id=owner.id,
         )
