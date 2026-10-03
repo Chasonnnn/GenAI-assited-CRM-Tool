@@ -369,3 +369,53 @@ def test_counts_and_action_list_exclude_other_organizations(db, test_org, test_u
     counts = notification_service.get_notification_counts(db, test_user.id, test_org.id)
     assert counts == notification_service.NotificationCounts(action=0, updates_unread=0)
     assert _open_action_ids(db, test_user, test_org) == set()
+
+
+@pytest.mark.asyncio
+async def test_action_list_exposes_the_pending_status_change_request(
+    authed_client, db, test_org, test_user
+):
+    surrogate_id = await _create_surrogate(authed_client)
+    now = datetime.now(UTC)
+    other_org = Organization(
+        id=uuid.uuid4(), name="Request Org", slug=f"request-org-{uuid.uuid4().hex[:8]}"
+    )
+    db.add(other_org)
+    db.flush()
+
+    def _request(org_id, requested_at):
+        request = StatusChangeRequest(
+            organization_id=org_id,
+            entity_type="surrogate",
+            entity_id=surrogate_id,
+            effective_at=now,
+            reason="Correction",
+            requested_by_user_id=test_user.id,
+            requested_at=requested_at,
+            status="pending",
+        )
+        db.add(request)
+        db.flush()
+        return request
+
+    ours = _request(test_org.id, now - timedelta(minutes=5))
+    # Same entity id in another org, requested later: must never be offered.
+    _request(other_org.id, now - timedelta(minutes=1))
+    notification = _notify(
+        db,
+        test_org.id,
+        test_user.id,
+        NotificationType.STATUS_CHANGE_REQUESTED,
+        entity_type="surrogate",
+        entity_id=surrogate_id,
+        created_at=now,
+    )
+
+    items = (await authed_client.get("/me/notifications?tier=action")).json()["items"]
+    [item] = [i for i in items if i["id"] == str(notification.id)]
+    assert item["request_id"] == str(ours.id)
+
+    ours.status = "approved"
+    db.flush()
+    items = (await authed_client.get("/me/notifications?tier=action")).json()["items"]
+    assert str(notification.id) not in {i["id"] for i in items}

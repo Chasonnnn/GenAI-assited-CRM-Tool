@@ -37,9 +37,13 @@ class NotificationRead(BaseModel):
     entity_id: str | None
     read_at: str | None
     created_at: str
+    # Pending status change request an open status_change_requested item asks about.
+    request_id: str | None = None
 
     @classmethod
-    def from_model(cls, notification: Notification) -> NotificationRead:
+    def from_model(
+        cls, notification: Notification, request_id: UUID | None = None
+    ) -> NotificationRead:
         return cls(
             id=str(notification.id),
             type=notification.type,
@@ -50,6 +54,7 @@ class NotificationRead(BaseModel):
             entity_id=str(notification.entity_id) if notification.entity_id else None,
             read_at=notification.read_at.isoformat() if notification.read_at else None,
             created_at=notification.created_at.isoformat(),
+            request_id=str(request_id) if request_id else None,
         )
 
 
@@ -159,8 +164,11 @@ def list_notifications(
         org_id=session.org_id,
     )
 
+    request_ids = notification_service.pending_status_change_request_ids(
+        db, session.org_id, notifications
+    )
     return NotificationListResponse(
-        items=[NotificationRead.from_model(n) for n in notifications],
+        items=[NotificationRead.from_model(n, request_ids.get(n.id)) for n in notifications],
         unread_count=unread_count,
         next_cursor=next_cursor,
     )

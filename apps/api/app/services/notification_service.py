@@ -614,6 +614,51 @@ def get_notifications(
     return notifications, next_cursor
 
 
+def pending_status_change_request_ids(
+    db: Session,
+    org_id: UUID,
+    notifications: list[Notification],
+) -> dict[UUID, UUID]:
+    """Map each open status change notification to the pending request it asks about.
+
+    Uses the same rule as _action_open_condition: the latest pending request on the
+    entity made at or before the notification.
+    """
+    targets = [
+        n
+        for n in notifications
+        if n.type == NotificationType.STATUS_CHANGE_REQUESTED.value and n.entity_id
+    ]
+    if not targets:
+        return {}
+    rows = (
+        db.query(
+            StatusChangeRequest.id,
+            StatusChangeRequest.entity_type,
+            StatusChangeRequest.entity_id,
+            StatusChangeRequest.requested_at,
+        )
+        .filter(
+            StatusChangeRequest.organization_id == org_id,
+            StatusChangeRequest.status == "pending",
+            StatusChangeRequest.entity_id.in_({n.entity_id for n in targets}),
+        )
+        .all()
+    )
+    request_ids: dict[UUID, UUID] = {}
+    for notification in targets:
+        candidates = [
+            row
+            for row in rows
+            if row.entity_type == notification.entity_type
+            and row.entity_id == notification.entity_id
+            and row.requested_at <= notification.created_at
+        ]
+        if candidates:
+            request_ids[notification.id] = max(candidates, key=lambda row: row.requested_at).id
+    return request_ids
+
+
 def get_unread_count(
     db: Session,
     user_id: UUID,
