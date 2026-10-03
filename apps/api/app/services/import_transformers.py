@@ -256,6 +256,8 @@ def transform_datetime_flexible(raw_value: str) -> TransformOutput:
 # Height Transformer
 # =============================================================================
 
+INCHES_COMPONENT_PATTERN = r"\d+(?:\s+\d+/\d+|\.\d+)?"
+
 
 def transform_height_flexible(raw_value: str) -> TransformOutput:
     """
@@ -266,6 +268,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
     - "5 4" (feet and inches, space-separated)
     - "4-5" (feet and inches, dash-separated)
     - "5 ft 4 in", "5ft 4in", or "5 ft 4 ins" (spelled out)
+    - "5'2 1/3" or "5 ft 2 3/4 in" (fractional inches, rounded to whole inches)
     - "5.4" or "5.33" (decimal feet)
     - "64" or "67 inches" (total inches)
     - "Height: 5-1" (label-prefixed values)
@@ -308,7 +311,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
     # Pattern: 5'4" or 5'4 or 5' 4" or 5' 4 or 5 4
     # Require an explicit separator so plain "54" is not interpreted as 5'4.
     match = re.match(
-        r"^(\d+)(?:\s*['\"]\s*|\s+|\s*-\s*)(\d+(?:\s*(?:1/2|\.5))?)\s*\"?\s*$",
+        rf"^(\d+)(?:\s*['\"]\s*|\s+|\s*-\s*)({INCHES_COMPONENT_PATTERN})\s*\"?\s*$",
         lowered,
     )
     if match:
@@ -326,7 +329,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
 
     # Pattern: 5ft 6 / 5ft 6" / 5 feet 4 inches / 5 foot 4 / 5ft 2 1/2 inches
     match = re.match(
-        r"^(\d+)\s*(?:ft|feet|foot)\.?\s*(?:and\s*)?(\d+(?:\s*(?:1/2|\.5))?)?\s*(?:\"|in|ins|inch|inches)?\.?\s*$",
+        rf"^(\d+)\s*(?:ft|feet|foot)\.?\s*(?:and\s*)?({INCHES_COMPONENT_PATTERN})?\s*(?:\"|in|ins|inch|inches)?\.?\s*$",
         lowered,
         re.IGNORECASE,
     )
@@ -338,10 +341,10 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
 
     # Pattern: 5:3 / 4/11 / 5*3 / 5'5ft / 5"0'
     match = re.match(
-        r"""^
+        rf"""^
         (\d+)
         \s*['"/:*]\s*
-        (\d+(?:\s*(?:1/2|\.5))?)
+        ({INCHES_COMPONENT_PATTERN})
         \s*(?:["']|in|ins|inch|inches|ft)?\s*:?\s*$
         """,
         lowered,
@@ -407,12 +410,12 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
                 warnings=warnings,
             )
 
-    # Pattern: feet.inches shorthand with half inch (5.2 1/2 => 5 ft 2.5 in)
-    match = re.match(r"^(\d+)\.(\d{1,2})\s*(?:1/2|\.5)$", lowered)
+    # Pattern: feet.inches shorthand with a fraction (5.2 1/3 => 5 ft 2 1/3 in)
+    match = re.match(r"^(\d+)\.(\d{1,2}(?:\s+\d+/\d+|\.5))$", lowered)
     if match:
         feet = int(match.group(1))
-        inches = Decimal(match.group(2)) + Decimal("0.5")
-        if Decimal("3") <= Decimal(str(feet)) <= Decimal("8") and inches < 12:
+        inches = _parse_inches_component(match.group(2))
+        if inches is not None and 3 <= feet <= 8 and inches < 12:
             warnings.append(f"Interpreted '{value}' as feet/inches notation")
             return _height_transform_result(feet, inches, warnings)
 
@@ -832,9 +835,12 @@ def _parse_inches_component(raw_inches: str | None) -> Decimal | None:
     if not value:
         return Decimal("0")
 
-    match = re.match(r"^(\d+)\s*(?:1/2|\.5)$", value)
+    match = re.fullmatch(r"(\d+)\s+(\d+)/(\d+)", value)
     if match:
-        return Decimal(match.group(1)) + Decimal("0.5")
+        whole, numerator, denominator = (Decimal(part) for part in match.groups())
+        if denominator == 0 or numerator >= denominator:
+            return None
+        return whole + numerator / denominator
 
     if re.match(r"^\d+(?:\.\d+)?$", value):
         return Decimal(value)
