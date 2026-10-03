@@ -47,6 +47,7 @@ export const TRIGGER_ICONS: Record<string, ElementType> = {
     appointment_requested: CalendarIcon,
     appointment_rescheduled: CalendarIcon,
     appointment_expired: ClockIcon,
+    appointment_time: ClockIcon,
     note_added: FileTextIcon,
     document_uploaded: FileTextIcon,
     donor_created: FileTextIcon,

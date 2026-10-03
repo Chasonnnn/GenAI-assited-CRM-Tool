@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import type { WorkflowEditorController, WorkflowEditorSelection } from "@/lib/workflows/use-workflow-editor"
 import {
     WORKFLOW_SUBJECT_PLURAL_LABELS,
+    describeAppointmentTiming,
+    getAppointmentTypeNames,
     getConditionFieldLabel,
     describeSchedule,
     getTriggerLabel,
@@ -43,6 +45,13 @@ function getTriggerCriteria(state: CanvasState, options: CanvasOptions): string[
     }
     if (triggerType === "task_due" && typeof triggerConfig.hours_before === "number") {
         lines.push(`${triggerConfig.hours_before} hours before due`)
+    }
+    if (triggerType === "appointment_time") {
+        lines.push(describeAppointmentTiming(triggerConfig))
+    }
+    if (state.isAppointmentTrigger) {
+        const typeNames = getAppointmentTypeNames(triggerConfig)
+        if (typeNames.length > 0) lines.push(`Types: ${typeNames.join(", ")}`)
     }
     if (typeof triggerConfig.form_id === "string" && triggerConfig.form_id) {
         const form = options.formOptions.find((option) => option.value === triggerConfig.form_id)

@@ -948,6 +948,74 @@ describe('WorkflowEditorPage', () => {
         expect(radioLabels('Linked record')).toEqual(['Surrogate'])
     })
 
+    it('saves a timing workflow for hours after an appointment ends', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...DEFAULT_OPTIONS,
+                trigger_types: [
+                    ...DEFAULT_OPTIONS.trigger_types,
+                    { value: 'appointment_time', label: 'Before or After Appointment', description: '' },
+                ],
+                action_types_by_trigger: { appointment_time: ['add_note'] },
+                trigger_entity_types: { appointment_time: 'appointment' },
+                appointment_type_names: ['Initial Consultation'],
+            },
+            isLoading: false,
+        })
+
+        renderNewWorkflow()
+        fireEvent.change(nameInput(), { target: { value: 'Consult follow-up' } })
+        fireEvent.click(screen.getByRole('radio', { name: 'Date or scheduled' }))
+        expect(optionLabels(triggerSelect())).toContain('Before or After Appointment')
+        fireEvent.change(triggerSelect(), { target: { value: 'appointment_time' } })
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('24 hours before start')
+
+        fireEvent.change(screen.getByRole('combobox', { name: 'When' }), { target: { value: 'after_end' } })
+        fireEvent.change(screen.getByRole('spinbutton', { name: 'Hours' }), { target: { value: '2' } })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Appointment types' }), {
+            target: { value: 'Initial Consultation' },
+        })
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('2 hours after end')
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Types: Initial Consultation')
+
+        addNoteAction('Send the consult summary')
+        fireEvent.click(launchButton())
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'appointment',
+                trigger_type: 'appointment_time',
+                trigger_config: { when: 'after_end', hours: 2, appointment_type_names: ['Initial Consultation'] },
+            }),
+            expect.any(Object),
+        )
+    })
+
+    it('blocks a timing workflow with hours out of range', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...DEFAULT_OPTIONS,
+                trigger_types: [{ value: 'appointment_time', label: 'Before or After Appointment', description: '' }],
+                action_types_by_trigger: { appointment_time: ['add_note'] },
+            },
+            isLoading: false,
+        })
+
+        renderNewWorkflow()
+        fireEvent.change(nameInput(), { target: { value: 'Too late' } })
+        fireEvent.click(screen.getByRole('radio', { name: 'Date or scheduled' }))
+        fireEvent.change(triggerSelect(), { target: { value: 'appointment_time' } })
+        fireEvent.change(screen.getByRole('spinbutton', { name: 'Hours' }), { target: { value: '200' } })
+        addNoteAction('Follow up')
+
+        expect(launchButton()).toHaveAttribute('aria-disabled', 'true')
+        expect(screen.getAllByTestId('tooltip').map((tip) => tip.textContent)).toContain(
+            'Hours must be a whole number from 1 to 168.',
+        )
+        fireEvent.click(launchButton())
+        expect(mockCreateWorkflow.mutate).not.toHaveBeenCalled()
+    })
+
     it('offers the appointment host only to appointment workflows', () => {
         mockUseWorkflowOptions.mockReturnValue({
             data: {

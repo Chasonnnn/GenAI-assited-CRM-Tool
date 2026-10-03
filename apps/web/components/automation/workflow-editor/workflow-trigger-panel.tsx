@@ -22,7 +22,9 @@ import {
     TIME_TRIGGER_TYPES,
     WEEKDAY_LABELS,
     WORKFLOW_SUBJECT_LABELS,
+    APPOINTMENT_TIMING_OPTIONS,
     buildSimpleCron,
+    getAppointmentTimingLabel,
     getAppointmentTypeNames,
     getConditionFieldLabel,
     getTriggerLabel,
@@ -264,6 +266,46 @@ function TriggerConfigFields({ controller }: { controller: WorkflowEditorControl
                         }
                     />
                 </FieldRow>
+            )}
+
+            {triggerType === "appointment_time" && (
+                <div className="grid grid-cols-2 gap-2">
+                    <FieldRow label="When">
+                        <Select
+                            aria-label="When"
+                            value={triggerConfig.when === "after_end" ? "after_end" : "before_start"}
+                            onValueChange={(value) =>
+                                value && setTriggerConfig((currentConfig) => ({ ...currentConfig, when: value }))
+                            }
+                        >
+                            <SelectTrigger aria-label="When" className="w-full">
+                                <SelectValue>{getAppointmentTimingLabel}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {APPOINTMENT_TIMING_OPTIONS.map((option) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FieldRow>
+                    <FieldRow label="Hours" htmlFor="workflow-trigger-appointment-hours">
+                        <Input
+                            id="workflow-trigger-appointment-hours"
+                            type="number"
+                            min={1}
+                            max={168}
+                            value={typeof triggerConfig.hours === "number" ? triggerConfig.hours : 24}
+                            onChange={(event) =>
+                                setTriggerConfig((currentConfig) => ({
+                                    ...currentConfig,
+                                    hours: Number(event.target.value),
+                                }))
+                            }
+                        />
+                    </FieldRow>
+                </div>
             )}
 
             {FORM_TRIGGER_TYPES.has(triggerType) && (

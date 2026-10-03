@@ -61,6 +61,21 @@ export function getAppointmentRecordType(triggerConfig: JsonObject): CreateWorkf
     return CREATE_WORKFLOW_SUBJECT_OPTIONS.find((option) => option.value === value)?.value ?? "surrogate"
 }
 
+export const APPOINTMENT_TIMING_OPTIONS: SelectOption[] = [
+    { value: "before_start", label: "Before start" },
+    { value: "after_end", label: "After end" },
+]
+
+export const getAppointmentTimingLabel = createSelectLabelGetter(APPOINTMENT_TIMING_OPTIONS, {
+    emptyLabel: "Before start",
+})
+
+export function describeAppointmentTiming(triggerConfig: JsonObject): string {
+    const hours = typeof triggerConfig.hours === "number" ? triggerConfig.hours : 24
+    const unit = hours === 1 ? "hour" : "hours"
+    return triggerConfig.when === "after_end" ? `${hours} ${unit} after end` : `${hours} ${unit} before start`
+}
+
 export function getAppointmentTypeNames(triggerConfig: JsonObject): string[] {
     return Array.isArray(triggerConfig.appointment_type_names)
         ? triggerConfig.appointment_type_names.filter((name): name is string => typeof name === "string")
@@ -84,6 +99,7 @@ export const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubject
     appointment_requested: "appointment",
     appointment_rescheduled: "appointment",
     appointment_expired: "appointment",
+    appointment_time: "appointment",
 }
 
 export const TRIGGER_LABELS: Record<string, string> = {
@@ -110,6 +126,7 @@ export const TRIGGER_LABELS: Record<string, string> = {
     appointment_requested: "Appointment Requested",
     appointment_rescheduled: "Appointment Rescheduled",
     appointment_expired: "Appointment Request Expired",
+    appointment_time: "Before or After Appointment",
     note_added: "Note Added",
     document_uploaded: "Document Uploaded",
     donor_created: "Donor Created",
@@ -251,6 +268,11 @@ export function normalizeTriggerConfigForUi(
             next.days = 7
         }
     }
+    if (triggerType === "appointment_time") {
+        if (next.when !== "after_end") next.when = "before_start"
+        const hours = Number(next.hours)
+        next.hours = Number.isFinite(hours) && hours > 0 ? hours : 24
+    }
     if (triggerType === "task_due") {
         if (typeof next.hours_before === "string") {
             const parsed = Number(next.hours_before)
@@ -292,6 +314,10 @@ export function buildTriggerConfigForSave(triggerType: string, triggerConfig: Js
         const hours = Number(next.hours_before)
         next.hours_before = Number.isFinite(hours) ? hours : 24
     }
+    if (triggerType === "appointment_time") {
+        if (next.when !== "after_end") next.when = "before_start"
+        next.hours = Number(next.hours)
+    }
     if (FORM_TRIGGER_TYPES.has(triggerType)) {
         if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
     }
@@ -316,6 +342,12 @@ export function getTriggerConfigValidationError(triggerType: string, triggerConf
     if (triggerType === "task_due") {
         const hours = triggerConfig.hours_before
         if (!hours || typeof hours !== "number") return "Hours before due is required."
+    }
+    if (triggerType === "appointment_time") {
+        const hours = triggerConfig.hours
+        if (typeof hours !== "number" || !Number.isInteger(hours) || hours < 1 || hours > 168) {
+            return "Hours must be a whole number from 1 to 168."
+        }
     }
     if (FORM_TRIGGER_TYPES.has(triggerType)) {
         const formId = triggerConfig.form_id
@@ -683,7 +715,7 @@ export function workflowBuilderReducer(state: WorkflowBuilderState, action: Work
 
 // Trigger types that fire on time rather than on a record event; the editor groups them under
 // "Date or scheduled" like the reference layout.
-export const TIME_TRIGGER_TYPES = new Set(["scheduled", "inactivity", "task_due", "task_overdue"])
+export const TIME_TRIGGER_TYPES = new Set(["scheduled", "inactivity", "task_due", "task_overdue", "appointment_time"])
 
 export type ScheduleFrequency = "daily" | "weekdays" | "weekly" | "custom"
 
