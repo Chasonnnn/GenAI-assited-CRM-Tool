@@ -13,6 +13,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.db.enums import NotificationType
 from app.db.models import Membership, Notification, Organization, User
 from app.services import (
     email_service,
@@ -34,13 +35,16 @@ def idempotency_key(notification_id: UUID) -> str:
 def record_path(notification: Notification) -> str | None:
     """Path of the record the notification points to.
 
-    Mirrors the entity branches of apps/web/lib/utils/notification-routing.ts so the
-    email opens the same page as the in-app click-through.
+    Mirrors apps/web/lib/utils/notification-routing.ts so the email opens the same page
+    as the in-app click-through. Status change requests open the record: the pending
+    request id is not stored on the notification.
     """
     if notification.entity_id is None:
         return None
     entity_id = notification.entity_id
     entity_type = notification.entity_type
+    if notification.type == NotificationType.WORKFLOW_APPROVAL_REQUESTED.value:
+        return f"/tasks?filter=my_tasks&focus=approvals&approval={entity_id}"
     if entity_type in {"surrogate", "case"}:
         return f"/surrogates/{entity_id}"
     if entity_type == "intended_parent":
@@ -50,9 +54,9 @@ def record_path(notification: Notification) -> str | None:
     if entity_type == "donor":
         return f"/donors/{entity_id}"
     if entity_type in {"task", "donor_task"}:
-        return "/tasks?filter=my_tasks&focus=tasks"
+        return f"/tasks?filter=my_tasks&task={entity_id}"
     if entity_type == "appointment":
-        return "/appointments"
+        return f"/appointments?appointment={entity_id}"
     return None
 
 
