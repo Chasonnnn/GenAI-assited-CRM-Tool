@@ -57,6 +57,7 @@ import {
     workflowBuilderReducer,
     type StateUpdate,
     type StatusOption,
+    type WorkflowEditorPreset,
 } from "@/lib/workflows/workflow-editor-state"
 
 const EMPTY_STATUS_OPTIONS: StatusOption[] = []
@@ -77,10 +78,12 @@ export type WorkflowEditorController = ReturnType<typeof useWorkflowEditor>
 export function useWorkflowEditor({
     workflowId,
     initialScope,
+    initialPreset = null,
 }: {
     /** Null creates a new workflow. */
     workflowId: string | null
     initialScope: WorkflowScope
+    initialPreset?: WorkflowEditorPreset | null
 }) {
     const { push } = useRouter()
     const { user } = useAuth()
@@ -101,10 +104,8 @@ export function useWorkflowEditor({
     const canCreatePersonal = !policyV2 || canManageAutomation
 
     const isEditing = workflowId !== null
-    const [state, dispatch] = useReducer(
-        workflowBuilderReducer,
-        initialScope,
-        createInitialWorkflowBuilderState,
+    const [state, dispatch] = useReducer(workflowBuilderReducer, null, () =>
+        createInitialWorkflowBuilderState(initialScope, initialPreset),
     )
     const [selection, setSelection] = useState<WorkflowEditorSelection>({ kind: "trigger" })
     const {

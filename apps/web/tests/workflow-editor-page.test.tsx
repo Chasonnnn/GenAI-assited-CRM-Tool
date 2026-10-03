@@ -4,6 +4,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import WorkflowEditorPageClient from '../app/(app)/automation/workflows/[id]/page.client'
 import { ApiError } from '@/lib/api'
 import { getApplicantTypeLabel } from '@/components/automation/workflow-editor/shared'
+import { getWorkflowEditorPreset } from '@/lib/workflows/workflow-editor-state'
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -919,6 +920,32 @@ describe('WorkflowEditorPage', () => {
             }),
             expect.any(Object),
         )
+    })
+
+    it('starts on the appointment trigger and type named in the link', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...DEFAULT_OPTIONS,
+                trigger_types: [
+                    { value: 'appointment_scheduled', label: 'Appointment Scheduled', description: '' },
+                ],
+                action_types_by_trigger: { appointment_scheduled: ['add_note'] },
+                trigger_entity_types: { appointment_scheduled: 'appointment' },
+                appointment_type_names: ['Initial Consultation'],
+            },
+            isLoading: false,
+        })
+        const preset = getWorkflowEditorPreset({
+            trigger: 'appointment_scheduled',
+            appointment_type: ' Initial Consultation ',
+        })
+        expect(getWorkflowEditorPreset({ trigger: 'surrogate_created', appointment_type: 'X' })).toBeNull()
+
+        render(<WorkflowEditorPageClient workflowId={null} initialScope="personal" initialPreset={preset} />)
+
+        expect(triggerSelect()).toHaveValue('appointment_scheduled')
+        expect(screen.getByRole('button', { name: 'Remove Initial Consultation' })).toBeInTheDocument()
+        expect(radioLabels('Linked record')).toEqual(['Surrogate'])
     })
 
     it('offers the appointment host only to appointment workflows', () => {

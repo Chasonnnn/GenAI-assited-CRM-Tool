@@ -472,7 +472,28 @@ export type WorkflowBuilderAction =
     | { type: "moveAction"; index: number; direction: -1 | 1 }
     | { type: "updateAction"; index: number; updates: Partial<ActionConfig> }
 
-export function createInitialWorkflowBuilderState(scope: WorkflowScope = "personal"): WorkflowBuilderState {
+/** Trigger a new workflow starts on, e.g. when opened from an appointment type. */
+export type WorkflowEditorPreset = { triggerType: string; triggerConfig: JsonObject }
+
+export function getWorkflowEditorPreset(
+    searchParams: Record<string, string | string[] | undefined>,
+): WorkflowEditorPreset | null {
+    const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value)
+    const triggerType = first(searchParams.trigger)
+    if (!triggerType || FIXED_TRIGGER_SUBJECT_TYPES[triggerType] !== "appointment") return null
+    const typeName = first(searchParams.appointment_type)?.trim()
+    return { triggerType, triggerConfig: typeName ? { appointment_type_names: [typeName] } : {} }
+}
+
+export function getAppointmentTypeWorkflowHref(typeName: string, scope: WorkflowScope): string {
+    const params = new URLSearchParams({ scope, trigger: "appointment_scheduled", appointment_type: typeName })
+    return `/automation/workflows/new?${params.toString()}`
+}
+
+export function createInitialWorkflowBuilderState(
+    scope: WorkflowScope = "personal",
+    preset: WorkflowEditorPreset | null = null,
+): WorkflowBuilderState {
     return {
         hydratedWorkflowId: null,
         validationError: null,
@@ -481,8 +502,8 @@ export function createInitialWorkflowBuilderState(scope: WorkflowScope = "person
         workflowDescription: "",
         workflowScope: scope,
         subjectType: "surrogate",
-        triggerType: "",
-        triggerConfig: {},
+        triggerType: preset?.triggerType ?? "",
+        triggerConfig: preset?.triggerConfig ?? {},
         conditions: [],
         conditionLogic: "AND",
         actions: [],

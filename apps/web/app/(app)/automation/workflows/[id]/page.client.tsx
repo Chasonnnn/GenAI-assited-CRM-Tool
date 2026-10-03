@@ -7,14 +7,20 @@ import { LoadErrorState, NotFoundState, PermissionDeniedState } from "@/componen
 import { PageHeader } from "@/components/page-header"
 import type { WorkflowScope } from "@/lib/api/workflows"
 import { useWorkflowEditor } from "@/lib/workflows/use-workflow-editor"
+import type { WorkflowEditorPreset } from "@/lib/workflows/workflow-editor-state"
 
 type WorkflowEditorPageClientProps = {
     workflowId: string | null
     initialScope: WorkflowScope
+    initialPreset?: WorkflowEditorPreset | null
 }
 
-export default function WorkflowEditorPageClient({ workflowId, initialScope }: WorkflowEditorPageClientProps) {
-    const controller = useWorkflowEditor({ workflowId, initialScope })
+export default function WorkflowEditorPageClient({
+    workflowId,
+    initialScope,
+    initialPreset = null,
+}: WorkflowEditorPageClientProps) {
+    const controller = useWorkflowEditor({ workflowId, initialScope, initialPreset })
     const { access, listHref } = controller
 
     if (access.status === "ok") {

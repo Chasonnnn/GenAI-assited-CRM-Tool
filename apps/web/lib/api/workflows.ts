@@ -205,6 +205,7 @@ export interface ListWorkflowsParams {
     trigger_type?: string
     scope?: WorkflowScope | null
     subject_type?: WorkflowSubjectType
+    appointment_type_name?: string
 }
 
 export async function listWorkflows(params?: ListWorkflowsParams): Promise<WorkflowListItem[]> {
@@ -213,6 +214,7 @@ export async function listWorkflows(params?: ListWorkflowsParams): Promise<Workf
     if (params?.trigger_type) searchParams.set("trigger_type", params.trigger_type)
     if (params?.scope) searchParams.set("scope", params.scope)
     if (params?.subject_type) searchParams.set("subject_type", params.subject_type)
+    if (params?.appointment_type_name) searchParams.set("appointment_type_name", params.appointment_type_name)
 
     const query = searchParams.toString()
     return api.get<WorkflowListItem[]>(`/workflows${query ? `?${query}` : ""}`)
