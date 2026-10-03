@@ -98,3 +98,52 @@ def test_seed_system_workflows_skips_stage_trigger_when_stage_is_missing(
         .trigger_config.get("to_stage_key")
         == "lost"
     )
+
+
+def test_every_seeded_system_workflow_passes_workflow_validation(db, test_org, test_user):
+    from app.db.enums import WorkflowTriggerType
+    from app.schemas.workflow import Condition
+    from app.services import workflow_service
+    from app.services.template_seeder import seed_system_templates
+    from app.services.workflow_definition_rules import validate_trigger_config
+
+    seed_system_templates(db, test_org.id)
+    seed_system_workflows(db, test_org.id, test_user.id)
+    workflows = (
+        db.query(AutomationWorkflow)
+        .filter(
+            AutomationWorkflow.organization_id == test_org.id,
+            AutomationWorkflow.is_system_workflow.is_(True),
+        )
+        .all()
+    )
+    assert workflows
+
+    options = workflow_service.get_workflow_options(db, test_org.id, workflow_scope="org")
+    invalid: dict[str, str] = {}
+    for workflow in workflows:
+        trigger_type = WorkflowTriggerType(workflow.trigger_type)
+        try:
+            workflow_service._validate_subject_trigger(workflow.subject_type, trigger_type)
+            allowed_actions = set(options.action_types_by_trigger[trigger_type.value])
+            for action in workflow.actions:
+                if action["action_type"] not in allowed_actions:
+                    raise ValueError(f"{action['action_type']} is not offered for this trigger")
+            validate_trigger_config(trigger_type, workflow.trigger_config)
+            for condition in workflow.conditions:
+                Condition.model_validate(condition)
+            workflow_service._validate_trigger_conditions(
+                trigger_type, workflow.subject_type, workflow.conditions
+            )
+            for action in workflow.actions:
+                workflow_service._validate_action_config(
+                    db,
+                    test_org.id,
+                    dict(action),
+                    workflow_scope="org",
+                    trigger_type=trigger_type,
+                    subject_type=workflow.subject_type,
+                )
+        except ValueError as exc:
+            invalid[workflow.system_key] = str(exc)
+    assert invalid == {}
