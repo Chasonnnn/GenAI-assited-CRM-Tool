@@ -31,6 +31,7 @@ class NotificationType(str, Enum):
 
     # Form notifications
     FORM_SUBMISSION_RECEIVED = "form_submission_received"  # Application submitted
+    FORM_SUBMISSION_ROUTING_REVIEW = "form_submission_routing_review"
 
     # Contact attempt reminders
     CONTACT_REMINDER = "contact_reminder"  # Reminder to follow up on case

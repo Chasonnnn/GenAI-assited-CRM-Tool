@@ -1,5 +1,6 @@
 """Per-form routing and human review, independent of workflow definitions."""
 
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Literal
@@ -26,6 +27,7 @@ from app.services import audit_service, form_intake_service, notification_servic
 from app.utils.business_hours import calculate_approval_due_date
 
 DONOR_KINDS = {FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value}
+logger = logging.getLogger(__name__)
 
 
 class RoutingReviewConflict(ValueError):
@@ -124,7 +126,7 @@ def list_form_workflows(
     return result
 
 
-def _lock_submission(db: Session, org_id: UUID, submission_id: UUID) -> FormSubmission:
+def lock_submission(db: Session, org_id: UUID, submission_id: UUID) -> FormSubmission:
     submission = (
         db.query(FormSubmission)
         .filter(
@@ -151,7 +153,7 @@ def _form(db: Session, submission: FormSubmission) -> Form:
     )
 
 
-def _review_owner(db: Session, form: Form, submission: FormSubmission) -> User:
+def _review_owner(db: Session, form: Form, submission: FormSubmission) -> User | None:
     # Unlinked form workflow approvals use the editor/creator, then the oldest active admin.
     active_members = (
         db.query(User)
@@ -171,15 +173,13 @@ def _review_owner(db: Session, form: Form, submission: FormSubmission) -> User:
         record = (
             db.query(model)
             .filter(model.organization_id == form.organization_id, model.id == record_id)
-            .one()
+            .first()
         )
         owner = (
             active_members.filter(User.id == record.owner_id).first()
-            if record.owner_type == OwnerType.USER.value
+            if record is not None and record.owner_type == OwnerType.USER.value
             else None
         )
-        if owner is None:
-            raise ValueError("Form routing requires an active record owner to review")
         return owner
     for user_id in (
         form.routing_updated_by_user_id,
@@ -197,8 +197,6 @@ def _review_owner(db: Session, form: Form, submission: FormSubmission) -> User:
         .order_by(User.created_at.asc())
         .first()
     )
-    if owner is None:
-        raise ValueError("Form routing requires review but no reviewer could be resolved")
     return owner
 
 
@@ -209,6 +207,41 @@ def _open_tasks(db: Session, submission: FormSubmission):
         Task.task_type == TaskType.REVIEW.value,
         Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
     )
+
+
+def finish_review(db: Session, submission: FormSubmission, actor_id: UUID | None) -> None:
+    """Supersede a review inside the caller's locked submission transaction."""
+    if not submission.routing_review_step:
+        return
+    submission.routing_review_step = None
+    submission.match_status = "ambiguous_review"
+    submission.match_reason = "routing_review_dismissed"
+    for task in _open_tasks(db, submission).all():
+        task.status = TaskStatus.COMPLETED.value
+        task.is_completed = True
+        task.completed_at = datetime.now(UTC)
+        task.completed_by_user_id = actor_id or SYSTEM_USER_ID
+    _audit(db, submission, "routing_review_closed", actor_id or SYSTEM_USER_ID)
+    # Donor helpers reload the locked row with populate_existing; autoflush is disabled.
+    db.flush()
+
+
+def run_after_commit(
+    db: Session, submission: FormSubmission, callbacks: list[Callable[[], None]]
+) -> None:
+    """Keep failures in committed routing side effects from suppressing later work."""
+    submission_id, org_id = submission.id, submission.organization_id
+    for callback in callbacks:
+        try:
+            callback()
+        except Exception as exc:
+            db.rollback()
+            logger.error(
+                "Submission callback failed: exception=%s submission_id=%s organization_id=%s",
+                type(exc).__name__,
+                submission_id,
+                org_id,
+            )
 
 
 def _request_review(
@@ -223,6 +256,13 @@ def _request_review(
     if _open_tasks(db, submission).first():
         return
     owner = _review_owner(db, form, submission)
+    if owner is None:
+        logger.warning(
+            "Routing reviewer unavailable: submission_id=%s organization_id=%s",
+            submission.id,
+            submission.organization_id,
+        )
+        return
     org = db.get(Organization, form.organization_id)
     task = Task(
         organization_id=submission.organization_id,
@@ -246,10 +286,9 @@ def _request_review(
     db.flush()
     # The notification helper commits; invoke it only after the routing transaction.
     after_commit.append(
-        lambda: notification_service.notify_workflow_approval_requested(
+        lambda: notification_service.notify_submission_routing_review(
             db=db,
             task_id=task.id,
-            task_title=task.title,
             org_id=submission.organization_id,
             assignee_id=owner.id,
         )
@@ -319,7 +358,7 @@ def _audit(db: Session, submission: FormSubmission, action: str, user_id: UUID |
 def route_submission(db: Session, *, org_id: UUID, submission_id: UUID) -> FormSubmission:
     after_commit: list[Callable[[], None]] = []
     try:
-        submission = _lock_submission(db, org_id, submission_id)
+        submission = lock_submission(db, org_id, submission_id)
         if submission.source_mode != "shared" or submission.match_status != "workflow_pending":
             db.commit()
             return submission
@@ -333,8 +372,7 @@ def route_submission(db: Session, *, org_id: UUID, submission_id: UUID) -> FormS
     except Exception:
         db.rollback()
         raise
-    for callback in after_commit:
-        callback()
+    run_after_commit(db, submission, after_commit)
     db.refresh(submission)
     return submission
 
@@ -350,12 +388,14 @@ def _review(
 
     after_commit: list[Callable[[], None]] = []
     # Reject before any write so a refused request leaves the review and its task untouched.
-    submission = _lock_submission(db, session.org_id, submission_id)
+    submission = lock_submission(db, session.org_id, submission_id)
     form_submission_access.check_submission(db, session, submission, write=True)
     step = submission.routing_review_step
     expected = {"run_match": "match", "create_lead": "create_lead"}.get(operation)
     if submission.match_status != "routing_review" or not step or (expected and step != expected):
         raise RoutingReviewConflict("Submission is not waiting for this routing review step")
+    if operation != "dismiss" and submission.status != "pending_review":
+        raise RoutingReviewConflict("Submission is not pending review")
     form = _form(db, submission)
     if operation == "create_lead" or (operation == "run_match" and form.routing_no_match == "auto"):
         check_record_creation(
@@ -365,14 +405,7 @@ def _review(
             v2_only=True,
         )
     try:
-        for task in _open_tasks(db, submission).all():
-            task.status = TaskStatus.COMPLETED.value
-            task.is_completed = True
-            task.completed_at = datetime.now(UTC)
-            task.completed_by_user_id = session.user_id
-        submission.routing_review_step = None
-        submission.match_status = "ambiguous_review"
-        db.flush()
+        finish_review(db, submission, session.user_id)
         if operation == "dismiss":
             submission.match_reason = "routing_review_dismissed"
         elif operation == "run_match":
@@ -384,8 +417,7 @@ def _review(
     except Exception:
         db.rollback()
         raise
-    for callback in after_commit:
-        callback()
+    run_after_commit(db, submission, after_commit)
     db.refresh(submission)
     return submission, submission.match_status
 

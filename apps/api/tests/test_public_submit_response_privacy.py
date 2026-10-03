@@ -8,7 +8,7 @@ import uuid
 import pytest
 
 from app.core.config import settings
-from app.db.models import AutomationWorkflow, FormSubmission
+from app.db.models import Form, FormSubmission
 from app.schemas.donor import DonorCreate
 from app.services import donor_service
 from tests.test_forms_public_embed import _create_published_lead_capture_form
@@ -37,23 +37,10 @@ def _public_result(response) -> dict:
     return {key: value for key, value in body.items() if key != "id"}
 
 
-def _auto_match_workflow(db, *, org_id, user_id, form_id: str) -> None:
-    db.add(
-        AutomationWorkflow(
-            id=uuid.uuid4(),
-            organization_id=org_id,
-            name=f"Auto match {uuid.uuid4().hex[:6]}",
-            trigger_type="form_submitted",
-            trigger_config={"form_id": form_id},
-            conditions=[],
-            condition_logic="AND",
-            actions=[{"action_type": "auto_match_submission"}],
-            is_enabled=True,
-            scope="org",
-            owner_user_id=None,
-            created_by_user_id=user_id,
-        )
-    )
+def _automatic_matching(db, *, org_id, user_id, form_id: str) -> None:
+    form = db.query(Form).filter_by(id=uuid.UUID(form_id), organization_id=org_id).one()
+    form.routing_exact_match = "auto"
+    form.routing_no_match = "off"
     db.commit()
 
 
@@ -72,7 +59,7 @@ async def test_hosted_submit_hides_the_matched_surrogate(
         phone="+1 (555) 222-4444",
         date_of_birth="1990-05-06",
     )
-    _auto_match_workflow(db, org_id=test_org.id, user_id=test_user.id, form_id=form_id)
+    _automatic_matching(db, org_id=test_org.id, user_id=test_user.id, form_id=form_id)
 
     submit = await client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -128,7 +115,7 @@ async def test_hosted_submit_hides_the_matched_donor(
         ),
     )
     form_id, slug = await _create_donor_form(authed_client)
-    _auto_match_workflow(db, org_id=test_org.id, user_id=test_user.id, form_id=form_id)
+    _automatic_matching(db, org_id=test_org.id, user_id=test_user.id, form_id=form_id)
     _other_form_id, other_slug = await _create_donor_form(authed_client)
 
     submit = await _submit_donor_form(client, slug=slug, email="returning-donor@example.com")

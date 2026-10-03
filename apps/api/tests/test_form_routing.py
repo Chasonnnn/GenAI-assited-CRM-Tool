@@ -336,19 +336,37 @@ def test_routing_schema_rejects_unknown_modes(field, value):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("operation", ["resolve", "retry"])
-async def test_manual_matching_requires_finishing_routing_review(
-    authed_client, db, test_org, test_user, operation
+@pytest.mark.parametrize("step", ["match", "create_lead"])
+@pytest.mark.parametrize("kind", KINDS)
+async def test_manual_matching_supersedes_routing_review(
+    authed_client, db, test_org, test_user, operation, step, kind
 ):
-    _, submission = routing_submission(db, test_org.id, test_user.id)
-    form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+    _, submission = routing_submission(
+        db, test_org.id, test_user.id, kind=kind, exact="review" if step == "match" else "auto"
+    )
+    # The request's identity map is stale, as when routing finishes after its initial read.
+    with Session(bind=db.connection(), join_transaction_mode="create_savepoint") as routing_db:
+        form_routing_service.route_submission(
+            routing_db, org_id=test_org.id, submission_id=submission.id
+        )
+    assert submission.routing_review_step is None
     response = await authed_client.post(
         f"/forms/submissions/{submission.id}/match/{operation}",
         json={"create_intake_lead": True} if operation == "resolve" else {},
     )
-    assert response.status_code == 409, response.text
+    assert response.status_code == 200, response.text
     db.refresh(submission)
-    assert submission.routing_review_step == "match"
-    assert tasks(db, submission)[0].status == "pending"
+    assert submission.routing_review_step is None
+    assert submission.match_status == (
+        "lead_created" if operation == "resolve" else "ambiguous_review"
+    )
+    if operation == "resolve":
+        assert submission.intake_lead_id is not None
+        lead = db.get(IntakeLead, submission.intake_lead_id)
+        assert lead.lead_type == kind and lead.organization_id == test_org.id
+    review_task = tasks(db, submission)[0]
+    assert review_task.status == "completed" and review_task.is_completed
+    assert review_task.completed_by_user_id == test_user.id
 
 
 def test_routing_is_shared_only_and_tenant_scoped(db, test_org, test_user):
@@ -363,9 +381,159 @@ def test_routing_is_shared_only_and_tenant_scoped(db, test_org, test_user):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["approved", "rejected"])
+@pytest.mark.parametrize("step,operation", [("match", "run-match"), ("create_lead", "create-lead")])
+async def test_review_refuses_nonpending_submission_but_allows_dismiss(
+    authed_client, db, test_org, test_user, status, step, operation
+):
+    _, submission = routing_submission(
+        db, test_org.id, test_user.id, exact="review" if step == "match" else "auto"
+    )
+    form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+    submission.status = status
+    db.commit()
+    audit_count = db.query(AuditLog).filter_by(target_id=submission.id).count()
+    response = await authed_client.post(f"/forms/submissions/{submission.id}/routing/{operation}")
+    assert response.status_code == 409, response.text
+    db.refresh(submission)
+    assert submission.routing_review_step == step
+    assert submission.intake_lead_id is None
+    assert tasks(db, submission)[0].status == "pending"
+    assert db.query(AuditLog).filter_by(target_id=submission.id).count() == audit_count
+    response = await authed_client.post(f"/forms/submissions/{submission.id}/routing/dismiss")
+    assert response.status_code == 200, response.text
+    db.refresh(submission)
+    assert submission.status == status
+    assert submission.routing_review_step is None
+    assert submission.match_reason == "routing_review_dismissed"
+    assert tasks(db, submission)[0].status == "completed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("step", ["match", "create_lead"])
+@pytest.mark.parametrize("kind", ["egg_donor", "sperm_donor"])
+async def test_reject_submission_closes_routing_review(
+    authed_client, db, test_org, test_user, step, kind
+):
+    _, submission = routing_submission(
+        db, test_org.id, test_user.id, kind=kind, exact="review" if step == "match" else "auto"
+    )
+    form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+    response = await authed_client.post(f"/forms/submissions/{submission.id}/reject", json={})
+    assert response.status_code == 200, response.text
+    db.refresh(submission)
+    assert submission.status == "rejected"
+    assert submission.routing_review_step is None
+    assert submission.match_status == "ambiguous_review"
+    assert submission.match_reason == "routing_review_dismissed"
+    review_task = tasks(db, submission)[0]
+    assert review_task.status == "completed" and review_task.is_completed
+    assert review_task.completed_by_user_id == test_user.id
+    assert (
+        db.query(AuditLog)
+        .filter_by(target_id=submission.id, event_type="form_submission_rejected")
+        .count()
+        == 1
+    )
+
+
+@pytest.mark.parametrize("step,linked", [("match", False), ("create_lead", False), ("match", True)])
+def test_missing_reviewer_keeps_review_and_runs_submission_workflows(
+    db, test_org, test_user, default_stage, monkeypatch, caplog, step, linked
+):
+    from app.db.models import Membership
+    from app.services import workflow_triggers
+
+    _, submission = routing_submission(
+        db, test_org.id, test_user.id, exact="review" if step == "match" else "auto"
+    )
+    if linked:
+        record = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+        submission.surrogate_id = record.id
+    db.query(Membership).filter_by(organization_id=test_org.id).update({"is_active": False})
+    db.commit()
+    observed = []
+
+    def trigger(**kwargs):
+        observed.append(kwargs["submission_id"])
+        return []
+
+    monkeypatch.setattr(workflow_triggers, "trigger_form_submitted", trigger)
+    form_intake_service.process_form_submission_workflow(
+        db, org_id=test_org.id, submission_id=submission.id
+    )
+    assert observed == [submission.id]
+    assert submission.match_status == "routing_review" and submission.routing_review_step == step
+    assert tasks(db, submission) == []
+    assert "Routing reviewer unavailable" in caplog.text
+    assert str(submission.id) in caplog.text and str(test_org.id) in caplog.text
+    assert ANSWERS["email"] not in caplog.text and ANSWERS["full_name"] not in caplog.text
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_routing_notification_has_submission_copy_and_respects_preferences(
+    db, test_org, test_user, enabled
+):
+    from app.services import notification_service
+
+    notification_service.update_user_settings(
+        db, test_user.id, test_org.id, {"workflow_approvals": enabled}
+    )
+    _, submission = routing_submission(db, test_org.id, test_user.id)
+    for _ in range(2):
+        form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+    notifications = db.query(Notification).filter_by(entity_id=tasks(db, submission)[0].id).all()
+    assert len(notifications) == int(enabled)
+    if enabled:
+        assert notifications[0].type == "form_submission_routing_review"
+        assert notifications[0].title == "Submission waiting for routing review"
+        assert notifications[0].body == "Review the submission routing task"
+
+
+def test_website_promotion_failure_does_not_suppress_attribution_or_staff_workflows(
+    db, test_org, test_user, monkeypatch, caplog
+):
+    from unittest.mock import Mock
+
+    from app.db.models import FormIntakeLink
+    from app.services import meta_crm_dataset_service, workflow_triggers
+
+    form, submission = routing_submission(
+        db, test_org.id, test_user.id, exact="auto", no_match="auto"
+    )
+    form.purpose = "lead_capture"
+    link = FormIntakeLink(
+        organization_id=test_org.id, form_id=form.id, slug=uuid4().hex, embed_enabled=True
+    )
+    db.add(link)
+    db.flush()
+    submission.intake_link_id = link.id
+    db.commit()
+    promotion = Mock(side_effect=RuntimeError("Private promotion failure"))
+    attribution, staff_workflows = Mock(), Mock()
+    monkeypatch.setattr(form_intake_service, "promote_intake_lead", promotion)
+    monkeypatch.setattr(
+        meta_crm_dataset_service, "link_website_lead_event_to_intake_lead", attribution
+    )
+    monkeypatch.setattr(workflow_triggers, "trigger_intake_lead_created", staff_workflows)
+    with Session(bind=db.connection(), join_transaction_mode="create_savepoint") as routing_db:
+        result = form_routing_service.route_submission(
+            routing_db, org_id=test_org.id, submission_id=submission.id
+        )
+        assert result.intake_lead_id is not None
+        assert result.match_status == "lead_created"
+    promotion.assert_called_once()
+    attribution.assert_called_once()
+    staff_workflows.assert_called_once()
+    assert "exception=RuntimeError" in caplog.text
+    assert "Private promotion failure" not in caplog.text
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("kind", KINDS)
-async def test_run_match_links_exact_record_and_completes_task(
-    authed_client, db, test_org, test_user, default_stage, kind
+@pytest.mark.parametrize("operation", ["run-match", "resolve"])
+async def test_matching_links_exact_record_and_completes_review_task(
+    authed_client, db, test_org, test_user, default_stage, kind, operation
 ):
     _, submission = routing_submission(db, test_org.id, test_user.id, kind=kind)
     if kind == "surrogate":
@@ -393,7 +561,13 @@ async def test_run_match_links_exact_record_and_completes_task(
         )
     db.commit()
     form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
-    response = await authed_client.post(f"/forms/submissions/{submission.id}/routing/run-match")
+    if operation == "resolve":
+        response = await authed_client.post(
+            f"/forms/submissions/{submission.id}/match/resolve",
+            json={"surrogate_id" if kind == "surrogate" else "donor_id": str(record.id)},
+        )
+    else:
+        response = await authed_client.post(f"/forms/submissions/{submission.id}/routing/run-match")
     assert response.status_code == 200, response.text
     assert response.json()["outcome"] == "linked"
     result = response.json()["submission"]

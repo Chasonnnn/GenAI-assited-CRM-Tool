@@ -313,6 +313,10 @@ class TestAdminImports:
                     "status": "draft",
                     "purpose": "other",
                     "lead_kind": "sperm_donor",
+                    "routing_exact_match": "review",
+                    "routing_no_match": "off",
+                    "routing_lead_source": "form_embed",
+                    "routing_auto_create_donor": False,
                     "schema_json": {"title": "Draft"},
                     "published_schema_json": {"title": "Published"},
                     "max_file_size_bytes": 1048576,
@@ -413,7 +417,7 @@ class TestAdminImports:
                     "trigger_config": {"from": ["new_unread"]},
                     "conditions": [],
                     "condition_logic": "AND",
-                    "actions": [{"type": "add_note", "content": "Hi"}],
+                    "actions": [{"action_type": "add_note", "content": "Hi"}],
                     "is_global": False,
                     "organization_id": str(test_org.id),
                     "usage_count": 0,
@@ -513,6 +517,12 @@ class TestAdminImports:
         assert form.updated_by_user_id == test_user.id
         assert form.purpose == "other"
         assert form.lead_kind == "sperm_donor"
+        assert (
+            form.routing_exact_match,
+            form.routing_no_match,
+            form.routing_lead_source,
+            form.routing_auto_create_donor,
+        ) == ("review", "off", "form_embed", False)
 
         pipeline = db.query(Pipeline).filter(Pipeline.id == donor_pipeline_id).one()
         assert pipeline.entity_type == "sperm_donor"

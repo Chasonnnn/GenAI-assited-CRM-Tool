@@ -39,7 +39,7 @@ async def test_module_donor_defaults_create_donor(authed_client, db, test_org, k
     )
     assert (
         db.query(AutomationWorkflow)
-        .filter_by(organization_id=test_org.id, system_key=f"shared_intake_routing:{form_id}")
+        .filter_by(organization_id=test_org.id, system_key=f"custom_notice:{form_id}")
         .count()
         == 0
     )
@@ -75,12 +75,12 @@ async def test_publish_preserves_existing_workflows(
         db.add(org)
         db.flush()
         org_id = org.id
-    actions = [{"action_type": "auto_match_submission", "requires_approval": True}]
+    actions = [{"action_type": "send_notification", "title": "Notice", "requires_approval": True}]
     conditions = [{"field": "source_mode", "operator": "equals", "value": "shared"}]
     grant = {"authorized_by_user_id": str(test_user.id)}
     workflow = AutomationWorkflow(
         organization_id=org_id,
-        name="Existing routing",
+        name="Existing notification",
         subject_type="form_submission",
         trigger_type="form_submitted",
         trigger_config={"form_id": form_id},
@@ -89,7 +89,7 @@ async def test_publish_preserves_existing_workflows(
         actions=actions,
         is_enabled=enabled,
         scope="org",
-        system_key=f"shared_intake_routing:{form_id}",
+        system_key=f"custom_notice:{form_id}",
         execution_authority=grant,
     )
     db.add(workflow)
@@ -116,10 +116,7 @@ async def test_publish_preserves_existing_workflows(
         k: v for k, v in saved.json().items() if k != "updated_at"
     }
     assert (
-        db.query(AutomationWorkflow)
-        .filter_by(system_key=f"shared_intake_routing:{form_id}")
-        .count()
-        == 1
+        db.query(AutomationWorkflow).filter_by(system_key=f"custom_notice:{form_id}").count() == 1
     )
 
 

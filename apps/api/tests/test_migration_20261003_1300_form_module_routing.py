@@ -14,7 +14,7 @@ PREVIOUS = "20261003_1200_repair_seeded_system_workflows"
 REVISION = "20261003_1300_form_module_routing"
 
 
-def test_upgrade_backfills_kind_defaults_and_enforces_invariants(db_engine):
+def test_upgrade_defaults_invariants_and_downgrade_closes_review_tasks(db_engine):
     with db_engine.connect() as connection:
         transaction = connection.begin()
         config = Config()
@@ -147,6 +147,63 @@ def test_upgrade_backfills_kind_defaults_and_enforces_invariants(db_engine):
                     {"id": submission_id},
                 ).scalar_one()
                 == 0
+            )
+            connection.execute(
+                text("""
+                    INSERT INTO form_submissions
+                        (id, organization_id, form_id, answers_json, match_status, routing_review_step)
+                    VALUES (:id, :org, :form, '{}'::jsonb, 'routing_review', 'match')
+                """),
+                {"id": submission_id, "org": org_id, "form": surrogate_form},
+            )
+            pending_id, in_progress_id, completed_id = uuid4(), uuid4(), uuid4()
+            for task_id, status in (
+                (pending_id, "pending"),
+                (completed_id, "completed"),
+            ):
+                connection.execute(insert_task, {**params, "id": task_id, "status": status})
+            # A second submission exercises in-progress reviews without violating the open-task index.
+            second_submission = uuid4()
+            connection.execute(
+                text("""
+                    INSERT INTO form_submissions (id, organization_id, form_id, answers_json)
+                    VALUES (:id, :org, :form, '{}'::jsonb)
+                """),
+                {"id": second_submission, "org": org_id, "form": surrogate_form},
+            )
+            connection.execute(
+                insert_task,
+                {
+                    **params,
+                    "id": in_progress_id,
+                    "submission": second_submission,
+                    "status": "in_progress",
+                },
+            )
+            command.downgrade(config, PREVIOUS)
+            for task_id in (pending_id, in_progress_id):
+                row = connection.execute(
+                    text("""
+                        SELECT status, is_completed, completed_at IS NOT NULL,
+                            CAST(completed_by_user_id AS text) FROM tasks
+                        WHERE id = :id AND organization_id = :org
+                    """),
+                    {"id": task_id, "org": org_id},
+                ).one()
+                assert tuple(row) == (
+                    "completed",
+                    True,
+                    True,
+                    "00000000-0000-0000-0000-000000000001",
+                )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT completed_at FROM tasks WHERE id = :id AND organization_id = :org"
+                    ),
+                    {"id": completed_id, "org": org_id},
+                ).scalar_one()
+                is None
             )
         finally:
             transaction.rollback()

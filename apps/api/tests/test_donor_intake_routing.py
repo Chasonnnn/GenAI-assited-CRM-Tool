@@ -191,6 +191,40 @@ async def test_donor_creation_waits_for_clean_scan_and_queues_once(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("step", ["match", "create_lead"])
+async def test_infected_photo_supersedes_routing_review(
+    authed_client, db, test_org, donor_storage, step
+):
+    from app.core.constants import SYSTEM_USER_ID
+    from app.db.models import Form, Task
+    from app.services import donor_intake_service, form_routing_service, form_submission_service
+
+    form_id, slug = await _create_donor_form(authed_client)
+    form = db.get(Form, uuid.UUID(form_id))
+    form.routing_exact_match = "review" if step == "match" else "auto"
+    form.routing_no_match = "review"
+    form.routing_auto_create_donor = False
+    db.commit()
+    response = await _submit_donor_form(authed_client, slug=slug, email="scan-review@example.com")
+    assert response.status_code == 200, response.text
+    submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
+    assert submission.routing_review_step == step
+    photo = db.query(FormSubmissionFile).filter_by(submission_id=submission.id).one()
+    form_submission_service.mark_submission_file_scanned(db, photo.id, "infected")
+    db.commit()
+    form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+    db.refresh(submission)
+    assert submission.routing_review_step is None
+    assert submission.match_status == "ambiguous_review"
+    assert submission.match_reason == donor_intake_service.PHOTO_REVIEW_REASON
+    assert photo.scan_status == "infected" and photo.quarantined
+    review = db.query(Task).filter_by(form_submission_id=submission.id, task_type="review").one()
+    assert review.status == "completed" and review.is_completed
+    assert review.completed_by_user_id == SYSTEM_USER_ID
+    assert not _jobs(db, test_org.id)
+
+
+@pytest.mark.asyncio
 async def test_donor_creation_is_opt_in(authed_client, db, test_org, donor_storage):
     submission = await _submission(authed_client, db)
     form_intake_service.create_intake_lead_for_submission(db, submission=submission, user_id=None)

@@ -95,6 +95,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("""
+        UPDATE tasks t SET status = 'completed', is_completed = true,
+            completed_at = now(),
+            completed_by_user_id = '00000000-0000-0000-0000-000000000001'::uuid
+        FROM form_submissions s
+        WHERE t.form_submission_id = s.id AND t.organization_id = s.organization_id
+          AND t.task_type = 'review' AND t.status IN ('pending', 'in_progress')
+    """)
     op.drop_index("uq_tasks_open_submission_review", table_name="tasks")
     op.drop_index("idx_tasks_form_submission", table_name="tasks")
     op.drop_constraint("fk_tasks_form_submission_org", "tasks", type_="foreignkey")

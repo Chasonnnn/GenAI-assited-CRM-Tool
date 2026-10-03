@@ -483,7 +483,8 @@ async def test_admin_with_edit_donors_can_manage_hosted_donor_form_lifecycle(
         db.query(AutomationWorkflow)
         .filter(
             AutomationWorkflow.organization_id == test_org.id,
-            AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}",
+            AutomationWorkflow.subject_type == "form_submission",
+            AutomationWorkflow.is_system_workflow.is_(True),
         )
         .count()
         == 0

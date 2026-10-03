@@ -67,6 +67,7 @@ from app.db.models import (
     UserPermissionOverride,
     WorkflowTemplate,
 )
+from app.schemas.workflow import validate_workflow_action_types
 from app.services import (
     ai_usage_service,
     analytics_meta_service,
@@ -857,7 +858,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "trigger_config": w.trigger_config,
             "conditions": w.conditions,
             "condition_logic": w.condition_logic,
-            "actions": w.actions,
+            "actions": validate_workflow_action_types(w.actions),
             "is_enabled": w.is_enabled,
             "run_count": w.run_count,
             "last_run_at": w.last_run_at,
@@ -892,14 +893,16 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "status": form.status,
             "purpose": form.purpose,
             "lead_kind": form.lead_kind,
+            "routing_exact_match": form.routing_exact_match,
+            "routing_no_match": form.routing_no_match,
+            "routing_lead_source": form.routing_lead_source,
+            "routing_auto_create_donor": form.routing_auto_create_donor,
             "schema_json": form.schema_json,
             "published_schema_json": form.published_schema_json,
             "max_file_size_bytes": form.max_file_size_bytes,
             "max_file_count": form.max_file_count,
             "allowed_mime_types": form.allowed_mime_types,
-            "default_application_email_template_id": str(
-                form.default_application_email_template_id
-            )
+            "default_application_email_template_id": str(form.default_application_email_template_id)
             if form.default_application_email_template_id
             else None,
             "created_by_user_id": str(form.created_by_user_id) if form.created_by_user_id else None,
@@ -1057,7 +1060,7 @@ def build_org_config_zip(db: Session, org_id: UUID) -> bytes:
             "trigger_config": template.trigger_config,
             "conditions": template.conditions,
             "condition_logic": template.condition_logic,
-            "actions": template.actions,
+            "actions": validate_workflow_action_types(template.actions),
             "is_global": template.is_global,
             "organization_id": str(template.organization_id) if template.organization_id else None,
             "usage_count": template.usage_count,

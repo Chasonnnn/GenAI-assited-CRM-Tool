@@ -68,8 +68,6 @@ def build_action_preview(
 
 
 _STATIC_PREVIEWS = {
-    WorkflowActionType.AUTO_MATCH_SUBMISSION.value: "Match the form submission to an existing record",
-    WorkflowActionType.CREATE_INTAKE_LEAD.value: "Create an intake lead from the form submission",
     "promote_intake_lead": "Promote the intake lead to a case",
 }
 

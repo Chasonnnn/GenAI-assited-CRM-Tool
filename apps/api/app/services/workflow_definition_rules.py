@@ -13,37 +13,6 @@ from app.schemas.workflow import (
     TaskDueTriggerConfig,
 )
 
-
-def normalize_actions_for_trigger(
-    trigger_type: WorkflowTriggerType,
-    actions: list[dict],
-) -> list[dict]:
-    """Normalize workflow actions for trigger-specific rules."""
-    normalized = [dict(action) for action in actions]
-    if trigger_type != WorkflowTriggerType.FORM_SUBMITTED:
-        return normalized
-
-    auto_match_indices = [
-        idx
-        for idx, action in enumerate(normalized)
-        if action.get("action_type") == "auto_match_submission"
-    ]
-    create_lead_indices = [
-        idx
-        for idx, action in enumerate(normalized)
-        if action.get("action_type") == "create_intake_lead"
-    ]
-    if auto_match_indices and create_lead_indices:
-        first_match_idx = auto_match_indices[0]
-        first_create_idx = create_lead_indices[0]
-        if first_match_idx > first_create_idx:
-            raise ValueError(
-                "For form_submitted workflows, auto_match_submission must be placed before create_intake_lead"
-            )
-
-    return normalized
-
-
 RETIRED_TRIGGER_TYPES = frozenset({WorkflowTriggerType.FORM_STARTED})
 APPOINTMENT_TRIGGER_TYPES = frozenset(
     {

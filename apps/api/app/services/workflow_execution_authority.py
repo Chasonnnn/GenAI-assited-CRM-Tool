@@ -21,8 +21,6 @@ from app.db.models import (
 from app.schemas.auth import UserSession
 from app.services import permission_policy_service, permission_service
 
-SHARED_INTAKE_ROUTING_AUTHORIZER = "system:shared_intake_routing"
-
 
 class WorkflowAuthorityError(ValueError):
     """An actor or execution no longer has authority for the requested action."""
@@ -155,18 +153,14 @@ def action_permissions(db: Session, workflow: AutomationWorkflow, action: dict) 
         pass
     elif action_type == "send_zapier_conversion_event":
         keys.add("manage_integrations")
-    elif action_type in {"promote_intake_lead", "auto_match_submission", "create_intake_lead"}:
+    elif action_type == "promote_intake_lead":
         modules = (
             {"surrogates", "donors"} if effective_subject == DONOR_PERMISSION_CONTEXT else {module}
         )
         keys.add("manage_forms")
         for intake_module in modules:
             keys.add(f"view_{intake_module}")
-            creates_record = action_type == "promote_intake_lead" or (
-                action_type == "create_intake_lead"
-                and (intake_module == "surrogates" or action.get("auto_promote") is True)
-            )
-            keys.add(f"{'create' if creates_record else 'edit'}_{intake_module}")
+            keys.add(f"create_{intake_module}")
     else:
         raise WorkflowAuthorityError("Workflow action is not supported")
     return keys
@@ -219,44 +213,6 @@ def grant_is_current(workflow: AutomationWorkflow) -> bool:
         and grant.get("organization_id") == str(workflow.organization_id)
         and grant.get("configuration_digest") == configuration_digest(workflow)
     )
-
-
-def authorize_generated_routing(
-    db: Session,
-    workflow: AutomationWorkflow,
-    publisher_user_id: UUID | None,
-    create_permission: str,
-) -> bool:
-    """Grant a generated shared-intake routing workflow the rights of its fixed actions.
-
-    The caller verifies the workflow holds the exact generated configuration. The
-    publisher must hold ``create_permission`` for the form's record type. A grant that
-    still matches the configuration is kept. Returns True when a new grant is stored.
-    """
-    if (
-        not enabled(db, workflow.organization_id)
-        or workflow.scope != "org"
-        or grant_is_current(workflow)
-    ):
-        return False
-    session = active_session(db, workflow.organization_id, publisher_user_id)
-    if session is None or not has_permissions(db, session, {create_permission}):
-        return False
-    keys: set[str] = set()
-    for action in workflow.actions:
-        keys.update(action_permissions(db, workflow, action))
-    workflow.execution_authority = {
-        "version": 2,
-        "organization_id": str(workflow.organization_id),
-        "configuration_digest": configuration_digest(workflow),
-        "permissions": sorted(keys),
-        "authorized_by": SHARED_INTAKE_ROUTING_AUTHORIZER,
-        "authorized_by_user_id": None,
-        "authorized_at": datetime.now(UTC).isoformat(),
-    }
-    db.flush()
-    audit_configuration(db, workflow, publisher_user_id, "system_authorize")
-    return True
 
 
 def execution_snapshot(db: Session, workflow: AutomationWorkflow) -> dict | None:
@@ -401,53 +357,6 @@ def authorize_action(
             or not required.issubset(set(grant.get("permissions", [])))
         ):
             raise WorkflowAuthorityError("Organization workflow action lacks authorization")
-
-
-def authorize_donor_intake_promotion(db: Session, lead) -> None:
-    """Deferred creation uses its original organization grant, not proposer membership."""
-    if not enabled(db, lead.organization_id):
-        return
-    try:
-        execution_id = UUID(str((lead.source_metadata or {}).get("workflow_execution_id")))
-    except ValueError, TypeError:
-        raise WorkflowAuthorityError(
-            "Donor creation requires a reviewed workflow execution"
-        ) from None
-    execution = (
-        db.query(WorkflowExecution)
-        .filter(
-            WorkflowExecution.id == execution_id,
-            WorkflowExecution.organization_id == lead.organization_id,
-            WorkflowExecution.subject_type == "form_submission",
-            WorkflowExecution.subject_id == lead.form_submission_id,
-        )
-        .first()
-    )
-    workflow = (
-        db.query(AutomationWorkflow)
-        .filter(
-            AutomationWorkflow.id == execution.workflow_id,
-            AutomationWorkflow.organization_id == lead.organization_id,
-            AutomationWorkflow.scope == "org",
-        )
-        .first()
-        if execution
-        else None
-    )
-    if (
-        workflow is None
-        or execution.status in {"canceled", "expired"}
-        or "create_donors" not in (execution.authority_snapshot or {}).get("permissions", [])
-    ):
-        raise WorkflowAuthorityError("Donor creation execution is unavailable")
-    authorize_action(
-        db,
-        workflow,
-        {"action_type": "create_intake_lead", "auto_promote": True},
-        subject_type=execution.subject_type,
-        subject_id=execution.subject_id,
-        snapshot=execution.authority_snapshot,
-    )
 
 
 def authorize_email_job(db: Session, job) -> None:

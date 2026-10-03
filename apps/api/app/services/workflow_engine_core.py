@@ -41,12 +41,6 @@ logger = logging.getLogger(__name__)
 # Maximum recursion depth for workflow-triggered events
 MAX_DEPTH = 3
 FORM_SUBMISSION_ACTION_SNAPSHOT_KEY = "_form_submission_workflow_actions"
-RECOVERABLE_FORM_SUBMISSION_ACTIONS = frozenset(
-    {
-        "auto_match_submission",
-        "create_intake_lead",
-    }
-)
 
 
 class WorkflowEngineCore:
@@ -709,6 +703,7 @@ class WorkflowEngineCore:
                 approval_task = (
                     db.query(Task)
                     .filter(
+                        Task.organization_id == workflow.organization_id,
                         Task.workflow_execution_id == execution.id,
                         Task.workflow_action_index == index,
                         Task.status == TaskStatus.PENDING.value,
@@ -721,37 +716,12 @@ class WorkflowEngineCore:
                     execution.paused_task_id = approval_task.id
                     db.commit()
                 return execution
-            if action.get("action_type") not in RECOVERABLE_FORM_SUBMISSION_ACTIONS:
-                execution.status = WorkflowExecutionStatus.FAILED.value
-                execution.error_message = "Workflow action requires manual recovery review"
-                db.commit()
-                return execution
-
-            result = self._execute_authorized_action(
-                workflow=workflow,
-                execution=execution,
-                db=db,
-                action=action,
-                entity=entity,
-                entity_type=execution.entity_type,
-                event_id=execution.event_id,
-                depth=execution.depth,
-                workflow_scope=workflow.scope,
-                workflow_owner_id=workflow.owner_user_id,
-                workflow_creator_user_id=workflow.created_by_user_id,
-                trigger_callback=self.trigger,
-                workflow_execution_id=execution.id,
-                workflow_action_index=index,
-                subject_type=execution.subject_type,
-                subject_id=execution.subject_id,
-            )
-            if index < len(action_results):
-                action_results[index] = result
-            else:
-                action_results.append(result)
-            execution.actions_executed = action_results
-            execution.status = WorkflowExecutionStatus.RUNNING.value
+            # Record actions and communications may already have taken effect before
+            # the crash; review their outcome before replaying them.
+            execution.status = WorkflowExecutionStatus.FAILED.value
+            execution.error_message = "Workflow action requires manual recovery review"
             db.commit()
+            return execution
 
         all_success = len(action_results) == len(actions_snapshot) and all(
             result.get("success") is True for result in action_results

@@ -1011,35 +1011,39 @@ def reject_submission(
     reviewer_id: uuid.UUID,
     review_notes: str | None,
 ) -> FormSubmission:
+    from app.services import audit_service, form_routing_service
+
+    submission = form_routing_service.lock_submission(db, submission.organization_id, submission.id)
     if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
         raise ValueError("Submission is not pending review")
 
-    submission.status = FormSubmissionStatus.REJECTED.value
-    submission.reviewed_at = datetime.now(UTC)
-    submission.reviewed_by_user_id = reviewer_id
-    submission.review_notes = review_notes
-    _close_rejected_submission_lead(db, submission)
-
-    from app.services import audit_service
-
-    audit_service.log_event(
-        db=db,
-        org_id=submission.organization_id,
-        event_type=AuditEventType.FORM_SUBMISSION_REJECTED,
-        actor_user_id=reviewer_id,
-        target_type="form_submission",
-        target_id=submission.id,
-        details={
-            "form_id": str(submission.form_id),
-            **(
-                {"donor_id": str(submission.donor_id) if submission.donor_id else None}
-                if submission.lead_kind in DONOR_LEAD_KINDS
-                else {"surrogate_id": str(submission.surrogate_id)}
-            ),
-        },
-    )
-
-    db.commit()
+    try:
+        form_routing_service.finish_review(db, submission, reviewer_id)
+        submission.status = FormSubmissionStatus.REJECTED.value
+        submission.reviewed_at = datetime.now(UTC)
+        submission.reviewed_by_user_id = reviewer_id
+        submission.review_notes = review_notes
+        _close_rejected_submission_lead(db, submission)
+        audit_service.log_event(
+            db=db,
+            org_id=submission.organization_id,
+            event_type=AuditEventType.FORM_SUBMISSION_REJECTED,
+            actor_user_id=reviewer_id,
+            target_type="form_submission",
+            target_id=submission.id,
+            details={
+                "form_id": str(submission.form_id),
+                **(
+                    {"donor_id": str(submission.donor_id) if submission.donor_id else None}
+                    if submission.lead_kind in DONOR_LEAD_KINDS
+                    else {"surrogate_id": str(submission.surrogate_id)}
+                ),
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(submission)
     _fire_review_workflows(db, submission, WorkflowTriggerType.FORM_SUBMISSION_REJECTED)
     return submission

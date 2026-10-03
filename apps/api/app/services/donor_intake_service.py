@@ -257,12 +257,17 @@ def apply_linked_photo_after_scan(db: Session, submission: FormSubmission) -> No
 
 def hold_for_photo_review(db: Session, submission: FormSubmission) -> None:
     """An unusable photo keeps the submission out of promotion and lets the applicant retry."""
+    from app.core.constants import SYSTEM_USER_ID
+    from app.services import form_routing_service
+
+    submission = form_routing_service.lock_submission(db, submission.organization_id, submission.id)
     if (
         submission.lead_kind not in {"egg_donor", "sperm_donor"}
         or submission.donor_id
         or submission.status != FormSubmissionStatus.PENDING_REVIEW.value
     ):
         return
+    form_routing_service.finish_review(db, submission, SYSTEM_USER_ID)
     submission.match_status = "ambiguous_review"
     submission.match_reason = PHOTO_REVIEW_REASON
     submission.matched_at = None

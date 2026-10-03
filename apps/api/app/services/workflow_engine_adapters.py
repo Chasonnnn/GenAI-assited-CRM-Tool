@@ -112,10 +112,6 @@ class DefaultWorkflowDomainAdapter:
         WorkflowActionType.ADD_NOTE.value,
     }
     INTAKE_LEAD_ONLY_ACTIONS = {WorkflowActionType.PROMOTE_INTAKE_LEAD.value}
-    FORM_SUBMISSION_ONLY_ACTIONS = {
-        WorkflowActionType.AUTO_MATCH_SUBMISSION.value,
-        WorkflowActionType.CREATE_INTAKE_LEAD.value,
-    }
     DONOR_COMPATIBLE_ACTIONS = {
         WorkflowActionType.SEND_EMAIL.value,
         WorkflowActionType.CREATE_TASK.value,
@@ -689,15 +685,6 @@ class DefaultWorkflowDomainAdapter:
                 }
             )
 
-        if action_type in self.FORM_SUBMISSION_ONLY_ACTIONS and entity_type != "form_submission":
-            return _with_action_type(
-                {
-                    "success": False,
-                    "error": f"Action '{action_type}' only supports form_submission entities",
-                    "skipped": True,
-                }
-            )
-
         try:
             if action_type == WorkflowActionType.SEND_EMAIL.value:
                 result = workflow_communication_actions.send_email(
@@ -802,16 +789,6 @@ class DefaultWorkflowDomainAdapter:
                         if key not in {"is_priority", "assign_to_user"}
                     }
                 result = workflow_intake_actions.promote_intake_lead(db, promote_action, entity)
-                return _with_action_type(result)
-
-            if action_type == WorkflowActionType.AUTO_MATCH_SUBMISSION.value:
-                result = workflow_intake_actions.auto_match_submission(db, entity)
-                return _with_action_type(result)
-
-            if action_type == WorkflowActionType.CREATE_INTAKE_LEAD.value:
-                result = workflow_intake_actions.create_intake_lead(
-                    db, action, entity, workflow_execution_id=workflow_execution_id
-                )
                 return _with_action_type(result)
 
             return _with_action_type(

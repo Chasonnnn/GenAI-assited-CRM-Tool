@@ -1612,6 +1612,24 @@
       "422"
     ]
   },
+  "/forms/submissions/{submission_id}/routing/create-lead": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/routing/dismiss": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/routing/run-match": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/surrogates/{surrogate_id}/application-forms": {
     "GET": [
       "200",
@@ -1697,6 +1715,16 @@
       "422"
     ]
   },
+  "/forms/{form_id}/routing": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/{form_id}/set-default-surrogate-application": {
     "POST": [
       "200",
@@ -1716,6 +1744,12 @@
     ]
   },
   "/forms/{form_id}/surrogates/{surrogate_id}/submission": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/workflows": {
     "GET": [
       "200",
       "422"

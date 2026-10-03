@@ -53,6 +53,8 @@ from app.db.models import (
     UserPermissionOverride,
     WorkflowTemplate,
 )
+from app.schemas.forms import FormRoutingUpdate
+from app.schemas.workflow import validate_workflow_action_types
 from app.services import attachment_service
 from app.services.import_transformers import transform_height_flexible, transform_int_flexible
 from app.utils.height import canonicalize_height_ft
@@ -86,9 +88,7 @@ LEGACY_WORKFLOW_SUBJECT_TYPES = {
     "appointment_time": "appointment",
 }
 
-DONOR_PHOTO_BASE64_FIELD_LIMIT = (
-    (attachment_service.MAX_FILE_SIZE_BYTES + 2) // 3
-) * 4
+DONOR_PHOTO_BASE64_FIELD_LIMIT = ((attachment_service.MAX_FILE_SIZE_BYTES + 2) // 3) * 4
 MAX_DONOR_STATUS_HISTORY_JSON_BYTES = 1_048_576
 MIN_DONOR_NUMBER_VALUE = 10_001
 
@@ -325,6 +325,25 @@ def import_org_config_zip(
         retention_policies_payload = _load_json(archive, "data_retention_policies.json", [])
         legal_holds_payload = _load_json(archive, "legal_holds.json", [])
         org_counters_payload = _load_json(archive, "org_counters.json", [])
+
+    # Refuse invalid archives before any configuration writes.
+    for workflow_data in [*workflows_payload, *workflow_templates_payload]:
+        validate_workflow_action_types(workflow_data.get("actions"))
+        draft = workflow_data.get("draft_config")
+        if isinstance(draft, dict):
+            validate_workflow_action_types(draft.get("actions"))
+
+    for form_data in forms_payload:
+        donor = form_data.get("lead_kind", "surrogate") in {"egg_donor", "sperm_donor"}
+        routing = FormRoutingUpdate(
+            exact_match=form_data.get("routing_exact_match", "auto" if donor else "review"),
+            no_match=form_data.get("routing_no_match", "auto" if donor else "review"),
+            lead_source=form_data.get("routing_lead_source", "website" if donor else None),
+            auto_create_donor=form_data.get("routing_auto_create_donor", donor),
+        )
+        if routing.auto_create_donor and not donor:
+            raise ValueError("Surrogate forms cannot automatically create donors")
+        form_data.update({f"routing_{key}": value for key, value in routing.model_dump().items()})
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
@@ -585,6 +604,16 @@ def import_org_config_zip(
             status=form_data.get("status"),
             purpose=form_data.get("purpose", "surrogate_application"),
             lead_kind=form_data.get("lead_kind", "surrogate"),
+            **{
+                key: form_data[key]
+                for key in (
+                    "routing_exact_match",
+                    "routing_no_match",
+                    "routing_lead_source",
+                    "routing_auto_create_donor",
+                )
+                if key in form_data
+            },
             schema_json=schema_json,
             published_schema_json=published_schema_json,
             max_file_size_bytes=form_data.get("max_file_size_bytes"),
@@ -1179,9 +1208,7 @@ def _restore_donor_profile_photo(
     scan_status = (row.get("profile_photo_scan_status") or "").strip().lower()
     quarantined_value = (row.get("profile_photo_quarantined") or "").strip().lower()
     if scan_status != "clean" or quarantined_value not in {"false", "0", "no", "n"}:
-        raise ValueError(
-            f"Profile photo must be clean and not quarantined for donor {donor.id}"
-        )
+        raise ValueError(f"Profile photo must be clean and not quarantined for donor {donor.id}")
     if expected_size < 0 or expected_size > attachment_service.MAX_FILE_SIZE_BYTES:
         raise ValueError(f"Invalid profile photo size for donor {donor.id}")
     max_encoded_size = ((attachment_service.MAX_FILE_SIZE_BYTES + 2) // 3) * 4

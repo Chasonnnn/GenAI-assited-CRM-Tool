@@ -512,7 +512,8 @@ async def test_publish_form_uses_module_routing_defaults(authed_client, db, test
         db.query(AutomationWorkflow)
         .filter(
             AutomationWorkflow.organization_id == test_org.id,
-            AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}",
+            AutomationWorkflow.subject_type == "form_submission",
+            AutomationWorkflow.is_system_workflow.is_(True),
         )
         .first()
     )
@@ -573,7 +574,8 @@ async def test_publish_form_skips_default_routing_workflow_when_enabled_form_wor
         db.query(AutomationWorkflow)
         .filter(
             AutomationWorkflow.organization_id == test_org.id,
-            AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}",
+            AutomationWorkflow.subject_type == "form_submission",
+            AutomationWorkflow.is_system_workflow.is_(True),
         )
         .first()
     )
