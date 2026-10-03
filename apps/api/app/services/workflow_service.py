@@ -61,9 +61,6 @@ from app.services.workflow_definition_rules import (
     appointment_record_type,
 )
 from app.services.workflow_definition_rules import (
-    normalize_actions_for_trigger as _normalize_actions_for_trigger,
-)
-from app.services.workflow_definition_rules import (
     validate_trigger_config as _validate_trigger_config,
 )
 from app.services.workflow_email_provider import validate_email_provider

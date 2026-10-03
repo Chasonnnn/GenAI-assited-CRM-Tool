@@ -14,6 +14,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -183,6 +184,11 @@ async def replace_bindings(
     destinations = [item for item in items if item.is_active and item.write_bookings]
     if len(destinations) > 1:
         raise CalendarBindingError("Select at most one active booking destination")
+    if any(
+        discovered[item.calendar_id]["access_role"] not in {"owner", "writer"}
+        for item in destinations
+    ):
+        raise CalendarBindingError("Select a writable Google Calendar booking destination")
 
     existing = {
         row.calendar_id: row
@@ -468,6 +474,63 @@ def list_visible_projection_events(
     return True, events
 
 
+def _binding_sync_key(org_id: UUID, binding_id: UUID, now: datetime) -> str:
+    bucket = int(now.timestamp()) // (5 * 60)
+    return f"google-calendar-binding:{org_id}:{binding_id}:{bucket}"
+
+
+def queue_user_binding_sync(db: Session, *, org_id: UUID, user_id: UUID) -> int:
+    """Atomically queue new work while accepting exact current-window duplicates."""
+    from app.db.enums import JobStatus, JobType
+    from app.services import job_service
+
+    now = datetime.now(UTC)
+    queued = 0
+    try:
+        targets = [
+            binding.id
+            for binding in list_bindings(db, org_id=org_id, user_id=user_id)
+            if binding.is_active
+        ]
+        for binding_id in targets:
+            key = _binding_sync_key(org_id, binding_id, now)
+            try:
+                with db.begin_nested():
+                    enqueue_binding_sync(
+                        db, binding_id=binding_id, org_id=org_id, commit=False, now=now
+                    )
+                queued += 1
+            except IntegrityError as exc:
+                if (
+                    getattr(exc.orig, "sqlstate", None) != "23505"
+                    or getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+                    != "uq_job_idempotency"
+                ):
+                    raise
+                existing = job_service.get_job_by_idempotency_key(
+                    db, org_id=org_id, idempotency_key=key
+                )
+                if (
+                    existing is None
+                    or existing.job_type != JobType.GOOGLE_CALENDAR_SYNC.value
+                    or (existing.payload or {}).get("binding_id") != str(binding_id)
+                ):
+                    raise
+                if existing.status not in {
+                    JobStatus.PENDING.value,
+                    JobStatus.RUNNING.value,
+                    JobStatus.COMPLETED.value,
+                }:
+                    raise CalendarBindingError(
+                        "Previous Google Calendar synchronization failed; try again in five minutes"
+                    ) from None
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return queued
+
+
 def enqueue_binding_sync(
     db: Session,
     *,
@@ -480,13 +543,12 @@ def enqueue_binding_sync(
     from app.db.enums import JobType
     from app.services import job_service
 
-    bucket = int((now or datetime.now(UTC)).timestamp()) // (5 * 60)
     return job_service.enqueue_job(
         db,
         org_id=org_id,
         job_type=JobType.GOOGLE_CALENDAR_SYNC,
         payload={"binding_id": str(binding_id), "source": "calendar_binding_v2"},
-        idempotency_key=f"google-calendar-binding:{org_id}:{binding_id}:{bucket}",
+        idempotency_key=_binding_sync_key(org_id, binding_id, now or datetime.now(UTC)),
         commit=commit,
     )
 

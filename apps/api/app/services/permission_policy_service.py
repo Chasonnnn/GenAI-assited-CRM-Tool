@@ -382,17 +382,22 @@ def get_execution_review(db: Session, org_id: UUID) -> list[dict]:
 
 
 def _apply_role_changes(db: Session, org_id: UUID, changes: dict[str, dict[str, bool]]) -> None:
-    for role, permissions in changes.items():
-        if role in PROTECTED_ROLES:
-            continue
-        rows = {
-            row.permission: row
-            for row in db.query(RolePermission)
-            .filter(RolePermission.organization_id == org_id, RolePermission.role == role)
-            .all()
-        }
+    mutable_roles = [role for role in changes if role not in PROTECTED_ROLES]
+    if not mutable_roles:
+        return
+    existing = {
+        (row.role, row.permission): row
+        for row in db.query(RolePermission)
+        .filter(
+            RolePermission.organization_id == org_id,
+            RolePermission.role.in_(mutable_roles),
+        )
+        .all()
+    }
+    for role in mutable_roles:
+        permissions = changes[role]
         for permission, granted in permissions.items():
-            row = rows.get(permission)
+            row = existing.get((role, permission))
             if row:
                 row.is_granted = granted
                 row.updated_at = datetime.now(UTC)
@@ -465,22 +470,28 @@ def activate(
         )
         .all()
     )
-    for grant in legacy_grants:
-        for key in MATCH_ACTION_PERMISSIONS:
-            existing = (
-                db.query(UserPermissionOverride)
-                .filter_by(organization_id=org_id, user_id=grant.user_id, permission=key)
-                .first()
+    if legacy_grants:
+        user_ids = {grant.user_id for grant in legacy_grants}
+        existing = set(
+            db.query(UserPermissionOverride.user_id, UserPermissionOverride.permission)
+            .filter(
+                UserPermissionOverride.organization_id == org_id,
+                UserPermissionOverride.user_id.in_(user_ids),
+                UserPermissionOverride.permission.in_(MATCH_ACTION_PERMISSIONS),
             )
-            if existing is None:
-                db.add(
-                    UserPermissionOverride(
-                        organization_id=org_id,
-                        user_id=grant.user_id,
-                        permission=key,
-                        override_type="grant",
+            .all()
+        )
+        for user_id in user_ids:
+            for key in MATCH_ACTION_PERMISSIONS:
+                if (user_id, key) not in existing:
+                    db.add(
+                        UserPermissionOverride(
+                            organization_id=org_id,
+                            user_id=user_id,
+                            permission=key,
+                            override_type="grant",
+                        )
                     )
-                )
     policy = db.get(OrganizationPermissionPolicy, org_id)
     if policy is None:
         policy = OrganizationPermissionPolicy(organization_id=org_id, configuration_revision=1)

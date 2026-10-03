@@ -1,12 +1,14 @@
 "use client"
 
-import { useId, useState, type FormEvent } from "react"
+import { useId, useState, type FormEvent, type ReactNode } from "react"
 import {
     AlertTriangleIcon,
     CheckCircle2Icon,
+    ChevronRightIcon,
+    CircleDashedIcon,
+    CircleMinusIcon,
+    CircleXIcon,
     Loader2Icon,
-    MessageSquareTextIcon,
-    RefreshCwIcon,
     ShieldCheckIcon,
 } from "lucide-react"
 
@@ -15,24 +17,28 @@ import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { CopyField } from "@/components/ui/copy-field"
+import { EmptyValue } from "@/components/ui/empty-value"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
+import { SaveBar } from "@/components/ui/save-bar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
-import { toastClearanceRef } from "@/components/ui/toast-clearance"
 import { useAuth } from "@/lib/auth-context"
 import { getErrorMessage } from "@/lib/error-utils"
 import type {
     TwilioCredentialTestRequest,
     TwilioMessagingPurpose,
     TwilioReadiness,
+    TwilioReadinessGate,
+    TwilioReadinessGateStatus,
     TwilioReadinessStatus,
+    TwilioRouteReadiness,
     TwilioRouteSettings,
     TwilioRouteSettingsUpdate,
     TwilioSettings,
@@ -40,6 +46,8 @@ import type {
 } from "@/lib/api/twilio"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import {
+    readinessPollInterval,
+    useQueueTwilioReadinessCheck,
     useTestTwilioCredentials,
     useTwilioReadiness,
     useTwilioSettings,
@@ -52,6 +60,11 @@ const ROUTE_LABELS: Record<TwilioMessagingPurpose, string> = {
     promotional: "Promotional route",
 }
 
+const ROUTE_PREFIX: Record<TwilioMessagingPurpose, string> = {
+    operational: "Operational",
+    promotional: "Promotional",
+}
+
 const READINESS_LABELS: Record<TwilioReadinessStatus, string> = {
     ready: "Ready",
     degraded: "Needs attention",
@@ -59,6 +72,18 @@ const READINESS_LABELS: Record<TwilioReadinessStatus, string> = {
     not_configured: "Not configured",
     action_required: "Action required",
     unknown: "Unknown",
+}
+
+const GATE_LABELS: Record<TwilioReadinessGateStatus, string> = {
+    pass: "Ready",
+    fail: "Blocked",
+    pending: "Check required",
+    skipped: "Not required",
+}
+
+const SENDER_TYPE_LABELS: Record<string, string> = {
+    toll_free: "Toll-free",
+    "10dlc": "10DLC",
 }
 
 type ClearableCredential =
@@ -98,6 +123,15 @@ interface SettingsDraft {
     routes: Record<TwilioMessagingPurpose, RouteDraft>
 }
 
+type EditableSection = "credentials" | "operational" | "promotional" | "consent"
+
+const NO_SECTIONS_EDITING: Record<EditableSection, boolean> = {
+    credentials: false,
+    operational: false,
+    promotional: false,
+    consent: false,
+}
+
 function valueOrNull(value: string) {
     const trimmed = value.trim()
     return trimmed.length > 0 ? trimmed : null
@@ -113,6 +147,10 @@ function initialRouteDraft(settings: TwilioRouteSettings): RouteDraft {
     }
 }
 
+function initialCredentialDraft(): CredentialDraft {
+    return { accountSid: "", apiKeySid: "", apiSecret: "", authToken: "" }
+}
+
 function initialDraft(settings: TwilioSettings): SettingsDraft {
     return {
         enabled: settings.enabled,
@@ -125,12 +163,7 @@ function initialDraft(settings: TwilioSettings): SettingsDraft {
         expectedFrequency: settings.expected_frequency ?? "",
         complianceToolkitEnabled: settings.compliance_toolkit_enabled,
         phiEnabled: settings.phi_enabled,
-        credentials: {
-            accountSid: "",
-            apiKeySid: "",
-            apiSecret: "",
-            authToken: "",
-        },
+        credentials: initialCredentialDraft(),
         clearCredentials: {
             account_sid: false,
             api_key_sid: false,
@@ -142,6 +175,11 @@ function initialDraft(settings: TwilioSettings): SettingsDraft {
             promotional: initialRouteDraft(settings.routes.promotional),
         },
     }
+}
+
+/** Both objects are built by the same constructors, so key order is stable. */
+function isDraftDirty(draft: SettingsDraft, settings: TwilioSettings) {
+    return JSON.stringify(draft) !== JSON.stringify(initialDraft(settings))
 }
 
 function friendlyStatus(value: string | null | undefined) {
@@ -163,19 +201,23 @@ function friendlyStatus(value: string | null | undefined) {
         unconfigured: "Not configured",
         unavailable: "Unavailable",
         unknown: "Unknown",
+        verified: "Verified",
     }
     return normalized ? labels[normalized] ?? "Needs review" : "Not configured"
 }
 
 function statusClasses(status: string | null | undefined) {
-    const normalized = status?.toLowerCase()
-    if (["ready", "active", "approved", "enabled", "enforced"].includes(normalized ?? "")) {
-        return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+    const normalized = status?.toLowerCase() ?? ""
+    if (["ready", "active", "approved", "enabled", "enforced", "verified", "available", "pass"].includes(normalized)) {
+        return "border-success/30 bg-success/10 text-success"
     }
-    if (["blocked", "failed", "rejected", "action_required"].includes(normalized ?? "")) {
+    if (["blocked", "failed", "rejected", "action_required", "fail"].includes(normalized)) {
         return "border-destructive/30 bg-destructive/10 text-destructive"
     }
-    return "border-amber-500/30 bg-amber-500/10 text-amber-700"
+    if (["skipped", "not_configured", "unconfigured"].includes(normalized)) {
+        return "border-border bg-muted text-muted-foreground"
+    }
+    return "border-warning/30 bg-warning/10 text-warning"
 }
 
 function StatusBadge({ status, label }: { status: string; label?: string }) {
@@ -193,111 +235,135 @@ function formatEvidenceDate(value: string | null) {
     return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`
 }
 
+function formatDateOnly(value: string | null) {
+    if (!value) return null
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return "Recorded"
+    return date.toISOString().slice(0, 10)
+}
+
 function LoadingState() {
     return (
         <div className="mx-auto max-w-7xl space-y-6 p-6" aria-label="Loading messaging settings">
-            <Skeleton className="h-12 w-full max-w-lg" />
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-40 w-full" />
             <div className="grid gap-4 lg:grid-cols-2">
                 <Skeleton className="h-64" />
                 <Skeleton className="h-64" />
             </div>
-            <Skeleton className="h-96" />
         </div>
     )
 }
 
+function SummaryItem({
+    label,
+    children,
+    mono = false,
+    className,
+}: {
+    label: string
+    children: ReactNode
+    mono?: boolean
+    className?: string
+}) {
+    return (
+        <div className={cn("min-w-0 space-y-0.5", className)}>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className={cn("flex flex-wrap items-center gap-2 text-sm font-medium break-words", mono && "font-mono text-xs")}>
+                {children}
+            </dd>
+        </div>
+    )
+}
+
+function GateIcon({ status }: { status: TwilioReadinessGateStatus }) {
+    if (status === "pass") return <CheckCircle2Icon className="size-4 text-success" aria-hidden="true" />
+    if (status === "fail") return <CircleXIcon className="size-4 text-destructive" aria-hidden="true" />
+    if (status === "pending") return <CircleDashedIcon className="size-4 text-warning" aria-hidden="true" />
+    return <CircleMinusIcon className="size-4 text-muted-foreground" aria-hidden="true" />
+}
+
 function CapabilityLine({ label, available }: { label: string; available: boolean }) {
     return (
-        <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2">
+        <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/20 px-3 py-2">
             <span className="text-sm font-medium">{label}</span>
             <StatusBadge status={available ? "ready" : "blocked"} label={available ? "Available" : "Unavailable"} />
         </div>
     )
 }
 
-function ReadinessSummary({ readiness }: { readiness: TwilioReadiness }) {
-    return (
-        <div className="grid gap-4 lg:grid-cols-2">
-            <Card role="region" aria-label="Provider readiness">
-                <CardHeader className="pb-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <CardTitle className="text-lg">Provider readiness</CardTitle>
-                            <CardDescription>
-                                Live Twilio account and carrier capability evidence.
-                            </CardDescription>
-                        </div>
-                        <StatusBadge
-                            status={readiness.provider.status}
-                            label={READINESS_LABELS[readiness.provider.status]}
-                        />
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                    <div className="grid gap-2 sm:grid-cols-2">
-                        <CapabilityLine label="SMS sending" available={readiness.provider.capabilities.send_sms} />
-                        <CapabilityLine label="MMS sending" available={readiness.provider.capabilities.send_mms} />
-                        <CapabilityLine label="SMS receiving" available={readiness.provider.capabilities.receive_sms} />
-                        <CapabilityLine label="MMS receiving" available={readiness.provider.capabilities.receive_mms} />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        Account {friendlyStatus(readiness.provider.account_status).toLowerCase()} · checked {formatEvidenceDate(readiness.provider.checked_at)}
-                    </p>
-                </CardContent>
-            </Card>
-
-            <Card role="region" aria-label="Local delivery operations">
-                <CardHeader className="pb-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <CardTitle className="text-lg">Local delivery operations</CardTitle>
-                            <CardDescription>
-                                Application queue and reconciliation state, independent of Twilio.
-                            </CardDescription>
-                        </div>
-                        <StatusBadge
-                            status={readiness.local.queue.status}
-                            label={READINESS_LABELS[readiness.local.queue.status]}
-                        />
-                    </div>
-                </CardHeader>
-                <CardContent className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-lg border p-4">
-                        <p className="text-sm text-muted-foreground">Delivery queue</p>
-                        <p className="mt-1 text-2xl font-semibold">{readiness.local.queue.queued_count} queued</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            {readiness.local.queue.processing_count} processing · {readiness.local.queue.failed_count} failed
-                        </p>
-                    </div>
-                    <div className="rounded-lg border p-4">
-                        <p className="text-sm text-muted-foreground">Reconciliation</p>
-                        <p className="mt-1 text-2xl font-semibold">
-                            {readiness.local.reconciliation.action_required_count} action required
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                            {readiness.local.reconciliation.unresolved_event_count} unresolved provider events
-                        </p>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+function ReadinessCard({ readiness, checking }: { readiness: TwilioReadiness; checking: boolean }) {
+    const gateDetails = new Set(readiness.gates.map((gate) => gate.detail).filter(Boolean))
+    const remainingIssues = readiness.issues.filter(
+        (issue) => issue.severity !== "info" && !gateDetails.has(issue.message),
     )
-}
+    const checkedLine = checking
+        ? "Checking with Twilio"
+        : readiness.provider.checked_at
+          ? `Checked ${formatEvidenceDate(readiness.provider.checked_at)}`
+          : "Settings changed since the last check"
 
-function ReadinessIssues({ readiness }: { readiness: TwilioReadiness }) {
-    if (readiness.issues.length === 0) return null
     return (
-        <Alert variant={readiness.issues.some((issue) => issue.severity === "error") ? "destructive" : "default"}>
-            <AlertTriangleIcon aria-hidden="true" />
-            <AlertTitle>Messaging readiness needs attention</AlertTitle>
-            <AlertDescription>
-                <ul className="list-disc space-y-1 pl-5">
-                    {readiness.issues.map((issue) => (
-                        <li key={`${issue.code}-${issue.route ?? "organization"}`}>{issue.message}</li>
+        <Card role="region" aria-label="Readiness" className="gap-0 py-0">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b py-4 [.border-b]:pb-4">
+                <CardTitle className="text-lg">Readiness</CardTitle>
+                <p className="text-sm text-muted-foreground" role="status" aria-label="Last readiness check">
+                    {checking ? <Loader2Icon className="mr-1.5 inline size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : null}
+                    {checkedLine}
+                </p>
+            </CardHeader>
+            <CardContent className="grid gap-0 p-0 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                <ul className="divide-y px-6 py-4" aria-label="Launch gates">
+                    {readiness.gates.map((gate) => (
+                        <li key={gate.key} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                            <GateIcon status={gate.status} />
+                            <div className="min-w-0">
+                                <p className="text-sm font-medium">{gate.label}</p>
+                                {gate.detail ? <p className="text-xs text-muted-foreground break-words">{gate.detail}</p> : null}
+                            </div>
+                            <StatusBadge status={gate.status} label={GATE_LABELS[gate.status]} />
+                        </li>
                     ))}
                 </ul>
-            </AlertDescription>
-        </Alert>
+                <div className="space-y-5 border-t px-6 py-4 lg:border-t-0 lg:border-l">
+                    <section aria-label="Capabilities" className="space-y-2">
+                        <h3 className="text-xs font-medium text-muted-foreground">Capabilities</h3>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                            <CapabilityLine label="SMS sending" available={readiness.provider.capabilities.send_sms} />
+                            <CapabilityLine label="SMS receiving" available={readiness.provider.capabilities.receive_sms} />
+                            <CapabilityLine label="MMS sending" available={readiness.provider.capabilities.send_mms} />
+                            <CapabilityLine label="MMS receiving" available={readiness.provider.capabilities.receive_mms} />
+                        </div>
+                    </section>
+                    <section aria-label="Local delivery operations" className="space-y-2">
+                        <h3 className="text-xs font-medium text-muted-foreground">Local operations</h3>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                            <div className="rounded-lg border p-3">
+                                <p className="text-xl font-semibold tabular-nums">{readiness.local.queue.queued_count} queued</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {readiness.local.queue.processing_count} processing · {readiness.local.queue.failed_count} failed
+                                </p>
+                            </div>
+                            <div className="rounded-lg border p-3">
+                                <p className="text-xl font-semibold tabular-nums">
+                                    {readiness.local.reconciliation.action_required_count} action required
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                    {readiness.local.reconciliation.unresolved_event_count} unresolved provider events
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+                    {remainingIssues.length > 0 ? (
+                        <ul className="list-disc space-y-1 pl-5 text-xs text-destructive" aria-label="Other issues">
+                            {remainingIssues.map((issue) => (
+                                <li key={`${issue.code}-${issue.route ?? "organization"}`}>{issue.message}</li>
+                            ))}
+                        </ul>
+                    ) : null}
+                </div>
+            </CardContent>
+        </Card>
     )
 }
 
@@ -341,12 +407,14 @@ function CredentialField({
     onChange: (value: string) => void
     onClearChange: (checked: boolean) => void
 }) {
-    const storedLabel = maskedValue ?? (configured ? "Stored securely" : "Not configured")
+    const stored = Boolean(maskedValue || configured)
     return (
         <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
                 <Label htmlFor={id}>{label}</Label>
-                <span className="font-mono text-xs text-muted-foreground">{storedLabel}</span>
+                {stored ? (
+                    <span className="font-mono text-xs text-muted-foreground">{maskedValue ?? "Stored"}</span>
+                ) : null}
             </div>
             <Input
                 id={id}
@@ -354,15 +422,11 @@ function CredentialField({
                 autoComplete="new-password"
                 value={value}
                 disabled={clearChecked}
-                placeholder={maskedValue || configured ? "Leave blank to keep saved value" : `Enter ${label}`}
+                placeholder={stored ? "Leave blank to keep saved value" : undefined}
                 onChange={(event) => onChange(event.target.value)}
             />
-            {(maskedValue || configured) ? (
-                <ClearStoredValue
-                    label={clearLabel}
-                    checked={clearChecked}
-                    onCheckedChange={onClearChange}
-                />
+            {stored ? (
+                <ClearStoredValue label={clearLabel} checked={clearChecked} onCheckedChange={onClearChange} />
             ) : null}
         </div>
     )
@@ -379,99 +443,416 @@ function WebhookValue({ label, value }: { label: string; value: string }) {
     )
 }
 
-function RouteConfiguration({
+function SectionActions({ children }: { children: ReactNode }) {
+    return <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>
+}
+
+function ConnectionCard({
+    settings,
+    draft,
+    gate,
+    editing,
+    credentialResult,
+    isTesting,
+    onEditingChange,
+    onEnabledChange,
+    onCredentialChange,
+    onCredentialClear,
+    onTest,
+}: {
+    settings: TwilioSettings
+    draft: SettingsDraft
+    gate: TwilioReadinessGate | null
+    editing: boolean
+    credentialResult: { valid: boolean; message: string } | null
+    isTesting: boolean
+    onEditingChange: (editing: boolean) => void
+    onEnabledChange: (enabled: boolean) => void
+    onCredentialChange: (field: keyof CredentialDraft, value: string) => void
+    onCredentialClear: (field: ClearableCredential, checked: boolean) => void
+    onTest: () => void
+}) {
+    const configured = Boolean(
+        settings.account_sid_masked ||
+            settings.api_key_sid_masked ||
+            settings.api_secret_configured ||
+            settings.auth_token_configured,
+    )
+    const showForm = editing || !configured
+
+    return (
+        <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center gap-3">
+                <CardTitle className="text-lg">Connection</CardTitle>
+                {gate ? <StatusBadge status={gate.status} label={GATE_LABELS[gate.status]} /> : null}
+                <SectionActions>
+                    <Button type="button" variant="outline" size="sm" onClick={onTest} disabled={isTesting}>
+                        {isTesting ? <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <ShieldCheckIcon aria-hidden="true" />}
+                        Test connection
+                    </Button>
+                    {configured ? (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            aria-label={editing ? "Cancel replacing credentials" : "Replace credentials"}
+                            onClick={() => onEditingChange(!editing)}
+                        >
+                            {editing ? "Cancel" : "Replace credentials"}
+                        </Button>
+                    ) : null}
+                </SectionActions>
+            </CardHeader>
+            <CardContent className="space-y-5">
+                <div className="flex items-center justify-between gap-4">
+                    <Label htmlFor="messaging-enabled">Organization messaging</Label>
+                    <Switch id="messaging-enabled" checked={draft.enabled} onCheckedChange={onEnabledChange} />
+                </div>
+                {showForm ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <CredentialField
+                            id="twilio-account-sid"
+                            label="Account SID"
+                            value={draft.credentials.accountSid}
+                            maskedValue={settings.account_sid_masked}
+                            clearLabel="Clear saved Account SID"
+                            clearChecked={draft.clearCredentials.account_sid}
+                            onChange={(value) => onCredentialChange("accountSid", value)}
+                            onClearChange={(checked) => onCredentialClear("account_sid", checked)}
+                        />
+                        <CredentialField
+                            id="twilio-api-key-sid"
+                            label="API Key SID"
+                            value={draft.credentials.apiKeySid}
+                            maskedValue={settings.api_key_sid_masked}
+                            clearLabel="Clear saved API Key SID"
+                            clearChecked={draft.clearCredentials.api_key_sid}
+                            onChange={(value) => onCredentialChange("apiKeySid", value)}
+                            onClearChange={(checked) => onCredentialClear("api_key_sid", checked)}
+                        />
+                        <CredentialField
+                            id="twilio-api-secret"
+                            label="API Secret"
+                            value={draft.credentials.apiSecret}
+                            configured={settings.api_secret_configured}
+                            secret
+                            clearLabel="Clear saved API Secret"
+                            clearChecked={draft.clearCredentials.api_secret}
+                            onChange={(value) => onCredentialChange("apiSecret", value)}
+                            onClearChange={(checked) => onCredentialClear("api_secret", checked)}
+                        />
+                        <CredentialField
+                            id="twilio-auth-token"
+                            label="Auth Token"
+                            value={draft.credentials.authToken}
+                            configured={settings.auth_token_configured}
+                            secret
+                            clearLabel="Clear saved Auth Token"
+                            clearChecked={draft.clearCredentials.auth_token}
+                            onChange={(value) => onCredentialChange("authToken", value)}
+                            onClearChange={(checked) => onCredentialClear("auth_token", checked)}
+                        />
+                    </div>
+                ) : (
+                    <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Saved credentials">
+                        <SummaryItem label="Account SID" mono>{settings.account_sid_masked ?? <EmptyValue label="Not configured" />}</SummaryItem>
+                        <SummaryItem label="API Key SID" mono>{settings.api_key_sid_masked ?? <EmptyValue label="Not configured" />}</SummaryItem>
+                        <SummaryItem label="API Secret">{settings.api_secret_configured ? "Stored" : <EmptyValue label="Not configured" />}</SummaryItem>
+                        <SummaryItem label="Auth Token">{settings.auth_token_configured ? "Stored" : <EmptyValue label="Not configured" />}</SummaryItem>
+                    </dl>
+                )}
+                {credentialResult ? (
+                    <Alert variant={credentialResult.valid ? "default" : "destructive"}>
+                        {credentialResult.valid ? <CheckCircle2Icon aria-hidden="true" /> : <AlertTriangleIcon aria-hidden="true" />}
+                        <AlertTitle>{credentialResult.valid ? "Connection verified" : "Connection failed"}</AlertTitle>
+                        <AlertDescription>{credentialResult.message}</AlertDescription>
+                    </Alert>
+                ) : null}
+            </CardContent>
+        </Card>
+    )
+}
+
+function RouteCard({
     purpose,
     settings,
     draft,
     readiness,
+    gates,
+    editing,
+    onEditingChange,
     onChange,
 }: {
     purpose: TwilioMessagingPurpose
     settings: TwilioRouteSettings
     draft: RouteDraft
-    readiness: TwilioReadiness["provider"]["routes"][TwilioMessagingPurpose] | null
+    readiness: TwilioRouteReadiness | null
+    gates: TwilioReadinessGate[]
+    editing: boolean
+    onEditingChange: (editing: boolean) => void
     onChange: (draft: RouteDraft) => void
 }) {
-    const titlePrefix = purpose === "operational" ? "Operational" : "Promotional"
-    const providerEvidence = (
-        settings.capability_evidence?.provider ?? {}
-    ) as Record<string, unknown>
-    const smsCapable = providerEvidence.sms === true
-    const mmsCapable = providerEvidence.mms === true
+    const prefix = ROUTE_PREFIX[purpose]
+    const configured = Boolean(settings.messaging_service_sid_masked && settings.sender_phone_masked)
+    const gateFor = (suffix: string) => gates.find((gate) => gate.key === `${purpose}_${suffix}`) ?? null
+    const registration = gateFor("sender_registration")
+    const optOut = gateFor("advanced_opt_out")
+    const consentApi = gateFor("consent_api")
+    const providerEvidence = (settings.capability_evidence?.provider ?? {}) as Record<string, unknown>
+    const senderTypeLabel = readiness?.sender_type ? SENDER_TYPE_LABELS[readiness.sender_type] : undefined
 
     return (
         <Card>
-            <CardHeader>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                        <CardTitle className="text-lg">{ROUTE_LABELS[purpose]}</CardTitle>
-                        <CardDescription>
-                            {purpose === "operational"
-                                ? "Service, care-coordination, and one-to-one operational messages."
-                                : "Consent-gated promotional messaging with an independent sender route."}
-                        </CardDescription>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        <StatusBadge status={settings.a2p_status} label={`A2P ${friendlyStatus(settings.a2p_status).toLowerCase()}`} />
-                        <StatusBadge status={settings.advanced_opt_out_status} label={`Opt-out ${friendlyStatus(settings.advanced_opt_out_status).toLowerCase()}`} />
-                    </div>
-                </div>
+            <CardHeader className="flex flex-row flex-wrap items-center gap-3">
+                <CardTitle className="text-lg">{ROUTE_LABELS[purpose]}</CardTitle>
+                {readiness ? (
+                    <StatusBadge status={readiness.status} label={READINESS_LABELS[readiness.status]} />
+                ) : null}
+                {configured ? (
+                    <SectionActions>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            aria-label={`${editing ? "Cancel editing" : "Edit"} ${ROUTE_LABELS[purpose].toLowerCase()}`}
+                            onClick={() => onEditingChange(!editing)}
+                        >
+                            {editing ? "Cancel" : "Edit"}
+                        </Button>
+                    </SectionActions>
+                ) : null}
             </CardHeader>
             <CardContent className="space-y-5">
-                <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/20 p-3">
-                    <div>
-                        <Label htmlFor={`${purpose}-route-enabled`} className="text-sm font-medium">Enable {purpose} route</Label>
-                        <p className="text-xs text-muted-foreground">Sending remains server-gated by consent and readiness.</p>
-                    </div>
+                <div className="flex items-center justify-between gap-4">
+                    <Label htmlFor={`${purpose}-route-enabled`}>Route enabled</Label>
                     <Switch
                         id={`${purpose}-route-enabled`}
+                        aria-label={`${prefix} route enabled`}
                         checked={draft.enabled}
                         onCheckedChange={(enabled) => onChange({ ...draft, enabled })}
                     />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                    <CredentialField
-                        id={`${purpose}-messaging-service-sid`}
-                        label={`${titlePrefix} Messaging Service SID`}
-                        value={draft.messagingServiceSid}
-                        maskedValue={settings.messaging_service_sid_masked}
-                        clearLabel={`Clear saved ${titlePrefix} Messaging Service SID`}
-                        clearChecked={draft.clearMessagingServiceSid}
-                        onChange={(messagingServiceSid) => onChange({ ...draft, messagingServiceSid })}
-                        onClearChange={(clearMessagingServiceSid) => onChange({ ...draft, clearMessagingServiceSid, messagingServiceSid: "" })}
-                    />
-                    <CredentialField
-                        id={`${purpose}-sender-phone`}
-                        label={`${titlePrefix} sender number`}
-                        value={draft.senderPhoneE164}
-                        maskedValue={settings.sender_phone_masked}
-                        clearLabel={`Clear saved ${titlePrefix} sender number`}
-                        clearChecked={draft.clearSenderPhone}
-                        onChange={(senderPhoneE164) => onChange({ ...draft, senderPhoneE164 })}
-                        onClearChange={(clearSenderPhone) => onChange({ ...draft, clearSenderPhone, senderPhoneE164: "" })}
-                    />
-                </div>
+                {editing ? (
+                    <div className="grid gap-4">
+                        <CredentialField
+                            id={`${purpose}-messaging-service-sid`}
+                            label={`${prefix} Messaging Service SID`}
+                            value={draft.messagingServiceSid}
+                            maskedValue={settings.messaging_service_sid_masked}
+                            clearLabel={`Clear saved ${prefix} Messaging Service SID`}
+                            clearChecked={draft.clearMessagingServiceSid}
+                            onChange={(messagingServiceSid) => onChange({ ...draft, messagingServiceSid })}
+                            onClearChange={(clearMessagingServiceSid) => onChange({ ...draft, clearMessagingServiceSid, messagingServiceSid: "" })}
+                        />
+                        <CredentialField
+                            id={`${purpose}-sender-phone`}
+                            label={`${prefix} sender number`}
+                            value={draft.senderPhoneE164}
+                            maskedValue={settings.sender_phone_masked}
+                            clearLabel={`Clear saved ${prefix} sender number`}
+                            clearChecked={draft.clearSenderPhone}
+                            onChange={(senderPhoneE164) => onChange({ ...draft, senderPhoneE164 })}
+                            onClearChange={(clearSenderPhone) => onChange({ ...draft, clearSenderPhone, senderPhoneE164: "" })}
+                        />
+                    </div>
+                ) : configured ? (
+                    <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2" aria-label={`${prefix} route summary`}>
+                        <SummaryItem label="Sender">
+                            {settings.sender_phone_masked}
+                            {senderTypeLabel ? <Badge variant="secondary">{senderTypeLabel}</Badge> : null}
+                        </SummaryItem>
+                        <SummaryItem label="Messaging Service" mono>{settings.messaging_service_sid_masked}</SummaryItem>
+                        <SummaryItem label={registration?.label ?? "Sender registration"}>
+                            {registration ? (
+                                <StatusBadge status={registration.status} label={GATE_LABELS[registration.status]} />
+                            ) : (
+                                friendlyStatus(settings.a2p_status)
+                            )}
+                        </SummaryItem>
+                        <SummaryItem label="Advanced Opt-Out">
+                            {optOut ? (
+                                <StatusBadge status={optOut.status} label={GATE_LABELS[optOut.status]} />
+                            ) : (
+                                friendlyStatus(settings.advanced_opt_out_status)
+                            )}
+                        </SummaryItem>
+                        <SummaryItem label="Consent API">
+                            {consentApi ? (
+                                <StatusBadge status={consentApi.status} label={GATE_LABELS[consentApi.status]} />
+                            ) : (
+                                friendlyStatus(settings.consent_management_status)
+                            )}
+                        </SummaryItem>
+                        <SummaryItem label="Evidence">
+                            <Badge variant="secondary">SMS {providerEvidence.sms === true ? "evidenced" : "not evidenced"}</Badge>
+                            <Badge variant="secondary">MMS {providerEvidence.mms === true ? "evidenced" : "not evidenced"}</Badge>
+                            <Badge variant="secondary">Sender pool {providerEvidence.sender_in_pool === true ? "verified" : "not verified"}</Badge>
+                        </SummaryItem>
+                    </dl>
+                ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                        <span>No sender or Messaging Service saved.</span>
+                        <Button type="button" variant="outline" size="sm" onClick={() => onEditingChange(true)}>
+                            Set up route
+                        </Button>
+                    </div>
+                )}
 
-                <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">A2P campaign</p><p className="mt-1 font-medium">{friendlyStatus(settings.a2p_status)}</p></div>
-                    <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Advanced Opt-Out</p><p className="mt-1 font-medium">{friendlyStatus(settings.advanced_opt_out_status)}</p></div>
-                    <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Consent API</p><p className="mt-1 font-medium">{friendlyStatus(settings.consent_management_status)}</p></div>
-                </div>
+                <Collapsible>
+                    <CollapsibleTrigger className="group/webhooks flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+                        <ChevronRightIcon className="size-4 transition-transform group-data-panel-open/webhooks:rotate-90" aria-hidden="true" />
+                        Webhooks
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-3 pt-3">
+                        <WebhookValue label={`${prefix} inbound webhook URL`} value={settings.inbound_webhook_url} />
+                        <WebhookValue label={`${prefix} status callback URL`} value={settings.status_callback_url} />
+                        <p className="text-xs text-muted-foreground">Webhook route ID: <code>{settings.webhook_id}</code></p>
+                    </CollapsibleContent>
+                </Collapsible>
+            </CardContent>
+        </Card>
+    )
+}
 
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <Badge variant="secondary">SMS {smsCapable ? "evidenced" : "not evidenced"}</Badge>
-                    <Badge variant="secondary">MMS {mmsCapable ? "evidenced" : "not evidenced"}</Badge>
-                    <Badge variant="secondary">Sender pool {providerEvidence.sender_in_pool === true ? "verified" : "not verified"}</Badge>
-                    {readiness ? <StatusBadge status={readiness.status} label={`Route ${READINESS_LABELS[readiness.status].toLowerCase()}`} /> : null}
-                </div>
+type DisclosureField =
+    | "legalMessagingBrand"
+    | "supportContact"
+    | "smsTermsUrl"
+    | "privacyPolicyUrl"
+    | "expectedFrequency"
+    | "operationalDisclosure"
+    | "promotionalDisclosure"
 
-                <Separator />
-                <div className="grid gap-4 xl:grid-cols-2">
-                    <WebhookValue label={`${titlePrefix} inbound webhook URL`} value={settings.inbound_webhook_url} />
-                    <WebhookValue label={`${titlePrefix} status callback URL`} value={settings.status_callback_url} />
+function LinkOrEmpty({ href }: { href: string | null }) {
+    if (!href) return <EmptyValue label="Not set" />
+    return (
+        <a href={href} target="_blank" rel="noreferrer" className="break-all underline underline-offset-4">
+            {href.replace(/^https?:\/\//, "")}
+        </a>
+    )
+}
+
+function ConsentDisclosureCard({
+    settings,
+    draft,
+    editing,
+    onEditingChange,
+    onChange,
+}: {
+    settings: TwilioSettings
+    draft: SettingsDraft
+    editing: boolean
+    onEditingChange: (editing: boolean) => void
+    onChange: (field: DisclosureField, value: string) => void
+}) {
+    return (
+        <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center gap-3">
+                <CardTitle className="text-lg">Consent and disclosure</CardTitle>
+                <SectionActions>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        aria-label={editing ? "Cancel editing consent and disclosure" : "Edit consent and disclosure"}
+                        onClick={() => onEditingChange(!editing)}
+                    >
+                        {editing ? "Cancel" : "Edit"}
+                    </Button>
+                </SectionActions>
+            </CardHeader>
+            <CardContent>
+                {editing ? (
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="legal-messaging-brand">Legal messaging brand</Label>
+                            <Input id="legal-messaging-brand" value={draft.legalMessagingBrand} onChange={(event) => onChange("legalMessagingBrand", event.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="support-contact">Support contact</Label>
+                            <Input id="support-contact" value={draft.supportContact} onChange={(event) => onChange("supportContact", event.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="sms-terms-url">SMS terms URL</Label>
+                            <Input id="sms-terms-url" type="url" value={draft.smsTermsUrl} onChange={(event) => onChange("smsTermsUrl", event.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="privacy-policy-url">Privacy policy URL</Label>
+                            <Input id="privacy-policy-url" type="url" value={draft.privacyPolicyUrl} onChange={(event) => onChange("privacyPolicyUrl", event.target.value)} />
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                            <Label htmlFor="expected-frequency">Expected message frequency</Label>
+                            <Input id="expected-frequency" value={draft.expectedFrequency} onChange={(event) => onChange("expectedFrequency", event.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="operational-disclosure">Operational disclosure</Label>
+                            <Textarea id="operational-disclosure" rows={5} value={draft.operationalDisclosure} onChange={(event) => onChange("operationalDisclosure", event.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="promotional-disclosure">Promotional disclosure</Label>
+                            <Textarea id="promotional-disclosure" rows={5} value={draft.promotionalDisclosure} onChange={(event) => onChange("promotionalDisclosure", event.target.value)} />
+                        </div>
+                    </div>
+                ) : (
+                    <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2" aria-label="Consent record">
+                        <SummaryItem label="Legal messaging brand">{settings.legal_messaging_brand || <EmptyValue label="Not set" />}</SummaryItem>
+                        <SummaryItem label="Support contact">{settings.support_contact || <EmptyValue label="Not set" />}</SummaryItem>
+                        <SummaryItem label="SMS terms"><LinkOrEmpty href={settings.sms_terms_url} /></SummaryItem>
+                        <SummaryItem label="Privacy policy"><LinkOrEmpty href={settings.privacy_policy_url} /></SummaryItem>
+                        <SummaryItem label="Expected message frequency" className="sm:col-span-2">{settings.expected_frequency || <EmptyValue label="Not set" />}</SummaryItem>
+                        <SummaryItem label="Operational disclosure" className="sm:col-span-2 [&>dd]:font-normal">{settings.operational_disclosure || <EmptyValue label="Not set" />}</SummaryItem>
+                        <SummaryItem label="Promotional disclosure" className="sm:col-span-2 [&>dd]:font-normal">{settings.promotional_disclosure || <EmptyValue label="Not set" />}</SummaryItem>
+                    </dl>
+                )}
+            </CardContent>
+        </Card>
+    )
+}
+
+function ComplianceControlsCard({
+    settings,
+    draft,
+    onToolkitChange,
+    onPhiChange,
+}: {
+    settings: TwilioSettings
+    draft: SettingsDraft
+    onToolkitChange: (enabled: boolean) => void
+    onPhiChange: (enabled: boolean) => void
+}) {
+    const phiPrerequisitesMet =
+        settings.twilio_edition?.toLowerCase() === "hipaa_eligible" &&
+        Boolean(settings.baa_verified_at) &&
+        Boolean(settings.compliance_approved_at)
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-lg">Compliance</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+                <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <SummaryItem label="Twilio edition" className="rounded-lg border p-3">{friendlyStatus(settings.twilio_edition)}</SummaryItem>
+                    <SummaryItem label="Counsel approval" className="rounded-lg border p-3">{formatDateOnly(settings.counsel_approved_at) ?? <EmptyValue label="Not recorded" />}</SummaryItem>
+                    <SummaryItem label="Compliance approval" className="rounded-lg border p-3">{formatDateOnly(settings.compliance_approved_at) ?? <EmptyValue label="Not recorded" />}</SummaryItem>
+                    <SummaryItem label="BAA verification" className="rounded-lg border p-3">{formatDateOnly(settings.baa_verified_at) ?? <EmptyValue label="Not recorded" />}</SummaryItem>
+                </dl>
+                <div className="grid gap-3 md:grid-cols-2">
+                    <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                        <Label htmlFor="compliance-toolkit-enabled">Compliance toolkit</Label>
+                        <Switch id="compliance-toolkit-enabled" checked={draft.complianceToolkitEnabled} onCheckedChange={onToolkitChange} />
+                    </div>
+                    <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                        <div>
+                            <Label htmlFor="phi-enabled">PHI messaging</Label>
+                            {phiPrerequisitesMet ? null : (
+                                <p className="text-xs text-muted-foreground">Requires a HIPAA-eligible edition, verified BAA, and compliance approval.</p>
+                            )}
+                        </div>
+                        <Switch id="phi-enabled" checked={draft.phiEnabled} disabled={!phiPrerequisitesMet} onCheckedChange={onPhiChange} />
+                    </div>
                 </div>
-                <p className="text-xs text-muted-foreground">Webhook route ID: <code>{settings.webhook_id}</code></p>
             </CardContent>
         </Card>
     )
@@ -526,231 +907,80 @@ function validateDraft(draft: SettingsDraft) {
     return null
 }
 
-function OrganizationConnectionCard({
+function buildCredentialTestRequest(draft: SettingsDraft): TwilioCredentialTestRequest {
+    const request: TwilioCredentialTestRequest = {}
+    if (draft.credentials.accountSid.trim()) request.account_sid = draft.credentials.accountSid.trim()
+    if (draft.credentials.apiKeySid.trim()) request.api_key_sid = draft.credentials.apiKeySid.trim()
+    if (draft.credentials.apiSecret) request.api_secret = draft.credentials.apiSecret
+    if (draft.credentials.authToken) request.auth_token = draft.credentials.authToken
+    const routes: NonNullable<TwilioCredentialTestRequest["routes"]> = {}
+    for (const purpose of ["operational", "promotional"] as const) {
+        const serviceSid = draft.routes[purpose].messagingServiceSid.trim()
+        const sender = draft.routes[purpose].senderPhoneE164.trim()
+        if (serviceSid || sender) {
+            routes[purpose] = {
+                ...(serviceSid ? { messaging_service_sid: serviceSid } : {}),
+                ...(sender ? { sender_phone_e164: sender } : {}),
+            }
+        }
+    }
+    if (Object.keys(routes).length > 0) request.routes = routes
+    return request
+}
+
+function SettingsForm({
     settings,
-    draft,
-    credentialResult,
-    isTesting,
-    onEnabledChange,
-    onCredentialChange,
-    onCredentialClear,
-    onTest,
+    readiness,
+    onSaved,
 }: {
     settings: TwilioSettings
-    draft: SettingsDraft
-    credentialResult: { valid: boolean; message: string } | null
-    isTesting: boolean
-    onEnabledChange: (enabled: boolean) => void
-    onCredentialChange: (field: keyof CredentialDraft, value: string) => void
-    onCredentialClear: (field: ClearableCredential, checked: boolean) => void
-    onTest: () => void
+    readiness: TwilioReadiness | null
+    onSaved: () => void
 }) {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                    <MessageSquareTextIcon className="size-5 text-primary" aria-hidden="true" />
-                    Organization connection
-                </CardTitle>
-                <CardDescription>
-                    Credentials are write-only. Blank fields preserve saved values; clearing requires an explicit choice.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-                <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/20 p-3">
-                    <div>
-                        <Label htmlFor="messaging-enabled" className="text-sm font-medium">Enable organization messaging</Label>
-                        <p className="text-xs text-muted-foreground">Delivery remains blocked unless route, consent, and compliance gates pass.</p>
-                    </div>
-                    <Switch id="messaging-enabled" checked={draft.enabled} onCheckedChange={onEnabledChange} />
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                    <CredentialField
-                        id="twilio-account-sid"
-                        label="Account SID"
-                        value={draft.credentials.accountSid}
-                        maskedValue={settings.account_sid_masked}
-                        clearLabel="Clear saved Account SID"
-                        clearChecked={draft.clearCredentials.account_sid}
-                        onChange={(value) => onCredentialChange("accountSid", value)}
-                        onClearChange={(checked) => onCredentialClear("account_sid", checked)}
-                    />
-                    <CredentialField
-                        id="twilio-api-key-sid"
-                        label="API Key SID"
-                        value={draft.credentials.apiKeySid}
-                        maskedValue={settings.api_key_sid_masked}
-                        clearLabel="Clear saved API Key SID"
-                        clearChecked={draft.clearCredentials.api_key_sid}
-                        onChange={(value) => onCredentialChange("apiKeySid", value)}
-                        onClearChange={(checked) => onCredentialClear("api_key_sid", checked)}
-                    />
-                    <CredentialField
-                        id="twilio-api-secret"
-                        label="API Secret"
-                        value={draft.credentials.apiSecret}
-                        configured={settings.api_secret_configured}
-                        secret
-                        clearLabel="Clear saved API Secret"
-                        clearChecked={draft.clearCredentials.api_secret}
-                        onChange={(value) => onCredentialChange("apiSecret", value)}
-                        onClearChange={(checked) => onCredentialClear("api_secret", checked)}
-                    />
-                    <CredentialField
-                        id="twilio-auth-token"
-                        label="Auth Token"
-                        value={draft.credentials.authToken}
-                        configured={settings.auth_token_configured}
-                        secret
-                        clearLabel="Clear saved Auth Token"
-                        clearChecked={draft.clearCredentials.auth_token}
-                        onChange={(value) => onCredentialChange("authToken", value)}
-                        onClearChange={(checked) => onCredentialClear("auth_token", checked)}
-                    />
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                    <Button type="button" variant="outline" onClick={onTest} disabled={isTesting}>
-                        {isTesting ? <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <ShieldCheckIcon aria-hidden="true" />}
-                        Test connection
-                    </Button>
-                    <p className="text-xs text-muted-foreground">Read-only account verification; this never sends SMS or MMS.</p>
-                </div>
-                {credentialResult ? (
-                    <Alert variant={credentialResult.valid ? "default" : "destructive"}>
-                        {credentialResult.valid ? <CheckCircle2Icon aria-hidden="true" /> : <AlertTriangleIcon aria-hidden="true" />}
-                        <AlertTitle>{credentialResult.valid ? "Connection verified" : "Connection failed"}</AlertTitle>
-                        <AlertDescription>{credentialResult.message}</AlertDescription>
-                    </Alert>
-                ) : null}
-            </CardContent>
-        </Card>
-    )
-}
-
-type DisclosureField =
-    | "legalMessagingBrand"
-    | "supportContact"
-    | "smsTermsUrl"
-    | "privacyPolicyUrl"
-    | "expectedFrequency"
-    | "operationalDisclosure"
-    | "promotionalDisclosure"
-
-function ConsentDisclosureCard({
-    draft,
-    onChange,
-}: {
-    draft: SettingsDraft
-    onChange: (field: DisclosureField, value: string) => void
-}) {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="text-lg">Consent and disclosure record</CardTitle>
-                <CardDescription>
-                    Organization-level language shown wherever SMS consent is collected. Provider opt-out state does not replace local consent evidence.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-                <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                        <Label htmlFor="legal-messaging-brand">Legal messaging brand</Label>
-                        <Input id="legal-messaging-brand" value={draft.legalMessagingBrand} onChange={(event) => onChange("legalMessagingBrand", event.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="support-contact">Support contact</Label>
-                        <Input id="support-contact" value={draft.supportContact} onChange={(event) => onChange("supportContact", event.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="sms-terms-url">SMS terms URL</Label>
-                        <Input id="sms-terms-url" type="url" value={draft.smsTermsUrl} onChange={(event) => onChange("smsTermsUrl", event.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="privacy-policy-url">Privacy policy URL</Label>
-                        <Input id="privacy-policy-url" type="url" value={draft.privacyPolicyUrl} onChange={(event) => onChange("privacyPolicyUrl", event.target.value)} />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                        <Label htmlFor="expected-frequency">Expected message frequency</Label>
-                        <Input id="expected-frequency" value={draft.expectedFrequency} onChange={(event) => onChange("expectedFrequency", event.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="operational-disclosure">Operational disclosure</Label>
-                        <Textarea id="operational-disclosure" rows={5} value={draft.operationalDisclosure} onChange={(event) => onChange("operationalDisclosure", event.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="promotional-disclosure">Promotional disclosure</Label>
-                        <Textarea id="promotional-disclosure" rows={5} value={draft.promotionalDisclosure} onChange={(event) => onChange("promotionalDisclosure", event.target.value)} />
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-    )
-}
-
-function ComplianceControlsCard({
-    settings,
-    draft,
-    onToolkitChange,
-    onPhiChange,
-}: {
-    settings: TwilioSettings
-    draft: SettingsDraft
-    onToolkitChange: (enabled: boolean) => void
-    onPhiChange: (enabled: boolean) => void
-}) {
-    const phiPrerequisitesMet =
-        settings.twilio_edition?.toLowerCase() === "hipaa_eligible" &&
-        Boolean(settings.baa_verified_at) &&
-        Boolean(settings.compliance_approved_at)
-
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="text-lg">Compliance controls</CardTitle>
-                <CardDescription>
-                    Product flags remain subordinate to recorded counsel, compliance, and Twilio account evidence.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Twilio edition</p><p className="mt-1 font-medium">{friendlyStatus(settings.twilio_edition)}</p></div>
-                    <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Counsel approval</p><p className="mt-1 text-sm font-medium">{formatEvidenceDate(settings.counsel_approved_at)}</p></div>
-                    <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Compliance approval</p><p className="mt-1 text-sm font-medium">{formatEvidenceDate(settings.compliance_approved_at)}</p></div>
-                    <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">BAA verification</p><p className="mt-1 text-sm font-medium">{formatEvidenceDate(settings.baa_verified_at)}</p></div>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2">
-                    <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-                        <div><Label htmlFor="compliance-toolkit-enabled">Compliance toolkit</Label><p className="text-xs text-muted-foreground">Require consent and suppression checks before dispatch.</p></div>
-                        <Switch id="compliance-toolkit-enabled" checked={draft.complianceToolkitEnabled} onCheckedChange={onToolkitChange} />
-                    </div>
-                    <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
-                        <div><Label htmlFor="phi-enabled">PHI messaging</Label><p className="text-xs text-muted-foreground">Requires HIPAA edition, verified BAA, and compliance approval.</p></div>
-                        <Switch id="phi-enabled" checked={draft.phiEnabled} disabled={!phiPrerequisitesMet} onCheckedChange={onPhiChange} />
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
-    )
-}
-
-function SettingsSaveBar({ version, isPending }: { version: number; isPending: boolean }) {
-    return (
-        <div ref={toastClearanceRef} className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background/95 p-4 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/85">
-            <p className="text-xs text-muted-foreground">Configuration version {version}</p>
-            <Button type="submit" disabled={isPending}>
-                {isPending ? <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <ShieldCheckIcon aria-hidden="true" />}
-                Save messaging settings
-            </Button>
-        </div>
-    )
-}
-
-function SettingsForm({ settings, readiness }: { settings: TwilioSettings; readiness: TwilioReadiness | null }) {
     const [draft, setDraft] = useState(() => initialDraft(settings))
+    const [editing, setEditing] = useState(NO_SECTIONS_EDITING)
     const [formError, setFormError] = useState<string | null>(null)
     const [credentialResult, setCredentialResult] = useState<{ valid: boolean; message: string } | null>(null)
     const updateSettings = useUpdateTwilioSettings()
     const testCredentials = useTestTwilioCredentials()
+    const gates = readiness?.gates ?? []
+    const dirty = isDraftDirty(draft, settings)
+
+    const setSectionEditing = (section: EditableSection, value: boolean) => {
+        setEditing((current) => ({ ...current, [section]: value }))
+        if (value) return
+        // Leaving edit mode drops unsaved edits for that section only.
+        setDraft((current) => {
+            if (section === "credentials") {
+                return {
+                    ...current,
+                    credentials: initialCredentialDraft(),
+                    clearCredentials: { account_sid: false, api_key_sid: false, api_secret: false, auth_token: false },
+                }
+            }
+            if (section === "consent") {
+                const fresh = initialDraft(settings)
+                return {
+                    ...current,
+                    legalMessagingBrand: fresh.legalMessagingBrand,
+                    supportContact: fresh.supportContact,
+                    smsTermsUrl: fresh.smsTermsUrl,
+                    privacyPolicyUrl: fresh.privacyPolicyUrl,
+                    expectedFrequency: fresh.expectedFrequency,
+                    operationalDisclosure: fresh.operationalDisclosure,
+                    promotionalDisclosure: fresh.promotionalDisclosure,
+                }
+            }
+            return {
+                ...current,
+                routes: {
+                    ...current.routes,
+                    [section]: { ...initialRouteDraft(settings.routes[section]), enabled: current.routes[section].enabled },
+                },
+            }
+        })
+    }
+
     const changeCredential = (field: keyof CredentialDraft, value: string) => {
         setCredentialResult(null)
         setDraft((current) => ({
@@ -784,38 +1014,8 @@ function SettingsForm({ settings, readiness }: { settings: TwilioSettings; readi
             setFormError(validationError)
             return
         }
-        const request: TwilioCredentialTestRequest = {}
-        if (draft.credentials.accountSid.trim()) request.account_sid = draft.credentials.accountSid.trim()
-        if (draft.credentials.apiKeySid.trim()) request.api_key_sid = draft.credentials.apiKeySid.trim()
-        if (draft.credentials.apiSecret) request.api_secret = draft.credentials.apiSecret
-        if (draft.credentials.authToken) request.auth_token = draft.credentials.authToken
-        const operationalServiceSid = draft.routes.operational.messagingServiceSid.trim()
-        const promotionalServiceSid = draft.routes.promotional.messagingServiceSid.trim()
-        const operationalSender = draft.routes.operational.senderPhoneE164.trim()
-        const promotionalSender = draft.routes.promotional.senderPhoneE164.trim()
-        if (operationalServiceSid || promotionalServiceSid || operationalSender || promotionalSender) {
-            request.routes = {
-                ...(operationalServiceSid || operationalSender
-                    ? {
-                          operational: {
-                              ...(operationalServiceSid ? { messaging_service_sid: operationalServiceSid } : {}),
-                              ...(operationalSender ? { sender_phone_e164: operationalSender } : {}),
-                          },
-                      }
-                    : {}),
-                ...(promotionalServiceSid || promotionalSender
-                    ? {
-                          promotional: {
-                              ...(promotionalServiceSid ? { messaging_service_sid: promotionalServiceSid } : {}),
-                              ...(promotionalSender ? { sender_phone_e164: promotionalSender } : {}),
-                          },
-                      }
-                    : {}),
-            }
-        }
-
         try {
-            const result = await testCredentials.mutateAsync(request)
+            const result = await testCredentials.mutateAsync(buildCredentialTestRequest(draft))
             if (result.valid) {
                 setCredentialResult({ valid: true, message: "Connection verified. No message was sent." })
                 toast.success("Twilio connection verified")
@@ -830,8 +1030,14 @@ function SettingsForm({ settings, readiness }: { settings: TwilioSettings; readi
         }
     }
 
-    const handleSubmit = async (event: FormEvent) => {
-        event.preventDefault()
+    const discard = () => {
+        setDraft(initialDraft(settings))
+        setEditing(NO_SECTIONS_EDITING)
+        setFormError(null)
+        setCredentialResult(null)
+    }
+
+    const handleSubmit = async () => {
         if (updateSettings.isPending) return
         setFormError(null)
         const validationError = validateDraft(draft)
@@ -863,15 +1069,24 @@ function SettingsForm({ settings, readiness }: { settings: TwilioSettings; readi
         addCredentialValue(update, "auth_token", draft.credentials.authToken, draft.clearCredentials.auth_token)
 
         try {
-            await updateSettings.mutateAsync(update)
+            const saved = await updateSettings.mutateAsync(update)
+            setDraft(initialDraft(saved))
+            setEditing(NO_SECTIONS_EDITING)
+            setCredentialResult(null)
             toast.success("Messaging settings saved")
+            onSaved()
         } catch (error) {
             setFormError(getErrorMessage(error, "Could not save messaging settings."))
         }
     }
 
+    const onSubmit = (event: FormEvent) => {
+        event.preventDefault()
+        void handleSubmit()
+    }
+
     return (
-        <form className="space-y-6" onSubmit={handleSubmit}>
+        <form className="space-y-6" onSubmit={onSubmit}>
             {formError ? (
                 <Alert variant="destructive">
                     <AlertTriangleIcon aria-hidden="true" />
@@ -880,38 +1095,43 @@ function SettingsForm({ settings, readiness }: { settings: TwilioSettings; readi
                 </Alert>
             ) : null}
 
-            <OrganizationConnectionCard
+            <ConnectionCard
                 settings={settings}
                 draft={draft}
+                gate={gates.find((gate) => gate.key === "connection") ?? null}
+                editing={editing.credentials}
                 credentialResult={credentialResult}
                 isTesting={testCredentials.isPending}
+                onEditingChange={(value) => setSectionEditing("credentials", value)}
                 onEnabledChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
                 onCredentialChange={changeCredential}
                 onCredentialClear={changeCredentialClear}
                 onTest={() => void handleTestCredentials()}
             />
 
+            <div className="grid gap-6 xl:grid-cols-2">
+                {(["operational", "promotional"] as const).map((purpose) => (
+                    <RouteCard
+                        key={purpose}
+                        purpose={purpose}
+                        settings={settings.routes[purpose]}
+                        draft={draft.routes[purpose]}
+                        readiness={readiness?.provider.routes[purpose] ?? null}
+                        gates={gates}
+                        editing={editing[purpose]}
+                        onEditingChange={(value) => setSectionEditing(purpose, value)}
+                        onChange={(route) => setDraft((current) => ({ ...current, routes: { ...current.routes, [purpose]: route } }))}
+                    />
+                ))}
+            </div>
+
             <ConsentDisclosureCard
+                settings={settings}
                 draft={draft}
+                editing={editing.consent}
+                onEditingChange={(value) => setSectionEditing("consent", value)}
                 onChange={(field, value) => setDraft((current) => ({ ...current, [field]: value }))}
             />
-
-            <div className="grid gap-6 xl:grid-cols-2">
-                <RouteConfiguration
-                    purpose="operational"
-                    settings={settings.routes.operational}
-                    draft={draft.routes.operational}
-                    readiness={readiness?.provider.routes.operational ?? null}
-                    onChange={(operational) => setDraft((current) => ({ ...current, routes: { ...current.routes, operational } }))}
-                />
-                <RouteConfiguration
-                    purpose="promotional"
-                    settings={settings.routes.promotional}
-                    draft={draft.routes.promotional}
-                    readiness={readiness?.provider.routes.promotional ?? null}
-                    onChange={(promotional) => setDraft((current) => ({ ...current, routes: { ...current.routes, promotional } }))}
-                />
-            </div>
 
             <ComplianceControlsCard
                 settings={settings}
@@ -920,7 +1140,13 @@ function SettingsForm({ settings, readiness }: { settings: TwilioSettings; readi
                 onPhiChange={(phiEnabled) => setDraft((current) => ({ ...current, phiEnabled }))}
             />
 
-            <SettingsSaveBar version={settings.current_version} isPending={updateSettings.isPending} />
+            <SaveBar
+                dirty={dirty}
+                saving={updateSettings.isPending}
+                onSave={() => void handleSubmit()}
+                onDiscard={discard}
+                saveLabel="Save messaging settings"
+            />
         </form>
     )
 }
@@ -932,13 +1158,21 @@ export default function MessagingIntegrationPageClient() {
     const canManageIntegrations =
         isDeveloper ||
         (permissionsQuery.data?.permissions ?? []).includes("manage_integrations")
+    const [awaitingCheckSince, setAwaitingCheckSince] = useState<string | null>(null)
     const settingsQuery = useTwilioSettings(Boolean(user && canManageIntegrations))
-    const readinessQuery = useTwilioReadiness(Boolean(user && canManageIntegrations))
+    const readinessQuery = useTwilioReadiness(Boolean(user && canManageIntegrations), awaitingCheckSince)
+    const queueCheck = useQueueTwilioReadinessCheck()
     const permissionsLoading = Boolean(user && !isDeveloper && permissionsQuery.isLoading)
-    const isRefreshing = settingsQuery.isFetching || readinessQuery.isFetching
+    const checking =
+        queueCheck.isPending || readinessPollInterval(readinessQuery.data, awaitingCheckSince) !== false
 
-    const refresh = () => {
-        void Promise.all([settingsQuery.refetch(), readinessQuery.refetch()])
+    const runReadinessCheck = async () => {
+        try {
+            const response = await queueCheck.mutateAsync()
+            setAwaitingCheckSince(response.queued_at)
+        } catch (error) {
+            toast.error(getErrorMessage(error, "Could not start the readiness check."))
+        }
     }
 
     if (authLoading || permissionsLoading || !user || !canManageIntegrations) {
@@ -975,9 +1209,19 @@ export default function MessagingIntegrationPageClient() {
                     ) : null
                 }
                 actions={
-                    <Button type="button" variant="outline" size="sm" onClick={refresh} disabled={isRefreshing}>
-                        <RefreshCwIcon className={isRefreshing ? "animate-spin motion-reduce:animate-none" : undefined} aria-hidden="true" />
-                        Refresh
+                    <Button
+                        type="button"
+                        variant={readinessQuery.data?.overall_status === "ready" ? "outline" : "default"}
+                        size="sm"
+                        onClick={() => void runReadinessCheck()}
+                        disabled={checking || !settingsQuery.data}
+                    >
+                        {checking ? (
+                            <Loader2Icon className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                        ) : (
+                            <ShieldCheckIcon aria-hidden="true" />
+                        )}
+                        {checking ? "Checking" : "Run readiness check"}
                     </Button>
                 }
             />
@@ -997,15 +1241,12 @@ export default function MessagingIntegrationPageClient() {
                 ) : null}
 
                 {readinessQuery.data ? (
-                    <>
-                        <ReadinessSummary readiness={readinessQuery.data} />
-                        <ReadinessIssues readiness={readinessQuery.data} />
-                    </>
+                    <ReadinessCard readiness={readinessQuery.data} checking={checking} />
                 ) : readinessQuery.isError ? (
                     <Alert>
                         <AlertTriangleIcon aria-hidden="true" />
                         <AlertTitle>Readiness evidence is temporarily unavailable</AlertTitle>
-                        <AlertDescription>Settings remain editable. Refresh before enabling delivery.</AlertDescription>
+                        <AlertDescription>Settings remain editable. Run a readiness check before enabling delivery.</AlertDescription>
                     </Alert>
                 ) : null}
 
@@ -1014,6 +1255,7 @@ export default function MessagingIntegrationPageClient() {
                         key={`twilio-settings-${settingsQuery.data.current_version}`}
                         settings={settingsQuery.data}
                         readiness={readinessQuery.data ?? null}
+                        onSaved={() => setAwaitingCheckSince(null)}
                     />
                 ) : null}
             </main>

@@ -210,12 +210,23 @@ class TwilioReadinessIssue(BaseModel):
     route: MessagingPurpose | None
 
 
+class TwilioReadinessGate(BaseModel):
+    """One launch requirement, projected from the authoritative no-send blockers."""
+
+    key: str
+    label: str
+    status: Literal["pass", "fail", "pending", "skipped"]
+    detail: str | None = None
+    route: MessagingPurpose | None = None
+
+
 class TwilioReadinessResponse(BaseModel):
     overall_status: TwilioReadinessStatus
     checked_at: str | None
     provider: TwilioProviderReadiness
     local: TwilioLocalReadiness
     issues: list[TwilioReadinessIssue]
+    gates: list[TwilioReadinessGate] = Field(default_factory=list)
 
 
 class TwilioReadinessCheckResponse(BaseModel):

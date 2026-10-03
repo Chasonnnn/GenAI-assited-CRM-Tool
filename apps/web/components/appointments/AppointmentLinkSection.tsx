@@ -20,6 +20,7 @@ import type { SurrogateListItem } from "@/lib/types/surrogate"
 type LinkableAppointment = Pick<
     Appointment,
     "id" | "surrogate_id" | "surrogate_number" | "intended_parent_id" | "intended_parent_name"
+    | "donor_id" | "donor_name" | "match_id" | "attempt_id"
 >
 
 function getSurrogateSelectLabel(value: string | null, surrogates: SurrogateListItem[]) {
@@ -59,7 +60,12 @@ export function AppointmentLinkSection({ appointment }: { appointment: LinkableA
     const surrogates = surrogatesData?.items || []
     const intendedParents = ipsData?.items || []
 
-    const hasLink = Boolean(appointment.surrogate_id || appointment.intended_parent_id)
+    const hasLink = Boolean(
+        appointment.surrogate_id || appointment.intended_parent_id || appointment.donor_id
+        || appointment.match_id || appointment.attempt_id
+    )
+    const surrogateLabel = appointment.surrogate_number ? `#${appointment.surrogate_number}` : "Linked surrogate"
+    const intendedParentLabel = appointment.intended_parent_name || "Linked intended parent"
     const isSaving = updateLinkMutation.isPending
 
     const openEditor = () => {
@@ -94,38 +100,54 @@ export function AppointmentLinkSection({ appointment }: { appointment: LinkableA
 
             {!showEditor ? (
                 <div className="space-y-2">
-                    {appointment.surrogate_id && appointment.surrogate_number ? (
+                    {appointment.surrogate_id ? (
                         <div className="flex items-center justify-between rounded-md bg-muted/50 p-2">
                             <span className="text-sm">
                                 <Badge variant="outline" className="mr-2">Surrogate</Badge>
-                                #{appointment.surrogate_number}
+                                {surrogateLabel}
                             </span>
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => updateLinkMutation.mutate({ appointmentId: appointment.id, data: { surrogate_id: null } })}
                                 disabled={isSaving}
-                                aria-label={`Unlink surrogate ${appointment.surrogate_number}`}
+                                aria-label={appointment.surrogate_number ? `Unlink surrogate ${appointment.surrogate_number}` : "Unlink surrogate"}
                             >
                                 <XIcon className="size-4" aria-hidden="true" />
                             </Button>
                         </div>
                     ) : null}
-                    {appointment.intended_parent_id && appointment.intended_parent_name ? (
+                    {appointment.intended_parent_id ? (
                         <div className="flex items-center justify-between rounded-md bg-muted/50 p-2">
                             <span className="text-sm">
                                 <Badge variant="outline" className="mr-2">IP</Badge>
-                                {appointment.intended_parent_name}
+                                {intendedParentLabel}
                             </span>
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => updateLinkMutation.mutate({ appointmentId: appointment.id, data: { intended_parent_id: null } })}
                                 disabled={isSaving}
-                                aria-label={`Unlink intended parent ${appointment.intended_parent_name}`}
+                                aria-label={appointment.intended_parent_name ? `Unlink intended parent ${appointment.intended_parent_name}` : "Unlink intended parent"}
                             >
                                 <XIcon className="size-4" aria-hidden="true" />
                             </Button>
+                        </div>
+                    ) : null}
+                    {appointment.donor_id ? (
+                        <div className="rounded-md bg-muted/50 p-2 text-sm">
+                            <Badge variant="outline" className="mr-2">Donor</Badge>
+                            {appointment.donor_name || "Linked donor"}
+                        </div>
+                    ) : null}
+                    {appointment.match_id ? (
+                        <div className="rounded-md bg-muted/50 p-2 text-sm">
+                            <Badge variant="outline">Match case</Badge>
+                        </div>
+                    ) : null}
+                    {appointment.attempt_id ? (
+                        <div className="rounded-md bg-muted/50 p-2 text-sm">
+                            <Badge variant="outline">Match attempt</Badge>
                         </div>
                     ) : null}
                     {!hasLink && <p className="text-sm text-muted-foreground">Not linked</p>}

@@ -2,7 +2,6 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.encryption import hash_email
@@ -11,69 +10,8 @@ from app.db.models import PipelineStage, Surrogate, SurrogateActivityLog
 from app.services import intelligent_suggestions_service, pipeline_service
 
 
-def _ensure_intelligent_schema(db) -> None:
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS org_intelligent_suggestion_settings (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                organization_id UUID NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
-                enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                new_unread_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                new_unread_business_days INTEGER NOT NULL DEFAULT 1,
-                meeting_outcome_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                meeting_outcome_business_days INTEGER NOT NULL DEFAULT 1,
-                stuck_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                stuck_business_days INTEGER NOT NULL DEFAULT 5,
-                daily_digest_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                digest_hour_local INTEGER NOT NULL DEFAULT 9,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE TABLE IF NOT EXISTS org_intelligent_suggestion_rules (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-                template_key VARCHAR(100) NOT NULL,
-                name VARCHAR(200) NOT NULL,
-                rule_kind VARCHAR(50) NOT NULL CHECK (rule_kind IN ('stage_inactivity', 'meeting_outcome_missing')),
-                stage_slug VARCHAR(100),
-                business_days INTEGER NOT NULL DEFAULT 1 CHECK (business_days BETWEEN 1 AND 60),
-                enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-            )
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            CREATE INDEX IF NOT EXISTS idx_intel_rules_org_enabled
-            ON org_intelligent_suggestion_rules (organization_id, enabled)
-            """
-        )
-    )
-    db.execute(
-        text(
-            """
-            ALTER TABLE user_notification_settings
-            ADD COLUMN IF NOT EXISTS intelligent_suggestion_digest BOOLEAN NOT NULL DEFAULT TRUE
-            """
-        )
-    )
-    db.commit()
-
-
 @pytest.mark.asyncio
 async def test_intelligent_suggestion_settings_defaults_and_update(authed_client, db):
-    _ensure_intelligent_schema(db)
     get_response = await authed_client.get("/settings/intelligent-suggestions")
     assert get_response.status_code == 200, get_response.text
     get_payload = get_response.json()
@@ -107,7 +45,6 @@ async def test_intelligent_suggestion_templates_and_rule_crud(
     db,
     default_stage,
 ):
-    _ensure_intelligent_schema(db)
 
     templates_response = await authed_client.get("/settings/intelligent-suggestions/templates")
     assert templates_response.status_code == 200, templates_response.text
@@ -176,7 +113,6 @@ async def test_intelligent_suggestion_rule_rejects_duplicates(
     db,
     default_stage,
 ):
-    _ensure_intelligent_schema(db)
     payload = {
         "template_key": "stage_followup_custom",
         "name": "Stage check",
@@ -219,7 +155,6 @@ async def test_intelligent_suggestion_rule_rejects_duplicates(
 def test_intelligent_suggestion_duplicate_check_is_org_scoped(db, test_org, default_stage):
     from app.db.models import Organization
 
-    _ensure_intelligent_schema(db)
     other_org = Organization(
         id=uuid.uuid4(),
         name="Other Org",
@@ -265,7 +200,6 @@ async def test_surrogates_dynamic_filter_new_unread_stale(
     default_stage,
     test_user,
 ):
-    _ensure_intelligent_schema(db)
     now = datetime.now(UTC)
 
     stale = Surrogate(
@@ -320,7 +254,6 @@ async def test_surrogates_dynamic_filter_attention_unreached_excludes_recent_act
     default_stage,
     test_user,
 ):
-    _ensure_intelligent_schema(db)
     now = datetime.now(UTC)
 
     stale = Surrogate(
@@ -608,7 +541,6 @@ async def test_intelligent_suggestions_summary_filters_by_cutoff_without_row_loo
     test_user,
     monkeypatch,
 ):
-    _ensure_intelligent_schema(db)
     now = datetime.now(UTC)
     stale = Surrogate(
         id=uuid.uuid4(),
@@ -678,7 +610,6 @@ async def test_intelligent_suggestions_summary_endpoint(
     default_stage,
     test_user,
 ):
-    _ensure_intelligent_schema(db)
     now = datetime.now(UTC)
     stale = Surrogate(
         id=uuid.uuid4(),
