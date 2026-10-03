@@ -251,6 +251,7 @@ export interface BookingCreate {
     request_id?: string;
     override_availability?: boolean;
     override_reason?: string | null;
+    record_token?: string;
 }
 
 export interface PublicAppointmentView {

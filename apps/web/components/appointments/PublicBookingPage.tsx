@@ -923,9 +923,11 @@ function PublicBookingFooter() {
 export function PublicBookingPage({
     publicSlug,
     preview = false,
+    recordToken,
 }: {
     publicSlug: string
     preview?: boolean
+    recordToken?: string | undefined
 }) {
     const isPreview = preview === true
     // State
@@ -1020,6 +1022,7 @@ export function PublicBookingPage({
             ),
             request_id: createSchedulingRequestId(),
             meeting_mode: effectiveMeetingMode,
+            ...(recordToken ? { record_token: recordToken } : {}),
         }
 
         if (isPreview) {
