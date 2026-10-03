@@ -383,6 +383,7 @@ async def process_meta_capi_event(db, job) -> None:
                 db.query(MetaAdAccount)
                 .filter(
                     MetaAdAccount.id == meta_ad.ad_account_id,
+                    MetaAdAccount.organization_id == job.organization_id,
                     MetaAdAccount.is_active.is_(True),
                 )
                 .first()
@@ -424,6 +425,7 @@ async def process_meta_capi_event(db, job) -> None:
     success, error = await meta_capi.send_status_event_for_account(
         meta_lead_id=str(meta_lead_id),
         ad_account=ad_account,
+        db=db,
         surrogate_status=str(surrogate_status),
         meta_status=meta_status,
         email=str(email) if email else None,

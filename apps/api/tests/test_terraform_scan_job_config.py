@@ -97,13 +97,6 @@ def test_worker_workflow_fallbacks_have_explicit_safe_terraform_controls() -> No
     assert "for_each = local.worker_env" in cloudrun
 
 
-def test_cloudbuild_updates_attachment_scan_job_image() -> None:
-    content = _read("cloudbuild/api.yaml")
-    assert "$_ATTACHMENT_SCAN_JOB" in content
-    assert 'gcloud run jobs update "$_ATTACHMENT_SCAN_JOB"' in content
-    assert '--image "$${worker_image_ref}"' in content
-
-
 def test_cloudbuild_updates_compatible_scan_runner_before_claim_producers() -> None:
     content = _read("cloudbuild/api.yaml")
     migration_execute = content.index('gcloud beta run jobs execute "$_MIGRATE_JOB"')

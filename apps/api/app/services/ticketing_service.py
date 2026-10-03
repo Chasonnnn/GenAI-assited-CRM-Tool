@@ -61,7 +61,7 @@ from app.db.models import (
 )
 from app.jobs.utils import mask_email
 from app.services import attachment_service, gmail_service, job_service, oauth_service
-from app.utils.normalization import extract_email_domain, normalize_email
+from app.utils.normalization import escape_like_string, extract_email_domain, normalize_email
 
 logger = logging.getLogger(__name__)
 
@@ -479,12 +479,12 @@ def list_tickets(
         query = query.filter(Ticket.surrogate_link_status != TicketLinkStatus.NEEDS_REVIEW.value)
 
     if q and q.strip():
-        search = f"%{q.strip()}%"
+        search = f"%{escape_like_string(q.strip())}%"
         query = query.filter(
             or_(
-                Ticket.subject.ilike(search),
-                Ticket.requester_email.ilike(search),
-                Ticket.ticket_code.ilike(search),
+                Ticket.subject.ilike(search, escape="\\"),
+                Ticket.requester_email.ilike(search, escape="\\"),
+                Ticket.ticket_code.ilike(search, escape="\\"),
             )
         )
 
@@ -3643,9 +3643,7 @@ def process_occurrence_stitch(db: Session, *, occurrence_id: UUID) -> None:
     content_row = (
         db.query(
             EmailMessageContent,
-            cast(EmailMessageContent.reply_to_emails, ARRAY(Text)).label(
-                "reply_to_emails_text"
-            ),
+            cast(EmailMessageContent.reply_to_emails, ARRAY(Text)).label("reply_to_emails_text"),
         )
         .filter(
             EmailMessageContent.organization_id == org_id,

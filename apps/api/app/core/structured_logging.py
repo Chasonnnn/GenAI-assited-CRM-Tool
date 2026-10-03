@@ -35,6 +35,25 @@ def _header_value(request: Any, name: str) -> str | None:
     return None
 
 
+# Only audited, exact messages may produce detail-specific codes. Unknown details can
+# contain user data regardless of capitalization and must use the HTTP status fallback.
+_STATIC_ERROR_CODES = {
+    "Appointment not found": "appointment_not_found",
+    "Google event changed; review before editing": "google_event_changed_review_before_editing",
+    "Reconnect the appointment owner's Google Calendar": (
+        "reconnect_the_appointment_owner_s_google_calendar"
+    ),
+    "Cannot cancel appointment with status cancelled": "cannot_cancel_appointment_with_status_cancelled",
+}
+
+
+def static_error_code(message: object) -> str | None:
+    """Return an allowlisted code without deriving log content from arbitrary details."""
+    if not isinstance(message, str):
+        return None
+    return _STATIC_ERROR_CODES.get(message)
+
+
 def hash_email_for_log(email: str | None) -> str | None:
     """Return a deterministic hash for email identity in operational logs."""
     normalized = (email or "").strip().lower()

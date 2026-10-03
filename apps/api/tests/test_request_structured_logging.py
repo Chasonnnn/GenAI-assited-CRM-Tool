@@ -4,6 +4,7 @@ import uuid
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.csrf import CSRF_HEADER
 from app.core.deps import COOKIE_NAME, get_db
 from app.core.security import create_session_token
 from app.db.enums import Role
@@ -52,6 +53,7 @@ async def test_api_request_completed_log_has_user_context_without_raw_email(
     assert record.method == "GET"
     assert record.status == 200
     assert isinstance(record.latency_ms, int)
+    assert not hasattr(record, "error_code")
     assert test_user.email not in str(record.__dict__)
 
 
@@ -136,3 +138,86 @@ async def test_permission_denied_log_includes_missing_permission_and_request_con
     assert request_logs[-1].status == 403
     assert request_logs[-1].error_code == "permission_denied"
     assert request_logs[-1].permission == "view_intended_parents"
+
+
+@pytest.mark.parametrize(
+    "message,expected",
+    [
+        (
+            "Google event changed; review before editing",
+            "google_event_changed_review_before_editing",
+        ),
+        (
+            "Reconnect the appointment owner's Google Calendar",
+            "reconnect_the_appointment_owner_s_google_calendar",
+        ),
+        (
+            "Cannot cancel appointment with status cancelled",
+            "cannot_cancel_appointment_with_status_cancelled",
+        ),
+        ("Reason required when moving to Ready to Match", None),
+        ("Invalid email jane.doe@example.com", None),
+        ("Slot 3 is taken", None),
+        ("Surrogate Jane Doe is already matched", None),
+        ({"field": "value"}, None),
+    ],
+)
+def test_static_error_code_logs_only_fixed_messages(message, expected):
+    from app.core.structured_logging import static_error_code
+
+    assert static_error_code(message) == expected
+
+
+@pytest.mark.asyncio
+async def test_client_error_log_records_the_error_code(authed_client, caplog):
+    with caplog.at_level(logging.INFO, logger="app.ops"):
+        response = await authed_client.post(f"/appointments/{uuid.uuid4()}/cancel", json={})
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Appointment not found"}
+    record = _records(caplog, "api_request_completed")[-1]
+    assert record.status == 404
+    assert record.error_code == "appointment_not_found"
+
+
+@pytest.mark.asyncio
+async def test_client_error_log_omits_user_supplied_template_name(authed_client, caplog):
+    template = {
+        "name": "john doe",
+        "subject": "Test subject",
+        "body": "<p>Test body</p>",
+        "scope": "org",
+    }
+    created = await authed_client.post("/email-templates", json=template)
+    assert created.status_code == 201
+
+    with caplog.at_level(logging.INFO, logger="app.ops"):
+        response = await authed_client.post("/email-templates", json=template)
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "An organization template named 'john doe' already exists"}
+    record = _records(caplog, "api_request_completed")[-1]
+    assert record.error_code == "http_409"
+    assert "john doe" not in str(record.json_fields)
+    assert "john_doe" not in str(record.json_fields)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "valid_csrf,expected_status,expected_code",
+    [(True, 422, "http_422"), (False, 403, "http_403")],
+    ids=["request-validation", "csrf-middleware"],
+)
+async def test_client_error_log_falls_back_without_http_exception(
+    authed_client, caplog, valid_csrf, expected_status, expected_code
+):
+    if not valid_csrf:
+        del authed_client.headers[CSRF_HEADER]
+
+    with caplog.at_level(logging.INFO, logger="app.ops"):
+        response = await authed_client.post("/appointments/not-a-uuid/cancel", json={})
+
+    assert response.status_code == expected_status
+    record = _records(caplog, "api_request_completed")[-1]
+    assert record.status == expected_status
+    assert record.error_code == expected_code

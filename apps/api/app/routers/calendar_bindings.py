@@ -108,19 +108,10 @@ def queue_google_calendar_binding_sync(
 ) -> CalendarBindingSyncResponse:
     if not getattr(settings, "SCHEDULING_V2_ENABLED", False):
         raise HTTPException(404, "Scheduling v2 is not enabled")
-    queued = 0
     try:
-        for binding in calendar_binding_service.list_bindings(
+        queued = calendar_binding_service.queue_user_binding_sync(
             db, org_id=session.org_id, user_id=session.user_id
-        ):
-            if not binding.is_active:
-                continue
-            calendar_binding_service.enqueue_binding_sync(
-                db, binding_id=binding.id, org_id=session.org_id, commit=False
-            )
-            queued += 1
-        db.commit()
+        )
     except Exception as exc:
-        db.rollback()
         raise HTTPException(409, "Google Calendar synchronization could not be queued") from exc
     return CalendarBindingSyncResponse(queued=queued)
