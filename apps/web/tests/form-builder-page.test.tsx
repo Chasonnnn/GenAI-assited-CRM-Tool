@@ -659,7 +659,7 @@ describe("FormBuilderPage", () => {
 
         expect(screen.queryByRole("button", { name: /select profile photo field/i })).not.toBeInTheDocument()
 
-        fireEvent.click(screen.getByRole("button", { name: "Browse Fields" }))
+        fireEvent.click(screen.getByRole("button", { name: "Add field" }))
         const fieldDialog = await screen.findByRole("dialog", { name: "Add form fields" })
         expect(within(fieldDialog).getByRole("button", { name: "Donor Details" })).toBeInTheDocument()
         expect(within(fieldDialog).getByRole("button", { name: "Add preset Education field" })).toBeInTheDocument()
@@ -681,7 +681,6 @@ describe("FormBuilderPage", () => {
         expect(screen.getByRole("button", { name: "Add preset Profile Photo field" })).toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Add preset Education field" }))
         fireEvent.click(await screen.findByRole("button", { name: /select education field/i }))
-        fireEvent.click(screen.getByRole("tab", { name: /^advanced$/i }))
         const mappingSection = screen.getByText("Mapping").closest("section")
         const mappingSelect = within(mappingSection as HTMLElement).getByRole("combobox")
         expect(mappingSelect).toHaveTextContent("Education")
@@ -888,9 +887,7 @@ describe("FormBuilderPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
         fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
         fireEvent.click(await screen.findByRole("button", { name: /select email field/i }))
-        fireEvent.click(screen.getByRole("tab", { name: /^advanced$/i }))
-
-        const logicSection = screen.getByText("Logic").closest("section")
+        const logicSection = screen.getByText("Display rule").closest("section")
         expect(logicSection).not.toBeNull()
 
         const displayRuleSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[0]
@@ -929,15 +926,15 @@ describe("FormBuilderPage", () => {
         expect(within(mappingSection as HTMLElement).getByRole("combobox")).not.toHaveTextContent("full_name")
     })
 
-    it("uses a persistent field browser, live edit canvas, and docked settings rail", async () => {
+    it("uses a fields and pages rail, live edit canvas, and a field settings drawer", async () => {
         render(<FormBuilderPage />)
 
-        expect(screen.getByTestId("form-builder-workspace")).toHaveClass("flex-col", "xl:grid")
+        expect(screen.getByTestId("form-builder-workspace")).toHaveClass("flex-col", "lg:grid")
+        expect(screen.getByRole("tab", { name: "Fields" })).toHaveAttribute("aria-selected", "true")
         expect(screen.getByTestId("form-builder-palette")).toBeInTheDocument()
         expect(screen.getByTestId("form-builder-canvas")).toBeInTheDocument()
-        expect(screen.getByTestId("form-builder-page-shell")).toHaveClass("min-h-[58rem]")
-        expect(screen.getByTestId("form-builder-settings")).toHaveClass("xl:min-h-[58rem]", "xl:self-stretch")
-        expect(screen.queryByTestId("form-builder-page-rail")).not.toBeInTheDocument()
+        expect(screen.getByTestId("form-builder-page-shell")).toBeInTheDocument()
+        expect(screen.queryByLabelText(/field title/i)).not.toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
 
@@ -949,7 +946,11 @@ describe("FormBuilderPage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: /select name field/i }))
 
-        expect(await screen.findByRole("tab", { name: /^general$/i })).toBeInTheDocument()
+        const drawer = await screen.findByTestId("form-builder-settings")
+        expect(within(drawer).queryByRole("tab")).not.toBeInTheDocument()
+        expect(within(drawer).getByText("Basics")).toBeInTheDocument()
+        expect(within(drawer).getByText("Display rule")).toBeInTheDocument()
+        expect(within(drawer).getByText("Mapping")).toBeInTheDocument()
         const selectedFieldActions = screen.getByTestId("form-builder-selected-field-actions")
         expect(selectedFieldActions).toHaveClass("gap-1.5", "pointer-events-none")
         expect(selectedFieldActions).not.toHaveClass("rounded-full", "border", "bg-white/95")
@@ -959,8 +960,10 @@ describe("FormBuilderPage", () => {
         expect(screen.getByRole("button", { name: "Delete Name" })).toHaveClass("rounded-full", "border")
         expect(selectedFieldActions.nextElementSibling).not.toHaveClass("pr-24")
         expect(screen.getByTestId("form-builder-selected-field-body")).toHaveClass("pt-3.5")
-        expect(screen.getByRole("tab", { name: /^advanced$/i })).toBeInTheDocument()
         expect(screen.getByLabelText(/field title/i)).toHaveValue("Name")
+
+        fireEvent.click(within(drawer).getByRole("button", { name: "Close field settings" }))
+        expect(screen.queryByLabelText(/field title/i)).not.toBeInTheDocument()
     })
 
     it("adds contextual aria-labels to automation form builder icon buttons", async () => {
@@ -990,17 +993,16 @@ describe("FormBuilderPage", () => {
         expect(updatedInput).toHaveFocus()
     })
 
-    it("returns field settings to General when another field is selected", async () => {
+    it("shows the newly selected field in the settings drawer", async () => {
         render(<FormBuilderPage />)
 
         fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
-        fireEvent.click(await screen.findByRole("tab", { name: "Advanced" }))
-
-        expect(screen.getByRole("tab", { name: "Advanced" })).toHaveAttribute("aria-selected", "true")
+        expect(await screen.findByLabelText(/field title/i)).toHaveValue("Name")
 
         fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
 
-        expect(await screen.findByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true")
+        expect(await screen.findByLabelText(/field title/i)).toHaveValue("Email")
+        expect(screen.getByRole("button", { name: "Delete Email field" })).toBeInTheDocument()
     })
 
     it("keeps the field library in the left sidebar, filters categories, and adds fields with click-to-add", async () => {
@@ -1012,16 +1014,15 @@ describe("FormBuilderPage", () => {
         expect(screen.getByRole("button", { name: "Demographics" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "General" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Choices" })).toBeInTheDocument()
-        expect(screen.getByTestId("form-builder-palette-search")).toHaveClass("rounded-xl")
-        expect(screen.getAllByTestId("form-builder-palette-field-grid")[0]).toHaveClass("grid-cols-4")
+        expect(screen.getAllByTestId("form-builder-palette-field-grid")[0]).toHaveClass("grid-cols-3")
         const nameTile = screen.getByTestId("form-builder-palette-tile-full_name")
-        expect(nameTile).toHaveClass("border-transparent", "items-center", "text-center", "gap-1.5")
-        expect(nameTile.querySelector("span")).toHaveClass("size-12")
-        expect(within(nameTile).getByText("Full Name")).toHaveClass("text-[13px]")
+        expect(within(nameTile).getByText("Full Name")).toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Contacts" })).toHaveAttribute("aria-pressed", "false")
 
         expect(screen.getByRole("button", { name: "Add preset Full Name field" })).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Demographics" }))
+        expect(screen.getByRole("button", { name: "Demographics" })).toHaveAttribute("aria-pressed", "true")
         expect(screen.getByRole("button", { name: "Add preset Date of Birth field" })).toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Add preset Full Name field" })).not.toBeInTheDocument()
 
@@ -1036,10 +1037,15 @@ describe("FormBuilderPage", () => {
         expect(await screen.findByRole("button", { name: /select email field/i })).toBeInTheDocument()
     })
 
-    it("supports page renaming and omits page reorder buttons from the compact page strip", async () => {
+    it("adds pages from the pages tab and renames the active page on the canvas", async () => {
         render(<FormBuilderPage />)
 
+        fireEvent.click(screen.getByRole("tab", { name: /^pages/i }))
         fireEvent.click(screen.getByRole("button", { name: /^add page$/i }))
+        const pageList = screen.getByRole("navigation", { name: "Form pages" })
+        expect(within(pageList).getAllByRole("button")).toHaveLength(2)
+        expect(within(pageList).getAllByRole("button")[1]).toHaveAttribute("aria-current", "page")
+        expect(within(screen.getByTestId("form-builder-canvas")).getByText("Page 2 of 2")).toBeInTheDocument()
 
         expect(screen.queryByLabelText(/^page name$/i)).not.toBeInTheDocument()
 

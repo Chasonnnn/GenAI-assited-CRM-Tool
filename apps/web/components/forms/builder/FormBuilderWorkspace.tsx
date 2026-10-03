@@ -1,14 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { CopyIcon, Layers2Icon, PlusIcon, Settings2Icon, Trash2Icon, XIcon } from "lucide-react"
+import { CopyIcon, PlusIcon, Trash2Icon, XIcon } from "lucide-react"
 
 import { FormBuilderFieldPreview } from "@/components/forms/FormBuilderFieldPreview"
 import { FormBuilderPalette } from "@/components/forms/FormBuilderPalette"
 import { PublicFormFieldRenderer } from "@/components/forms/PublicFormFieldRenderer"
 import { DonorFieldSensitivitySelect } from "@/components/forms/builder/DonorFieldSensitivitySelect"
 import { FieldLibraryDialog } from "@/components/forms/builder/FieldLibraryDialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -98,11 +97,6 @@ type FormBuilderWorkspaceProps = {
     inspectorHeader?: React.ReactNode
 }
 
-type FieldSettingsTabState = {
-    fieldId: string | null
-    tab: string
-}
-
 function buildCanvasField(field: BuilderFormField): FormField {
     return {
         key: field.id,
@@ -162,19 +156,14 @@ const SHOW_IF_OPERATOR_LABELS: Record<NonNullable<BuilderFormField["showIf"]>["o
 
 function InspectorSection({
     title,
-    description,
     children,
 }: {
     title: string
-    description?: string
     children: React.ReactNode
 }) {
     return (
-        <section className="space-y-3 rounded-2xl border border-border/70 bg-background p-4">
-            <div className="space-y-1">
-                <h4 className="text-sm font-semibold text-foreground">{title}</h4>
-                {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
-            </div>
+        <section className="space-y-3 border-b border-border/70 px-5 py-4 last:border-b-0">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
             {children}
         </section>
     )
@@ -214,7 +203,9 @@ function CanvasFieldSurface({
     onSelect,
     onDuplicate,
     onDelete,
+    mappingLabel,
 }: {
+    mappingLabel: string | null
     field: BuilderFormField
     selected: boolean
     isDragging: boolean
@@ -239,10 +230,10 @@ function CanvasFieldSurface({
             {isDragging && showDropIndicator ? <div className="h-1 rounded-full bg-primary" /> : null}
             <div
                 className={cn(
-                    "group relative rounded-[24px] border border-stone-200 bg-white transition-all",
+                    "group relative rounded-lg border-2 transition-colors",
                     selected
-                        ? "border-primary/60 ring-2 ring-primary/15"
-                        : "hover:border-primary/30",
+                        ? "border-primary/70 bg-primary/5"
+                        : "border-transparent hover:border-border",
                 )}
             >
                 <Button unstyled
@@ -306,119 +297,198 @@ function CanvasFieldSurface({
                             />
                         )}
                     </div>
+                    {mappingLabel || field.showIf ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                            {mappingLabel ? (
+                                <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] text-muted-foreground">
+                                    Mapped to {mappingLabel}
+                                </span>
+                            ) : null}
+                            {field.showIf ? (
+                                <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] text-muted-foreground">
+                                    Conditional
+                                </span>
+                            ) : null}
+                        </div>
+                    ) : null}
                 </div>
             </div>
         </div>
     )
 }
 
-function PageStrip({
+function PageList({
+    pages,
+    activePage,
+    onSetActivePage,
+    onAddPage,
+}: {
+    pages: BuilderFormPage[]
+    activePage: number
+    onSetActivePage: (pageId: number) => void
+    onAddPage: () => void
+}) {
+    return (
+        <div className="flex flex-col gap-1 p-3">
+            <nav aria-label="Form pages" className="flex flex-col gap-0.5">
+                {pages.map((page, index) => {
+                    const pageLabel = page.name.trim() || `Page ${index + 1}`
+                    const isActive = page.id === activePage
+
+                    return (
+                        <Button unstyled
+                            key={page.id}
+                            type="button"
+                            aria-current={isActive ? "page" : undefined}
+                            onClick={() => onSetActivePage(page.id)}
+                            className={cn(
+                                "flex h-9 items-center gap-2.5 rounded-md px-2.5 text-left text-sm transition-colors",
+                                isActive
+                                    ? "bg-primary/10 font-medium text-foreground"
+                                    : "text-foreground hover:bg-muted",
+                            )}
+                        >
+                            <span className="w-5 shrink-0 font-mono text-xs text-muted-foreground">
+                                {String(index + 1).padStart(2, "0")}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate">{pageLabel}</span>
+                            <span className="shrink-0 text-xs text-muted-foreground">{page.fields.length}</span>
+                        </Button>
+                    )
+                })}
+            </nav>
+            <Button type="button" variant="ghost" size="sm" className="justify-start" onClick={onAddPage}>
+                <PlusIcon aria-hidden="true" />
+                Add page
+            </Button>
+        </div>
+    )
+}
+
+function WorkspaceRail({
+    leadKind,
+    pages,
+    activePage,
+    fieldLibrarySearch,
+    fieldLibraryCategory,
+    onFieldLibrarySearchChange,
+    onFieldLibraryCategoryChange,
+    onSetActivePage,
+    onAddPage,
+    onInsertField,
+    onFieldDragStart,
+    onFieldDragEnd,
+}: {
+    leadKind: FormLeadKind
+    pages: BuilderFormPage[]
+    activePage: number
+    fieldLibrarySearch: string
+    fieldLibraryCategory: string
+    onFieldLibrarySearchChange: (value: string) => void
+    onFieldLibraryCategoryChange: (value: string) => void
+    onSetActivePage: (pageId: number) => void
+    onAddPage: () => void
+    onInsertField: (field: BuilderPaletteField) => void
+    onFieldDragStart: (field: BuilderPaletteField) => void
+    onFieldDragEnd: () => void
+}) {
+    const [tab, setTab] = React.useState("fields")
+
+    return (
+        <aside
+            data-testid="form-builder-rail"
+            aria-label="Fields and pages"
+            className="flex max-h-[24rem] min-h-0 w-full flex-col border-b border-border bg-card lg:max-h-none lg:border-r lg:border-b-0"
+        >
+            <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
+                <div className="border-b border-border/70 px-3 py-2">
+                    <TabsList aria-label="Builder library" className="grid w-full grid-cols-2">
+                        <TabsTrigger value="fields">Fields</TabsTrigger>
+                        <TabsTrigger value="pages">
+                            Pages
+                            <span className="text-xs text-muted-foreground">{pages.length}</span>
+                        </TabsTrigger>
+                    </TabsList>
+                </div>
+                <TabsContent value="fields" className="mt-0 flex min-h-0 flex-1 flex-col">
+                    <FormBuilderPalette
+                        leadKind={leadKind}
+                        activeCategory={fieldLibraryCategory}
+                        search={fieldLibrarySearch}
+                        onCategoryChange={onFieldLibraryCategoryChange}
+                        onSearchChange={onFieldLibrarySearchChange}
+                        onInsertField={onInsertField}
+                        onFieldDragStart={onFieldDragStart}
+                        onFieldDragEnd={onFieldDragEnd}
+                    />
+                </TabsContent>
+                <TabsContent value="pages" className="mt-0 min-h-0 flex-1 overflow-y-auto">
+                    <PageList
+                        pages={pages}
+                        activePage={activePage}
+                        onSetActivePage={onSetActivePage}
+                        onAddPage={onAddPage}
+                    />
+                </TabsContent>
+            </Tabs>
+        </aside>
+    )
+}
+
+function CanvasPageHeader({
     pages,
     activePage,
     currentPage,
-    onSetActivePage,
-    onAddPage,
-    onDuplicatePage,
     onRenamePage,
+    onDuplicatePage,
     onRequestDeletePage,
-    onOpenFieldLibrary,
 }: {
     pages: BuilderFormPage[]
     activePage: number
     currentPage: BuilderFormPage
-    onSetActivePage: (pageId: number) => void
-    onAddPage: () => void
-    onDuplicatePage: (pageId: number) => void
     onRenamePage: (pageId: number, name: string) => void
+    onDuplicatePage: (pageId: number) => void
     onRequestDeletePage: (pageId: number) => void
-    onOpenFieldLibrary: () => void
 }) {
     const activeIndex = Math.max(0, pages.findIndex((page) => page.id === activePage))
     const currentPageLabel = currentPage.name.trim() || `Page ${activeIndex + 1}`
 
     return (
-        <div className="border-b border-border/70 pb-4">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0 flex-1 space-y-2">
-                    <div role="tablist" aria-label="Form pages" className="flex flex-wrap items-center gap-1.5">
-                        {pages.map((page, index) => {
-                            const pageLabel = page.name.trim() || `Page ${index + 1}`
-                            const isActive = page.id === activePage
-                            const widthStyle = { width: `${Math.max(7, Math.min(pageLabel.length + 2, 22))}ch` }
-
-                            if (isActive) {
-                                return (
-                                    <div
-                                        key={page.id}
-                                        role="tab"
-                                        aria-selected="true"
-                                        aria-label={pageLabel}
-                                        className="rounded-full border border-border bg-background px-3 py-1 shadow-sm"
-                                    >
-                                        <Input
-                                            aria-label="Edit page name"
-                                            value={page.name}
-                                            placeholder={pageLabel}
-                                            onChange={(event) => onRenamePage(page.id, event.target.value)}
-                                            onClick={(event) => event.stopPropagation()}
-                                            style={widthStyle}
-                                            className="h-auto border-0 bg-transparent p-0 text-sm font-medium text-foreground shadow-none focus-visible:ring-0"
-                                        />
-                                    </div>
-                                )
-                            }
-
-                            return (
-                                <Button unstyled
-                                    key={page.id}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected="false"
-                                    aria-label={pageLabel}
-                                    onClick={() => onSetActivePage(page.id)}
-                                    className="rounded-full px-3 py-1 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                >
-                                    {pageLabel}
-                                </Button>
-                            )
-                        })}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        {currentPage.fields.length} {currentPage.fields.length === 1 ? "field" : "fields"} on this page
-                    </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                    <Button type="button" variant="outline" size="sm" className="xl:hidden" onClick={onOpenFieldLibrary}>
-                        <PlusIcon className="mr-2 size-4" />
-                        Browse Fields
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={onAddPage}>
-                        <PlusIcon className="mr-2 size-4" />
-                        Add Page
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onDuplicatePage(activePage)}
-                        aria-label={`Duplicate ${currentPageLabel}`}
-                    >
-                        <CopyIcon className="mr-2 size-4" />
-                        Duplicate
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="destructive-ghost"
-                        size="sm"
-                        onClick={() => onRequestDeletePage(activePage)}
-                        disabled={pages.length === 1}
-                        aria-label={`Delete page ${currentPageLabel}`}
-                    >
-                        <Trash2Icon className="mr-2 size-4" />
-                        Delete page
-                    </Button>
-                </div>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Page {activeIndex + 1} of {pages.length}
+                </p>
+                <Input
+                    aria-label="Edit page name"
+                    value={currentPage.name}
+                    placeholder={currentPageLabel}
+                    onChange={(event) => onRenamePage(currentPage.id, event.target.value)}
+                    className="h-auto border-0 bg-transparent p-0 text-xl font-semibold text-foreground shadow-none focus-visible:ring-0 md:text-xl"
+                />
+            </div>
+            <div className="flex items-center gap-1">
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onDuplicatePage(activePage)}
+                    aria-label={`Duplicate ${currentPageLabel}`}
+                >
+                    <CopyIcon aria-hidden="true" />
+                    Duplicate
+                </Button>
+                <Button
+                    type="button"
+                    variant="destructive-ghost"
+                    size="sm"
+                    onClick={() => onRequestDeletePage(activePage)}
+                    disabled={pages.length === 1}
+                    aria-label={`Delete page ${currentPageLabel}`}
+                >
+                    <Trash2Icon aria-hidden="true" />
+                    Delete page
+                </Button>
             </div>
         </div>
     )
@@ -430,6 +500,8 @@ function EditCanvas({
     publicEyebrow,
     publicTitle,
     publicSubtitle,
+    pageHeader,
+    onOpenFieldLibrary,
     currentPage,
     selectedField,
     isDragging,
@@ -443,12 +515,16 @@ function EditCanvas({
     onSelectField,
     onDuplicateField,
     onDeleteField,
+    mappingLabels,
 }: {
+    mappingLabels: Map<string, string>
     desktopCanvasWidthClass: string
     canvasFrameClass: string
     publicEyebrow: string
     publicTitle: string
     publicSubtitle: string
+    pageHeader: React.ReactNode
+    onOpenFieldLibrary: () => void
     currentPage: BuilderFormPage
     selectedField: string | null
     isDragging: boolean
@@ -468,14 +544,15 @@ function EditCanvas({
     const displaySubtitle = publicSubtitle.trim()
 
     return (
-        <section data-testid="form-builder-canvas" className="min-h-0 min-w-0 overflow-y-auto bg-muted/20 p-4 sm:p-6 xl:p-8">
+        <section data-testid="form-builder-canvas" className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-muted/30 p-4 sm:p-6 xl:p-8">
             <div className="mx-auto flex h-full min-h-full flex-col gap-4">
+                <div className={cn("mx-auto w-full", desktopCanvasWidthClass)}>{pageHeader}</div>
                 <div
                     onDragOver={onCanvasDragOver}
                     onDrop={onDrop}
                     className={cn("mx-auto w-full", desktopCanvasWidthClass)}
                 >
-                    <div data-testid="form-builder-page-shell" className={cn("min-h-[58rem] space-y-6", canvasFrameClass)}>
+                    <div data-testid="form-builder-page-shell" className={cn("space-y-6", canvasFrameClass)}>
                         <div className="space-y-1 border-b border-stone-200/80 pb-4">
                             {displayEyebrow ? (
                                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
@@ -492,13 +569,10 @@ function EditCanvas({
                             ) : null}
                         </div>
 
-                        <div className="space-y-4">
+                        <div className="space-y-2">
                             {currentPage.fields.length === 0 ? (
-                                <div className="rounded-[24px] border border-dashed border-stone-300 bg-stone-50 p-8 text-center">
-                                    <p className="text-base font-semibold text-stone-900">Add fields to this page</p>
-                                    <p className="mt-1.5 text-sm text-stone-500">
-                                        Use the field browser to start this page.
-                                    </p>
+                                <div className="rounded-lg border border-dashed border-border p-8 text-center">
+                                    <p className="text-sm font-medium text-foreground">Add fields to this page</p>
                                 </div>
                             ) : (
                                 <>
@@ -516,11 +590,26 @@ function EditCanvas({
                                             onSelect={onSelectField}
                                             onDuplicate={onDuplicateField}
                                             onDelete={onDeleteField}
+                                            mappingLabel={
+                                                field.surrogateFieldMapping
+                                                    ? mappingLabels.get(field.surrogateFieldMapping) ?? field.surrogateFieldMapping
+                                                    : null
+                                            }
                                         />
                                     ))}
                                     {isDragging && dropIndicatorId === "end" ? <div className="h-1 rounded-full bg-primary" /> : null}
                                 </>
                             )}
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-center border border-dashed border-border text-muted-foreground hover:text-foreground"
+                                onClick={onOpenFieldLibrary}
+                            >
+                                <PlusIcon aria-hidden="true" />
+                                Add field
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -529,70 +618,48 @@ function EditCanvas({
     )
 }
 
-function FieldInspectorEmptyState({
-    currentPage,
-    settingsPanelClass,
-    header,
+const INSPECTOR_PANEL_CLASS =
+    "w-full border-t border-border bg-card lg:min-h-0 lg:overflow-y-auto lg:border-t-0 lg:border-l"
+
+function FieldInspectorHeader({
+    field,
+    onDuplicate,
+    onDelete,
+    onClose,
 }: {
-    currentPage: BuilderFormPage
-    settingsPanelClass: string
-    header?: React.ReactNode
+    field: BuilderFormField
+    onDuplicate: (fieldId: string) => void
+    onDelete: (fieldId: string) => void
+    onClose: () => void
 }) {
-    return (
-        <aside data-testid="form-builder-settings" aria-label="Form builder settings" className={settingsPanelClass}>
-            <div className="flex min-h-full flex-col gap-4">
-                {header}
-                <div className="rounded-2xl border border-border/70 bg-background p-4">
-                    <div className="flex items-start gap-3">
-                        <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                            <Layers2Icon className="size-5" />
-                        </div>
-                        <div className="min-w-0 flex-1 space-y-1">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                                Current page
-                            </p>
-                            <h3 className="text-base font-semibold text-foreground">
-                                {currentPage.name || "Current page"}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                                {currentPage.fields.length} {currentPage.fields.length === 1 ? "field" : "fields"} on this page.
-                            </p>
-                        </div>
-                    </div>
-                </div>
+    const fieldLabel = field.label.trim() || "Untitled"
 
-                <InspectorSection title="Edit guidance" description="Select a field to edit it.">
-                    <p className="text-sm text-muted-foreground">
-                        The canvas shows the live form layout. Field details appear here when selected.
-                    </p>
-                </InspectorSection>
-            </div>
-        </aside>
-    )
-}
-
-function SelectedFieldSummary({ field }: { field: BuilderFormField }) {
     return (
-        <div className="rounded-2xl border border-border/70 bg-background p-4">
-            <div className="flex items-start gap-3">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Settings2Icon className="size-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                        Selected field
-                    </p>
-                    <h3 className="mt-1 truncate text-base font-semibold text-foreground">
-                        {field.label || "Untitled field"}
-                    </h3>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                        <Badge variant="outline">{getBuilderFieldTypeLabel(field.type)}</Badge>
-                        {field.required ? <Badge variant="secondary">Required</Badge> : null}
-                        {field.surrogateFieldMapping ? <Badge variant="secondary">Mapped</Badge> : null}
-                        {field.showIf ? <Badge variant="secondary">Conditional</Badge> : null}
-                    </div>
-                </div>
-            </div>
+        <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-border bg-card px-5 py-3">
+            <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                {getBuilderFieldTypeLabel(field.type)}
+            </h2>
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onDuplicate(field.id)}
+                aria-label={`Duplicate ${fieldLabel} field`}
+            >
+                <CopyIcon aria-hidden="true" />
+            </Button>
+            <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onDelete(field.id)}
+                aria-label={`Delete ${fieldLabel} field`}
+            >
+                <Trash2Icon aria-hidden="true" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close field settings">
+                <XIcon aria-hidden="true" />
+            </Button>
         </div>
     )
 }
@@ -615,9 +682,15 @@ function useFieldInspectorView({
     syncOptionKeys,
     addOption,
     removeOption,
+    onDuplicateField,
+    onDeleteField,
+    onClose,
     header,
 }: {
     header?: React.ReactNode
+    onDuplicateField: (fieldId: string) => void
+    onDeleteField: (fieldId: string) => void
+    onClose: () => void
     leadKind: FormLeadKind
     currentPage: BuilderFormPage
     selectedFieldData: BuilderFormField | null
@@ -648,13 +721,6 @@ function useFieldInspectorView({
     removeOption: (fieldId: string, optionIndex: number) => void
 }) {
     const selectedFieldId = selectedFieldData?.id ?? null
-    const [activeTabState, setActiveTabState] = React.useState<FieldSettingsTabState>(() => ({
-        fieldId: selectedFieldId,
-        tab: "general",
-    }))
-    const activeTab = activeTabState.fieldId === selectedFieldId ? activeTabState.tab : "general"
-    const settingsPanelClass =
-        "w-full border-t border-border/70 bg-card p-4 xl:min-h-[58rem] xl:w-auto xl:self-stretch xl:overflow-y-auto xl:border-t-0 xl:border-l xl:p-6"
     const conditionalFields = currentPage.fields.filter((field) => field.id !== selectedFieldId)
     const fieldLabelMap = new Map(
         conditionalFields.map((field) => [field.id, field.label.trim() || "Untitled field"] as const),
@@ -662,33 +728,26 @@ function useFieldInspectorView({
     const mappingLabelMap = new Map(mappingOptions.map((mapping) => [mapping.value, mapping.label] as const))
 
     if (!selectedFieldData) {
+        // The drawer only opens for publish readiness when no field is selected.
+        if (!header) return null
         return (
-            <FieldInspectorEmptyState
-                currentPage={currentPage}
-                settingsPanelClass={settingsPanelClass}
-                header={header}
-            />
+            <aside data-testid="form-builder-settings" aria-label="Field settings" className={INSPECTOR_PANEL_CLASS}>
+                <div className="p-4">{header}</div>
+            </aside>
         )
     }
 
     return (
-        <aside data-testid="form-builder-settings" aria-label="Form builder settings" className={settingsPanelClass}>
-            <div className="flex min-h-full flex-col gap-4">
-                {header}
-                <SelectedFieldSummary field={selectedFieldData} />
-
-                <Tabs
-                    value={activeTab}
-                    onValueChange={(tab) => setActiveTabState({ fieldId: selectedFieldId, tab })}
-                    className="flex min-h-0 flex-1 flex-col gap-4"
-                >
-                    <TabsList aria-label="Field settings sections" className="grid w-full grid-cols-2 bg-stone-100">
-                        <TabsTrigger value="general">General</TabsTrigger>
-                        <TabsTrigger value="advanced">Advanced</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="general" className="mt-0 space-y-4">
-                        <InspectorSection title="Basics" description="Core copy and visibility for this field.">
+        <aside data-testid="form-builder-settings" aria-label="Field settings" className={INSPECTOR_PANEL_CLASS}>
+            <FieldInspectorHeader
+                field={selectedFieldData}
+                onDuplicate={onDuplicateField}
+                onDelete={onDeleteField}
+                onClose={onClose}
+            />
+            {header ? <div className="border-b border-border/70 p-4">{header}</div> : null}
+            <div>
+                        <InspectorSection title="Basics">
                             <div className="space-y-2">
                                 <Label htmlFor="field-title">Field title</Label>
                                 <Input
@@ -720,7 +779,7 @@ function useFieldInspectorView({
                         </InspectorSection>
 
                         {selectedFieldData.options ? (
-                            <InspectorSection title="Options" description="Manage the answer choices shown to applicants.">
+                            <InspectorSection title="Options">
                                 <div className="space-y-2">
                                     {(() => {
                                         const optionKeys = syncOptionKeys(selectedFieldData.id, selectedFieldData.options.length)
@@ -761,14 +820,7 @@ function useFieldInspectorView({
                         ) : null}
 
                         {selectedFieldData.type === "repeatable_table" || selectedFieldData.type === "table" ? (
-                            <InspectorSection
-                                title="Table setup"
-                                description={
-                                    selectedFieldData.type === "table"
-                                        ? "Define fixed rows and the columns each row should capture."
-                                        : "Define rows and columns for repeatable table capture."
-                                }
-                            >
+                            <InspectorSection title="Table setup">
                                 {selectedFieldData.type === "repeatable_table" ? (
                                     <div className="grid grid-cols-2 gap-2">
                                         <Input
@@ -949,23 +1001,7 @@ function useFieldInspectorView({
                                 </Button>
                             </InspectorSection>
                         ) : null}
-                    </TabsContent>
-
-                    <TabsContent value="advanced" className="mt-0 space-y-4">
-                        <InspectorSection title="Logic" description="Show or hide this field based on earlier answers.">
-                            <div className="flex items-center justify-between">
-                                <Label>Display Rules</Label>
-                                {selectedFieldData.showIf ? (
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => onUpdateField(selectedFieldData.id, { showIf: null })}
-                                    >
-                                        Clear rule
-                                    </Button>
-                                ) : null}
-                            </div>
+                        <InspectorSection title="Display rule">
                             <Select
                                 value={selectedFieldData.showIf?.fieldKey || "none"}
                                 onValueChange={(value) =>
@@ -974,7 +1010,7 @@ function useFieldInspectorView({
                                     })
                                 }
                             >
-                                <SelectTrigger>
+                                <SelectTrigger aria-label="Show when">
                                     <SelectValue placeholder="Show when...">
                                         {(value: string | null) =>
                                             value === "none"
@@ -1081,7 +1117,7 @@ function useFieldInspectorView({
 
                         {["text", "textarea", "email", "phone", "address"].includes(selectedFieldData.type) ||
                         selectedFieldData.type === "number" ? (
-                            <InspectorSection title="Validation" description="Apply limits and patterns for answer quality.">
+                            <InspectorSection title="Validation">
                                 {["text", "textarea", "email", "phone", "address"].includes(selectedFieldData.type) ? (
                                     <>
                                         <div className="grid grid-cols-2 gap-2">
@@ -1149,7 +1185,7 @@ function useFieldInspectorView({
                             onChange={(sensitivity) => onUpdateField(selectedFieldData.id, { sensitivity })}
                         />
 
-                        <InspectorSection title="Mapping" description="Connect this field to a CRM record field.">
+                        <InspectorSection title="Mapping">
                             <Select
                                 value={selectedFieldData.surrogateFieldMapping || "none"}
                                 onValueChange={(value) => onMappingChange(selectedFieldData.id, value)}
@@ -1173,8 +1209,6 @@ function useFieldInspectorView({
                                 </SelectContent>
                             </Select>
                         </InspectorSection>
-                    </TabsContent>
-                </Tabs>
             </div>
         </aside>
     )
@@ -1200,83 +1234,93 @@ export function FormBuilderWorkspace({
     inspectorHeader,
 }: FormBuilderWorkspaceProps) {
     const [fieldLibraryOpen, setFieldLibraryOpen] = React.useState(false)
+    const mappingLabels = React.useMemo(
+        () => new Map(mappingOptions.map((mapping) => [mapping.value, mapping.label] as const)),
+        [mappingOptions],
+    )
+    const drawerOpen = Boolean(document.selectedFieldData || inspectorHeader)
 
     return (
         <div
             data-testid="form-builder-workspace"
-            className="flex min-h-0 flex-1 flex-col overflow-y-auto xl:grid xl:grid-cols-[clamp(21rem,32vw,31rem)_minmax(0,1fr)] xl:overflow-hidden"
+            className={cn(
+                "flex min-h-0 flex-1 flex-col overflow-y-auto lg:grid lg:overflow-hidden",
+                drawerOpen
+                    ? "lg:grid-cols-[17rem_minmax(0,1fr)_22rem]"
+                    : "lg:grid-cols-[17rem_minmax(0,1fr)]",
+            )}
         >
-            <FormBuilderPalette
+            <WorkspaceRail
                 leadKind={leadKind}
-                className="hidden xl:block"
-                activeCategory={fieldLibraryCategory}
-                search={fieldLibrarySearch}
-                onCategoryChange={onFieldLibraryCategoryChange}
-                onSearchChange={onFieldLibrarySearchChange}
+                pages={document.pages}
+                activePage={document.activePage}
+                fieldLibrarySearch={fieldLibrarySearch}
+                fieldLibraryCategory={fieldLibraryCategory}
+                onFieldLibrarySearchChange={onFieldLibrarySearchChange}
+                onFieldLibraryCategoryChange={onFieldLibraryCategoryChange}
+                onSetActivePage={document.setActivePage}
+                onAddPage={document.handleAddPage}
                 onInsertField={document.handleInsertField}
                 onFieldDragStart={document.handleDragStart}
                 onFieldDragEnd={document.handleDragEnd}
             />
 
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <div className="border-b border-border/70 bg-background/95 p-4 supports-[backdrop-filter]:bg-background/60 sm:p-6 xl:p-6 xl:pb-3">
-                    <PageStrip
+            <EditCanvas
+                desktopCanvasWidthClass={desktopCanvasWidthClass}
+                canvasFrameClass={canvasFrameClass}
+                publicEyebrow={publicEyebrow}
+                publicTitle={publicTitle}
+                publicSubtitle={publicSubtitle}
+                pageHeader={
+                    <CanvasPageHeader
                         pages={document.pages}
                         activePage={document.activePage}
                         currentPage={document.currentPage}
-                        onSetActivePage={document.setActivePage}
-                        onAddPage={document.handleAddPage}
-                        onDuplicatePage={document.handleDuplicatePage}
                         onRenamePage={document.handleRenamePage}
+                        onDuplicatePage={document.handleDuplicatePage}
                         onRequestDeletePage={document.requestDeletePage}
-                        onOpenFieldLibrary={() => setFieldLibraryOpen(true)}
                     />
-                </div>
+                }
+                onOpenFieldLibrary={() => setFieldLibraryOpen(true)}
+                mappingLabels={mappingLabels}
+                currentPage={document.currentPage}
+                selectedField={document.selectedField}
+                isDragging={document.isDragging}
+                dropIndicatorId={document.dropIndicatorId}
+                onCanvasDragOver={document.handleCanvasDragOver}
+                onDrop={document.handleDrop}
+                onFieldDragOver={document.handleFieldDragOver}
+                onDropOnField={document.handleDropOnField}
+                onFieldDragStart={document.handleFieldDragStart}
+                onDragEnd={document.handleDragEnd}
+                onSelectField={document.selectField}
+                onDuplicateField={document.handleDuplicateField}
+                onDeleteField={document.handleDeleteField}
+            />
 
-                <div className="flex min-h-0 flex-1 flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_clamp(18rem,23vw,24rem)] xl:items-stretch">
-                    <EditCanvas
-                        desktopCanvasWidthClass={desktopCanvasWidthClass}
-                        canvasFrameClass={canvasFrameClass}
-                        publicEyebrow={publicEyebrow}
-                        publicTitle={publicTitle}
-                        publicSubtitle={publicSubtitle}
-                        currentPage={document.currentPage}
-                        selectedField={document.selectedField}
-                        isDragging={document.isDragging}
-                        dropIndicatorId={document.dropIndicatorId}
-                        onCanvasDragOver={document.handleCanvasDragOver}
-                        onDrop={document.handleDrop}
-                        onFieldDragOver={document.handleFieldDragOver}
-                        onDropOnField={document.handleDropOnField}
-                        onFieldDragStart={document.handleFieldDragStart}
-                        onDragEnd={document.handleDragEnd}
-                        onSelectField={document.selectField}
-                        onDuplicateField={document.handleDuplicateField}
-                        onDeleteField={document.handleDeleteField}
-                    />
-
-                    <FieldInspector
-                        header={inspectorHeader}
-                        leadKind={leadKind}
-                        currentPage={document.currentPage}
-                        selectedFieldData={document.selectedFieldData}
-                        mappingOptions={mappingOptions}
-                        onUpdateField={document.handleUpdateField}
-                        onValidationChange={document.handleValidationChange}
-                        onAddColumn={document.handleAddColumn}
-                        onUpdateColumn={document.handleUpdateColumn}
-                        onRemoveColumn={document.handleRemoveColumn}
-                        onAddRow={document.handleAddRow}
-                        onUpdateRow={document.handleUpdateRow}
-                        onRemoveRow={document.handleRemoveRow}
-                        onShowIfChange={document.handleShowIfChange}
-                        onMappingChange={document.handleMappingChange}
-                        syncOptionKeys={document.syncOptionKeys}
-                        addOption={document.addOption}
-                        removeOption={document.removeOption}
-                    />
-                </div>
-            </div>
+            <FieldInspector
+                header={inspectorHeader}
+                leadKind={leadKind}
+                currentPage={document.currentPage}
+                selectedFieldData={document.selectedFieldData}
+                mappingOptions={mappingOptions}
+                onUpdateField={document.handleUpdateField}
+                onValidationChange={document.handleValidationChange}
+                onAddColumn={document.handleAddColumn}
+                onUpdateColumn={document.handleUpdateColumn}
+                onRemoveColumn={document.handleRemoveColumn}
+                onAddRow={document.handleAddRow}
+                onUpdateRow={document.handleUpdateRow}
+                onRemoveRow={document.handleRemoveRow}
+                onShowIfChange={document.handleShowIfChange}
+                onMappingChange={document.handleMappingChange}
+                syncOptionKeys={document.syncOptionKeys}
+                addOption={document.addOption}
+                removeOption={document.removeOption}
+                onDuplicateField={document.handleDuplicateField}
+                onDeleteField={document.handleDeleteField}
+                onClose={() => document.selectField(null)}
+            />
 
             <FieldLibraryDialog
                 leadKind={leadKind}

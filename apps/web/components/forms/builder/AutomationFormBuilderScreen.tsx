@@ -61,7 +61,7 @@ export function AutomationFormBuilderScreen({
     }
 
     return (
-        <div className="flex min-h-screen flex-col bg-background">
+        <div className="flex min-h-screen flex-col bg-background lg:h-screen">
             <FormBuilderHeader
                 backAriaLabel="Back to forms"
                 formName={controller.state.formName}
@@ -71,6 +71,22 @@ export function AutomationFormBuilderScreen({
                 autoSaveLabel={controller.autoSaveLabel}
                 autoSaveTone={controller.state.autoSaveStatus === "error" ? "error" : "default"}
                 contextBadgeLabel={controller.formLeadKindLabel}
+                navigation={
+                    <FormBuilderWorkspaceTabs
+                        value={controller.state.workspaceTab}
+                        onValueChange={controller.onWorkspaceTabChange}
+                        tabs={[
+                            { value: "edit", label: "Edit" },
+                            { value: "preview", label: "Preview" },
+                            { value: "settings", label: "Settings" },
+                            {
+                                value: "submissions",
+                                label: "Submissions",
+                                badgeCount: controller.submissionsPanelProps.pendingSubmissionHistory.length,
+                            },
+                        ]}
+                    />
+                }
                 onBack={controller.onBack}
                 onFormNameChange={controller.onFormNameChange}
                 onSave={controller.handleSave}
@@ -78,21 +94,6 @@ export function AutomationFormBuilderScreen({
                 saveDisabled={controller.hasPendingSave}
                 publishDisabled={controller.publishDisabled}
                 publishDisabledReason={controller.publishBlockedReason}
-            />
-
-            <FormBuilderWorkspaceTabs
-                value={controller.state.workspaceTab}
-                onValueChange={controller.onWorkspaceTabChange}
-                tabs={[
-                    { value: "edit", label: "Edit" },
-                    { value: "preview", label: "Preview" },
-                    { value: "settings", label: "Settings" },
-                    {
-                        value: "submissions",
-                        label: "Submissions",
-                        badgeCount: controller.submissionsPanelProps.pendingSubmissionHistory.length,
-                    },
-                ]}
             />
 
             {controller.state.workspaceTab === "edit" ? (

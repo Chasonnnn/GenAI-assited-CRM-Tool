@@ -21,9 +21,8 @@ export function FormBuilderWorkspaceTabs({
     onValueChange,
 }: FormBuilderWorkspaceTabsProps) {
     return (
-        <div className="border-b border-border bg-background/95 px-4 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6">
-            <Tabs value={value} onValueChange={onValueChange} className="gap-0">
-                <TabsList aria-label="Workspace sections" className="h-auto flex-wrap gap-1 bg-transparent p-0">
+        <Tabs value={value} onValueChange={onValueChange} className="gap-0">
+            <TabsList aria-label="Workspace sections">
                     {tabs.map((tab) => (
                         <TabsTrigger key={tab.value} value={tab.value} className="flex-none text-sm">
                             {tab.label}
@@ -34,8 +33,7 @@ export function FormBuilderWorkspaceTabs({
                             ) : null}
                         </TabsTrigger>
                     ))}
-                </TabsList>
-            </Tabs>
-        </div>
+            </TabsList>
+        </Tabs>
     )
 }
