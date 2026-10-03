@@ -89,12 +89,13 @@ def test_schedules_one_job_per_org_and_day_only_with_opted_in_members(db, test_u
     assert len(jobs()) == 2
 
 
-def test_digest_lists_open_actions_and_recent_unread_updates(
-    db, test_user, ny_org, platform_sender
-):
+@pytest.mark.usefixtures("platform_sender")
+def test_digest_lists_open_actions_and_recent_unread_updates(db, test_user, ny_org):
     _opt_in(db, test_user, ny_org)
     _notify(db, ny_org.id, test_user.id, NotificationType.ATTACHMENT_INFECTED, "File <quarantined>")
-    _notify(db, ny_org.id, test_user.id, NotificationType.SURROGATE_STATUS_CHANGED, "Moved to Match")
+    _notify(
+        db, ny_org.id, test_user.id, NotificationType.SURROGATE_STATUS_CHANGED, "Moved to Match"
+    )
     _notify(
         db,
         ny_org.id,
@@ -127,9 +128,8 @@ def test_digest_lists_open_actions_and_recent_unread_updates(
     assert "Read update" not in email.body
 
 
-def test_no_digest_when_nothing_to_report_or_not_opted_in(
-    db, test_user, ny_org, platform_sender
-):
+@pytest.mark.usefixtures("platform_sender")
+def test_no_digest_when_nothing_to_report_or_not_opted_in(db, test_user, ny_org):
     _opt_in(db, test_user, ny_org)
     assert notification_digest_service.send_org_digests(db, ny_org.id, NOW.date(), NOW) == {
         "queued": 0,
@@ -143,9 +143,8 @@ def test_no_digest_when_nothing_to_report_or_not_opted_in(
     assert _digest_emails(db, ny_org.id) == []
 
 
-def test_digest_excludes_other_org_members_and_notifications(
-    db, test_user, ny_org, platform_sender
-):
+@pytest.mark.usefixtures("platform_sender")
+def test_digest_excludes_other_org_members_and_notifications(db, test_user, ny_org):
     other_org, other_user = _other_org_member(db)
     _opt_in(db, other_user, other_org)
     _opt_in(db, test_user, ny_org)
