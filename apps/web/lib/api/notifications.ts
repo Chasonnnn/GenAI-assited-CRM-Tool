@@ -44,6 +44,7 @@ export interface NotificationSettings {
     approval_timeouts: boolean
     security_alerts: boolean
     email_workflow_notifications: boolean
+    email_daily_digest: boolean
 }
 
 // API Functions
