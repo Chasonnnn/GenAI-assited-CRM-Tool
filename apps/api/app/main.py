@@ -11,11 +11,13 @@ from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.errors import ServerErrorMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -39,6 +41,7 @@ from app.core.structured_logging import (
     extract_request_id,
     extract_trace_id,
     log_structured_event,
+    static_error_code,
 )
 from app.core.telemetry import configure_telemetry
 from app.db.enums import AlertSeverity, AlertType, AuditEventType
@@ -556,6 +559,15 @@ async def csrf_protection_middleware(request: Request, call_next):
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+@app.exception_handler(StarletteHTTPException)
+async def _log_client_error_code(request: Request, exc: StarletteHTTPException):
+    """Record why a client error happened in the request log, when the message is log-safe."""
+    if 400 <= exc.status_code < 500 and not getattr(request.state, "error_code", None):
+        request.state.error_code = static_error_code(exc.detail)
+    return await http_exception_handler(request, exc)
+
+
 # CORS middleware - must be added before routers
 # Tightened for production, but allow tenant subdomains.
 tenant_origin_regex = None
@@ -647,6 +659,8 @@ async def structured_request_logging_middleware(request: Request, call_next):
         raise
     finally:
         latency_ms = int((perf_counter() - start) * 1000)
+        if 400 <= status_code < 500 and not getattr(request.state, "error_code", None):
+            request.state.error_code = f"http_{status_code}"
         if response is not None:
             response.headers["X-Request-ID"] = request.state.request_id
         log_structured_event(

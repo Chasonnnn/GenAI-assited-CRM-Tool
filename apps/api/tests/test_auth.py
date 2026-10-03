@@ -1,6 +1,7 @@
 """Tests for Authentication."""
 
 import json
+import logging
 from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
@@ -338,13 +339,21 @@ def test_existing_google_identity_email_refresh_rejects_deprovisioned_user(db):
 
 
 @pytest.mark.asyncio
-async def test_google_callback_rate_limited(client: AsyncClient, rate_limiter_reset):
+async def test_google_callback_rate_limited(client: AsyncClient, rate_limiter_reset, caplog):
     for _ in range(5):
         response = await client.get("/auth/google/callback", follow_redirects=False)
         assert response.status_code != 429
 
-    blocked = await client.get("/auth/google/callback", follow_redirects=False)
+    with caplog.at_level(logging.INFO, logger="app.ops"):
+        blocked = await client.get("/auth/google/callback", follow_redirects=False)
     assert blocked.status_code == 429
+    request_logs = [
+        record
+        for record in caplog.records
+        if record.name == "app.ops" and record.message == "api_request_completed"
+    ]
+    assert request_logs[-1].status == 429
+    assert request_logs[-1].error_code == "http_429"
 
 
 @pytest.mark.asyncio
