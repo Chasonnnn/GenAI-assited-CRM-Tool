@@ -5,9 +5,12 @@
 import api from '../api'
 
 // Types
+export type NotificationTier = 'action' | 'update'
+
 export interface Notification {
     id: string
     type: string
+    tier: NotificationTier
     title: string
     body: string | null
     entity_type: string | null
@@ -20,6 +23,11 @@ export interface NotificationListResponse {
     items: Notification[]
     unread_count: number
     next_cursor?: string | null
+}
+
+export interface NotificationCounts {
+    action_count: number
+    updates_unread: number
 }
 
 export interface NotificationSettings {
@@ -45,6 +53,7 @@ export async function getNotifications(options?: {
     offset?: number
     cursor?: string
     notification_types?: string[]  // Filter by notification types
+    tier?: NotificationTier  // 'action' returns open action items only
 }): Promise<NotificationListResponse> {
     const params = new URLSearchParams()
     if (options?.unread_only) params.set('unread_only', 'true')
@@ -54,12 +63,13 @@ export async function getNotifications(options?: {
     if (options?.notification_types?.length) {
         params.set('notification_types', options.notification_types.join(','))
     }
+    if (options?.tier) params.set('tier', options.tier)
 
     const query = params.toString() ? `?${params.toString()}` : ''
     return api.get(`/me/notifications${query}`)
 }
 
-export async function getUnreadCount(): Promise<{ count: number }> {
+export async function getNotificationCounts(): Promise<NotificationCounts> {
     return api.get('/me/notifications/count')
 }
 
@@ -67,8 +77,10 @@ export async function markNotificationRead(id: string): Promise<Notification> {
     return api.patch(`/me/notifications/${id}/read`)
 }
 
-export async function markAllNotificationsRead(): Promise<{ marked_read: number }> {
-    return api.post('/me/notifications/read-all')
+export async function markAllNotificationsRead(
+    tier?: NotificationTier
+): Promise<{ marked_read: number }> {
+    return api.post(tier ? `/me/notifications/read-all?tier=${tier}` : '/me/notifications/read-all')
 }
 
 export async function getNotificationSettings(): Promise<NotificationSettings> {
