@@ -4,7 +4,8 @@ Notifications Router - /me/notifications endpoints.
 Provides notification listing, read status, and settings.
 """
 
-from typing import Annotated, Literal
+from datetime import datetime
+from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,7 +14,6 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header
 from app.db.enums import NotificationTier, notification_tier
-from app.db.models import Notification
 from app.schemas.auth import UserSession
 from app.services import notification_service
 
@@ -23,6 +23,19 @@ router = APIRouter(prefix="/me", tags=["notifications"])
 # =============================================================================
 # Schemas
 # =============================================================================
+
+
+class _NotificationRow(Protocol):
+    """Fields NotificationRead reads; routers do not import ORM models."""
+
+    id: UUID
+    type: str
+    title: str
+    body: str | None
+    entity_type: str | None
+    entity_id: UUID | None
+    read_at: datetime | None
+    created_at: datetime
 
 
 class NotificationRead(BaseModel):
@@ -42,7 +55,7 @@ class NotificationRead(BaseModel):
 
     @classmethod
     def from_model(
-        cls, notification: Notification, request_id: UUID | None = None
+        cls, notification: _NotificationRow, request_id: UUID | None = None
     ) -> NotificationRead:
         return cls(
             id=str(notification.id),
