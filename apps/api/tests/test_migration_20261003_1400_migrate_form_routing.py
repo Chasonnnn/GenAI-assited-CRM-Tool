@@ -1,7 +1,7 @@
 """Data migration preserves routing intent, tenant boundaries, and pending reviews."""
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -344,7 +344,8 @@ def test_upgrade_maps_routing_shapes_and_never_uses_foreign_form_bindings(db_eng
 
 
 @pytest.mark.parametrize("has_reviewer", [True, False])
-def test_upgrade_moves_paused_actions_to_submission_reviews(db_engine, has_reviewer):
+@pytest.mark.parametrize("timezone", ["UTC", "America/Los_Angeles"])
+def test_upgrade_moves_paused_actions_to_submission_reviews(db_engine, has_reviewer, timezone):
     with db_engine.connect() as connection:
         transaction = connection.begin()
         config = Config()
@@ -355,13 +356,18 @@ def test_upgrade_moves_paused_actions_to_submission_reviews(db_engine, has_revie
         try:
             command.downgrade(config, PREVIOUS)
             org, user = _org(connection)
+            connection.execute(
+                text("UPDATE organizations SET timezone = :timezone WHERE id = :org"),
+                {"timezone": timezone, "org": org},
+            )
             expected = []
             if not has_reviewer:
                 connection.execute(
                     text("UPDATE memberships SET is_active = false WHERE organization_id = :org"),
                     {"org": org},
                 )
-            due = datetime.now(UTC) + timedelta(days=4)
+            due = datetime(2026, 10, 6, 2, 30, tzinfo=UTC)
+            local_due = datetime(2026, 10, 5, 19, 30) if timezone == "America/Los_Angeles" else due
             for action_type, step in ((MATCH, "match"), (CREATE, "create_lead")):
                 form = _form(connection, org, user)
                 action = {"action_type": action_type, "requires_approval": True}
@@ -461,8 +467,8 @@ def test_upgrade_moves_paused_actions_to_submission_reviews(db_engine, has_revie
                         due,
                         "pending",
                         "Review submission: Application",
-                        due.date(),
-                        due.time(),
+                        local_due.date(),
+                        local_due.time(),
                     )
                 else:
                     assert review is None
@@ -983,13 +989,16 @@ def test_upgrade_preserves_execution_history_and_indices(
         == "pending"
     )
     row = connection.execute(
-        text("SELECT actions, is_enabled, system_key FROM automation_workflows WHERE id = :id"),
+        text(
+            "SELECT actions, is_enabled, system_key, is_system_workflow FROM automation_workflows WHERE id = :id"
+        ),
         {"id": workflow},
     ).one()
     assert tuple(row) == (
         [] if routing_only else [NOTICE],
         not routing_only,
-        f"shared_intake_routing:{form}",
+        f"shared_intake_routing:{form}" if routing_only else None,
+        routing_only,
     )
 
 

@@ -21,6 +21,7 @@ from app.db.enums import (
 )
 from app.db.models import (
     AutomationWorkflow,
+    Form,
     FormSubmission,
     IntakeLead,
     Membership,
@@ -35,7 +36,11 @@ from app.services.workflow_definition_rules import (
     appointment_timing_key,
 )
 from app.services.workflow_engine_adapters import WorkflowDomainAdapter
-from app.services.workflow_routing_retirement import has_retired_routing_actions
+from app.services.workflow_routing_retirement import (
+    cancel_paused_routing_execution,
+    has_retired_routing_actions,
+    retired_action_skip,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -782,8 +787,12 @@ class WorkflowEngineCore:
         # Lock execution row
         execution = (
             db.query(WorkflowExecution)
-            .filter(WorkflowExecution.id == execution_id)
+            .filter(
+                WorkflowExecution.id == execution_id,
+                WorkflowExecution.organization_id == resume_org,
+            )
             .with_for_update()
+            .populate_existing()
             .first()
         )
 
@@ -821,12 +830,43 @@ class WorkflowEngineCore:
             return
 
         if has_retired_routing_actions(workflow.actions):
-            logger.warning(
-                "Skipped retired routing workflow resume: workflow_id=%s organization_id=%s execution_id=%s",
-                workflow.id,
-                workflow.organization_id,
-                execution.id,
-            )
+            from app.services import form_routing_service
+
+            submission = None
+            if execution.entity_type == "form_submission":
+                submission = (
+                    db.query(FormSubmission)
+                    .join(
+                        Form,
+                        (Form.id == FormSubmission.form_id)
+                        & (Form.organization_id == FormSubmission.organization_id),
+                    )
+                    .filter(
+                        FormSubmission.id == execution.entity_id,
+                        FormSubmission.organization_id == execution.organization_id,
+                        FormSubmission.source_mode == "shared",
+                        FormSubmission.status == "pending_review",
+                        FormSubmission.match_status == "workflow_pending",
+                        FormSubmission.surrogate_id.is_(None),
+                        FormSubmission.donor_id.is_(None),
+                        FormSubmission.intake_lead_id.is_(None),
+                    )
+                    .with_for_update(of=FormSubmission)
+                    .populate_existing()
+                    .first()
+                )
+            try:
+                cancel_paused_routing_execution(db, execution)
+                if submission is not None:
+                    # Routing commits the cancellation, task completion, and routing audit together.
+                    form_routing_service.route_submission(
+                        db, org_id=execution.organization_id, submission_id=submission.id
+                    )
+                else:
+                    db.commit()
+            except Exception:
+                db.rollback()
+                raise
             return
 
         # Get entity
@@ -910,7 +950,7 @@ class WorkflowEngineCore:
                 return
 
             # Execute the approved action
-            result = self._execute_authorized_action(
+            result = retired_action_skip(action) or self._execute_authorized_action(
                 workflow=workflow,
                 execution=execution,
                 db=db,
@@ -935,6 +975,10 @@ class WorkflowEngineCore:
             for idx, next_action in enumerate(remaining_actions):
                 actual_idx = action_index + 1 + idx
 
+                retired = retired_action_skip(next_action)
+                if retired:
+                    action_results.append(retired)
+                    continue
                 denied = self._action_authority_error(db, workflow, execution, next_action)
                 if denied:
                     action_results.append(denied)

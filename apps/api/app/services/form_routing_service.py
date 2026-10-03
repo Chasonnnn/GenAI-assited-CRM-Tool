@@ -5,6 +5,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
@@ -24,7 +25,7 @@ from app.db.models import (
 from app.schemas.auth import UserSession
 from app.schemas.forms import FormRoutingRead, FormRoutingUpdate, FormWorkflowSummary
 from app.services import audit_service, form_intake_service, notification_service
-from app.utils.business_hours import calculate_approval_due_date
+from app.utils.business_hours import calculate_approval_due_date, get_effective_timezone
 
 DONOR_KINDS = {FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value}
 logger = logging.getLogger(__name__)
@@ -270,6 +271,7 @@ def _request_review(
         org=org,
         timeout_hours=WORKFLOW_APPROVAL_TIMEOUT_HOURS,
     )
+    local_due = due_at.astimezone(ZoneInfo(get_effective_timezone(owner, org)))
     task = Task(
         organization_id=submission.organization_id,
         form_submission_id=submission.id,
@@ -282,8 +284,8 @@ def _request_review(
         status=TaskStatus.PENDING.value,
         created_by_user_id=SYSTEM_USER_ID,
         due_at=due_at,
-        due_date=due_at.date(),
-        due_time=due_at.time(),
+        due_date=local_due.date(),
+        due_time=local_due.time(),
     )
     db.add(task)
     db.flush()

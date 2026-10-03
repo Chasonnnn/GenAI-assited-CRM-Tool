@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from pydantic import ValidationError
@@ -228,8 +229,9 @@ def test_routing_mode_matrix(db, test_org, test_user, default_stage, kind, exact
         assert task.title == "Review submission: Application"
         assert task.due_at is not None
         assert task.due_at > datetime.now(task.due_at.tzinfo)
-        assert task.due_date == task.due_at.date()
-        assert task.due_time == task.due_at.time()
+        local_due = task.due_at.astimezone(ZoneInfo(test_org.timezone))
+        assert task.due_date == local_due.date()
+        assert task.due_time == local_due.time()
         assert (
             db.query(Notification)
             .filter_by(entity_type="form", entity_id=form.id, user_id=test_user.id)

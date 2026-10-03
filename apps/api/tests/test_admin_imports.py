@@ -1891,3 +1891,54 @@ async def test_import_unknown_action_keeps_400_error_convention(authed_client, d
     assert response.status_code == 400, response.text
     assert "Unknown workflow action type: unsupported_action" in response.json()["detail"]
     assert db.get(AutomationWorkflow, workflow_id) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["surrogate", "egg_donor", "sperm_donor"])
+async def test_import_legacy_form_without_routing_stays_paused(
+    authed_client, db, test_org, test_user, kind
+):
+    form_id, workflow_id = uuid.uuid4(), uuid.uuid4()
+    archive = _build_config_zip(
+        {
+            "forms.json": [
+                {
+                    "id": str(form_id),
+                    "name": "Legacy application",
+                    "status": "published",
+                    "lead_kind": kind,
+                    "purpose": "other",
+                    "schema_json": {"pages": []},
+                    "created_by_user_id": str(test_user.id),
+                }
+            ],
+            "workflows.json": [
+                {
+                    "id": str(workflow_id),
+                    "name": "Old routing",
+                    "trigger_type": "form_submitted",
+                    "subject_type": "form_submission",
+                    "trigger_config": {"form_id": str(form_id)},
+                    "actions": [
+                        {"action_type": "auto_match_submission"},
+                        {"action_type": "create_intake_lead"},
+                    ],
+                }
+            ],
+        }
+    )
+    response = await authed_client.post(
+        "/admin/imports/config", files={"config_zip": ("config.zip", archive, "application/zip")}
+    )
+    assert response.status_code == 200, response.text
+    form = db.get(Form, form_id)
+    donor = kind != "surrogate"
+    assert (
+        form.routing_exact_match,
+        form.routing_no_match,
+        form.routing_lead_source,
+        form.routing_auto_create_donor,
+    ) == ("review", "off", "website" if donor else None, donor)
+    assert f"Paused routing for legacy form {form_id}." in response.json()["config"]["warnings"]
+    assert db.get(AutomationWorkflow, workflow_id).actions == []
+    assert not db.get(AutomationWorkflow, workflow_id).is_enabled

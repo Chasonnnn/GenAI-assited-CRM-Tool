@@ -1312,6 +1312,8 @@ def list_workflows(
         or_(
             AutomationWorkflow.system_key.is_(None),
             ~AutomationWorkflow.system_key.startswith(GENERATED_ROUTING_PREFIX, autoescape=True),
+            AutomationWorkflow.is_enabled.is_(True),
+            AutomationWorkflow.actions != [],
         ),
     )
 

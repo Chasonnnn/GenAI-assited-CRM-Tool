@@ -138,8 +138,9 @@ def test_rollout_skips_entire_workflow_before_any_action(action, caplog):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [False, True])
 async def test_generated_leftovers_hidden_but_execution_history_visible(
-    authed_client, db, test_org, test_user
+    authed_client, db, test_org, test_user, enabled
 ):
     from app.db.models import AutomationWorkflow, WorkflowExecution
     from tests.test_form_routing import routing_submission
@@ -167,7 +168,19 @@ async def test_generated_leftovers_hidden_but_execution_history_visible(
         trigger_config={"form_id": str(form.id)},
         actions=[{"action_type": "send_notification"}],
     )
-    db.add_all([leftover, visible])
+    retained = AutomationWorkflow(
+        organization_id=test_org.id,
+        name="Retained generated notification",
+        scope="org",
+        subject_type="form_submission",
+        trigger_type="form_submitted",
+        trigger_config={"form_id": str(form.id)},
+        actions=[{"action_type": "send_notification", "title": "Received"}],
+        is_enabled=enabled,
+        is_system_workflow=True,
+        system_key=f"shared_intake_routing:{uuid4()}",
+    )
+    db.add_all([leftover, visible, retained])
     db.flush()
     execution = WorkflowExecution(
         organization_id=test_org.id,
@@ -193,6 +206,7 @@ async def test_generated_leftovers_hidden_but_execution_history_visible(
         entries = data["items"] if isinstance(data, dict) else data
         ids = {row["id"] for row in entries}
         assert str(visible.id) in ids
+        assert str(retained.id) in ids
         assert str(leftover.id) not in ids
     for path in ("/workflows/executions", f"/workflows/{leftover.id}/executions"):
         response = await authed_client.get(path)

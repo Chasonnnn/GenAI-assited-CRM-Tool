@@ -111,11 +111,13 @@ def _migrate_paused(connection) -> None:
             sa.text("""
         SELECT e.*, w.actions AS current_actions, f.name AS form_name,
                f.updated_by_user_id AS form_editor, f.created_by_user_id AS form_creator,
-               s.id AS submission_id, s.surrogate_id, s.donor_id, s.intake_lead_id
+               s.id AS submission_id, s.surrogate_id, s.donor_id, s.intake_lead_id,
+               COALESCE(NULLIF(o.timezone, ''), 'UTC') AS timezone
         FROM workflow_executions e
         JOIN automation_workflows w ON w.id = e.workflow_id AND w.organization_id = e.organization_id
         JOIN form_submissions s ON s.id = e.entity_id AND s.organization_id = e.organization_id
         JOIN forms f ON f.id = s.form_id AND f.organization_id = s.organization_id
+        JOIN organizations o ON o.id = e.organization_id
         WHERE e.status = 'paused' AND e.entity_type = 'form_submission'
         ORDER BY e.executed_at, e.id
         FOR UPDATE OF e, s, w, f
@@ -239,15 +241,16 @@ def _migrate_paused(connection) -> None:
                 row["submission_id"],
                 row["organization_id"],
             )
-        # Preserve the original approval deadline, including its business-hours calculation.
+        # Users have no timezone column at this revision; the effective timezone is
+        # the organization's. Preserve the deadline but store local task wall-clock fields.
         connection.execute(
             sa.text("""
             INSERT INTO tasks (id, organization_id, form_submission_id, surrogate_id, donor_id,
                 task_type, title, owner_type, owner_id, status, created_by_user_id, due_at, due_date, due_time)
             SELECT :id, :org, :submission, :surrogate, :donor, 'review', :title, 'user', :owner,
                 'pending', '00000000-0000-0000-0000-000000000001', :due,
-                (CAST(:due AS timestamptz) AT TIME ZONE 'UTC')::date,
-                (CAST(:due AS timestamptz) AT TIME ZONE 'UTC')::time
+                (CAST(:due AS timestamptz) AT TIME ZONE :timezone)::date,
+                (CAST(:due AS timestamptz) AT TIME ZONE :timezone)::time
             WHERE CAST(:owner AS uuid) IS NOT NULL
               AND NOT EXISTS (SELECT 1 FROM tasks WHERE organization_id = :org
                 AND form_submission_id = :submission AND task_type = 'review'
@@ -261,6 +264,7 @@ def _migrate_paused(connection) -> None:
                 "title": f"Review submission: {row['form_name']}"[:255],
                 "owner": owner,
                 "due": task["due_at"] if task else None,
+                "timezone": row["timezone"],
             },
         )
         logger.info(
@@ -480,6 +484,9 @@ def upgrade() -> None:
             change = "mapped routing settings; deleted routing-only workflow"
         else:
             grant = workflow["execution_authority"]
+            retained_generated = remaining and str(workflow["system_key"] or "").startswith(
+                "shared_intake_routing:"
+            )
             # Removing actions narrows authority. Preserve only a grant valid for the old config.
             if _grant_is_current(connection, workflow):
                 grant = {
@@ -493,6 +500,10 @@ def upgrade() -> None:
                     actions=remaining,
                     is_enabled=bool(remaining) and workflow["is_enabled"],
                     execution_authority=grant,
+                    system_key=None if retained_generated else workflow["system_key"],
+                    is_system_workflow=False
+                    if retained_generated
+                    else workflow["is_system_workflow"],
                     updated_at=datetime.now(UTC),
                 )
             )

@@ -353,6 +353,10 @@ def import_org_config_zip(
 
     for form_data in forms_payload:
         donor = form_data.get("lead_kind", "surrogate") in {"egg_donor", "sperm_donor"}
+        if not any(key.startswith("routing_") for key in form_data):
+            # Match the 1400 migration fallback: pause both modes, keep the kind's lead defaults.
+            form_data.update(routing_exact_match="review", routing_no_match="off")
+            warnings.append(f"Paused routing for legacy form {form_data.get('id', 'unknown')}.")
         routing = FormRoutingUpdate(
             exact_match=form_data.get("routing_exact_match", "auto" if donor else "review"),
             no_match=form_data.get("routing_no_match", "auto" if donor else "review"),

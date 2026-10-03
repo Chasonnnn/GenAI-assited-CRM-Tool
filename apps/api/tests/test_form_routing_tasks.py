@@ -1,6 +1,7 @@
 """Submission tasks expose actionable dates and tenant-scoped form context."""
 
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import event
@@ -13,16 +14,19 @@ from tests.test_form_routing import routing_submission, tasks
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("step", ["match", "create_lead"])
+@pytest.mark.parametrize("timezone", ["UTC", "America/Los_Angeles"])
 async def test_review_task_reads_include_form_context_and_filterable_due_date(
-    authed_client, db, test_org, test_user, step
+    authed_client, db, test_org, test_user, step, timezone
 ):
+    test_org.timezone = timezone
     form, submission = routing_submission(
         db, test_org.id, test_user.id, exact="review" if step == "match" else "auto"
     )
     form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
     task = tasks(db, submission)[0]
-    assert task.due_date == task.due_at.date()
-    assert task.due_time == task.due_at.time()
+    local_due = task.due_at.astimezone(ZoneInfo(timezone))
+    assert task.due_date == local_due.date()
+    assert task.due_time == local_due.time()
     assert submission.routing_review_step == step
 
     detail = await authed_client.get(f"/tasks/{task.id}")

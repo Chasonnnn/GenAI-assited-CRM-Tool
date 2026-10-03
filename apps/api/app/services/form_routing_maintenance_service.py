@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import String, cast, or_
+from sqlalchemy import String, and_, cast, or_
 from sqlalchemy.orm import Session
 
 from app.db.enums import AuditEventType
@@ -15,6 +15,7 @@ from app.db.models import (
     FormSubmission,
     Job,
     Organization,
+    Task,
     WorkflowExecution,
 )
 from app.services import (
@@ -25,7 +26,9 @@ from app.services import (
 )
 from app.services.workflow_engine_core import FORM_SUBMISSION_ACTION_SNAPSHOT_KEY
 from app.services.workflow_routing_retirement import (
+    GENERATED_ROUTING_PREFIX,
     RETIRED_ROUTING_ACTIONS,
+    cancel_paused_routing_execution,
     strip_retired_routing_actions,
 )
 
@@ -33,10 +36,13 @@ logger = logging.getLogger(__name__)
 
 
 def repair_routing_window(
-    db: Session, *, org_id: UUID, released_at: datetime, apply: bool = False
-) -> dict[str, int]:
-    if released_at.tzinfo is None or released_at.utcoffset() is None:
-        raise ValueError("Release timestamp must include a timezone")
+    db: Session, *, org_id: UUID, window_start: datetime, released_at: datetime, apply: bool = False
+) -> dict[str, int | list[str]]:
+    for timestamp in (window_start, released_at):
+        if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+            raise ValueError("Window timestamps must include a timezone")
+    if window_start > released_at:
+        raise ValueError("Window start must not be after release timestamp")
     if db.query(Organization.id).filter(Organization.id == org_id).first() is None:
         raise ValueError("Organization not found")
 
@@ -48,7 +54,13 @@ def repair_routing_window(
                 *[
                     AutomationWorkflow.actions.contains([{"action_type": action}])
                     for action in sorted(RETIRED_ROUTING_ACTIONS)
-                ]
+                ],
+                and_(
+                    AutomationWorkflow.system_key.startswith(
+                        GENERATED_ROUTING_PREFIX, autoescape=True
+                    ),
+                    AutomationWorkflow.actions != [],
+                ),
             ),
         )
         .order_by(AutomationWorkflow.id)
@@ -74,6 +86,8 @@ def repair_routing_window(
         .filter(
             FormSubmission.organization_id == org_id,
             FormSubmission.source_mode == "shared",
+            FormSubmission.submitted_at >= window_start,
+            FormSubmission.submitted_at <= released_at,
             FormSubmission.status == "pending_review",
             FormSubmission.match_status == "workflow_pending",
             FormSubmission.surrogate_id.is_(None),
@@ -83,8 +97,36 @@ def repair_routing_window(
         )
         .order_by(FormSubmission.id)
     )
+    paused = (
+        db.query(WorkflowExecution, AutomationWorkflow, Task)
+        .join(
+            AutomationWorkflow,
+            (AutomationWorkflow.id == WorkflowExecution.workflow_id)
+            & (AutomationWorkflow.organization_id == WorkflowExecution.organization_id),
+        )
+        .outerjoin(
+            Task,
+            (Task.id == WorkflowExecution.paused_task_id)
+            & (Task.workflow_execution_id == WorkflowExecution.id)
+            & (Task.organization_id == WorkflowExecution.organization_id)
+            & (Task.task_type == "workflow_approval"),
+        )
+        .filter(
+            WorkflowExecution.organization_id == org_id,
+            WorkflowExecution.status == "paused",
+            WorkflowExecution.executed_at >= window_start,
+            WorkflowExecution.executed_at <= released_at,
+        )
+        .order_by(WorkflowExecution.id)
+    )
+    result = {"workflow_ids": [], "submission_ids": [], "execution_ids": []}
     if not apply:
-        return {"workflows": workflows.count(), "submissions": submissions.count()}
+        result["workflow_ids"] = [str(w.id) for w in workflows.all()]
+        result["submission_ids"] = [str(s.id) for s in submissions.all()]
+        result["execution_ids"] = [
+            str(e.id) for e, w, t in paused.all() if _paused_on_retired_action(e, w, t)
+        ]
+        return _counts(result)
 
     permission_policy_service.lock_configuration(db, org_id)
     changed = 0
@@ -113,6 +155,11 @@ def repair_routing_window(
                     }
             workflow.actions = strip_retired_routing_actions(original)
             workflow.is_enabled = workflow.is_enabled and bool(workflow.actions)
+            if workflow.actions and (workflow.system_key or "").startswith(
+                GENERATED_ROUTING_PREFIX
+            ):
+                workflow.system_key = None
+                workflow.is_system_workflow = False
             if current_grant:
                 workflow.execution_authority = {
                     **workflow.execution_authority,
@@ -131,11 +178,18 @@ def repair_routing_window(
             # Sessions disable autoflush; the next audit entry must see this hash.
             db.flush()
             changed += 1
+            result["workflow_ids"].append(str(workflow.id))
             logger.info(
                 "Retired workflow routing: workflow_id=%s organization_id=%s", workflow.id, org_id
             )
         if changed:
             permission_policy_service.touch_configuration(db, org_id)
+        for execution, workflow, task in (
+            paused.with_for_update(of=WorkflowExecution).populate_existing().all()
+        ):
+            if _paused_on_retired_action(execution, workflow, task):
+                cancel_paused_routing_execution(db, execution)
+                result["execution_ids"].append(str(execution.id))
         db.commit()
     except Exception:
         db.rollback()
@@ -144,7 +198,6 @@ def repair_routing_window(
     # Each route owns its atomic domain/audit transaction and row lock. Committed
     # repairs survive an interrupted run; replay skips already-routed submissions.
     submission_ids = [row.id for row in submissions.all()]
-    routed = 0
     for submission_id in submission_ids:
         # Recheck eligibility under the routing row lock, including completion of a
         # concurrent release job, before route_submission can write anything.
@@ -153,5 +206,34 @@ def repair_routing_window(
             db.commit()
             continue
         form_routing_service.route_submission(db, org_id=org_id, submission_id=submission_id)
-        routed += 1
-    return {"workflows": changed, "submissions": routed}
+        result["submission_ids"].append(str(submission_id))
+    return _counts(result)
+
+
+def _counts(result: dict[str, list[str]]) -> dict[str, int | list[str]]:
+    return {
+        **result,
+        "workflows": len(result["workflow_ids"]),
+        "submissions": len(result["submission_ids"]),
+        "executions": len(result["execution_ids"]),
+    }
+
+
+def _paused_on_retired_action(
+    execution: WorkflowExecution, workflow: AutomationWorkflow, task: Task | None
+) -> bool:
+    if task is not None:
+        action = task.workflow_action_payload or {}
+        if isinstance(action, dict) and action.get("action_type"):
+            return action["action_type"] in RETIRED_ROUTING_ACTIONS
+        if task.workflow_action_type:
+            return task.workflow_action_type in RETIRED_ROUTING_ACTIONS
+    snapshot = (execution.trigger_event or {}).get(FORM_SUBMISSION_ACTION_SNAPSHOT_KEY)
+    actions = snapshot if isinstance(snapshot, list) else workflow.actions
+    index = execution.paused_at_action_index
+    return bool(
+        isinstance(index, int)
+        and 0 <= index < len(actions or [])
+        and isinstance(actions[index], dict)
+        and actions[index].get("action_type") in RETIRED_ROUTING_ACTIONS
+    )
