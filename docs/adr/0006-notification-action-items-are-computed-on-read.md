@@ -29,4 +29,6 @@ No column stores resolution. Nothing writes when the work finishes, and no migra
 
 A new action type must get a clause in `_action_open_condition`; a type without one never shows as open.
 
+The panel acts on open items in place through the existing endpoints: approve or deny a workflow approval, approve or reject a status change request, claim a surrogate, approve or decline an appointment request, and complete an assigned or overdue task. A status change notification stores the record, not the request, so the list response adds `request_id` by the same rule as the open check: the latest pending request on the record made at or before the notification. Match conflicts and contact reminders need a reason or a form, so they only link.
+
 The tier split and panel design were chosen from the prototype at https://claude.ai/artifact/MKuXvJKy2zRuPTzArsdnMp (variant A, side panel).
