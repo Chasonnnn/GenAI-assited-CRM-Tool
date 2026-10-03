@@ -85,6 +85,15 @@ def _public_create_payload(appointment_type, start, *, request_id="public-create
     }
 
 
+def _started(db, appointment):
+    """Move a confirmed test appointment so it began five minutes ago."""
+    shift = appointment.scheduled_start - (datetime.now(UTC) - timedelta(minutes=5))
+    appointment.scheduled_start -= shift
+    appointment.scheduled_end -= shift
+    db.commit()
+    return appointment
+
+
 async def _public_pending(client, db, booking_surface):
     appointment_type, booking_link, start = booking_surface
     response = await client.post(
@@ -113,6 +122,16 @@ async def test_public_create_staff_approve_and_complete_http_contract(
     )
     assert approved.status_code == 200, approved.text
     assert approved.json()["scheduling"]["revision"] == 2
+    assert approved.json()["scheduling"]["capabilities"]["can_complete"] is False
+    early = await authed_client.post(
+        f"/appointments/{appointment.id}/complete",
+        json={"expected_revision": 2, "request_id": "staff-early", "status": "completed"},
+    )
+    assert early.status_code == 400
+    db.refresh(appointment)
+    _started(db, appointment)
+    started = await authed_client.get(f"/appointments/{appointment.id}")
+    assert started.json()["scheduling"]["capabilities"]["can_complete"] is True
 
     completed = await authed_client.post(
         f"/appointments/{appointment.id}/complete",

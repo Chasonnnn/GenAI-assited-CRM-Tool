@@ -211,6 +211,7 @@ class AppointmentSyncResolve(AppointmentMutation):
 class AppointmentCapabilities(BaseModel):
     can_reschedule: bool
     can_cancel: bool
+    can_complete: bool
     can_retry_google_sync: bool
     can_resolve_google_conflict: bool
 

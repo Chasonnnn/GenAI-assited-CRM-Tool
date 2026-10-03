@@ -366,6 +366,15 @@ def test_unlinked_meet_queues_crm_confirmation_notice(
     )
 
 
+def _started(db, appointment):
+    """Move a confirmed test appointment so it began five minutes ago."""
+    shift = appointment.scheduled_start - (datetime.now(UTC) - timedelta(minutes=5))
+    appointment.scheduled_start -= shift
+    appointment.scheduled_end -= shift
+    db.commit()
+    return appointment
+
+
 def test_complete_booking_is_revision_fenced(db, test_org, test_user, booking_type, monkeypatch):
     monkeypatch.setattr(settings, "SCHEDULING_V2_ENABLED", True)
     appointment_type, start = booking_type
@@ -377,6 +386,16 @@ def test_complete_booking_is_revision_fenced(db, test_org, test_user, booking_ty
         expected_revision=1,
         request_id="approve-complete",
     )
+    with pytest.raises(ValueError, match="not started"):
+        scheduling_v2_service.complete_booking(
+            db,
+            appointment,
+            status=AppointmentStatus.COMPLETED.value,
+            actor_user_id=test_user.id,
+            expected_revision=2,
+            request_id="complete-early",
+        )
+    appointment = _started(db, appointment)
     appointment = scheduling_v2_service.complete_booking(
         db,
         appointment,

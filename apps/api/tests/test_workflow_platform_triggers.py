@@ -212,6 +212,15 @@ def _create_booking(db, org_id, owner_id, appointment_type_id, start, request_id
     )
 
 
+def _started(db, appointment):
+    """Move a confirmed test appointment so it began five minutes ago."""
+    shift = appointment.scheduled_start - (datetime.now(UTC) - timedelta(minutes=5))
+    appointment.scheduled_start -= shift
+    appointment.scheduled_end -= shift
+    db.commit()
+    return appointment
+
+
 def _approve(db, appointment, user_id, request_id):
     return scheduling_v2_service.approve_booking(
         db,
@@ -243,6 +252,7 @@ def test_v2_approval_and_completion_fire_appointment_workflows_once(
 
     appointment = _approve(db, appointment, test_user.id, "trigger-approve")
     assert _execution_count(db, test_org.id, scheduled.id) == 1
+    appointment = _started(db, appointment)
 
     complete_args = {
         "status": AppointmentStatus.COMPLETED.value,
@@ -274,6 +284,7 @@ def test_v2_no_show_and_cancel_fire_their_own_workflows(db, test_org, test_user,
         test_user.id,
         "no-show-approve",
     )
+    first = _started(db, first)
     scheduling_v2_service.complete_booking(
         db,
         first,

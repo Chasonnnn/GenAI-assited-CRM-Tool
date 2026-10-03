@@ -554,6 +554,10 @@ def scheduling_read(
             and appointment.meeting_mode != MeetingMode.ZOOM.value
             and not (state == "unlinked" and appointment.google_event_id)
             and state not in {"failed", "conflict"},
+            can_complete=can_edit
+            and not public
+            and appointment.status == AppointmentStatus.CONFIRMED.value
+            and appointment.scheduled_start <= datetime.now(UTC),
             can_retry_google_sync=can_edit
             and not public
             and not legacy_google_link

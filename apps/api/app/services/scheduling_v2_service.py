@@ -1087,6 +1087,8 @@ def complete_booking(
     _check_revision(appointment, expected_revision)
     if appointment.status != AppointmentStatus.CONFIRMED.value:
         raise ValueError("Only confirmed appointments can be completed")
+    if appointment.scheduled_start > datetime.now(UTC):
+        raise ValueError("Appointment has not started yet")
     appointment.status = status
     appointment.revision += 1
     appointment_email_service.cancel_queued_reminders(
