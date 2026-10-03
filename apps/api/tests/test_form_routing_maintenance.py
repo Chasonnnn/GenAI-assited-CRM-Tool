@@ -5,20 +5,25 @@ from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.orm import Session
 
 from app.core.constants import SYSTEM_USER_ID
 from app.db.models import (
     AuditLog,
     AutomationWorkflow,
+    Form,
     Job,
+    Notification,
     Organization,
     Task,
     WorkflowExecution,
 )
-from app.services import workflow_service
+from app.jobs.handlers.workflows import process_workflow_resume
+from app.services import form_routing_service, task_service, workflow_service
 from app.services.form_routing_maintenance_service import repair_routing_window
 from app.services.workflow_engine import engine
 from tests.test_form_routing import routing_submission
+from tests.test_forms import _create_surrogate
 
 
 def test_release_repair_routes_missing_jobs_and_preserves_history(db, test_org, test_user):
@@ -301,7 +306,7 @@ def test_release_repair_validates_before_writing(db, test_org):
 
 @pytest.mark.parametrize("action_type", ["auto_match_submission", "create_intake_lead"])
 @pytest.mark.parametrize("index", [0, 1])
-def test_preserved_snapshot_skips_retired_actions_without_new_approvals(
+def test_preserved_snapshot_skips_retired_actions_without_new_workflow_approvals(
     db, test_org, test_user, action_type, index
 ):
     notice = {
@@ -334,7 +339,201 @@ def test_preserved_snapshot_skips_retired_actions_without_new_approvals(
     assert all(action["success"] for action in execution.actions_executed)
     assert db.query(Task).filter_by(workflow_execution_id=execution.id).count() == 1
     assert submission.intake_lead_id is None
+    assert submission.match_status == "routing_review"
+    assert submission.routing_review_step == "match"
+    assert (
+        db.query(Task).filter_by(form_submission_id=submission.id, task_type="review").count() == 1
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("step", ["match", "create_lead"])
+async def test_non_routing_approval_resume_routes_preserved_snapshot(db, test_org, test_user, step):
+    notice = {
+        "action_type": "send_notification",
+        "title": "Received",
+        "recipients": [str(test_user.id)],
+        "requires_approval": True,
+    }
+    original_actions = [
+        notice,
+        {"action_type": "auto_match_submission", "requires_approval": True},
+        {"action_type": "create_intake_lead", "requires_approval": True},
+    ]
+    submission, workflow, execution, task = _paused_submission(
+        db, test_org, test_user, original_actions, current_actions=[notice]
+    )
+    form = db.get(Form, submission.form_id)
+    form.routing_exact_match = "review" if step == "match" else "auto"
+    # This migrated execution predates the repair command's rollout window.
+    submission.submitted_at = execution.executed_at = datetime.now(UTC) - timedelta(days=120)
+    db.commit()
+
+    task_service.resolve_workflow_approval(
+        db, task_id=task.id, org_id=test_org.id, decision="approve", user_id=test_user.id
+    )
+    job = (
+        db.query(Job)
+        .filter_by(
+            organization_id=test_org.id,
+            job_type="workflow_resume",
+            idempotency_key=f"{execution.id}:0",
+        )
+        .one()
+    )
+    await process_workflow_resume(db, job)
+    db.refresh(execution)
+    db.refresh(submission)
+    assert execution.status == "success"
+    assert execution.paused_task_id is None and execution.paused_at_action_index is None
+    assert len(execution.actions_executed) == 3
+    assert all(result["success"] for result in execution.actions_executed)
+    assert [result["action_type"] for result in execution.actions_executed[1:]] == [
+        "auto_match_submission",
+        "create_intake_lead",
+    ]
+    assert all(result["skipped"] for result in execution.actions_executed[1:])
+    assert execution.trigger_event["_form_submission_workflow_actions"] == original_actions
+    assert submission.match_status == "routing_review" and submission.routing_review_step == step
+    assert submission.intake_lead_id is None
+    review = db.query(Task).filter_by(form_submission_id=submission.id, task_type="review").one()
+    assert review.status == "pending" and review.organization_id == test_org.id
+    assert db.query(Task).filter_by(workflow_execution_id=execution.id).count() == 1
+    assert workflow.run_count == 1
+    audit_count = db.query(AuditLog).filter_by(target_id=submission.id).count()
+
+    await process_workflow_resume(db, job)
+    assert db.query(Task).filter_by(form_submission_id=submission.id).one().id == review.id
+    assert db.query(AuditLog).filter_by(target_id=submission.id).count() == audit_count
+    assert workflow.run_count == 1
+
+
+def test_final_approval_routes_after_retired_actions_skipped_on_earlier_resume(
+    db, test_org, test_user
+):
+    notice = {
+        "action_type": "send_notification",
+        "recipients": "creator",
+        "requires_approval": True,
+    }
+    retired = {"action_type": "auto_match_submission"}
+    submission, _, execution, task = _paused_submission(
+        db,
+        test_org,
+        test_user,
+        [notice, retired, notice],
+        current_actions=[notice, notice],
+        index=2,
+        task_status="completed",
+    )
+    execution.actions_executed = [
+        {"action_type": "send_notification", "success": True},
+        {"action_type": "auto_match_submission", "success": True, "skipped": True},
+    ]
+    db.commit()
+    engine.continue_execution(db, execution.id, task, "approve")
+    db.refresh(execution)
+    db.refresh(submission)
+    assert execution.status == "success"
+    assert submission.match_status == "routing_review" and submission.routing_review_step == "match"
+    assert db.query(Task).filter_by(form_submission_id=submission.id).one().status == "pending"
+
+
+@pytest.mark.parametrize(
+    "state", ["linked", "already_routed", "rejected", "direct", "foreign_form"]
+)
+def test_preserved_snapshot_does_not_route_ineligible_submission(
+    db, test_org, test_user, default_stage, state
+):
+    notice = {
+        "action_type": "send_notification",
+        "recipients": "creator",
+        "requires_approval": True,
+    }
+    submission, _, execution, task = _paused_submission(
+        db,
+        test_org,
+        test_user,
+        [notice, {"action_type": "create_intake_lead"}],
+        current_actions=[notice],
+        task_status="completed",
+    )
+    if state == "linked":
+        record = _create_surrogate(db, test_org.id, test_user.id, default_stage)
+        submission.surrogate_id = record.id
+    elif state == "already_routed":
+        form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+    elif state == "rejected":
+        submission.status = "rejected"
+    elif state == "direct":
+        submission.source_mode = "direct"
+    else:
+        foreign = Organization(name="Foreign", slug=uuid4().hex)
+        db.add(foreign)
+        db.flush()
+        foreign_form, _ = routing_submission(db, foreign.id, test_user.id)
+        submission.form_id = foreign_form.id
+    db.commit()
+    before = (submission.match_status, submission.routing_review_step, submission.surrogate_id)
+    audit_count = db.query(AuditLog).filter_by(target_id=submission.id).count()
+    task_ids = {t.id for t in db.query(Task).filter_by(form_submission_id=submission.id)}
+    engine.continue_execution(db, execution.id, task, "approve")
+    db.refresh(execution)
+    db.refresh(submission)
+    assert execution.status == "success" and execution.actions_executed[-1]["skipped"]
+    assert (
+        submission.match_status,
+        submission.routing_review_step,
+        submission.surrogate_id,
+    ) == before
+    assert submission.intake_lead_id is None
+    assert {t.id for t in db.query(Task).filter_by(form_submission_id=submission.id)} == task_ids
+    assert db.query(AuditLog).filter_by(target_id=submission.id).count() == audit_count
+
+
+def test_routing_failure_after_committed_action_does_not_rerun_it(
+    db, test_org, test_user, monkeypatch
+):
+    notice = {
+        "action_type": "send_notification",
+        "recipients": [str(test_user.id)],
+        "requires_approval": True,
+    }
+    submission, workflow, execution, task = _paused_submission(
+        db,
+        test_org,
+        test_user,
+        [notice, {"action_type": "auto_match_submission"}],
+        current_actions=[notice],
+        task_status="completed",
+    )
+    original_audit = form_routing_service._audit
+
+    def fail_audit(*args, **kwargs):
+        original_audit(*args, **kwargs)
+        args[0].flush()
+        raise RuntimeError("routing audit unavailable")
+
+    monkeypatch.setattr(form_routing_service, "_audit", fail_audit)
+    with Session(bind=db.connection(), join_transaction_mode="create_savepoint") as resume_db:
+        with pytest.raises(RuntimeError, match="routing audit unavailable"):
+            engine.continue_execution(
+                resume_db, execution.id, resume_db.get(Task, task.id), "approve"
+            )
+    db.expire_all()
+    assert submission.match_status == "workflow_pending" and submission.routing_review_step is None
+    assert db.query(Task).filter_by(form_submission_id=submission.id).count() == 0
+    assert db.query(AuditLog).filter_by(target_id=submission.id).count() == 0
+    # The approved notification committed with the cleared approval pointer, so a
+    # retry must not run the approved action again (at-most-once side effects).
+    assert execution.paused_task_id is None and execution.paused_at_action_index is None
+    assert db.query(Notification).filter_by(entity_id=submission.id).count() == 1
+
+    monkeypatch.setattr(form_routing_service, "_audit", original_audit)
+    engine.continue_execution(db, execution.id, task, "approve")
+    db.refresh(submission)
     assert submission.match_status == "workflow_pending"
+    assert db.query(Notification).filter_by(entity_id=submission.id).count() == 1
 
 
 def test_repair_cancels_paused_routing_only_inside_window_and_organization(db, test_org, test_user):

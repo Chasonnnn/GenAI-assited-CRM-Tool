@@ -37,6 +37,7 @@ from app.services.workflow_definition_rules import (
 )
 from app.services.workflow_engine_adapters import WorkflowDomainAdapter
 from app.services.workflow_routing_retirement import (
+    RETIRED_ROUTING_ACTIONS,
     cancel_paused_routing_execution,
     has_retired_routing_actions,
     retired_action_skip,
@@ -47,6 +48,34 @@ logger = logging.getLogger(__name__)
 # Maximum recursion depth for workflow-triggered events
 MAX_DEPTH = 3
 FORM_SUBMISSION_ACTION_SNAPSHOT_KEY = "_form_submission_workflow_actions"
+
+
+def _lock_pending_routing_submission(
+    db: Session, execution: WorkflowExecution
+) -> FormSubmission | None:
+    if execution.entity_type != "form_submission":
+        return None
+    return (
+        db.query(FormSubmission)
+        .join(
+            Form,
+            (Form.id == FormSubmission.form_id)
+            & (Form.organization_id == FormSubmission.organization_id),
+        )
+        .filter(
+            FormSubmission.id == execution.entity_id,
+            FormSubmission.organization_id == execution.organization_id,
+            FormSubmission.source_mode == "shared",
+            FormSubmission.status == "pending_review",
+            FormSubmission.match_status == "workflow_pending",
+            FormSubmission.surrogate_id.is_(None),
+            FormSubmission.donor_id.is_(None),
+            FormSubmission.intake_lead_id.is_(None),
+        )
+        .with_for_update(of=FormSubmission)
+        .populate_existing()
+        .first()
+    )
 
 
 class WorkflowEngineCore:
@@ -774,7 +803,7 @@ class WorkflowEngineCore:
         Called by the resume job processor after task is resolved.
         """
 
-        from app.services import permission_policy_service
+        from app.services import form_routing_service, permission_policy_service
 
         resume_org = (
             db.query(WorkflowExecution.organization_id)
@@ -830,31 +859,7 @@ class WorkflowEngineCore:
             return
 
         if has_retired_routing_actions(workflow.actions):
-            from app.services import form_routing_service
-
-            submission = None
-            if execution.entity_type == "form_submission":
-                submission = (
-                    db.query(FormSubmission)
-                    .join(
-                        Form,
-                        (Form.id == FormSubmission.form_id)
-                        & (Form.organization_id == FormSubmission.organization_id),
-                    )
-                    .filter(
-                        FormSubmission.id == execution.entity_id,
-                        FormSubmission.organization_id == execution.organization_id,
-                        FormSubmission.source_mode == "shared",
-                        FormSubmission.status == "pending_review",
-                        FormSubmission.match_status == "workflow_pending",
-                        FormSubmission.surrogate_id.is_(None),
-                        FormSubmission.donor_id.is_(None),
-                        FormSubmission.intake_lead_id.is_(None),
-                    )
-                    .with_for_update(of=FormSubmission)
-                    .populate_existing()
-                    .first()
-                )
+            submission = _lock_pending_routing_submission(db, execution)
             try:
                 cancel_paused_routing_execution(db, execution)
                 if submission is not None:
@@ -1070,18 +1075,34 @@ class WorkflowEngineCore:
 
             # All done - determine final status
             all_success = all(r.get("success") for r in action_results)
-            execution.status = (
-                WorkflowExecutionStatus.SUCCESS.value
-                if all_success
-                else WorkflowExecutionStatus.PARTIAL.value
-            )
-            execution.actions_executed = action_results
-            db.commit()
-
-            # Update workflow stats
-            workflow.run_count += 1
-            workflow.last_run_at = datetime.now(UTC)
-            db.commit()
+            submission = None
+            # Include prior resumes: a retired action may precede a later approval.
+            if any(
+                result.get("success")
+                and result.get("skipped")
+                and result.get("action_type") in RETIRED_ROUTING_ACTIONS
+                for result in action_results
+            ):
+                submission = _lock_pending_routing_submission(db, execution)
+            try:
+                execution.status = (
+                    WorkflowExecutionStatus.SUCCESS.value
+                    if all_success
+                    else WorkflowExecutionStatus.PARTIAL.value
+                )
+                execution.actions_executed = action_results
+                workflow.run_count += 1
+                workflow.last_run_at = datetime.now(UTC)
+                if submission is not None:
+                    # Routing commits the final execution result, stats, and routing audit together.
+                    form_routing_service.route_submission(
+                        db, org_id=execution.organization_id, submission_id=submission.id
+                    )
+                else:
+                    db.commit()
+            except Exception:
+                db.rollback()
+                raise
 
         elif task.status == TaskStatus.DENIED.value:
             # DENIED: Mark execution as canceled
