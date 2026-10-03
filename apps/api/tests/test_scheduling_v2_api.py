@@ -502,3 +502,78 @@ async def test_legacy_google_import_marks_synthetic_appointments_external(
     )
     imported = db.query(Appointment).filter_by(google_event_id="legacy-google-event").one()
     assert imported.origin == "google_import"
+
+
+@pytest.mark.asyncio
+async def test_public_booking_record_token_links_the_emailed_surrogate(
+    client, db, test_org, test_user, booking_surface
+):
+    from app.core.security import create_booking_record_token
+
+    appointment_type, booking_link, start = booking_surface
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(full_name="Linked booker", email=f"linked-{uuid4().hex}@example.com"),
+    )
+    payload = _public_create_payload(appointment_type, start, request_id="record-link")
+    payload["record_token"] = create_booking_record_token(test_org.id, "surrogate", surrogate.id)
+
+    response = await client.post(f"/book/{booking_link.public_slug}/book", json=payload)
+
+    assert response.status_code == 200, response.text
+    appointment = db.query(Appointment).filter_by(organization_id=test_org.id).one()
+    assert appointment.surrogate_id == surrogate.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("token_kind", ["other_org", "tampered", "wrong_purpose"])
+async def test_public_booking_ignores_record_tokens_it_cannot_trust(
+    client, db, test_org, test_user, booking_surface, token_kind
+):
+    import jwt
+
+    from app.core.security import create_booking_record_token, create_export_token
+
+    appointment_type, booking_link, start = booking_surface
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(full_name="Unlinked booker", email=f"unlinked-{uuid4().hex}@example.com"),
+    )
+    if token_kind == "other_org":
+        token = create_booking_record_token(uuid4(), "surrogate", surrogate.id)
+    elif token_kind == "tampered":
+        token = jwt.encode(
+            {
+                "org_id": str(test_org.id),
+                "record_type": "surrogate",
+                "record_id": str(surrogate.id),
+                "purpose": "booking_record",
+            },
+            "not-the-signing-secret-but-long-enough-for-hs256",
+            algorithm="HS256",
+        )
+    else:
+        token = create_export_token(test_org.id, surrogate.id)
+    payload = _public_create_payload(appointment_type, start, request_id=f"bad-{token_kind}")
+    payload["record_token"] = token
+
+    response = await client.post(f"/book/{booking_link.public_slug}/book", json=payload)
+
+    assert response.status_code == 200, response.text
+    appointment = db.query(Appointment).filter_by(organization_id=test_org.id).one()
+    assert appointment.surrogate_id is None
+
+
+@pytest.mark.asyncio
+async def test_staff_create_rejects_record_token(authed_client, booking_surface):
+    appointment_type, _booking_link, start = booking_surface
+    payload = _public_create_payload(appointment_type, start, request_id="staff-token")
+    payload["record_token"] = "anything"
+
+    response = await authed_client.post("/appointments", json=payload)
+
+    assert response.status_code == 422

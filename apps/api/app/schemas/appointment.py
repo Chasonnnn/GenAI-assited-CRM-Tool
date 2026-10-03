@@ -166,6 +166,12 @@ class AppointmentCreate(BaseModel):
     request_id: str | None = Field(None, min_length=1, max_length=255)
 
 
+class PublicBookingCreate(AppointmentCreate):
+    """Public booking; record_token links it to the record whose email carried the link."""
+
+    record_token: str | None = Field(None, max_length=2048)
+
+
 class AppointmentReschedule(BaseModel):
     """Schema for rescheduling an appointment."""
 

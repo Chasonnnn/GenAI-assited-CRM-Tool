@@ -986,11 +986,12 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         if booking_link:
             from app.services import org_service
 
-            portal_base_url = org_service.get_org_portal_base_url(org)
-            appointment_link = (
-                f"{portal_base_url}/book/{booking_link.public_slug}"
-                if portal_base_url
-                else f"/book/{booking_link.public_slug}"
+            appointment_link = _record_booking_url(
+                org_service.get_org_portal_base_url(org),
+                booking_link.public_slug,
+                surrogate.organization_id,
+                "surrogate",
+                surrogate.id,
             )
 
     # Best-effort appointment context for workflow/campaign templates.
@@ -1168,12 +1169,33 @@ def _donor_appointment_link(db: Session, donor: Donor, org: Organization | None)
         )
     if not booking_link:
         return ""
-    portal_base_url = org_service.get_org_portal_base_url(org)
-    return (
-        f"{portal_base_url}/book/{booking_link.public_slug}"
-        if portal_base_url
-        else f"/book/{booking_link.public_slug}"
+    from app.services import match_lifecycle
+
+    # Donor links on appointments stay fenced until match expansion is enabled.
+    linked = match_lifecycle.expansion_enabled()
+    return _record_booking_url(
+        org_service.get_org_portal_base_url(org),
+        booking_link.public_slug,
+        donor.organization_id,
+        "donor" if linked else None,
+        donor.id,
     )
+
+
+def _record_booking_url(
+    portal_base_url: str | None,
+    public_slug: str,
+    org_id: UUID,
+    record_type: str | None,
+    record_id: UUID,
+) -> str:
+    """Booking page URL whose bookings link back to the emailed record."""
+    url = f"{portal_base_url}/book/{public_slug}" if portal_base_url else f"/book/{public_slug}"
+    if record_type is None:
+        return url
+    from app.core.security import create_booking_record_token
+
+    return f"{url}?record={create_booking_record_token(org_id, record_type, record_id)}"
 
 
 def _build_record_contact_template_variables(

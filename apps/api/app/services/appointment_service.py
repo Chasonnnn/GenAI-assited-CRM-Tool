@@ -9,6 +9,7 @@ Handles:
 """
 
 import hashlib
+import logging
 import re
 import secrets
 from datetime import UTC, date, datetime, time, timedelta
@@ -51,6 +52,8 @@ from app.schemas.appointment import (
 from app.services import appointment_integrations
 from app.utils.normalization import escape_like_string
 from app.utils.pagination import paginate_query_by_offset
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Types
@@ -2471,6 +2474,58 @@ def _validate_new_record_context(db, org_id, links):
         from app.services.match_work_service import validate_context
 
         validate_context(db, org_id, links["match_id"], links.get("attempt_id"), write=True)
+
+
+def resolve_booking_record_links(db: Session, org_id: UUID, token: str | None) -> dict:
+    """Return the record link a public booking token carries, or {} when it cannot apply.
+
+    Scope comes from the token and must match the booking link's organization. A stale,
+    foreign or tampered token books the appointment unlinked instead of failing the client.
+    """
+    if not token:
+        return {}
+    import jwt
+
+    from app.core.security import decode_booking_record_token
+
+    try:
+        payload = decode_booking_record_token(token)
+        token_org_id = UUID(str(payload.get("org_id")))
+        record_id = UUID(str(payload.get("record_id")))
+    except jwt.InvalidTokenError, ValueError, TypeError:
+        logger.info("Ignored invalid booking record token")
+        return {}
+    if token_org_id != org_id:
+        logger.warning("Ignored booking record token for another organization")
+        return {}
+    record_type = payload.get("record_type")
+    if record_type == "surrogate":
+        exists = (
+            db.query(Surrogate.id)
+            .filter(
+                Surrogate.id == record_id,
+                Surrogate.organization_id == org_id,
+                Surrogate.is_archived.is_(False),
+            )
+            .first()
+        )
+        return {"surrogate_id": record_id} if exists else {}
+    if record_type == "donor":
+        from app.services import match_lifecycle
+
+        if not match_lifecycle.expansion_enabled():
+            return {}
+        exists = (
+            db.query(Donor.id)
+            .filter(
+                Donor.id == record_id,
+                Donor.organization_id == org_id,
+                Donor.is_archived.is_(False),
+            )
+            .first()
+        )
+        return {"donor_id": record_id} if exists else {}
+    return {}
 
 
 def _audit_record_appointment(
