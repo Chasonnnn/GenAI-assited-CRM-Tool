@@ -1076,15 +1076,15 @@ class WorkflowEngineCore:
             # All done - determine final status
             all_success = all(r.get("success") for r in action_results)
             submission = None
-            # Include prior resumes: a retired action may precede a later approval.
-            if any(
-                result.get("success")
-                and result.get("skipped")
-                and result.get("action_type") in RETIRED_ROUTING_ACTIONS
-                for result in action_results
-            ):
-                submission = _lock_pending_routing_submission(db, execution)
             try:
+                # Include prior resumes: a retired action may precede a later approval.
+                if any(
+                    result.get("success")
+                    and result.get("skipped")
+                    and result.get("action_type") in RETIRED_ROUTING_ACTIONS
+                    for result in action_results
+                ):
+                    submission = _lock_pending_routing_submission(db, execution)
                 execution.status = (
                     WorkflowExecutionStatus.SUCCESS.value
                     if all_success
@@ -1102,7 +1102,9 @@ class WorkflowEngineCore:
                     db.commit()
             except Exception:
                 db.rollback()
-                self._record_failed_resume_completion(db, execution.id, action_results)
+                self._record_failed_resume_completion(
+                    db, execution.id, execution.organization_id, action_results
+                )
                 raise
 
         elif task.status == TaskStatus.DENIED.value:
@@ -1300,12 +1302,15 @@ class WorkflowEngineCore:
         return None, None, "Workflow requires approval but no approver could be resolved"
 
     def _record_failed_resume_completion(
-        self, db: Session, execution_id: UUID, action_results: list[dict]
+        self, db: Session, execution_id: UUID, org_id: UUID, action_results: list[dict]
     ) -> None:
         """Close an execution whose committed actions can no longer resume."""
         execution = (
             db.query(WorkflowExecution)
-            .filter(WorkflowExecution.id == execution_id)
+            .filter(
+                WorkflowExecution.id == execution_id,
+                WorkflowExecution.organization_id == org_id,
+            )
             .with_for_update()
             .populate_existing()
             .first()
