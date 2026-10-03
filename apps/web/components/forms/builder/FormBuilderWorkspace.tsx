@@ -398,7 +398,7 @@ function WorkspaceRail({
         <aside
             data-testid="form-builder-rail"
             aria-label="Fields and pages"
-            className="flex max-h-[24rem] min-h-0 w-full flex-col border-b border-border bg-card lg:max-h-none lg:border-r lg:border-b-0"
+            className="flex h-[24rem] min-h-0 w-full shrink-0 flex-col border-b border-border bg-card lg:h-auto lg:border-r lg:border-b-0"
         >
             <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
                 <div className="border-b border-border/70 px-3 py-2">
@@ -455,7 +455,7 @@ function CanvasPageHeader({
 
     return (
         <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 basis-60 space-y-1">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Page {activeIndex + 1} of {pages.length}
                 </p>
@@ -464,7 +464,7 @@ function CanvasPageHeader({
                     value={currentPage.name}
                     placeholder={currentPageLabel}
                     onChange={(event) => onRenamePage(currentPage.id, event.target.value)}
-                    className="h-auto border-0 bg-transparent p-0 text-xl font-semibold text-foreground shadow-none focus-visible:ring-0 md:text-xl"
+                    className="h-auto rounded-sm border-0 bg-transparent p-0 text-xl font-semibold text-foreground shadow-none md:text-xl"
                 />
             </div>
             <div className="flex items-center gap-1">

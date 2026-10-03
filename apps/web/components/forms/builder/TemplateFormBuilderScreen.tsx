@@ -35,7 +35,7 @@ export function TemplateFormBuilderScreen({
     }
 
     return (
-        <div className="flex min-h-screen flex-col bg-background lg:h-screen">
+        <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-background lg:h-[calc(100vh-3.5rem)]">
             <ConfirmDialog
                 open={controller.state.showDeleteTemplateDialog}
                 onOpenChange={controller.onDeleteTemplateDialogOpenChange}

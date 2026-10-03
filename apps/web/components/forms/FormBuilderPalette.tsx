@@ -128,7 +128,7 @@ export function FormBuilderPalette({
     }
 
     return (
-        <div data-testid="form-builder-palette" className={cn("flex h-full min-h-0 flex-col", className)}>
+        <div data-testid="form-builder-palette" className={cn("flex min-h-0 flex-1 flex-col", className)}>
             <div className="space-y-3 border-b border-border/70 p-3">
                 <div data-testid="form-builder-palette-search" className="rounded-lg border border-border bg-background">
                     <Command className="rounded-lg border-0 bg-transparent p-0 shadow-none">
