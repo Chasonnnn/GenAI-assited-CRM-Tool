@@ -104,6 +104,7 @@ TRIGGER_ENTITY_TYPES = {
     "appointment_requested": "appointment",
     "appointment_rescheduled": "appointment",
     "appointment_expired": "appointment",
+    "appointment_time": "appointment",
     "note_added": "note",
     "document_uploaded": "document",
 }
@@ -496,6 +497,7 @@ LEGACY_TRIGGER_SUBJECT_TYPES = {
     WorkflowTriggerType.APPOINTMENT_REQUESTED.value: "appointment",
     WorkflowTriggerType.APPOINTMENT_RESCHEDULED.value: "appointment",
     WorkflowTriggerType.APPOINTMENT_EXPIRED.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_TIME.value: "appointment",
 }
 FIXED_TRIGGER_SUBJECT_TYPES = frozenset(LEGACY_TRIGGER_SUBJECT_TYPES.values())
 
@@ -1935,6 +1937,11 @@ def get_workflow_options(
             "value": "appointment_expired",
             "label": "Appointment Request Expired",
             "description": "When a booking request expires without approval",
+        },
+        {
+            "value": "appointment_time",
+            "label": "Before or After Appointment",
+            "description": "Hours before an appointment starts or after it ends",
         },
         {
             "value": "note_added",

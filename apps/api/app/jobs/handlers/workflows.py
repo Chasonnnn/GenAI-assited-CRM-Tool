@@ -15,7 +15,8 @@ async def process_workflow_sweep(db, job) -> None:
 
     Payload:
         - org_id: Optional organization copy, validated against the job claim
-        - sweep_type: 'scheduled', 'inactivity', 'task_due', 'task_overdue', or 'all'
+        - sweep_type: 'scheduled', 'inactivity', 'task_due', 'task_overdue',
+          'appointment_time', or 'all'
         - evaluated_at: Timezone-aware ISO timestamp captured when the sweep was queued
     """
     from app.db.models import Organization
@@ -69,6 +70,9 @@ async def process_workflow_sweep(db, job) -> None:
 
             if sweep_type in ("all", "task_overdue"):
                 workflow_triggers.trigger_task_overdue_sweep(db, org.id)
+
+            if sweep_type in ("all", "appointment_time"):
+                workflow_triggers.trigger_appointment_time_sweep(db, org.id)
 
             db.commit()
             logger.info("Workflow sweep complete for org %s", org.id)

@@ -83,6 +83,7 @@ LEGACY_WORKFLOW_SUBJECT_TYPES = {
     "appointment_requested": "appointment",
     "appointment_rescheduled": "appointment",
     "appointment_expired": "appointment",
+    "appointment_time": "appointment",
 }
 
 DONOR_PHOTO_BASE64_FIELD_LIMIT = (

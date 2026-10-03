@@ -315,6 +315,13 @@ class AppointmentTriggerConfig(BaseModel):
     )
 
 
+class AppointmentTimeTriggerConfig(AppointmentTriggerConfig):
+    """Config for appointment_time: runs once per appointment time, hours from start or end."""
+
+    when: Literal["before_start", "after_end"] = "before_start"
+    hours: int = Field(24, ge=1, le=168)
+
+
 class IntakeLeadCreatedTriggerConfig(BaseModel):
     """Config for intake_lead_created trigger."""
 

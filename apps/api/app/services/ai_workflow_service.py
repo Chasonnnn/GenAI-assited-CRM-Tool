@@ -126,6 +126,10 @@ AVAILABLE_TRIGGERS = {
     "appointment_requested": "When a booking request is waiting for approval",
     "appointment_rescheduled": "When an appointment moves to a new time",
     "appointment_expired": "When a booking request expires without approval",
+    "appointment_time": (
+        "Hours before a confirmed appointment starts or after it ends "
+        "(trigger_config.when 'before_start' or 'after_end', trigger_config.hours 1-168)"
+    ),
 }
 
 AVAILABLE_ACTIONS = {

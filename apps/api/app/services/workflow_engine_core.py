@@ -32,6 +32,7 @@ from app.services import workflow_execution_authority, workflow_service
 from app.services.workflow_definition_rules import (
     APPOINTMENT_TRIGGER_TYPES,
     appointment_record_type,
+    appointment_timing_key,
 )
 from app.services.workflow_engine_adapters import WorkflowDomainAdapter
 
@@ -307,6 +308,10 @@ class WorkflowEngineCore:
             return True
 
         if trigger_type in APPOINTMENT_TRIGGER_TYPES:
+            if trigger_type == WorkflowTriggerType.APPOINTMENT_TIME and (
+                appointment_timing_key(config) not in (event_data.get("due_timings") or [])
+            ):
+                return False
             type_names = {
                 name.strip().casefold() for name in config.get("appointment_type_names") or []
             }
@@ -1279,6 +1284,12 @@ class WorkflowEngineCore:
                     occurrence_key = schedule_time.astimezone(UTC).strftime("%Y%m%dT%H%MZ")
 
             return f"{workflow.id}:{entity_id}:{trigger_type}:{occurrence_key}"
+
+        if trigger_type == WorkflowTriggerType.APPOINTMENT_TIME.value:
+            # Once per appointment time and timing; a reschedule earns a new run.
+            scheduled_start = (event_data or {}).get("scheduled_start")
+            timing = appointment_timing_key(workflow.trigger_config)
+            return f"{workflow.id}:{entity_id}:{trigger_type}:{timing}:{scheduled_start}"
 
         return None
 

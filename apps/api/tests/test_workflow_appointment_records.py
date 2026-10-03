@@ -416,3 +416,136 @@ def test_options_offer_record_actions_and_org_type_names_for_appointments(db, te
         "add_note",
     ]
     assert options.appointment_type_names in (["Initial Interview"], ["initial interview"])
+
+
+TIME = WorkflowTriggerType.APPOINTMENT_TIME
+
+
+def _executions(db, org_id, workflow_id) -> list[uuid.UUID]:
+    return [
+        execution.entity_id
+        for execution in db.query(WorkflowExecution).filter(
+            WorkflowExecution.organization_id == org_id,
+            WorkflowExecution.workflow_id == workflow_id,
+        )
+    ]
+
+
+def test_time_sweep_runs_hours_before_start_once_per_appointment_time(db, test_org, test_user):
+    now = datetime.now(UTC).replace(microsecond=0)
+    surrogate = _surrogate(db, test_org.id, test_user.id)
+    notify = [{"action_type": "send_notification", "title": "Tomorrow", "recipients": "host"}]
+    day_before = _workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        notify,
+        trigger_config={"when": "before_start", "hours": 24},
+        trigger_type=TIME,
+    )
+    hour_before = _workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        notify,
+        trigger_config={"when": "before_start", "hours": 1},
+        trigger_type=TIME,
+    )
+    due = _appointment(
+        db,
+        test_org.id,
+        test_user.id,
+        start=now + timedelta(hours=23),
+        surrogate_id=surrogate.id,
+    )
+    later = _appointment(
+        db,
+        test_org.id,
+        test_user.id,
+        start=now + timedelta(hours=30),
+        surrogate_id=surrogate.id,
+    )
+    pending = _appointment(
+        db,
+        test_org.id,
+        test_user.id,
+        start=now + timedelta(hours=23),
+        surrogate_id=surrogate.id,
+    )
+    for appointment in (due, later):
+        appointment.status = "confirmed"
+    pending.status = "pending"
+    db.flush()
+
+    workflow_triggers.trigger_appointment_time_sweep(db, test_org.id, now=now)
+    workflow_triggers.trigger_appointment_time_sweep(db, test_org.id, now=now)
+
+    assert _executions(db, test_org.id, day_before.id) == [due.id]
+    assert _executions(db, test_org.id, hour_before.id) == []
+
+    # A reschedule into the window earns a new run for the new time.
+    due.scheduled_start = now + timedelta(hours=22, minutes=30)
+    due.scheduled_end = due.scheduled_start + timedelta(minutes=30)
+    db.flush()
+    workflow_triggers.trigger_appointment_time_sweep(db, test_org.id, now=now)
+    assert _executions(db, test_org.id, day_before.id) == [due.id, due.id]
+
+
+def test_time_sweep_runs_hours_after_end_for_held_appointments_of_the_type(db, test_org, test_user):
+    now = datetime.now(UTC).replace(microsecond=0)
+    surrogate = _surrogate(db, test_org.id, test_user.id)
+    workflow = _workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        [{"action_type": "add_note", "content": "Follow up"}],
+        trigger_config={
+            "when": "after_end",
+            "hours": 2,
+            "appointment_type_names": ["Initial Interview"],
+        },
+        trigger_type=TIME,
+    )
+    ended = now - timedelta(hours=3)
+    completed = _appointment(db, test_org.id, test_user.id, start=ended, surrogate_id=surrogate.id)
+    cancelled = _appointment(db, test_org.id, test_user.id, start=ended, surrogate_id=surrogate.id)
+    cancelled.status = "cancelled"
+    other_type = _appointment(
+        db,
+        test_org.id,
+        test_user.id,
+        type_name="Follow-up",
+        start=ended,
+        surrogate_id=surrogate.id,
+    )
+    other_org = Organization(name="Other Org", slug=f"other-{uuid.uuid4().hex[:8]}")
+    db.add(other_org)
+    db.flush()
+    for appointment in (completed, other_type):
+        appointment.scheduled_end = now - timedelta(hours=2, minutes=30)
+    cancelled.scheduled_end = now - timedelta(hours=2, minutes=30)
+    db.flush()
+
+    workflow_triggers.trigger_appointment_time_sweep(db, other_org.id, now=now)
+    assert _executions(db, test_org.id, workflow.id) == []
+
+    workflow_triggers.trigger_appointment_time_sweep(db, test_org.id, now=now)
+
+    assert _executions(db, test_org.id, workflow.id) == [completed.id]
+    assert all(result["success"] for result in _results(db, test_org.id, workflow.id))
+
+
+@pytest.mark.parametrize(
+    "trigger_config",
+    [{"when": "during", "hours": 2}, {"when": "after_end", "hours": 0}, {"hours": 169}],
+)
+def test_time_trigger_rejects_invalid_timing(db, test_org, test_user, trigger_config):
+    with pytest.raises(ValueError):
+        _workflow(
+            db,
+            test_org.id,
+            test_user.id,
+            [{"action_type": "add_note", "content": "Follow up"}],
+            trigger_config=trigger_config,
+            trigger_type=TIME,
+        )

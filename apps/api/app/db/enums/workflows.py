@@ -42,6 +42,7 @@ class WorkflowTriggerType(str, Enum):
     APPOINTMENT_REQUESTED = "appointment_requested"
     APPOINTMENT_RESCHEDULED = "appointment_rescheduled"
     APPOINTMENT_EXPIRED = "appointment_expired"
+    APPOINTMENT_TIME = "appointment_time"
 
 
 class RecurrenceMode(str, Enum):

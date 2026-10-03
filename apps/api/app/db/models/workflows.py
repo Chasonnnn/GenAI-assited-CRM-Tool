@@ -46,6 +46,7 @@ def _default_workflow_subject_type(context) -> str:
         "appointment_requested": "appointment",
         "appointment_rescheduled": "appointment",
         "appointment_expired": "appointment",
+        "appointment_time": "appointment",
     }.get(trigger_type, "surrogate")
 
 

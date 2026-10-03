@@ -588,5 +588,6 @@ def test_migration_backfill_map_matches_service_contract():
     historical["appointment_requested"] = "appointment"
     historical["appointment_rescheduled"] = "appointment"
     historical["appointment_expired"] = "appointment"
+    historical["appointment_time"] = "appointment"
     assert historical == workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES
     assert set(module.DONOR_ONLY_TRIGGER_TYPES) == template_service.DONOR_ONLY_TRIGGER_TYPES

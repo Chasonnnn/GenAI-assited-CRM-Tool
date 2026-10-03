@@ -432,7 +432,7 @@ def maybe_schedule_workflow_maintenance_jobs(
     now: datetime,
     last_run_at: datetime | None,
 ) -> datetime | None:
-    """Best-effort hourly fallback for inactivity and task workflow triggers."""
+    """Best-effort hourly fallback for inactivity, task, and appointment time workflow triggers."""
     if not WORKFLOW_MAINTENANCE_FALLBACK_ENABLED:
         return last_run_at
 
@@ -447,7 +447,8 @@ def maybe_schedule_workflow_maintenance_jobs(
     utc_now = now.astimezone(UTC)
     daily_bucket = utc_now.strftime("%Y%m%d")
     hourly_bucket = utc_now.strftime("%Y%m%dT%HZ")
-    sweep_types = ("inactivity", "task_due", "task_overdue")
+    sweep_types = ("inactivity", "task_due", "task_overdue", "appointment_time")
+    hourly_sweep_types = {"task_due", "appointment_time"}
     jobs_created = 0
     duplicates_skipped = 0
     orgs = org_service.list_orgs(db)
@@ -456,7 +457,7 @@ def maybe_schedule_workflow_maintenance_jobs(
         for sweep_type in sweep_types:
             if sweep_type not in enabled_trigger_types:
                 continue
-            bucket = hourly_bucket if sweep_type == "task_due" else daily_bucket
+            bucket = hourly_bucket if sweep_type in hourly_sweep_types else daily_bucket
             idempotency_key = f"workflow-sweep:{sweep_type}:{org.id}:{bucket}"
             try:
                 existing = job_service.get_job_by_idempotency_key(

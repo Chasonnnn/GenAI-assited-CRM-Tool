@@ -2,6 +2,7 @@
 
 from app.db.enums import WorkflowTriggerType
 from app.schemas.workflow import (
+    AppointmentTimeTriggerConfig,
     AppointmentTriggerConfig,
     FormSubmittedTriggerConfig,
     InactivityTriggerConfig,
@@ -53,8 +54,15 @@ APPOINTMENT_TRIGGER_TYPES = frozenset(
         WorkflowTriggerType.APPOINTMENT_CANCELLED,
         WorkflowTriggerType.APPOINTMENT_NO_SHOW,
         WorkflowTriggerType.APPOINTMENT_EXPIRED,
+        WorkflowTriggerType.APPOINTMENT_TIME,
     }
 )
+
+
+def appointment_timing_key(trigger_config: dict | None) -> str:
+    """'<when>:<hours>' for an appointment_time config, with the schema defaults."""
+    config = trigger_config or {}
+    return f"{config.get('when') or 'before_start'}:{config.get('hours') or 24}"
 
 
 def appointment_record_type(trigger_config: dict | None) -> str:
@@ -80,6 +88,7 @@ def validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) -> 
         WorkflowTriggerType.FORM_SUBMISSION_REJECTED: FormSubmittedTriggerConfig,
         WorkflowTriggerType.INTAKE_LEAD_CREATED: IntakeLeadCreatedTriggerConfig,
         **dict.fromkeys(APPOINTMENT_TRIGGER_TYPES, AppointmentTriggerConfig),
+        WorkflowTriggerType.APPOINTMENT_TIME: AppointmentTimeTriggerConfig,
     }
 
     validator = validators.get(trigger_type)
