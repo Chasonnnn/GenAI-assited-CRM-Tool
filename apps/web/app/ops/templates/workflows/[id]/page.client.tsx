@@ -206,6 +206,9 @@ const FALLBACK_TRIGGER_TYPES = [
     { value: "appointment_completed", label: "Appointment Completed", description: "When an appointment is completed" },
     { value: "appointment_cancelled", label: "Appointment Cancelled", description: "When an appointment is cancelled" },
     { value: "appointment_no_show", label: "Appointment No-Show", description: "When an appointment is marked no-show" },
+    { value: "appointment_requested", label: "Appointment Requested", description: "When a booking request is waiting for approval" },
+    { value: "appointment_rescheduled", label: "Appointment Rescheduled", description: "When an appointment moves to a new time" },
+    { value: "appointment_expired", label: "Appointment Request Expired", description: "When a booking request expires without approval" },
     { value: "note_added", label: "Note Added", description: "When a note is added to a case" },
     { value: "document_uploaded", label: "Document Uploaded", description: "When a document is uploaded" },
 ]

@@ -23,6 +23,7 @@ import {
     WEEKDAY_LABELS,
     WORKFLOW_SUBJECT_LABELS,
     buildSimpleCron,
+    getAppointmentTypeNames,
     getConditionFieldLabel,
     getTriggerLabel,
     parseSimpleCron,
@@ -55,8 +56,9 @@ const SCHEDULE_FREQUENCY_OPTIONS: { value: ScheduleFrequency; label: string }[] 
 
 export function WorkflowTriggerPanel({ controller }: { controller: WorkflowEditorController }) {
     const { state, handlers, isEditing, createWorkflowSubjectOptions } = controller
-    const { subjectType, savedSubjectType, triggerType, workflowDescription } = state
-    const { setSubjectType, setTriggerType, setWorkflowDescription } = handlers
+    const { subjectType, savedSubjectType, actionSubjectType, isAppointmentTrigger, triggerType, workflowDescription } =
+        state
+    const { setSubjectType, setTriggerType, setTriggerConfig, setWorkflowDescription } = handlers
     const [selectedMode, setSelectedMode] = useState<TriggerMode>("event")
     const mode: TriggerMode = triggerType ? (TIME_TRIGGER_TYPES.has(triggerType) ? "time" : "event") : selectedMode
     const triggerOptions = controller.options.triggerTypeOptions.filter(
@@ -108,15 +110,28 @@ export function WorkflowTriggerPanel({ controller }: { controller: WorkflowEdito
             </PanelSection>
 
             <PanelSection title="Workflow will target">
-                <PanelCard icon={CrosshairIcon} title="Target by">
-                    <DotOptionGroup
-                        ariaLabel="Record type"
-                        value={subjectLocked ? savedSubjectType : subjectType}
-                        options={subjectOptions}
-                        onValueChange={(value) => setSubjectType(value as WorkflowSubjectType)}
-                        disabled={subjectLocked}
-                    />
-                </PanelCard>
+                {isAppointmentTrigger ? (
+                    <PanelCard icon={CrosshairIcon} title="Linked record">
+                        <DotOptionGroup
+                            ariaLabel="Linked record"
+                            value={actionSubjectType}
+                            options={createWorkflowSubjectOptions}
+                            onValueChange={(value) =>
+                                setTriggerConfig((currentConfig) => ({ ...currentConfig, record_type: value }))
+                            }
+                        />
+                    </PanelCard>
+                ) : (
+                    <PanelCard icon={CrosshairIcon} title="Target by">
+                        <DotOptionGroup
+                            ariaLabel="Record type"
+                            value={subjectLocked ? savedSubjectType : subjectType}
+                            options={subjectOptions}
+                            onValueChange={(value) => setSubjectType(value as WorkflowSubjectType)}
+                            disabled={subjectLocked}
+                        />
+                    </PanelCard>
+                )}
             </PanelSection>
 
             {triggerType === "scheduled" ? (
@@ -145,8 +160,9 @@ export function WorkflowTriggerPanel({ controller }: { controller: WorkflowEdito
 
 function TriggerConfigFields({ controller }: { controller: WorkflowEditorController }) {
     const { state, options, handlers } = controller
-    const { triggerType, triggerConfig } = state
+    const { triggerType, triggerConfig, isAppointmentTrigger } = state
     const {
+        appointmentTypeNames,
         formOptions,
         statusOptions,
         activeStatusOptions,
@@ -359,6 +375,16 @@ function TriggerConfigFields({ controller }: { controller: WorkflowEditorControl
                 </FieldRow>
             )}
 
+            {isAppointmentTrigger && (
+                <AppointmentTypeFilter
+                    typeNames={appointmentTypeNames}
+                    selected={getAppointmentTypeNames(triggerConfig)}
+                    onChange={(names) =>
+                        setTriggerConfig((currentConfig) => ({ ...currentConfig, appointment_type_names: names }))
+                    }
+                />
+            )}
+
             {(triggerType === "surrogate_assigned" || triggerType === "donor_assigned") && (
                 <FieldRow label="Assigned to">
                     <Select
@@ -388,6 +414,60 @@ function TriggerConfigFields({ controller }: { controller: WorkflowEditorControl
                 </FieldRow>
             )}
         </>
+    )
+}
+
+function AppointmentTypeFilter({
+    typeNames,
+    selected,
+    onChange,
+}: {
+    typeNames: string[]
+    selected: string[]
+    onChange: (names: string[]) => void
+}) {
+    const selectedKeys = new Set(selected.map((name) => name.toLocaleLowerCase()))
+    const available = typeNames.filter((name) => !selectedKeys.has(name.toLocaleLowerCase()))
+    return (
+        <FieldRow label="Appointment types">
+            <Select
+                aria-label="Appointment types"
+                value=""
+                onValueChange={(value) => {
+                    if (value) onChange([...selected, value])
+                }}
+            >
+                <SelectTrigger aria-label="Appointment types" className="w-full">
+                    <SelectValue placeholder="Any type">
+                        {(value: string | null) => value || (selected.length > 0 ? "Add type" : "Any type")}
+                    </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    {available.map((name) => (
+                        <SelectItem key={name} value={name}>
+                            {name}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            {selected.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                    {selected.map((name) => (
+                        <Badge key={name} variant="outline" className="gap-1 bg-card">
+                            {name}
+                            <Button
+                                unstyled
+                                type="button"
+                                aria-label={`Remove ${name}`}
+                                onClick={() => onChange(selected.filter((item) => item !== name))}
+                            >
+                                <XIcon className="size-3" />
+                            </Button>
+                        </Badge>
+                    ))}
+                </div>
+            )}
+        </FieldRow>
     )
 }
 

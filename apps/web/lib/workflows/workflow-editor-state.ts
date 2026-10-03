@@ -55,6 +55,18 @@ export const CREATE_WORKFLOW_SUBJECT_OPTIONS: Array<{ value: CreateWorkflowSubje
     { value: "sperm_donor", label: WORKFLOW_SUBJECT_LABELS.sperm_donor },
 ]
 
+/** The record an appointment workflow acts on (mirrors AppointmentTriggerConfig.record_type). */
+export function getAppointmentRecordType(triggerConfig: JsonObject): CreateWorkflowSubjectType {
+    const value = triggerConfig.record_type
+    return CREATE_WORKFLOW_SUBJECT_OPTIONS.find((option) => option.value === value)?.value ?? "surrogate"
+}
+
+export function getAppointmentTypeNames(triggerConfig: JsonObject): string[] {
+    return Array.isArray(triggerConfig.appointment_type_names)
+        ? triggerConfig.appointment_type_names.filter((name): name is string => typeof name === "string")
+        : []
+}
+
 // Mirrors workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES; the engine matches on subject_type.
 export const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubjectType>> = {
     form_submitted: "form_submission",
@@ -69,6 +81,9 @@ export const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubject
     appointment_completed: "appointment",
     appointment_cancelled: "appointment",
     appointment_no_show: "appointment",
+    appointment_requested: "appointment",
+    appointment_rescheduled: "appointment",
+    appointment_expired: "appointment",
 }
 
 export const TRIGGER_LABELS: Record<string, string> = {
@@ -92,6 +107,9 @@ export const TRIGGER_LABELS: Record<string, string> = {
     appointment_completed: "Appointment Completed",
     appointment_cancelled: "Appointment Cancelled",
     appointment_no_show: "Appointment No-Show",
+    appointment_requested: "Appointment Requested",
+    appointment_rescheduled: "Appointment Rescheduled",
+    appointment_expired: "Appointment Request Expired",
     note_added: "Note Added",
     document_uploaded: "Document Uploaded",
     donor_created: "Donor Created",

@@ -860,6 +860,85 @@ describe('WorkflowEditorPage', () => {
         )
     })
 
+    it('saves an appointment workflow for donor-linked bookings of chosen types', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_automation', 'view_donors', 'edit_donors'] },
+        })
+        mockUseWorkflowOptions.mockImplementation((_scope: string, subjectType: string) => ({
+            data: {
+                ...DEFAULT_OPTIONS,
+                trigger_types: [
+                    { value: 'appointment_scheduled', label: 'Appointment Scheduled', description: '' },
+                ],
+                action_types: [
+                    { value: 'send_message', label: 'Send SMS/MMS', description: '' },
+                    { value: 'send_notification', label: 'Send Notification', description: '' },
+                ],
+                action_types_by_trigger: { appointment_scheduled: ['send_message', 'send_notification'] },
+                trigger_entity_types: { appointment_scheduled: 'appointment' },
+                appointment_type_names: subjectType === 'egg_donor' ? [] : ['Consultation', 'Medical Screening'],
+            },
+            isLoading: false,
+        }))
+
+        renderNewWorkflow('org')
+        fireEvent.change(nameInput(), { target: { value: 'Donor consult booked' } })
+        fireEvent.change(triggerSelect(), { target: { value: 'appointment_scheduled' } })
+
+        expect(radioLabels('Linked record')).toEqual(['Surrogate', 'Egg Donor', 'Sperm Donor'])
+        expect(screen.getByRole('radio', { name: 'Surrogate' })).toBeChecked()
+        expect(screen.getByTestId('workflow-build-panel')).toHaveTextContent('Send SMS/MMS')
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Egg Donor' }))
+        expect(mockUseWorkflowOptions).toHaveBeenCalledWith('org', 'egg_donor')
+        expect(screen.getByTestId('workflow-build-panel')).not.toHaveTextContent('Send SMS/MMS')
+
+        const typeSelect = screen.getByRole('combobox', { name: 'Appointment types' })
+        fireEvent.change(typeSelect, { target: { value: 'Consultation' } })
+        expect(optionLabels(typeSelect)).toEqual(['Medical Screening'])
+        expect(screen.getByRole('button', { name: 'Remove Consultation' })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send Notification' }))
+        fireEvent.change(screen.getByRole('textbox', { name: 'Notification title' }), {
+            target: { value: 'Consult booked' },
+        })
+        const recipientSelect = getFirstElement(
+            screen.getAllByTestId('select').filter((select) => select.querySelector('option[value="host"]')),
+            'Expected a notification recipient select',
+        )
+        expect(optionLabels(recipientSelect)).toContain('Appointment Host')
+        fireEvent.change(recipientSelect, { target: { value: 'host' } })
+        fireEvent.click(launchButton())
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'appointment',
+                trigger_type: 'appointment_scheduled',
+                trigger_config: { record_type: 'egg_donor', appointment_type_names: ['Consultation'] },
+                actions: [expect.objectContaining({ action_type: 'send_notification', recipients: 'host' })],
+            }),
+            expect.any(Object),
+        )
+    })
+
+    it('offers the appointment host only to appointment workflows', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...DEFAULT_OPTIONS,
+                action_types: [{ value: 'send_notification', label: 'Send Notification', description: '' }],
+                action_types_by_trigger: { surrogate_created: ['send_notification'] },
+            },
+            isLoading: false,
+        })
+
+        renderNewWorkflow()
+        fireEvent.change(triggerSelect(), { target: { value: 'surrogate_created' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Send Notification' }))
+
+        expect(screen.queryByRole('option', { name: 'Appointment Host' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('radiogroup', { name: 'Linked record' })).not.toBeInTheDocument()
+    })
+
     it('saves a form-submitted workflow with the form submission subject', () => {
         mockUseWorkflowOptions.mockReturnValue({
             data: {

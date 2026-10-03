@@ -49,6 +49,7 @@ import {
     buildTriggerConfigForSave,
     createInitialWorkflowBuilderState,
     getActionsValidationError,
+    getAppointmentRecordType,
     getTriggerConfigValidationError,
     isDonorSubject,
     normalizeTriggerConfigForUi,
@@ -121,6 +122,10 @@ export function useWorkflowEditor({
         actions,
     } = state
     const savedSubjectType = FIXED_TRIGGER_SUBJECT_TYPES[triggerType] ?? subjectType
+    // Appointment workflows act on the linked record named by trigger_config.record_type.
+    const isAppointmentTrigger = savedSubjectType === "appointment"
+    const appointmentRecordType = getAppointmentRecordType(triggerConfig)
+    const actionSubjectType: WorkflowSubjectType = isAppointmentTrigger ? appointmentRecordType : subjectType
 
     const setupSessionIdRef = useRef<string | null>(null)
     useEffect(() => {
@@ -145,8 +150,9 @@ export function useWorkflowEditor({
         isDonorLeadKind(triggerForm?.lead_kind) && isDonorLeadKind(configuredIntakeLeadKind)
             ? configuredIntakeLeadKind
             : triggerForm?.lead_kind ?? configuredIntakeLeadKind
-    const recordSubjectType: WorkflowSubjectType =
-        intakeLeadKindKey && !isDonorSubject(subjectType) && isDonorLeadKind(intakeLeadKind)
+    const recordSubjectType: WorkflowSubjectType = isAppointmentTrigger
+        ? appointmentRecordType
+        : intakeLeadKindKey && !isDonorSubject(subjectType) && isDonorLeadKind(intakeLeadKind)
             ? intakeLeadKind
             : subjectType
     const isSharedDonorTriggerForm =
@@ -166,15 +172,21 @@ export function useWorkflowEditor({
     const actionTypeValuesForTrigger = triggerType && options?.action_types_by_trigger?.[triggerType]
         ? new Set(options.action_types_by_trigger[triggerType])
         : null
-    const filteredActionTypes = actionTypeValuesForTrigger
+    const triggerActionTypes = actionTypeValuesForTrigger
         ? actionTypeOptions.filter((action) => actionTypeValuesForTrigger.has(action.value))
         : actionTypeOptions
+    // The appointment action list ignores record_type, and donor records have no messaging
+    // (mirrors _validate_action_subject_compatibility).
+    const filteredActionTypes = isAppointmentTrigger && isDonorSubject(appointmentRecordType)
+        ? triggerActionTypes.filter((action) => action.value !== "send_message")
+        : triggerActionTypes
     const userOptions = options?.users ?? []
     const queueOptions = options?.queues ?? []
     const messageTemplates = options?.message_templates ?? []
     const emailTemplates = options?.email_templates ?? []
     const triggerEntityType = triggerType ? options?.trigger_entity_types?.[triggerType] : undefined
-    const baseEmailRecipientOptions: SelectOption[] = isDonorSubject(subjectType)
+    const appointmentTypeNames = options?.appointment_type_names ?? []
+    const baseEmailRecipientOptions: SelectOption[] = isDonorSubject(actionSubjectType)
         ? [
             { value: "donor", label: "Donor" },
             ...EMAIL_RECIPIENT_OPTIONS.flatMap((option) => {
@@ -321,7 +333,7 @@ export function useWorkflowEditor({
 
     const buildNewAction = (actionType: string): Partial<ActionConfig> => ({
         action_type: actionType,
-        ...(isDonorSubject(subjectType) && actionType === "send_message" ? { requires_approval: true } : {}),
+        ...(isDonorSubject(actionSubjectType) && actionType === "send_message" ? { requires_approval: true } : {}),
         ...(actionType === "send_email" && triggerEntityType === "intake_lead" ? { recipients: "all_admins" } : {}),
     })
     const addAction = (actionType = "") => {
@@ -459,6 +471,8 @@ export function useWorkflowEditor({
             workflowScope,
             subjectType,
             savedSubjectType,
+            actionSubjectType,
+            isAppointmentTrigger,
             triggerType,
             triggerConfig,
             conditions,
@@ -486,6 +500,7 @@ export function useWorkflowEditor({
             configuredIntakeLeadKind,
             isDonorIntakeTrigger,
             getConditionOptions,
+            appointmentTypeNames,
         },
         handlers: {
             setWorkflowName,
