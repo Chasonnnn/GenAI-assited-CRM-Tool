@@ -123,6 +123,9 @@ AVAILABLE_TRIGGERS = {
     "appointment_completed": "When an appointment is completed",
     "appointment_cancelled": "When an appointment is cancelled",
     "appointment_no_show": "When an appointment is marked as a no-show",
+    "appointment_requested": "When a booking request is waiting for approval",
+    "appointment_rescheduled": "When an appointment moves to a new time",
+    "appointment_expired": "When a booking request expires without approval",
 }
 
 AVAILABLE_ACTIONS = {

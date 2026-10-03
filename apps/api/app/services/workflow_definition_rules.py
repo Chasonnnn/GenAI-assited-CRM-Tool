@@ -2,6 +2,7 @@
 
 from app.db.enums import WorkflowTriggerType
 from app.schemas.workflow import (
+    AppointmentTriggerConfig,
     FormSubmittedTriggerConfig,
     InactivityTriggerConfig,
     IntakeLeadCreatedTriggerConfig,
@@ -43,6 +44,23 @@ def normalize_actions_for_trigger(
 
 
 RETIRED_TRIGGER_TYPES = frozenset({WorkflowTriggerType.FORM_STARTED})
+APPOINTMENT_TRIGGER_TYPES = frozenset(
+    {
+        WorkflowTriggerType.APPOINTMENT_REQUESTED,
+        WorkflowTriggerType.APPOINTMENT_SCHEDULED,
+        WorkflowTriggerType.APPOINTMENT_RESCHEDULED,
+        WorkflowTriggerType.APPOINTMENT_COMPLETED,
+        WorkflowTriggerType.APPOINTMENT_CANCELLED,
+        WorkflowTriggerType.APPOINTMENT_NO_SHOW,
+        WorkflowTriggerType.APPOINTMENT_EXPIRED,
+    }
+)
+
+
+def appointment_record_type(trigger_config: dict | None) -> str:
+    """Record type an appointment workflow's record actions run on."""
+    record_type = (trigger_config or {}).get("record_type")
+    return record_type if record_type in {"egg_donor", "sperm_donor"} else "surrogate"
 
 
 def validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) -> None:
@@ -61,6 +79,7 @@ def validate_trigger_config(trigger_type: WorkflowTriggerType, config: dict) -> 
         WorkflowTriggerType.FORM_SUBMISSION_APPROVED: FormSubmittedTriggerConfig,
         WorkflowTriggerType.FORM_SUBMISSION_REJECTED: FormSubmittedTriggerConfig,
         WorkflowTriggerType.INTAKE_LEAD_CREATED: IntakeLeadCreatedTriggerConfig,
+        **dict.fromkeys(APPOINTMENT_TRIGGER_TYPES, AppointmentTriggerConfig),
     }
 
     validator = validators.get(trigger_type)

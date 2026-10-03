@@ -916,12 +916,6 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
 
     form_link = ""
     appointment_link = ""
-    appointment_manage_url = ""
-    appointment_reschedule_url = ""
-    appointment_cancel_url = ""
-    appointment_date = ""
-    appointment_time = ""
-    appointment_location = ""
     from app.services import form_intake_service, form_service
 
     default_application_form = form_service.get_default_surrogate_application_form(
@@ -1013,47 +1007,11 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         .order_by(Appointment.scheduled_start.asc())
         .first()
     )
-    if upcoming_appointment:
-        from app.services import org_service
-
-        portal_base_url = org_service.get_org_portal_base_url(org)
-        manage_token = upcoming_appointment.reschedule_token or upcoming_appointment.cancel_token
-        if manage_token:
-            appointment_manage_url = (
-                f"{portal_base_url}/book/self-service/{surrogate.organization_id}/manage/{manage_token}"
-                if portal_base_url
-                else f"/book/self-service/{surrogate.organization_id}/manage/{manage_token}"
-            )
-        if upcoming_appointment.reschedule_token:
-            appointment_reschedule_url = (
-                f"{portal_base_url}/book/self-service/{surrogate.organization_id}/reschedule/{upcoming_appointment.reschedule_token}"
-                if portal_base_url
-                else f"/book/self-service/{surrogate.organization_id}/reschedule/{upcoming_appointment.reschedule_token}"
-            )
-        if upcoming_appointment.cancel_token:
-            appointment_cancel_url = (
-                f"{portal_base_url}/book/self-service/{surrogate.organization_id}/cancel/{upcoming_appointment.cancel_token}"
-                if portal_base_url
-                else f"/book/self-service/{surrogate.organization_id}/cancel/{upcoming_appointment.cancel_token}"
-            )
-
-        tz_name = upcoming_appointment.client_timezone or (
-            org.timezone if org else "America/Los_Angeles"
-        )
-        try:
-            local_tz = ZoneInfo(tz_name)
-        except Exception:
-            local_tz = ZoneInfo("America/Los_Angeles")
-        local_start = upcoming_appointment.scheduled_start.astimezone(local_tz)
-        appointment_date = local_start.strftime("%A, %B %d, %Y")
-        appointment_time = local_start.strftime("%I:%M %p %Z")
-        appointment_location = (
-            upcoming_appointment.meeting_location
-            or upcoming_appointment.dial_in_number
-            or upcoming_appointment.zoom_join_url
-            or upcoming_appointment.google_meet_url
-            or "To be confirmed"
-        )
+    appointment_variables = (
+        build_appointment_template_variables(db, upcoming_appointment, org)
+        if upcoming_appointment
+        else dict.fromkeys(APPOINTMENT_TEMPLATE_VARIABLES, "")
+    )
 
     return {
         **contact_variables,
@@ -1061,12 +1019,7 @@ def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dic
         "status_label": surrogate.status_label or "",
         "form_link": form_link,
         "appointment_link": appointment_link,
-        "appointment_manage_url": appointment_manage_url,
-        "appointment_reschedule_url": appointment_reschedule_url,
-        "appointment_cancel_url": appointment_cancel_url,
-        "appointment_date": appointment_date,
-        "appointment_time": appointment_time,
-        "appointment_location": appointment_location,
+        **appointment_variables,
     }
 
 
@@ -1261,65 +1214,53 @@ def _build_record_contact_template_variables(
     }
 
 
+APPOINTMENT_TEMPLATE_VARIABLES = (
+    "appointment_manage_url",
+    "appointment_reschedule_url",
+    "appointment_cancel_url",
+    "appointment_date",
+    "appointment_time",
+    "appointment_location",
+)
+
+
 def build_appointment_template_variables(
-    db: Session,
-    appointment,
-    surrogate: Surrogate | None = None,
+    db: Session, appointment, org: Organization | None = None
 ) -> dict[str, str]:
-    """
-    Build template variables for an appointment context.
+    """Variables for one appointment, with times in the client's timezone."""
+    from app.services import org_service
 
-    Formats appointment times in the client's timezone (or org timezone fallback).
-    Uses client_timezone from the appointment for user-facing display.
-    """
-    from zoneinfo import ZoneInfo
-
-    from app.db.models import Organization
-    from app.services import media_service
-
-    # Get org for fallback timezone
-    org = db.query(Organization).filter(Organization.id == appointment.organization_id).first()
-    org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
-
-    # Use appointment's client_timezone, fall back to org timezone
-    tz_name = getattr(appointment, "client_timezone", None) or (
-        org.timezone if org else "America/Los_Angeles"
-    )
+    if org is None:
+        org = db.query(Organization).filter(Organization.id == appointment.organization_id).first()
+    portal_base_url = org_service.get_org_portal_base_url(org) if org else ""
+    self_service = f"{portal_base_url}/book/self-service/{appointment.organization_id}"
+    manage_token = appointment.reschedule_token or appointment.cancel_token
+    tz_name = appointment.client_timezone or (org.timezone if org else "America/Los_Angeles")
     try:
         local_tz = ZoneInfo(tz_name)
     except Exception:
         local_tz = ZoneInfo("America/Los_Angeles")
-
-    # Convert UTC times to local timezone
     local_start = appointment.scheduled_start.astimezone(local_tz)
-
-    # Format date and time in user-friendly format
-    appointment_date = local_start.strftime("%A, %B %d, %Y")  # "Monday, December 25, 2024"
-    appointment_time = local_start.strftime("%I:%M %p %Z")  # "2:30 PM PST"
-
-    # Get location (virtual link or physical address)
-    location = ""
-    if hasattr(appointment, "video_link") and appointment.video_link:
-        location = appointment.video_link
-    elif hasattr(appointment, "location") and appointment.location:
-        location = appointment.location
-    else:
-        location = "To be confirmed"
-
-    variables = {
-        "appointment_date": appointment_date,
-        "appointment_time": appointment_time,
-        "appointment_location": location,
-        "org_name": org.name if org else "",
-        "org_logo_url": org_logo_url or "",
+    return {
+        "appointment_manage_url": f"{self_service}/manage/{manage_token}" if manage_token else "",
+        "appointment_reschedule_url": (
+            f"{self_service}/reschedule/{appointment.reschedule_token}"
+            if appointment.reschedule_token
+            else ""
+        ),
+        "appointment_cancel_url": (
+            f"{self_service}/cancel/{appointment.cancel_token}" if appointment.cancel_token else ""
+        ),
+        "appointment_date": local_start.strftime("%A, %B %d, %Y"),
+        "appointment_time": local_start.strftime("%I:%M %p %Z"),
+        "appointment_location": (
+            appointment.meeting_location
+            or appointment.dial_in_number
+            or appointment.zoom_join_url
+            or appointment.google_meet_url
+            or "To be confirmed"
+        ),
     }
-
-    # Merge in surrogate variables if provided
-    if surrogate:
-        surrogate_vars = build_surrogate_template_variables(db, surrogate)
-        variables.update(surrogate_vars)
-
-    return variables
 
 
 def resolve_surrogate_email_attachments(

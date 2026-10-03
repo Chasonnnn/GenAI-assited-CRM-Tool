@@ -31,7 +31,7 @@ def _workflow(db, org_id, user_id, trigger_type, conditions, actions=None, **ext
             trigger_type=trigger_type,
             trigger_config=extra.pop("trigger_config", {}),
             conditions=conditions,
-            actions=actions or [{"action_type": "add_note", "content": "Workflow ran"}],
+            actions=actions or [{"action_type": "send_notification", "title": "Workflow ran"}],
             **extra,
         ),
     )

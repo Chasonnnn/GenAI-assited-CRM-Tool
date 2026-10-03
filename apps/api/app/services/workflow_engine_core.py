@@ -29,6 +29,10 @@ from app.db.models import (
     WorkflowExecution,
 )
 from app.services import workflow_execution_authority, workflow_service
+from app.services.workflow_definition_rules import (
+    APPOINTMENT_TRIGGER_TYPES,
+    appointment_record_type,
+)
 from app.services.workflow_engine_adapters import WorkflowDomainAdapter
 
 logger = logging.getLogger(__name__)
@@ -300,6 +304,15 @@ class WorkflowEngineCore:
             lead_type = config.get("lead_type")
             if lead_type and event_data.get("lead_type") != lead_type:
                 return False
+            return True
+
+        if trigger_type in APPOINTMENT_TRIGGER_TYPES:
+            type_names = {
+                name.strip().casefold() for name in config.get("appointment_type_names") or []
+            }
+            if type_names:
+                event_type = str(event_data.get("appointment_type") or "").strip().casefold()
+                return event_type in type_names
             return True
 
         # For surrogate_created, task_due, task_overdue, scheduled, inactivity
@@ -1102,6 +1115,8 @@ class WorkflowEngineCore:
             kwargs["execution_permissions"] = frozenset(
                 (execution.authority_snapshot or {}).get("permissions", [])
             )
+        if workflow.subject_type == "appointment":
+            kwargs["appointment_record_type"] = appointment_record_type(workflow.trigger_config)
         return self.adapter.execute_action(**kwargs)
 
     def _load_active_org_user(

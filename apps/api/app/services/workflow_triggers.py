@@ -22,6 +22,7 @@ from app.db.models import (
 )
 from app.schemas.workflow import is_supported_simple_cron
 from app.services import workflow_execution_authority
+from app.services.workflow_definition_rules import APPOINTMENT_TRIGGER_TYPES
 from app.services.workflow_engine import engine
 
 logger = logging.getLogger(__name__)
@@ -1048,16 +1049,6 @@ def trigger_note_added(db: Session, note: EntityNote) -> None:
 # =============================================================================
 
 
-APPOINTMENT_TRIGGER_TYPES = frozenset(
-    {
-        WorkflowTriggerType.APPOINTMENT_SCHEDULED,
-        WorkflowTriggerType.APPOINTMENT_COMPLETED,
-        WorkflowTriggerType.APPOINTMENT_CANCELLED,
-        WorkflowTriggerType.APPOINTMENT_NO_SHOW,
-    }
-)
-
-
 def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None:
     """Trigger workflows when an appointment is scheduled/approved."""
     trigger_appointment_event(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
@@ -1072,6 +1063,9 @@ def trigger_appointment_event(
     entity_owner_id = _get_owner_id_for_surrogate_id(
         db, appointment.organization_id, appointment.surrogate_id
     )
+    if entity_owner_id is None and appointment.donor_id:
+        donor = _get_donor_by_id(db, appointment.organization_id, appointment.donor_id)
+        entity_owner_id = _get_entity_owner_id(donor) if donor else None
     engine.trigger(
         db=db,
         trigger_type=trigger_type,
@@ -1083,6 +1077,7 @@ def trigger_appointment_event(
             "intended_parent_id": str(appointment.intended_parent_id)
             if appointment.intended_parent_id
             else None,
+            "donor_id": str(appointment.donor_id) if appointment.donor_id else None,
             "user_id": str(appointment.user_id),
             "scheduled_start": appointment.scheduled_start.isoformat()
             if appointment.scheduled_start

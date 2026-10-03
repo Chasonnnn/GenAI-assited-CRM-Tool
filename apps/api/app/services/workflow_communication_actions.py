@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.enums import JobType, OwnerType
 from app.db.models import (
+    Appointment,
     Donor,
     EmailTemplate,
     FormSubmission,
@@ -35,8 +36,13 @@ def send_email(
     workflow_owner_id: UUID | None = None,
     workflow_creator_user_id: UUID | None = None,
     workflow_execution_id: UUID | None = None,
+    appointment: Appointment | None = None,
 ) -> dict:
-    """Queue an email using template."""
+    """Queue an email using template.
+
+    An appointment workflow passes its triggering appointment so appointment variables
+    describe that appointment, not the record's next upcoming one.
+    """
     template_id = action.get("template_id")
     recipients = action.get("recipients", "subject")
 
@@ -125,6 +131,10 @@ def send_email(
 
     # Resolve variables
     variables = resolve_email_variables(db, entity)
+    if appointment is not None:
+        from app.services import email_service
+
+        variables.update(email_service.build_appointment_template_variables(db, appointment))
 
     job_ids: list[str] = []
     for email in sorted(set(recipient_emails)):
@@ -385,9 +395,36 @@ def send_notification(
 
     target = entity
     target_entity_type = "donor" if isinstance(entity, Donor) else "surrogate"
+    host_id = None
     if isinstance(entity, FormSubmission):
         target_entity_type = "form_submission"
-    if not hasattr(entity, "owner_type"):
+    if isinstance(entity, Appointment):
+        # Owner recipients follow the linked record; unlinked bookings notify on the appointment.
+        host_id = entity.user_id
+        target, target_entity_type = entity, "appointment"
+        if entity.surrogate_id:
+            surrogate = (
+                db.query(Surrogate)
+                .filter(
+                    Surrogate.id == entity.surrogate_id,
+                    Surrogate.organization_id == entity.organization_id,
+                )
+                .first()
+            )
+            if surrogate:
+                target, target_entity_type = surrogate, "surrogate"
+        elif entity.donor_id:
+            donor = (
+                db.query(Donor)
+                .filter(
+                    Donor.id == entity.donor_id,
+                    Donor.organization_id == entity.organization_id,
+                )
+                .first()
+            )
+            if donor:
+                target, target_entity_type = donor, "donor"
+    elif not hasattr(entity, "owner_type"):
         surrogate_id = getattr(entity, "surrogate_id", None)
         if surrogate_id:
             target = (
@@ -417,6 +454,8 @@ def send_notification(
     elif recipients == "creator":
         creator_id = getattr(target, "created_by_user_id", None)
         user_ids = [creator_id] if creator_id else []
+    elif recipients == "host":
+        user_ids = [host_id] if host_id else []
     elif recipients == "all_admins":
         memberships = (
             db.query(Membership)

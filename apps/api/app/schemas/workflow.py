@@ -1,11 +1,11 @@
 """Pydantic schemas for Automation Workflows."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.db.enums import (
     OwnerType,
@@ -300,6 +300,21 @@ class FormSubmittedTriggerConfig(BaseModel):
     lead_kind: Literal["surrogate", "egg_donor", "sperm_donor"] | None = None
 
 
+class AppointmentTriggerConfig(BaseModel):
+    """Config for appointment triggers.
+
+    record_type picks the linked record that record actions run on. Appointment types are
+    per host, so the type filter matches type names case-insensitively across hosts.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    record_type: Literal["surrogate", "egg_donor", "sperm_donor"] = "surrogate"
+    appointment_type_names: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(
+        default_factory=list, max_length=50
+    )
+
+
 class IntakeLeadCreatedTriggerConfig(BaseModel):
     """Config for intake_lead_created trigger."""
 
@@ -394,7 +409,8 @@ class SendNotificationActionConfig(BaseModel):
     action_type: Literal["send_notification"] = "send_notification"
     title: str = Field(max_length=100)
     body: str | None = None
-    recipients: Literal["owner", "creator", "all_admins"] | list[UUID] = "owner"
+    # "host" is the appointment's staff host; only appointment triggers offer it.
+    recipients: Literal["owner", "creator", "all_admins", "host"] | list[UUID] = "owner"
 
 
 class SendZapierConversionEventActionConfig(BaseModel):
@@ -656,6 +672,7 @@ class WorkflowOptions(BaseModel):
     queues: list[dict]  # {id, name}
     statuses: list[dict]  # {id, value, label, is_active}
     forms: list[dict] = []  # {id, name, lead_kind, lead_kinds}
+    appointment_type_names: list[str] = []
 
 
 # =============================================================================
