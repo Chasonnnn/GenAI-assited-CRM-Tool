@@ -354,7 +354,7 @@ jobs:
       
       - name: Run type check
         working-directory: apps/web
-        run: pnpm run typecheck
+        run: pnpm run typecheck && pnpm run typecheck:tests
       
       - name: Run build
         working-directory: apps/web

@@ -49,6 +49,8 @@ describe("SurrogateNotesTab", () => {
                     notes={[
                         {
                             id: "note_1",
+                            surrogate_id: "sur_1",
+                            author_id: "user_1",
                             author_name: "Nina Admin",
                             created_at: "2026-01-01T00:00:00Z",
                             body: "<p>Hello</p>",

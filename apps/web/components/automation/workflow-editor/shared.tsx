@@ -26,18 +26,26 @@ const BOOLEAN_FIELDS = new Set([
     "is_non_smoker",
     "has_surrogate_experience",
     "is_age_eligible",
+    "is_archived",
 ])
 
 const NUMBER_FIELDS = new Set([
-    "age",
-    "bmi",
     "height_ft",
     "weight_lb",
     "num_deliveries",
     "num_csections",
 ])
 
-const DATE_FIELDS = new Set(["created_at", "date_of_birth"])
+const DATE_FIELDS = new Set([
+    "created_at",
+    "date_of_birth",
+    "last_contacted_at",
+    "assigned_at",
+    "pregnancy_due_date",
+    "actual_delivery_date",
+    "submitted_at",
+    "scheduled_start",
+])
 export const LIST_OPERATORS = new Set(["in", "not_in"])
 export const VALUELESS_OPERATORS = new Set(["is_empty", "is_not_empty"])
 
@@ -51,15 +59,69 @@ export const MULTISELECT_FIELDS = new Set([
     "source_mode",
     "lead_kind",
     "match_status",
+    "contact_status",
+    "status",
+    "match_kind",
+    "meeting_mode",
 ])
 
 export const SOURCE_OPTIONS: SelectOption[] = [
     { value: "manual", label: "Manual" },
     { value: "meta", label: "Meta" },
+    { value: "tiktok", label: "TikTok" },
+    { value: "google", label: "Google" },
     { value: "website", label: "Website" },
     { value: "referral", label: "Referral" },
     { value: "import", label: "Import" },
     { value: "agency", label: "Agency" },
+    { value: "other", label: "Other" },
+]
+
+export const CONTACT_STATUS_OPTIONS: SelectOption[] = [
+    { value: "unreached", label: "Unreached" },
+    { value: "reached", label: "Reached" },
+]
+
+// Status values by the record a trigger's conditions read (mirrors the backend enums).
+export const STATUS_OPTIONS_BY_ENTITY: Partial<Record<string, SelectOption[]>> = {
+    form_submission: [
+        { value: "pending_review", label: "Pending Review" },
+        { value: "approved", label: "Approved" },
+        { value: "rejected", label: "Rejected" },
+    ],
+    intake_lead: [
+        { value: "pending_review", label: "Pending Review" },
+        { value: "promoted", label: "Promoted" },
+        { value: "rejected", label: "Rejected" },
+    ],
+    match: [
+        { value: "under_review", label: "Under Review" },
+        { value: "accepted", label: "Accepted" },
+        { value: "cancellation_pending", label: "Cancellation Pending" },
+        { value: "declined", label: "Declined" },
+        { value: "cancelled", label: "Cancelled" },
+        { value: "completed", label: "Completed" },
+    ],
+    appointment: [
+        { value: "pending", label: "Pending" },
+        { value: "confirmed", label: "Confirmed" },
+        { value: "completed", label: "Completed" },
+        { value: "cancelled", label: "Cancelled" },
+        { value: "no_show", label: "No-Show" },
+        { value: "expired", label: "Expired" },
+    ],
+}
+
+export const MATCH_KIND_OPTIONS: SelectOption[] = [
+    { value: "surrogate", label: "Surrogate" },
+    { value: "donor", label: "Donor" },
+]
+
+export const MEETING_MODE_OPTIONS: SelectOption[] = [
+    { value: "zoom", label: "Zoom" },
+    { value: "google_meet", label: "Google Meet" },
+    { value: "phone", label: "Phone" },
+    { value: "in_person", label: "In Person" },
 ]
 
 export const FORM_SOURCE_MODE_OPTIONS: SelectOption[] = [
@@ -67,6 +129,7 @@ export const FORM_SOURCE_MODE_OPTIONS: SelectOption[] = [
 ]
 
 export const FORM_MATCH_STATUS_OPTIONS: SelectOption[] = [
+    { value: "workflow_pending", label: "Pending Workflow" },
     { value: "linked", label: "Linked" },
     { value: "ambiguous_review", label: "Ambiguous Review" },
     { value: "lead_created", label: "Lead Created" },
@@ -83,6 +146,21 @@ export const EMAIL_RECIPIENT_OPTIONS: SelectOption[] = [
     { value: "creator", label: "Creator" },
     { value: "all_admins", label: "All Admins" },
     { value: "user", label: "Specific User" },
+    { value: "queue", label: "Queue" },
+    { value: "role", label: "Role" },
+    { value: "custom", label: "Email Address" },
+]
+
+// Email recipients that are the record's own contact rather than staff.
+export const SUBJECT_EMAIL_RECIPIENTS = new Set(["surrogate", "donor", "subject"])
+
+// Mirrors app.db.enums.Role.
+export const STAFF_ROLE_OPTIONS: SelectOption[] = [
+    { value: "intake_specialist", label: "Intake Specialist" },
+    { value: "case_manager", label: "Case Manager" },
+    { value: "operations", label: "Operations" },
+    { value: "admin", label: "Admin" },
+    { value: "developer", label: "Developer" },
 ]
 
 export type DonorLeadKind = Extract<WorkflowSubjectType, "egg_donor" | "sperm_donor">
@@ -94,8 +172,13 @@ export function isDonorLeadKind(value: unknown): value is DonorLeadKind {
 // Intake triggers store the applicant type under a trigger-specific key.
 export const INTAKE_LEAD_KIND_CONFIG_KEYS: Partial<Record<string, string>> = {
     form_submitted: "lead_kind",
+    form_submission_approved: "lead_kind",
+    form_submission_rejected: "lead_kind",
     intake_lead_created: "lead_type",
 }
+
+// Triggers configured with a form; the form also sets the workflow's surrogate or donor context.
+export const FORM_TRIGGER_TYPES = new Set(Object.keys(INTAKE_LEAD_KIND_CONFIG_KEYS))
 
 // "Both" leaves the applicant type unset, so the workflow runs for either donor type.
 export const APPLICANT_TYPE_BOTH = "both"
@@ -307,6 +390,11 @@ export function getEmailRecipientKind(action: ActionConfig): string {
     if (Array.isArray(recipients)) return "user"
     if (typeof recipients === "string") return recipients
     return "surrogate"
+}
+
+export function getEmailRecipientEmails(action: ActionConfig): string[] {
+    const emails = action.recipient_emails
+    return Array.isArray(emails) ? emails.filter((email): email is string => typeof email === "string") : []
 }
 
 export function getEmailRecipientUserId(action: ActionConfig): string {

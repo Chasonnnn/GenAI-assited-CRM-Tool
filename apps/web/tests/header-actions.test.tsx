@@ -587,10 +587,10 @@ describe("HeaderActions", () => {
     })
 
     it("disables export action while request is in progress", async () => {
-        let resolveExport: ((value: { includesApplication: boolean }) => void) | null = null
+        const exportRequest: { resolve?: (value: { includesApplication: boolean }) => void } = {}
         mockExportSurrogatePacketPdf.mockReturnValue(
             new Promise((resolve) => {
-                resolveExport = resolve
+                exportRequest.resolve = resolve
             })
         )
 
@@ -603,7 +603,8 @@ describe("HeaderActions", () => {
         })
         expect(exportButton).toBeDisabled()
 
-        resolveExport?.({ includesApplication: false })
+        if (!exportRequest.resolve) throw new Error("Expected pending export request")
+        exportRequest.resolve({ includesApplication: false })
         await waitFor(() => {
             expect(exportButton).not.toBeDisabled()
         })

@@ -415,7 +415,7 @@ describe('IntendedParentDetailPage', () => {
 
         render(<IntendedParentDetailPage />)
 
-        const activityCard = screen.getByText("Activity").closest('[data-slot="card"]')
+        const activityCard = screen.getByText("Activity").closest<HTMLElement>('[data-slot="card"]')
         expect(activityCard).toBeTruthy()
 
         const activity = within(activityCard!)
@@ -443,7 +443,7 @@ describe('IntendedParentDetailPage', () => {
     it("renders fixed trust info on the detail page", () => {
         render(<IntendedParentDetailPage />)
 
-        const trustInfoCard = screen.getByText("Trust Info").closest('[data-slot="card"]')
+        const trustInfoCard = screen.getByText("Trust Info").closest<HTMLElement>('[data-slot="card"]')
         expect(trustInfoCard).toBeTruthy()
 
         const card = within(trustInfoCard!)

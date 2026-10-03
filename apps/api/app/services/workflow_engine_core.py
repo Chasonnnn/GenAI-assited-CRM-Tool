@@ -280,13 +280,11 @@ class WorkflowEngineCore:
             changed_fields = set(event_data.get("changed_fields", []))
             return bool(required_fields & changed_fields)
 
-        if trigger_type == WorkflowTriggerType.FORM_STARTED:
-            form_id = config.get("form_id")
-            if form_id and str(event_data.get("form_id")) != str(form_id):
-                return False
-            return True
-
-        if trigger_type == WorkflowTriggerType.FORM_SUBMITTED:
+        if trigger_type in {
+            WorkflowTriggerType.FORM_SUBMITTED,
+            WorkflowTriggerType.FORM_SUBMISSION_APPROVED,
+            WorkflowTriggerType.FORM_SUBMISSION_REJECTED,
+        }:
             form_id = config.get("form_id")
             if form_id and str(event_data.get("form_id")) != str(form_id):
                 return False
@@ -398,6 +396,12 @@ class WorkflowEngineCore:
                 logger.warning(f"Donor subject {subject_type}:{subject_id} is invalid")
                 return None
             condition_entity = donor
+        elif subject_type == "surrogate" and entity_type in {"task", "note", "document"}:
+            # Conditions describe the subject record, as they do for donor subjects. An
+            # unlinked legacy task keeps evaluating against itself.
+            surrogate = self.adapter.get_entity(db, "surrogate", subject_id)
+            if surrogate is not None and surrogate.organization_id == workflow.organization_id:
+                condition_entity = surrogate
 
         try:
             authority_snapshot = workflow_execution_authority.execution_snapshot(db, workflow)
@@ -1231,7 +1235,12 @@ class WorkflowEngineCore:
         """Generate deterministic dedupe keys for triggers that must run once per entity."""
         trigger_type = workflow.trigger_type
 
-        if trigger_type in ["form_submitted", "intake_lead_created"]:
+        if trigger_type in [
+            "form_submitted",
+            "form_submission_approved",
+            "form_submission_rejected",
+            "intake_lead_created",
+        ]:
             return f"{workflow.id}:{entity_id}:{trigger_type}"
 
         if trigger_type in ["scheduled", "inactivity", "task_due", "task_overdue"]:

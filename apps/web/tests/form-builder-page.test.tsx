@@ -118,6 +118,12 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useUploadFormLogo: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
+function requiredAt<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
+
 describe("FormBuilderPage", () => {
     beforeEach(() => {
         navigationState.formId = "new"
@@ -832,7 +838,7 @@ describe("FormBuilderPage", () => {
                 home_state: "NY",
                 education_background: "MS in Biochemistry",
             },
-            schema_snapshot: donorForm.form_schema,
+            schema_snapshot: donorForm.form_schema ?? null,
             mapping_snapshot: [
                 { field_key: "applicant_name", surrogate_field: "full_name" },
                 { field_key: "email_address", surrogate_field: "email" },
@@ -893,7 +899,7 @@ describe("FormBuilderPage", () => {
         const logicSection = screen.getByText("Logic").closest("section")
         expect(logicSection).not.toBeNull()
 
-        const displayRuleSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[0]
+        const displayRuleSelect = requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 0)
         expect(displayRuleSelect).toHaveTextContent("Always show")
         expect(displayRuleSelect).not.toHaveTextContent("none")
 
@@ -902,16 +908,16 @@ describe("FormBuilderPage", () => {
         fireEvent.mouseMove(nameFieldOption)
         fireEvent.click(nameFieldOption)
 
-        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[0]).toHaveTextContent("Name")
+        expect(requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 0)).toHaveTextContent("Name")
 
-        const operatorSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[1]
+        const operatorSelect = requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 1)
         fireEvent.mouseDown(operatorSelect)
         const notEqualsOption = await screen.findByRole("option", { name: "Does not equal" })
         fireEvent.mouseMove(notEqualsOption)
         fireEvent.click(notEqualsOption)
 
-        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[1]).toHaveTextContent("Does not equal")
-        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[1]).not.toHaveTextContent("not_equals")
+        expect(requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 1)).toHaveTextContent("Does not equal")
+        expect(requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 1)).not.toHaveTextContent("not_equals")
 
         const mappingSection = screen.getByText("Mapping").closest("section")
         expect(mappingSection).not.toBeNull()
@@ -1109,12 +1115,12 @@ describe("FormBuilderPage", () => {
             public_title: "Apply today",
             pages: liveSchema.pages.map((page) => ({
                 fields: page.fields.map((field) => ({
-                    required: field.required,
+                    ...(field.required === undefined ? {} : { required: field.required }),
                     type: field.type,
                     label: field.label,
                     key: field.key,
                 })),
-                title: page.title,
+                ...(page.title === undefined ? {} : { title: page.title }),
             })),
         }
         const buildPublishedForm = (overrides: Partial<FormRead> = {}): FormRead => ({

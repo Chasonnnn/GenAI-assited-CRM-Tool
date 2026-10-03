@@ -326,17 +326,39 @@ def _tier_condition(tier: NotificationTier, now: datetime) -> ColumnElement[bool
 # =============================================================================
 
 
-def get_user_settings(
+IN_APP_SETTING_KEYS: tuple[str, ...] = (
+    "surrogate_assigned",
+    "surrogate_status_changed",
+    "surrogate_claim_available",
+    "task_assigned",
+    "workflow_approvals",
+    "task_reminders",
+    "appointments",
+    "contact_reminder",
+    "intelligent_suggestion_digest",
+    "status_change_decisions",
+    "approval_timeouts",
+    "security_alerts",
+)
+
+# Email is opt-in per notification type (ADR 0008). Types absent here never send email.
+EMAIL_SETTING_BY_TYPE: dict[str, str] = {
+    NotificationType.WORKFLOW_NOTIFICATION.value: "email_workflow_notifications",
+}
+EMAIL_SETTING_KEYS: tuple[str, ...] = tuple(EMAIL_SETTING_BY_TYPE.values())
+
+DEFAULT_SETTINGS: dict[str, bool] = {
+    **{key: True for key in IN_APP_SETTING_KEYS},
+    **{key: False for key in EMAIL_SETTING_KEYS},
+}
+
+
+def _get_settings_row(
     db: Session,
     user_id: UUID,
     org_id: UUID,
-) -> dict:
-    """
-    Get user notification settings.
-
-    Returns defaults (all ON) if no row exists.
-    """
-    settings = (
+) -> UserNotificationSettings | None:
+    return (
         db.query(UserNotificationSettings)
         .filter(
             UserNotificationSettings.user_id == user_id,
@@ -345,37 +367,25 @@ def get_user_settings(
         .first()
     )
 
-    if settings:
-        return {
-            "surrogate_assigned": settings.surrogate_assigned,
-            "surrogate_status_changed": settings.surrogate_status_changed,
-            "surrogate_claim_available": settings.surrogate_claim_available,
-            "task_assigned": settings.task_assigned,
-            "workflow_approvals": settings.workflow_approvals,
-            "task_reminders": settings.task_reminders,
-            "appointments": settings.appointments,
-            "contact_reminder": settings.contact_reminder,
-            "intelligent_suggestion_digest": settings.intelligent_suggestion_digest,
-            "status_change_decisions": settings.status_change_decisions,
-            "approval_timeouts": settings.approval_timeouts,
-            "security_alerts": settings.security_alerts,
-        }
 
-    # Defaults (all ON)
-    return {
-        "surrogate_assigned": True,
-        "surrogate_status_changed": True,
-        "surrogate_claim_available": True,
-        "task_assigned": True,
-        "workflow_approvals": True,
-        "task_reminders": True,
-        "appointments": True,
-        "contact_reminder": True,
-        "intelligent_suggestion_digest": True,
-        "status_change_decisions": True,
-        "approval_timeouts": True,
-        "security_alerts": True,
-    }
+def _settings_to_dict(settings: UserNotificationSettings) -> dict:
+    return {key: getattr(settings, key) for key in DEFAULT_SETTINGS}
+
+
+def get_user_settings(
+    db: Session,
+    user_id: UUID,
+    org_id: UUID,
+) -> dict:
+    """
+    Get user notification settings.
+
+    Returns defaults (in-app ON, email OFF) if no row exists.
+    """
+    settings = _get_settings_row(db, user_id, org_id)
+    if settings:
+        return _settings_to_dict(settings)
+    return dict(DEFAULT_SETTINGS)
 
 
 def update_user_settings(
@@ -389,14 +399,7 @@ def update_user_settings(
 
     Creates row if it doesn't exist.
     """
-    settings = (
-        db.query(UserNotificationSettings)
-        .filter(
-            UserNotificationSettings.user_id == user_id,
-            UserNotificationSettings.organization_id == org_id,
-        )
-        .first()
-    )
+    settings = _get_settings_row(db, user_id, org_id)
 
     if not settings:
         settings = UserNotificationSettings(
@@ -407,26 +410,27 @@ def update_user_settings(
 
     # Update provided fields
     for key, value in updates.items():
-        if hasattr(settings, key):
+        if key in DEFAULT_SETTINGS:
             setattr(settings, key, value)
 
     db.commit()
     db.refresh(settings)
 
-    return {
-        "surrogate_assigned": settings.surrogate_assigned,
-        "surrogate_status_changed": settings.surrogate_status_changed,
-        "surrogate_claim_available": settings.surrogate_claim_available,
-        "task_assigned": settings.task_assigned,
-        "workflow_approvals": settings.workflow_approvals,
-        "task_reminders": settings.task_reminders,
-        "appointments": settings.appointments,
-        "contact_reminder": settings.contact_reminder,
-        "intelligent_suggestion_digest": settings.intelligent_suggestion_digest,
-        "status_change_decisions": settings.status_change_decisions,
-        "approval_timeouts": settings.approval_timeouts,
-        "security_alerts": settings.security_alerts,
-    }
+    return _settings_to_dict(settings)
+
+
+def wants_email(
+    db: Session,
+    user_id: UUID,
+    org_id: UUID,
+    notification_type: str,
+) -> bool:
+    """Check the user's opt-in email toggle for this notification type."""
+    setting_key = EMAIL_SETTING_BY_TYPE.get(notification_type)
+    if setting_key is None:
+        return False
+    settings = _get_settings_row(db, user_id, org_id)
+    return bool(settings is not None and getattr(settings, setting_key))
 
 
 def should_notify(
@@ -500,6 +504,8 @@ def create_notification(
         dedupe_key=dedupe_key,
     )
     db.add(notification)
+    db.flush()
+    _queue_email_copy(db, notification)
     db.commit()
     db.refresh(notification)
 
@@ -507,6 +513,28 @@ def create_notification(
     counts = get_notification_counts(db, user_id, org_id)
     _schedule_ws_send(_send_ws_updates(user_id, notification, counts))
     return notification
+
+
+def _queue_email_copy(db: Session, notification: Notification) -> None:
+    """Queue the opt-in email in the notification's transaction.
+
+    A failed enqueue rolls back only its savepoint so the in-app notification
+    still commits. The log carries the error class only: database errors can
+    echo bound parameters, which include the recipient address and body.
+    """
+    if notification.type not in EMAIL_SETTING_BY_TYPE:
+        return
+    from app.services import notification_email_service
+
+    try:
+        with db.begin_nested():
+            notification_email_service.queue_notification_email(db, notification)
+    except Exception as exc:
+        logger.error(
+            "Notification email enqueue failed notification_id=%s error_class=%s",
+            notification.id,
+            type(exc).__name__,
+        )
 
 
 def get_notifications(

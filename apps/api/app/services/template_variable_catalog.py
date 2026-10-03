@@ -127,6 +127,23 @@ def list_org_email_template_variables() -> list[TemplateVariableDefinition]:
             category="Appointment",
             value_type="url",
         ),
+        # Workflow record (workflow emails only)
+        TemplateVariableDefinition(
+            name="record_link",
+            description="Staff link to the workflow record",
+            category="Workflow",
+            value_type="url",
+        ),
+        TemplateVariableDefinition(
+            name="form_name",
+            description="Submitted form name",
+            category="Workflow",
+        ),
+        TemplateVariableDefinition(
+            name="submitted_at",
+            description="Submission or lead time (UTC)",
+            category="Workflow",
+        ),
         # Organization
         TemplateVariableDefinition(
             name="org_name",

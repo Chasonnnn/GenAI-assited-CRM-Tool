@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { ApprovalTaskActions } from '../components/tasks/ApprovalTaskActions'
 
 const mockResolveApproval = vi.fn()
@@ -66,8 +66,7 @@ describe('ApprovalTaskActions', () => {
         fireEvent.change(textarea, { target: { value: 'Not appropriate' } })
 
         // Confirm deny
-        const denyButtons = screen.getAllByRole('button', { name: /deny/i })
-        fireEvent.click(denyButtons[denyButtons.length - 1]) // Click dialog's deny button
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /deny/i }))
 
         await waitFor(() => {
             expect(mockResolveApproval).toHaveBeenCalledWith({

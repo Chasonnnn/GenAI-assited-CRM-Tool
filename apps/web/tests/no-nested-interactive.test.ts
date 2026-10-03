@@ -57,17 +57,17 @@ function collectTsxFiles(dir: string): string[] {
   return files
 }
 
-function getTagName(tag: ts.JsxTagNameExpression): string | null {
+function getTagName(tag: TypeScript.JsxTagNameExpression): string | null {
   if (ts.isIdentifier(tag)) {
     return tag.text
   }
-  if (tag.kind === ts.SyntaxKind.JsxMemberExpression) {
-    return (tag as ts.JsxMemberExpression).name.text
+  if (ts.isPropertyAccessExpression(tag)) {
+    return tag.name.text
   }
   return null
 }
 
-function findFirstInteractiveDescendant(node: ts.Node): { tagName: string; node: ts.Node } | null {
+function findFirstInteractiveDescendant(node: TypeScript.Node): { tagName: string; node: TypeScript.Node } | null {
   if (ts.isJsxElement(node)) {
     const tagName = getTagName(node.openingElement.tagName)
     if (tagName && INTERACTIVE_TAGS.has(tagName)) {
@@ -82,7 +82,7 @@ function findFirstInteractiveDescendant(node: ts.Node): { tagName: string; node:
     }
   }
 
-  let found: { tagName: string; node: ts.Node } | null = null
+  let found: { tagName: string; node: TypeScript.Node } | null = null
   node.forEachChild((child) => {
     if (found) {
       return
@@ -109,7 +109,7 @@ describe("navigation markup", () => {
         ts.ScriptKind.TSX
       )
 
-      const visit = (node: ts.Node) => {
+      const visit = (node: TypeScript.Node) => {
         if (ts.isJsxElement(node)) {
           const parentTag = getTagName(node.openingElement.tagName)
           if (parentTag && INTERACTIVE_TAGS.has(parentTag)) {

@@ -38,8 +38,10 @@ describe("getPublishReadinessItems", () => {
             ["Phone", "missing"],
             ["Email", "missing"],
         ])
-        expect(items[1].addField?.surrogateFieldMapping).toBe("date_of_birth")
-        expect(items[0].addField).toBeNull()
+        const [nameItem, dateOfBirthItem] = items
+        if (!nameItem || !dateOfBirthItem) throw new Error("Expected identity readiness items")
+        expect(dateOfBirthItem.addField?.surrogateFieldMapping).toBe("date_of_birth")
+        expect(nameItem.addField).toBeNull()
         expect(getPublishReadinessReason(items)).toBe(
             "To publish, add Date of Birth, Phone, Email.",
         )

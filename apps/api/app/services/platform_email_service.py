@@ -68,6 +68,42 @@ async def send_email_logged(
     commit: bool = True,
 ) -> JsonObject:
     """Queue a platform/system email in the leased transactional outbox."""
+    return queue_email_logged(
+        db=db,
+        org_id=org_id,
+        to_email=to_email,
+        subject=subject,
+        from_email=from_email,
+        html=html,
+        text=text,
+        template_id=template_id,
+        surrogate_id=surrogate_id,
+        idempotency_key=idempotency_key,
+        source_type=source_type,
+        source_id=source_id,
+        attachments=attachments,
+        commit=commit,
+    )
+
+
+def queue_email_logged(
+    *,
+    db: Session,
+    org_id: UUID,
+    to_email: str,
+    subject: str,
+    from_email: str | None = None,
+    html: str,
+    text: str | None = None,
+    template_id: UUID | None = None,
+    surrogate_id: UUID | None = None,
+    idempotency_key: str | None = None,
+    source_type: str | None = None,
+    source_id: UUID | None = None,
+    attachments: list[dict[str, object]] | None = None,
+    commit: bool = True,
+) -> JsonObject:
+    """Synchronous form of send_email_logged for callers already inside a sync transaction."""
     from app.services import org_service, unsubscribe_service
 
     if not platform_sender_configured():

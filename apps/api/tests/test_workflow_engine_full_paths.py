@@ -143,9 +143,6 @@ def test_workflow_action_normalization_and_trigger_config_validation():
         WorkflowTriggerType.SURROGATE_UPDATED, {"fields": ["status_label"]}
     )
     workflow_service._validate_trigger_config(
-        WorkflowTriggerType.FORM_STARTED, {"form_id": str(uuid4())}
-    )
-    workflow_service._validate_trigger_config(
         WorkflowTriggerType.FORM_SUBMITTED, {"form_id": str(uuid4())}
     )
     workflow_service._validate_trigger_config(

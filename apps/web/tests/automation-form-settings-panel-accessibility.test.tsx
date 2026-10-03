@@ -11,6 +11,9 @@ describe("AutomationFormSettingsPanel accessibility", () => {
                 formName="Surrogate Application"
                 formDescription="Application intake"
                 formPurpose="surrogate_application"
+                formLeadKind="surrogate"
+                formLeadKindChangeDisabled={false}
+                onFormLeadKindChange={() => undefined}
                 publicEyebrow="Apply"
                 publicTitle="Become a surrogate"
                 publicSubtitle="Tell us about yourself"

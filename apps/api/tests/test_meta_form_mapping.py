@@ -1097,18 +1097,38 @@ def test_meta_lead_conversion_failure_records_system_alert(monkeypatch, db, test
 
 
 @pytest.mark.parametrize(
-    ("meta_lead_id", "height_value", "expected_height", "num_csections_value"),
+    (
+        "meta_lead_id",
+        "height_value",
+        "expected_height",
+        "num_csections_value",
+        "weight_value",
+        "expected_bmi",
+    ),
     [
-        ("zapier-9c807da9-d5f9-423f-bacd-9732aa39ca5f", "4”ft 11", "4.92", None),
-        ("zapier-71fef5b9-320d-4107-9d97-dcc49dd10a6c", "5’3inch", "5.25", "No"),
+        ("zapier-9c807da9-d5f9-423f-bacd-9732aa39ca5f", "4”ft 11", "4.92", None, None, None),
+        ("zapier-71fef5b9-320d-4107-9d97-dcc49dd10a6c", "5’3inch", "5.25", "No", None, None),
+        ("lead-quoted-height", "5'2\"", "5.17", None, "165", 30.2),
+        ("lead-plural-inch-abbreviation", "5 ft 2 ins", "5.17", None, "240", 43.9),
+        ("lead-fractional-height", "5”2 1/3", "5.17", None, "200", 36.6),
+        ("lead-one-inch-height", "5'1\"", "5.08", None, "143", 27.0),
     ],
 )
 def test_meta_lead_mapping_handles_additional_height_formats(
-    db, test_org, test_user, meta_lead_id, height_value, expected_height, num_csections_value
+    db,
+    test_org,
+    test_user,
+    meta_lead_id,
+    height_value,
+    expected_height,
+    num_csections_value,
+    weight_value,
+    expected_bmi,
 ):
     from decimal import Decimal
 
     from app.db.models import MetaLead
+    from app.routers.surrogates_shared import _surrogate_to_list_item
     from app.services import meta_lead_service
 
     lead = MetaLead(
@@ -1120,12 +1140,14 @@ def test_meta_lead_mapping_handles_additional_height_formats(
             "full_name": "Height Test",
             "email": f"{expected_height.replace('.', '')}@example.com",
             "height": height_value,
+            "weight": weight_value,
             "num_csections": num_csections_value,
         },
         field_data_raw={
             "full_name": "Height Test",
             "email": f"{expected_height.replace('.', '')}@example.com",
             "height": height_value,
+            "weight": weight_value,
             "num_csections": num_csections_value,
         },
         meta_created_time=datetime.now(UTC),
@@ -1156,6 +1178,13 @@ def test_meta_lead_mapping_handles_additional_height_formats(
             "custom_field_key": None,
         },
         {
+            "csv_column": "weight",
+            "surrogate_field": "weight_lb",
+            "transformation": None,
+            "action": "map",
+            "custom_field_key": None,
+        },
+        {
             "csv_column": "num_csections",
             "surrogate_field": "num_csections",
             "transformation": None,
@@ -1174,7 +1203,11 @@ def test_meta_lead_mapping_handles_additional_height_formats(
 
     assert error is None
     assert surrogate is not None
+    db.refresh(surrogate)
     assert surrogate.height_ft == Decimal(expected_height)
+    assert surrogate.weight_lb == (int(weight_value) if weight_value is not None else None)
+    assert _surrogate_to_list_item(surrogate).bmi == expected_bmi
+    assert not (surrogate.import_metadata or {}).get("dropped_invalid_fields")
     if num_csections_value is not None:
         assert surrogate.num_csections == 0
 
@@ -1240,7 +1273,13 @@ def test_meta_lead_mapping_converts_num_csections_word_none(db, test_org, test_u
     assert surrogate.num_csections == 0
 
 
-def test_meta_lead_mapping_drops_invalid_optional_phone(db, test_org, test_user):
+@pytest.mark.parametrize(
+    ("field_name", "raw_value"),
+    [("phone", "+659555010000"), ("height_ft", "5inch1feet")],
+)
+def test_meta_lead_mapping_preserves_invalid_optional_answers_for_review(
+    db, test_org, test_user, field_name, raw_value
+):
     from app.db.models import MetaLead
     from app.services import meta_lead_service
 
@@ -1250,14 +1289,14 @@ def test_meta_lead_mapping_drops_invalid_optional_phone(db, test_org, test_user)
         meta_form_id="form_bad_phone",
         meta_page_id="page_bad_phone",
         field_data={
-            "full_name": "Regina Reg",
-            "email": "ginas89@hotmail.com",
-            "phone": "+659566490211",
+            "full_name": "Input Test",
+            "email": "input@example.com",
+            field_name: raw_value,
         },
         field_data_raw={
-            "full_name": "Regina Reg",
-            "email": "ginas89@hotmail.com",
-            "phone": "+659566490211",
+            "full_name": "Input Test",
+            "email": "input@example.com",
+            field_name: raw_value,
         },
         meta_created_time=datetime.now(UTC),
     )
@@ -1280,8 +1319,8 @@ def test_meta_lead_mapping_drops_invalid_optional_phone(db, test_org, test_user)
             "custom_field_key": None,
         },
         {
-            "csv_column": "phone",
-            "surrogate_field": "phone",
+            "csv_column": field_name,
+            "surrogate_field": field_name,
             "transformation": None,
             "action": "map",
             "custom_field_key": None,
@@ -1298,4 +1337,7 @@ def test_meta_lead_mapping_drops_invalid_optional_phone(db, test_org, test_user)
 
     assert error is None
     assert surrogate is not None
-    assert surrogate.phone is None
+    assert getattr(surrogate, field_name) is None
+    assert surrogate.import_metadata["dropped_invalid_fields"] == [field_name]
+    db.refresh(lead)
+    assert lead.field_data_raw[field_name] == raw_value

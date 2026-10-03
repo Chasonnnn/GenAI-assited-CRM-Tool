@@ -11,7 +11,7 @@ const {
     mockGlobalSearch,
 } = vi.hoisted(() => ({
     mockUseQuery: vi.fn(),
-    mockUseDebouncedValue: vi.fn((value: string) => value),
+    mockUseDebouncedValue: vi.fn((value: string, _delay: number) => value),
     mockGlobalSearch: vi.fn(),
 }))
 

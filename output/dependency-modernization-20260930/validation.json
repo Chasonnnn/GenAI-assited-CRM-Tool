@@ -1,0 +1,159 @@
+{
+  "installed_versions": {
+    "pyjwt": "2.15.1",
+    "urllib3": "2.8.0",
+    "fastapi": "0.136.3",
+    "openai": "2.36.0",
+    "pydantic": "2.12.5",
+    "opentelemetry-sdk": "1.39.1",
+    "next": "16.3.7",
+    "@next/bundle-analyzer": "16.3.7",
+    "markdown-it": "14.3.1",
+    "dompurify": "3.4.16",
+    "@tiptap/react": "3.30.5",
+    "@typescript/native": "7.0.2",
+    "typescript": "6.0.2"
+  },
+  "backend_test_files": [
+    "tests/test_ai_provider_focus_schedule_paths.py",
+    "tests/test_ai_sdk_transport.py",
+    "tests/test_ai_studio.py",
+    "tests/test_audit_exports.py",
+    "tests/test_auth.py",
+    "tests/test_auth_oauth_host_error_paths.py",
+    "tests/test_auth_service_invite_reuse.py",
+    "tests/test_calendar_service_watch_and_event_crud.py",
+    "tests/test_cli_and_transcript_storage.py",
+    "tests/test_dependency_security.py",
+    "tests/test_duo_admin_service.py",
+    "tests/test_duo_service_sanitize.py",
+    "tests/test_gmail_service.py",
+    "tests/test_google_calendar_linked_transport.py",
+    "tests/test_google_calendar_push_webhooks.py",
+    "tests/test_google_gmail_push_webhooks.py",
+    "tests/test_google_tasks_sync_and_calendar_hooks.py",
+    "tests/test_http_service.py",
+    "tests/test_internal_meta_token_check.py",
+    "tests/test_journey.py",
+    "tests/test_mailboxes_oauth.py",
+    "tests/test_meta_oauth.py",
+    "tests/test_meta_oauth_asset_batches.py",
+    "tests/test_meta_token_service.py",
+    "tests/test_mfa.py",
+    "tests/test_mfa_duo_initiate.py",
+    "tests/test_mfa_ops_fallback.py",
+    "tests/test_mfa_session_upgrade.py",
+    "tests/test_oidc_provider.py",
+    "tests/test_ops_cli_auth.py",
+    "tests/test_platform_admin_auth.py",
+    "tests/test_platform_mfa_reset.py",
+    "tests/test_platform_router_template_studio_and_alerts.py",
+    "tests/test_platform_template_studio.py",
+    "tests/test_resend_control_plane.py",
+    "tests/test_resend_transport.py",
+    "tests/test_resend_transport_boundary.py",
+    "tests/test_security_headers.py",
+    "tests/test_security_verify_secret.py",
+    "tests/test_session_host_validation.py",
+    "tests/test_storage_client.py",
+    "tests/test_storage_rollback_cleanup.py",
+    "tests/test_storage_url_service.py",
+    "tests/test_support_sessions.py",
+    "tests/test_twilio_consent_sync.py",
+    "tests/test_twilio_inbound_media.py",
+    "tests/test_twilio_readiness.py",
+    "tests/test_twilio_settings.py",
+    "tests/test_twilio_transport.py",
+    "tests/test_twilio_webhooks.py",
+    "tests/test_unsubscribe.py",
+    "tests/test_websocket_revocation.py"
+  ],
+  "web_snapshot_mismatches": [],
+  "baseline_revision": "595bf5b75254783a80e158eb99a6d99a1893e22e",
+  "implementation_revision": "d2e1201098869e11d60ba44c0e142d26d211b785",
+  "validated_at_utc": "2026-10-01",
+  "frontend_snapshot": "Baseline git archive plus the explicitly listed task-owned files; unrelated concurrent workflow edits excluded.",
+  "frontend_file_sha256": {
+    "apps/web/components/rich-text-editor-toolbar.tsx": "96b983d830e1c0254fe52288a2245d0c76ab4ba4eb5cc08d1346bd07387d4f4f",
+    "apps/web/components/surrogates/interviews/TranscriptEditor.tsx": "8f8bdfb75491ed98afb34eb2c2aab674b42502f8e0a944c7a04ccc49556e2b79",
+    "apps/web/docs/next-16-3-adoption.md": "983725abf78c0e278fe78fc2e79330c45a275d65009432e210bd12b4f4f45232",
+    "apps/web/package.json": "dc12d5600b856ff8bd0ae4f8c4e8c61db4b5f1d62d8d578fb68d17d2ca8c40e8",
+    "apps/web/pnpm-lock.yaml": "0004b79b40788a83a973e7831c1d2e44e1c1352d1c6f519a1c7ad3478b0bd5d6",
+    "apps/web/pnpm-workspace.yaml": "89fa9ec64617b1cd911d8da3a67e8bee72011a15e06983e1d4ff3433fc822464",
+    "apps/web/tests/dependency-security.test.ts": "f1e6a551e5422a132a0010d39851ea6f4b8737b9669ee71640b13a081903509b",
+    "apps/web/tests/rich-text-editor-toolbar.test.tsx": "83449ecad35de68f3f27db3faa4e310ac147080a3811be5ce6b359ce83170cdf",
+    "apps/web/tests/rich-text-editor.test.tsx": "e5a08529edef84abb75dee4fe41f11c4cff73a126f55a8677ce3a749a00c8118",
+    "apps/web/tests/setup.ts": "6cfb20dd1d326ba3fff8e2486f68fa4c6c227f04b20e8cd0a9e8b292ceb4cf76",
+    "apps/web/tests/tsconfig.json": "77b37ea8cbefe2cf7fd20ee6dd578a0bb98789adcf0405ec75a405b7789b17ca",
+    "apps/web/tests/transcript-editor.test.tsx": "f9b75d993421fbead16f4406afe6094d4a5d8b31994e2ed6288e342b4d5ba970"
+  },
+  "frontend_check": {
+    "command": "mise exec -- pnpm run check",
+    "exit_code": 0,
+    "test_files": 365,
+    "tests_passed": 2814
+  },
+  "backend_check": {
+    "command": "apps/api/run_tests.sh <backend_test_files> --tb=short",
+    "exit_code": 0,
+    "test_files": 52,
+    "tests_passed": 439,
+    "database": "unique migrated disposable PostgreSQL database; dropped after invocation"
+  },
+  "security_scans": {
+    "python": "pip_audit_guard.py: exit0, no advisories",
+    "npm": "pnpm_audit_guard.sh: exit0, no known vulnerabilities",
+    "limit": "The September30 Next16.3.8 advisories were not yet reported by the registry; separate release-age hold recorded in audit.md."
+  },
+  "builds": {
+    "native": "Next16.3.7 Webpack production build passed",
+    "container": "linux/amd64 standalone Docker image built with frozen pnpm installation",
+    "container_image": "sha256:9de00557e40373d2633cd5a9457c837db29399ff7daae7f17317c43cab5fd43a"
+  },
+  "container_smoke": [
+    {
+      "path": "/health",
+      "host": "127.0.0.1",
+      "status": 200,
+      "content_type": "application/json",
+      "bytes": 11
+    },
+    {
+      "path": "/login",
+      "host": "app.surrogacyforce.com",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8",
+      "bytes": 12836
+    },
+    {
+      "path": "/_next/static/chunks/d2a1207b-cc2a8609365fa313.js",
+      "host": "app.surrogacyforce.com",
+      "status": 200,
+      "content_type": "application/javascript; charset=UTF-8",
+      "bytes": 201059
+    },
+    {
+      "path": "/automation",
+      "host": "unknown.invalid",
+      "status": 404,
+      "content_type": "text/plain; charset=utf-8",
+      "bytes": 22
+    }
+  ],
+  "container_cleanup": {
+    "id": "afa17c25a0a30a9162947c6e04c056da221baeb93fa208023cc7e957caa5e342",
+    "pid": 74508,
+    "status": "stopped and removed; task image removed"
+  },
+  "test_typecheck": {
+    "exit_code": 1,
+    "pre_existing_diagnostics": 358,
+    "files": 75,
+    "new_diagnostics": 0
+  },
+  "delivery": {
+    "pushed": false,
+    "deployed": false,
+    "telemetry_activated": false
+  }
+}

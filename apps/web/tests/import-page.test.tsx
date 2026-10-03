@@ -1,5 +1,5 @@
 import type { ReactNode, ButtonHTMLAttributes } from 'react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { assert, describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import CSVImportPage from '../app/(app)/surrogates/import/page'
 
@@ -172,7 +172,9 @@ describe('CSVImportPage', () => {
         mockCancelImport.mockResolvedValue({ message: 'Import deleted' })
         render(<CSVImportPage />)
 
-        fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[0])
+        const deleteButton = screen.getAllByRole('button', { name: /^delete$/i })[0]
+        assert.isDefined(deleteButton)
+        fireEvent.click(deleteButton)
 
         const dialog = await screen.findByRole('alertdialog')
         expect(within(dialog).getByText('Delete surrogates.csv?')).toBeInTheDocument()
@@ -191,7 +193,9 @@ describe('CSVImportPage', () => {
         mockCancelImport.mockRejectedValue(new Error('Network down'))
         render(<CSVImportPage />)
 
-        fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[0])
+        const deleteButton = screen.getAllByRole('button', { name: /^delete$/i })[0]
+        assert.isDefined(deleteButton)
+        fireEvent.click(deleteButton)
         const dialog = await screen.findByRole('alertdialog')
         fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 

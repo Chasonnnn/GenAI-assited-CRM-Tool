@@ -1,0 +1,68 @@
+[
+  {
+    "name": "next",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T16:07:21.198Z",
+    "registry": "https://registry.npmjs.org/next"
+  },
+  {
+    "name": "@next/bundle-analyzer",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T15:56:53.337Z",
+    "registry": "https://registry.npmjs.org/@next%2fbundle-analyzer"
+  },
+  {
+    "name": "@next/env",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T15:56:43.745Z",
+    "registry": "https://registry.npmjs.org/@next%2fenv"
+  },
+  {
+    "name": "@next/swc-darwin-arm64",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T15:56:35.278Z",
+    "registry": "https://registry.npmjs.org/@next%2fswc-darwin-arm64"
+  },
+  {
+    "name": "@next/swc-darwin-x64",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T15:57:12.290Z",
+    "registry": "https://registry.npmjs.org/@next%2fswc-darwin-x64"
+  },
+  {
+    "name": "@next/swc-linux-arm64-gnu",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T15:57:23.310Z",
+    "registry": "https://registry.npmjs.org/@next%2fswc-linux-arm64-gnu"
+  },
+  {
+    "name": "@next/swc-linux-arm64-musl",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T15:56:41.148Z",
+    "registry": "https://registry.npmjs.org/@next%2fswc-linux-arm64-musl"
+  },
+  {
+    "name": "@next/swc-linux-x64-gnu",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T15:57:37.276Z",
+    "registry": "https://registry.npmjs.org/@next%2fswc-linux-x64-gnu"
+  },
+  {
+    "name": "@next/swc-linux-x64-musl",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T15:57:19.346Z",
+    "registry": "https://registry.npmjs.org/@next%2fswc-linux-x64-musl"
+  },
+  {
+    "name": "@next/swc-win32-arm64-msvc",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T15:59:57.117Z",
+    "registry": "https://registry.npmjs.org/@next%2fswc-win32-arm64-msvc"
+  },
+  {
+    "name": "@next/swc-win32-x64-msvc",
+    "version": "16.3.8",
+    "published_at": "2026-09-30T15:58:21.647Z",
+    "registry": "https://registry.npmjs.org/@next%2fswc-win32-x64-msvc"
+  }
+]

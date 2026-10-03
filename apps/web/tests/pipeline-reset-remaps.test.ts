@@ -95,7 +95,7 @@ const currentStages = [
             requires_reason_on_enter: false,
         },
     },
-]
+] as const
 
 const recommendedStages = [
     currentStages[0],
@@ -142,7 +142,7 @@ const recommendedStages = [
 
 describe("buildRecommendedDraftRemaps", () => {
     it("maps removed custom stages onto the closest default stages", () => {
-        expect(buildRecommendedDraftRemaps(currentStages, recommendedStages)).toEqual([
+        expect(buildRecommendedDraftRemaps([...currentStages], recommendedStages)).toEqual([
             {
                 removed_stage_key: "application_packet_received",
                 target_stage_key: "application_submitted",

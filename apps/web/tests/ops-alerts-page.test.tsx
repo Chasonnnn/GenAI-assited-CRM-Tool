@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { assert, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
@@ -118,6 +118,8 @@ describe("OpsAlertsPage filters", () => {
 
         const statusSelect = selects[0]
         const severitySelect = selects[1]
+        assert.isDefined(statusSelect)
+        assert.isDefined(severitySelect)
 
         fireEvent.mouseDown(severitySelect)
         await screen.findByRole("option", { name: "Warning" })
@@ -144,6 +146,7 @@ describe("OpsAlertsPage filters", () => {
         renderAlertsPage()
 
         const severitySelect = screen.getAllByRole("combobox")[1]
+        assert.isDefined(severitySelect)
         fireEvent.mouseDown(severitySelect)
         const warningOption = await screen.findByRole("option", { name: "Warning" })
         fireEvent.mouseMove(warningOption)

@@ -1,5 +1,5 @@
 import React from "react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
@@ -40,6 +40,12 @@ const smsConsentOptions = {
         sms_terms_url: "https://www.ewisurrogacy.com/sms-terms",
         privacy_policy_url: "https://www.ewisurrogacy.com/privacy",
     },
+}
+
+function requiredItem<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
 }
 
 const embedForm = {
@@ -92,7 +98,7 @@ const embedForm = {
     embed_theme_json: {},
 }
 
-let addEventListenerSpy: ReturnType<typeof vi.spyOn> | null = null
+let addEventListenerSpy: MockInstance<typeof window.addEventListener> | null = null
 
 async function waitForEmbedMessageListener() {
     await waitFor(() => {
@@ -230,7 +236,7 @@ describe("EmbedFormPageClient", () => {
                 pages: [{
                     title: "Contact",
                     fields: [
-                        ...embedForm.form_schema.pages[0].fields,
+                        ...requiredItem(embedForm.form_schema.pages, 0).fields,
                         {
                             key: "history", label: "History", type: "repeatable_table",
                             required, min_rows: 2, max_rows: 3,
@@ -348,7 +354,7 @@ describe("EmbedFormPageClient", () => {
                     {
                         title: "Contact",
                         fields: [
-                            ...embedForm.form_schema.pages[0].fields,
+                            ...requiredItem(embedForm.form_schema.pages, 0).fields,
                             {
                                 key: "phone",
                                 label: "Phone",
@@ -426,7 +432,7 @@ describe("EmbedFormPageClient", () => {
                     {
                         title: "Contact",
                         fields: [
-                            ...embedForm.form_schema.pages[0].fields,
+                            ...requiredItem(embedForm.form_schema.pages, 0).fields,
                             {
                                 key: "supporting_docs",
                                 label: "Supporting Documents",
@@ -483,7 +489,7 @@ describe("EmbedFormPageClient", () => {
                     pages: [{
                         title: "Contact",
                         fields: [
-                            ...embedForm.form_schema.pages[0].fields,
+                            ...requiredItem(embedForm.form_schema.pages, 0).fields,
                             {
                                 key: "history", label: "History", type: "repeatable_table",
                                 required: true, min_rows: 2,
@@ -625,7 +631,7 @@ describe("EmbedFormPageClient", () => {
     })
 
     describe("SMS consent", () => {
-        const [fullNameField, emailField] = embedForm.form_schema.pages[0].fields
+        const [fullNameField, emailField] = requiredItem(embedForm.form_schema.pages, 0).fields
         const homePhoneField = {
             key: "phone",
             label: "Home Phone",
