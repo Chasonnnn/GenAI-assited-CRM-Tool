@@ -78,6 +78,7 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
         mutate: vi.fn(),
         isPending: false,
     }),
+    useCompleteAppointment: () => ({ mutate: vi.fn(), isPending: false, variables: undefined }),
     useRescheduleSlots: (
         appointmentId: string,
         dateStart: string,

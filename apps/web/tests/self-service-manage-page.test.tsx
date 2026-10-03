@@ -147,7 +147,7 @@ describe("Self-service manage appointment page", () => {
             manage_actions: { can_reschedule: true, can_cancel: false },
             scheduling: {
                 revision: 1,
-                capabilities: { can_reschedule: true, can_cancel: true, can_retry_google_sync: true, can_resolve_google_conflict: true },
+                capabilities: { can_reschedule: true, can_cancel: true, can_complete: false, can_retry_google_sync: true, can_resolve_google_conflict: true },
                 google_sync: { state: "failed", linked: true, error_code: "test", conflict: null },
             },
         })

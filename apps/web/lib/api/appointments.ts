@@ -178,6 +178,7 @@ export type GoogleSyncState = 'pending' | 'completed' | 'failed' | 'conflict' | 
 export interface AppointmentSchedulingCapabilities {
     can_reschedule: boolean;
     can_cancel: boolean;
+    can_complete: boolean;
     can_retry_google_sync: boolean;
     can_resolve_google_conflict: boolean;
 }
@@ -386,6 +387,18 @@ export function approveAppointment(
     options: SchedulingMutationOptions = {},
 ): Promise<Appointment> {
     return api.post<Appointment>(`/appointments/${appointmentId}/approve`, {
+        expected_revision: options.expectedRevision,
+        request_id: options.requestId,
+    });
+}
+
+export function completeAppointment(
+    appointmentId: string,
+    status: 'completed' | 'no_show',
+    options: Required<Pick<SchedulingMutationOptions, 'expectedRevision' | 'requestId'>>,
+): Promise<Appointment> {
+    return api.post<Appointment>(`/appointments/${appointmentId}/complete`, {
+        status,
         expected_revision: options.expectedRevision,
         request_id: options.requestId,
     });
