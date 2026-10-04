@@ -924,13 +924,23 @@ def find_unresolved_template_variables(
     return sorted(unresolved)
 
 
-def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dict[str, str]:
-    """Build flat template variables for a surrogate context."""
+def build_surrogate_template_variables(
+    db: Session,
+    surrogate: Surrogate,
+    *,
+    unsubscribe_url: str | None = None,
+) -> dict[str, str]:
+    """Build flat template variables for a surrogate context.
+
+    ``unsubscribe_url`` replaces the tokenized link; previews pass one so they write no token.
+    """
     from app.db.enums import FormPurpose, FormStatus, OwnerType
     from app.db.models import BookingLink, Form
 
     org = db.query(Organization).filter(Organization.id == surrogate.organization_id).first()
-    contact_variables = _build_record_contact_template_variables(db, surrogate, org)
+    contact_variables = _build_record_contact_template_variables(
+        db, surrogate, org, unsubscribe_url=unsubscribe_url
+    )
 
     form_link = ""
     appointment_link = ""
@@ -1198,6 +1208,8 @@ def _build_record_contact_template_variables(
     db: Session,
     record: Surrogate | IntendedParent | Donor,
     org: Organization | None,
+    *,
+    unsubscribe_url: str | None = None,
 ) -> dict[str, str]:
     """Resolve contact, owner, branding, and unsubscribe context consistently."""
     from app.db.enums import OwnerType
@@ -1233,8 +1245,9 @@ def _build_record_contact_template_variables(
 
     full_name = record.full_name or ""
     email = record.email or ""
-    unsubscribe_url = ""
-    if email:
+    if unsubscribe_url is None:
+        unsubscribe_url = ""
+    if email and not unsubscribe_url:
         from app.services import org_service, unsubscribe_service
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(

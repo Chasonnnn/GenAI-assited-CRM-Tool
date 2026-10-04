@@ -131,8 +131,12 @@ def compose_template_email_html(
     scope: TemplateScope,
     sender_user_id: uuid.UUID | None = None,
     portal_base_url: str | None = None,
+    unsubscribe_url: str | None = None,
 ) -> str:
-    """Compose final HTML for a template email (body + signature + unsubscribe footer)."""
+    """Compose final HTML for a template email (body + signature + unsubscribe footer).
+
+    ``unsubscribe_url`` replaces the tokenized link; previews pass one so they write no token.
+    """
     body = _wrap_body_html(rendered_body_html or "")
 
     signature_html = ""
@@ -149,8 +153,9 @@ def compose_template_email_html(
             org_id=org_id,
         )
 
-    unsubscribe_url = ""
-    if (recipient_email or "").strip():
+    if unsubscribe_url is None:
+        unsubscribe_url = ""
+    if not unsubscribe_url and (recipient_email or "").strip():
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
             db,
             org_id=org_id,

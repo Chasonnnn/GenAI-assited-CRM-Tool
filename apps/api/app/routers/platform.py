@@ -40,7 +40,9 @@ from app.core.rate_limit import limiter
 from app.db.enums import Role
 from app.schemas.email import (
     EmailBodyDesign,
+    EmailTemplatePreviewResponse,
     EmailTemplateTestSendResponse,
+    PlatformEmailTemplatePreviewRequest,
     PlatformEmailTemplateTestSendRequest,
     TemplateVariableRead,
 )
@@ -1180,6 +1182,48 @@ def update_platform_email_branding(
 # =============================================================================
 
 
+def _preview_org(db: Session, org_id: UUID | None):
+    from app.services import org_service
+
+    if org_id is None:
+        return None
+    org = org_service.get_org_by_id(db, org_id, include_deleted=True)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return org
+
+
+def _preview_response(preview) -> EmailTemplatePreviewResponse:
+    return EmailTemplatePreviewResponse(
+        subject=preview.subject,
+        html=preview.html,
+        unresolved_variables=preview.unresolved_variables,
+    )
+
+
+@router.post(
+    "/email/system-templates/preview",
+    response_model=EmailTemplatePreviewResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def preview_platform_system_email_template(
+    body: PlatformEmailTemplatePreviewRequest,
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> EmailTemplatePreviewResponse:
+    """Render unsaved system template content as its test send does."""
+    from app.services import email_preview_service
+
+    preview = email_preview_service.preview_system_template(
+        db,
+        subject=body.subject,
+        body=body.body,
+        variable_mode=body.variable_mode,
+        org=_preview_org(db, body.org_id),
+    )
+    return _preview_response(preview)
+
+
 @router.post(
     "/email/system-templates",
     status_code=201,
@@ -1440,7 +1484,6 @@ async def _send_test_system_template(
         audit_service,
         email_service,
         org_service,
-        platform_branding_service,
         platform_email_service,
         system_email_template_service,
     )
@@ -1462,36 +1505,15 @@ async def _send_test_system_template(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    org_name = org_service.get_org_display_name(org)
-    org_slug = org.slug
-    base_url = org_service.get_org_portal_base_url(org)
-    invite_url = f"{base_url.rstrip('/')}/invite/EXAMPLE"
-    inviter_text = ""
-
-    branding = platform_branding_service.get_branding(db)
-    platform_logo_url = (branding.logo_url or "").strip()
-    platform_logo_block = (
-        f'<img src="{platform_logo_url}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />'
-        if platform_logo_url
-        else ""
-    )
-
-    variables = {
-        "org_name": org_name,
-        "org_slug": org_slug,
-        "invite_url": invite_url,
-        "role_title": "Admin",
-        "inviter_text": inviter_text,
-        "expires_block": "<p>This is a test email. Expiration text would appear here.</p>",
-        "platform_logo_url": platform_logo_url,
-        "platform_logo_block": platform_logo_block,
-    }
+    variables = system_email_template_service.build_sample_variables(db, org=org)
+    org_name = variables["org_name"]
+    invite_url = variables["invite_url"]
 
     rendered_subject, rendered_body = email_service.render_template(
         template.subject,
         template.body,
         variables,
-        safe_html_vars={"expires_block", "platform_logo_block"},
+        safe_html_vars=set(system_email_template_service.SAFE_HTML_VARIABLES),
     )
 
     result = await platform_email_service.send_email_logged(
@@ -2024,6 +2046,30 @@ def list_platform_email_templates(
 
     templates = platform_template_service.list_platform_email_templates(db)
     return [_email_list_item(template) for template in templates]
+
+
+@router.post(
+    "/templates/email/preview",
+    response_model=EmailTemplatePreviewResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def preview_platform_email_template(
+    body: PlatformEmailTemplatePreviewRequest,
+    session: Annotated[PlatformUserSession, "fastapi_param"] = Depends(require_platform_admin),
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> EmailTemplatePreviewResponse:
+    """Render unsaved library template content as its test send does."""
+    from app.services import email_preview_service
+
+    preview = email_preview_service.preview_platform_template(
+        db,
+        subject=body.subject,
+        body=body.body,
+        variable_mode=body.variable_mode,
+        org=_preview_org(db, body.org_id),
+        actor_display_name=session.display_name,
+    )
+    return _preview_response(preview)
 
 
 @router.post(

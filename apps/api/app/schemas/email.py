@@ -174,6 +174,39 @@ class PlatformEmailTemplateTestSendRequest(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=256)
 
 
+class EmailTemplatePreviewRequest(BaseModel):
+    """Unsaved template content to render through the send composition."""
+
+    subject: str = Field(default="", max_length=200)
+    body: str = Field(default="", max_length=50000)
+    scope: EmailTemplateScope = "org"
+    variable_mode: Literal["sample", "names", "record"] = "sample"
+    surrogate_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def record_needs_surrogate(self) -> EmailTemplatePreviewRequest:
+        if self.variable_mode == "record" and self.surrogate_id is None:
+            raise ValueError("surrogate_id is required for record previews")
+        return self
+
+
+class PlatformEmailTemplatePreviewRequest(BaseModel):
+    """Unsaved platform template content to render as its test send does."""
+
+    subject: str = Field(default="", max_length=200)
+    body: str = Field(default="", max_length=50000)
+    variable_mode: Literal["sample", "names"] = "sample"
+    org_id: UUID | None = None
+
+
+class EmailTemplatePreviewResponse(BaseModel):
+    """Rendered preview document for a sandboxed iframe."""
+
+    subject: str
+    html: str
+    unresolved_variables: list[str]
+
+
 class EmailTemplateTestSendResponse(BaseModel):
     """Response after sending a test email."""
 
