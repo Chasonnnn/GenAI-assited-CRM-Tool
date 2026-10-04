@@ -610,7 +610,10 @@ export function AppSidebar({ children }: AppSidebarProps) {
         user?.role === "intake_specialist" || user?.role === "case_manager"
     const canAccessIntegrations = canViewIntegrations || canAccessPersonalIntegrations
     const canViewAlerts = isDeveloper || permissionSet.has("manage_ops")
-    const canViewAutomationExecutions = isDeveloper || permissionSet.has("manage_automation")
+    // Version 2 org executions need both workflow keys, matching workflow_access.can_create("org").
+    const canViewAutomationExecutions = isDeveloper || (
+        permissionSet.has("manage_automation") && (!isNewPolicy || permissionSet.has("manage_org_workflows"))
+    )
     const canViewFormBuilder = isDeveloper || permissionSet.has("manage_forms")
     const isMobile = useIsMobile()
 
@@ -700,7 +703,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     ]
 
     const automationItems: Array<{ title: string; url: string; tab?: string | null }> = [
-        ...(!isNewPolicy || permissionSet.has("view_automation") ? [{ title: "Workflows", url: "/automation", tab: null }] : []),
+        ...(!isNewPolicy || permissionSet.has("manage_automation") ? [{ title: "Workflows", url: "/automation", tab: null }] : []),
         ...(!isNewPolicy || permissionSet.has("view_campaigns") ? [{ title: "Campaigns", url: "/automation/campaigns" }] : []),
         ...(!isNewPolicy || permissionSet.has("view_email_templates") ? [{ title: "Email Templates", url: "/automation/email-templates" }] : []),
         // The forms API requires manage_forms under both policy versions.

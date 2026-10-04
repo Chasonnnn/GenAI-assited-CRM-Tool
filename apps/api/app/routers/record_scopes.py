@@ -15,13 +15,16 @@ from app.schemas.record_scope import (
     CollaboratorOption,
     CollaboratorRead,
     HandoffMigrationReviewRequest,
+    HandoffMigrationReviewResult,
     LegacyPoolResolutionRequest,
+    LegacyPoolResolutionResult,
     RecordAccessExplanation,
     RecordKind,
     RecordModule,
     RecordScopeAdditionCreate,
     RecordScopeAdditionRead,
     RecordScopeRule,
+    ScopeMigrationReviewRead,
 )
 from app.services import record_scope_service
 
@@ -140,25 +143,27 @@ def check_record_scope(body: CheckRecordAccessRequest, db: DB, session: Staff):
     return _call(record_scope_service.explain_member_access, db, session.org_id, body)
 
 
-@router.get("/migration-review")
-def migration_review(db: DB, session: Staff) -> dict[str, object]:
+@router.get("/migration-review", response_model=ScopeMigrationReviewRead)
+def migration_review(db: DB, session: Staff):
     _admin(session)
     return record_scope_service.get_policy_scope_snapshot(db, session.org_id)
 
 
 @router.post(
-    "/migration-review/records/{kind}/{record_id}", dependencies=[Depends(require_csrf_header)]
+    "/migration-review/records/{kind}/{record_id}",
+    response_model=HandoffMigrationReviewResult,
+    dependencies=[Depends(require_csrf_header)],
 )
 def review_handoff(
     kind: RecordKind, record_id: UUID, body: HandoffMigrationReviewRequest, db: DB, session: Staff
-) -> dict[str, str | bool]:
+):
     return _call(record_scope_service.resolve_handoff_migration, db, session, kind, record_id, body)
 
 
 @router.post(
-    "/migration-review/pool-grants/{grant_id}", dependencies=[Depends(require_csrf_header)]
+    "/migration-review/pool-grants/{grant_id}",
+    response_model=LegacyPoolResolutionResult,
+    dependencies=[Depends(require_csrf_header)],
 )
-def review_legacy_pool(
-    grant_id: UUID, body: LegacyPoolResolutionRequest, db: DB, session: Staff
-) -> dict[str, bool]:
+def review_legacy_pool(grant_id: UUID, body: LegacyPoolResolutionRequest, db: DB, session: Staff):
     return _call(record_scope_service.resolve_legacy_pool_grant, db, session, grant_id, body)
