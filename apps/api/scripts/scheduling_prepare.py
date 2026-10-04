@@ -12,14 +12,14 @@ from uuid import UUID
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.core.config import settings  # noqa: E402
-from app.db.models import Membership, Organization, User  # noqa: E402
-from app.schemas.calendar_binding import CalendarBindingInput  # noqa: E402
-from app.services import calendar_binding_service  # noqa: E402
-
 
 async def prepare_primary(db, *, organization_id: UUID, user_id: UUID) -> dict:
     """Use scoped services; preserve a different existing calendar selection."""
+    from app.core.config import settings
+    from app.db.models import Membership, Organization, User
+    from app.schemas.calendar_binding import CalendarBindingInput
+    from app.services import calendar_binding_service
+
     if not settings.SCHEDULING_V2_ENABLED:
         raise ValueError("Enable SCHEDULING_V2_ENABLED for this operator process only")
     membership = (
@@ -71,9 +71,9 @@ def main() -> int:
     # Provider and database exceptions can contain private data. Only emit the
     # aggregate result or exception class from this operator command.
     logging.disable(logging.CRITICAL)
-    from app.db.session import SessionLocal
-
     try:
+        from app.db.session import SessionLocal
+
         with SessionLocal() as db:
             result = asyncio.run(
                 prepare_primary(db, organization_id=args.organization_id, user_id=args.user_id)
