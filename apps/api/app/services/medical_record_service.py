@@ -433,7 +433,8 @@ def correct_record(
     changed = _apply_corrections(record, changes, user_id=user_id, source="manual", now=now)
     if not changed:
         return record
-    if not (record.name or record.provider_name):
+    # Imported records may lack a name; only refuse a correction that removes one.
+    if {"name", "provider_name"} & set(changes) and not (record.name or record.provider_name):
         raise MedicalRecordError("Enter a name")
     record.revision += 1
     record.updated_at = now

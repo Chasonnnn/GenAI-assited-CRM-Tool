@@ -176,6 +176,40 @@ async def test_correction_increments_revision_and_records_values(db, test_org, s
 
 
 @pytest.mark.asyncio
+async def test_imported_record_without_name_accepts_other_corrections(db, test_org, surrogate):
+    # Imported sections can have details but no name; they must stay editable.
+    record = MedicalRecord(
+        organization_id=test_org.id,
+        surrogate_id=surrogate.id,
+        section="insurance",
+        source="import",
+        member_id="M4410-22",
+    )
+    db.add(record)
+    db.flush()
+    base = f"/surrogates/{surrogate.id}"
+    async with _client_for_org(db, test_org) as client:
+        response = await client.patch(
+            f"{base}/medical-records/{record.id}",
+            json={"expected_revision": 1, "phone": "(555) 410-3300"},
+        )
+        assert response.status_code == 200, response.text
+        corrected = _current(response.json(), "insurance")
+        assert corrected["name"] is None and corrected["revision"] == 2
+
+        response = await client.patch(
+            f"{base}/medical-records/{record.id}",
+            json={"expected_revision": 2, "name": "Harbor Mutual"},
+        )
+        assert response.status_code == 200, response.text
+        cleared = await client.patch(
+            f"{base}/medical-records/{record.id}",
+            json={"expected_revision": 3, "name": ""},
+        )
+        assert cleared.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_create_rejects_fields_from_other_sections_and_missing_name(db, test_org, surrogate):
     base = f"/surrogates/{surrogate.id}"
     today = _today(db, test_org).isoformat()
