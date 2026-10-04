@@ -198,10 +198,34 @@ class ProviderAttachment(TypedDict):
     content_bytes: bytes
 
 
+_STYLE_ATTR_RE = re.compile(r"""(\bstyle\s*=\s*)(["'])(.*?)\2""", re.IGNORECASE | re.DOTALL)
+# A `background:` declaration whose whole value is one color. Values with images,
+# gradients, or positions do not match and are dropped by the property allowlist.
+_COLOR_BACKGROUND_RE = re.compile(
+    r"(^|;)(\s*)background\s*:\s*"
+    r"(#[0-9a-f]{3,8}|(?:rgba?|hsla?)\([^()]*\)|[a-z]+)"
+    r"(\s*!\s*important)?\s*(?=;|$)",
+    re.IGNORECASE,
+)
+
+
+def _color_background_to_background_color(html: str) -> str:
+    """Keep the fill of color-only `background:` shorthands, which the allowlist drops."""
+
+    def rewrite_style(match: re.Match[str]) -> str:
+        prefix, quote, style = match.groups()
+        style = _COLOR_BACKGROUND_RE.sub(
+            lambda m: f"{m[1]}{m[2]}background-color: {m[3]}{m[4] or ''}", style
+        )
+        return f"{prefix}{quote}{style}{quote}"
+
+    return _STYLE_ATTR_RE.sub(rewrite_style, html)
+
+
 def sanitize_template_html(html: str) -> str:
     """Sanitize email template HTML to prevent XSS."""
     cleaned = nh3.clean(
-        html,
+        _color_background_to_background_color(html),
         tags=ALLOWED_TEMPLATE_TAGS,
         attributes=ALLOWED_TEMPLATE_ATTRS,
         filter_style_properties=ALLOWED_TEMPLATE_STYLE_PROPERTIES,
