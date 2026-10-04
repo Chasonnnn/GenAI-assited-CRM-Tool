@@ -3,6 +3,10 @@
  */
 
 import api from '../api';
+import type {
+    EmailBodyDesign,
+    EmailTemplatePreview,
+} from '@/lib/api/email-templates';
 import type { FormSchema } from '@/lib/api/forms';
 import type { ActionConfig, Condition } from '@/lib/api/workflows';
 import type { JsonObject } from '@/lib/types/json';
@@ -159,6 +163,7 @@ export interface SystemEmailTemplate {
     subject: string;
     from_email: string | null;
     body: string;
+    body_design?: EmailBodyDesign | null;
     is_active: boolean;
     current_version: number;
     updated_at: string | null;
@@ -172,6 +177,7 @@ export interface PlatformSystemEmailTemplateCreate {
     subject: string;
     from_email?: string | null;
     body: string;
+    body_design?: EmailBodyDesign | null;
     is_active?: boolean;
 }
 
@@ -458,6 +464,7 @@ export function updatePlatformSystemEmailTemplate(
         subject: string;
         from_email?: string | null;
         body: string;
+        body_design?: EmailBodyDesign | null;
         is_active: boolean;
         expected_version?: number;
     }
@@ -557,6 +564,7 @@ interface PlatformEmailTemplateDraft {
     name: string
     subject: string
     body: string
+    body_design?: EmailBodyDesign | null
     from_email?: string | null
     category?: string | null
 }
@@ -584,6 +592,7 @@ export interface PlatformEmailTemplateUpdate {
     name?: string
     subject?: string
     body?: string
+    body_design?: EmailBodyDesign | null
     from_email?: string | null
     category?: string | null
     expected_version: number
@@ -728,6 +737,25 @@ export function sendTestPlatformEmailTemplate(
     payload: PlatformEmailTemplateTestSendRequest
 ): Promise<EmailTemplateTestSendResponse> {
     return api.post<EmailTemplateTestSendResponse>(`/platform/templates/email/${id}/test`, payload)
+}
+
+export interface PlatformEmailTemplatePreviewRequest {
+    subject: string
+    body: string
+    variable_mode: 'sample' | 'names'
+    org_id?: string | null
+}
+
+export function previewPlatformEmailTemplate(
+    payload: PlatformEmailTemplatePreviewRequest
+): Promise<EmailTemplatePreview> {
+    return api.post<EmailTemplatePreview>('/platform/templates/email/preview', payload)
+}
+
+export function previewPlatformSystemEmailTemplate(
+    payload: PlatformEmailTemplatePreviewRequest
+): Promise<EmailTemplatePreview> {
+    return api.post<EmailTemplatePreview>('/platform/email/system-templates/preview', payload)
 }
 
 /**
