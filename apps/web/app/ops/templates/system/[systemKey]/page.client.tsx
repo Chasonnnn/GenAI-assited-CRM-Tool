@@ -3,8 +3,6 @@
 import Image from "next/image"
 import { type ChangeEvent, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react"
 import { useParams, useRouter } from "next/navigation"
-import DOMPurify from "dompurify"
-import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -24,7 +22,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { EmptyState } from "@/components/empty-state"
 import { ValidatedField } from "@/components/ui/field"
 import { PageHeader } from "@/components/page-header"
 import { SaveStatus, type SaveStatusState } from "@/components/ui/save-bar"
@@ -37,13 +34,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import {
     AlertTriangleIcon,
     ArrowLeftIcon,
-    EyeIcon,
+    ImageIcon,
+    LayoutTemplateIcon,
     Loader2Icon,
     MoreHorizontalIcon,
     RotateCcwIcon,
@@ -55,11 +52,13 @@ import {
     UsersIcon,
 } from "lucide-react"
 import { toast } from "@/components/ui/toast"
-import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
+import { EmailDesignEditor, type EmailDesignEditorHandle } from "@/components/email/design/email-design-editor"
+import { EmailHtmlSource } from "@/components/email/design/email-html-source"
+import { EmailPreviewPane } from "@/components/email/design/email-preview-pane"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"
-import { normalizeTemplateHtml } from "@/lib/email-template-html"
 import { insertAtCursor } from "@/lib/insert-at-cursor"
+import type { EmailBodyValue } from "@/lib/email-design"
+import type { EmailBodyDesign } from "@/lib/api/email-templates"
 import {
     usePlatformEmailBranding,
     usePlatformSystemEmailTemplate,
@@ -73,6 +72,7 @@ import {
 } from "@/lib/hooks/use-platform-templates"
 import {
     listMembers,
+    previewPlatformSystemEmailTemplate,
     type OrganizationSummary,
     type OrgMember,
 } from "@/lib/api/platform"
@@ -194,14 +194,15 @@ function createCampaignOccurrenceId(): string {
     ].join("-")
 }
 
-type EditorMode = "visual" | "html"
+type ActiveInsertionTarget = "subject" | "body" | null
 
-type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
+type EditorView = "edit" | "preview" | "html"
 
 type TemplateDraft = {
     subject: string
     fromEmail: string
     body: string
+    bodyDesign: EmailBodyDesign | null
     isActive: boolean
 }
 
@@ -209,6 +210,7 @@ type TemplateDraftSource = {
     subject?: string | null
     from_email?: string | null
     body?: string | null
+    body_design?: EmailBodyDesign | null
     is_active?: boolean
 } | null | undefined
 
@@ -224,6 +226,7 @@ function buildTemplateDraft(template: TemplateDraftSource): TemplateDraft {
         subject: template?.subject ?? "",
         fromEmail: template?.from_email ?? "",
         body: template?.body ?? "",
+        bodyDesign: template?.body_design ?? null,
         isActive: template?.is_active ?? true,
     }
 }
@@ -244,79 +247,6 @@ function getLogoPreviewUrl(logoUrl: string): string {
         return base ? `${base}${logoUrl}` : logoUrl
     }
     return logoUrl
-}
-
-function hasComplexEmailHtml(body: string): boolean {
-    return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body)
-}
-
-function buildPreviewHtml(body: string, logoPreviewUrl: string): string {
-    const logoPlaceholder =
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='54'><rect width='100%' height='100%' rx='10' fill='%23e5e7eb'/><text x='50%' y='55%' text-anchor='middle' font-family='Arial' font-size='14' fill='%236b7280'>Logo</text></svg>"
-    const platformLogoUrl = logoPreviewUrl || logoPlaceholder
-    const platformLogoBlock = logoPreviewUrl
-        ? `<img src="${platformLogoUrl}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />`
-        : ""
-    const rawHtml = body
-        .replace(/\{\{org_name\}\}/g, "Sample Organization")
-        .replace(/\{\{org_slug\}\}/g, "sample-org")
-        .replace(/\{\{first_name\}\}/g, "Avery")
-        .replace(/\{\{full_name\}\}/g, "Avery James")
-        .replace(/\{\{email\}\}/g, "avery@example.com")
-        .replace(/\{\{inviter_text\}\}/g, "")
-        .replace(/\{\{role_title\}\}/g, "Admin")
-        .replace(/\{\{invite_url\}\}/g, "https://app.surrogacyforce.com/invite/EXAMPLE")
-        .replace(/\{\{expires_block\}\}/g, "<p>This invitation expires in 7 days.</p>")
-        .replace(/\{\{platform_logo_url\}\}/g, platformLogoUrl)
-        .replace(/\{\{platform_logo_block\}\}/g, platformLogoBlock)
-        .replace(/\{\{unsubscribe_url\}\}/g, "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE")
-
-    return DOMPurify.sanitize(normalizeTemplateHtml(rawHtml), {
-        USE_PROFILES: { html: true },
-        ADD_TAGS: [
-            "table",
-            "thead",
-            "tbody",
-            "tfoot",
-            "tr",
-            "td",
-            "th",
-            "colgroup",
-            "col",
-            "img",
-            "hr",
-            "div",
-            "span",
-            "center",
-            "h1",
-            "h2",
-            "h3",
-            "h4",
-            "h5",
-            "h6",
-        ],
-        ADD_ATTR: [
-            "style",
-            "class",
-            "align",
-            "valign",
-            "width",
-            "height",
-            "cellpadding",
-            "cellspacing",
-            "border",
-            "bgcolor",
-            "colspan",
-            "rowspan",
-            "role",
-            "target",
-            "rel",
-            "href",
-            "src",
-            "alt",
-            "title",
-        ],
-    })
 }
 
 function recordSelection(
@@ -564,8 +494,9 @@ export default function PlatformSystemEmailTemplatePage() {
         systemKey: string
         draft: TemplateDraft
     } | null>(null)
-    const [editorMode, setEditorMode] = useState<EditorMode>("visual")
-    const [editorModeTouched, setEditorModeTouched] = useState(false)
+    const [view, setView] = useState<EditorView>("edit")
+    // Remounts the block editor when the body is replaced outside it (save, reset, layout).
+    const [editorGeneration, setEditorGeneration] = useState(0)
     const [logoUrlOverride, setLogoUrlOverride] = useState<string | null>(null)
     const [testEmail, setTestEmail] = useState("")
     const [testOrgId, setTestOrgId] = useState("")
@@ -596,9 +527,7 @@ export default function PlatformSystemEmailTemplatePage() {
 
     const subjectRef = useRef<HTMLInputElement | null>(null)
     const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null)
-    const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
-    const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
-    const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
+    const designRef = useRef<EmailDesignEditorHandle | null>(null)
     const activeInsertionTargetRef = useRef<ActiveInsertionTarget>(null)
     const currentVersionRef = useRef<{ systemKey: string; version: number | null } | null>(null)
 
@@ -612,6 +541,7 @@ export default function PlatformSystemEmailTemplatePage() {
     const subject = draft.subject
     const fromEmail = draft.fromEmail
     const body = draft.body
+    const bodyDesign = draft.bodyDesign
     const isActive = draft.isActive
 
     const updateDraft = (updater: (current: TemplateDraft) => TemplateDraft) => {
@@ -632,11 +562,9 @@ export default function PlatformSystemEmailTemplatePage() {
         updateDraft((current) => ({ ...current, fromEmail: value }))
     }
 
-    const setBody: Dispatch<SetStateAction<string>> = (value) => {
-        updateDraft((current) => ({
-            ...current,
-            body: typeof value === "function" ? value(current.body) : value,
-        }))
+    const setBody = (value: EmailBodyValue) => {
+        if (value.body === body && value.bodyDesign === bodyDesign) return
+        updateDraft((current) => ({ ...current, body: value.body, bodyDesign: value.bodyDesign }))
     }
 
     const setIsActive = (value: boolean) => {
@@ -668,6 +596,7 @@ export default function PlatformSystemEmailTemplatePage() {
         subject !== sourceDraft.subject ||
         fromEmail !== sourceDraft.fromEmail ||
         body !== sourceDraft.body ||
+        bodyDesign !== sourceDraft.bodyDesign ||
         isActive !== sourceDraft.isActive
     const saveStatus: SaveStatusState = saving
         ? "saving"
@@ -688,10 +617,13 @@ export default function PlatformSystemEmailTemplatePage() {
     })
 
     const focusTestSend = () => {
-        const form = testSendCardRef.current
-        if (!form) return
-        form.scrollIntoView({ behavior: "smooth", block: "nearest" })
-        form.querySelector<HTMLElement>("button, input")?.focus({ preventScroll: true })
+        setView("edit")
+        requestAnimationFrame(() => {
+            const form = testSendCardRef.current
+            if (!form) return
+            form.scrollIntoView({ behavior: "smooth", block: "nearest" })
+            form.querySelector<HTMLElement>("button, input")?.focus({ preventScroll: true })
+        })
     }
 
     const handleCampaignOpenChange = (open: boolean) => {
@@ -805,54 +737,30 @@ export default function PlatformSystemEmailTemplatePage() {
     const totalSelectedUsers = campaignTargets.reduce((acc, target) => acc + target.user_ids.length, 0)
     const campaignOrgCount = campaignTargets.length
 
-    const hasComplexHtml = hasComplexEmailHtml(body)
-
-    const effectiveEditorMode: EditorMode =
-        editorMode === "visual" && hasComplexHtml && !editorModeTouched ? "html" : editorMode
-
     const insertToken = (token: string) => {
-        const activeInsertionTarget = activeInsertionTargetRef.current
-        const insertionTarget =
-            activeInsertionTarget === "body_visual" && effectiveEditorMode === "html" ? null : activeInsertionTarget
-
-        if (insertionTarget === "subject") {
+        if (activeInsertionTargetRef.current === "subject") {
             insertIntoTextControl(subjectRef.current, subjectSelectionRef, setSubject, token)
             return
         }
-        if (insertionTarget === "body_html") {
-            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, token)
-            return
-        }
-        if (insertionTarget === "body_visual") {
-            visualBodyRef.current?.insertText(token)
-            return
-        }
-
-        if (effectiveEditorMode === "html") {
-            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, token)
-            return
-        }
-        visualBodyRef.current?.insertText(token)
+        designRef.current?.insertText(token)
     }
 
+    // The server expands {{platform_logo_block}} to the branding logo image.
     const insertPlatformLogo = () => {
         if (body.includes("{{platform_logo_block}}")) return
-        const block = `<p>{{platform_logo_block}}</p>\n`
-        if (effectiveEditorMode === "visual") {
-            visualBodyRef.current?.insertHtml(block)
-            setActiveInsertionTarget("body_visual")
-            return
-        }
-        insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, block)
-        setActiveInsertionTarget("body_html")
+        designRef.current?.insertText("{{platform_logo_block}}")
+        setActiveInsertionTarget("body")
     }
 
     const applySfTemplate = () => {
-        setSubject(SF_INVITE_SUBJECT)
-        setBody(SF_INVITE_BODY)
+        updateDraft((current) => ({
+            ...current,
+            subject: SF_INVITE_SUBJECT,
+            body: SF_INVITE_BODY,
+            bodyDesign: null,
+        }))
+        setEditorGeneration((generation) => generation + 1)
     }
-
-    const previewHtml = buildPreviewHtml(body, logoPreviewUrl)
 
     const handleSave = async () => {
         if (!subject.trim()) {
@@ -878,12 +786,14 @@ export default function PlatformSystemEmailTemplatePage() {
             const payload: {
                 subject: string
                 body: string
+                body_design: EmailBodyDesign | null
                 is_active: boolean
                 from_email: string | null
                 expected_version?: number
             } = {
                 subject: subject.trim(),
                 body,
+                body_design: bodyDesign,
                 is_active: isActive,
                 from_email: fromEmail.trim() ? fromEmail.trim() : null,
             }
@@ -898,6 +808,7 @@ export default function PlatformSystemEmailTemplatePage() {
             testSendOccurrenceIdRef.current = null
             // Show the saved (server-sanitized) content; the refetched template then matches it.
             setTemplateDraftOverride({ systemKey, draft: buildTemplateDraft(updated) })
+            if (updated.body !== body) setEditorGeneration((generation) => generation + 1)
             setSaveResult("saved")
             toast.success("System template updated")
             finishSaving()
@@ -919,7 +830,8 @@ export default function PlatformSystemEmailTemplatePage() {
             setSaveResult("idle")
             currentVersionRef.current = null
             toast.success("System template reset to default")
-            void refetchTemplate()
+            await refetchTemplate()
+            setEditorGeneration((generation) => generation + 1)
             return
         }
         toast.success("System template deleted")
@@ -1068,7 +980,7 @@ export default function PlatformSystemEmailTemplatePage() {
     const headerBusy = deleteTemplate.isPending || saving || sending || brandingSaving || campaignSending
 
     return (
-        <div>
+        <Tabs value={view} onValueChange={(value) => setView(value as EditorView)} className="gap-0">
             {isBuiltinTemplate ? (
                 <ConfirmDialog
                     open={showDeleteDialog}
@@ -1107,6 +1019,11 @@ export default function PlatformSystemEmailTemplatePage() {
                 }
                 actions={
                     <>
+                        <TabsList aria-label="Editor view">
+                            <TabsTrigger value="edit">Edit</TabsTrigger>
+                            <TabsTrigger value="preview">Preview</TabsTrigger>
+                            <TabsTrigger value="html">HTML</TabsTrigger>
+                        </TabsList>
                         <DropdownMenu>
                             <DropdownMenuTrigger
                                 render={<Button variant="outline" size="icon" aria-label="More actions" />}
@@ -1287,94 +1204,17 @@ export default function PlatformSystemEmailTemplatePage() {
                         </DialogContent>
                     </Dialog>
 
-            <div className="grid grid-cols-1 gap-6 p-6 xl:grid-cols-[1.1fr_0.9fr]">
-                <div className="min-w-0 space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Platform Branding</CardTitle>
-                            <CardDescription>
-                                Set the logo used in platform system emails.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="flex items-center gap-4">
-                                {logoPreviewUrl ? (
-                                    <Image
-                                        src={logoPreviewUrl}
-                                        alt="Platform logo"
-                                        className="h-14 w-auto rounded border object-contain"
-                                        width={112}
-                                        height={56}
-                                        unoptimized
-                                    />
-                                ) : (
-                                    <div className="h-14 w-28 rounded border border-dashed flex items-center justify-center text-xs text-muted-foreground">
-                                        No logo
-                                    </div>
-                                )}
-                                <div>
-                                    <input
-                                        id="platform-branding-logo-upload"
-                                        aria-label="Platform branding logo upload"
-                                        name="platform_branding_logo_upload"
-                                        type="file"
-                                        ref={logoFileInputRef}
-                                        onChange={handleLogoUpload}
-                                        accept="image/png,image/jpeg"
-                                        className="hidden"
-                                    />
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => logoFileInputRef.current?.click()}
-                                        disabled={uploadBrandingLogo.isPending}
-                                    >
-                                        {uploadBrandingLogo.isPending ? (
-                                            <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                        ) : (
-                                            <UploadIcon className="mr-2 size-4" />
-                                        )}
-                                        Upload Logo
-                                    </Button>
-                                    <p className="text-xs text-muted-foreground mt-1">Max 200x80px, PNG/JPG</p>
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="platform-logo">Logo URL</Label>
-                                <Input
-                                    id="platform-logo"
-                                    value={logoUrl}
-                                    onChange={(event) => setLogoUrl(event.target.value)}
-                                    placeholder="https://cdn.surrogacyforce.com/logo.png"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    This logo is available as <span className="font-mono">{"{{platform_logo_block}}"}</span>.
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    variant="outline"
-                                    onClick={handleSaveBranding}
-                                    disabled={brandingSaving}
-                                >
-                                    {brandingSaving ? (
-                                        <Loader2Icon className="mr-2 size-4 animate-spin" />
-                                    ) : null}
-                                    Save branding
-                                </Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Template Details</CardTitle>
-                            <CardDescription>
-                                Configure the sender, subject line, and content.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-5">
+            <TabsContent value="edit" keepMounted className="mt-0 flex min-h-[calc(100dvh-8rem)] flex-col data-hidden:hidden">
+                <EmailDesignEditor
+                    key={`${systemKey}:${editorGeneration}`}
+                    ref={designRef}
+                    initialValue={{ body, bodyDesign }}
+                    onChange={setBody}
+                    variables={templateVariables}
+                    onSelectVariable={(variable) => insertToken(`{{${variable.name}}}`)}
+                    onFocus={() => setActiveInsertionTarget("body")}
+                    fields={
+                        <div className="grid gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="from-email">From (required for Resend)</Label>
                                 <Input
@@ -1408,109 +1248,6 @@ export default function PlatformSystemEmailTemplatePage() {
                                     placeholder="Invitation to join {{org_name}}"
                                 />
                             </div>
-                            <div className="flex items-center justify-between rounded-md border p-3">
-                                <div>
-                                    <Label className="text-sm">Template active</Label>
-                                    <p className="text-xs text-muted-foreground">
-                                        If disabled, system emails fall back to the default template.
-                                    </p>
-                                </div>
-                                <Switch checked={isActive} onCheckedChange={setIsActive} />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Email Body</CardTitle>
-                            <CardDescription>
-                                Use variables to personalize content across all orgs.
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <ToggleGroup
-                                        multiple={false}
-                                        value={effectiveEditorMode ? [effectiveEditorMode] : []}
-                                        onValueChange={(value) => {
-                                            const next = value[0] as EditorMode | undefined
-                                            if (!next) return
-                                            setEditorMode(next)
-                                            setEditorModeTouched(true)
-                                            const currentTarget = activeInsertionTargetRef.current
-                                            setActiveInsertionTarget(
-                                                currentTarget === "subject"
-                                                    ? currentTarget
-                                                    : next === "html"
-                                                      ? "body_html"
-                                                      : "body_visual"
-                                            )
-                                        }}
-                                    >
-                                        <ToggleGroupItem value="visual" className="h-8">
-                                            Visual
-                                        </ToggleGroupItem>
-                                    <ToggleGroupItem value="html" className="h-8">
-                                            HTML
-                                    </ToggleGroupItem>
-                                    </ToggleGroup>
-                                    <TemplateVariablePicker
-                                        variables={templateVariables}
-                                        disabled={variablesLoading || templateVariables.length === 0}
-                                        triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
-                                        onSelect={(variable) => insertToken(`{{${variable.name}}}`)}
-                                    />
-                                    <Button type="button" variant="ghost" size="sm" onClick={insertPlatformLogo}>
-                                        Insert Logo
-                                    </Button>
-                                    {isOrgInvite && (
-                                        <Button type="button" variant="ghost" size="sm" onClick={applySfTemplate}>
-                                            Use SF-style layout
-                                        </Button>
-                                    )}
-                                </div>
-                                <span className="text-xs text-muted-foreground">
-                                    Variables:{" "}
-                                    {templateVariables.length > 0
-                                        ? templateVariables.map((v) => `{{${v.name}}}`).join(", ")
-                                        : "Loading..."}
-                                </span>
-                            </div>
-                            {effectiveEditorMode === "visual" ? (
-                                <RichTextEditor
-                                    ref={visualBodyRef}
-                                    content={body}
-                                    onChange={(html) => setBody(html)}
-                                    onFocus={() => setActiveInsertionTarget("body_visual")}
-                                    placeholder="Write your system email content here..."
-                                    minHeight="240px"
-                                    maxHeight="480px"
-                                    enableImages
-                                    enableEmojiPicker
-                                />
-                            ) : (
-                                <Textarea
-                                    ref={htmlBodyRef}
-                                    value={body}
-                                    onChange={(event) => setBody(event.target.value)}
-                                    onFocus={(event) => {
-                                        setActiveInsertionTarget("body_html")
-                                        recordSelection(event.currentTarget, htmlBodySelectionRef)
-                                    }}
-                                    onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    aria-label="HTML body"
-                                    placeholder="Paste or edit the HTML for this template..."
-                                    className="min-h-[280px] max-h-[60vh] overflow-y-auto font-mono text-xs leading-relaxed"
-                                />
-                            )}
-                            {effectiveEditorMode === "visual" && hasComplexHtml && (
-                                <p className="text-xs text-amber-600">
-                                    This template contains advanced HTML. Switch to HTML mode to preserve layout.
-                                </p>
-                            )}
                             {(unknownVariables.length > 0 || missingRequiredVariables.length > 0) &&
                                 (subject.trim() || body.trim()) && (
                                     <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50">
@@ -1536,53 +1273,120 @@ export default function PlatformSystemEmailTemplatePage() {
                                         </AlertDescription>
                                     </Alert>
                                 )}
-                        </CardContent>
-                    </Card>
+                        </div>
+                    }
+                    settings={
+                        <div className="grid gap-5">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <Label htmlFor="template-active" className="text-sm">
+                                        Template active
+                                    </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        If disabled, system emails fall back to the default template.
+                                    </p>
+                                </div>
+                                <Switch id="template-active" checked={isActive} onCheckedChange={setIsActive} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={body.includes("{{platform_logo_block}}")}
+                                    onClick={insertPlatformLogo}
+                                >
+                                    <ImageIcon aria-hidden="true" />
+                                    Insert logo
+                                </Button>
+                                {isOrgInvite ? (
+                                    <Button type="button" variant="outline" size="sm" onClick={applySfTemplate}>
+                                        <LayoutTemplateIcon aria-hidden="true" />
+                                        Use SF-style layout
+                                    </Button>
+                                ) : null}
+                            </div>
 
-                </div>
-
-                <div className="min-w-0 space-y-6 xl:sticky xl:top-36 xl:max-h-[calc(100dvh-10rem)] xl:self-start xl:overflow-y-auto">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <EyeIcon className="size-4" aria-hidden="true" />
-                                Preview
-                            </CardTitle>
-                            <CardDescription>Rendered using sample values.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {body.trim() ? (
-                                // The preview mirrors an email client, so it stays on a white surface in dark mode.
-                                // Fixed-width email tables scroll inside it instead of widening the page.
-                                <div className="overflow-x-auto rounded-md border border-stone-200 bg-white shadow-sm">
-                                    <TrustedSanitizedHtmlContent
-                                        html={previewHtml}
-                                        className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
+                            <section aria-labelledby="platform-branding-heading" className="grid gap-3">
+                                <h2 id="platform-branding-heading" className="text-sm font-medium">
+                                    Platform branding
+                                </h2>
+                                <div className="flex items-center gap-3">
+                                    {logoPreviewUrl ? (
+                                        <Image
+                                            src={logoPreviewUrl}
+                                            alt="Platform logo"
+                                            className="h-12 w-auto rounded border object-contain"
+                                            width={96}
+                                            height={48}
+                                            unoptimized
+                                        />
+                                    ) : (
+                                        <div className="flex h-12 w-24 items-center justify-center rounded border border-dashed text-xs text-muted-foreground">
+                                            No logo
+                                        </div>
+                                    )}
+                                    <div>
+                                        <input
+                                            id="platform-branding-logo-upload"
+                                            aria-label="Platform branding logo upload"
+                                            name="platform_branding_logo_upload"
+                                            type="file"
+                                            ref={logoFileInputRef}
+                                            onChange={handleLogoUpload}
+                                            accept="image/png,image/jpeg"
+                                            className="hidden"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => logoFileInputRef.current?.click()}
+                                            disabled={uploadBrandingLogo.isPending}
+                                        >
+                                            {uploadBrandingLogo.isPending ? (
+                                                <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                                            ) : (
+                                                <UploadIcon className="size-4" aria-hidden="true" />
+                                            )}
+                                            Upload logo
+                                        </Button>
+                                        <p className="mt-1 text-xs text-muted-foreground">Max 200x80px, PNG/JPG</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="platform-logo">Logo URL</Label>
+                                    <Input
+                                        id="platform-logo"
+                                        value={logoUrl}
+                                        onChange={(event) => setLogoUrl(event.target.value)}
+                                        placeholder="https://cdn.surrogacyforce.com/logo.png"
                                     />
                                 </div>
-                            ) : (
-                                <EmptyState
-                                    icon={EyeIcon}
-                                    title="No content yet"
-                                    headingLevel={3}
-                                    className="rounded-md border border-dashed"
-                                />
-                            )}
-                        </CardContent>
-                    </Card>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleSaveBranding}
+                                    disabled={brandingSaving}
+                                >
+                                    {brandingSaving ? (
+                                        <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                                    ) : null}
+                                    Save branding
+                                </Button>
+                            </section>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Send test email</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <form
-                                ref={testSendCardRef}
-                                noValidate
-                                onSubmit={testSendValidation.handleSubmit(handleSendTest)}
-                                className="space-y-3"
-                            >
-                                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                            <section aria-labelledby="send-test-heading" className="grid gap-3">
+                                <h2 id="send-test-heading" className="text-sm font-medium">
+                                    Send test email
+                                </h2>
+                                <form
+                                    ref={testSendCardRef}
+                                    noValidate
+                                    onSubmit={testSendValidation.handleSubmit(handleSendTest)}
+                                    className="space-y-3"
+                                >
                                     <ValidatedField
                                         id="test-agency"
                                         label="Agency"
@@ -1624,20 +1428,39 @@ export default function PlatformSystemEmailTemplatePage() {
                                             />
                                         )}
                                     </ValidatedField>
-                                </div>
-                                <Button type="submit" disabled={sending}>
-                                    {sending ? (
-                                        <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
-                                    ) : (
-                                        <SendIcon className="size-4" aria-hidden="true" />
-                                    )}
-                                    Send test
-                                </Button>
-                            </form>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        </div>
+                                    <Button type="submit" disabled={sending}>
+                                        {sending ? (
+                                            <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                                        ) : (
+                                            <SendIcon className="size-4" aria-hidden="true" />
+                                        )}
+                                        Send test
+                                    </Button>
+                                </form>
+                            </section>
+                        </div>
+                    }
+                />
+            </TabsContent>
+            <TabsContent value="preview" className="mt-0 flex min-h-[calc(100dvh-8rem)] flex-col">
+                <EmailPreviewPane
+                    subject={subject}
+                    body={body}
+                    queryKey={["platform-system", systemKey, effectiveTestOrgId]}
+                    modes={["sample", "names"]}
+                    load={(request) =>
+                        previewPlatformSystemEmailTemplate({
+                            subject: request.subject,
+                            body: request.body,
+                            variable_mode: request.variableMode === "names" ? "names" : "sample",
+                            org_id: effectiveTestOrgId || null,
+                        })
+                    }
+                />
+            </TabsContent>
+            <TabsContent value="html" className="mt-0 min-h-[calc(100dvh-8rem)] bg-muted/40 p-4 sm:p-6">
+                <EmailHtmlSource html={body} />
+            </TabsContent>
+        </Tabs>
     )
 }

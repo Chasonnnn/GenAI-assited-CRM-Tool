@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
 import * as React from "react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import PlatformSystemEmailTemplatePage from "../app/ops/templates/system/[systemKey]/page.client"
+import { emailDesignEditorMock } from "./fixtures/email-design-editor-mock"
 
 const mocks = vi.hoisted(() => ({
     push: vi.fn(),
@@ -16,7 +18,7 @@ const mocks = vi.hoisted(() => ({
     listOrganizations: vi.fn(),
     listMembers: vi.fn(),
     refetchTemplate: vi.fn(),
-    richTextEditor: vi.fn(),
+    preview: vi.fn(),
     state: {
         templateBody: "<table><tbody><tr><td>Hello {{org_name}}</td></tr></tbody></table>",
         templateQueryError: false,
@@ -45,21 +47,12 @@ vi.mock("@/components/ui/toast", () => ({
     },
 }))
 
-vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: function MockRichTextEditor(props: unknown) {
-        const { ref } = props as { ref?: React.Ref<{ insertText: () => void; insertHtml: () => void }> }
-        mocks.richTextEditor(props)
-        React.useImperativeHandle(ref, () => ({
-            insertText: vi.fn(),
-            insertHtml: vi.fn(),
-        }))
-        return <div data-testid="rich-text-editor" />
-    },
-}))
+vi.mock("@/components/email/design/email-design-editor", () => import("./fixtures/email-design-editor-mock"))
 
 vi.mock("@/lib/api/platform", () => ({
     listOrganizations: mocks.listOrganizations,
     listMembers: mocks.listMembers,
+    previewPlatformSystemEmailTemplate: mocks.preview,
 }))
 
 vi.mock("@/lib/hooks/use-platform-templates", () => ({
@@ -151,7 +144,8 @@ describe("PlatformSystemEmailTemplatePage", () => {
         mocks.listOrganizations.mockReset()
         mocks.listMembers.mockReset()
         mocks.refetchTemplate.mockReset()
-        mocks.richTextEditor.mockClear()
+        emailDesignEditorMock.reset()
+        mocks.preview.mockReset()
         mocks.refetchTemplate.mockResolvedValue(undefined)
         mocks.listOrganizations.mockResolvedValue({
             items: [
@@ -176,8 +170,11 @@ describe("PlatformSystemEmailTemplatePage", () => {
             "data-src",
             "/platform/email/branding/logo/local/platform.png"
         )
-        expect(await screen.findByPlaceholderText("Paste or edit the HTML for this template...")).toHaveValue(
-            mocks.state.templateBody
+        expect(screen.getByLabelText("Email body")).toHaveValue(mocks.state.templateBody)
+        expect(emailDesignEditorMock.render).toHaveBeenCalledWith(
+            expect.objectContaining({
+                initialValue: { body: mocks.state.templateBody, bodyDesign: null },
+            }),
         )
         expect(screen.getByLabelText("Platform branding logo upload")).toHaveAttribute(
             "accept",
@@ -298,11 +295,66 @@ describe("PlatformSystemEmailTemplatePage", () => {
         await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/ops/templates?tab=system"))
     })
 
-    it("shows a preview placeholder when the body is empty", () => {
-        mocks.state.templateBody = ""
+    it("saves the compiled body and its design together", async () => {
+        const design = { type: "doc" as const, content: [{ type: "paragraph" }] }
+        emailDesignEditorMock.nextDesign = design
+        mocks.update.mockResolvedValue({ current_version: 8, body: "<p>Designed</p>" })
         render(<PlatformSystemEmailTemplatePage />)
 
-        expect(screen.getByRole("heading", { name: "No content yet" })).toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText("Email body"), { target: { value: "<p>Designed</p>" } })
+        fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+        await waitFor(() =>
+            expect(mocks.update).toHaveBeenCalledWith({
+                systemKey: "org_invite",
+                payload: expect.objectContaining({ body: "<p>Designed</p>", body_design: design }),
+            }),
+        )
+    })
+
+    it("replaces the body and drops the design when applying the SF-style layout", async () => {
+        emailDesignEditorMock.nextDesign = { type: "doc", content: [] }
+        render(<PlatformSystemEmailTemplatePage />)
+        fireEvent.change(screen.getByLabelText("Email body"), { target: { value: "<p>Designed</p>" } })
+
+        fireEvent.click(screen.getByRole("button", { name: "Use SF-style layout" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save" }))
+
+        await waitFor(() =>
+            expect(mocks.update).toHaveBeenCalledWith({
+                systemKey: "org_invite",
+                payload: expect.objectContaining({
+                    subject: "Invitation to join {{org_name}} as {{role_title}}",
+                    body: expect.stringContaining("{{platform_logo_block}}"),
+                    body_design: null,
+                }),
+            }),
+        )
+    })
+
+    it("previews through the system template endpoint", async () => {
+        mocks.preview.mockResolvedValue({
+            subject: "Invite Acme Surrogacy",
+            html: "<!doctype html><html><body><p>Hello</p></body></html>",
+            unresolved_variables: [],
+        })
+        render(
+            <QueryClientProvider client={new QueryClient()}>
+                <PlatformSystemEmailTemplatePage />
+            </QueryClientProvider>,
+        )
+
+        fireEvent.click(screen.getByRole("tab", { name: "Preview" }))
+
+        await waitFor(() =>
+            expect(mocks.preview).toHaveBeenCalledWith({
+                subject: "Invite {{org_name}}",
+                body: mocks.state.templateBody,
+                variable_mode: "sample",
+                org_id: "org-1",
+            }),
+        )
+        expect(await screen.findByTitle("Desktop email preview")).toBeInTheDocument()
     })
 
     it("sends campaign to selected active organization members", async () => {
