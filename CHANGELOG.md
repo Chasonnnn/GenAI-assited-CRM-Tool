@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.80](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.79...surrogacy-crm-platform-v0.91.80) (2026-10-04)
+
+
+### Features
+
+* compact pipeline settings, matching stage colors, and the organization logo in the sidebar ([e6d8695](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e6d86954a919a7261a90ea58ffdf9cd79f893507))
+* drop the flat medical profile columns replaced by medical records ([2317cd2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2317cd23959b9c144d05ad0a041e9088c6c24cea))
+* forms and email templates redesign ([a8faf1e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a8faf1e51f85483bee156a3612a5bfbebab936ab))
+* rebuild the workflow editor with test runs, undo, drag insert, and step history ([3c6414b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3c6414b258ec1569596841546d7acffe976c471c))
+* **web:** greet users by time of day on the dashboard ([e772a87](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e772a87f4ee8d92a1f85f73e2f2ab886fd3e2f92))
+* **web:** greet users by time of day on the dashboard ([bef1a04](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bef1a04161f9d5f78fffe9cc15a0db8143a9995f))
+
+
+### Bug Fixes
+
+* **api:** cap logo pixels before decoding, accept phone JPEGs, and contain local logo deletes ([0ff608c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0ff608c3a472f58d7b8462167a997919a3f744b5))
+* **api:** commit signature logo changes together with their audit entry ([7f095b3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7f095b319c90a14e6012cfdfdb8f2fb2c86be86d))
+* **api:** declare response schemas for the record scope migration review routes ([9f658de](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9f658de9a6d4d1e263084fe2bab014a5c439c6c8))
+* **api:** order the email template body design migration after the flat medical column drop ([8399d4a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8399d4adece1614159e6b8afd53a3b36e975b89a))
+* **api:** order the organization logo migration after the email template body design migration ([1d7b030](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1d7b0306b876f0abdf2f7610a59cef9c4fa080ca))
+* **api:** order the organization logo migration after the flat medical column drop ([11d4ba1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/11d4ba15bdac741efcf3fb63558848ad94f89222))
+* **api:** return the committed default pipeline when concurrent first reads race to create it ([738eed9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/738eed97a6b65387ca1205750abe12999b61accb))
+* **api:** stop concurrent first reads from failing on default pipeline creation ([8bc9c44](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8bc9c449851f0e232ba9f35fc8ce6c2c36e65cc9))
+* isolate global database checks and balance CI shards ([dbbc70a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dbbc70a351455770fdfbe4648afbc560b9ee9fea))
+* **web:** close the phone sidebar on Escape ([d881caa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d881caa072b562c7023e8fe61261d02595b93602))
+* **web:** close the phone sidebar on Escape and return focus to its toggle ([c4b69b8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c4b69b8e722a3862df1f3e4923cf1941f5409a66))
+* **web:** end long stage slugs with an ellipsis in the pipeline table ([10c9456](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/10c945654202b0e308387327470a326ea920963c))
+* **web:** gate sidebar workflows and executions on the real v2 workflow permissions ([507b151](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/507b151ae078b256fbf45804be9c1c6f15c85fea))
+* **web:** keep focus on pipeline stages after reordering and removing a stage ([a4247a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a4247a425e4e6cf3fee2bae072f321c525761e32))
+* **web:** name journey milestones by label in the remove stage dialog ([9e6730d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9e6730d1aca9aa657793fbaf6e59b0e20b2884c1))
+* **web:** reach phone pipeline errors from the save bar and keep focus when opening and leaving a stage ([3bfed52](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3bfed52250a99057e3847541719ea0cced40d004))
+* **web:** read pipeline versions from the bare list the API returns ([4f30cb7](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/4f30cb7673d4199c9c646b5b3252f65547d8e0f2))
+* **web:** refresh the signed-in user after settings saves without the full-page loader ([cb625ba](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cb625ba184eec158aa389cbd071471c1b175ecd5))
+
+
+### Maintenance
+
+* avoid redundant backend coverage reporting ([0e0e062](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0e0e062883a696480adf9a4c5e4665140cc9b9c4))
+* **ci:** stop backend test jobs after 10 minutes ([28aa7b4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/28aa7b4ca98e3b5aae80ddaf86e077d57afa61d8))
+* **ci:** stop backend test jobs after 10 minutes ([5af3c82](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5af3c82a076bc0c7d570289b5734c227832b583f))
+* dedupe the web lockfile after the forms and email redesign merge ([5ad28d2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5ad28d2fdc27f7c311203f99bc06b49bfb8bfe07))
+* enable pnpm autoDedupe and drop the removed onlyBuiltDependencies setting ([ee52f2c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ee52f2c159371a6fc3872b5f82c9fa702a2c70d8))
+* merge main into worktree-forms-email-workbench ([18a60cb](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/18a60cbd4de4e6a0e9883caf73220fcebed51d57))
+* parallelize CI and update test tooling ([8752330](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/87523300699322736fe1d82fc5eca6cb4ddb2a45))
+* remove expired minimumReleaseAge exclusions ([09cfa88](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/09cfa88371f35c1e8377cbe386785b390a9b17f4))
+* shorten CI test critical path ([1c2f4f3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1c2f4f3d0abf117c93cce8ad188a186e0e1d270a))
+* silence the pnpm update notice in the web image build ([2835dbc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2835dbccf75252ce47206106c8ae2bf7d4eea242))
+* upgrade frontend test tooling ([37edbff](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/37edbfff45248f4b81fab19e6a15ff480cf4c2cd))
+* upgrade pnpm to 12.9.1 ([9cd8947](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9cd894704fb2fc2a984a728104c930de7ef91453))
+* upgrade pnpm to 12.9.1 and fix release follow-ups ([d8febc9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d8febc99bae81abc57b7d4a347984dfebb892ece))
+
 ## [0.91.79](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.78...surrogacy-crm-platform-v0.91.79) (2026-10-04)
 
 
