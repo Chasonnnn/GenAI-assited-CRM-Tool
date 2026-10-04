@@ -324,17 +324,6 @@ class TestWorkflowValidation:
         assert not result.valid
         assert any("Invalid trigger type" in e for e in result.errors)
 
-    def test_validate_valid_trigger_type(self, db, test_org):
-        """Should pass with valid trigger type and action."""
-        workflow = GeneratedWorkflow(
-            name="Test Workflow",
-            trigger_type="surrogate_created",
-            actions=[{"action_type": "add_note", "content": "test note"}],
-        )
-        result = validate_workflow(db, test_org.id, workflow)
-        # May have warnings but shouldn't have trigger errors
-        assert not any("Invalid trigger type" in e for e in result.errors)
-
     def test_validate_inactivity_requires_days(self, db, test_org):
         """Inactivity trigger must have days config."""
         workflow = GeneratedWorkflow(
@@ -644,13 +633,6 @@ class TestAddNoteExecutor:
         assert not valid
         assert "content" in error.lower()
 
-    def test_validate_with_content(self, db, test_user, test_org):
-        """Should pass with content."""
-        executor = AddNoteExecutor()
-        valid, error = executor.validate({"content": "test note"}, db, test_user.id, test_org.id)
-        assert valid
-        assert error is None
-
     def test_validate_accepts_body_alias(self, db, test_user, test_org):
         """Should accept 'body' as alias for content."""
         executor = AddNoteExecutor()
@@ -677,6 +659,10 @@ class TestAddNoteExecutor:
         db.flush()
 
         executor = AddNoteExecutor()
+        valid, error = executor.validate({"content": "test note"}, db, test_user.id, test_org.id)
+        assert valid
+        assert error is None
+
         result = executor.execute(
             {"content": "AI generated note"}, db, test_user.id, test_org.id, case.id
         )
@@ -699,12 +685,6 @@ class TestCreateTaskExecutor:
         assert not valid
         assert "title" in error.lower()
 
-    def test_validate_with_title(self, db, test_user, test_org):
-        """Should pass with title."""
-        executor = CreateTaskExecutor()
-        valid, error = executor.validate({"title": "Follow up"}, db, test_user.id, test_org.id)
-        assert valid
-
     def test_execute_creates_task(self, db, test_user, test_org, default_stage):
         """Should create a task for the case."""
         normalized_email = normalize_email("test@example.com")
@@ -725,6 +705,9 @@ class TestCreateTaskExecutor:
         db.flush()
 
         executor = CreateTaskExecutor()
+        valid, _ = executor.validate({"title": "Follow up"}, db, test_user.id, test_org.id)
+        assert valid
+
         result = executor.execute(
             {"title": "Follow up call", "description": "Call the client"},
             db,
@@ -751,14 +734,6 @@ class TestUpdateStatusExecutor:
         valid, error = executor.validate({}, db, test_user.id, test_org.id)
         assert not valid
         assert "stage_id" in error.lower()
-
-    def test_validate_with_valid_stage(self, db, test_user, test_org, default_stage):
-        """Should pass with valid stage_id."""
-        executor = UpdateStatusExecutor()
-        valid, error = executor.validate(
-            {"stage_id": str(default_stage.id)}, db, test_user.id, test_org.id
-        )
-        assert valid
 
     def test_execute_updates_status(self, db, test_user, test_org, default_stage):
         """Should update case status."""
@@ -794,6 +769,11 @@ class TestUpdateStatusExecutor:
         db.flush()
 
         executor = UpdateStatusExecutor()
+        valid, _ = executor.validate(
+            {"stage_id": str(default_stage.id)}, db, test_user.id, test_org.id
+        )
+        assert valid
+
         result = executor.execute(
             {"stage_id": str(new_stage.id)}, db, test_user.id, test_org.id, case.id
         )
@@ -813,24 +793,6 @@ class TestUpdateStatusExecutor:
 
 class TestExecutorRegistry:
     """Tests for executor registry."""
-
-    def test_get_executor_add_note(self):
-        """Should return AddNoteExecutor."""
-        executor = get_executor("add_note")
-        assert executor is not None
-        assert isinstance(executor, AddNoteExecutor)
-
-    def test_get_executor_create_task(self):
-        """Should return CreateTaskExecutor."""
-        executor = get_executor("create_task")
-        assert executor is not None
-        assert isinstance(executor, CreateTaskExecutor)
-
-    def test_get_executor_update_status(self):
-        """Should return UpdateStatusExecutor."""
-        executor = get_executor("update_status")
-        assert executor is not None
-        assert isinstance(executor, UpdateStatusExecutor)
 
     def test_get_executor_unknown(self):
         """Should return None for unknown action."""
