@@ -186,7 +186,7 @@ def test_workflow_dry_run_uses_exact_donor_subject_and_rejects_cross_type(db, te
         session,
     )
     assert result.conditions_matched is True
-    assert result.conditions_evaluated[0]["actual"] == "egg"
+    assert result.conditions_evaluated[0].actual == "egg"
 
     with pytest.raises(HTTPException) as exc_info:
         workflow_test_route(

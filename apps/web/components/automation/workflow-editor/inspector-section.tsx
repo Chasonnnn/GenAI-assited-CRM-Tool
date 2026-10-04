@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { ChevronUpIcon, GripVerticalIcon } from "lucide-react"
+import { ChevronUpIcon } from "lucide-react"
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Label } from "@/components/ui/label"
@@ -25,17 +25,6 @@ export function EditorColumn({
         <aside className={cn("flex min-h-0 flex-col gap-2 overflow-y-auto", EDITOR_DENSITY_CLASS, className)} {...props}>
             {children}
         </aside>
-    )
-}
-
-/** Column heading row with a drag-handle glyph, as in the reference layout. */
-export function PanelHeading({ title, actions }: { title: string; actions?: ReactNode }) {
-    return (
-        <div className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5">
-            <GripVerticalIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />
-            <h2 className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</h2>
-            {actions}
-        </div>
     )
 }
 
