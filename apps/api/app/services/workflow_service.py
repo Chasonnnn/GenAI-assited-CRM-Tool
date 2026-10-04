@@ -2315,12 +2315,22 @@ def list_executions(
     offset: int = 0,
     include_donor_subjects: bool = True,
 ) -> tuple[list[ExecutionRead], int]:
-    """List tenant-scoped executions with exact donor subject identity."""
+    """List tenant-scoped executions with exact donor or surrogate identity."""
     query = (
         db.query(
             WorkflowExecution,
+            Surrogate.full_name,
+            Surrogate.surrogate_number,
             Donor.full_name,
             Donor.donor_number,
+        )
+        .outerjoin(
+            Surrogate,
+            and_(
+                WorkflowExecution.entity_type == "surrogate",
+                WorkflowExecution.entity_id == Surrogate.id,
+                Surrogate.organization_id == WorkflowExecution.organization_id,
+            ),
         )
         .outerjoin(Donor, _exact_donor_execution_identity_match())
         .filter(
@@ -2340,9 +2350,13 @@ def list_executions(
 
     return [
         ExecutionRead.model_validate(execution).model_copy(
-            update={"entity_name": donor_name, "entity_number": donor_number}
+            update=(
+                {"entity_name": donor_name, "entity_number": donor_number}
+                if execution.subject_type in DONOR_SUBJECT_TYPES
+                else {"entity_name": surrogate_name, "entity_number": surrogate_number}
+            )
         )
-        for execution, donor_name, donor_number in items
+        for execution, surrogate_name, surrogate_number, donor_name, donor_number in items
     ], total
 
 
