@@ -1149,6 +1149,7 @@ def trigger_appointment_time_sweep(
                 Appointment.status == AppointmentStatus.CONFIRMED.value,
                 Appointment.scheduled_start > window_start + offset,
                 Appointment.scheduled_start <= now + offset,
+                # A late sweep still runs before the start, never after it.
                 Appointment.scheduled_start > now,
             )
         for appointment in query.order_by(Appointment.id):
