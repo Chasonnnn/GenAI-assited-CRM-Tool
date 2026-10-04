@@ -150,7 +150,7 @@ export function FormBuilderCanvasPreview({
         <div
             data-testid="form-builder-preview-shell"
             className={cn(
-                "mx-auto w-full rounded-[28px] border border-border/70 bg-gradient-to-b from-stone-50 to-stone-100/70",
+                "mx-auto w-full overflow-hidden rounded-[28px] border border-border/70 bg-gradient-to-b from-stone-50 to-stone-100/70",
                 previewDevice === "mobile" ? mobileWidthClass : desktopWidthClass,
             )}
         >
