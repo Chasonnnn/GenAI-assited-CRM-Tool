@@ -63,7 +63,9 @@ Across three repetitions of the same 588 tests, the upgraded dependency group re
 
 Test pruning removes 306 net test lines. Stronger existing CI guards add 52 net test lines, for a total net reduction of 254 test lines. Production and shared test-support LOC changes are zero; workflow changes add five net lines. Dependency manifests and generated lockfile changes are separate from these counts.
 
-Changes are committed locally on the existing branch. No push, new PR, merge, release, or deployment has been performed for this task. Hosted validation remains pending publication authorization under the repository's AGENTS.md.
+Changes are committed on the existing branch. The user authorized pushing and opening a PR for hosted CI measurement. No PR merge, release, or deployment is authorized. Hosted validation remains pending.
+
+Before publication, main at `e772a87f4` was merged into the branch without conflicts. Its only additional file change was the already-merged Google Tasks concurrency-test fix; no production source or collected-case count changed. All 21 concurrency and CI configuration tests passed after reconciliation. The repository wrapper could not find the local `createdb` client, so validation used an explicitly created, migrated disposable database through the existing container instead; that database was removed afterward.
 
 The two audit databases and temporary transform/fixture/uv caches were removed. No application servers were started. The pre-existing `crm_db` service remains running. Detailed local execution logs remain under `output/ci-test-audit-20261003.local/`; compact evidence is committed in this directory.
 
