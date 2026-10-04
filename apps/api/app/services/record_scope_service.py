@@ -198,10 +198,28 @@ def _stage_filter(session, kind, model, rule):
             .correlate_except(history, prior, following)
             .scalar_subquery()
         )
+        paused_origin = PipelineStage.__table__.alias("scope_paused_origin")
+        origin_needs_history = (
+            select(literal(1))
+            .select_from(paused_origin)
+            .where(
+                paused_origin.c.id == model.paused_from_stage_id,
+                paused_origin.c.pipeline_id == current.c.pipeline_id,
+                paused_origin.c.is_active.is_(True),
+                paused_origin.c.stage_type.in_(["paused", "terminal"]),
+            )
+            .correlate_except(paused_origin)
+            .exists()
+        )
+        # A paused/terminal origin needs the same historical phase evidence as a terminal record.
+        paused_effective_id = case(
+            (origin_needs_history, historical_stage),
+            else_=func.coalesce(model.paused_from_stage_id, historical_stage),
+        )
         effective_id = case(
             (
                 current.c.stage_type == "paused",
-                func.coalesce(model.paused_from_stage_id, historical_stage),
+                paused_effective_id,
             ),
             (current.c.stage_type == "terminal", historical_stage),
             else_=model.stage_id,

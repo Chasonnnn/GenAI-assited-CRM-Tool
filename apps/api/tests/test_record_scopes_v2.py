@@ -102,6 +102,34 @@ def _assert_parity(db, session, kind, records, expected, **kwargs):
         assert bool(explanation.sources) is (record in expected)
 
 
+def _stage_history(db, record, kind, from_stage_id, to_stage_id, *, org_id=None):
+    from datetime import UTC, datetime
+
+    from app.db.models import DonorStatusHistory, SurrogateStatusHistory
+
+    fields = dict(
+        id=uuid4(),
+        organization_id=org_id or record.organization_id,
+        effective_at=datetime.now(UTC),
+        recorded_at=datetime.now(UTC),
+    )
+    if kind == "surrogate":
+        history = SurrogateStatusHistory(
+            **fields, surrogate_id=record.id, from_stage_id=from_stage_id, to_stage_id=to_stage_id
+        )
+    else:
+        history = DonorStatusHistory(
+            **fields,
+            donor_id=record.id,
+            old_stage_id=from_stage_id,
+            new_stage_id=to_stage_id,
+            new_status="disqualified",
+            new_label_snapshot="Disqualified",
+        )
+    db.add(history)
+    db.flush()
+
+
 @pytest.mark.parametrize("kind", ["surrogate", "donor"])
 def test_assignment_and_phase_are_conjoined_and_approved_starts_post(db, context, kind):
     mine = _record(db, context.intake, kind, suffix=1)
@@ -183,6 +211,8 @@ def test_paused_stage_uses_prior_phase_and_archive_policy_is_shared(db, context,
     pre_key = "new_unread" if kind == "surrogate" else "new"
     paused_pre = _record(db, context.intake, kind, key="on_hold", paused=pre_key, suffix=1)
     paused_post = _record(db, context.manager, kind, key="on_hold", paused="approved", suffix=2)
+    # A valid explicit origin takes precedence over older intake history.
+    _stage_history(db, paused_post, kind, paused_pre.paused_from_stage_id, paused_post.stage_id)
     archived = _record(db, context.manager, kind, key="approved", archived=True, suffix=3)
     records = [paused_pre, paused_post, archived]
     _assert_parity(db, context.intake, kind, records, [paused_pre])
@@ -337,12 +367,15 @@ async def test_scope_settings_require_admin_and_csrf(db, test_user, authed_clien
 
 
 @pytest.mark.parametrize("kind", ["surrogate", "donor"])
-def test_terminal_phase_comes_from_history_not_display_order(db, context, kind):
-    from datetime import UTC, datetime
-
-    from app.db.models import DonorStatusHistory, SurrogateStatusHistory
-
-    record = _record(db, context.intake, kind, key="disqualified")
+@pytest.mark.parametrize("paused_origin", [None, "disqualified", "on_hold"])
+def test_terminal_phase_comes_from_history_not_display_order(db, context, kind, paused_origin):
+    record = _record(
+        db,
+        context.intake,
+        kind,
+        key="on_hold" if paused_origin else "disqualified",
+        paused=paused_origin,
+    )
     assert not scopes.can_access_record(db, context.manager, kind, record)
     pipeline = pipeline_service.get_or_create_default_pipeline(
         db, context.org.id, entity_type="egg_donor" if kind == "donor" else kind
@@ -352,27 +385,7 @@ def test_terminal_phase_comes_from_history_not_display_order(db, context, kind):
         for stage in pipeline.stages
         if stage.stage_key == ("new_unread" if kind == "surrogate" else "new")
     )
-    fields = dict(
-        id=uuid4(),
-        organization_id=context.org.id,
-        effective_at=datetime.now(UTC),
-        recorded_at=datetime.now(UTC),
-    )
-    if kind == "surrogate":
-        history = SurrogateStatusHistory(
-            **fields, surrogate_id=record.id, from_stage_id=pre.id, to_stage_id=record.stage_id
-        )
-    else:
-        history = DonorStatusHistory(
-            **fields,
-            donor_id=record.id,
-            old_stage_id=pre.id,
-            new_stage_id=record.stage_id,
-            new_status="disqualified",
-            new_label_snapshot="Disqualified",
-        )
-    db.add(history)
-    db.flush()
+    _stage_history(db, record, kind, pre.id, record.stage_id)
     _assert_parity(db, context.intake, kind, [record], [record])
     _assert_parity(db, context.manager, kind, [record], [])
 
@@ -380,10 +393,18 @@ def test_terminal_phase_comes_from_history_not_display_order(db, context, kind):
 @pytest.mark.parametrize(
     "phase,can_intake,can_manager", [("pre_approval", True, False), ("post_approval", False, True)]
 )
+@pytest.mark.parametrize("kind", ["surrogate", "donor"])
+@pytest.mark.parametrize("paused_origin", [None, "disqualified", "on_hold"])
 def test_unknown_terminal_phase_needs_record_evidence_and_resolution(
-    db, context, phase, can_intake, can_manager
+    db, context, phase, can_intake, can_manager, kind, paused_origin
 ):
-    record = _record(db, context.intake, "surrogate", key="disqualified")
+    record = _record(
+        db,
+        context.intake,
+        kind,
+        key="on_hold" if paused_origin else "disqualified",
+        paused=paused_origin,
+    )
     snapshot = scopes.get_policy_scope_snapshot(db, context.org.id)
     candidate = snapshot["unresolved_handoffs"][0]
     assert candidate["phase_requires_review"]
@@ -392,7 +413,7 @@ def test_unknown_terminal_phase_needs_record_evidence_and_resolution(
         scopes.resolve_handoff_migration(
             db,
             context.admin,
-            "surrogate",
+            kind,
             record.id,
             HandoffMigrationReviewRequest(
                 decision="no_verified_owner",
@@ -403,7 +424,7 @@ def test_unknown_terminal_phase_needs_record_evidence_and_resolution(
     scopes.resolve_handoff_migration(
         db,
         context.admin,
-        "surrogate",
+        kind,
         record.id,
         HandoffMigrationReviewRequest(
             decision="no_verified_owner",
@@ -413,8 +434,50 @@ def test_unknown_terminal_phase_needs_record_evidence_and_resolution(
         ),
     )
     assert scopes.get_policy_scope_snapshot(db, context.org.id)["ready"]
-    assert scopes.can_access_record(db, context.intake, "surrogate", record) is can_intake
-    assert scopes.can_access_record(db, context.manager, "surrogate", record) is can_manager
+    _assert_parity(db, context.intake, kind, [record], [record] if can_intake else [])
+    _assert_parity(db, context.manager, kind, [record], [record] if can_manager else [])
+
+
+@pytest.mark.parametrize("kind", ["surrogate", "donor"])
+@pytest.mark.parametrize(
+    "boundary",
+    [
+        "inactive_origin",
+        "foreign_origin",
+        "inactive_history",
+        "foreign_history_org",
+        "foreign_history_stage",
+    ],
+)
+def test_paused_terminal_fallback_keeps_stage_and_tenant_guards(db, context, kind, boundary):
+    record = _record(db, context.intake, kind, key="on_hold", paused="disqualified")
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, context.org.id, entity_type="egg_donor" if kind == "donor" else kind
+    )
+    stages = {stage.stage_key: stage for stage in pipeline.stages}
+    prior = stages["new_unread" if kind == "surrogate" else "new"]
+    history_org = context.org.id
+    if boundary == "inactive_origin":
+        stages["disqualified"].is_active = False
+    elif boundary == "inactive_history":
+        prior.is_active = False
+    else:
+        other_org = Organization(id=uuid4(), name="Other", slug=f"scope-{uuid4()}")
+        db.add(other_org)
+        db.flush()
+        foreign_pipeline = pipeline_service.get_or_create_default_pipeline(
+            db, other_org.id, entity_type="egg_donor" if kind == "donor" else kind
+        )
+        foreign_stages = {stage.stage_key: stage for stage in foreign_pipeline.stages}
+        if boundary == "foreign_origin":
+            record.paused_from_stage_id = foreign_stages["disqualified"].id
+        elif boundary == "foreign_history_org":
+            history_org = other_org.id
+        else:
+            prior = foreign_stages["new_unread" if kind == "surrogate" else "new"]
+    _stage_history(db, record, kind, prior.id, record.stage_id, org_id=history_org)
+    _assert_parity(db, context.intake, kind, [record], [])
+    _assert_parity(db, context.manager, kind, [record], [])
 
 
 @pytest.mark.parametrize("decision", ["remove", "replace_with_scope_addition"])
