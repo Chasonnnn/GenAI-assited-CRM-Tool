@@ -12,7 +12,7 @@ Editing a field corrects the record in place. Each correction stores the field, 
 
 Archiving ends the current record today and keeps its history. Restoring an archived section creates a new record dated today with the archived record's details. Create and restore accept an idempotency key. Form answers mapped to the former flat field names correct the current record, or start a record dated on the submission date when the section has none.
 
-The migration copies each non-empty flat section into one imported record. The former flat columns on `surrogates` and `donors` stay in the database unused, and payloads that send them are rejected. A follow-up migration drops the columns once this release is verified in production.
+The migration copies each non-empty flat section into one imported record. Payloads that send the former flat columns are rejected. `20261004_1000_drop_flat_medical_columns` drops the columns from `surrogates` and `donors` after the import was verified in production.
 
 ## Considered Options
 

@@ -143,7 +143,22 @@ def test_workflow_note_sanitizes_and_records_durable_activity_without_recursion(
     assert activity.details == {"note_id": str(note.id)}
 
 
-def test_workflow_and_campaign_donor_template_context_matches(db, owned_donor):
+def test_workflow_and_campaign_donor_template_context_matches(db, owned_donor, monkeypatch):
+    from app.core import security
+
+    real_datetime = security.datetime
+
+    class _TickingDatetime(real_datetime):
+        """Each call lands a second apart, so minted tokens never share an issue time."""
+
+        ticks = 0
+
+        @classmethod
+        def now(cls, tz=None):
+            cls.ticks += 1
+            return real_datetime.now(tz) - timedelta(seconds=cls.ticks)
+
+    monkeypatch.setattr(security, "datetime", _TickingDatetime)
     expected = email_service.build_donor_template_variables(db, owned_donor)
     actual = workflow_communication_actions.resolve_email_variables(db, owned_donor)
 
@@ -152,6 +167,17 @@ def test_workflow_and_campaign_donor_template_context_matches(db, owned_donor):
     assert expected.pop("unsubscribe_url").startswith("https://")
     # Workflow emails add a staff link to the record.
     assert actual.pop("record_link").endswith(f"/donors/{owned_donor.id}")
+    # Booking links carry a freshly signed record token; compare what it references.
+    actual_url, actual_token = actual.pop("appointment_link").split("?record=")
+    expected_url, expected_token = expected.pop("appointment_link").split("?record=")
+    assert actual_url == expected_url
+
+    def _record_claims(token):
+        claims = security.decode_booking_record_token(token)
+        return {key: claims[key] for key in ("org_id", "record_type", "record_id")}
+
+    assert _record_claims(actual_token) == _record_claims(expected_token)
+    assert _record_claims(actual_token)["record_id"] == str(owned_donor.id)
     assert actual == expected
     assert actual["first_name"] == "Synthetic"
     assert actual["donor_type"] == "Egg Donor"

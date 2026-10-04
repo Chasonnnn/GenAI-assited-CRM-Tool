@@ -5,6 +5,7 @@ import WorkflowEditorPageClient from '../app/(app)/automation/workflows/[id]/pag
 import { ApiError } from '@/lib/api'
 import { getApplicantTypeLabel } from '@/components/automation/workflow-editor/shared'
 import { getWorkflowEditorPreset } from '@/lib/workflows/workflow-editor-state'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -156,12 +157,21 @@ const mockUseWorkflow = vi.fn()
 const mockUseWorkflowOptions = vi.fn()
 const mockCreateWorkflow = { mutate: vi.fn(), isPending: false }
 const mockUpdateWorkflow = { mutate: vi.fn(), isPending: false }
+const mockTestWorkflowDraft = { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }
+const mockUseWorkflowExecutions = vi.fn(() => ({ data: { items: [], total: 0 }, isLoading: false }))
+
+vi.mock('@/lib/workflows/test-entities', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/workflows/test-entities')>()),
+    fetchTestEntities: vi.fn(async () => [{ id: 'surrogate-1', label: 'S10001 • Test Record', meta: 'New Unread' }]),
+}))
 
 vi.mock('@/lib/hooks/use-workflows', () => ({
     useWorkflow: (...args: unknown[]) => mockUseWorkflow(...args),
     useWorkflowOptions: (...args: unknown[]) => mockUseWorkflowOptions(...args),
     useCreateWorkflow: () => mockCreateWorkflow,
     useUpdateWorkflow: () => mockUpdateWorkflow,
+    useTestWorkflowDraft: () => mockTestWorkflowDraft,
+    useWorkflowExecutions: () => mockUseWorkflowExecutions(),
 }))
 
 function getFirstElement<T>(items: T[], message: string): T {
@@ -213,6 +223,9 @@ const nameInput = () => screen.getByRole('textbox', { name: 'Workflow name' })
 const triggerSelect = () => screen.getByRole('combobox', { name: 'Trigger type' })
 const launchButton = () => screen.getByRole('button', { name: 'Launch workflow' })
 const saveChangesButton = () => screen.getByRole('button', { name: 'Save changes' })
+/** Disabled-reason tooltips on Test run and the save buttons; Undo and Redo show shortcuts. */
+const reasonTooltips = () =>
+    screen.getAllByTestId('tooltip').filter((tip) => !/^(Undo|Redo)\b/.test(tip.textContent ?? ''))
 
 const chooseRecordType = (label: string) => {
     fireEvent.click(screen.getByRole('radio', { name: label }))
@@ -318,7 +331,9 @@ describe('WorkflowEditorPage', () => {
         renderNewWorkflow()
 
         expect(launchButton()).toHaveAttribute('aria-disabled', 'true')
-        expect(screen.getAllByTestId('tooltip').map((tip) => tip.textContent)).toEqual([
+        // Test run, Save draft, and Launch each name the blocking reason.
+        expect(reasonTooltips().map((tip) => tip.textContent)).toEqual([
+            'Workflow name is required.',
             'Workflow name is required.',
             'Workflow name is required.',
         ])
@@ -326,7 +341,8 @@ describe('WorkflowEditorPage', () => {
         expect(mockCreateWorkflow.mutate).not.toHaveBeenCalled()
 
         fireEvent.change(nameInput(), { target: { value: 'Named' } })
-        expect(screen.getAllByTestId('tooltip').map((tip) => tip.textContent)).toEqual([
+        expect(reasonTooltips().map((tip) => tip.textContent)).toEqual([
+            'Trigger type is required.',
             'Trigger type is required.',
             'Trigger type is required.',
         ])
@@ -751,6 +767,9 @@ describe('WorkflowEditorPage', () => {
         renderExistingWorkflow('workflow-egg')
 
         expect(screen.getByDisplayValue('Egg donor follow-up')).toBeInTheDocument()
+        // A saved workflow opens on the canvas with the inspector closed.
+        expect(screen.queryByRole('region', { name: 'Step settings' })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Trigger step' }))
         expect(radioLabels('Record type')).toEqual(['Egg Donor'])
         expect(screen.getByRole('radio', { name: 'Egg Donor' })).toBeDisabled()
         expect(screen.getByText('Enabled')).toBeInTheDocument()
@@ -1335,7 +1354,10 @@ describe('WorkflowEditorPage', () => {
             expect(saveChangesButton()).toHaveAttribute('aria-disabled', 'true')
             fireEvent.click(saveChangesButton())
 
-            expect(screen.getByText('Stage references need a form for one donor type.')).toBeInTheDocument()
+            expect(reasonTooltips().map((tip) => tip.textContent)).toEqual([
+                'Stage references need a form for one donor type.',
+                'Stage references need a form for one donor type.',
+            ])
             expect(mockUpdateWorkflow.mutate).not.toHaveBeenCalled()
         })
 
@@ -1453,6 +1475,7 @@ describe('WorkflowEditorPage', () => {
             })
 
             renderExistingWorkflow('workflow-egg-intake')
+            fireEvent.click(screen.getByRole('button', { name: 'Trigger step' }))
             fireEvent.change(formSelect('form-surrogate'), { target: { value: 'form-surrogate' } })
             fireEvent.click(saveChangesButton())
 
@@ -1628,7 +1651,9 @@ describe('WorkflowEditorPage', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Remove action' }))
         expect(screen.queryByRole('button', { name: 'Action 2: Add Note' })).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'Action 1: Add Note' })).toHaveTextContent('First')
-        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveAttribute('aria-pressed', 'true')
+        // Removing the selected step closes the inspector.
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveAttribute('aria-pressed', 'false')
+        expect(screen.queryByRole('complementary', { name: 'Action settings' })).not.toBeInTheDocument()
     })
 
     it('returns to the scoped list after saving changes', () => {
@@ -1731,7 +1756,7 @@ describe('WorkflowEditorPage', () => {
             expect(addresses).toHaveValue('intake@agency.test, ')
 
             fireEvent.change(addresses, { target: { value: 'intake@agency.test, not-an-address' } })
-            expect(screen.getAllByTestId('tooltip')[0]).toHaveTextContent('Enter valid email addresses.')
+            expect(reasonTooltips()[0]).toHaveTextContent('Enter valid email addresses.')
 
             fireEvent.change(addresses, { target: { value: 'intake@agency.test, ops@agency.test' } })
             fireEvent.click(launchButton())
@@ -1779,6 +1804,202 @@ describe('WorkflowEditorPage', () => {
 
             fireEvent.change(field, { target: { value: 'contact_status' } })
             expect(optionLabels(selectWith('reached'))).toEqual(['Unreached', 'Reached'])
+        })
+    })
+
+    describe('canvas editing', () => {
+        const savedWorkflow = (actions: Record<string, unknown>[]) => ({
+            data: {
+                id: 'workflow-steps',
+                name: 'Steps',
+                description: null,
+                scope: 'personal',
+                subject_type: 'surrogate',
+                trigger_type: 'surrogate_created',
+                trigger_config: {},
+                conditions: [],
+                condition_logic: 'AND',
+                actions,
+                is_enabled: true,
+            },
+            isLoading: false,
+        })
+        const notes = (...contents: string[]) => contents.map((content) => ({ action_type: 'add_note', content }))
+        const stepTexts = () =>
+            screen
+                .getAllByRole('button', { name: /^Action \d+: / })
+                .map((step) => (step.textContent ?? '').replace(/^Add Note/, '').trim())
+
+        it('undoes and redoes a removed step from the toolbar and the keyboard', () => {
+            mockUseWorkflow.mockReturnValue(savedWorkflow(notes('First', 'Second')))
+            renderExistingWorkflow('workflow-steps')
+
+            fireEvent.click(screen.getByRole('button', { name: 'Remove action 1' }))
+            expect(stepTexts()).toEqual(['Second'])
+
+            fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+            expect(stepTexts()).toEqual(['First', 'Second'])
+
+            fireEvent.keyDown(window, { key: 'z', metaKey: true, shiftKey: true })
+            expect(stepTexts()).toEqual(['Second'])
+            fireEvent.keyDown(window, { key: 'z', ctrlKey: true })
+            expect(stepTexts()).toEqual(['First', 'Second'])
+        })
+
+        it('leaves undo to text fields while typing', () => {
+            mockUseWorkflow.mockReturnValue(savedWorkflow(notes('First')))
+            renderExistingWorkflow('workflow-steps')
+
+            fireEvent.change(nameInput(), { target: { value: 'Renamed' } })
+            fireEvent.keyDown(nameInput(), { key: 'z', metaKey: true })
+            expect(nameInput()).toHaveValue('Renamed')
+        })
+
+        it('deletes the selected step with the keyboard and closes the inspector with Escape', () => {
+            mockUseWorkflow.mockReturnValue(savedWorkflow(notes('First', 'Second')))
+            renderExistingWorkflow('workflow-steps')
+
+            fireEvent.click(screen.getByRole('button', { name: 'Action 1: Add Note' }))
+            expect(screen.getByRole('region', { name: 'Step settings' })).toBeInTheDocument()
+            fireEvent.keyDown(window, { key: 'Delete' })
+            expect(stepTexts()).toEqual(['Second'])
+
+            fireEvent.click(screen.getByRole('button', { name: 'Trigger step' }))
+            fireEvent.keyDown(window, { key: 'Escape' })
+            expect(screen.queryByRole('region', { name: 'Step settings' })).not.toBeInTheDocument()
+        })
+
+        it('moves the selected step with Alt and the arrow keys', () => {
+            mockUseWorkflow.mockReturnValue(savedWorkflow(notes('First', 'Second')))
+            renderExistingWorkflow('workflow-steps')
+
+            fireEvent.click(screen.getByRole('button', { name: 'Action 2: Add Note' }))
+            fireEvent.keyDown(window, { key: 'ArrowUp', altKey: true })
+            expect(stepTexts()).toEqual(['Second', 'First'])
+        })
+
+        it('inserts palette steps after the selected step and blank steps between steps', () => {
+            mockUseWorkflow.mockReturnValue(savedWorkflow(notes('First', 'Second')))
+            renderExistingWorkflow('workflow-steps')
+
+            fireEvent.click(screen.getByRole('button', { name: 'Action 1: Add Note' }))
+            fireEvent.click(within(screen.getByTestId('workflow-build-panel')).getByRole('button', { name: 'Add Note' }))
+            expect(stepTexts()).toEqual(['First', 'Step 2Note actions need content.', 'Second'])
+            expect(screen.getByRole('button', { name: 'Action 2: Add Note' })).toHaveAttribute('aria-pressed', 'true')
+
+            fireEvent.click(screen.getByRole('button', { name: 'Insert step 1' }))
+            expect(screen.getByRole('button', { name: 'Action 1: Choose an action' })).toHaveAttribute('aria-pressed', 'true')
+        })
+
+        it('walks to the next step from the inspector footer', () => {
+            mockUseWorkflow.mockReturnValue(savedWorkflow(notes('First', 'Second')))
+            renderExistingWorkflow('workflow-steps')
+
+            fireEvent.click(screen.getByRole('button', { name: 'Trigger step' }))
+            fireEvent.click(screen.getByRole('button', { name: 'Next step' }))
+            expect(screen.getByRole('button', { name: 'Action 1: Add Note' })).toHaveAttribute('aria-pressed', 'true')
+            fireEvent.click(screen.getByRole('button', { name: 'Next step' }))
+            expect(screen.getByRole('button', { name: 'Action 2: Add Note' })).toHaveAttribute('aria-pressed', 'true')
+            expect(screen.queryByRole('button', { name: 'Next step' })).not.toBeInTheDocument()
+            expect(screen.getByRole('button', { name: 'Add next step' })).toBeInTheDocument()
+        })
+
+        it('shows each step outcome from recent runs in the history tab', () => {
+            mockUseWorkflow.mockReturnValue(savedWorkflow(notes('First', 'Second')))
+            mockUseWorkflowExecutions.mockReturnValue({
+                data: {
+                    items: [
+                        {
+                            id: 'run-1',
+                            entity_number: 'S10001',
+                            entity_name: 'Test Record',
+                            matched_conditions: true,
+                            status: 'partial',
+                            actions_executed: [
+                                { success: true, action_type: 'add_note' },
+                                { success: false, action_type: 'add_note', error: 'Note body empty' },
+                            ],
+                            executed_at: '2026-10-01T12:00:00Z',
+                        },
+                        {
+                            id: 'run-2',
+                            entity_type: 'form_submission',
+                            entity_id: '1a2b3c4d-0000-0000-0000-000000000000',
+                            entity_number: null,
+                            entity_name: null,
+                            matched_conditions: false,
+                            status: 'skipped',
+                            actions_executed: [],
+                            executed_at: '2026-10-01T11:00:00Z',
+                        },
+                    ],
+                    total: 2,
+                },
+                isLoading: false,
+            } as never)
+            renderExistingWorkflow('workflow-steps')
+
+            fireEvent.click(screen.getByRole('button', { name: 'Action 2: Add Note' }))
+            fireEvent.click(screen.getByRole('tab', { name: 'History' }))
+            const runs = screen.getByRole('list', { name: 'Runs for step 2' })
+            expect(runs).toHaveTextContent('S10001 · Test Record')
+            expect(runs).toHaveTextContent('Failed')
+            expect(runs).toHaveTextContent('Note body empty')
+            expect(runs).toHaveTextContent('Form submission #1a2b3c4d')
+            mockUseWorkflowExecutions.mockReset()
+            mockUseWorkflowExecutions.mockReturnValue({ data: { items: [], total: 0 }, isLoading: false })
+        })
+
+        it('test runs the unsaved draft on a record and marks each step', async () => {
+            mockUseWorkflow.mockReturnValue(
+                savedWorkflow([
+                    { action_type: 'add_note', content: 'First' },
+                    { action_type: 'add_note', content: 'Second', requires_approval: true },
+                    { action_type: 'add_note', content: 'Third' },
+                ]),
+            )
+            mockTestWorkflowDraft.mutate.mockImplementation(
+                (_request: unknown, options?: { onSuccess?: (result: unknown) => void; onSettled?: () => void }) => {
+                    options?.onSuccess?.({
+                        would_trigger: true,
+                        conditions_matched: true,
+                        conditions_evaluated: [],
+                        actions_preview: [
+                            { action_type: 'add_note', description: 'Add note', requires_approval: false },
+                            { action_type: 'add_note', description: 'Add note', requires_approval: true },
+                            { action_type: 'add_note', description: 'Add note', requires_approval: false },
+                        ],
+                    })
+                    options?.onSettled?.()
+                },
+            )
+            render(
+                <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+                    <WorkflowEditorPageClient workflowId="workflow-steps" initialScope="personal" />
+                </QueryClientProvider>,
+            )
+
+            fireEvent.click(screen.getByRole('button', { name: 'Test run' }))
+            fireEvent.click(await screen.findByRole('button', { name: /S10001 • Test Record/ }))
+
+            expect(mockTestWorkflowDraft.mutate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    entity_id: 'surrogate-1',
+                    entity_type: 'surrogate',
+                    workflow_id: 'workflow-steps',
+                    workflow: expect.objectContaining({ trigger_type: 'surrogate_created' }),
+                }),
+                expect.any(Object),
+            )
+            expect(screen.getByRole('button', { name: 'Action 1: Add Note' })).toHaveTextContent('Would run')
+            expect(screen.getByRole('button', { name: 'Action 2: Add Note' })).toHaveTextContent('Waits for approval')
+            expect(screen.getByRole('button', { name: 'Action 3: Add Note' })).toHaveTextContent('After approval')
+            expect(screen.getByText('Tested on S10001 • Test Record')).toBeInTheDocument()
+
+            fireEvent.click(screen.getByRole('button', { name: 'Remove action 3' }))
+            expect(screen.getByText('Changed since this test')).toBeInTheDocument()
+            expect(screen.getByRole('button', { name: 'Action 1: Add Note' })).not.toHaveTextContent('Would run')
+            mockTestWorkflowDraft.mutate.mockReset()
         })
     })
 })

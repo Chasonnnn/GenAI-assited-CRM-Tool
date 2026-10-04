@@ -89,6 +89,13 @@ describe("accessibility hardening", () => {
         ).toBeInTheDocument()
     })
 
+    it("hides the floating AI button in the workflow editor", () => {
+        mockUsePathname.mockReturnValue("/automation/workflows/new")
+        render(<AIFloatingButton />)
+
+        expect(screen.queryByRole("button", { name: /open ai assistant/i })).not.toBeInTheDocument()
+    })
+
     it("labels the dashboard refresh control", () => {
         render(
             <DashboardFilterBar
