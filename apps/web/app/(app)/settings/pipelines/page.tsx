@@ -815,6 +815,7 @@ function PipelinesSettingsContent() {
                 stage={selectedDeleteStage}
                 stages={currentStages}
                 dependencyGraph={dependencyGraph}
+                featureConfig={currentFeatureConfig}
                 open={Boolean(deleteStageState)}
                 state={deleteStageState}
                 onOpenChange={editor.handleDeleteStageDialogOpenChange}

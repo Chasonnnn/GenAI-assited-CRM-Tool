@@ -30,6 +30,7 @@ import type {
 import { formatRelativeTime } from "@/lib/formatters"
 import { usePipelineVersions } from "@/lib/hooks/use-pipelines"
 import {
+    createMilestoneLabelGetter,
     deepClone,
     getActiveRemapTargetStages,
     getDeleteRequirements,
@@ -357,6 +358,7 @@ export function DeleteStageDialog({
     stage,
     stages,
     dependencyGraph,
+    featureConfig,
     open,
     state,
     onOpenChange,
@@ -368,6 +370,7 @@ export function DeleteStageDialog({
     stage: EditableStage | undefined
     stages: EditableStage[]
     dependencyGraph: PipelineDependencyGraph | null | undefined
+    featureConfig: PipelineFeatureConfig | undefined
     open: boolean
     state: DeleteStageState | null
     onOpenChange: (open: boolean) => void
@@ -377,6 +380,7 @@ export function DeleteStageDialog({
 }) {
     if (!stage || !state) return null
     const dependency = getDependencyByStageKey(dependencyGraph, stage.stage_key)
+    const getMilestoneLabel = featureConfig ? createMilestoneLabelGetter(featureConfig) : (slug: string) => slug
     const requirements = getDeleteRequirements(dependencyGraph, stage.stage_key, entityType)
     const requiresRemap = requirements.length > 0
     const targetOptions = getActiveRemapTargetStages(stages, stage.stage_key)
@@ -424,7 +428,8 @@ export function DeleteStageDialog({
                         <Alert>
                             <InfoIcon className="size-4" aria-hidden="true" />
                             <AlertDescription>
-                                Journey references in: {dependency.journey_milestone_slugs.join(", ")}.
+                                Journey references in:{" "}
+                                {dependency.journey_milestone_slugs.map(getMilestoneLabel).join(", ")}.
                                 Saving will remap or clear those draft references automatically.
                             </AlertDescription>
                         </Alert>

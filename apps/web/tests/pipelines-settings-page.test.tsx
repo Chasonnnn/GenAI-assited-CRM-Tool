@@ -1631,6 +1631,8 @@ describe("PipelinesSettingsPage", () => {
         render(<PipelinesSettingsPage />)
 
         fireEvent.click(screen.getByRole("button", { name: /remove contacted/i }))
+        expect(screen.getByText(/^Journey references in: Application & Intake\./)).toBeInTheDocument()
+        expect(screen.queryByText(/application_intake/)).not.toBeInTheDocument()
         fireEvent.mouseDown(screen.getByRole("combobox", { name: "Remap target stage" }))
         const remapOption = await screen.findByRole("option", { name: "New Unread" })
         fireEvent.mouseMove(remapOption)
