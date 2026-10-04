@@ -186,7 +186,7 @@ A modern, multi-tenant platform for surrogacy agencies. Manage surrogates, inten
 ### Prerequisites
 
 - **Node.js** 24.18.0
-- **pnpm** 11.18.0 (pinned via `packageManager`; activate with `corepack`)
+- **pnpm** 12.9.1 (pinned via `packageManager`; activate with `corepack`)
 - **Python** 3.14.6
 - **uv** 0.12.0 (Python package manager)
 - **Docker** + Docker Compose
