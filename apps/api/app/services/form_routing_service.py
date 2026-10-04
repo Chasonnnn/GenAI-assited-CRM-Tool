@@ -304,6 +304,8 @@ def _request_review(
         org=org,
         timeout_hours=WORKFLOW_APPROVAL_TIMEOUT_HOURS,
     )
+    # Whole minutes; browser time inputs drop values with fractional seconds.
+    due_at = due_at.replace(second=0, microsecond=0)
     local_due = due_at.astimezone(ZoneInfo(get_effective_timezone(owner, org)))
     task = Task(
         organization_id=submission.organization_id,

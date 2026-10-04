@@ -124,6 +124,7 @@ async def test_review_task_reads_include_form_context_and_filterable_due_date(
     local_due = task.due_at.astimezone(ZoneInfo(timezone))
     assert task.due_date == local_due.date()
     assert task.due_time == local_due.time()
+    assert (task.due_time.second, task.due_time.microsecond) == (0, 0)
     assert submission.routing_review_step == step
 
     detail = await authed_client.get(f"/tasks/{task.id}")
