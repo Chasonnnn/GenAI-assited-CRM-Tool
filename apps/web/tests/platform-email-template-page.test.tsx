@@ -1,10 +1,12 @@
 import { beforeEach, describe, it, expect, vi } from "vitest"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import * as React from "react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import PlatformEmailTemplatePage from "../app/ops/templates/email/[id]/page.client"
+import { emailDesignEditorMock } from "./fixtures/email-design-editor-mock"
 
-const richTextEditorSpy = vi.fn()
 const mocks = vi.hoisted(() => ({
+    preview: vi.fn(),
     updateTemplate: vi.fn(),
     publishTemplate: vi.fn(),
     deleteTemplate: vi.fn(),
@@ -37,14 +39,10 @@ vi.mock("@/components/ui/toast", () => ({
 
 vi.mock("@/lib/api/platform", () => ({
     listOrganizations: mocks.listOrganizations,
+    previewPlatformEmailTemplate: mocks.preview,
 }))
 
-vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: function MockRichTextEditor(props: { content?: string }) {
-        richTextEditorSpy(props)
-        return <div data-testid="rich-text-editor" />
-    },
-}))
+vi.mock("@/components/email/design/email-design-editor", () => import("./fixtures/email-design-editor-mock"))
 
 vi.mock("@/components/ops/templates/PublishDialog", () => ({
     PublishDialog: ({ onPublish }: { onPublish: (publishAll: boolean, orgIds: string[]) => void }) => (
@@ -112,7 +110,8 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
 describe("PlatformEmailTemplatePage", () => {
     beforeEach(() => {
         mockParamsId = "tpl_1"
-        richTextEditorSpy.mockClear()
+        emailDesignEditorMock.reset()
+        mocks.preview.mockReset()
         mocks.updateTemplate.mockReset()
         mocks.publishTemplate.mockReset()
         mocks.deleteTemplate.mockReset()
@@ -133,17 +132,75 @@ describe("PlatformEmailTemplatePage", () => {
         })
     })
 
-    it("avoids rendering the rich editor with complex HTML", async () => {
-        mockParamsId = "tpl_1"
+    it("opens a legacy HTML body as is and saves it without a design", async () => {
         render(<PlatformEmailTemplatePage />)
 
-        await screen.findByPlaceholderText("Paste or edit the HTML for this template...")
+        expect(emailDesignEditorMock.render).toHaveBeenCalledWith(
+            expect.objectContaining({
+                initialValue: { body: templateBodyWithTable, bodyDesign: null },
+            }),
+        )
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
 
-        const richEditorCallsWithTable = richTextEditorSpy.mock.calls.filter(
-            ([props]) => (props?.content || "").includes("<table")
+        await waitFor(() =>
+            expect(mocks.updateTemplate).toHaveBeenCalledWith({
+                id: "tpl_1",
+                payload: expect.objectContaining({ body: templateBodyWithTable, body_design: null }),
+            }),
+        )
+    })
+
+    it("saves the compiled body and its design together", async () => {
+        const design = { type: "doc" as const, content: [{ type: "paragraph" }] }
+        emailDesignEditorMock.nextDesign = design
+        render(<PlatformEmailTemplatePage />)
+
+        fireEvent.change(screen.getByLabelText("Email body"), { target: { value: "<p>Designed</p>" } })
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+        await waitFor(() =>
+            expect(mocks.updateTemplate).toHaveBeenCalledWith({
+                id: "tpl_1",
+                payload: expect.objectContaining({ body: "<p>Designed</p>", body_design: design }),
+            }),
+        )
+    })
+
+    it("inserts the organization logo as an image block", () => {
+        render(<PlatformEmailTemplatePage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Insert logo" }))
+
+        expect(emailDesignEditorMock.insertImage).toHaveBeenCalledWith(
+            "{{org_logo_url}}",
+            "{{org_name}} logo",
+        )
+    })
+
+    it("previews through the platform endpoint for the test agency", async () => {
+        mocks.preview.mockResolvedValue({
+            subject: "Welcome",
+            html: "<!doctype html><html><body><p>Hi</p></body></html>",
+            unresolved_variables: [],
+        })
+        render(
+            <QueryClientProvider client={new QueryClient()}>
+                <PlatformEmailTemplatePage />
+            </QueryClientProvider>,
         )
 
-        expect(richEditorCallsWithTable.length).toBe(0)
+        fireEvent.click(screen.getByRole("tab", { name: "Preview" }))
+
+        await waitFor(() =>
+            expect(mocks.preview).toHaveBeenCalledWith({
+                subject: mockTemplateData.draft.subject,
+                body: templateBodyWithTable,
+                variable_mode: "sample",
+                org_id: "org-1",
+            }),
+        )
+        expect(screen.queryByRole("button", { name: "Record" })).not.toBeInTheDocument()
+        expect(await screen.findByTitle("Desktop email preview")).toBeInTheDocument()
     })
 
     it("renders send test email card", () => {
@@ -204,24 +261,6 @@ describe("PlatformEmailTemplatePage", () => {
             /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
         )
         expect(retriedKey).toBe(firstKey)
-    })
-
-    it("enables emoji picker in visual editor mode", async () => {
-        mockParamsId = "tpl_1"
-        const previousBody = mockTemplateData.draft.body
-        mockTemplateData.draft.body = "<p>Hello there</p>"
-
-        try {
-            render(<PlatformEmailTemplatePage />)
-            await screen.findByTestId("rich-text-editor")
-
-            const hasEmojiEnabled = richTextEditorSpy.mock.calls.some(
-                ([props]) => Boolean((props as { enableEmojiPicker?: boolean }).enableEmojiPicker)
-            )
-            expect(hasEmojiEnabled).toBe(true)
-        } finally {
-            mockTemplateData.draft.body = previousBody
-        }
     })
 
     it("publishes the revision returned by the preceding save", async () => {
@@ -323,12 +362,10 @@ describe("PlatformEmailTemplatePage", () => {
         expect(mocks.sendTest.mock.calls[0][0].payload).toMatchObject({ org_id: "org-2" })
     })
 
-    it("shows a preview placeholder and no overflow menu for a new template", () => {
+    it("shows no overflow menu for a new template", () => {
         mockParamsId = "new"
         render(<PlatformEmailTemplatePage />)
 
-        expect(screen.getByText("No content yet")).toBeInTheDocument()
-        expect(screen.queryByText(/Manage email preferences/)).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument()
         expect(screen.getByRole("link", { name: "Back to email templates" })).toHaveAttribute(
             "href",
