@@ -68,6 +68,8 @@ Use the production database and provider credentials only inside the approved
 operator environment, such as a one-off migration-job execution. The command
 requires an active membership and writable discovered primary calendar, refuses
 to replace a different existing selection, and prints aggregate readiness only.
+Preparation updates projections only; it cannot reconcile linked appointments or
+fire appointment workflows. Normal enabled-worker sync still reconciles exact links.
 A failed sync may leave the explicit binding prepared; repeat the command after
 repair and keep the service flags off until every required snapshot is complete.
 

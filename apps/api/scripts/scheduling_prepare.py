@@ -54,7 +54,7 @@ async def prepare_primary(db, *, organization_id: UUID, user_id: UUID) -> dict:
     )
     binding = next(binding for binding in bindings if binding.calendar_id == calendar_id)
     projected = await calendar_binding_service.sync_binding(
-        db, binding_id=binding.id, org_id=org_id
+        db, binding_id=binding.id, org_id=org_id, reconcile_appointments=False
     )
     db.refresh(binding)
     if binding.synced_at is None or binding.sync_error:

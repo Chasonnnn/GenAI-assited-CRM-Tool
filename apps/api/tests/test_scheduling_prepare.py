@@ -121,3 +121,84 @@ async def test_operator_does_not_replace_a_different_calendar_selection(
     assert binding.calendar_id == "staff-selected-calendar" and binding.write_bookings
     assert db.query(CalendarBinding).count() == 1
     google_scheduling_adapter.read_incremental_events.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_preparation_does_not_apply_google_cancellation_or_fire_workflows(
+    db, test_auth, primary_calendar, monkeypatch
+):
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import Mock
+
+    from app.db.models import Appointment, ExternalCalendarEvent
+    from app.services import scheduling_v2_service
+
+    await prepare_primary(db, organization_id=test_auth.org.id, user_id=test_auth.user.id)
+    binding = db.query(CalendarBinding).one()
+    start = datetime.now(UTC).replace(microsecond=0) + timedelta(days=1)
+    end = start + timedelta(minutes=30)
+    appointment_id = uuid4()
+    event_id = google_scheduling_adapter.deterministic_event_id(test_auth.org.id, appointment_id)
+    appointment = Appointment(
+        id=appointment_id,
+        organization_id=test_auth.org.id,
+        user_id=test_auth.user.id,
+        client_name="Synthetic client",
+        client_email="client@example.test",
+        client_phone="555-0100",
+        client_timezone="UTC",
+        scheduled_start=start,
+        scheduled_end=end,
+        duration_minutes=30,
+        meeting_mode="phone",
+        status="confirmed",
+        origin="crm",
+        google_event_id=event_id,
+        google_calendar_id=binding.calendar_id,
+        google_integration_id=binding.integration_id,
+        google_account_email=binding.account_email,
+        google_event_etag='"v1"',
+        google_sync_state="completed",
+        google_last_synced={
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "status": "confirmed",
+            "timezone": "UTC",
+            "etag": '"v1"',
+        },
+    )
+    db.add(appointment)
+    db.commit()
+    remote = google_scheduling_adapter.parse_event(
+        {
+            "id": event_id,
+            "etag": '"v2"',
+            "status": "cancelled",
+            "start": {"dateTime": start.isoformat()},
+            "end": {"dateTime": end.isoformat()},
+        }
+    )
+    remote["calendar_id"] = binding.calendar_id
+    google_scheduling_adapter.read_incremental_events.return_value = {
+        "events": [remote],
+        "complete": True,
+        "calendar_id": binding.calendar_id,
+        "next_sync_token": "instances-v1:after-cancellation",
+    }
+    workflows = Mock()
+    monkeypatch.setattr(scheduling_v2_service, "fire_appointment_workflows", workflows)
+    result = await prepare_primary(db, organization_id=test_auth.org.id, user_id=test_auth.user.id)
+    db.refresh(appointment)
+    assert result["ready"] is True
+    assert db.query(ExternalCalendarEvent).one().status == "cancelled"
+    assert appointment.status == "confirmed"
+    assert appointment.scheduled_start == start
+    assert appointment.google_event_etag == '"v1"'
+    workflows.assert_not_called()
+    assert binding.sync_token is None
+
+    await calendar_binding_service.sync_binding(db, binding_id=binding.id, org_id=test_auth.org.id)
+    db.refresh(appointment)
+    assert appointment.status == "cancelled"
+    assert binding.sync_token == "instances-v1:after-cancellation"
+    workflows.assert_called_once()
