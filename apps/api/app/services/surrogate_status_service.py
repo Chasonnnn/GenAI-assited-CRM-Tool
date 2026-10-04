@@ -975,10 +975,18 @@ def apply_status_change(
             trigger_workflows=trigger_workflows,
         )
 
+    def dispatch_interview_appointment() -> None:
+        trigger = getattr(scheduled_interview, "_workflow_trigger", None)
+        if scheduled_interview is not None and trigger is not None and trigger_workflows:
+            from app.services import scheduling_v2_service
+
+            scheduling_v2_service.fire_appointment_workflows(db, scheduled_interview, trigger)
+
     after_commit_effects = [
         ("surrogate_note_added", dispatch_reason_note),
         ("surrogate_follow_up_task_sync", sync_follow_up_tasks),
         ("surrogate_stage_changed", dispatch_status_changed),
+        ("interview_appointment_changed", dispatch_interview_appointment),
     ]
 
     def after_commit() -> None:

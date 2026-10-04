@@ -2,6 +2,7 @@ import { notFound } from "next/navigation"
 
 import WorkflowEditorPageClient from "./page.client"
 import { getServerRouteResourceStatus } from "@/lib/server-route-resource"
+import { getWorkflowEditorPreset } from "@/lib/workflows/workflow-editor-state"
 
 type PageProps = {
     params: Promise<{ id?: string | string[] }>
@@ -26,7 +27,13 @@ export default async function WorkflowEditorPage({ params, searchParams }: PageP
     const initialScope = scopeParam === "org" ? "org" : "personal"
 
     if (workflowId === "new") {
-        return <WorkflowEditorPageClient workflowId={null} initialScope={initialScope} />
+        return (
+            <WorkflowEditorPageClient
+                workflowId={null}
+                initialScope={initialScope}
+                initialPreset={getWorkflowEditorPreset(resolvedSearchParams)}
+            />
+        )
     }
 
     const status = await getServerRouteResourceStatus(`/workflows/${encodeURIComponent(workflowId)}`)

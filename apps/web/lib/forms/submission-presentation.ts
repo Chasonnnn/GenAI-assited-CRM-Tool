@@ -26,6 +26,7 @@ export function formatSubmissionDateTime(isoString: string) {
 export function submissionOutcomeLabel(submission: FormSubmissionRead) {
     if (submission.match_status === "linked") return "Matched"
     if (submission.match_status === "lead_created") return "Lead Created"
+    if (submission.match_status === "routing_review") return "Routing Review"
     return "Pending Match"
 }
 
@@ -50,7 +51,8 @@ export function submissionReviewLabel(submission: FormSubmissionRead) {
 }
 
 const MATCH_REASON_LABELS: Record<string, string> = {
-    workflow_pending: "Waiting for routing workflow",
+    workflow_pending: "Waiting for routing",
+    routing_review_dismissed: "Routing review dismissed",
     phone_dob_name_exact: "Name, date of birth and phone match",
     email_dob_name_exact: "Name, date of birth and email match",
     phone_dob_name_ambiguous: "Several records share name, date of birth and phone",
@@ -66,6 +68,8 @@ const MATCH_REASON_LABELS: Record<string, string> = {
     manual_retry_requires_manual_link: "Previously promoted; link manually",
     existing_lead_retained: "Existing lead kept",
     existing_lead_relinked: "Existing lead relinked",
+    routing_lead_creation: "Lead created by routing",
+    // Rows from before form routing replaced the routing workflow actions keep this reason.
     workflow_lead_creation: "Lead created by workflow",
     workflow_website_lead_creation: "Website lead created by workflow",
     lead_promoted_to_surrogate: "Lead promoted to surrogate",

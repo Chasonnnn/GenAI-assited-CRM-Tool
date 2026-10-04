@@ -48,6 +48,20 @@ class Form(Base):
             "lead_kind IN ('surrogate', 'egg_donor', 'sperm_donor')",
             name="ck_forms_lead_kind",
         ),
+        CheckConstraint(
+            "routing_exact_match IN ('auto', 'review')", name="ck_forms_routing_exact_match"
+        ),
+        CheckConstraint(
+            "routing_no_match IN ('auto', 'review', 'off')", name="ck_forms_routing_no_match"
+        ),
+        CheckConstraint(
+            "routing_lead_source IS NULL OR routing_lead_source IN ('website', 'form_embed')",
+            name="ck_forms_routing_lead_source",
+        ),
+        CheckConstraint(
+            "NOT routing_auto_create_donor OR lead_kind <> 'surrogate'",
+            name="ck_forms_routing_auto_create_donor",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -74,6 +88,47 @@ class Form(Base):
         String(20),
         server_default=text(f"'{FormLeadKind.SURROGATE.value}'"),
         nullable=False,
+    )
+
+    routing_exact_match: Mapped[str] = mapped_column(
+        String(10),
+        default=lambda ctx: (
+            "auto"
+            if ctx.get_current_parameters().get("lead_kind") in {"egg_donor", "sperm_donor"}
+            else "review"
+        ),
+        nullable=False,
+        server_default=text("'review'"),
+    )
+    routing_no_match: Mapped[str] = mapped_column(
+        String(10),
+        default=lambda ctx: (
+            "auto"
+            if ctx.get_current_parameters().get("lead_kind") in {"egg_donor", "sperm_donor"}
+            else "review"
+        ),
+        nullable=False,
+        server_default=text("'review'"),
+    )
+    routing_lead_source: Mapped[str | None] = mapped_column(
+        String(20),
+        default=lambda ctx: (
+            "website"
+            if ctx.get_current_parameters().get("lead_kind") in {"egg_donor", "sperm_donor"}
+            else None
+        ),
+        nullable=True,
+    )
+    routing_auto_create_donor: Mapped[bool] = mapped_column(
+        Boolean,
+        default=lambda ctx: (
+            ctx.get_current_parameters().get("lead_kind") in {"egg_donor", "sperm_donor"}
+        ),
+        nullable=False,
+        server_default=text("false"),
+    )
+    routing_updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
     # Draft + published schemas (no versioning; published is last published snapshot)
@@ -177,6 +232,15 @@ class FormSubmission(Base):
 
     __tablename__ = "form_submissions"
     __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_form_submissions_org_id"),
+        CheckConstraint(
+            "routing_review_step IS NULL OR routing_review_step IN ('match', 'create_lead')",
+            name="ck_form_submissions_routing_review_step",
+        ),
+        CheckConstraint(
+            "(match_status = 'routing_review') = (routing_review_step IS NOT NULL)",
+            name="ck_form_submissions_routing_review_status",
+        ),
         Index("idx_form_submissions_org", "organization_id"),
         Index("idx_form_submissions_form", "form_id"),
         Index("idx_form_submissions_surrogate", "surrogate_id"),
@@ -292,6 +356,7 @@ class FormSubmission(Base):
         nullable=False,
     )
     match_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    routing_review_step: Mapped[str | None] = mapped_column(String(20), nullable=True)
     matched_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
 
     status: Mapped[str] = mapped_column(

@@ -33,7 +33,7 @@ class SchedulingConflict(ValueError):
     """A request has a stale revision or reuses an idempotency key."""
 
 
-def _fire_appointment_workflows(
+def fire_appointment_workflows(
     db: Session, appointment: Appointment, trigger_type: WorkflowTriggerType
 ) -> None:
     """Run appointment workflows after the scheduling change committed.
@@ -496,6 +496,8 @@ def record_stage_booking(
             actor_user_id,
             override_availability=override_availability,
         )
+        # The stage change fires this after its transaction commits.
+        appointment._workflow_trigger = WorkflowTriggerType.APPOINTMENT_SCHEDULED
         return appointment
 
     appointment = _lock_appointment(db, appointment)
@@ -538,9 +540,11 @@ def record_stage_booking(
         appointment.pending_expires_at = None
         _enqueue_create(db, appointment)
         _queue_notice(db, appointment, AppointmentEmailType.CONFIRMED)
+        appointment._workflow_trigger = WorkflowTriggerType.APPOINTMENT_SCHEDULED
     else:
         _enqueue_change(db, appointment, "reschedule")
         _queue_notice(db, appointment, AppointmentEmailType.RESCHEDULED, old_start=old_start)
+        appointment._workflow_trigger = WorkflowTriggerType.APPOINTMENT_RESCHEDULED
     _queue_reminder(db, appointment)
     _audit(
         db,
@@ -733,8 +737,13 @@ def create_booking(
     )
     db.commit()
     db.refresh(appointment)
-    if appointment.status == AppointmentStatus.CONFIRMED.value:
-        _fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
+    fire_appointment_workflows(
+        db,
+        appointment,
+        WorkflowTriggerType.APPOINTMENT_SCHEDULED
+        if appointment.status == AppointmentStatus.CONFIRMED.value
+        else WorkflowTriggerType.APPOINTMENT_REQUESTED,
+    )
     return appointment
 
 
@@ -765,6 +774,7 @@ def approve_booking(
     if appointment.pending_expires_at and appointment.pending_expires_at <= datetime.now(UTC):
         _expire_locked(db, appointment)
         db.commit()
+        fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_EXPIRED)
         raise ValueError("Appointment request has expired")
     if appointment.meeting_mode == MeetingMode.ZOOM.value:
         raise ValueError("Zoom scheduling is unavailable in scheduling v2")
@@ -799,7 +809,7 @@ def approve_booking(
     )
     db.commit()
     db.refresh(appointment)
-    _fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
+    fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
     return appointment
 
 
@@ -840,6 +850,7 @@ def expire_booking(
         return False
     _expire_locked(db, appointment)
     db.commit()
+    fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_EXPIRED)
     return True
 
 
@@ -858,6 +869,8 @@ def expire_pending(db: Session, *, org_id: UUID | None = None, user_id: UUID | N
         _expire_locked(db, appointment)
     if rows:
         db.commit()
+    for appointment in rows:
+        fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_EXPIRED)
     return len(rows)
 
 
@@ -920,6 +933,7 @@ def reschedule_booking(
     if appointment.pending_expires_at and appointment.pending_expires_at <= datetime.now(UTC):
         _expire_locked(db, appointment)
         db.commit()
+        fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_EXPIRED)
         raise ValueError("Appointment request has expired")
     if appointment.meeting_mode == MeetingMode.ZOOM.value or appointment.zoom_meeting_id:
         raise ValueError("Zoom scheduling is unavailable in scheduling v2")
@@ -972,7 +986,21 @@ def reschedule_booking(
     )
     db.commit()
     db.refresh(appointment)
+    fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_RESCHEDULED)
     return appointment
+
+
+def external_change_trigger(
+    before_status: str, before_start: datetime, appointment: Appointment
+) -> WorkflowTriggerType | None:
+    """Trigger for a verified Google Calendar change, or None when nothing changed."""
+    if appointment.status == AppointmentStatus.CANCELLED.value:
+        if before_status != AppointmentStatus.CANCELLED.value:
+            return WorkflowTriggerType.APPOINTMENT_CANCELLED
+        return None
+    if appointment.scheduled_start != before_start:
+        return WorkflowTriggerType.APPOINTMENT_RESCHEDULED
+    return None
 
 
 def cancel_booking(
@@ -1016,6 +1044,7 @@ def cancel_booking(
     if appointment.pending_expires_at and appointment.pending_expires_at <= datetime.now(UTC):
         _expire_locked(db, appointment)
         db.commit()
+        fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_EXPIRED)
         raise ValueError("Appointment request has expired")
     if appointment.meeting_mode == MeetingMode.ZOOM.value or appointment.zoom_meeting_id:
         raise ValueError("Zoom scheduling is unavailable in scheduling v2")
@@ -1056,7 +1085,7 @@ def cancel_booking(
     )
     db.commit()
     db.refresh(appointment)
-    _fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_CANCELLED)
+    fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_CANCELLED)
     return appointment
 
 
@@ -1087,6 +1116,8 @@ def complete_booking(
     _check_revision(appointment, expected_revision)
     if appointment.status != AppointmentStatus.CONFIRMED.value:
         raise ValueError("Only confirmed appointments can be completed")
+    if appointment.scheduled_start > datetime.now(UTC):
+        raise ValueError("Appointment has not started yet")
     appointment.status = status
     appointment.revision += 1
     appointment_email_service.cancel_queued_reminders(
@@ -1113,7 +1144,7 @@ def complete_booking(
     )
     db.commit()
     db.refresh(appointment)
-    _fire_appointment_workflows(
+    fire_appointment_workflows(
         db,
         appointment,
         WorkflowTriggerType.APPOINTMENT_COMPLETED

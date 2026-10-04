@@ -545,3 +545,57 @@ def test_v2_scheduler_queues_explicit_binding_sync_and_retains_tasks(db, binding
 
 async def _async_result(value):
     return value
+
+
+@pytest.mark.asyncio
+async def test_sync_fires_appointment_workflows_for_applied_google_changes(
+    db, test_org, binding, monkeypatch
+):
+    from app.db.enums import WorkflowTriggerType
+    from app.services import (
+        appointment_google_sync_service,
+        google_scheduling_adapter,
+        scheduling_v2_service,
+    )
+
+    moved = _appointment(binding)
+    cancelled = _appointment(binding, event_id="cancelled-event")
+    db.add_all([moved, cancelled])
+    db.commit()
+    fired = []
+
+    def observe(_db, current, _remote):
+        if current.id == cancelled.id:
+            current.status = AppointmentStatus.CANCELLED.value
+        else:
+            current.scheduled_start += timedelta(hours=1)
+        return "applied"
+
+    monkeypatch.setattr(appointment_google_sync_service, "observe_remote", observe)
+    monkeypatch.setattr(
+        scheduling_v2_service,
+        "fire_appointment_workflows",
+        lambda _db, appointment, trigger: fired.append((appointment.id, trigger)),
+    )
+    monkeypatch.setattr(
+        google_scheduling_adapter,
+        "read_incremental_events",
+        lambda **_kwargs: _async_result(
+            {
+                "complete": True,
+                "calendar_id": binding.calendar_id,
+                "events": [_remote_event(), _remote_event(event_id="cancelled-event")],
+                "next_sync_token": "applied-page",
+            }
+        ),
+    )
+
+    await calendar_binding_service.sync_binding(db, binding_id=binding.id, org_id=test_org.id)
+
+    assert sorted(fired, key=lambda item: item[1].value) == sorted(
+        [
+            (moved.id, WorkflowTriggerType.APPOINTMENT_RESCHEDULED),
+            (cancelled.id, WorkflowTriggerType.APPOINTMENT_CANCELLED),
+        ],
+        key=lambda item: item[1].value,
+    )

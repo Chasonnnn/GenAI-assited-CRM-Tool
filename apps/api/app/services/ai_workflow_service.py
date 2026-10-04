@@ -123,6 +123,13 @@ AVAILABLE_TRIGGERS = {
     "appointment_completed": "When an appointment is completed",
     "appointment_cancelled": "When an appointment is cancelled",
     "appointment_no_show": "When an appointment is marked as a no-show",
+    "appointment_requested": "When a booking request is waiting for approval",
+    "appointment_rescheduled": "When an appointment moves to a new time",
+    "appointment_expired": "When a booking request expires without approval",
+    "appointment_time": (
+        "Hours before a confirmed appointment starts or after it ends "
+        "(trigger_config.when 'before_start' or 'after_end', trigger_config.hours 1-168)"
+    ),
 }
 
 AVAILABLE_ACTIONS = {
@@ -163,16 +170,6 @@ AVAILABLE_ACTIONS = {
         "description": "Promote intake lead into a surrogate case",
         "required_fields": [],
         "optional_fields": ["source", "is_priority", "assign_to_user"],
-    },
-    "auto_match_submission": {
-        "description": "Deterministically match a form submission to an existing surrogate",
-        "required_fields": [],
-        "optional_fields": [],
-    },
-    "create_intake_lead": {
-        "description": "Create an intake lead from an unmatched form submission",
-        "required_fields": [],
-        "optional_fields": ["source"],
     },
 }
 

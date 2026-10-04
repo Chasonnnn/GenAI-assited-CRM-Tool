@@ -10,9 +10,8 @@ import { DONOR_SOURCE_LABELS } from "@/lib/donor-source-labels"
 import { isPermissionError } from "@/lib/error-utils"
 import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
+import { FORM_TRIGGER_TYPES, INTAKE_LEAD_KIND_CONFIG_KEYS } from "@/lib/workflows/form-trigger-types"
 import {
-    FORM_TRIGGER_TYPES,
-    INTAKE_LEAD_KIND_CONFIG_KEYS,
     LIST_OPERATORS,
     MULTISELECT_FIELDS,
     VALUELESS_OPERATORS,
@@ -55,6 +54,33 @@ export const CREATE_WORKFLOW_SUBJECT_OPTIONS: Array<{ value: CreateWorkflowSubje
     { value: "sperm_donor", label: WORKFLOW_SUBJECT_LABELS.sperm_donor },
 ]
 
+/** The record an appointment workflow acts on (mirrors AppointmentTriggerConfig.record_type). */
+export function getAppointmentRecordType(triggerConfig: JsonObject): CreateWorkflowSubjectType {
+    const value = triggerConfig.record_type
+    return CREATE_WORKFLOW_SUBJECT_OPTIONS.find((option) => option.value === value)?.value ?? "surrogate"
+}
+
+export const APPOINTMENT_TIMING_OPTIONS: SelectOption[] = [
+    { value: "before_start", label: "Before start" },
+    { value: "after_end", label: "After end" },
+]
+
+export const getAppointmentTimingLabel = createSelectLabelGetter(APPOINTMENT_TIMING_OPTIONS, {
+    emptyLabel: "Before start",
+})
+
+export function describeAppointmentTiming(triggerConfig: JsonObject): string {
+    const hours = typeof triggerConfig.hours === "number" ? triggerConfig.hours : 24
+    const unit = hours === 1 ? "hour" : "hours"
+    return triggerConfig.when === "after_end" ? `${hours} ${unit} after end` : `${hours} ${unit} before start`
+}
+
+export function getAppointmentTypeNames(triggerConfig: JsonObject): string[] {
+    return Array.isArray(triggerConfig.appointment_type_names)
+        ? triggerConfig.appointment_type_names.filter((name): name is string => typeof name === "string")
+        : []
+}
+
 // Mirrors workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES; the engine matches on subject_type.
 export const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubjectType>> = {
     form_submitted: "form_submission",
@@ -69,6 +95,10 @@ export const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubject
     appointment_completed: "appointment",
     appointment_cancelled: "appointment",
     appointment_no_show: "appointment",
+    appointment_requested: "appointment",
+    appointment_rescheduled: "appointment",
+    appointment_expired: "appointment",
+    appointment_time: "appointment",
 }
 
 export const TRIGGER_LABELS: Record<string, string> = {
@@ -92,6 +122,10 @@ export const TRIGGER_LABELS: Record<string, string> = {
     appointment_completed: "Appointment Completed",
     appointment_cancelled: "Appointment Cancelled",
     appointment_no_show: "Appointment No-Show",
+    appointment_requested: "Appointment Requested",
+    appointment_rescheduled: "Appointment Rescheduled",
+    appointment_expired: "Appointment Request Expired",
+    appointment_time: "Before or After Appointment",
     note_added: "Note Added",
     document_uploaded: "Document Uploaded",
     donor_created: "Donor Created",
@@ -233,6 +267,11 @@ export function normalizeTriggerConfigForUi(
             next.days = 7
         }
     }
+    if (triggerType === "appointment_time") {
+        if (next.when !== "after_end") next.when = "before_start"
+        const hours = Number(next.hours)
+        next.hours = Number.isFinite(hours) && hours > 0 ? hours : 24
+    }
     if (triggerType === "task_due") {
         if (typeof next.hours_before === "string") {
             const parsed = Number(next.hours_before)
@@ -274,6 +313,10 @@ export function buildTriggerConfigForSave(triggerType: string, triggerConfig: Js
         const hours = Number(next.hours_before)
         next.hours_before = Number.isFinite(hours) ? hours : 24
     }
+    if (triggerType === "appointment_time") {
+        if (next.when !== "after_end") next.when = "before_start"
+        next.hours = Number(next.hours)
+    }
     if (FORM_TRIGGER_TYPES.has(triggerType)) {
         if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
     }
@@ -298,6 +341,12 @@ export function getTriggerConfigValidationError(triggerType: string, triggerConf
     if (triggerType === "task_due") {
         const hours = triggerConfig.hours_before
         if (!hours || typeof hours !== "number") return "Hours before due is required."
+    }
+    if (triggerType === "appointment_time") {
+        const hours = triggerConfig.hours
+        if (typeof hours !== "number" || !Number.isInteger(hours) || hours < 1 || hours > 168) {
+            return "Hours must be a whole number from 1 to 168."
+        }
     }
     if (FORM_TRIGGER_TYPES.has(triggerType)) {
         const formId = triggerConfig.form_id
@@ -373,13 +422,6 @@ export function getActionValidationError(action: ActionConfig): string | null {
 
 export function getActionsValidationError(triggerType: string, actions: ActionConfig[]): string | null {
     if (actions.length === 0) return "Add at least one action."
-    if (triggerType === "form_submitted") {
-        const autoMatchIndex = actions.findIndex((action) => action.action_type === "auto_match_submission")
-        const createLeadIndex = actions.findIndex((action) => action.action_type === "create_intake_lead")
-        if (autoMatchIndex >= 0 && createLeadIndex >= 0 && autoMatchIndex > createLeadIndex) {
-            return "Place Auto-Match Submission before Create Intake Lead for form-submitted workflows."
-        }
-    }
     for (const action of actions) {
         const error = getActionValidationError(action)
         if (error) return error
@@ -454,7 +496,32 @@ export type WorkflowBuilderAction =
     | { type: "moveAction"; index: number; direction: -1 | 1 }
     | { type: "updateAction"; index: number; updates: Partial<ActionConfig> }
 
-export function createInitialWorkflowBuilderState(scope: WorkflowScope = "personal"): WorkflowBuilderState {
+/** Trigger and filter a new workflow starts on, e.g. when opened from an appointment type or a form. Runs in Server Components. */
+export type WorkflowEditorPreset = { triggerType: string; triggerConfig: JsonObject }
+
+export function getWorkflowEditorPreset(
+    searchParams: Record<string, string | string[] | undefined>,
+): WorkflowEditorPreset | null {
+    const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value)
+    const triggerType = first(searchParams.trigger)
+    if (!triggerType) return null
+    if (FORM_TRIGGER_TYPES.has(triggerType)) {
+        return { triggerType, triggerConfig: { form_id: first(searchParams.form_id)?.trim() ?? "" } }
+    }
+    if (FIXED_TRIGGER_SUBJECT_TYPES[triggerType] !== "appointment") return null
+    const typeName = first(searchParams.appointment_type)?.trim()
+    return { triggerType, triggerConfig: typeName ? { appointment_type_names: [typeName] } : {} }
+}
+
+export function getAppointmentTypeWorkflowHref(typeName: string, scope: WorkflowScope): string {
+    const params = new URLSearchParams({ scope, trigger: "appointment_scheduled", appointment_type: typeName })
+    return `/automation/workflows/new?${params.toString()}`
+}
+
+export function createInitialWorkflowBuilderState(
+    scope: WorkflowScope = "personal",
+    preset: WorkflowEditorPreset | null = null,
+): WorkflowBuilderState {
     return {
         hydratedWorkflowId: null,
         validationError: null,
@@ -463,8 +530,8 @@ export function createInitialWorkflowBuilderState(scope: WorkflowScope = "person
         workflowDescription: "",
         workflowScope: scope,
         subjectType: "surrogate",
-        triggerType: "",
-        triggerConfig: {},
+        triggerType: preset?.triggerType ?? "",
+        triggerConfig: preset?.triggerConfig ?? {},
         conditions: [],
         conditionLogic: "AND",
         actions: [],
@@ -644,7 +711,7 @@ export function workflowBuilderReducer(state: WorkflowBuilderState, action: Work
 
 // Trigger types that fire on time rather than on a record event; the editor groups them under
 // "Date or scheduled" like the reference layout.
-export const TIME_TRIGGER_TYPES = new Set(["scheduled", "inactivity", "task_due", "task_overdue"])
+export const TIME_TRIGGER_TYPES = new Set(["scheduled", "inactivity", "task_due", "task_overdue", "appointment_time"])
 
 export type ScheduleFrequency = "daily" | "weekdays" | "weekly" | "custom"
 

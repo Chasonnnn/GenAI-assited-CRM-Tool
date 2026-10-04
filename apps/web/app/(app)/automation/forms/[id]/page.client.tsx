@@ -8,14 +8,20 @@ import {
     FormBuilderLoadingState,
 } from "@/components/forms/builder/FormBuilderAccessStates"
 import { useAutomationFormBuilderPage } from "@/lib/forms/use-automation-form-builder-page"
+import type { WorkspaceTab } from "@/lib/forms/form-builder-workspace-tab"
 import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 
-function AutomationFormBuilder() {
-    const controller = useAutomationFormBuilderPage()
+function AutomationFormBuilder({ initialTab }: { initialTab?: WorkspaceTab | undefined }) {
+    const controller = useAutomationFormBuilderPage(initialTab ? { initialTab } : {})
     return <AutomationFormBuilderScreen controller={controller} />
 }
 
-export default function FormBuilderPage() {
+type FormBuilderPageProps = {
+    /** Workspace tab from the `tab` query parameter. */
+    initialTab?: WorkspaceTab | undefined
+}
+
+export default function FormBuilderPage({ initialTab }: FormBuilderPageProps = {}) {
     const permissionCheck = usePermissionCheck()
 
     if (permissionCheck.isLoading) {
@@ -39,5 +45,5 @@ export default function FormBuilderPage() {
         return <FormBuilderDeniedScreen />
     }
 
-    return <AutomationFormBuilder />
+    return <AutomationFormBuilder initialTab={initialTab} />
 }

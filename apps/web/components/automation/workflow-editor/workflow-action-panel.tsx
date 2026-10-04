@@ -5,7 +5,6 @@ import { ChevronDownIcon, ChevronUpIcon, ShieldCheckIcon, Trash2Icon } from "luc
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
@@ -27,6 +26,13 @@ import {
 import { EditorColumn, FieldRow, PanelCard, PanelHeading, PanelSection } from "./inspector-section"
 import { getActionMeta } from "./node-meta"
 
+const NOTIFICATION_RECIPIENT_LABELS: Record<string, string> = {
+    owner: "Owner",
+    creator: "Creator",
+    all_admins: "All Admins",
+    host: "Appointment Host",
+}
+
 export function WorkflowActionPanel({
     controller,
     action,
@@ -37,12 +43,12 @@ export function WorkflowActionPanel({
     index: number
 }) {
     const { state, options, handlers } = controller
-    const { actions, subjectType } = state
+    const { actions, actionSubjectType } = state
     const { actionTypeOptions, filteredActionTypes } = options
     const { updateActionType, removeAction, moveAction } = handlers
     const meta = getActionMeta(action.action_type)
     const actionLabel = actionTypeOptions.find((option) => option.value === action.action_type)?.label ?? "Action"
-    const approvalLocked = isDonorSubject(subjectType) && action.action_type === "send_message"
+    const approvalLocked = isDonorSubject(actionSubjectType) && action.action_type === "send_message"
 
     return (
         <EditorColumn aria-label="Action settings">
@@ -175,7 +181,7 @@ function WorkflowActionFields({
     index: number
 }) {
     const { state, options, handlers } = controller
-    const { subjectType } = state
+    const { actionSubjectType, isAppointmentTrigger } = state
     const {
         emailTemplates,
         emailRecipientOptions,
@@ -218,7 +224,7 @@ function WorkflowActionFields({
                 <FieldRow label="Recipient" htmlFor={fieldId("email-recipient")}>
                     <Select
                         value={
-                            isDonorSubject(subjectType) && getEmailRecipientKind(action) === "surrogate"
+                            isDonorSubject(actionSubjectType) && getEmailRecipientKind(action) === "surrogate"
                                 ? "donor"
                                 : getEmailRecipientKind(action)
                         }
@@ -447,7 +453,7 @@ function WorkflowActionFields({
                             <SelectValue placeholder="Assignee" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="owner">{isDonorSubject(subjectType) ? "Donor Owner" : "Case Owner"}</SelectItem>
+                            <SelectItem value="owner">{isDonorSubject(actionSubjectType) ? "Donor Owner" : "Case Owner"}</SelectItem>
                             <SelectItem value="creator">Creator</SelectItem>
                             <SelectItem value="admin">Admin</SelectItem>
                             {userOptions.map((user) => (
@@ -494,7 +500,7 @@ function WorkflowActionFields({
                         }
                         onValueChange={(value) => {
                             if (!value) return
-                            if (value === "owner" || value === "creator" || value === "all_admins") {
+                            if (typeof value === "string" && Object.hasOwn(NOTIFICATION_RECIPIENT_LABELS, value)) {
                                 updateAction(index, { recipients: value })
                                 return
                             }
@@ -502,12 +508,24 @@ function WorkflowActionFields({
                         }}
                     >
                         <SelectTrigger id={fieldId("notification-recipients")} className="w-full">
-                            <SelectValue placeholder="Recipients" />
+                            <SelectValue placeholder="Recipients">
+                                {(value: string | null) => {
+                                    if (!value) return "Recipients"
+                                    return (
+                                        NOTIFICATION_RECIPIENT_LABELS[value] ??
+                                        userOptions.find((user) => user.id === value)?.display_name ??
+                                        "Unknown user"
+                                    )
+                                }}
+                            </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="owner">Owner</SelectItem>
-                            <SelectItem value="creator">Creator</SelectItem>
-                            <SelectItem value="all_admins">All Admins</SelectItem>
+                            <SelectItem value="owner">{NOTIFICATION_RECIPIENT_LABELS.owner}</SelectItem>
+                            <SelectItem value="creator">{NOTIFICATION_RECIPIENT_LABELS.creator}</SelectItem>
+                            <SelectItem value="all_admins">{NOTIFICATION_RECIPIENT_LABELS.all_admins}</SelectItem>
+                            {isAppointmentTrigger && (
+                                <SelectItem value="host">{NOTIFICATION_RECIPIENT_LABELS.host}</SelectItem>
+                            )}
                             {userOptions.map((user) => (
                                 <SelectItem key={user.id} value={user.id}>
                                     {user.display_name}
@@ -705,41 +723,6 @@ function WorkflowActionFields({
                     rows={3}
                 />
             </FieldRow>
-        )
-    }
-
-    if (action.action_type === "auto_match_submission") {
-        return (
-            <p className="rounded-md border p-3 text-sm text-muted-foreground">
-                Matches existing applicants and holds conflicting identities for review.
-            </p>
-        )
-    }
-
-    if (action.action_type === "create_intake_lead") {
-        return (
-            <>
-                <FieldRow label="Source" htmlFor={fieldId("intake-source")}>
-                    <Input
-                        id={fieldId("intake-source")}
-                        placeholder="Optional, e.g. event_qr"
-                        aria-label="Source"
-                        value={typeof action.source === "string" ? action.source : ""}
-                        onChange={(event) => updateAction(index, { source: event.target.value })}
-                    />
-                </FieldRow>
-                <div className="flex items-center justify-between gap-3 rounded-md border p-3">
-                    <Label htmlFor={`auto-promote-donor-${index}`}>Create donor after photo scan</Label>
-                    <Switch
-                        id={`auto-promote-donor-${index}`}
-                        checked={action.auto_promote === true}
-                        onCheckedChange={(checked) => updateAction(index, { auto_promote: checked })}
-                    />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                    Skips automatically if the submission is already linked or has ambiguous match candidates.
-                </p>
-            </>
         )
     }
 

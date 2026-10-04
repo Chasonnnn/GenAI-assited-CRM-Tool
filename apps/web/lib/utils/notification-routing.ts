@@ -45,6 +45,11 @@ export function getNotificationHref(notification: NotificationRouteInput): strin
                 return buildTasksHref({ focus: "approvals", approval: notification.request_id })
             }
             return getRecordHref(notification) ?? buildTasksHref({ focus: "approvals" })
+        case "form_submission_routing_review":
+            if (notification.entity_type === "form" && entityId) {
+                return `/automation/form-submissions?${new URLSearchParams({ form: entityId })}`
+            }
+            break
     }
 
     const taskFocus = TASK_FOCUS_BY_TYPE[notification.type]

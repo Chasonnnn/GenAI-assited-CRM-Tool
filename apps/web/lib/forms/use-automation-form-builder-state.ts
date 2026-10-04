@@ -4,8 +4,7 @@ import { useReducer, useState } from "react"
 
 import type { FormLeadKind, FormPurpose, FormRead } from "@/lib/api/forms"
 import { schemaToMetadata } from "@/lib/forms/form-builder-document"
-
-type WorkspaceTab = "edit" | "preview" | "settings" | "submissions"
+import type { WorkspaceTab } from "@/lib/forms/form-builder-workspace-tab"
 type SubmissionHistoryFilter = "all" | "pending" | "processed"
 type AutoSaveStatus = "idle" | "saving" | "saved" | "error"
 type PreviewDevice = "desktop" | "mobile"
@@ -28,6 +27,8 @@ type AutomationBuilderState = {
     allowedMimeTypesText: string
     defaultTemplateId: string
     workspaceTab: WorkspaceTab
+    /** The Routing tab mounts on first open and stays mounted so an unsaved draft survives tab switches. */
+    routingTabOpened: boolean
     submissionHistoryFilter: SubmissionHistoryFilter
     selectedQueueSubmissionId: string | null
     manualSurrogateId: string
@@ -54,7 +55,7 @@ type AutomationBuilderState = {
 
 type AutomationBuilderAction =
     | { type: "patch"; payload: Partial<AutomationBuilderState> }
-    | { type: "reset_for_form"; payload: { formKey: string; isNewForm: boolean } }
+    | { type: "reset_for_form"; payload: { formKey: string; isNewForm: boolean; workspaceTab: WorkspaceTab } }
     | {
         type: "hydrate_from_form"
         payload: {
@@ -63,7 +64,11 @@ type AutomationBuilderAction =
         }
     }
 
-const buildInitialState = (formKey: string, isNewForm: boolean): AutomationBuilderState => ({
+const buildInitialState = (
+    formKey: string,
+    isNewForm: boolean,
+    workspaceTab: WorkspaceTab = "edit",
+): AutomationBuilderState => ({
     baselineFormKey: null,
     formKey,
     hasHydrated: isNewForm,
@@ -80,7 +85,8 @@ const buildInitialState = (formKey: string, isNewForm: boolean): AutomationBuild
     maxFileCount: 10,
     allowedMimeTypesText: "",
     defaultTemplateId: "",
-    workspaceTab: "edit",
+    workspaceTab,
+    routingTabOpened: workspaceTab === "routing",
     submissionHistoryFilter: "all",
     selectedQueueSubmissionId: null,
     manualSurrogateId: "",
@@ -110,7 +116,7 @@ function reducer(state: AutomationBuilderState, action: AutomationBuilderAction)
         case "patch":
             return { ...state, ...action.payload }
         case "reset_for_form":
-            return buildInitialState(action.payload.formKey, action.payload.isNewForm)
+            return buildInitialState(action.payload.formKey, action.payload.isNewForm, action.payload.workspaceTab)
         case "hydrate_from_form": {
             const schema = action.payload.form.form_schema ?? action.payload.form.published_schema ?? null
             const metadata = schemaToMetadata(schema)
@@ -145,19 +151,25 @@ function reducer(state: AutomationBuilderState, action: AutomationBuilderAction)
     }
 }
 
-export function useAutomationFormBuilderState(formKey: string, isNewForm: boolean) {
-    const [state, dispatch] = useReducer(reducer, buildInitialState(formKey, isNewForm))
+export function useAutomationFormBuilderState(
+    formKey: string,
+    isNewForm: boolean,
+    initialWorkspaceTab: WorkspaceTab = "edit",
+) {
+    const [state, dispatch] = useReducer(reducer, buildInitialState(formKey, isNewForm, initialWorkspaceTab))
 
     const [patchState] = useState(() => (payload: Partial<AutomationBuilderState>) => {
         dispatch({ type: "patch", payload })
     })
 
-    const [resetForForm] = useState(() => (nextFormKey: string, nextIsNewForm: boolean) => {
-        dispatch({
-            type: "reset_for_form",
-            payload: { formKey: nextFormKey, isNewForm: nextIsNewForm },
-        })
-    })
+    const [resetForForm] = useState(
+        () => (nextFormKey: string, nextIsNewForm: boolean, workspaceTab: WorkspaceTab = "edit") => {
+            dispatch({
+                type: "reset_for_form",
+                payload: { formKey: nextFormKey, isNewForm: nextIsNewForm, workspaceTab },
+            })
+        },
+    )
 
     const [hydrateFromForm] = useState(
         () => (payload: { form: FormRead; orgLogoPath: string }) => {

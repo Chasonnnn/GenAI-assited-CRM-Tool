@@ -434,7 +434,7 @@ describe("InterviewAppointmentManager", () => {
                 status: "cancelled",
                 scheduling: {
                     revision: 4,
-                    capabilities: { can_reschedule: false, can_cancel: false, can_retry_google_sync: false, can_resolve_google_conflict: false },
+                    capabilities: { can_reschedule: false, can_cancel: false, can_complete: false, can_retry_google_sync: false, can_resolve_google_conflict: false },
                     google_sync: { state: "completed", linked: true, error_code: null, conflict: null },
                 },
             },
@@ -493,7 +493,7 @@ describe("InterviewAppointmentManager", () => {
                 ...appointment,
                 scheduling: {
                     revision: 3,
-                    capabilities: { can_reschedule: false, can_cancel: true, can_retry_google_sync: false, can_resolve_google_conflict: false },
+                    capabilities: { can_reschedule: false, can_cancel: true, can_complete: false, can_retry_google_sync: false, can_resolve_google_conflict: false },
                     google_sync: { state: "pending", linked: true, error_code: null, conflict: null },
                 },
             },
@@ -511,7 +511,7 @@ describe("InterviewAppointmentManager", () => {
                 ...appointment,
                 scheduling: {
                     revision: 3,
-                    capabilities: { can_reschedule: false, can_cancel: false, can_retry_google_sync: false, can_resolve_google_conflict: false },
+                    capabilities: { can_reschedule: false, can_cancel: false, can_complete: false, can_retry_google_sync: false, can_resolve_google_conflict: false },
                     google_sync: { state: "pending", linked: true, error_code: null, conflict: null },
                 },
             },

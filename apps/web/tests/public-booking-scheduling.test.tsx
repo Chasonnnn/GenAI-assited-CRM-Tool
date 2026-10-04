@@ -67,7 +67,7 @@ describe("public booking timezone", () => {
             status: "confirmed", scheduled_start: slotStart, meeting_mode: "phone",
             meeting_location: null, dial_in_number: null, zoom_join_url: null, google_meet_url: null,
         }))
-        render(<PublicBookingPage publicSlug="test-booking" />)
+        render(<PublicBookingPage publicSlug="test-booking" recordToken="signed-record" />)
         fireEvent.click(screen.getByRole("button", { name: "Consultation" }))
         expect(screen.getByText("Choose a date.")).toBeInTheDocument()
         expect(screen.queryByText("No available times on this date.")).not.toBeInTheDocument()
@@ -95,7 +95,7 @@ describe("public booking timezone", () => {
             expect.objectContaining({ data: expect.objectContaining({
                 scheduled_start: slotStart, client_timezone: "America/Los_Angeles",
                 client_name: "Sample Visitor", client_email: "sample@example.com", client_phone: "555-0100",
-                client_notes: "Please call first",
+                client_notes: "Please call first", record_token: "signed-record",
             }) }),
             expect.any(Object),
         )

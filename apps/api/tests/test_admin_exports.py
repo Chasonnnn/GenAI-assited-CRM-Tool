@@ -226,9 +226,7 @@ class TestAdminExports:
             ),
         )
         initial_history = (
-            db.query(DonorStatusHistory)
-            .filter(DonorStatusHistory.donor_id == donor.id)
-            .one()
+            db.query(DonorStatusHistory).filter(DonorStatusHistory.donor_id == donor.id).one()
         )
         initial_at = datetime(2026, 8, 27, 10, 15, tzinfo=UTC)
         initial_history.effective_at = initial_at
@@ -431,6 +429,10 @@ class TestAdminExports:
             status="draft",
             purpose="other",
             lead_kind="egg_donor",
+            routing_exact_match="review",
+            routing_no_match="off",
+            routing_lead_source="form_embed",
+            routing_auto_create_donor=False,
             schema_json={"title": "Draft"},
             published_schema_json={"title": "Published"},
             max_file_size_bytes=1048576,
@@ -550,7 +552,7 @@ class TestAdminExports:
             trigger_config={"from": ["new_unread"]},
             conditions=[],
             condition_logic="AND",
-            actions=[{"type": "add_note", "content": "Hi"}],
+            actions=[{"action_type": "add_note", "content": "Hi"}],
             is_global=False,
             organization_id=test_org.id,
             usage_count=0,
@@ -631,6 +633,20 @@ class TestAdminExports:
             assert forms_payload and forms_payload[0]["name"] == "Test Form"
             assert forms_payload[0]["purpose"] == "other"
             assert forms_payload[0]["lead_kind"] == "egg_donor"
+            assert {
+                key: forms_payload[0][key]
+                for key in (
+                    "routing_exact_match",
+                    "routing_no_match",
+                    "routing_lead_source",
+                    "routing_auto_create_donor",
+                )
+            } == {
+                "routing_exact_match": "review",
+                "routing_no_match": "off",
+                "routing_lead_source": "form_embed",
+                "routing_auto_create_donor": False,
+            }
             assert "default_application_email_template_id" in forms_payload[0]
 
             pipelines_payload = json.loads(archive.read("pipelines.json"))
@@ -640,9 +656,7 @@ class TestAdminExports:
             assert exported_pipeline["entity_type"] == "egg_donor"
             assert exported_pipeline["feature_config"] == {"requires_profile_photo": True}
             assert exported_pipeline["stages"][0]["stage_key"] == "egg_donor.new"
-            assert exported_pipeline["stages"][0]["semantics"] == {
-                "analytics_bucket": "egg_new"
-            }
+            assert exported_pipeline["stages"][0]["semantics"] == {"analytics_bucket": "egg_new"}
             assert exported_pipeline["stages"][0]["is_intake_stage"] is True
             assert exported_pipeline["stages"][0]["allowed_next_slugs"] == ["contacted"]
 
@@ -697,3 +711,52 @@ class TestAdminExports:
             assert download.status_code == 404
         finally:
             settings.EXPORT_STORAGE_BACKEND = original_storage_backend
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_export_skips_retired_routing_without_mutating_definitions(db, test_org, mixed):
+    retained = (
+        [{"action_type": "update_field", "field": "is_priority", "value": True}] if mixed else []
+    )
+    actions = [
+        {"action_type": "auto_match_submission"},
+        {"action_type": "create_intake_lead"},
+        *retained,
+    ]
+    workflow = AutomationWorkflow(
+        organization_id=test_org.id,
+        name="Pre-release route",
+        subject_type="form_submission",
+        trigger_type="form_submitted",
+        actions=actions,
+        is_enabled=True,
+    )
+    template = WorkflowTemplate(
+        organization_id=test_org.id,
+        name="Pre-release template",
+        subject_type="form_submission",
+        trigger_type="form_submitted",
+        actions=actions,
+    )
+    db.add_all([workflow, template])
+    db.flush()
+    with zipfile.ZipFile(
+        io.BytesIO(admin_export_service.build_org_config_zip(db, test_org.id))
+    ) as archive:
+        exported = next(
+            row
+            for row in json.loads(archive.read("workflows.json"))
+            if row["id"] == str(workflow.id)
+        )
+        assert exported["actions"] == retained
+        assert exported["is_enabled"] is mixed
+        exported = next(
+            row
+            for row in json.loads(archive.read("workflow_templates.json"))
+            if row["id"] == str(template.id)
+        )
+        assert exported["actions"] == retained
+    db.refresh(workflow)
+    db.refresh(template)
+    assert workflow.actions == actions
+    assert template.actions == actions

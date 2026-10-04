@@ -54,7 +54,7 @@ async def test_slow_metrics_do_not_delay_requests_or_queue_on_saturation(
     def blocked_record(**kwargs):
         calls.append(kwargs)
         started.set()
-        release.wait(timeout=1)
+        release.wait(timeout=5)
 
     monkeypatch.setattr(main.metrics_service, "record_request", blocked_record)
     response = SimpleNamespace(status_code=200)
@@ -64,8 +64,8 @@ async def test_slow_metrics_do_not_delay_requests_or_queue_on_saturation(
 
     try:
         assert await main.metrics_middleware(request, next_response) is response
-        await asyncio.sleep(0.01)
-        assert started.is_set()
+        # Wait for the worker thread; a fixed sleep loses the race on loaded CI runners.
+        assert await asyncio.to_thread(started.wait, 2)
         assert not finished.is_set(), "metrics blocked the event loop and request response"
         from httpx import ASGITransport, AsyncClient
 
@@ -160,7 +160,7 @@ async def test_metrics_shutdown_does_not_wait_for_blocked_write(metrics_runtime,
 
     def blocked_write(**kwargs):
         started.set()
-        release.wait(timeout=1)
+        release.wait(timeout=5)
 
     monkeypatch.setattr(main.settings, "DB_MIGRATION_CHECK", False)
     monkeypatch.setattr(main.settings, "DB_AUTO_MIGRATE", False)
@@ -172,8 +172,7 @@ async def test_metrics_shutdown_does_not_wait_for_blocked_write(metrics_runtime,
     try:
         async with main.lifespan(main.app):
             assert main._record_metrics(metrics_request(), 200, 1) is True
-            await asyncio.sleep(0.01)
-            assert started.is_set()
+            assert await asyncio.to_thread(started.wait, 2)
             started_at = asyncio.get_running_loop().time()
         assert asyncio.get_running_loop().time() - started_at < 0.5
     finally:

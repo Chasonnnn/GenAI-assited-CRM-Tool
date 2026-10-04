@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import type { WorkflowEditorController, WorkflowEditorSelection } from "@/lib/workflows/use-workflow-editor"
 import {
     WORKFLOW_SUBJECT_PLURAL_LABELS,
+    describeAppointmentTiming,
+    getAppointmentTypeNames,
     getConditionFieldLabel,
     describeSchedule,
     getTriggerLabel,
@@ -44,6 +46,13 @@ function getTriggerCriteria(state: CanvasState, options: CanvasOptions): string[
     if (triggerType === "task_due" && typeof triggerConfig.hours_before === "number") {
         lines.push(`${triggerConfig.hours_before} hours before due`)
     }
+    if (triggerType === "appointment_time") {
+        lines.push(describeAppointmentTiming(triggerConfig))
+    }
+    if (state.isAppointmentTrigger) {
+        const typeNames = getAppointmentTypeNames(triggerConfig)
+        if (typeNames.length > 0) lines.push(`Types: ${typeNames.join(", ")}`)
+    }
     if (typeof triggerConfig.form_id === "string" && triggerConfig.form_id) {
         const form = options.formOptions.find((option) => option.value === triggerConfig.form_id)
         lines.push(form ? `Form: ${form.label}` : "Form selected")
@@ -79,7 +88,7 @@ function getActionSummary(action: EditableAction, options: CanvasOptions, state:
             const template = options.emailTemplates.find((option) => option.id === action.template_id)
             // Donor workflows save the default surrogate recipient as "donor" (mirrors the action panel).
             const storedKind = getEmailRecipientKind(action)
-            const kind = isDonorSubject(state.subjectType) && storedKind === "surrogate" ? "donor" : storedKind
+            const kind = isDonorSubject(state.actionSubjectType) && storedKind === "surrogate" ? "donor" : storedKind
             const recipient =
                 kind === "user"
                     ? options.userOptions.find((option) => option.id === getEmailRecipientUserId(action))?.display_name
@@ -223,7 +232,11 @@ export function WorkflowCanvas({
                         icon={TriggerIcon}
                         tone="violet"
                         title={triggerLabel}
-                        subtitle={`Runs for ${WORKFLOW_SUBJECT_PLURAL_LABELS[subjectType].toLowerCase()}`}
+                        subtitle={
+                            state.isAppointmentTrigger
+                                ? `Runs on linked ${WORKFLOW_SUBJECT_PLURAL_LABELS[state.actionSubjectType].toLowerCase()}`
+                                : `Runs for ${WORKFLOW_SUBJECT_PLURAL_LABELS[subjectType].toLowerCase()}`
+                        }
                     />
                     <div className="border-t border-border px-3 py-2.5">
                         <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">

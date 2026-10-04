@@ -22,6 +22,7 @@ const base = {
         capabilities: {
             can_reschedule: false,
             can_cancel: false,
+            can_complete: false,
             can_retry_google_sync: false,
             can_resolve_google_conflict: false,
         },

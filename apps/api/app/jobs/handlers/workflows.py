@@ -15,7 +15,8 @@ async def process_workflow_sweep(db, job) -> None:
 
     Payload:
         - org_id: Optional organization copy, validated against the job claim
-        - sweep_type: 'scheduled', 'inactivity', 'task_due', 'task_overdue', or 'all'
+        - sweep_type: 'scheduled', 'inactivity', 'task_due', 'task_overdue',
+          'appointment_time', or 'all'
         - evaluated_at: Timezone-aware ISO timestamp captured when the sweep was queued
     """
     from app.db.models import Organization
@@ -69,6 +70,9 @@ async def process_workflow_sweep(db, job) -> None:
 
             if sweep_type in ("all", "task_overdue"):
                 workflow_triggers.trigger_task_overdue_sweep(db, org.id)
+
+            if sweep_type in ("all", "appointment_time"):
+                workflow_triggers.trigger_appointment_time_sweep(db, org.id)
 
             db.commit()
             logger.info("Workflow sweep complete for org %s", org.id)
@@ -196,57 +200,23 @@ async def process_workflow_resume(db, job) -> None:
     if not workflow:
         raise Exception(f"Workflow {execution.workflow_id} not found")
 
-    # Handle based on task status
-    if task.status == TaskStatus.COMPLETED.value:
-        # APPROVED: Execute the action and continue workflow
-        logger.info("Resuming approved workflow execution %s", execution_id)
-
+    # The engine owns terminal decisions and their atomic form-routing handoff.
+    if task.status in {
+        TaskStatus.COMPLETED.value,
+        TaskStatus.DENIED.value,
+        TaskStatus.EXPIRED.value,
+    }:
         engine = WorkflowEngine()
         engine.continue_execution(
             db=db,
             execution_id=execution.id,
             task=task,
-            decision="approve",
+            decision={
+                TaskStatus.COMPLETED.value: "approve",
+                TaskStatus.DENIED.value: "deny",
+                TaskStatus.EXPIRED.value: "expire",
+            }[task.status],
         )
-
-    elif task.status == TaskStatus.DENIED.value:
-        # DENIED: Cancel workflow
-        logger.info("Workflow execution %s denied", execution_id)
-        execution.paused_at_action_index = None
-        execution.paused_task_id = None
-        execution.status = WorkflowExecutionStatus.CANCELED.value
-        execution.error_message = task.workflow_denial_reason or "Approval denied by case owner"
-
-        # Record the skipped action
-        action_results = list(execution.actions_executed or [])
-        action_results.append(
-            {
-                "success": False,
-                "action_type": task.workflow_action_type,
-                "skipped": True,
-                "reason": "denied",
-            }
-        )
-        execution.actions_executed = action_results
-
-    elif task.status == TaskStatus.EXPIRED.value:
-        # EXPIRED: Mark workflow expired
-        logger.info("Workflow execution %s expired", execution_id)
-        execution.paused_at_action_index = None
-        execution.paused_task_id = None
-        execution.status = WorkflowExecutionStatus.EXPIRED.value
-        execution.error_message = "Approval timed out"
-
-        action_results = list(execution.actions_executed or [])
-        action_results.append(
-            {
-                "success": False,
-                "action_type": task.workflow_action_type,
-                "skipped": True,
-                "reason": "expired",
-            }
-        )
-        execution.actions_executed = action_results
 
     else:
         logger.warning("Unexpected task status for resume: %s", task.status)

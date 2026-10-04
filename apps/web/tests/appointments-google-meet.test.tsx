@@ -18,6 +18,7 @@ const mockUseRegenerateBookingLink = vi.fn()
 const mockUseAppointments = vi.fn()
 const mockUseAppointment = vi.fn()
 const mockUseApproveAppointment = vi.fn()
+const mockUseCompleteAppointment = vi.fn()
 const mockUseRescheduleAppointment = vi.fn()
 const mockUseRescheduleSlots = vi.fn()
 const mockUseCancelAppointment = vi.fn()
@@ -185,6 +186,11 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
     useCancelAppointment: () => ({
         mutate: mockUseCancelAppointment,
         isPending: false,
+    }),
+    useCompleteAppointment: () => ({
+        mutate: mockUseCompleteAppointment,
+        isPending: false,
+        variables: undefined,
     }),
     useRetryAppointmentGoogleSync: () => ({ mutate: vi.fn(), isPending: false }),
     useResolveAppointmentGoogleConflict: () => ({ mutate: vi.fn(), isPending: false }),
@@ -629,7 +635,7 @@ describe("Appointments Google Meet UI", () => {
                 scheduling: syncState ? {
                     revision: 1,
                     google_sync: { state: syncState, conflict: null },
-                    capabilities: { can_reschedule: true, can_cancel: true, can_retry_google_sync: true },
+                    capabilities: { can_reschedule: true, can_cancel: true, can_complete: false, can_retry_google_sync: true },
                 } : null,
                 surrogate_id: null,
                 surrogate_number: null,
@@ -659,6 +665,63 @@ describe("Appointments Google Meet UI", () => {
             expect(screen.getByRole("button", { name: "Retry Google update" })).toBeEnabled()
             expect(header.queryByRole("alert")).not.toBeInTheDocument()
         }
+    })
+
+    it.each([
+        [true, "completed"],
+        [true, "no_show"],
+        [false, null],
+    ] as const)("offers outcome buttons only when completion is allowed (%s, %s)", (canComplete, outcome) => {
+        const scheduledStart = new Date("2024-02-01T18:00:00Z").toISOString()
+        const scheduledEnd = new Date("2024-02-01T18:30:00Z").toISOString()
+        const appointment = {
+            id: "appt-outcome",
+            user_id: "u1",
+            appointment_type_id: "type1",
+            appointment_type_name: "Intro Call",
+            client_name: "Outcome Client",
+            client_email: "outcome@example.com",
+            client_phone: "555-0100",
+            client_timezone: "America/Los_Angeles",
+            client_notes: null,
+            scheduled_start: scheduledStart,
+            scheduled_end: scheduledEnd,
+            duration_minutes: 30,
+            meeting_mode: "phone",
+            status: "confirmed",
+            surrogate_id: null,
+            surrogate_number: null,
+            intended_parent_id: null,
+            intended_parent_name: null,
+            created_at: scheduledStart,
+            updated_at: scheduledStart,
+            scheduling: {
+                revision: 4,
+                google_sync: { state: null, linked: false, error_code: null, conflict: null },
+                capabilities: { can_reschedule: true, can_cancel: true, can_complete: canComplete, can_retry_google_sync: false, can_resolve_google_conflict: false },
+            },
+        }
+        mockUseAppointments.mockReturnValue({
+            data: { items: [appointment], total: 1, page: 1, per_page: 50, pages: 1 },
+            isLoading: false,
+        })
+        mockUseAppointment.mockReturnValue({ data: appointment, isLoading: false })
+
+        render(<AppointmentsList />)
+        const entry = screen.getAllByText("Outcome Client")[0]
+        assert.isDefined(entry)
+        fireEvent.click(entry)
+
+        if (!outcome) {
+            expect(screen.queryByRole("button", { name: "Completed" })).not.toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "No-show" })).not.toBeInTheDocument()
+            return
+        }
+        fireEvent.click(screen.getByRole("button", { name: outcome === "completed" ? "Completed" : "No-show" }))
+        expect(mockUseCompleteAppointment).toHaveBeenCalledWith(
+            expect.objectContaining({ appointmentId: "appt-outcome", status: outcome, expectedRevision: 4, requestId: expect.any(String) }),
+            expect.any(Object),
+        )
     })
 
     it("keeps pending appointment selection separate from approval actions", () => {

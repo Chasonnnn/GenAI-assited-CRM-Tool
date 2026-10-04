@@ -14,6 +14,27 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 MeetingModeLiteral = Literal["zoom", "google_meet", "phone", "in_person"]
 
 
+class AppointmentClientMessage(BaseModel):
+    """One client email; template_id None uses the org default template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    template_id: UUID | None = None
+
+
+class AppointmentClientMessages(BaseModel):
+    """Client emails per appointment type, keyed by AppointmentEmailType value."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_received: AppointmentClientMessage = Field(default_factory=AppointmentClientMessage)
+    confirmed: AppointmentClientMessage = Field(default_factory=AppointmentClientMessage)
+    reminder: AppointmentClientMessage = Field(default_factory=AppointmentClientMessage)
+    rescheduled: AppointmentClientMessage = Field(default_factory=AppointmentClientMessage)
+    cancelled: AppointmentClientMessage = Field(default_factory=AppointmentClientMessage)
+
+
 class AppointmentTypeCreate(BaseModel):
     """Schema for creating an appointment type."""
 
@@ -27,7 +48,8 @@ class AppointmentTypeCreate(BaseModel):
     meeting_location: str | None = Field(None, max_length=500)
     dial_in_number: str | None = Field(None, max_length=100)
     auto_approve: bool = False
-    reminder_hours_before: int = Field(24, ge=0, le=168)
+    reminder_hours_before: int = Field(24, ge=1, le=168)
+    client_messages: AppointmentClientMessages | None = None
 
 
 class AppointmentTypeUpdate(BaseModel):
@@ -43,7 +65,8 @@ class AppointmentTypeUpdate(BaseModel):
     meeting_location: str | None = Field(None, max_length=500)
     dial_in_number: str | None = Field(None, max_length=100)
     auto_approve: bool | None = None
-    reminder_hours_before: int | None = Field(None, ge=0, le=168)
+    reminder_hours_before: int | None = Field(None, ge=1, le=168)
+    client_messages: AppointmentClientMessages | None = None
     is_active: bool | None = None
 
 
@@ -67,6 +90,12 @@ class AppointmentTypeRead(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class AppointmentTypeStaffRead(AppointmentTypeRead):
+    """Appointment type for its owner; public booking pages omit client messages."""
+
+    client_messages: AppointmentClientMessages
 
 
 # =============================================================================
@@ -166,6 +195,12 @@ class AppointmentCreate(BaseModel):
     request_id: str | None = Field(None, min_length=1, max_length=255)
 
 
+class PublicBookingCreate(AppointmentCreate):
+    """Public booking; record_token links it to the record whose email carried the link."""
+
+    record_token: str | None = Field(None, max_length=2048)
+
+
 class AppointmentReschedule(BaseModel):
     """Schema for rescheduling an appointment."""
 
@@ -205,6 +240,7 @@ class AppointmentSyncResolve(AppointmentMutation):
 class AppointmentCapabilities(BaseModel):
     can_reschedule: bool
     can_cancel: bool
+    can_complete: bool
     can_retry_google_sync: bool
     can_resolve_google_conflict: bool
 

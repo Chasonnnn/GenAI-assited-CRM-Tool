@@ -256,10 +256,11 @@ def workflow_sweep(
     Daily sweep for workflow automation triggers.
 
     Called by external cron (typically daily).
-    Processes: scheduled, inactivity, task_due, task_overdue workflows.
+    Processes: scheduled, inactivity, task_due, task_overdue, appointment_time workflows.
 
     Args:
-        sweep_type: 'all', 'scheduled', 'inactivity', 'task_due', 'task_overdue'
+        sweep_type: 'all', 'scheduled', 'inactivity', 'task_due', 'task_overdue',
+            'appointment_time'
     """
     verify_internal_secret(x_internal_secret)
 

@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from app.core.security import decode_booking_record_token
 from app.db.enums import AppointmentStatus, MeetingMode, SurrogateSource
 from app.db.models import Appointment, AppointmentType, BookingLink, FormIntakeLink
 from app.schemas.surrogate import SurrogateCreate
@@ -111,7 +112,11 @@ def test_build_surrogate_template_variables_includes_appointment_link(db, test_o
     base_url = org_service.get_org_portal_base_url(test_org)
     assert variables["appointment_link"].startswith(f"{base_url}/book/")
 
-    issued_slug = variables["appointment_link"].removeprefix(f"{base_url}/book/")
+    booking_url, record_token = variables["appointment_link"].split("?record=")
+    issued_slug = booking_url.removeprefix(f"{base_url}/book/")
+    token = decode_booking_record_token(record_token)
+    assert token["org_id"] == str(test_org.id)
+    assert (token["record_type"], token["record_id"]) == ("surrogate", str(surrogate.id))
     link_row = db.query(BookingLink).filter(BookingLink.public_slug == issued_slug).first()
     assert link_row is not None
     assert link_row.user_id == test_user.id
@@ -249,7 +254,9 @@ def test_build_surrogate_template_variables_reuses_existing_appointment_link(
     variables = email_service.build_surrogate_template_variables(db, surrogate)
 
     base_url = org_service.get_org_portal_base_url(test_org)
-    assert variables["appointment_link"] == f"{base_url}/book/{existing_link.public_slug}"
+    assert variables["appointment_link"].startswith(
+        f"{base_url}/book/{existing_link.public_slug}?record="
+    )
     link_count = (
         db.query(BookingLink)
         .filter(
