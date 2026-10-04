@@ -499,9 +499,11 @@ export type WorkflowBuilderAction =
     | { type: "addCondition" }
     | { type: "removeCondition"; index: number }
     | { type: "updateCondition"; index: number; updates: Partial<Condition> }
-    | { type: "addAction"; clientId?: string; action?: Partial<ActionConfig> }
+    /** Appends unless index is given, which inserts before that position. */
+    | { type: "addAction"; clientId?: string; action?: Partial<ActionConfig>; index?: number }
     | { type: "removeAction"; index: number }
     | { type: "moveAction"; index: number; direction: -1 | 1 }
+    | { type: "reorderAction"; from: number; to: number }
     | { type: "updateAction"; index: number; updates: Partial<ActionConfig> }
 
 /** Trigger a new workflow starts on, e.g. when opened from an appointment type. */
@@ -550,6 +552,17 @@ function mergeActionConfig(action: EditableAction, updates: Partial<ActionConfig
         }
     }
     return next
+}
+
+/** Moves the action at from so it ends up at index to; out-of-range moves are no-ops. */
+function reorderActions(state: WorkflowBuilderState, from: number, to: number): WorkflowBuilderState {
+    const count = state.actions.length
+    if (from === to || from < 0 || from >= count || to < 0 || to >= count) return state
+    const actions = [...state.actions]
+    const [moved] = actions.splice(from, 1)
+    if (!moved) return state
+    actions.splice(to, 0, moved)
+    return { ...state, actions, serverErrors: [] }
 }
 
 export function workflowBuilderReducer(state: WorkflowBuilderState, action: WorkflowBuilderAction): WorkflowBuilderState {
@@ -672,34 +685,28 @@ export function workflowBuilderReducer(state: WorkflowBuilderState, action: Work
                 }),
                 serverErrors: [],
             }
-        case "addAction":
+        case "addAction": {
+            const added = mergeActionConfig(
+                { clientId: action.clientId ?? createClientRowId(), action_type: "" },
+                action.action ?? {},
+            )
+            const at = Math.min(Math.max(action.index ?? state.actions.length, 0), state.actions.length)
             return {
                 ...state,
-                actions: [
-                    ...state.actions,
-                    mergeActionConfig(
-                        { clientId: action.clientId ?? createClientRowId(), action_type: "" },
-                        action.action ?? {},
-                    ),
-                ],
+                actions: [...state.actions.slice(0, at), added, ...state.actions.slice(at)],
                 serverErrors: [],
             }
+        }
         case "removeAction":
             return {
                 ...state,
                 actions: state.actions.filter((_, index) => index !== action.index),
                 serverErrors: [],
             }
-        case "moveAction": {
-            const target = action.index + action.direction
-            if (action.index < 0 || action.index >= state.actions.length) return state
-            if (target < 0 || target >= state.actions.length) return state
-            const actions = [...state.actions]
-            const [moved] = actions.splice(action.index, 1)
-            if (!moved) return state
-            actions.splice(target, 0, moved)
-            return { ...state, actions, serverErrors: [] }
-        }
+        case "moveAction":
+            return reorderActions(state, action.index, action.index + action.direction)
+        case "reorderAction":
+            return reorderActions(state, action.from, action.to)
         case "updateAction":
             return {
                 ...state,
@@ -710,6 +717,105 @@ export function workflowBuilderReducer(state: WorkflowBuilderState, action: Work
             }
         default:
             return state
+    }
+}
+
+// =============================================================================
+// Undo history
+// =============================================================================
+
+const HISTORY_LIMIT = 100
+/** Edits to the same field within this window undo as one step, so typing is not per keystroke. */
+const HISTORY_COALESCE_MS = 1000
+
+export type WorkflowEditorHistory = {
+    past: WorkflowBuilderState[]
+    present: WorkflowBuilderState
+    future: WorkflowBuilderState[]
+    lastKey: string | null
+    lastAt: number
+}
+
+export type WorkflowHistoryAction =
+    | { type: "undo" }
+    | { type: "redo" }
+    | { type: "edit"; action: WorkflowBuilderAction; at: number }
+
+export function createWorkflowEditorHistory(present: WorkflowBuilderState): WorkflowEditorHistory {
+    return { past: [], present, future: [], lastKey: null, lastAt: 0 }
+}
+
+/** Edits that change what the user would undo; null means the edit never merges with another. */
+function historyKey(action: WorkflowBuilderAction): string | null {
+    switch (action.type) {
+        case "setWorkflowName":
+        case "setWorkflowDescription":
+        case "setTriggerConfig":
+            return action.type
+        case "updateCondition":
+        case "updateAction":
+            return `${action.type}:${action.index}`
+        default:
+            return null
+    }
+}
+
+const UNTRACKED_ACTIONS = new Set<WorkflowBuilderAction["type"]>([
+    "setValidationError",
+    "setServerErrors",
+    "normalizeTriggerConfig",
+])
+
+/** A snapshot restored by undo or redo, keeping load state and dropping stale errors. */
+function restore(snapshot: WorkflowBuilderState, present: WorkflowBuilderState): WorkflowBuilderState {
+    return { ...snapshot, hydratedWorkflowId: present.hydratedWorkflowId, validationError: null, serverErrors: [] }
+}
+
+export function workflowEditorHistoryReducer(
+    history: WorkflowEditorHistory,
+    historyAction: WorkflowHistoryAction,
+): WorkflowEditorHistory {
+    const { past, present, future } = history
+    if (historyAction.type === "undo") {
+        const previous = past.at(-1)
+        if (!previous) return history
+        return {
+            past: past.slice(0, -1),
+            present: restore(previous, present),
+            future: [present, ...future],
+            lastKey: null,
+            lastAt: 0,
+        }
+    }
+    if (historyAction.type === "redo") {
+        const next = future[0]
+        if (!next) return history
+        return {
+            past: [...past, present].slice(-HISTORY_LIMIT),
+            present: restore(next, present),
+            future: future.slice(1),
+            lastKey: null,
+            lastAt: 0,
+        }
+    }
+
+    const { action, at } = historyAction
+    const nextPresent = workflowBuilderReducer(present, action)
+    if (nextPresent === present) return history
+    // Loading or resetting the workflow starts a fresh history.
+    if (action.type === "hydrateWorkflow" || action.type === "reset") {
+        return createWorkflowEditorHistory(nextPresent)
+    }
+    if (UNTRACKED_ACTIONS.has(action.type)) return { ...history, present: nextPresent }
+
+    const key = historyKey(action)
+    const coalesce = key !== null && key === history.lastKey && at - history.lastAt < HISTORY_COALESCE_MS
+    return {
+        past: coalesce ? past : [...past, present].slice(-HISTORY_LIMIT),
+        present: nextPresent,
+        future: [],
+        lastKey: key,
+        lastAt: at,
     }
 }
 

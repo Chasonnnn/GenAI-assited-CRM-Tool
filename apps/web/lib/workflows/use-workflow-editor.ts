@@ -54,8 +54,10 @@ import {
     isDonorSubject,
     normalizeTriggerConfigForUi,
     parseServerErrors,
-    workflowBuilderReducer,
+    createWorkflowEditorHistory,
+    workflowEditorHistoryReducer,
     type StateUpdate,
+    type WorkflowBuilderAction,
     type StatusOption,
     type WorkflowEditorPreset,
 } from "@/lib/workflows/workflow-editor-state"
@@ -104,9 +106,11 @@ export function useWorkflowEditor({
     const canCreatePersonal = !policyV2 || canManageAutomation
 
     const isEditing = workflowId !== null
-    const [state, dispatch] = useReducer(workflowBuilderReducer, null, () =>
-        createInitialWorkflowBuilderState(initialScope, initialPreset),
+    const [history, dispatchHistory] = useReducer(workflowEditorHistoryReducer, null, () =>
+        createWorkflowEditorHistory(createInitialWorkflowBuilderState(initialScope, initialPreset)),
     )
+    const state = history.present
+    const dispatch = (action: WorkflowBuilderAction) => dispatchHistory({ type: "edit", action, at: Date.now() })
     const [selection, setSelection] = useState<WorkflowEditorSelection>({ kind: "trigger" })
     const {
         hydratedWorkflowId,
@@ -337,9 +341,15 @@ export function useWorkflowEditor({
         ...(isDonorSubject(actionSubjectType) && actionType === "send_message" ? { requires_approval: true } : {}),
         ...(actionType === "send_email" && triggerEntityType === "intake_lead" ? { recipients: "all_admins" } : {}),
     })
-    const addAction = (actionType = "") => {
+    /** Appends, or inserts before index when given, and selects the new step. */
+    const addAction = (actionType = "", index?: number) => {
         const clientId = createClientRowId()
-        dispatch({ type: "addAction", clientId, action: actionType ? buildNewAction(actionType) : {} })
+        dispatch({
+            type: "addAction",
+            clientId,
+            action: actionType ? buildNewAction(actionType) : {},
+            ...(index === undefined ? {} : { index }),
+        })
         setSelection({ kind: "action", clientId })
     }
     const removeAction = (index: number) => {
@@ -347,6 +357,9 @@ export function useWorkflowEditor({
         setSelection({ kind: "trigger" })
     }
     const moveAction = (index: number, direction: -1 | 1) => dispatch({ type: "moveAction", index, direction })
+    const reorderAction = (from: number, to: number) => dispatch({ type: "reorderAction", from, to })
+    const undo = () => dispatchHistory({ type: "undo" })
+    const redo = () => dispatchHistory({ type: "redo" })
     const updateAction = (index: number, updates: Partial<ActionConfig>) =>
         dispatch({ type: "updateAction", index, updates })
     const updateActionType = (index: number, actionType: string) => updateAction(index, buildNewAction(actionType))
@@ -517,9 +530,16 @@ export function useWorkflowEditor({
             addAction,
             removeAction,
             moveAction,
+            reorderAction,
             updateAction,
             updateActionType,
             saveWorkflow,
+            undo,
+            redo,
+        },
+        history: {
+            canUndo: history.past.length > 0,
+            canRedo: history.future.length > 0,
         },
     }
 }
