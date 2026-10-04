@@ -111,13 +111,18 @@ function SubmissionQueue({formId, canReview, canPromoteLead, canReviewRouting, c
     return <>
         {candidates.isError && <div role="alert" className="flex items-center gap-3"><p>Unable to load matching records.</p><Button variant="outline" onClick={() => {void candidates.refetch()}}>Retry matches</Button></div>}
         <AutomationFormSubmissionsPanel {...presentation}
+            readAnswerValue={(submission, keys) => presentation.readAnswerValue(submission, keys, submission.mapping_snapshot ?? [])}
             canReview={canReview} canPromoteLead={canPromoteLead} canReviewRouting={canReviewRouting} canEditSubject={canEditSubject} formId={formId}
             pendingSubmissionHistory={pending} processedSubmissionHistory={processed}
             routingReviewSubmissions={rows.filter(row => row.match_status === "routing_review")}
             routingReviewQueueStatus={submissions.isLoading ? "loading" : "ready"} isRoutingReviewRetrying={submissions.isFetching}
             onRetryRoutingReview={() => {void submissions.refetch()}}
             ambiguousSubmissions={rows.filter(row => row.match_status === "ambiguous_review")}
+            ambiguousQueueStatus={submissions.isLoading ? "loading" : "ready"} isAmbiguousQueueRetrying={submissions.isFetching}
+            onRetryAmbiguousQueue={() => {void submissions.refetch()}}
             leadQueueSubmissions={rows.filter(row => row.match_status === "lead_created" && !row.surrogate_id && !row.donor_id)}
+            leadQueueStatus={submissions.isLoading ? "loading" : "ready"} isLeadQueueRetrying={submissions.isFetching}
+            onRetryLeadQueue={() => {void submissions.refetch()}}
             visibleSubmissionHistory={filter === "pending" ? pending : filter === "processed" ? processed : rows}
             submissionHistoryFilter={filter} selectedQueueSubmissionId={selected}
             selectedMatchCandidates={candidates.data ?? []} isSubmissionHistoryLoading={submissions.isLoading}

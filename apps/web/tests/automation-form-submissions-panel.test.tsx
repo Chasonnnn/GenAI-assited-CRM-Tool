@@ -85,8 +85,16 @@ function makeSubmission(overrides: Partial<FormSubmissionRead>): FormSubmissionR
     }
 }
 
+async function selectHistoryAction(name: string) {
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }))
+    const item = await screen.findByRole("menuitem", { name })
+    fireEvent.mouseMove(item)
+    fireEvent.click(item)
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument())
+}
+
 describe("AutomationFormSubmissionsPanel", () => {
-    it("preserves queue, history, and candidate review actions after section splits", () => {
+    it("preserves queue, history, and candidate review actions through disclosures and menus", async () => {
         const ambiguousSubmission = makeSubmission({
             id: "sub-ambiguous",
         })
@@ -134,6 +142,12 @@ describe("AutomationFormSubmissionsPanel", () => {
                 processedSubmissionHistory={[historySubmission]}
                 routingReviewSubmissions={[]}
                 routingReviewQueueStatus="ready"
+                ambiguousQueueStatus="ready"
+                isAmbiguousQueueRetrying={false}
+                onRetryAmbiguousQueue={vi.fn()}
+                leadQueueStatus="ready"
+                isLeadQueueRetrying={false}
+                onRetryLeadQueue={vi.fn()}
                 isRoutingReviewRetrying={false}
                 onRetryRoutingReview={vi.fn()}
                 ambiguousSubmissions={[ambiguousSubmission]}
@@ -192,12 +206,19 @@ describe("AutomationFormSubmissionsPanel", () => {
         fireEvent.click(screen.getByRole("button", { name: "Processed" }))
         expect(onSubmissionHistoryFilterChange).toHaveBeenCalledWith("processed")
 
+        expect(screen.getByRole("link", { name: "Open record for History Applicant" })).toHaveAttribute("href", "/surrogates/sur-1")
+        expect(screen.queryByText("sur-1")).not.toBeInTheDocument()
+        expect(screen.queryByRole("menuitem", { name: "Unlink" })).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Matching details" }))
+        expect(screen.getByText("sur-1", { exact: false })).toBeInTheDocument()
+        expect(screen.getByText("lead-2", { exact: false })).toBeInTheDocument()
+
         const reviewCandidatesButton = screen.getAllByRole("button", { name: "Review Candidates" })[0]
         assert.isDefined(reviewCandidatesButton)
         fireEvent.click(reviewCandidatesButton)
         expect(onSelectQueueSubmission).toHaveBeenCalledWith("sub-history")
 
-        fireEvent.click(screen.getByRole("button", { name: "Re-run Auto-Match" }))
+        await selectHistoryAction("Re-run Auto-Match")
         expect(onRetrySubmissionMatch).toHaveBeenCalledWith(
             historySubmission,
             {
@@ -207,7 +228,7 @@ describe("AutomationFormSubmissionsPanel", () => {
             "Auto-match re-run complete",
         )
 
-        fireEvent.click(screen.getByRole("button", { name: "Unlink" }))
+        await selectHistoryAction("Unlink")
         expect(onRetrySubmissionMatch).toHaveBeenCalledWith(
             historySubmission,
             {
@@ -217,7 +238,7 @@ describe("AutomationFormSubmissionsPanel", () => {
             "Submission unlinked. Select the correct surrogate.",
         )
 
-        fireEvent.click(screen.getByRole("button", { name: "Undo Lead + Reprocess" }))
+        await selectHistoryAction("Undo Lead + Reprocess")
         expect(onRetrySubmissionMatch).toHaveBeenCalledWith(
             historySubmission,
             {
@@ -237,7 +258,7 @@ describe("AutomationFormSubmissionsPanel", () => {
         expect(onResolveSubmissionToSurrogate).toHaveBeenCalledWith("sub-ambiguous", "sur-candidate")
     })
 
-    it("routes donor review and retry actions through intake-lead behavior", () => {
+    it("routes donor review and retry actions through intake-lead behavior", async () => {
         const donorSubmission = makeSubmission({
             id: "sub-donor-review",
             lead_kind: "sperm_donor",
@@ -253,6 +274,12 @@ describe("AutomationFormSubmissionsPanel", () => {
                 processedSubmissionHistory={[]}
                 routingReviewSubmissions={[]}
                 routingReviewQueueStatus="ready"
+                ambiguousQueueStatus="ready"
+                isAmbiguousQueueRetrying={false}
+                onRetryAmbiguousQueue={vi.fn()}
+                leadQueueStatus="ready"
+                isLeadQueueRetrying={false}
+                onRetryLeadQueue={vi.fn()}
                 isRoutingReviewRetrying={false}
                 onRetryRoutingReview={vi.fn()}
                 ambiguousSubmissions={[donorSubmission]}
@@ -293,7 +320,7 @@ describe("AutomationFormSubmissionsPanel", () => {
         fireEvent.click(screen.getByRole("button", { name: "Create Intake Lead" }))
         expect(onResolveSubmissionToLead).toHaveBeenCalledWith("sub-donor-review")
 
-        fireEvent.click(screen.getByRole("button", { name: "Reprocess" }))
+        await selectHistoryAction("Reprocess")
         expect(onRetrySubmissionMatch).toHaveBeenCalledWith(
             donorSubmission,
             {
@@ -354,6 +381,12 @@ describe("AutomationFormSubmissionsPanel", () => {
                 processedSubmissionHistory={[donorSubmission]}
                 routingReviewSubmissions={[]}
                 routingReviewQueueStatus="ready"
+                ambiguousQueueStatus="ready"
+                isAmbiguousQueueRetrying={false}
+                onRetryAmbiguousQueue={vi.fn()}
+                leadQueueStatus="ready"
+                isLeadQueueRetrying={false}
+                onRetryLeadQueue={vi.fn()}
                 isRoutingReviewRetrying={false}
                 onRetryRoutingReview={vi.fn()}
                 ambiguousSubmissions={[]}
@@ -394,11 +427,13 @@ describe("AutomationFormSubmissionsPanel", () => {
         expect(screen.getByText("Egg Donor")).toBeInTheDocument()
         expect(screen.getByText("Bachelor's degree")).toBeInTheDocument()
         expect(screen.getByText("New York")).toBeInTheDocument()
-        expect(screen.getByRole("link", { name: "Open donor D10001" })).toHaveAttribute(
+        expect(screen.getByRole("link", { name: "Open record for donor D10001" })).toHaveAttribute(
             "href",
             "/donors/donor-1",
         )
-        expect(screen.getByText("D10001")).toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Open record for donor D10001" })).toHaveTextContent("Open record")
+        fireEvent.click(screen.getByRole("button", { name: "Matching details" }))
+        expect(screen.getByText("D10001", { exact: false })).toBeInTheDocument()
         expect(await screen.findByRole("img", { name: "Egg donor profile photo" })).toHaveAttribute(
             "src",
             "https://files.example.test/profile.jpg",
@@ -426,6 +461,12 @@ describe("AutomationFormSubmissionsPanel", () => {
                 processedSubmissionHistory={[donorSubmission]}
                 routingReviewSubmissions={[]}
                 routingReviewQueueStatus="ready"
+                ambiguousQueueStatus="ready"
+                isAmbiguousQueueRetrying={false}
+                onRetryAmbiguousQueue={vi.fn()}
+                leadQueueStatus="ready"
+                isLeadQueueRetrying={false}
+                onRetryLeadQueue={vi.fn()}
                 isRoutingReviewRetrying={false}
                 onRetryRoutingReview={vi.fn()}
                 ambiguousSubmissions={[]}
@@ -479,6 +520,12 @@ function panelElement(props: Partial<PanelProps>) {
             processedSubmissionHistory={[]}
             routingReviewSubmissions={[]}
             routingReviewQueueStatus="ready"
+            ambiguousQueueStatus="ready"
+            isAmbiguousQueueRetrying={false}
+            onRetryAmbiguousQueue={vi.fn()}
+            leadQueueStatus="ready"
+            isLeadQueueRetrying={false}
+            onRetryLeadQueue={vi.fn()}
             isRoutingReviewRetrying={false}
             onRetryRoutingReview={vi.fn()}
             ambiguousSubmissions={[]}
@@ -676,8 +723,9 @@ describe("AutomationFormSubmissionsPanel donor review", () => {
 
         renderPanel({ visibleSubmissionHistory: [linked, held], canEditSubject: () => true })
 
-        expect(screen.getByText("Linked by reviewer")).toBeInTheDocument()
-        expect(screen.getByText("Profile photo needs review")).toBeInTheDocument()
+        for (const details of screen.getAllByRole("button", { name: "Matching details" })) fireEvent.click(details)
+        expect(screen.getByText("Linked by reviewer", { exact: false })).toBeInTheDocument()
+        expect(screen.getByText("Profile photo needs review", { exact: false })).toBeInTheDocument()
         expect(screen.getAllByRole("button", { name: "Link to Donor" })).toHaveLength(1)
 
         fireEvent.click(screen.getByRole("button", { name: "Approve" }))
@@ -758,8 +806,10 @@ describe("AutomationFormSubmissionsPanel donor review", () => {
             leadQueueSubmissions: [rejectedLead],
         })
 
-        expect(screen.getByText("No ambiguous submissions.")).toBeInTheDocument()
-        expect(screen.getByText("No pending lead submissions.")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: /^Ambiguous Match Queue/ }))
+        fireEvent.click(screen.getByRole("button", { name: /^Lead Promotion Queue/ }))
+        expect(screen.getByText("No ambiguous submissions.")).toBeVisible()
+        expect(screen.getByText("No pending lead submissions.")).toBeVisible()
         expect(screen.queryByRole("button", { name: "Create Intake Lead" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Promote to Egg Donor" })).not.toBeInTheDocument()
     })
@@ -815,7 +865,8 @@ describe("AutomationFormSubmissionsPanel routing review", () => {
         renderPanel({ routingReviewSubmissions: [matchStep, leadStep] })
 
         expect(screen.getByText("Routing Review", { selector: "h3" })).toBeInTheDocument()
-        expect(screen.getByText("Routing Review", { selector: "p" }).nextElementSibling).toHaveTextContent("2")
+        expect(screen.getAllByText("Routing Review")).toHaveLength(1)
+        expect(within(screen.getByRole("region", { name: "Routing Review" })).getByText("2")).toBeInTheDocument()
         const [matchRow, leadRow] = routingRows()
         assert.isDefined(matchRow)
         assert.isDefined(leadRow)
@@ -896,45 +947,25 @@ describe("AutomationFormSubmissionsPanel routing review", () => {
         expect(screen.getByRole("button", { name: "Dismiss routing review for Ashley Brooks" })).toBeEnabled()
     })
 
-    it("shows an empty queue and hides it from viewers who cannot review", () => {
-        const { unmount } = renderPanel({ routingReviewSubmissions: [] })
-        expect(screen.getByText("No submissions waiting for routing review.")).toBeInTheDocument()
-        expect(screen.queryByText("Workflow approvals for submission routing and lead creation")).not.toBeInTheDocument()
+    it("collapses ready empty queues while keeping their details available, and hides review queues from viewers", () => {
+        const { unmount } = renderPanel({})
+        for (const [title, message] of [
+            ["Routing Review", "No submissions waiting for routing review."],
+            ["Ambiguous Match Queue", "No ambiguous submissions."],
+            ["Lead Promotion Queue", "No pending lead submissions."],
+        ]) {
+            const trigger = screen.getByRole("button", { name: new RegExp(`^${title}`) })
+            expect(trigger).toHaveAttribute("aria-expanded", "false")
+            expect(screen.queryByText(message!)).not.toBeInTheDocument()
+            fireEvent.click(trigger)
+            expect(trigger).toHaveAttribute("aria-expanded", "true")
+            expect(screen.getByText(message!)).toBeVisible()
+        }
         unmount()
 
         renderPanel({ routingReviewSubmissions: [matchStep], canReview: false })
+        expect(screen.queryByText("Routing Review")).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Run match for Maria Delgado" })).not.toBeInTheDocument()
-        expect(screen.getByText("Routing Review", { selector: "p" }).nextElementSibling).toHaveTextContent("1")
     })
 
-    it("shows loading instead of an empty queue while the queue loads", () => {
-        renderPanel({ routingReviewSubmissions: [], routingReviewQueueStatus: "loading" })
-
-        expect(screen.getByRole("status")).toHaveTextContent("Loading routing review…")
-        expect(screen.queryByText("No submissions waiting for routing review.")).not.toBeInTheDocument()
-        expect(screen.getByText("Routing Review", { selector: "p" }).nextElementSibling).toHaveTextContent("—")
-    })
-
-    it("shows a retryable error instead of an empty queue when the queue fails to load", () => {
-        const onRetryRoutingReview = vi.fn()
-        const { rerender } = renderPanel({
-            routingReviewSubmissions: [],
-            routingReviewQueueStatus: "error",
-            onRetryRoutingReview,
-        })
-
-        expect(screen.getByRole("alert")).toHaveTextContent("Unable to load routing review.")
-        expect(screen.queryByText("No submissions waiting for routing review.")).not.toBeInTheDocument()
-        expect(screen.getByText("Routing Review", { selector: "p" }).nextElementSibling).toHaveTextContent("—")
-        fireEvent.click(within(screen.getByRole("alert")).getByRole("button", { name: "Retry" }))
-        expect(onRetryRoutingReview).toHaveBeenCalledTimes(1)
-
-        rerender(panelElement({
-            routingReviewSubmissions: [],
-            routingReviewQueueStatus: "error",
-            isRoutingReviewRetrying: true,
-            onRetryRoutingReview,
-        }))
-        expect(within(screen.getByRole("alert")).getByRole("button", { name: "Retry" })).toBeDisabled()
-    })
 })

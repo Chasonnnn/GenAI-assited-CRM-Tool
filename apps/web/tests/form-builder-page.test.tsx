@@ -505,11 +505,11 @@ describe("FormBuilderPage", () => {
             files: [],
         }
 
-        // Serves `result` for the routing review queue and empty results for every other list.
-        const mockRoutingReviewQueue = (result: Record<string, unknown>) => {
+        // Serves `result` for the requested queue and empty results for every other list.
+        const mockRoutingReviewQueue = (result: Record<string, unknown>, matchStatus: ListFormSubmissionsParams["match_status"] = "routing_review") => {
             mockFormSubmissions.mockImplementation(
                 (_formId: string | null, params: ListFormSubmissionsParams = {}) =>
-                    params.match_status === "routing_review"
+                    params.match_status === matchStatus
                         ? { refetch: vi.fn(), isLoading: false, ...result }
                         : { data: [], refetch: vi.fn(), isLoading: false },
             )
@@ -559,31 +559,41 @@ describe("FormBuilderPage", () => {
             expect(screen.getByRole("button", { name: "Dismiss routing review for Maria Delgado" })).toBeEnabled()
         })
 
-        it("shows the routing review queue loading, then a retryable error, then the recovered rows", async () => {
+        it.each([
+            { title: "Routing Review", subject: "routing review", matchStatus: "routing_review", action: "Run match for Maria Delgado" },
+            { title: "Ambiguous Match Queue", subject: "ambiguous submissions", matchStatus: "ambiguous_review", action: "Review Candidates" },
+            { title: "Lead Promotion Queue", subject: "lead submissions", matchStatus: "lead_created", action: "Promote Lead" },
+        ] as const)("shows $title loading, retryable failure, and recovered rows without a false empty count", async (queue) => {
             navigationState.formId = "form-1"
             mockUseForm.mockReturnValue({ data: buildForm(), isLoading: false })
-            mockRoutingReviewQueue({ data: undefined, isLoading: true })
+            mockRoutingReviewQueue({ data: undefined, isLoading: true }, queue.matchStatus)
             const view = render(<FormBuilderPage />)
             await openSubmissionsTab()
 
-            expect(screen.getByText("Loading routing review…")).toBeInTheDocument()
-            expect(screen.queryByText("No submissions waiting for routing review.")).not.toBeInTheDocument()
+            const region = () => within(screen.getByRole("region", { name: queue.title }))
+            expect(region().getByRole("status")).toHaveTextContent(`Loading ${queue.subject}…`)
+            expect(region().queryByText("0")).not.toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: new RegExp(`^${queue.title}`) })).not.toBeInTheDocument()
 
             const refetch = vi.fn()
-            mockRoutingReviewQueue({ data: undefined, isError: true, refetch })
+            mockRoutingReviewQueue({ data: undefined, isError: true, refetch }, queue.matchStatus)
             view.rerender(<FormBuilderPage />)
 
-            const alert = screen.getByRole("alert")
-            expect(alert).toHaveTextContent("Unable to load routing review.")
-            expect(screen.queryByText("No submissions waiting for routing review.")).not.toBeInTheDocument()
-            fireEvent.click(within(alert).getByRole("button", { name: "Retry" }))
+            expect(region().getByRole("alert")).toHaveTextContent(`Unable to load ${queue.subject}.`)
+            expect(region().queryByText("0")).not.toBeInTheDocument()
+            fireEvent.click(region().getByRole("button", { name: "Retry" }))
             expect(refetch).toHaveBeenCalledTimes(1)
 
-            mockRoutingReviewQueue({ data: [routingReviewSubmission] })
+            mockRoutingReviewQueue({ data: undefined, isError: true, isFetching: true, refetch }, queue.matchStatus)
+            view.rerender(<FormBuilderPage />)
+            expect(region().getByRole("button", { name: "Retry" })).toBeDisabled()
+
+            mockRoutingReviewQueue({ data: [{ ...routingReviewSubmission, match_status: queue.matchStatus, intake_lead_id: "lead-1" }] }, queue.matchStatus)
             view.rerender(<FormBuilderPage />)
 
-            expect(screen.queryByText("Unable to load routing review.")).not.toBeInTheDocument()
-            expect(screen.getByRole("button", { name: "Run match for Maria Delgado" })).toBeInTheDocument()
+            expect(region().queryByRole("alert")).not.toBeInTheDocument()
+            expect(region().getByText("1")).toBeInTheDocument()
+            expect(region().getByRole("button", { name: queue.action })).toBeInTheDocument()
         })
 
         it("shows the empty routing review queue only after a successful empty load", async () => {
@@ -593,7 +603,11 @@ describe("FormBuilderPage", () => {
             render(<FormBuilderPage />)
             await openSubmissionsTab()
 
-            expect(screen.getByText("No submissions waiting for routing review.")).toBeInTheDocument()
+            const trigger = screen.getByRole("button", { name: /^Routing Review/ })
+            expect(trigger).toHaveAttribute("aria-expanded", "false")
+            expect(screen.queryByText("No submissions waiting for routing review.")).not.toBeInTheDocument()
+            fireEvent.click(trigger)
+            expect(screen.getByText("No submissions waiting for routing review.")).toBeVisible()
             expect(screen.queryByText("Loading routing review…")).not.toBeInTheDocument()
         })
     })
@@ -1104,7 +1118,7 @@ describe("FormBuilderPage", () => {
         expect(screen.getByText("+16075550181")).toBeInTheDocument()
         expect(screen.getByText("NY")).toBeInTheDocument()
         expect(screen.getByText("MS in Biochemistry")).toBeInTheDocument()
-        expect(screen.getByRole("link", { name: "Open donor D10001" })).toHaveAttribute(
+        expect(screen.getByRole("link", { name: "Open record for donor D10001" })).toHaveAttribute(
             "href",
             "/donors/donor-1",
         )
