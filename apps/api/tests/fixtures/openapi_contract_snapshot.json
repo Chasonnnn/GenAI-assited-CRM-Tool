@@ -3612,6 +3612,15 @@
       "422"
     ]
   },
+  "/settings/organization/logo": {
+    "DELETE": [
+      "204"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/settings/organization/signature": {
     "GET": [
       "200"

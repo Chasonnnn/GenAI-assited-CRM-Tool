@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from app.core.config import settings
 from app.services import attachment_service, org_logo_service, storage_url_service
 
@@ -21,6 +23,11 @@ async def process_storage_delete(db, job) -> None:
     for storage_key in storage_keys:
         if not isinstance(storage_key, str) or not storage_key.startswith(allowed_prefixes):
             raise ValueError("Storage key is outside the job organization")
+        if (
+            storage_key.startswith(f"logos/{org_id}/")
+            and os.path.normpath(storage_key) != storage_key
+        ):
+            raise ValueError("Invalid logo storage key")
 
     for storage_key in storage_keys:
         if storage_key.startswith(f"logos/{org_id}/"):

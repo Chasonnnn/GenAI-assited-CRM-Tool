@@ -4,7 +4,6 @@ import io
 import logging
 import os
 import tempfile
-import warnings
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, Request
@@ -19,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 MAX_LOGO_SIZE_BYTES = 50 * 1024
 MAX_LOGO_UPLOAD_BYTES = 1024 * 1024
+MAX_LOGO_PIXELS = 4096 * 4096
 LOCAL_LOGO_URL_PREFIX = "/settings/organization/signature/logo/local/"
 ALLOWED_SQUARE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
@@ -68,7 +68,10 @@ def delete_logo_from_storage(logo_url: str) -> None:
 
     storage_key = extract_local_logo_storage_key(logo_url)
     if storage_key:
-        local_path = os.path.join(get_local_logo_path(), storage_key)
+        base = os.path.realpath(get_local_logo_path())
+        local_path = os.path.realpath(os.path.join(base, storage_key))
+        if os.path.commonpath([local_path, base]) != base:
+            raise ValueError("Invalid local logo storage path")
         try:
             os.remove(local_path)
         except FileNotFoundError:
@@ -93,46 +96,52 @@ def process_square_logo(content: bytes, filename: str | None) -> tuple[bytes, st
         raise ValueError("File too large (max 1MB)")
 
     try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(io.BytesIO(content)) as source:
-                if source.format not in {"PNG", "JPEG", "WEBP"}:
-                    raise ValueError("Invalid image file. Allowed: PNG, JPG, WebP")
-                if min(source.size) < 64:
-                    raise ValueError("Image must be at least 64x64 pixels")
-                image = ImageOps.exif_transpose(source)
-                mode = (
-                    "RGBA"
-                    if image.has_transparency_data and extension not in {"jpg", "jpeg"}
-                    else "RGB"
-                )
-                image = ImageOps.fit(
-                    image.convert(mode), (256, 256), method=Image.Resampling.LANCZOS
-                )
-                # The stored image contains only pixels, without uploaded metadata.
-                image.info.clear()
-                output = io.BytesIO()
-                if extension == "png":
-                    image.save(output, format="PNG", optimize=True)
-                else:
-                    format = "WEBP" if extension == "webp" else "JPEG"
-                    extension = "webp" if format == "WEBP" else "jpg"
-                    for quality in range(85, 29, -10):
-                        output.seek(0)
-                        output.truncate()
-                        image.save(output, format=format, quality=quality, optimize=True)
-                        if output.tell() <= MAX_LOGO_SIZE_BYTES:
-                            break
-                if output.tell() > MAX_LOGO_SIZE_BYTES:
-                    raise ValueError("Image too complex to compress under 50KB")
-                return output.getvalue(), extension
-    except (
-        UnidentifiedImageError,
-        OSError,
-        SyntaxError,
-        Image.DecompressionBombError,
-        Image.DecompressionBombWarning,
-    ) as exc:
+        with Image.open(io.BytesIO(content)) as source:
+            if source.width * source.height > MAX_LOGO_PIXELS:
+                raise ValueError(f"Image exceeds the maximum of {MAX_LOGO_PIXELS} pixels")
+            if source.format not in {"PNG", "JPEG", "MPO", "WEBP"}:
+                raise ValueError("Invalid image file. Allowed: PNG, JPG, WebP")
+            if min(source.size) < 64:
+                raise ValueError("Image must be at least 64x64 pixels")
+            # JPEG/MPO opens on the first frame; reduce its decode before loading pixels.
+            if source.format in {"JPEG", "MPO"}:
+                source.draft(None, (256, 256))
+            ImageOps.exif_transpose(source, in_place=True)
+            mode = (
+                "RGBA"
+                if source.has_transparency_data and extension not in {"jpg", "jpeg"}
+                else "RGB"
+            )
+            side = min(source.size)
+            left = (source.width - side) // 2
+            top = (source.height - side) // 2
+            image = source.crop((left, top, left + side, top + side))
+
+        # Release the decoded source before resizing. Palette images need conversion
+        # first because Pillow otherwise forces nearest-neighbor resampling.
+        if image.mode in {"P", "1"}:
+            image = image.convert(mode)
+        image = image.resize((256, 256), Image.Resampling.LANCZOS)
+        if image.mode != mode:
+            image = image.convert(mode)
+        # The stored image contains only pixels, without uploaded metadata.
+        image.info.clear()
+        output = io.BytesIO()
+        if extension == "png":
+            image.save(output, format="PNG", optimize=True)
+        else:
+            format = "WEBP" if extension == "webp" else "JPEG"
+            extension = "webp" if format == "WEBP" else "jpg"
+            for quality in range(85, 29, -10):
+                output.seek(0)
+                output.truncate()
+                image.save(output, format=format, quality=quality, optimize=True)
+                if output.tell() <= MAX_LOGO_SIZE_BYTES:
+                    break
+        if output.tell() > MAX_LOGO_SIZE_BYTES:
+            raise ValueError("Image too complex to compress under 50KB")
+        return output.getvalue(), extension
+    except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombError) as exc:
         raise ValueError("Invalid image file") from exc
 
 
