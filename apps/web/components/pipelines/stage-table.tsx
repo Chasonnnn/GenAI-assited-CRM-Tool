@@ -257,7 +257,10 @@ function StageRow({
                         aria-label={`Stage ${index + 1} slug`}
                         aria-invalid={errors?.slug ? true : undefined}
                         aria-describedby={errors?.slug ? slugErrorId : undefined}
-                        className={cn(INLINE_INPUT_CLASS, "text-muted-foreground focus-visible:text-foreground font-mono md:text-xs")}
+                        className={cn(
+                            INLINE_INPUT_CLASS,
+                            "text-muted-foreground focus-visible:text-foreground text-ellipsis font-mono md:text-xs",
+                        )}
                     />
                 )}
                 <StageFieldError id={slugErrorId} message={errors?.slug} />
