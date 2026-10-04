@@ -16,9 +16,9 @@ from app.services import donor_service
 from tests.test_tasks_match_scope import _create_surrogate
 
 
-def _load_migration():
-    path = Path(__file__).parents[1] / "alembic/versions/20261003_1700_medical_records.py"
-    spec = importlib.util.spec_from_file_location("medical_records_migration", path)
+def _load_migration(filename: str = "20261003_1700_medical_records.py"):
+    path = Path(__file__).parents[1] / "alembic/versions" / filename
+    spec = importlib.util.spec_from_file_location(path.stem, path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     return migration
@@ -26,6 +26,7 @@ def _load_migration():
 
 def test_medical_records_migration_imports_flat_sections(db, test_org, test_user, default_stage):
     migration = _load_migration()
+    drop = _load_migration("20261004_1000_drop_flat_medical_columns.py")
     surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     empty_surrogate = _create_surrogate(db, test_org.id, test_user.id, default_stage)
     donor = donor_service.create_donor(
@@ -36,6 +37,8 @@ def test_medical_records_migration_imports_flat_sections(db, test_org, test_user
         emit_workflow_events=False,
     )
     connection = db.connection()
+    with Operations.context(MigrationContext.configure(connection)):
+        drop.downgrade()
     connection.execute(
         text(
             "UPDATE surrogates SET clinic_name = 'Cedar Ridge Fertility', clinic_city = 'San Diego', "
@@ -66,6 +69,7 @@ def test_medical_records_migration_imports_flat_sections(db, test_org, test_user
         migration.downgrade()
         assert "medical_records" not in inspect(connection).get_table_names()
         migration.upgrade()
+        drop.upgrade()
 
     db.expire_all()
     records = db.scalars(
