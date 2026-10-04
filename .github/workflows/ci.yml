@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        group: [parallel-1, parallel-2, serial]
+        group: [parallel-1, parallel-2, parallel-3, serial]
     
     services:
       postgres:
@@ -128,7 +128,7 @@ jobs:
               and path.name != "test_email_delivery_outbox.py"
           )
           shard = int(os.environ["TEST_GROUP"].rsplit("-", 1)[1]) - 1
-          print("\n".join(files[shard::2]))
+          print("\n".join(files[shard::3]))
           PYTHON
           mapfile -t test_files < /tmp/backend-test-files
           test "${#test_files[@]}" -gt 0
@@ -364,12 +364,12 @@ jobs:
         run: pnpm run build
 
   frontend-test-shards:
-    name: Frontend Test Shard ${{ matrix.shard }}/2
+    name: Frontend Test Shard ${{ matrix.shard }}/4
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: true
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
 
     steps:
       - uses: actions/checkout@v6
@@ -392,9 +392,9 @@ jobs:
 
       - name: Run test shard
         working-directory: apps/web
-        # The aggregate job enforces coverage floors after merging both shards.
+        # Coverage floors apply to the combined reports, never an individual shard.
         run: |
-          pnpm test --shard=${{ matrix.shard }}/2 --coverage --reporter=default --reporter=blob \
+          pnpm test --shard=${{ matrix.shard }}/4 --coverage --reporter=default --reporter=blob \
             --coverage.thresholds.lines=0 --coverage.thresholds.statements=0 \
             --coverage.thresholds.branches=0 --coverage.thresholds.functions=0
 
@@ -406,20 +406,11 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
-  frontend-tests:
-    name: Frontend Tests
-    if: always()
-    needs: [frontend-build, frontend-test-shards]
+  frontend-coverage:
+    name: Frontend Coverage
+    needs: frontend-test-shards
     runs-on: ubuntu-26.04
     steps:
-      - name: Verify frontend gates
-        env:
-          BUILD_RESULT: ${{ needs.frontend-build.result }}
-          TEST_RESULT: ${{ needs.frontend-test-shards.result }}
-        run: |
-          test "$BUILD_RESULT" = success
-          test "$TEST_RESULT" = success
-
       - uses: actions/checkout@v6
 
       - name: Set up Node
@@ -455,6 +446,20 @@ jobs:
           name: frontend-coverage
           path: apps/web/coverage/coverage-summary.json
           if-no-files-found: error
+
+  frontend-tests:
+    name: Frontend Tests
+    if: always()
+    needs: [frontend-build, frontend-coverage]
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Verify frontend gates
+        env:
+          BUILD_RESULT: ${{ needs.frontend-build.result }}
+          COVERAGE_RESULT: ${{ needs.frontend-coverage.result }}
+        run: |
+          test "$BUILD_RESULT" = success
+          test "$COVERAGE_RESULT" = success
 
   lint:
     name: Lint

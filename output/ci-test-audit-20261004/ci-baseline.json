@@ -1,0 +1,334 @@
+{
+  "runs": [
+    {
+      "run_id": 37174608098,
+      "head_sha": "5ad28d2fdc27f7c311203f99bc06b49bfb8bfe07",
+      "url": "https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37174608098",
+      "job_creation_to_last_completion_seconds": 369.0,
+      "jobs": [
+        {
+          "name": "Backend FastAPI Gates",
+          "conclusion": "success",
+          "seconds": 51.0,
+          "work_steps_seconds": {
+            "Install dependencies": 2.0
+          }
+        },
+        {
+          "name": "Security Scans",
+          "conclusion": "success",
+          "seconds": 165.0,
+          "work_steps_seconds": {
+            "Install Python dependencies": 2.0,
+            "Install frontend dependencies": 15.0
+          }
+        },
+        {
+          "name": "Backend Tests (parallel-1)",
+          "conclusion": "success",
+          "seconds": 205.0,
+          "work_steps_seconds": {
+            "Install dependencies": 2.0,
+            "Run parallel-safe tests": 155.0,
+            "Run shared-database tests serially": 0.0,
+            "Upload backend coverage data": 1.0
+          }
+        },
+        {
+          "name": "Frontend Test Shard 1/2",
+          "conclusion": "success",
+          "seconds": 325.0,
+          "work_steps_seconds": {
+            "Install dependencies": 18.0,
+            "Run test shard": 293.0,
+            "Upload test and coverage shard": 2.0
+          }
+        },
+        {
+          "name": "Lint",
+          "conclusion": "success",
+          "seconds": 173.0,
+          "work_steps_seconds": {}
+        },
+        {
+          "name": "Backend Tests (serial)",
+          "conclusion": "success",
+          "seconds": 123.0,
+          "work_steps_seconds": {
+            "Install dependencies": 2.0,
+            "Run parallel-safe tests": 0.0,
+            "Run shared-database tests serially": 76.0,
+            "Upload backend coverage data": 1.0
+          }
+        },
+        {
+          "name": "Terraform Format",
+          "conclusion": "success",
+          "seconds": 7.0,
+          "work_steps_seconds": {}
+        },
+        {
+          "name": "Frontend Build",
+          "conclusion": "success",
+          "seconds": 240.0,
+          "work_steps_seconds": {
+            "Install dependencies": 14.0,
+            "Restore Next.js incremental build cache": 15.0,
+            "Run build": 165.0
+          }
+        },
+        {
+          "name": "Frontend Test Shard 2/2",
+          "conclusion": "success",
+          "seconds": 273.0,
+          "work_steps_seconds": {
+            "Install dependencies": 15.0,
+            "Run test shard": 245.0,
+            "Upload test and coverage shard": 2.0
+          }
+        },
+        {
+          "name": "Production Artifact / web",
+          "conclusion": "success",
+          "seconds": 208.0,
+          "work_steps_seconds": {
+            "Build web image": 201.0
+          }
+        },
+        {
+          "name": "Production Artifact / api",
+          "conclusion": "success",
+          "seconds": 80.0,
+          "work_steps_seconds": {
+            "Build api image": 73.0
+          }
+        },
+        {
+          "name": "Backend Tests (parallel-2)",
+          "conclusion": "success",
+          "seconds": 277.0,
+          "work_steps_seconds": {
+            "Install dependencies": 2.0,
+            "Run parallel-safe tests": 223.0,
+            "Run shared-database tests serially": 0.0,
+            "Upload backend coverage data": 1.0
+          }
+        },
+        {
+          "name": "Production Artifact / worker",
+          "conclusion": "success",
+          "seconds": 47.0,
+          "work_steps_seconds": {
+            "Build worker image": 42.0
+          }
+        },
+        {
+          "name": "Ticketing Launch Gate",
+          "conclusion": "success",
+          "seconds": 77.0,
+          "work_steps_seconds": {
+            "Install dependencies": 2.0,
+            "Run ticketing launch gate tests": 24.0
+          }
+        },
+        {
+          "name": "Production Artifacts",
+          "conclusion": "success",
+          "seconds": 2.0,
+          "work_steps_seconds": {
+            "Verify production image builds": 0.0
+          }
+        },
+        {
+          "name": "Backend Tests",
+          "conclusion": "success",
+          "seconds": 58.0,
+          "work_steps_seconds": {
+            "Install dependencies": 3.0,
+            "Download backend coverage data": 1.0,
+            "Combine coverage and enforce floors": 33.0,
+            "Upload backend coverage report": 2.0,
+            "Report changed-line coverage (non-blocking)": 1.0
+          }
+        },
+        {
+          "name": "Frontend Tests",
+          "conclusion": "success",
+          "seconds": 37.0,
+          "work_steps_seconds": {
+            "Install dependencies": 15.0,
+            "Download test and coverage shards": 2.0,
+            "Merge reports and enforce frontend coverage floors": 4.0,
+            "Upload frontend coverage report": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "run_id": 37174910646,
+      "head_sha": "f6e26a430d092ea009e03aae377e7a4ff7381620",
+      "url": "https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37174910646",
+      "job_creation_to_last_completion_seconds": 422.0,
+      "jobs": [
+        {
+          "name": "Frontend Build",
+          "conclusion": "success",
+          "seconds": 145.0,
+          "work_steps_seconds": {
+            "Install dependencies": 14.0,
+            "Restore Next.js incremental build cache": 15.0,
+            "Run build": 78.0
+          }
+        },
+        {
+          "name": "Frontend Test Shard 1/2",
+          "conclusion": "success",
+          "seconds": 223.0,
+          "work_steps_seconds": {
+            "Install dependencies": 12.0,
+            "Run test shard": 197.0,
+            "Upload test and coverage shard": 1.0
+          }
+        },
+        {
+          "name": "Ticketing Launch Gate",
+          "conclusion": "success",
+          "seconds": 69.0,
+          "work_steps_seconds": {
+            "Install dependencies": 2.0,
+            "Run ticketing launch gate tests": 22.0
+          }
+        },
+        {
+          "name": "Security Scans",
+          "conclusion": "success",
+          "seconds": 159.0,
+          "work_steps_seconds": {
+            "Install Python dependencies": 3.0,
+            "Install frontend dependencies": 14.0
+          }
+        },
+        {
+          "name": "Lint",
+          "conclusion": "success",
+          "seconds": 108.0,
+          "work_steps_seconds": {}
+        },
+        {
+          "name": "Backend FastAPI Gates",
+          "conclusion": "success",
+          "seconds": 49.0,
+          "work_steps_seconds": {
+            "Install dependencies": 3.0
+          }
+        },
+        {
+          "name": "Production Artifact / worker",
+          "conclusion": "success",
+          "seconds": 46.0,
+          "work_steps_seconds": {
+            "Build worker image": 41.0
+          }
+        },
+        {
+          "name": "Production Artifact / api",
+          "conclusion": "success",
+          "seconds": 90.0,
+          "work_steps_seconds": {
+            "Build api image": 86.0
+          }
+        },
+        {
+          "name": "Backend Tests (parallel-1)",
+          "conclusion": "success",
+          "seconds": 260.0,
+          "work_steps_seconds": {
+            "Install dependencies": 2.0,
+            "Run parallel-safe tests": 211.0,
+            "Run shared-database tests serially": 0.0,
+            "Upload backend coverage data": 1.0
+          }
+        },
+        {
+          "name": "Terraform Format",
+          "conclusion": "success",
+          "seconds": 6.0,
+          "work_steps_seconds": {}
+        },
+        {
+          "name": "Production Artifact / web",
+          "conclusion": "success",
+          "seconds": 217.0,
+          "work_steps_seconds": {
+            "Build web image": 211.0
+          }
+        },
+        {
+          "name": "Frontend Test Shard 2/2",
+          "conclusion": "success",
+          "seconds": 269.0,
+          "work_steps_seconds": {
+            "Install dependencies": 14.0,
+            "Run test shard": 244.0,
+            "Upload test and coverage shard": 1.0
+          }
+        },
+        {
+          "name": "Backend Tests (parallel-2)",
+          "conclusion": "success",
+          "seconds": 349.0,
+          "work_steps_seconds": {
+            "Install dependencies": 2.0,
+            "Run parallel-safe tests": 297.0,
+            "Run shared-database tests serially": 0.0,
+            "Upload backend coverage data": 2.0
+          }
+        },
+        {
+          "name": "Backend Tests (serial)",
+          "conclusion": "success",
+          "seconds": 155.0,
+          "work_steps_seconds": {
+            "Install dependencies": 2.0,
+            "Run parallel-safe tests": 0.0,
+            "Run shared-database tests serially": 108.0,
+            "Upload backend coverage data": 1.0
+          }
+        },
+        {
+          "name": "Production Artifacts",
+          "conclusion": "success",
+          "seconds": 3.0,
+          "work_steps_seconds": {
+            "Verify production image builds": 0.0
+          }
+        },
+        {
+          "name": "Frontend Tests",
+          "conclusion": "success",
+          "seconds": 28.0,
+          "work_steps_seconds": {
+            "Install dependencies": 14.0,
+            "Download test and coverage shards": 0.0,
+            "Merge reports and enforce frontend coverage floors": 4.0,
+            "Upload frontend coverage report": 1.0
+          }
+        },
+        {
+          "name": "Backend Tests",
+          "conclusion": "success",
+          "seconds": 67.0,
+          "work_steps_seconds": {
+            "Install dependencies": 3.0,
+            "Download backend coverage data": 2.0,
+            "Combine coverage and enforce floors": 41.0,
+            "Upload backend coverage report": 1.0,
+            "Report changed-line coverage (non-blocking)": 1.0
+          }
+        }
+      ]
+    }
+  ],
+  "candidate_hosted_run": null,
+  "limits": "Timing starts with the first job creation; earlier workflow/event queue time is not included. No total-PR timing improvement is measured yet."
+}
