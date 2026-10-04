@@ -1,5 +1,5 @@
 import { describe, it, beforeEach, vi, expect } from "vitest"
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
 import * as React from "react"
 import EmailTemplatesPage from "../app/(app)/automation/email-templates/page"
 import type {
@@ -356,10 +356,10 @@ describe("EmailTemplatesPage", () => {
 
     it("renders template tabs and ownership labels", () => {
         render(<EmailTemplatesPage />)
-        expect(screen.getByRole("tab", { name: "My Email Templates" })).toBeInTheDocument()
-        expect(screen.getByRole("tab", { name: "Organization Templates" })).toBeInTheDocument()
-        expect(screen.getByRole("tab", { name: "Platform Templates" })).toBeInTheDocument()
-        expect(screen.getByRole("tab", { name: "My Signature" })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: /^Personal/ })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: /^Organization/ })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: /^Platform/ })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: "Signature" })).toBeInTheDocument()
         expect(screen.getByRole("combobox")).toHaveTextContent("My Templates")
         expect(screen.getByRole("combobox")).not.toHaveTextContent(/^mine$/)
     })
@@ -379,7 +379,7 @@ describe("EmailTemplatesPage", () => {
     it("shows send test email action and opens dialog", async () => {
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
 
         fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
 
@@ -395,7 +395,7 @@ describe("EmailTemplatesPage", () => {
     it("lets a manager set an active organization template inactive from its card", async () => {
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
         fireEvent.click(
             await screen.findByRole("button", { name: "Actions for Org Template" }),
         )
@@ -431,7 +431,7 @@ describe("EmailTemplatesPage", () => {
         orgTemplatesFixture = [{ ...ORG_TEMPLATE, is_active: false }]
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
         fireEvent.click(screen.getByRole("checkbox", { name: "Hide Inactive" }))
         fireEvent.click(
             await screen.findByRole("button", { name: "Actions for Org Template" }),
@@ -475,7 +475,7 @@ describe("EmailTemplatesPage", () => {
         }]
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
         fireEvent.click(
             await screen.findByRole("button", { name: "Actions for Org Template" }),
         )
@@ -613,7 +613,7 @@ describe("EmailTemplatesPage", () => {
     it("labels organization template action menus with template context", async () => {
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
 
         expect(
             await screen.findByRole("button", { name: "Actions for Org Template" })
@@ -623,7 +623,7 @@ describe("EmailTemplatesPage", () => {
     it("adds an accessible name to the signature photo upload button", async () => {
         const { container } = render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "My Signature" }))
+        fireEvent.click(screen.getByRole("tab", { name: "Signature" }))
 
         expect(
             await screen.findByRole("button", { name: "Upload signature photo" }),
@@ -644,7 +644,7 @@ describe("EmailTemplatesPage", () => {
             signature_instagram: null,
         }
         const view = render(<EmailTemplatesPage />)
-        fireEvent.click(screen.getByRole("tab", { name: "My Signature" }))
+        fireEvent.click(screen.getByRole("tab", { name: "Signature" }))
 
         const nameInput = await screen.findByLabelText("Name")
         fireEvent.change(nameInput, { target: { value: "Unsaved Name" } })
@@ -658,13 +658,13 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByLabelText("Name")).toHaveValue("Unsaved Name")
     })
 
-    it("clamps long subjects on template cards", () => {
+    it("keeps long subjects on one line on template cards", () => {
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
 
         const subject = screen.getByText("Your Surrogacy Journey Starts with EWI Family Global")
-        expect(subject).toHaveClass("line-clamp-2")
+        expect(subject).toHaveClass("truncate")
         expect(subject).toHaveAttribute("title", "Your Surrogacy Journey Starts with EWI Family Global")
     })
 
@@ -678,7 +678,7 @@ describe("EmailTemplatesPage", () => {
         ]
 
         render(<EmailTemplatesPage />)
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
 
         const title = screen.getByText(
             "Gift Card Email-Completed the interview and waiting for GC to process through the payroll team"
@@ -691,7 +691,7 @@ describe("EmailTemplatesPage", () => {
 
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Platform/ }))
         fireEvent.click(screen.getByRole("button", { name: "Preview" }))
 
         expect(await screen.findByText("Email Preview")).toBeInTheDocument()
@@ -712,7 +712,7 @@ describe("EmailTemplatesPage", () => {
 
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Platform/ }))
         fireEvent.click(screen.getByRole("button", { name: "Preview" }))
 
         expect(await screen.findByText("Welcome to Test Org")).toBeInTheDocument()
@@ -722,7 +722,7 @@ describe("EmailTemplatesPage", () => {
     it("clears library preview state when the preview dialog closes", async () => {
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Platform/ }))
         fireEvent.click(screen.getByRole("button", { name: "Preview" }))
 
         expect(await screen.findByText("Hi there")).toBeInTheDocument()
@@ -741,7 +741,7 @@ describe("EmailTemplatesPage", () => {
     it("routes organization template creation to the Studio", () => {
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
         fireEvent.click(screen.getByRole("button", { name: /Create Org Template/i }))
 
         expect(mockRouterPush).toHaveBeenCalledWith("/automation/email-templates/org/new")
@@ -752,7 +752,7 @@ describe("EmailTemplatesPage", () => {
         orgTemplatesFixture = []
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
         const createButtons = screen.getAllByRole("button", { name: "Create Org Template" })
         fireEvent.click(createButtons[1]!)
 
@@ -763,7 +763,7 @@ describe("EmailTemplatesPage", () => {
     it("routes organization template editing to the Studio", async () => {
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
         fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
         fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }))
 
@@ -776,7 +776,7 @@ describe("EmailTemplatesPage", () => {
     it("opens an editable organization template from its title", () => {
         render(<EmailTemplatesPage />)
 
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
         const titleLink = screen.getByRole("link", { name: "Edit Org Template" })
         expect(titleLink).toHaveAttribute(
             "href",
@@ -806,16 +806,18 @@ describe("EmailTemplatesPage", () => {
         orgDraftsFixture = [NEW_ORG_DRAFT]
 
         render(<EmailTemplatesPage />)
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
 
-        expect(screen.getByText("New Journey Draft")).toBeInTheDocument()
         expect(screen.getByText("Unpublished draft")).toBeInTheDocument()
-        // The header row must be allowed to shrink, or the badge is pushed out of the card at 390px.
-        expect(screen.getByText("Unpublished draft").parentElement).toHaveClass("min-w-0")
-        fireEvent.click(screen.getByRole("button", { name: "Resume New Journey Draft" }))
+        const resumeLink = screen.getByRole("link", { name: "Resume New Journey Draft" })
+        expect(resumeLink).toHaveTextContent("New Journey Draft")
+        // The title must be allowed to shrink, or the actions button is pushed out of the card at 390px.
+        expect(resumeLink.closest("h3")).toHaveClass("min-w-0")
+        fireEvent.click(resumeLink)
 
         expect(mockRouterPush).toHaveBeenCalledWith(
             "/automation/email-templates/org/draft_new_1",
+            undefined,
         )
     })
 
@@ -830,11 +832,33 @@ describe("EmailTemplatesPage", () => {
         }]
 
         render(<EmailTemplatesPage />)
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
-        fireEvent.click(screen.getByRole("button", { name: "Resume Org Template updates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
 
-        expect(mockRouterPush).toHaveBeenCalledWith(
+        expect(screen.getByText("Draft changes")).toBeInTheDocument()
+        expect(screen.queryByText("Org Template updates")).not.toBeInTheDocument()
+        expect(screen.getByRole("link", { name: "Edit Org Template" })).toHaveAttribute(
+            "href",
             "/automation/email-templates/org/tpl_org_1",
+        )
+    })
+
+    it("discards draft changes from the published template card", async () => {
+        orgDraftsFixture = [{
+            ...NEW_ORG_DRAFT,
+            id: "draft_existing_1",
+            template_id: "tpl_org_1",
+            name: "Org Template updates",
+        }]
+
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for Org Template" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Discard draft changes" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Discard draft" }))
+
+        expect(mockDiscardEmailTemplateDraft).toHaveBeenCalledWith(
+            { id: "draft_existing_1", expectedRevision: 3 },
+            expect.any(Object),
         )
     })
 
@@ -842,8 +866,9 @@ describe("EmailTemplatesPage", () => {
         orgDraftsFixture = [NEW_ORG_DRAFT]
 
         render(<EmailTemplatesPage />)
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
-        fireEvent.click(screen.getByRole("button", { name: "Discard New Journey Draft" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
+        fireEvent.click(await screen.findByRole("button", { name: "Actions for New Journey Draft" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Discard draft" }))
 
         expect(mockDiscardEmailTemplateDraft).not.toHaveBeenCalled()
         expect(await screen.findByRole("heading", { name: "Discard draft?" })).toBeInTheDocument()
@@ -875,10 +900,10 @@ describe("EmailTemplatesPage", () => {
         })
 
         render(<EmailTemplatesPage />)
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
 
         expect(screen.queryByText("New Journey Draft")).not.toBeInTheDocument()
-        expect(screen.queryByRole("button", { name: "Resume New Journey Draft" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Resume New Journey Draft" })).not.toBeInTheDocument()
     })
 
     it("routes personal template editing to the draft-first Studio", async () => {
@@ -899,16 +924,30 @@ describe("EmailTemplatesPage", () => {
 
         render(<EmailTemplatesPage />)
 
-        expect(screen.getByText("Personal follow-up draft")).toBeInTheDocument()
-        fireEvent.click(
-            screen.getByRole("button", {
-                name: "Resume Personal follow-up draft",
-            }),
-        )
+        fireEvent.click(screen.getByRole("link", { name: "Resume Personal follow-up draft" }))
 
         expect(mockRouterPush).toHaveBeenCalledWith(
             "/automation/email-templates/personal/draft_personal_1",
+            undefined,
         )
+    })
+
+    it("filters cards by name or subject and shows a no-match state", () => {
+        render(<EmailTemplatesPage />)
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
+
+        const search = screen.getByRole("searchbox", { name: "Search templates" })
+        fireEvent.change(search, { target: { value: "ewi family" } })
+        expect(screen.getByRole("link", { name: "Edit Org Template" })).toBeInTheDocument()
+
+        fireEvent.change(search, { target: { value: "zzz" } })
+        expect(screen.queryByRole("link", { name: "Edit Org Template" })).not.toBeInTheDocument()
+        expect(
+            within(screen.getByRole("tabpanel", { name: /^Organization/ })).getByRole("heading", {
+                level: 2,
+                name: "No matching templates",
+            }),
+        ).toBeInTheDocument()
     })
 
     it("shows a retryable error instead of hiding personal drafts", () => {
@@ -1089,7 +1128,7 @@ describe("EmailTemplatesPage", () => {
         }]
 
         render(<EmailTemplatesPage />)
-        fireEvent.click(screen.getByRole("tab", { name: "Organization Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
 
         const hideInactive = screen.getByRole("checkbox", {
             name: "Hide Inactive",
@@ -1118,7 +1157,7 @@ describe("EmailTemplatesPage", () => {
         mockUseAuth.mockReturnValue({ user: { user_id: "user_1", role: "intake_specialist", ai_enabled: false } })
         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates", "manage_email_templates"] } })
         render(<EmailTemplatesPage />)
-        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Platform/ }))
         const copyButton = await screen.findByRole("button", { name: "Copy to Org" })
         expect(copyButton).toBeDisabled()
         fireEvent.click(copyButton)
@@ -1131,7 +1170,7 @@ describe("EmailTemplatesPage", () => {
         mockUseAuth.mockReturnValue({ user: { user_id: "user_1", role: "operations", ai_enabled: false } })
         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates", "manage_email_templates", "manage_org_templates"] } })
         render(<EmailTemplatesPage />)
-        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Platform/ }))
         fireEvent.click(await screen.findByRole("button", { name: "Copy to Org" }))
         expect(await screen.findByRole("dialog", { name: "Copy to Org Templates" })).toBeInTheDocument()
         fireEvent.change(screen.getByLabelText("Template Name"), { target: { value: "Agency follow-up" } })
@@ -1142,7 +1181,7 @@ describe("EmailTemplatesPage", () => {
     it("closes an open organization copy dialog after organization management is revoked", async () => {
         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates", "manage_email_templates", "manage_org_templates"] } })
         const view = render(<EmailTemplatesPage />)
-        fireEvent.click(screen.getByRole("tab", { name: "Platform Templates" }))
+        fireEvent.click(screen.getByRole("tab", { name: /^Platform/ }))
         fireEvent.click(await screen.findByRole("button", { name: "Copy to Org" }))
         expect(await screen.findByRole("dialog", { name: "Copy to Org Templates" })).toBeInTheDocument()
         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates", "manage_email_templates"] } })
