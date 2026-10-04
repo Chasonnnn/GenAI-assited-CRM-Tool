@@ -17,7 +17,7 @@ from tests.test_tasks_match_scope import _create_surrogate
 
 
 def _load_migration():
-    path = Path(__file__).parents[1] / "alembic/versions/20261003_1200_medical_records.py"
+    path = Path(__file__).parents[1] / "alembic/versions/20261003_1700_medical_records.py"
     spec = importlib.util.spec_from_file_location("medical_records_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)

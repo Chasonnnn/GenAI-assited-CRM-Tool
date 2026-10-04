@@ -9,8 +9,8 @@ verified; a follow-up migration drops them. Downgrade drops the new tables, so
 records created after the upgrade are lost while the flat columns keep their
 pre-upgrade values.
 
-Revision ID: 20261003_1200_medical_records
-Revises: 20260928_1340_zapier_event_effective_at
+Revision ID: 20261003_1700_medical_records
+Revises: 20261003_1600_notification_daily_digest
 """
 
 import sqlalchemy as sa
@@ -18,8 +18,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision = "20261003_1200_medical_records"
-down_revision = "20260928_1340_zapier_event_effective_at"
+revision = "20261003_1700_medical_records"
+down_revision = "20261003_1600_notification_daily_digest"
 branch_labels = None
 depends_on = None
 
