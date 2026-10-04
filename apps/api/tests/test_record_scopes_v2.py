@@ -120,6 +120,33 @@ def test_assignment_and_phase_are_conjoined_and_approved_starts_post(db, context
     } == {mine.id}
 
 
+def test_creator_route_is_explained_but_does_not_grant_personal_work_or_survive_departure(
+    db, context
+):
+    record = _record(db, context.intake, "surrogate")
+    record.created_by_user_id = context.manager.user_id
+    db.flush()
+    scopes.save_role_scope(
+        db, context.admin, "case_manager", "surrogates", RecordScopeRule(assignment="none")
+    )
+    _assert_parity(db, context.manager, "surrogate", [record], [record])
+    explanation = scopes.explain_record_access(db, context.manager, "surrogate", record)
+    assert explanation.sources == ["creator"]
+    _assert_parity(db, context.manager, "surrogate", [record], [], personal_only=True)
+    alias = aliased(Surrogate)
+    assert {
+        row.id
+        for row in db.query(alias).filter(
+            scopes.build_visibility_filter(db, context.manager, "surrogate", model=alias)
+        )
+    } == {record.id}
+    db.query(Membership).filter_by(
+        organization_id=context.org.id, user_id=context.manager.user_id
+    ).one().is_active = False
+    db.flush()
+    _assert_parity(db, context.manager, "surrogate", [record], [])
+
+
 @pytest.mark.parametrize("kind", ["surrogate", "donor"])
 def test_handoff_retention_is_idempotent_and_revocation_keeps_other_grants(db, context, kind):
     record = _record(db, context.intake, kind, key="approved")
@@ -464,7 +491,8 @@ def test_role_scope_can_participate_in_callers_atomic_transaction(db, context, m
     )
 
 
-def test_migration_scope_counts_compare_legacy_without_changing_policy(db, context):
+@pytest.mark.parametrize("changed_field", ["owner_id", "created_by_user_id"])
+def test_migration_scope_counts_compare_legacy_without_changing_policy(db, context, changed_field):
     record = _record(db, context.intake, "surrogate", key="approved")
     policy = db.get(OrganizationPermissionPolicy, context.org.id)
     policy.version = 1
@@ -481,7 +509,7 @@ def test_migration_scope_counts_compare_legacy_without_changing_policy(db, conte
     assert row["lost_count"] == 1
     assert row["lost_record_id_samples"] == [str(record.id)]
     assert policy.version == 1
-    record.owner_id = context.manager.user_id
+    setattr(record, changed_field, context.manager.user_id)
     db.flush()
     updated = scopes.get_policy_scope_snapshot(db, context.org.id)
     assert snapshot["record_state_digest"] != updated["record_state_digest"]

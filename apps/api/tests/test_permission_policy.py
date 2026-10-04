@@ -1,6 +1,7 @@
 """Versioned permission activation, administration, and tenant boundaries."""
 
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -17,7 +18,7 @@ from app.db.models import (
 from app.db.models.permission_policy import OrganizationPermissionPolicy
 from app.schemas.permission_policy import PermissionPolicyChanges, RevokeResolution
 from app.services import permission_policy_service as policy_service
-from app.services import permission_service
+from app.services import permission_service, record_scope_service
 
 
 def add_member(db, org_id, role="intake_specialist"):
@@ -67,6 +68,29 @@ def test_empty_organization_activates_through_real_scope_and_execution_review(
     assert reviewed.execution_review == []
     result = policy_service.activate(db, test_org.id, test_user.id, changes, reviewed.digest)
     assert result.version == 2
+
+
+def test_creator_access_is_preserved_through_reviewed_activation(db, test_org, test_user):
+    from tests.test_record_scopes_v2 import _record
+
+    manager, _ = add_member(db, test_org.id, "case_manager")
+    actor = SimpleNamespace(org_id=test_org.id, user_id=manager.id, role="case_manager")
+    record = _record(db, actor, "surrogate", owner_id=test_user.id)
+    record.created_by_user_id = manager.id
+    db.flush()
+    changes = PermissionPolicyChanges()
+    reviewed = policy_service.preview(db, test_org.id, changes)
+    assert reviewed.ready
+    difference = next(
+        row
+        for row in reviewed.scope_review["member_record_scope_differences"]
+        if row["user_id"] == str(manager.id) and row["module"] == "surrogates"
+    )
+    assert difference["current_count"] == difference["proposed_count"] == 1
+    assert difference["gained_count"] == difference["lost_count"] == 0
+    result = policy_service.activate(db, test_org.id, test_user.id, changes, reviewed.digest)
+    assert result.version == 2
+    assert record_scope_service.can_access_record(db, actor, "surrogate", record)
 
 
 @pytest.mark.parametrize("review_type", ["scope", "execution"])

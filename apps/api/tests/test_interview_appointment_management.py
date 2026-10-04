@@ -1393,6 +1393,8 @@ async def test_v2_appointment_collaboration_revocation_blocks_owner_of_appointme
     authed_client, db, v2_interview, notifications
 ):
     surrogate, user, membership = v2_interview
+    # Collaboration must be the only record-access route, even for the appointment owner.
+    surrogate.created_by_user_id = None
     queue = Queue(organization_id=surrogate.organization_id, name="Interview pool", is_active=True)
     db.add(queue)
     db.flush()

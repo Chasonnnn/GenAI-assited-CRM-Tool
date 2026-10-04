@@ -301,6 +301,9 @@ def _routes(db, session, kind, model):
     module = RECORDS[kind][1]
     rule = get_role_scope(db, session.org_id, session.role, module)
     routes = [("role", _rule_filter(session, kind, model, rule))]
+    if kind == "surrogate" and _role(session.role) == Role.CASE_MANAGER.value:
+        # Creator access survives reassignment; action and tenant boundaries still apply.
+        routes.append(("creator", model.created_by_user_id == session.user_id))
     additions = (
         db.query(UserRecordScopeAddition)
         .join(Membership, Membership.id == UserRecordScopeAddition.membership_id)
@@ -1119,6 +1122,8 @@ def _scope_count_preview(db, org_id):
     record_state.append(("stages", [tuple(row) for row in stage_state]))
     for kind, (model, module, _) in RECORDS.items():
         columns = [model.id, model.stage_id, model.owner_type, model.owner_id, model.is_archived]
+        if kind == "surrogate":
+            columns.append(model.created_by_user_id)
         if kind in {"surrogate", "donor"}:
             columns.append(model.paused_from_stage_id)
         rows = db.query(*columns).filter(model.organization_id == org_id).order_by(model.id).all()

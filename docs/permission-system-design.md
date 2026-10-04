@@ -11,7 +11,7 @@ Each staff member has one supplied role. Agencies cannot create custom roles or 
 | Role | Default donor/surrogate record access | Configuration |
 |---|---|---|
 | Intake Specialist | Assigned applicants before approval, plus retained Intake-collaborator records after handoff | Admin/Dev can edit the role baseline and add individual permissions |
-| Case Manager | All Approved-and-later records, regardless of owner, for matching and case work | Admin/Dev can edit the role baseline and add individual permissions |
+| Case Manager | All Approved-and-later records, plus surrogates they created at any stage | Admin/Dev can edit the role baseline and add individual permissions |
 | Operations | All donor/surrogate records and reports; no record writes or sending by default | Editable baseline; manages organization workflows, campaigns, and templates |
 | Admin | Full agency authority within organization and domain rules | Protected baseline |
 | Dev | Platform-controlled authority within existing organization boundaries | Protected baseline; not configurable by agency users |
@@ -26,7 +26,9 @@ Changing a person's role requires an Admin to review their additions and collabo
 
 Record scope is configured separately for each module. It defines the same record set for viewing and editing; action permissions determine what the person may do within that set.
 
-A Case Manager with Edit can therefore edit information on every post-approval record they can view, including records owned by another Case Manager.
+A Case Manager with Edit can therefore edit information on every record they can view, including post-approval records owned by another Case Manager and surrogates they created before approval.
+
+Case Managers retain visibility of surrogates whose stored creator is that member, including after reassignment. This route exists in both permission versions and is separate from configured role scope. It does not apply to donor or intended-parent records, infer a creator for historical rows, bypass action permissions, or expand personal workflow/campaign eligibility. Organization, active-membership and archive checks still apply. [Decision](adr/0008-case-manager-created-surrogate-access.md).
 
 Within a configured scope rule, assignment and phase/stage restrictions combine with AND. Separate grants, including an individual scope addition or explicit record collaboration, add access to their explicitly covered records.
 
@@ -136,7 +138,7 @@ The additive schema and reviewed activation flow are implemented. Fresh-database
 
 ## Restricted Case Manager scope
 
-If an agency deliberately configures a Case Manager as assigned-only, unclaimed records outside that scope remain hidden until an authorized person assigns them. There is no implicit pool-review exception. The default all-post-approval Case Manager role still sees the approved pool.
+If an agency deliberately configures a Case Manager as assigned-only, unclaimed records outside that scope remain hidden unless another access route applies. The surrogate creator route remains available to that Case Manager. There is no implicit pool-review exception for other records. The default all-post-approval Case Manager role still sees the approved pool.
 
 ## Reports and form submissions
 
