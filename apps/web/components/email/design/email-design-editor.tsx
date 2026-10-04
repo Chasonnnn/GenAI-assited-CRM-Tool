@@ -13,7 +13,7 @@ import {
     type ComponentType,
     type ReactNode,
 } from "react"
-import { EditorContent, EditorContext, useEditor, type Editor, type JSONContent } from "@tiptap/react"
+import { EditorContent, EditorContext, useEditor, type Editor, type Extensions, type JSONContent } from "@tiptap/react"
 import { NodeSelection } from "@tiptap/pm/state"
 import { useEditorImage } from "@react-email/editor/plugins"
 import {
@@ -398,6 +398,7 @@ export const EmailDesignEditor = forwardRef<EmailDesignEditorHandle, EmailDesign
                 />
                 <ConvertHtmlDialog
                     target={convertTarget}
+                    extensions={extensions}
                     onOpenChange={(open) => {
                         if (!open) setConvertTarget(null)
                     }}
@@ -465,10 +466,12 @@ type ConversionResult = { target: HtmlBlockTarget } & ConversionState
 
 function ConvertHtmlDialog({
     target,
+    extensions,
     onOpenChange,
     onApply,
 }: {
     target: HtmlBlockTarget | null
+    extensions: Extensions
     onOpenChange: (open: boolean) => void
     onApply: (blocks: JSONContent[]) => void
 }) {
@@ -479,7 +482,7 @@ function ConvertHtmlDialog({
     useEffect(() => {
         if (!target) return
         let cancelled = false
-        convertHtmlToDesign(target.html).then(
+        convertHtmlToDesign(target.html, extensions).then(
             (converted) => {
                 if (!cancelled) setResult({ target, status: "ready", result: converted })
             },
@@ -490,7 +493,7 @@ function ConvertHtmlDialog({
         return () => {
             cancelled = true
         }
-    }, [target])
+    }, [target, extensions])
 
     return (
         <Dialog open={target !== null} onOpenChange={onOpenChange}>
@@ -499,7 +502,7 @@ function ConvertHtmlDialog({
                     <DialogTitle>Convert to blocks</DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-4 md:grid-cols-2">
-                    <section aria-labelledby="convert-original" className="grid gap-2">
+                    <section aria-labelledby="convert-original" className="grid content-start gap-2">
                         <h3 id="convert-original" className="text-sm font-medium">
                             Original
                         </h3>
@@ -507,7 +510,7 @@ function ConvertHtmlDialog({
                             <EmailHtmlFrame html={target?.html ?? ""} title="Original HTML" autoHeight />
                         </div>
                     </section>
-                    <section aria-labelledby="convert-blocks" className="grid gap-2">
+                    <section aria-labelledby="convert-blocks" className="grid content-start gap-2">
                         <h3 id="convert-blocks" className="text-sm font-medium">
                             Blocks
                         </h3>
@@ -524,6 +527,11 @@ function ConvertHtmlDialog({
                         </div>
                     </section>
                 </div>
+                {conversion.status === "ready" && conversion.result.warnings.length > 0 ? (
+                    <p role="alert" className="text-sm text-destructive">
+                        {conversion.result.warnings.join(" ")}
+                    </p>
+                ) : null}
                 <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                         Keep HTML

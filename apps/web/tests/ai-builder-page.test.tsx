@@ -140,6 +140,7 @@ describe("AIBuilderPage", () => {
             body: '<div style="background-color:#ffffff"><p>Hi {{first_name}}</p></div>',
             bodyDesign: design,
             blocks: [],
+            warnings: [],
         })
 
         render(<AIBuilderPage />)
@@ -166,7 +167,7 @@ describe("AIBuilderPage", () => {
         )
     })
 
-    it("saves the generated HTML as is when block conversion fails", async () => {
+    it.each(["fails", "has fidelity warnings"])("saves the generated HTML as is when block conversion %s", async (outcome) => {
         mockUseSearchParams.mockReturnValue({
             get: (key: string) => (key === "mode" ? "email_template" : null),
         })
@@ -183,7 +184,16 @@ describe("AIBuilderPage", () => {
             explanation: null,
         })
         mockCreateEmailTemplateDraft.mockResolvedValue({ id: "draft-ai-personal" })
-        mockConvertHtmlToDesign.mockRejectedValue(new Error("parse failed"))
+        if (outcome === "fails") {
+            mockConvertHtmlToDesign.mockRejectedValue(new Error("parse failed"))
+        } else {
+            mockConvertHtmlToDesign.mockResolvedValue({
+                body: "<p>Changed formatting</p>",
+                bodyDesign: { type: "doc", content: [{ type: "paragraph" }] },
+                blocks: [],
+                warnings: ["Stylesheet rules may change"],
+            })
+        }
 
         render(<AIBuilderPage />)
         fireEvent.change(screen.getByRole("textbox"), { target: { value: "Welcome email" } })

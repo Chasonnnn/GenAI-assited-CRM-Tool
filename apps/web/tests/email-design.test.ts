@@ -121,9 +121,12 @@ describe("convertHtmlToDesign", () => {
     it("parses tables, links, and variables into blocks", async () => {
         const converted = await convertHtmlToDesign(
             '<h1>Title</h1><table role="presentation"><tr><td style="padding:8px"><a href="{{form_link}}">Apply</a></td></tr></table>',
+            createEmailDesignExtensions(),
         )
 
-        const types = converted.blocks.map((block) => block.type)
+        const types: string[] = []
+        const convertedEditor = editorFor({ type: "doc", content: converted.blocks })
+        convertedEditor.state.doc.descendants((node) => { types.push(node.type.name) })
         expect(types).toContain("heading")
         expect(types).toContain("table")
         expect(types).not.toContain("htmlBlock")

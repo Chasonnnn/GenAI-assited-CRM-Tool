@@ -464,10 +464,11 @@ function useAIBuilderController() {
         }
 
         try {
-            // Generated HTML opens as editor blocks. A body the converter rejects is saved as
-            // HTML and opens as one HTML block instead.
+            // Automatic conversion has no comparison dialog. Preserve HTML when conversion
+            // needs a fidelity warning so the user can review it in Studio first.
             const converted = await import("@/components/email/design/compile")
                 .then(({ convertHtmlToDesign }) => convertHtmlToDesign(templateBody))
+                .then((result) => result.warnings.length === 0 ? result : null)
                 .catch(() => null)
             const draft = await createEmailTemplateDraft.mutateAsync({
                 name: templateName.trim(),
