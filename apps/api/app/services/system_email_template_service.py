@@ -8,10 +8,15 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.db.models import EmailTemplate, PlatformSystemEmailTemplate
+from app.core.email_body_design import validate_body_design
+from app.db.models import EmailTemplate, Organization, PlatformSystemEmailTemplate
 
 ORG_INVITE_SYSTEM_KEY = "org_invite"
 STAFF_NOTIFICATION_SYSTEM_KEY = "staff_notification"
+# Variables the platform renders as HTML; every other value is escaped.
+SAFE_HTML_VARIABLES = frozenset(
+    {"expires_block", "platform_logo_block", "body_block", "link_block"}
+)
 
 _ORG_INVITE_BODY_V1 = """
 <div style="background-color: #f5f5f7; padding: 32px 16px; margin: 0;">
@@ -365,6 +370,7 @@ def create_platform_system_template(
     subject: str,
     body: str,
     from_email: str | None,
+    body_design: dict | None = None,
     is_active: bool,
 ) -> PlatformSystemEmailTemplate:
     """Create a custom platform system email template."""
@@ -380,6 +386,7 @@ def create_platform_system_template(
         name=name,
         subject=subject,
         body=email_service.sanitize_template_html(body),
+        body_design=validate_body_design(body_design),
         from_email=(from_email.strip() or None) if from_email else None,
         is_active=is_active,
         current_version=1,
@@ -457,3 +464,39 @@ def ensure_system_template(db: Session, *, system_key: str) -> PlatformSystemEma
     db.add(template)
     db.flush()
     return template
+
+
+def build_platform_logo_block(platform_logo_url: str) -> str:
+    if not platform_logo_url:
+        return ""
+    return (
+        f'<img src="{platform_logo_url}" alt="Platform logo" style="max-width: 180px; '
+        'height: auto; display: block; margin: 0 auto 6px auto;" />'
+    )
+
+
+def build_sample_variables(db: Session, *, org: Organization | None) -> dict[str, str]:
+    """Sample values for test sends and previews; without an org, stand-in values."""
+    from app.services import org_service, platform_branding_service
+
+    org_name = org_service.get_org_display_name(org) if org else "Example Agency"
+    base_url = org_service.get_org_portal_base_url(org)
+    platform_logo_url = (platform_branding_service.get_branding(db).logo_url or "").strip()
+    return {
+        "org_name": org_name,
+        "org_slug": org.slug if org else "example",
+        "invite_url": f"{base_url.rstrip('/')}/invite/EXAMPLE",
+        "role_title": "Admin",
+        "inviter_text": "",
+        "expires_block": "<p>This is a test email. Expiration text would appear here.</p>",
+        "platform_logo_url": platform_logo_url,
+        "platform_logo_block": build_platform_logo_block(platform_logo_url),
+        "title": "New task assigned",
+        "body_block": "<p>This is a test email. Notification details would appear here.</p>",
+        "link_block": (
+            f'<a href="{base_url.rstrip("/")}/tasks" target="_blank" '
+            'style="display: inline-block; padding: 10px 18px; border-radius: 10px; '
+            "background-color: #111827; color: #ffffff; text-decoration: none; "
+            'font-size: 14px; font-weight: 600;">Open in Surrogacy Force</a>'
+        ),
+    }

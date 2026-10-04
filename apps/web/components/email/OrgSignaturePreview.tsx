@@ -21,5 +21,5 @@ export function OrgSignaturePreview() {
             </div>
         )
     }
-    return <SafeHtmlContent html={preview.html} className="prose prose-sm prose-stone max-w-none text-stone-900" />
+    return <SafeHtmlContent html={preview.html} className="prose prose-sm prose-neutral max-w-none text-neutral-900" />
 }

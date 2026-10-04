@@ -49,6 +49,7 @@ from app.schemas.forms import (
     FormIntakeLinkSendRequest,
     FormIntakeLinkSendResponse,
     FormIntakeLinkUpdate,
+    FormListItem,
     FormLogoRead,
     FormMappingOption,
     FormPublishResponse,
@@ -378,7 +379,7 @@ def _intake_link_read(link, intake_url: str | None = None) -> FormIntakeLinkRead
 
 @router.get(
     "",
-    response_model=list[FormSummary],
+    response_model=list[FormListItem],
     dependencies=[Depends(require_permission(POLICIES["forms"].default))],
 )
 def list_forms(
@@ -391,7 +392,14 @@ def list_forms(
         session.org_id,
         commit=False,
     )
-    return [_form_summary(form, default_form_id=default_form_id) for form in forms]
+    counts = form_service.count_submissions_by_form(db, session.org_id)
+    return [
+        FormListItem(
+            **_form_summary(form, default_form_id=default_form_id).model_dump(),
+            submission_count=counts.get(form.id, 0),
+        )
+        for form in forms
+    ]
 
 
 # =============================================================================

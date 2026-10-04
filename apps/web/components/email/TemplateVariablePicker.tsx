@@ -5,6 +5,7 @@ import { CodeIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "@/components/ui/command"
+import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { TemplateVariableRead } from "@/lib/types/template-variable"
 
@@ -60,6 +61,58 @@ function filterTemplateVariableGroups(groups: TemplateVariableGroup[], query: st
         }
     }
     return nextGroups
+}
+
+/** Inline, searchable variable list; selecting a variable inserts it at the last cursor position. */
+export function TemplateVariableList({
+    variables,
+    onSelect,
+}: {
+    variables: TemplateVariableRead[]
+    onSelect: (variable: TemplateVariableRead) => void
+}) {
+    const [query, setQuery] = useState("")
+    const filteredGroups = filterTemplateVariableGroups(groupTemplateVariables(variables), query)
+
+    return (
+        <div className="flex flex-col gap-3">
+            <Input
+                type="search"
+                aria-label="Search variables"
+                placeholder="Search variables"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+            />
+            {filteredGroups.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">No variables found.</p>
+            ) : (
+                filteredGroups.map((group) => (
+                    <section key={group.category} aria-label={group.category} className="flex flex-col gap-0.5">
+                        <h3 className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            {group.category}
+                        </h3>
+                        {group.items.map((variable) => (
+                            <Button
+                                key={variable.name}
+                                type="button"
+                                variant="ghost"
+                                // Keeps focus (and the cursor) in the subject or body while inserting.
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => onSelect(variable)}
+                                aria-label={`Insert {{${variable.name}}}`}
+                                className="h-auto flex-col items-start gap-0.5 px-2 py-1.5 text-left font-normal whitespace-normal"
+                            >
+                                <span className="font-mono text-xs text-foreground">{`{{${variable.name}}}`}</span>
+                                {variable.description ? (
+                                    <span className="text-xs text-muted-foreground">{variable.description}</span>
+                                ) : null}
+                            </Button>
+                        ))}
+                    </section>
+                ))
+            )}
+        </div>
+    )
 }
 
 export function TemplateVariablePicker({

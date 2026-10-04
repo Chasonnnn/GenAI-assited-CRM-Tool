@@ -1020,7 +1020,7 @@ export function useAutomationFormBuilderPage({ initialTab = "edit" }: { initialT
         workspaceProps: {
             leadKind: state.formLeadKind,
             desktopCanvasWidthClass: "max-w-[min(100%,72rem)]",
-            canvasFrameClass: "rounded-[24px] border border-stone-200 bg-white p-4 sm:p-5",
+            canvasFrameClass: "rounded-[24px] border border-neutral-200 bg-white p-4 sm:p-5",
             mappingOptions: fieldMappings,
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
@@ -1033,7 +1033,6 @@ export function useAutomationFormBuilderPage({ initialTab = "edit" }: { initialT
         },
         previewProps: {
             pages,
-            activePage,
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
             publicSubtitle: state.publicSubtitle,
@@ -1042,7 +1041,6 @@ export function useAutomationFormBuilderPage({ initialTab = "edit" }: { initialT
             previewDevice: state.previewDevice,
             desktopCanvasWidthClass: "max-w-[min(100%,72rem)]",
             mobileCanvasWidthClass: "max-w-sm",
-            onSetActivePage: setActivePage,
             onPreviewDeviceChange: (value: "desktop" | "mobile") => patchState({ previewDevice: value }),
         },
         settingsPanelProps: {

@@ -29,17 +29,18 @@ def extract_variables(subject: str, body: str) -> set[str]:
 def build_sample_variables(
     db: Session,
     *,
-    org_id: UUID,
+    org_id: UUID | None,
     to_email: str,
     actor_display_name: str | None,
+    unsubscribe_url: str | None = None,
 ) -> dict[str, str]:
-    org = db.query(Organization).filter(Organization.id == org_id).first()
+    org = db.get(Organization, org_id) if org_id else None
     org_name = org.name if org else ""
     org_logo_url = (
         media_service.get_signed_media_url(org.signature_logo_url) if org else None
     ) or ""
 
-    unsubscribe_url = ""
+    sample_unsubscribe_url = ""
     form_link = ""
     appointment_link = ""
     appointment_manage_url = ""
@@ -50,7 +51,7 @@ def build_sample_variables(
 
         portal_base_url = org_service.get_org_portal_base_url(org)
 
-        unsubscribe_url = unsubscribe_service.build_unsubscribe_url(
+        sample_unsubscribe_url = unsubscribe_url or unsubscribe_service.build_unsubscribe_url(
             db,
             org_id=org_id,
             email=to_email,
@@ -105,7 +106,7 @@ def build_sample_variables(
         "appointment_time": "09:00",
         "appointment_location": "Zoom",
         # Compliance
-        "unsubscribe_url": unsubscribe_url,
+        "unsubscribe_url": sample_unsubscribe_url,
     }
 
 

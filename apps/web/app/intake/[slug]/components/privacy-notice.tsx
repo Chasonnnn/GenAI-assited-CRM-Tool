@@ -6,7 +6,7 @@ export function PrivacyNotice({ text }: { text?: string | null }) {
     const isUrl = /^https?:\/\//i.test(trimmed) || /^mailto:/i.test(trimmed)
 
     return (
-        <div className="flex items-center gap-2 text-xs text-stone-500 mt-6">
+        <div className="flex items-center gap-2 text-xs text-neutral-500 mt-6">
             <LockIcon className="size-4" />
             {isUrl ? (
                 <a

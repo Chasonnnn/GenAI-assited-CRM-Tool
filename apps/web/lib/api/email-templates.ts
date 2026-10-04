@@ -8,6 +8,25 @@ import type { TemplateVariableRead } from '@/lib/types/template-variable'
 // Types
 export type EmailTemplateScope = 'org' | 'personal'
 
+/** React Email editor document stored beside `body`; `body` stays the send artifact (ADR 0006). */
+export type EmailBodyDesign = { type: 'doc'; content?: unknown[] } & Record<string, unknown>
+
+export type EmailPreviewVariableMode = 'sample' | 'names' | 'record'
+
+export interface EmailTemplatePreviewRequest {
+    subject: string
+    body: string
+    scope: EmailTemplateScope
+    variable_mode: EmailPreviewVariableMode
+    surrogate_id?: string | null
+}
+
+export interface EmailTemplatePreview {
+    subject: string
+    html: string
+    unresolved_variables: string[]
+}
+
 export type EmailTemplateCapabilities = {
     can_edit: boolean
     can_send_test: boolean
@@ -23,6 +42,7 @@ export interface EmailTemplate {
     subject: string
     from_email: string | null
     body: string
+    body_design?: EmailBodyDesign | null
     is_active: boolean
     scope: EmailTemplateScope
     owner_user_id: string | null
@@ -58,6 +78,7 @@ export interface EmailTemplateCreate {
     subject: string
     from_email?: string | null
     body: string
+    body_design?: EmailBodyDesign | null
     scope?: EmailTemplateScope
 }
 
@@ -88,6 +109,7 @@ export interface EmailTemplateUpdate {
     subject?: string
     from_email?: string | null
     body?: string
+    body_design?: EmailBodyDesign | null
     is_active?: boolean
     expected_version?: number
 }
@@ -174,6 +196,12 @@ export async function deleteTemplate(id: string): Promise<void> {
 
 export async function sendEmail(data: EmailSendRequest): Promise<EmailLog> {
     return api.post<EmailLog>('/email-templates/send', data)
+}
+
+export async function previewEmailTemplate(
+    payload: EmailTemplatePreviewRequest
+): Promise<EmailTemplatePreview> {
+    return api.post<EmailTemplatePreview>('/email-templates/preview', payload)
 }
 
 export async function sendTestEmailTemplate(

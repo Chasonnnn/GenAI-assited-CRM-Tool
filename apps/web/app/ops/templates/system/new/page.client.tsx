@@ -2,36 +2,33 @@
 
 import { useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react"
 import { useRouter } from "next/navigation"
-import DOMPurify from "dompurify"
 import { toast } from "@/components/ui/toast"
-import { EyeIcon, Loader2Icon, PlusIcon } from "lucide-react"
-import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
-import { EmptyState } from "@/components/empty-state"
+import { ImageIcon, Loader2Icon, PlusIcon } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldError, FieldLabel, ValidatedField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { PageHeader } from "@/components/page-header"
 import { ApiError } from "@/lib/api"
 import { useFormValidation, type FormFieldErrors } from "@/lib/forms/use-form-validation"
+import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
-import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"
-import { normalizeTemplateHtml } from "@/lib/email-template-html"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { EmailDesignEditor, type EmailDesignEditorHandle } from "@/components/email/design/email-design-editor"
+import { EmailHtmlSource } from "@/components/email/design/email-html-source"
+import { EmailPreviewPane } from "@/components/email/design/email-preview-pane"
+import { previewPlatformSystemEmailTemplate } from "@/lib/api/platform"
+import type { EmailBodyDesign } from "@/lib/api/email-templates"
+import type { EmailBodyValue } from "@/lib/email-design"
 import { insertAtCursor } from "@/lib/insert-at-cursor"
 import {
     useCreatePlatformSystemEmailTemplate,
     usePlatformSystemEmailTemplateVariables,
 } from "@/lib/hooks/use-platform-templates"
 
-type EditorMode = "visual" | "html"
-
-type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
+type ActiveInsertionTarget = "subject" | "body" | null
+type EditorView = "edit" | "preview" | "html"
 type TextSelectionRef = MutableRefObject<{ start: number; end: number } | null>
-type TemplateVariable = NonNullable<ReturnType<typeof usePlatformSystemEmailTemplateVariables>["data"]>[number]
 
 function extractTemplateVariables(text: string): string[] {
     if (!text) return []
@@ -109,73 +106,6 @@ function validateNewSystemTemplate(values: NewSystemTemplateValues): FormFieldEr
 
 type NewSystemTemplateField = keyof NewSystemTemplateValues
 
-function hasComplexEmailHtml(body: string): boolean {
-    return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body)
-}
-
-function buildPreviewHtml(body: string): string {
-    const platformLogoUrl =
-        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='54'><rect width='100%' height='100%' rx='10' fill='%23e5e7eb'/><text x='50%' y='55%' text-anchor='middle' font-family='Arial' font-size='14' fill='%236b7280'>Logo</text></svg>"
-    const rawHtml = body
-        .replace(/\{\{org_name\}\}/g, "Sample Organization")
-        .replace(/\{\{org_slug\}\}/g, "sample-org")
-        .replace(/\{\{first_name\}\}/g, "Avery")
-        .replace(/\{\{full_name\}\}/g, "Avery James")
-        .replace(/\{\{email\}\}/g, "avery@example.com")
-        .replace(/\{\{inviter_text\}\}/g, "")
-        .replace(/\{\{role_title\}\}/g, "Admin")
-        .replace(/\{\{invite_url\}\}/g, "https://app.surrogacyforce.com/invite/EXAMPLE")
-        .replace(/\{\{expires_block\}\}/g, "<p>This invitation expires in 7 days.</p>")
-        .replace(/\{\{platform_logo_url\}\}/g, platformLogoUrl)
-        .replace(
-            /\{\{platform_logo_block\}\}/g,
-            `<img src="${platformLogoUrl}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />`
-        )
-        .replace(/\{\{unsubscribe_url\}\}/g, "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE")
-
-    return DOMPurify.sanitize(normalizeTemplateHtml(rawHtml), {
-        USE_PROFILES: { html: true },
-        ADD_TAGS: [
-            "table",
-            "thead",
-            "tbody",
-            "tfoot",
-            "tr",
-            "td",
-            "th",
-            "colgroup",
-            "col",
-            "img",
-            "hr",
-            "div",
-            "span",
-            "center",
-            "h1",
-            "h2",
-            "h3",
-            "h4",
-            "h5",
-            "h6",
-        ],
-        ADD_ATTR: [
-            "style",
-            "class",
-            "align",
-            "valign",
-            "width",
-            "height",
-            "cellpadding",
-            "cellspacing",
-            "border",
-            "bgcolor",
-            "src",
-            "alt",
-            "href",
-            "target",
-        ],
-    })
-}
-
 function recordSelection(
     el: HTMLInputElement | HTMLTextAreaElement,
     ref: MutableRefObject<{ start: number; end: number } | null>
@@ -219,22 +149,28 @@ export default function PlatformSystemEmailTemplateNewPage() {
     const [name, setName] = useState("")
     const [subject, setSubject] = useState("")
     const [fromEmail, setFromEmail] = useState("")
-    const [body, setBody] = useState("")
+    const [bodyValue, setBodyValue] = useState<{ body: string; bodyDesign: EmailBodyDesign | null }>({
+        body: "",
+        bodyDesign: null,
+    })
+    const body = bodyValue.body
     const [isActive, setIsActive] = useState(true)
     const [saving, setSaving] = useState(false)
-
-    const [editorMode, setEditorMode] = useState<EditorMode>("visual")
-    const [editorModeTouched, setEditorModeTouched] = useState(false)
+    const [view, setView] = useState<EditorView>("edit")
 
     const subjectRef = useRef<HTMLInputElement | null>(null)
     const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null)
-    const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
-    const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
-    const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
+    const designRef = useRef<EmailDesignEditorHandle | null>(null)
     const activeInsertionTargetRef = useRef<ActiveInsertionTarget>(null)
 
     const setActiveInsertionTarget = (target: ActiveInsertionTarget) => {
         activeInsertionTargetRef.current = target
+    }
+
+    const setBody = (value: EmailBodyValue) => {
+        setBodyValue((current) =>
+            current.body === value.body && current.bodyDesign === value.bodyDesign ? current : value,
+        )
     }
 
     const systemKey = manualSystemKey ?? buildSystemKeyFromName(name)
@@ -243,10 +179,6 @@ export default function PlatformSystemEmailTemplateNewPage() {
         values: { system_key: systemKey, name, subject, from_email: fromEmail, body },
         validate: validateNewSystemTemplate,
     })
-    const hasComplexHtml = hasComplexEmailHtml(body)
-
-    const effectiveEditorMode: EditorMode =
-        editorMode === "visual" && hasComplexHtml && !editorModeTouched ? "html" : editorMode
 
     const canValidateVariables = !variablesLoading && templateVariables.length > 0
     const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
@@ -264,43 +196,20 @@ export default function PlatformSystemEmailTemplateNewPage() {
     const missingRequiredVariables = canValidateVariables
         ? requiredVariableNames.filter((variable) => !usedVariableNamesSet.has(variable))
         : []
-    const previewHtml = buildPreviewHtml(body)
 
     const insertToken = (token: string) => {
-        const activeInsertionTarget = activeInsertionTargetRef.current
-        const insertionTarget =
-            activeInsertionTarget === "body_visual" && effectiveEditorMode === "html" ? null : activeInsertionTarget
-
-        if (insertionTarget === "subject") {
+        if (activeInsertionTargetRef.current === "subject") {
             insertIntoTextControl(subjectRef.current, subjectSelectionRef, setSubject, token)
             return
         }
-        if (insertionTarget === "body_html") {
-            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, token)
-            return
-        }
-        if (insertionTarget === "body_visual") {
-            visualBodyRef.current?.insertText(token)
-            return
-        }
-
-        if (effectiveEditorMode === "html") {
-            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, token)
-            return
-        }
-        visualBodyRef.current?.insertText(token)
+        designRef.current?.insertText(token)
     }
 
+    // The server expands {{platform_logo_block}} to the branding logo image.
     const insertPlatformLogo = () => {
         if (body.includes("{{platform_logo_block}}")) return
-        const block = `<p>{{platform_logo_block}}</p>\n`
-        if (effectiveEditorMode === "visual") {
-            visualBodyRef.current?.insertHtml(block)
-            setActiveInsertionTarget("body_visual")
-            return
-        }
-        insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setBody, block)
-        setActiveInsertionTarget("body_html")
+        designRef.current?.insertText("{{platform_logo_block}}")
+        setActiveInsertionTarget("body")
     }
 
     const handleCreate = async (values: NewSystemTemplateValues) => {
@@ -314,6 +223,7 @@ export default function PlatformSystemEmailTemplateNewPage() {
                 subject: values.subject.trim(),
                 from_email: values.from_email.trim() ? values.from_email.trim() : null,
                 body: values.body,
+                ...(bodyValue.bodyDesign ? { body_design: bodyValue.bodyDesign } : {}),
                 is_active: isActive,
             })
             toast.success("System email template created")
@@ -333,82 +243,126 @@ export default function PlatformSystemEmailTemplateNewPage() {
         }
     }
 
+    const bodyError = validation.errorFor("body")
+
     return (
-        <div>
+        <Tabs value={view} onValueChange={(value) => setView(value as EditorView)} className="gap-0">
             <PageHeader
                 title="New System Email"
                 back={{ href: "/ops/templates?tab=system", label: "Back to templates" }}
                 sticky
                 className="top-14"
                 actions={
-                    <Button onClick={validation.handleSubmit(handleCreate)} disabled={saving}>
-                        {saving ? (
-                            <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
-                        ) : (
-                            <PlusIcon className="size-4" aria-hidden="true" />
-                        )}
-                        Create
-                    </Button>
+                    <>
+                        <TabsList aria-label="Editor view">
+                            <TabsTrigger value="edit">Edit</TabsTrigger>
+                            <TabsTrigger value="preview">Preview</TabsTrigger>
+                            <TabsTrigger value="html">HTML</TabsTrigger>
+                        </TabsList>
+                        <Button
+                            onClick={(event) => {
+                                setView("edit")
+                                void validation.handleSubmit(handleCreate)(event)
+                            }}
+                            disabled={saving}
+                        >
+                            {saving ? (
+                                <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+                            ) : (
+                                <PlusIcon className="size-4" aria-hidden="true" />
+                            )}
+                            Create
+                        </Button>
+                    </>
                 }
             />
 
-            <div className="grid gap-6 p-6 lg:grid-cols-3">
-                <div className="space-y-6 lg:col-span-2">
-                    <TemplateSettingsCard
-                        systemKey={systemKey}
-                        systemKeyError={validation.errorFor("system_key")}
-                        name={name}
-                        nameError={validation.errorFor("name")}
-                        subject={subject}
-                        subjectError={validation.errorFor("subject")}
-                        fromEmail={fromEmail}
-                        fromEmailError={validation.errorFor("from_email")}
-                        onFieldBlur={validation.touch}
-                        isActive={isActive}
-                        templateVariables={templateVariables}
-                        variablesLoading={variablesLoading}
-                        subjectRef={subjectRef}
-                        subjectSelectionRef={subjectSelectionRef}
-                        onSystemKeyChange={setManualSystemKey}
-                        onNameChange={setName}
-                        onSubjectChange={setSubject}
-                        onFromEmailChange={setFromEmail}
-                        onActiveChange={setIsActive}
-                        onInsertToken={insertToken}
-                        onActiveInsertionTargetChange={setActiveInsertionTarget}
-                    />
-
-                    <TemplateContentCard
-                        effectiveEditorMode={effectiveEditorMode}
-                        hasComplexHtml={hasComplexHtml}
-                        body={body}
-                        bodyError={validation.errorFor("body")}
-                        onBodyBlur={() => validation.touch("body")}
-                        templateVariables={templateVariables}
-                        variablesLoading={variablesLoading}
-                        visualBodyRef={visualBodyRef}
-                        htmlBodyRef={htmlBodyRef}
-                        htmlBodySelectionRef={htmlBodySelectionRef}
-                        activeInsertionTargetRef={activeInsertionTargetRef}
-                        unknownVariables={unknownVariables}
-                        missingRequiredVariables={missingRequiredVariables}
-                        showVariableWarnings={Boolean(subject.trim() || body.trim())}
-                        onBodyChange={setBody}
-                        onEditorModeChange={setEditorMode}
-                        onEditorModeTouchedChange={setEditorModeTouched}
-                        onInsertToken={insertToken}
-                        onInsertPlatformLogo={insertPlatformLogo}
-                        onActiveInsertionTargetChange={setActiveInsertionTarget}
-                    />
-                </div>
-
-                <TemplatePreviewCard hasContent={Boolean(body.trim())} previewHtml={previewHtml} />
-            </div>
-        </div>
+            <TabsContent value="edit" keepMounted className="mt-0 flex min-h-[calc(100dvh-8rem)] flex-col data-hidden:hidden">
+                <EmailDesignEditor
+                    ref={designRef}
+                    initialValue={bodyValue}
+                    onChange={setBody}
+                    variables={templateVariables}
+                    onSelectVariable={(variable) => insertToken(`{{${variable.name}}}`)}
+                    onFocus={() => setActiveInsertionTarget("body")}
+                    invalid={Boolean(bodyError)}
+                    error={bodyError ? <FieldError id="body-error">{bodyError}</FieldError> : null}
+                    fields={
+                        <div className="grid gap-4">
+                            <TemplateSettingsFields
+                                systemKey={systemKey}
+                                systemKeyError={validation.errorFor("system_key")}
+                                name={name}
+                                nameError={validation.errorFor("name")}
+                                subject={subject}
+                                subjectError={validation.errorFor("subject")}
+                                fromEmail={fromEmail}
+                                fromEmailError={validation.errorFor("from_email")}
+                                onFieldBlur={validation.touch}
+                                subjectRef={subjectRef}
+                                subjectSelectionRef={subjectSelectionRef}
+                                onSystemKeyChange={setManualSystemKey}
+                                onNameChange={setName}
+                                onSubjectChange={setSubject}
+                                onFromEmailChange={setFromEmail}
+                                onActiveInsertionTargetChange={setActiveInsertionTarget}
+                            />
+                            <TemplateVariableWarnings
+                                unknownVariables={unknownVariables}
+                                missingRequiredVariables={missingRequiredVariables}
+                                show={Boolean(subject.trim() || body.trim())}
+                            />
+                        </div>
+                    }
+                    settings={
+                        <div className="grid gap-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <Label htmlFor="template-active">Active</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        Inactive templates cannot be used for campaigns or transactional sends.
+                                    </p>
+                                </div>
+                                <Switch id="template-active" checked={isActive} onCheckedChange={setIsActive} />
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={body.includes("{{platform_logo_block}}")}
+                                onClick={insertPlatformLogo}
+                            >
+                                <ImageIcon aria-hidden="true" />
+                                Insert logo
+                            </Button>
+                        </div>
+                    }
+                />
+            </TabsContent>
+            <TabsContent value="preview" className="mt-0 flex min-h-[calc(100dvh-8rem)] flex-col">
+                <EmailPreviewPane
+                    subject={subject}
+                    body={body}
+                    queryKey={["platform-system", "new"]}
+                    modes={["sample", "names"]}
+                    load={(request) =>
+                        previewPlatformSystemEmailTemplate({
+                            subject: request.subject,
+                            body: request.body,
+                            variable_mode: request.variableMode === "names" ? "names" : "sample",
+                            org_id: null,
+                        })
+                    }
+                />
+            </TabsContent>
+            <TabsContent value="html" className="mt-0 min-h-[calc(100dvh-8rem)] bg-muted/40 p-4 sm:p-6">
+                <EmailHtmlSource html={body} />
+            </TabsContent>
+        </Tabs>
     )
 }
 
-function TemplateSettingsCard({
+function TemplateSettingsFields({
     systemKey,
     systemKeyError,
     name,
@@ -417,9 +371,6 @@ function TemplateSettingsCard({
     subjectError,
     fromEmail,
     fromEmailError,
-    isActive,
-    templateVariables,
-    variablesLoading,
     subjectRef,
     subjectSelectionRef,
     onFieldBlur,
@@ -427,8 +378,6 @@ function TemplateSettingsCard({
     onNameChange,
     onSubjectChange,
     onFromEmailChange,
-    onActiveChange,
-    onInsertToken,
     onActiveInsertionTargetChange,
 }: {
     systemKey: string
@@ -440,252 +389,89 @@ function TemplateSettingsCard({
     fromEmail: string
     fromEmailError: string | undefined
     onFieldBlur: (field: NewSystemTemplateField) => void
-    isActive: boolean
-    templateVariables: TemplateVariable[]
-    variablesLoading: boolean
     subjectRef: MutableRefObject<HTMLInputElement | null>
     subjectSelectionRef: TextSelectionRef
     onSystemKeyChange: Dispatch<SetStateAction<string | null>>
     onNameChange: Dispatch<SetStateAction<string>>
     onSubjectChange: Dispatch<SetStateAction<string>>
     onFromEmailChange: Dispatch<SetStateAction<string>>
-    onActiveChange: Dispatch<SetStateAction<boolean>>
-    onInsertToken: (token: string) => void
     onActiveInsertionTargetChange: (target: ActiveInsertionTarget) => void
 }) {
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Template settings</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-                <ValidatedField
-                    id="system-key"
-                    label="System key"
-                    description="Lowercase letters, numbers, and underscores. Cannot be changed later."
-                    error={systemKeyError}
-                >
-                    {(control) => (
-                        <Input
-                            {...control}
-                            value={systemKey}
-                            onChange={(event) => {
-                                onSystemKeyChange(event.target.value)
-                            }}
-                            onBlur={() => onFieldBlur("system_key")}
-                            placeholder="e.g. password_reset"
-                        />
-                    )}
-                </ValidatedField>
-                <ValidatedField id="name" label="Name" error={nameError}>
-                    {(control) => (
-                        <Input
-                            {...control}
-                            value={name}
-                            onChange={(event) => onNameChange(event.target.value)}
-                            onBlur={() => onFieldBlur("name")}
-                            placeholder="Human-friendly label"
-                        />
-                    )}
-                </ValidatedField>
-                <Field data-invalid={subjectError ? true : undefined} className="sm:col-span-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                        <FieldLabel htmlFor="subject">Subject</FieldLabel>
-                        <TemplateVariablePicker
-                            variables={templateVariables}
-                            disabled={variablesLoading || templateVariables.length === 0}
-                            triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
-                            onSelect={(variable) => onInsertToken(`{{${variable.name}}}`)}
-                        />
-                    </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+            <ValidatedField
+                id="system-key"
+                label="System key"
+                description="Lowercase letters, numbers, and underscores. Cannot be changed later."
+                error={systemKeyError}
+            >
+                {(control) => (
                     <Input
-                        ref={subjectRef}
-                        id="subject"
-                        value={subject}
-                        aria-invalid={subjectError ? true : undefined}
-                        aria-describedby={subjectError ? "subject-error" : undefined}
-                        onChange={(event) => onSubjectChange(event.target.value)}
-                        onFocus={() => onActiveInsertionTargetChange("subject")}
-                        onBlur={() => onFieldBlur("subject")}
-                        onKeyUp={(event) =>
-                            recordSelection(event.currentTarget, subjectSelectionRef)
-                        }
-                        onMouseUp={(event) =>
-                            recordSelection(event.currentTarget, subjectSelectionRef)
-                        }
-                        onSelect={(event) =>
-                            recordSelection(event.currentTarget, subjectSelectionRef)
-                        }
-                        placeholder="Email subject..."
-                    />
-                    {subjectError ? <FieldError id="subject-error">{subjectError}</FieldError> : null}
-                </Field>
-                <ValidatedField
-                    id="from-email"
-                    label="From email (optional)"
-                    error={fromEmailError}
-                    className="sm:col-span-2"
-                >
-                    {(control) => (
-                        <Input
-                            {...control}
-                            value={fromEmail}
-                            onChange={(event) => onFromEmailChange(event.target.value)}
-                            onBlur={() => onFieldBlur("from_email")}
-                            placeholder="e.g. Surrogacy Force <no-reply@surrogacyforce.com>"
-                        />
-                    )}
-                </ValidatedField>
-                <div className="flex items-center justify-between gap-3 rounded-lg border p-3 sm:col-span-2">
-                    <div>
-                        <p className="text-sm font-medium">Active</p>
-                        <p className="text-xs text-muted-foreground">
-                            Inactive templates cannot be used for campaigns or transactional sends.
-                        </p>
-                    </div>
-                    <Switch checked={isActive} onCheckedChange={onActiveChange} />
-                </div>
-            </CardContent>
-        </Card>
-    )
-}
-
-function TemplateContentCard({
-    effectiveEditorMode,
-    hasComplexHtml,
-    body,
-    bodyError,
-    onBodyBlur,
-    templateVariables,
-    variablesLoading,
-    visualBodyRef,
-    htmlBodyRef,
-    htmlBodySelectionRef,
-    activeInsertionTargetRef,
-    unknownVariables,
-    missingRequiredVariables,
-    showVariableWarnings,
-    onBodyChange,
-    onEditorModeChange,
-    onEditorModeTouchedChange,
-    onInsertToken,
-    onInsertPlatformLogo,
-    onActiveInsertionTargetChange,
-}: {
-    effectiveEditorMode: EditorMode
-    hasComplexHtml: boolean
-    body: string
-    bodyError: string | undefined
-    onBodyBlur: () => void
-    templateVariables: TemplateVariable[]
-    variablesLoading: boolean
-    visualBodyRef: MutableRefObject<RichTextEditorHandle | null>
-    htmlBodyRef: MutableRefObject<HTMLTextAreaElement | null>
-    htmlBodySelectionRef: TextSelectionRef
-    activeInsertionTargetRef: MutableRefObject<ActiveInsertionTarget>
-    unknownVariables: string[]
-    missingRequiredVariables: string[]
-    showVariableWarnings: boolean
-    onBodyChange: Dispatch<SetStateAction<string>>
-    onEditorModeChange: Dispatch<SetStateAction<EditorMode>>
-    onEditorModeTouchedChange: Dispatch<SetStateAction<boolean>>
-    onInsertToken: (token: string) => void
-    onInsertPlatformLogo: () => void
-    onActiveInsertionTargetChange: (target: ActiveInsertionTarget) => void
-}) {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Template content</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <ToggleGroup
-                        multiple={false}
-                        value={effectiveEditorMode ? [effectiveEditorMode] : []}
-                        onValueChange={(value) => {
-                            const next = value[0] as EditorMode | undefined
-                            if (!next) return
-                            onEditorModeChange(next)
-                            onEditorModeTouchedChange(true)
-                            const currentTarget = activeInsertionTargetRef.current
-                            onActiveInsertionTargetChange(
-                                currentTarget === "subject"
-                                    ? currentTarget
-                                    : next === "html"
-                                      ? "body_html"
-                                      : "body_visual"
-                            )
+                        {...control}
+                        value={systemKey}
+                        onChange={(event) => {
+                            onSystemKeyChange(event.target.value)
                         }}
-                    >
-                        <ToggleGroupItem value="visual" className="h-8">
-                            Visual
-                        </ToggleGroupItem>
-                        <ToggleGroupItem value="html" className="h-8">
-                            HTML
-                        </ToggleGroupItem>
-                    </ToggleGroup>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <TemplateVariablePicker
-                            variables={templateVariables}
-                            disabled={variablesLoading || templateVariables.length === 0}
-                            triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
-                            onSelect={(variable) => onInsertToken(`{{${variable.name}}}`)}
-                        />
-                        <Button type="button" variant="ghost" size="sm" onClick={onInsertPlatformLogo}>
-                            Insert Logo
-                        </Button>
-                    </div>
-                </div>
-
-                {effectiveEditorMode === "visual" ? (
-                    <RichTextEditor
-                        ref={visualBodyRef}
-                        content={body}
-                        onChange={(html) => onBodyChange(html)}
-                        onFocus={() => onActiveInsertionTargetChange("body_visual")}
-                        placeholder="Write your system email content here..."
-                        minHeight="240px"
-                        maxHeight="480px"
-                        enableImages
-                        enableEmojiPicker
-                    />
-                ) : (
-                    <Textarea
-                        ref={htmlBodyRef}
-                        value={body}
-                        onChange={(event) => onBodyChange(event.target.value)}
-                        onFocus={(event) => {
-                            onActiveInsertionTargetChange("body_html")
-                            recordSelection(event.currentTarget, htmlBodySelectionRef)
-                        }}
-                        onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                        onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                        onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                        onBlur={onBodyBlur}
-                        aria-label="HTML body"
-                        aria-invalid={bodyError ? true : undefined}
-                        aria-describedby={bodyError ? "body-error" : undefined}
-                        placeholder="Paste or edit the HTML for this template..."
-                        className="min-h-[280px] max-h-[60vh] font-mono text-xs leading-relaxed"
+                        onBlur={() => onFieldBlur("system_key")}
+                        placeholder="e.g. password_reset"
                     />
                 )}
-
-                {bodyError ? <FieldError id="body-error">{bodyError}</FieldError> : null}
-
-                {effectiveEditorMode === "visual" && hasComplexHtml && (
-                    <p className="text-xs text-amber-600">
-                        This template contains advanced HTML. Switch to HTML mode to preserve layout.
-                    </p>
+            </ValidatedField>
+            <ValidatedField id="name" label="Name" error={nameError}>
+                {(control) => (
+                    <Input
+                        {...control}
+                        value={name}
+                        onChange={(event) => onNameChange(event.target.value)}
+                        onBlur={() => onFieldBlur("name")}
+                        placeholder="Human-friendly label"
+                    />
                 )}
-
-                <TemplateVariableWarnings
-                    unknownVariables={unknownVariables}
-                    missingRequiredVariables={missingRequiredVariables}
-                    show={showVariableWarnings}
+            </ValidatedField>
+            <Field data-invalid={subjectError ? true : undefined} className="sm:col-span-2">
+                <FieldLabel htmlFor="subject">Subject</FieldLabel>
+                <Input
+                    ref={subjectRef}
+                    id="subject"
+                    value={subject}
+                    aria-invalid={subjectError ? true : undefined}
+                    aria-describedby={subjectError ? "subject-error" : undefined}
+                    onChange={(event) => onSubjectChange(event.target.value)}
+                    onFocus={(event) => {
+                        onActiveInsertionTargetChange("subject")
+                        recordSelection(event.currentTarget, subjectSelectionRef)
+                    }}
+                    onBlur={() => onFieldBlur("subject")}
+                    onKeyUp={(event) =>
+                        recordSelection(event.currentTarget, subjectSelectionRef)
+                    }
+                    onMouseUp={(event) =>
+                        recordSelection(event.currentTarget, subjectSelectionRef)
+                    }
+                    onSelect={(event) =>
+                        recordSelection(event.currentTarget, subjectSelectionRef)
+                    }
+                    placeholder="Email subject..."
                 />
-            </CardContent>
-        </Card>
+                {subjectError ? <FieldError id="subject-error">{subjectError}</FieldError> : null}
+            </Field>
+            <ValidatedField
+                id="from-email"
+                label="From email (optional)"
+                error={fromEmailError}
+                className="sm:col-span-2"
+            >
+                {(control) => (
+                    <Input
+                        {...control}
+                        value={fromEmail}
+                        onChange={(event) => onFromEmailChange(event.target.value)}
+                        onBlur={() => onFieldBlur("from_email")}
+                        placeholder="e.g. Surrogacy Force <no-reply@surrogacyforce.com>"
+                    />
+                )}
+            </ValidatedField>
+        </div>
     )
 }
 
@@ -724,37 +510,5 @@ function TemplateVariableWarnings({
                 )}
             </AlertDescription>
         </Alert>
-    )
-}
-
-function TemplatePreviewCard({ hasContent, previewHtml }: { hasContent: boolean; previewHtml: string }) {
-    return (
-        <Card className="h-fit">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <EyeIcon className="size-4" />
-                    Preview
-                </CardTitle>
-                <CardDescription>Rendered using sample values.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {hasContent ? (
-                    // Email preview surface: stays white in dark mode; fixed-width tables scroll inside it.
-                    <div className="overflow-x-auto rounded-md border border-stone-200 bg-white shadow-sm">
-                        <TrustedSanitizedHtmlContent
-                            html={previewHtml}
-                            className="p-6 prose prose-sm prose-stone max-w-none text-stone-900"
-                        />
-                    </div>
-                ) : (
-                    <EmptyState
-                        icon={EyeIcon}
-                        title="No content yet"
-                        headingLevel={3}
-                        className="rounded-md border border-dashed"
-                    />
-                )}
-            </CardContent>
-        </Card>
     )
 }

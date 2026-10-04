@@ -387,7 +387,8 @@ describe("PublicFormFieldRenderer", () => {
         )
 
         const group = screen.getByRole("radiogroup", { name: /specify your race/i })
-        expect(group).toHaveClass("sm:grid-cols-2")
+        // Columns are at least 11rem wide, so choices stack below two columns' width.
+        expect(group).toHaveClass("grid-cols-[repeat(auto-fit,minmax(min(11rem,100%),1fr))]")
         expect(group).not.toHaveClass("grid-cols-2")
     })
 

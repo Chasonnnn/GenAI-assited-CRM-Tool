@@ -5,17 +5,16 @@ import {
     CopyIcon,
     EditIcon,
     LockIcon,
-    MoreVerticalIcon,
+    MoreHorizontalIcon,
     SendIcon,
     ShareIcon,
     TrashIcon,
-    UserIcon,
 } from "lucide-react"
 
 import Link from "@/components/app-link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -23,6 +22,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import type { EmailTemplateDraft } from "@/lib/api/email-template-drafts"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import { formatDate } from "@/lib/formatters"
 import { getTemplateStudioHref } from "@/components/email/template-studio-route"
@@ -42,6 +42,56 @@ type TemplateCardActionConfig = { group: TemplateCardActionGroup; label: string 
 export type TemplateCardControls =
     | { kind: "actions"; actions: TemplateCardActionKind[]; onAction: (action: TemplateCardActionKind) => void }
     | { kind: "read_only" }
+
+export const templateChipClassName = {
+    active: "border-transparent bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+    inactive: "border-transparent bg-muted text-muted-foreground",
+    draft: "border-transparent bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
+}
+
+export const templateCardClassName = "relative min-w-0 gap-3 py-4 transition-colors hover:bg-accent/40"
+export const templateCardTitleClassName =
+    "min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug"
+export const templateCardLinkClassName =
+    "line-clamp-2 after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
+
+export function TemplateCardMenuTrigger({ name }: { name: string }) {
+    return (
+        <DropdownMenuTrigger
+            render={
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="relative z-10 -mr-2 -mt-1 size-8 shrink-0"
+                    aria-label={`Actions for ${name}`}
+                >
+                    <MoreHorizontalIcon className="size-4" aria-hidden="true" />
+                </Button>
+            }
+        />
+    )
+}
+
+export function TemplateCardSubject({ subject }: { subject: string }) {
+    return (
+        <p className="truncate px-4 font-mono text-xs text-muted-foreground" title={subject}>
+            {subject}
+        </p>
+    )
+}
+
+export function TemplateCardMeta({ ownerName, updatedAt }: { ownerName: string | null; updatedAt: string }) {
+    return (
+        <p className="px-4 text-xs text-muted-foreground">
+            {ownerName ? `${ownerName} · ` : null}Updated {formatDate(updatedAt)}
+        </p>
+    )
+}
+
+export function getTemplateDraftLabel(draft: EmailTemplateDraft) {
+    return draft.template_id ? "Draft changes" : "Unpublished draft"
+}
 
 function getTemplateCardActionConfig(kind: TemplateCardActionKind): TemplateCardActionConfig {
     switch (kind) {
@@ -67,55 +117,93 @@ function getTemplateCardActionIcon(kind: TemplateCardActionKind) {
     }
 }
 
-export function TemplateCard({ template, controls }: { template: EmailTemplateListItem; controls: TemplateCardControls }) {
+export function TemplateCard({
+    template,
+    controls,
+    draft,
+    onDiscardDraft,
+}: {
+    template: EmailTemplateListItem
+    controls: TemplateCardControls
+    draft?: EmailTemplateDraft | undefined
+    onDiscardDraft?: (() => void) | undefined
+}) {
     const canEdit = controls.kind === "actions" && controls.actions.includes("edit")
+    const actions = controls.kind === "actions" ? controls.actions : []
+    const hasMenu = actions.length > 0 || Boolean(draft && onDiscardDraft)
     return (
-        <Card className="group relative min-w-0">
-            <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-start gap-2">
-                            <CardTitle className="min-h-12 text-base leading-6 break-words">
-                                {canEdit ? (
-                                    <Link href={getTemplateStudioHref(template)} fallbackMode="router" aria-label={`Edit ${template.name}`} className="block w-full cursor-pointer rounded-sm text-left transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                                        <span className="line-clamp-2">{template.name}</span>
-                                    </Link>
-                                ) : <span className="line-clamp-2">{template.name}</span>}
-                            </CardTitle>
-                            {template.is_system_template && <Badge variant="secondary" className="text-xs shrink-0">System</Badge>}
-                        </div>
-                        <CardDescription className="mt-1 line-clamp-2 min-h-10 break-words" title={template.subject}>{template.subject}</CardDescription>
-                        {template.owner_name && <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1"><UserIcon className="size-3" />{template.owner_name}</p>}
-                    </div>
-                    {controls.kind === "actions" && controls.actions.length > 0 && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger render={<Button type="button" variant="outline" size="icon" className="size-8 shrink-0" aria-label={`Actions for ${template.name}`}><MoreVerticalIcon className="size-4" aria-hidden="true" /></Button>} />
-                            <DropdownMenuContent align="end">
-                                {controls.actions.map((action, index) => {
-                                    const actionConfig = getTemplateCardActionConfig(action)
-                                    const previousAction = controls.actions[index - 1]
-                                    const previousActionConfig = previousAction ? getTemplateCardActionConfig(previousAction) : null
-                                    return (
-                                        <React.Fragment key={action}>
-                                            {previousActionConfig && previousActionConfig.group !== actionConfig.group && <DropdownMenuSeparator />}
-                                            <DropdownMenuItem onClick={() => controls.onAction(action)} className={actionConfig.group === "danger" ? "text-destructive" : undefined}>
-                                                {getTemplateCardActionIcon(action)}{actionConfig.label}
-                                            </DropdownMenuItem>
-                                        </React.Fragment>
-                                    )
-                                })}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+        <Card className={templateCardClassName}>
+            <div className="flex items-start gap-2 px-4">
+                <h3 className={templateCardTitleClassName}>
+                    {canEdit ? (
+                        <Link
+                            href={getTemplateStudioHref(template)}
+                            fallbackMode="router"
+                            aria-label={`Edit ${template.name}`}
+                            className={templateCardLinkClassName}
+                        >
+                            {template.name}
+                        </Link>
+                    ) : (
+                        <span className="line-clamp-2">{template.name}</span>
                     )}
-                    {controls.kind === "read_only" && <Badge variant="outline" className="text-xs shrink-0"><LockIcon className="size-3 mr-1" />View Only</Badge>}
-                </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-                <div className="flex items-center gap-2">
-                    <Badge variant={template.is_active ? "default" : "secondary"}>{template.is_active ? "Active" : "Inactive"}</Badge>
-                    <span className="text-xs text-muted-foreground">Updated {formatDate(template.updated_at)}</span>
-                </div>
-            </CardContent>
+                </h3>
+                {hasMenu ? (
+                    <DropdownMenu>
+                        <TemplateCardMenuTrigger name={template.name} />
+                        <DropdownMenuContent align="end">
+                            {actions.map((action, index) => {
+                                const actionConfig = getTemplateCardActionConfig(action)
+                                const previousAction = actions[index - 1]
+                                const previousActionConfig = previousAction ? getTemplateCardActionConfig(previousAction) : null
+                                return (
+                                    <React.Fragment key={action}>
+                                        {previousActionConfig && previousActionConfig.group !== actionConfig.group && <DropdownMenuSeparator />}
+                                        <DropdownMenuItem
+                                            onClick={() => controls.kind === "actions" && controls.onAction(action)}
+                                            className={actionConfig.group === "danger" ? "text-destructive" : undefined}
+                                        >
+                                            {getTemplateCardActionIcon(action)}
+                                            {actionConfig.label}
+                                        </DropdownMenuItem>
+                                    </React.Fragment>
+                                )
+                            })}
+                            {draft && onDiscardDraft ? (
+                                <>
+                                    {actions.length > 0 ? <DropdownMenuSeparator /> : null}
+                                    <DropdownMenuItem className="text-destructive" onClick={onDiscardDraft}>
+                                        <TrashIcon className="mr-2 size-4" />
+                                        Discard draft changes
+                                    </DropdownMenuItem>
+                                </>
+                            ) : null}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                ) : null}
+            </div>
+            <TemplateCardSubject subject={template.subject} />
+            <div className="flex flex-wrap items-center gap-1.5 px-4">
+                <Badge
+                    variant="outline"
+                    className={template.is_active ? templateChipClassName.active : templateChipClassName.inactive}
+                >
+                    {template.is_active ? "Active" : "Inactive"}
+                </Badge>
+                {template.is_system_template ? <Badge variant="outline">System</Badge> : null}
+                {draft ? (
+                    <Badge variant="outline" className={templateChipClassName.draft}>
+                        {getTemplateDraftLabel(draft)}
+                    </Badge>
+                ) : null}
+                {controls.kind === "read_only" ? (
+                    <Badge variant="outline">
+                        <LockIcon className="mr-1 size-3" aria-hidden="true" />
+                        View Only
+                    </Badge>
+                ) : null}
+            </div>
+            <TemplateCardMeta ownerName={template.owner_name} updatedAt={draft?.updated_at ?? template.updated_at} />
         </Card>
     )
 }

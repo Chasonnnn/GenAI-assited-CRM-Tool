@@ -135,6 +135,10 @@ export interface FormSummary {
     updated_at: string
 }
 
+export interface FormListItem extends FormSummary {
+    submission_count: number
+}
+
 export interface FormRead extends FormSummary {
     description?: string | null
     form_schema?: FormSchema | null
@@ -561,8 +565,8 @@ export interface SubmissionDownloadResponse {
     filename: string
 }
 
-export function listForms(): Promise<FormSummary[]> {
-    return api.get<FormSummary[]>('/forms')
+export function listForms(): Promise<FormListItem[]> {
+    return api.get<FormListItem[]>('/forms')
 }
 
 export function getForm(formId: string): Promise<FormRead> {

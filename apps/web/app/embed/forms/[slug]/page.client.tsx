@@ -54,7 +54,7 @@ type EmbedFormAction =
     | { type: "submissionStarted" }
     | { type: "submissionSucceeded" }
     | { type: "submissionFailed"; error: string }
-const pageClassName = "public-form-light min-h-screen bg-transparent text-stone-900"
+const pageClassName = "public-form-light min-h-screen bg-transparent text-neutral-900"
 
 function getInitialParentOrigin(): string | null {
     if (typeof window === "undefined") return null
@@ -351,21 +351,21 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
                 </div>
             ) : error && !formConfig ? (
                 <div className="flex min-h-[320px] items-center justify-center p-6">
-                    <Card className="w-full max-w-md rounded-lg border-stone-200">
+                    <Card className="w-full max-w-md rounded-lg border-neutral-200">
                         <CardContent className="space-y-3 p-6 text-center">
                             <AlertTriangleIcon className="mx-auto size-10 text-amber-500" />
-                            <p className="text-sm text-stone-600">{error}</p>
+                            <p className="text-sm text-neutral-600">{error}</p>
                         </CardContent>
                     </Card>
                 </div>
             ) : isSubmitted ? (
                 <div className="flex min-h-[320px] items-center justify-center p-6">
-                    <Card className="w-full max-w-md rounded-lg border-stone-200">
+                    <Card className="w-full max-w-md rounded-lg border-neutral-200">
                         <CardContent className="space-y-4 p-6 text-center">
                             <CheckCircle2Icon className="mx-auto size-12 text-primary" />
                             <div>
-                                <h1 className="text-lg font-semibold text-stone-950">Request received</h1>
-                                <p className="mt-2 text-sm leading-6 text-stone-600">
+                                <h1 className="text-lg font-semibold text-neutral-950">Request received</h1>
+                                <p className="mt-2 text-sm leading-6 text-neutral-600">
                                     The intake team will follow up with you shortly.
                                 </p>
                             </div>
@@ -374,20 +374,20 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
                 </div>
             ) : formConfig ? (
                 <main className="mx-auto w-full max-w-[760px] px-4 py-4 sm:px-6 sm:py-6">
-                    <section className="border border-stone-200/80 bg-white px-4 py-5 shadow-[0_18px_60px_rgba(31,38,58,0.08)] sm:px-6 sm:py-6">
-                        <div className="mb-5 border-b border-stone-200/80 pb-4">
+                    <section className="border border-neutral-200/80 bg-white px-4 py-5 shadow-[0_18px_60px_rgba(31,38,58,0.08)] sm:px-6 sm:py-6">
+                        <div className="mb-5 border-b border-neutral-200/80 pb-4">
                             {formConfig.form_schema.public_eyebrow?.trim() ? (
-                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
+                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-400">
                                     {formConfig.form_schema.public_eyebrow.trim()}
                                 </p>
                             ) : null}
                             {formConfig.form_schema.public_title?.trim() ? (
-                                <h1 className="text-[22px] font-semibold leading-tight text-stone-950">
+                                <h1 className="text-[22px] font-semibold leading-tight text-neutral-950">
                                     {formConfig.form_schema.public_title.trim()}
                                 </h1>
                             ) : null}
                             {formConfig.form_schema.public_subtitle?.trim() ? (
-                                <p className="mt-2 max-w-[54ch] text-[14px] leading-6 text-stone-600">
+                                <p className="mt-2 max-w-[54ch] text-[14px] leading-6 text-neutral-600">
                                     {formConfig.form_schema.public_subtitle.trim()}
                                 </p>
                             ) : null}
@@ -411,7 +411,7 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
                         {smsPhoneField ? null : smsConsent}
 
                         {formConfig.form_schema.privacy_notice?.trim() ? (
-                            <p className="rounded-md bg-stone-50 px-3 py-2 text-[12px] leading-5 text-stone-500">
+                            <p className="rounded-md bg-neutral-50 px-3 py-2 text-[12px] leading-5 text-neutral-500">
                                 {formConfig.form_schema.privacy_notice.trim()}
                             </p>
                         ) : null}

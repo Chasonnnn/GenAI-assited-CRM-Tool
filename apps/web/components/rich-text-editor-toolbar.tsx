@@ -24,6 +24,12 @@ import { RichTextEditorEmojiPopover } from "@/components/rich-text-editor-emoji-
 /** Every toolbar control is a 32px square, so toggles and buttons line up on one row. */
 const TOOLBAR_ITEM_CLASS = "size-8 min-w-8 p-0"
 
+// Same effect as TextAlign's setTextAlign for the paragraph-only configuration. @react-email/editor
+// 1.7.11 declares its own Commands["textAlign"] group, which hides setTextAlign from the types.
+function alignParagraph(editor: Editor, alignment: "left" | "center" | "right") {
+    editor.chain().focus().updateAttributes("paragraph", { textAlign: alignment }).run()
+}
+
 function ToolbarGroup({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div role="group" aria-label={label} className="flex items-center gap-1">
@@ -182,7 +188,7 @@ export function RichTextEditorToolbar({
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
                         pressed={toolbarState.isAlignLeft}
-                        onPressedChange={() => editor.chain().focus().setTextAlign("left").run()}
+                        onPressedChange={() => alignParagraph(editor, "left")}
                         aria-label="Align Left"
                     >
                         <AlignLeftIcon className="size-4" />
@@ -191,7 +197,7 @@ export function RichTextEditorToolbar({
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
                         pressed={toolbarState.isAlignCenter}
-                        onPressedChange={() => editor.chain().focus().setTextAlign("center").run()}
+                        onPressedChange={() => alignParagraph(editor, "center")}
                         aria-label="Align Center"
                     >
                         <AlignCenterIcon className="size-4" />
@@ -200,7 +206,7 @@ export function RichTextEditorToolbar({
                         size="sm"
                         className={TOOLBAR_ITEM_CLASS}
                         pressed={toolbarState.isAlignRight}
-                        onPressedChange={() => editor.chain().focus().setTextAlign("right").run()}
+                        onPressedChange={() => alignParagraph(editor, "right")}
                         aria-label="Align Right"
                     >
                         <AlignRightIcon className="size-4" />

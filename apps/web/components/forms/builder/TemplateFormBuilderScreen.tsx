@@ -35,7 +35,7 @@ export function TemplateFormBuilderScreen({
     }
 
     return (
-        <div className="flex min-h-screen flex-col bg-background">
+        <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-background lg:h-[calc(100vh-3.5rem)]">
             <ConfirmDialog
                 open={controller.state.showDeleteTemplateDialog}
                 onOpenChange={controller.onDeleteTemplateDialogOpenChange}
@@ -54,6 +54,17 @@ export function TemplateFormBuilderScreen({
                 isSaving={controller.state.isSaving}
                 autoSaveLabel={controller.autoSaveLabel}
                 autoSaveTone={controller.state.autoSaveStatus === "error" ? "error" : "default"}
+                navigation={
+                    <FormBuilderWorkspaceTabs
+                        value={controller.state.workspaceTab}
+                        onValueChange={controller.onWorkspaceTabChange}
+                        tabs={[
+                            { value: "edit", label: "Edit" },
+                            { value: "preview", label: "Preview" },
+                            { value: "settings", label: "Settings" },
+                        ]}
+                    />
+                }
                 onBack={controller.onBack}
                 onFormNameChange={controller.onFormNameChange}
                 onSave={controller.handleSave}
@@ -69,16 +80,6 @@ export function TemplateFormBuilderScreen({
                         },
                     }
                     : {})}
-            />
-
-            <FormBuilderWorkspaceTabs
-                value={controller.state.workspaceTab}
-                onValueChange={controller.onWorkspaceTabChange}
-                tabs={[
-                    { value: "edit", label: "Edit" },
-                    { value: "preview", label: "Preview" },
-                    { value: "settings", label: "Settings" },
-                ]}
             />
 
             {controller.state.workspaceTab === "edit" ? (

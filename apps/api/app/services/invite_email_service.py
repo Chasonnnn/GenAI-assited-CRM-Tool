@@ -135,11 +135,7 @@ async def send_invite_email(
     expires_block = f"<p>This invitation expires {expires_at}.</p>" if expires_at else ""
     branding = platform_branding_service.get_branding(db)
     platform_logo_url = (branding.logo_url or "").strip()
-    platform_logo_block = (
-        f'<img src="{platform_logo_url}" alt="Platform logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 6px auto;" />'
-        if platform_logo_url
-        else ""
-    )
+    platform_logo_block = system_email_template_service.build_platform_logo_block(platform_logo_url)
 
     variables = {
         "org_name": org_name,
@@ -166,7 +162,7 @@ async def send_invite_email(
         subject_template,
         body_template,
         variables,
-        safe_html_vars={"expires_block", "platform_logo_block"},
+        safe_html_vars=set(system_email_template_service.SAFE_HTML_VARIABLES),
     )
 
     html_body = _strip_role_articles(html_body, role_title=variables["role_title"])

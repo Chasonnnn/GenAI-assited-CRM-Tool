@@ -1367,6 +1367,12 @@
       "422"
     ]
   },
+  "/email-templates/preview": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/email-templates/send": {
     "POST": [
       "201",
@@ -3070,6 +3076,12 @@
       "422"
     ]
   },
+  "/platform/email/system-templates/preview": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/platform/email/system-templates/{system_key}": {
     "DELETE": [
       "204",
@@ -3248,6 +3260,12 @@
     ],
     "POST": [
       "201",
+      "422"
+    ]
+  },
+  "/platform/templates/email/preview": {
+    "POST": [
+      "200",
       "422"
     ]
   },

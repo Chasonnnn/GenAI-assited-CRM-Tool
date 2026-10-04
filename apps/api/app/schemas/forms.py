@@ -160,6 +160,10 @@ class FormSummary(BaseModel):
     updated_at: datetime
 
 
+class FormListItem(FormSummary):
+    submission_count: int
+
+
 class FormRead(FormSummary):
     description: str | None
     form_schema: FormSchema | None

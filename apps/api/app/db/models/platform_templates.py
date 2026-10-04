@@ -8,6 +8,7 @@ from datetime import datetime
 from sqlalchemy import (
     TIMESTAMP,
     Boolean,
+    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -26,7 +27,17 @@ class PlatformEmailTemplate(Base):
     """Platform-managed email templates with draft + published snapshots."""
 
     __tablename__ = "platform_email_templates"
-    __table_args__ = (Index("idx_platform_email_templates_status", "status"),)
+    __table_args__ = (
+        Index("idx_platform_email_templates_status", "status"),
+        CheckConstraint(
+            "body_design IS NULL OR jsonb_typeof(body_design) = 'object'",
+            name="ck_platform_email_templates_body_design_object",
+        ),
+        CheckConstraint(
+            "published_body_design IS NULL OR jsonb_typeof(published_body_design) = 'object'",
+            name="ck_platform_email_templates_published_body_design_object",
+        ),
+    )
 
     external_key: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
 
@@ -38,6 +49,8 @@ class PlatformEmailTemplate(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    # React Email editor document; ``body`` stays the send artifact (ADR 0006).
+    body_design: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     from_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
@@ -45,6 +58,9 @@ class PlatformEmailTemplate(Base):
     published_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     published_subject: Mapped[str | None] = mapped_column(String(200), nullable=True)
     published_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    published_body_design: Mapped[dict | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
     published_from_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     published_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
@@ -73,11 +89,19 @@ class PlatformSystemEmailTemplate(Base):
     """Platform-managed system email templates (global)."""
 
     __tablename__ = "platform_system_email_templates"
+    __table_args__ = (
+        CheckConstraint(
+            "body_design IS NULL OR jsonb_typeof(body_design) = 'object'",
+            name="ck_platform_system_email_templates_body_design_object",
+        ),
+    )
 
     system_key: Mapped[str] = mapped_column(String(100), primary_key=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    # React Email editor document; ``body`` stays the send artifact (ADR 0006).
+    body_design: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     from_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
     current_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

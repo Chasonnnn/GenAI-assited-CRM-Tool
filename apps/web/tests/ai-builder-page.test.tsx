@@ -10,6 +10,7 @@ const mockGenerateWorkflow = vi.fn()
 const mockSaveAIWorkflow = vi.fn()
 const mockGenerateEmailTemplate = vi.fn()
 const mockCreateEmailTemplateDraft = vi.fn()
+const mockConvertHtmlToDesign = vi.fn()
 const mockRouterPush = vi.fn()
 
 vi.mock("@/lib/auth-context", () => ({
@@ -46,6 +47,10 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
     }),
 }))
 
+vi.mock("@/components/email/design/compile", () => ({
+    convertHtmlToDesign: (html: string) => mockConvertHtmlToDesign(html),
+}))
+
 vi.mock("@/lib/hooks/use-email-template-drafts", () => ({
     useCreateEmailTemplateDraft: () => ({
         mutateAsync: mockCreateEmailTemplateDraft,
@@ -62,6 +67,7 @@ describe("AIBuilderPage", () => {
         mockSaveAIWorkflow.mockReset()
         mockGenerateEmailTemplate.mockReset()
         mockCreateEmailTemplateDraft.mockReset()
+        mockConvertHtmlToDesign.mockReset()
         mockRouterPush.mockReset()
     })
 
@@ -110,7 +116,7 @@ describe("AIBuilderPage", () => {
         expect(screen.getByText("unsubscribe_url")).toBeInTheDocument()
     })
 
-    it("saves generated personal templates as isolated Studio drafts", async () => {
+    it("saves generated personal templates as isolated Studio drafts with blocks", async () => {
         mockUseSearchParams.mockReturnValue({
             get: (key: string) => (key === "mode" ? "email_template" : null),
         })
@@ -129,6 +135,12 @@ describe("AIBuilderPage", () => {
         mockCreateEmailTemplateDraft.mockResolvedValue({
             id: "draft-ai-personal",
         })
+        const design = { type: "doc", content: [{ type: "paragraph" }] }
+        mockConvertHtmlToDesign.mockResolvedValue({
+            body: '<div style="background-color:#ffffff"><p>Hi {{first_name}}</p></div>',
+            bodyDesign: design,
+            blocks: [],
+        })
 
         render(<AIBuilderPage />)
         fireEvent.change(screen.getByRole("textbox"), {
@@ -143,12 +155,48 @@ describe("AIBuilderPage", () => {
             expect(mockCreateEmailTemplateDraft).toHaveBeenCalledWith({
                 name: "Welcome",
                 subject: "Hello {{first_name}}",
+                body: '<div style="background-color:#ffffff"><p>Hi {{first_name}}</p></div>',
+                body_design: design,
+                scope: "personal",
+            })
+        })
+        expect(mockConvertHtmlToDesign).toHaveBeenCalledWith("<p>Hi {{first_name}}</p>")
+        expect(mockRouterPush).toHaveBeenCalledWith(
+            "/automation/email-templates/personal/draft-ai-personal",
+        )
+    })
+
+    it("saves the generated HTML as is when block conversion fails", async () => {
+        mockUseSearchParams.mockReturnValue({
+            get: (key: string) => (key === "mode" ? "email_template" : null),
+        })
+        mockGenerateEmailTemplate.mockResolvedValue({
+            success: true,
+            template: {
+                name: "Welcome",
+                subject: "Hello {{first_name}}",
+                body_html: "<p>Hi {{first_name}}</p>",
+                variables_used: ["first_name"],
+            },
+            warnings: [],
+            validation_errors: [],
+            explanation: null,
+        })
+        mockCreateEmailTemplateDraft.mockResolvedValue({ id: "draft-ai-personal" })
+        mockConvertHtmlToDesign.mockRejectedValue(new Error("parse failed"))
+
+        render(<AIBuilderPage />)
+        fireEvent.change(screen.getByRole("textbox"), { target: { value: "Welcome email" } })
+        fireEvent.click(screen.getByRole("button", { name: /generate template/i }))
+        fireEvent.click(await screen.findByRole("button", { name: "Save Template" }))
+
+        await waitFor(() => {
+            expect(mockCreateEmailTemplateDraft).toHaveBeenCalledWith({
+                name: "Welcome",
+                subject: "Hello {{first_name}}",
                 body: "<p>Hi {{first_name}}</p>",
                 scope: "personal",
             })
         })
-        expect(mockRouterPush).toHaveBeenCalledWith(
-            "/automation/email-templates/personal/draft-ai-personal",
-        )
     })
 })

@@ -2,7 +2,6 @@
 
 import { useReducer, useRef, useState, type MutableRefObject } from "react"
 import { useParams, useRouter } from "next/navigation"
-import DOMPurify from "dompurify"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
@@ -15,18 +14,16 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { ValidatedField } from "@/components/ui/field"
 import { SaveStatus, type SaveStatusState } from "@/components/ui/save-bar"
-import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import {
     Loader2Icon,
-    EyeIcon,
     AlertTriangleIcon,
+    ImageIcon,
     MoreHorizontalIcon,
     SendIcon,
     Trash2Icon,
@@ -37,12 +34,13 @@ import { TestSendAgencySelect, useTestSendAgencies } from "@/components/ops/temp
 import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import { useFormValidation } from "@/lib/forms/use-form-validation"
 import { validateEmail, validateRequired } from "@/lib/forms/validators"
-import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
+import { EmailDesignEditor, type EmailDesignEditorHandle } from "@/components/email/design/email-design-editor"
+import { EmailHtmlSource } from "@/components/email/design/email-html-source"
+import { EmailPreviewPane } from "@/components/email/design/email-preview-pane"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { TrustedSanitizedHtmlContent } from "@/components/safe-html-content"
-import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"
-import { normalizeTemplateHtml } from "@/lib/email-template-html"
 import { insertAtCursor } from "@/lib/insert-at-cursor"
+import type { EmailBodyValue } from "@/lib/email-design"
+import type { EmailBodyDesign } from "@/lib/api/email-templates"
 import {
     useCreatePlatformEmailTemplate,
     usePlatformEmailTemplate,
@@ -52,12 +50,16 @@ import {
     useSendTestPlatformEmailTemplate,
     useUpdatePlatformEmailTemplate,
 } from "@/lib/hooks/use-platform-templates"
-import type { OrganizationSummary, PlatformEmailTemplate } from "@/lib/api/platform"
+import {
+    previewPlatformEmailTemplate,
+    type OrganizationSummary,
+    type PlatformEmailTemplate,
+} from "@/lib/api/platform"
 import type { TemplateVariableRead } from "@/lib/types/template-variable"
 
-type EditorMode = "visual" | "html"
+type ActiveInsertionTarget = "subject" | "body" | null
 
-type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
+type EditorView = "edit" | "preview" | "html"
 
 type TextFieldName = "name" | "subject" | "fromEmail" | "category" | "testOrgId" | "testEmail"
 
@@ -100,8 +102,7 @@ interface EmailTemplateEditorState {
     fromEmail: string
     category: string
     body: string
-    editorMode: EditorMode
-    editorModeTouched: boolean
+    bodyDesign: EmailBodyDesign | null
     isPublished: boolean
     showPublishDialog: boolean
     showDeleteDialog: boolean
@@ -119,58 +120,12 @@ interface EmailTemplateEditorState {
 type EmailTemplateEditorAction =
     | { type: "setSaveResult"; result: SaveResult }
     | { type: "setTextField"; field: TextFieldName; value: string }
-    | { type: "setBody"; value: string; activeInsertionTarget?: ActiveInsertionTarget }
-    | { type: "setEditorMode"; mode: EditorMode }
+    | { type: "setBody"; value: EmailBodyValue }
     | { type: "setActiveInsertionTarget"; target: ActiveInsertionTarget }
     | { type: "setPublished"; isPublished: boolean }
     | { type: "setDialog"; dialog: DialogName; open: boolean }
     | { type: "setBusy"; flag: BusyFlagName; value: boolean }
     | { type: "setTestVariable"; name: string; value: string }
-
-const PREVIEW_ALLOWED_TAGS = [
-    "table",
-    "thead",
-    "tbody",
-    "tfoot",
-    "tr",
-    "td",
-    "th",
-    "colgroup",
-    "col",
-    "img",
-    "hr",
-    "div",
-    "span",
-    "center",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-]
-
-const PREVIEW_ALLOWED_ATTRS = [
-    "style",
-    "class",
-    "align",
-    "valign",
-    "width",
-    "height",
-    "cellpadding",
-    "cellspacing",
-    "border",
-    "bgcolor",
-    "colspan",
-    "rowspan",
-    "role",
-    "target",
-    "rel",
-    "href",
-    "src",
-    "alt",
-    "title",
-]
 
 function extractTemplateVariables(text: string): string[] {
     if (!text) return []
@@ -181,10 +136,6 @@ function extractTemplateVariables(text: string): string[] {
 
 function getEditableVariableNames(subject: string, body: string): string[] {
     return extractTemplateVariables(`${subject}\n${body}`).filter((variable) => variable !== "unsubscribe_url")
-}
-
-function hasComplexTemplateHtml(body: string): boolean {
-    return /<table|<tbody|<thead|<tr|<td|<img|<div/i.test(body)
 }
 
 function buildTestVariableSample(variableName: string, testEmail: string): string {
@@ -271,17 +222,13 @@ function createEditorState({
     initialSaveResult: SaveResult
 }): EmailTemplateEditorState {
     const draft = templateData?.draft
-    const body = draft?.body ?? ""
-    const editorMode: EditorMode = body && hasComplexTemplateHtml(body) ? "html" : "visual"
-
     return syncTestFields({
         name: draft?.name ?? "",
         subject: draft?.subject ?? "",
         fromEmail: draft?.from_email ?? "",
         category: draft?.category ?? "",
-        body,
-        editorMode,
-        editorModeTouched: false,
+        body: draft?.body ?? "",
+        bodyDesign: draft?.body_design ?? null,
         isPublished: (templateData?.published_version ?? 0) > 0,
         showPublishDialog: false,
         showDeleteDialog: false,
@@ -318,37 +265,16 @@ function templateEditorReducer(
             return action.field === "subject" ? syncTestFields(nextState) : nextState
         }
         case "setBody": {
-            const nextState: EmailTemplateEditorState = {
+            if (action.value.body === state.body && action.value.bodyDesign === state.bodyDesign) {
+                return state
+            }
+            return syncTestFields({
                 ...state,
-                body: action.value,
+                body: action.value.body,
+                bodyDesign: action.value.bodyDesign,
                 saveResult: clearSavedResult(state.saveResult),
-                activeInsertionTarget:
-                    action.activeInsertionTarget === undefined
-                        ? state.activeInsertionTarget
-                        : action.activeInsertionTarget,
-            }
-            if (
-                !nextState.editorModeTouched &&
-                nextState.editorMode !== "html" &&
-                hasComplexTemplateHtml(action.value)
-            ) {
-                nextState.editorMode = "html"
-                nextState.activeInsertionTarget = null
-            }
-            return syncTestFields(nextState)
+            })
         }
-        case "setEditorMode":
-            return {
-                ...state,
-                editorMode: action.mode,
-                editorModeTouched: true,
-                activeInsertionTarget:
-                    state.activeInsertionTarget === "subject"
-                        ? "subject"
-                        : action.mode === "html"
-                          ? "body_html"
-                          : "body_visual",
-            }
         case "setActiveInsertionTarget":
             return { ...state, activeInsertionTarget: action.target }
         case "setPublished":
@@ -419,40 +345,6 @@ function getFromEmailError(fromEmail: string): string | null {
     const namedEmail = /^.+<\s*[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+\s*>$/
     if (basicEmail.test(value) || namedEmail.test(value)) return null
     return "Use a valid email or name <email@domain> format."
-}
-
-function buildPreviewHtml(body: string): string {
-    let html = normalizeTemplateHtml(body || "")
-
-    html = html.replace(/\{\{\s*unsubscribe_url\s*\}\}/gi, "")
-    html = html.replace(
-        /<a\b[^>]*\bhref\s*=\s*(["'])\s*\{\{\s*unsubscribe_url\s*\}\}\s*\1[^>]*>[\s\S]*?<\/a>/gi,
-        ""
-    )
-
-    const unsubscribeUrl = "https://app.surrogacyforce.com/email/unsubscribe/EXAMPLE"
-    const footerHtml = `
-        <div style="margin-top: 14px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
-            <p style="margin: 0;">
-                Manage email preferences:
-                <a href="${unsubscribeUrl}" target="_blank" style="color: #2563eb; text-decoration: none;">Unsubscribe</a>
-            </p>
-        </div>
-    `.trim()
-
-    if (/<\/body\s*>/i.test(html)) {
-        html = html.replace(/<\/body\s*>/i, `${footerHtml}</body>`)
-    } else if (/<\/html\s*>/i.test(html)) {
-        html = html.replace(/<\/html\s*>/i, `${footerHtml}</html>`)
-    } else {
-        html = `${html}${footerHtml}`
-    }
-
-    return DOMPurify.sanitize(html, {
-        USE_PROFILES: { html: true },
-        ADD_TAGS: PREVIEW_ALLOWED_TAGS,
-        ADD_ATTR: PREVIEW_ALLOWED_ATTRS,
-    })
 }
 
 function LoadingTemplate() {
@@ -528,6 +420,7 @@ export default function PlatformEmailTemplatePage() {
     // A save refetches the template and remounts the editor under a new key. Keeping the saved
     // revision here lets the remounted editor keep showing "Saved".
     const [savedRevision, setSavedRevision] = useState<string | null>(null)
+    const [view, setView] = useState<EditorView>("edit")
 
     if (!isNew && isLoading) {
         return <LoadingTemplate />
@@ -560,6 +453,8 @@ export default function PlatformEmailTemplatePage() {
             variablesLoading={variablesLoading}
             initialSaveResult={savedRevision !== null && savedRevision === editorKey ? "saved" : "idle"}
             onSaved={(saved) => setSavedRevision(getTemplateRevisionKey(saved))}
+            view={view}
+            onViewChange={setView}
         />
     )
 }
@@ -577,16 +472,23 @@ interface PlatformEmailTemplateEditorProps {
     variablesLoading: boolean
     initialSaveResult: SaveResult
     onSaved: (saved: PlatformEmailTemplate) => void
+    view: EditorView
+    onViewChange: (view: EditorView) => void
 }
 
 function PlatformEmailTemplateEditor(props: PlatformEmailTemplateEditorProps) {
     const { isNew, templateData, templateVariables, variablesLoading } = props
     const controller = useEmailTemplateController(props)
     const { actions, derived, refs, state } = controller
+    const { designRef, subjectRef, testSendFormRef } = refs
     const mode: TemplatePageMode = isNew ? "new" : "existing"
 
     return (
-        <div>
+        <Tabs
+            value={props.view}
+            onValueChange={(value) => props.onViewChange(value as EditorView)}
+            className="gap-0"
+        >
             <TemplatePageHeader
                 mode={mode}
                 name={state.name}
@@ -614,60 +516,92 @@ function PlatformEmailTemplateEditor(props: PlatformEmailTemplateEditorProps) {
                 onConfirm={actions.handleDelete}
             />
 
-            <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr]">
-                <EmailContentCard
-                    subject={state.subject}
-                    fromEmail={state.fromEmail}
-                    category={state.category}
-                    body={state.body}
-                    editorMode={state.editorMode}
-                    hasComplexHtml={derived.hasComplexHtml}
-                    fromEmailError={derived.fromEmailError}
-                    templateVariables={templateVariables}
-                    variablesLoading={variablesLoading}
-                    unknownVariables={derived.unknownVariables}
-                    missingRequiredVariables={derived.missingRequiredVariables}
-                    subjectRef={refs.subjectRef}
-                    htmlBodyRef={refs.htmlBodyRef}
-                    visualBodyRef={refs.visualBodyRef}
-                    onSubjectChange={(value) => actions.setTextField("subject", value)}
-                    onFromEmailChange={(value) => actions.setTextField("fromEmail", value)}
-                    onCategoryChange={(value) => actions.setTextField("category", value)}
-                    onBodyChange={actions.setBody}
-                    onEditorModeChange={actions.setEditorMode}
-                    onInsertVariable={actions.insertVariable}
-                    onInsertLogo={actions.insertOrgLogo}
-                    onActiveInsertionTargetChange={actions.setActiveInsertionTarget}
-                    onSubjectSelection={actions.recordSubjectSelection}
-                    onHtmlBodySelection={actions.recordHtmlBodySelection}
+            <TabsContent value="edit" keepMounted className="mt-0 flex min-h-[calc(100dvh-8rem)] flex-col data-hidden:hidden">
+                <EmailDesignEditor
+                    ref={designRef}
+                    initialValue={{ body: state.body, bodyDesign: state.bodyDesign }}
+                    onChange={actions.setBody}
+                    variables={templateVariables}
+                    onSelectVariable={(variable) => actions.insertVariable(variable.name)}
+                    onFocus={() => actions.setActiveInsertionTarget("body")}
+                    fields={
+                        <div className="grid gap-4">
+                            <TemplateDetailsFields
+                                subject={state.subject}
+                                fromEmail={state.fromEmail}
+                                category={state.category}
+                                fromEmailError={derived.fromEmailError}
+                                subjectRef={subjectRef}
+                                onSubjectChange={(value) => actions.setTextField("subject", value)}
+                                onFromEmailChange={(value) => actions.setTextField("fromEmail", value)}
+                                onCategoryChange={(value) => actions.setTextField("category", value)}
+                                onActiveInsertionTargetChange={actions.setActiveInsertionTarget}
+                                onSubjectSelection={actions.recordSubjectSelection}
+                            />
+                            <VariableValidationAlert
+                                subjectOrBodyHasContent={Boolean(state.body.trim())}
+                                unknownVariables={derived.unknownVariables}
+                                missingRequiredVariables={derived.missingRequiredVariables}
+                            />
+                        </div>
+                    }
+                    settings={
+                        <div className="grid gap-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={variablesLoading || state.body.includes("{{org_logo_url}}")}
+                                onClick={actions.insertOrgLogo}
+                            >
+                                <ImageIcon aria-hidden="true" />
+                                Insert logo
+                            </Button>
+                            <SendTestEmailSection
+                                mode={mode}
+                                formRef={testSendFormRef}
+                                agencies={derived.testAgencies}
+                                test={{
+                                    orgId: derived.effectiveTestOrgId,
+                                    email: state.testEmail,
+                                    variables: state.testVariables,
+                                    hasUnsubscribeUrl: derived.testHasUnsubscribeUrl,
+                                    editableVariableNames: derived.testEditableVariableNames,
+                                }}
+                                validation={derived.testSendValidation}
+                                busy={{
+                                    sending: state.isSendingTest,
+                                    saving: state.isSaving,
+                                    publishing: state.isPublishing,
+                                }}
+                                onTestOrgIdChange={(value) => actions.setTextField("testOrgId", value)}
+                                onTestEmailChange={(value) => actions.setTextField("testEmail", value)}
+                                onTestVariableChange={actions.setTestVariable}
+                                onSendTest={actions.handleSendTest}
+                            />
+                        </div>
+                    }
                 />
-
-                <div className="min-w-0 space-y-6 lg:sticky lg:top-36 lg:max-h-[calc(100dvh-10rem)] lg:self-start lg:overflow-y-auto">
-                    <PreviewCard hasContent={Boolean(state.body.trim())} previewHtml={derived.previewHtml} />
-                    <SendTestEmailCard
-                        mode={mode}
-                        formRef={refs.testSendFormRef}
-                        agencies={derived.testAgencies}
-                        test={{
-                            orgId: derived.effectiveTestOrgId,
-                            email: state.testEmail,
-                            variables: state.testVariables,
-                            hasUnsubscribeUrl: derived.testHasUnsubscribeUrl,
-                            editableVariableNames: derived.testEditableVariableNames,
-                        }}
-                        validation={derived.testSendValidation}
-                        busy={{
-                            sending: state.isSendingTest,
-                            saving: state.isSaving,
-                            publishing: state.isPublishing,
-                        }}
-                        onTestOrgIdChange={(value) => actions.setTextField("testOrgId", value)}
-                        onTestEmailChange={(value) => actions.setTextField("testEmail", value)}
-                        onTestVariableChange={actions.setTestVariable}
-                        onSendTest={actions.handleSendTest}
-                    />
-                </div>
-            </div>
+            </TabsContent>
+            <TabsContent value="preview" className="mt-0 flex min-h-[calc(100dvh-8rem)] flex-col">
+                <EmailPreviewPane
+                    subject={state.subject}
+                    body={state.body}
+                    queryKey={["platform-library", derived.effectiveTestOrgId]}
+                    modes={["sample", "names"]}
+                    load={({ subject, body, variableMode }) =>
+                        previewPlatformEmailTemplate({
+                            subject,
+                            body,
+                            variable_mode: variableMode === "names" ? "names" : "sample",
+                            org_id: derived.effectiveTestOrgId || null,
+                        })
+                    }
+                />
+            </TabsContent>
+            <TabsContent value="html" className="mt-0 min-h-[calc(100dvh-8rem)] bg-muted/40 p-4 sm:p-6">
+                <EmailHtmlSource html={state.body} />
+            </TabsContent>
 
             <PublishDialog
                 open={state.showPublishDialog}
@@ -677,7 +611,7 @@ function PlatformEmailTemplateEditor(props: PlatformEmailTemplateEditorProps) {
                 defaultPublishAll={templateData?.is_published_globally ?? true}
                 initialOrgIds={templateData?.target_org_ids ?? []}
             />
-        </div>
+        </Tabs>
     )
 }
 
@@ -690,6 +624,7 @@ function useEmailTemplateController({
     variablesLoading,
     initialSaveResult,
     onSaved,
+    onViewChange,
 }: PlatformEmailTemplateEditorProps) {
     const { push, replace } = useRouter()
     const createTemplate = useCreatePlatformEmailTemplate()
@@ -712,9 +647,7 @@ function useEmailTemplateController({
     const testSendFormRef = useRef<HTMLFormElement | null>(null)
     const subjectRef = useRef<HTMLInputElement | null>(null)
     const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null)
-    const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
-    const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
-    const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
+    const designRef = useRef<EmailDesignEditorHandle | null>(null)
     const testSendOccurrenceIdRef = useRef<string | null>(null)
     const currentVersionRef = useRef(templateData?.current_version ?? null)
 
@@ -737,8 +670,6 @@ function useEmailTemplateController({
     const testEditableVariableNames = usedVariableNames.filter((variable) => variable !== "unsubscribe_url")
     const testHasUnsubscribeUrl = usedVariableNames.includes("unsubscribe_url")
     const fromEmailError = getFromEmailError(state.fromEmail)
-    const hasComplexHtml = hasComplexTemplateHtml(state.body)
-    const previewHtml = buildPreviewHtml(state.body)
     const saveStatus: SaveStatusState = state.isSaving || state.isPublishing ? "saving" : state.saveResult
 
     // With exactly one agency, test sends default to it.
@@ -752,10 +683,13 @@ function useEmailTemplateController({
     })
 
     const focusTestSend = () => {
-        const form = testSendFormRef.current
-        if (!form) return
-        form.scrollIntoView({ behavior: "smooth", block: "nearest" })
-        form.querySelector<HTMLElement>("button, input")?.focus({ preventScroll: true })
+        onViewChange("edit")
+        requestAnimationFrame(() => {
+            const form = testSendFormRef.current
+            if (!form) return
+            form.scrollIntoView({ behavior: "smooth", block: "nearest" })
+            form.querySelector<HTMLElement>("button, input")?.focus({ preventScroll: true })
+        })
     }
 
     const setTextField = (field: TextFieldName, value: string) => {
@@ -763,8 +697,8 @@ function useEmailTemplateController({
         dispatch({ type: "setTextField", field, value })
     }
 
-    const setBody = (value: string) => {
-        testSendOccurrenceIdRef.current = null
+    const setBody = (value: EmailBodyValue) => {
+        if (value.body !== state.body) testSendOccurrenceIdRef.current = null
         dispatch({ type: "setBody", value })
     }
 
@@ -776,10 +710,6 @@ function useEmailTemplateController({
         dispatch({ type: "setActiveInsertionTarget", target })
     }
 
-    const setEditorMode = (mode: EditorMode) => {
-        dispatch({ type: "setEditorMode", mode })
-    }
-
     const setTestVariable = (name: string, value: string) => {
         testSendOccurrenceIdRef.current = null
         dispatch({ type: "setTestVariable", name, value })
@@ -787,10 +717,6 @@ function useEmailTemplateController({
 
     const recordSubjectSelection = (el: HTMLInputElement) => {
         recordSelection(el, subjectSelectionRef)
-    }
-
-    const recordHtmlBodySelection = (el: HTMLTextAreaElement) => {
-        recordSelection(el, htmlBodySelectionRef)
     }
 
     const insertToken = (token: string) => {
@@ -801,38 +727,14 @@ function useEmailTemplateController({
             )
             return
         }
-        if (state.activeInsertionTarget === "body_html") {
-            applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, token, (value) =>
-                dispatch({ type: "setBody", value })
-            )
-            return
-        }
-        if (state.activeInsertionTarget === "body_visual") {
-            visualBodyRef.current?.insertText(token)
-            return
-        }
-
-        if (state.editorMode === "html") {
-            applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, token, (value) =>
-                dispatch({ type: "setBody", value })
-            )
-            return
-        }
-        visualBodyRef.current?.insertText(token)
+        designRef.current?.insertText(token)
     }
 
     const insertOrgLogo = () => {
         if (state.body.includes("{{org_logo_url}}")) return
         testSendOccurrenceIdRef.current = null
-        const logo = `<p><img src="{{org_logo_url}}" alt="{{org_name}} logo" style="max-width: 160px; height: auto; display: block;" /></p>\n`
-        if (state.editorMode === "visual") {
-            visualBodyRef.current?.insertHtml(logo)
-            dispatch({ type: "setActiveInsertionTarget", target: "body_visual" })
-            return
-        }
-        applyTextInsertion(htmlBodyRef.current, htmlBodySelectionRef, state.body, logo, (value) =>
-            dispatch({ type: "setBody", value, activeInsertionTarget: "body_html" })
-        )
+        designRef.current?.insertImage("{{org_logo_url}}", "{{org_name}} logo")
+        dispatch({ type: "setActiveInsertionTarget", target: "body" })
     }
 
     const insertVariable = (variableName: string) => {
@@ -848,6 +750,7 @@ function useEmailTemplateController({
             name: state.name.trim(),
             subject: state.subject.trim(),
             body: state.body || "",
+            body_design: state.bodyDesign,
             from_email: state.fromEmail.trim() ? state.fromEmail.trim() : null,
             category: state.category.trim() ? state.category.trim() : null,
         }
@@ -1008,12 +911,10 @@ function useEmailTemplateController({
             handleSendTest,
             insertOrgLogo,
             insertVariable,
-            recordHtmlBodySelection,
             recordSubjectSelection,
             setActiveInsertionTarget,
             setBody,
             setDialog,
-            setEditorMode,
             setTestVariable,
             setTextField,
         },
@@ -1021,9 +922,7 @@ function useEmailTemplateController({
         derived: {
             effectiveTestOrgId,
             fromEmailError,
-            hasComplexHtml,
             missingRequiredVariables,
-            previewHtml,
             saveStatus,
             testAgencies: {
                 agencies: testAgencies,
@@ -1036,10 +935,9 @@ function useEmailTemplateController({
             unknownVariables,
         },
         refs: {
-            htmlBodyRef,
+            designRef,
             subjectRef,
             testSendFormRef,
-            visualBodyRef,
         },
         state,
     }
@@ -1101,6 +999,11 @@ function TemplatePageHeader({
             }
             actions={
                 <>
+                    <TabsList aria-label="Editor view">
+                        <TabsTrigger value="edit">Edit</TabsTrigger>
+                        <TabsTrigger value="preview">Preview</TabsTrigger>
+                        <TabsTrigger value="html">HTML</TabsTrigger>
+                    </TabsList>
                     {mode === "existing" ? (
                         <DropdownMenu>
                             <DropdownMenuTrigger
@@ -1136,46 +1039,17 @@ function TemplatePageHeader({
     )
 }
 
-interface EmailContentCardProps {
+interface TemplateDetailsFieldsProps {
     subject: string
     fromEmail: string
     category: string
-    body: string
-    editorMode: EditorMode
-    hasComplexHtml: boolean
     fromEmailError: string | null
-    templateVariables: TemplateVariableRead[]
-    variablesLoading: boolean
-    unknownVariables: string[]
-    missingRequiredVariables: string[]
     subjectRef: MutableRefObject<HTMLInputElement | null>
-    htmlBodyRef: MutableRefObject<HTMLTextAreaElement | null>
-    visualBodyRef: MutableRefObject<RichTextEditorHandle | null>
     onSubjectChange: (value: string) => void
     onFromEmailChange: (value: string) => void
     onCategoryChange: (value: string) => void
-    onBodyChange: (value: string) => void
-    onEditorModeChange: (mode: EditorMode) => void
-    onInsertVariable: (variableName: string) => void
-    onInsertLogo: () => void
     onActiveInsertionTargetChange: (target: ActiveInsertionTarget) => void
     onSubjectSelection: (el: HTMLInputElement) => void
-    onHtmlBodySelection: (el: HTMLTextAreaElement) => void
-}
-
-function EmailContentCard(props: EmailContentCardProps) {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Email Content</CardTitle>
-                <CardDescription>Design the default template shared to org libraries.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <TemplateDetailsFields {...props} />
-                <EmailBodyEditor {...props} />
-            </CardContent>
-        </Card>
-    )
 }
 
 function TemplateDetailsFields({
@@ -1189,7 +1063,7 @@ function TemplateDetailsFields({
     onCategoryChange,
     onActiveInsertionTargetChange,
     onSubjectSelection,
-}: EmailContentCardProps) {
+}: TemplateDetailsFieldsProps) {
     return (
         <>
             <div className="space-y-2">
@@ -1244,104 +1118,6 @@ function TemplateDetailsFields({
     )
 }
 
-function EmailBodyEditor({
-    body,
-    editorMode,
-    hasComplexHtml,
-    templateVariables,
-    variablesLoading,
-    unknownVariables,
-    missingRequiredVariables,
-    htmlBodyRef,
-    visualBodyRef,
-    onBodyChange,
-    onEditorModeChange,
-    onInsertVariable,
-    onInsertLogo,
-    onActiveInsertionTargetChange,
-    onHtmlBodySelection,
-}: EmailContentCardProps) {
-    return (
-        <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label id="template-body-label" htmlFor={editorMode === "html" ? "template-body-html" : undefined}>
-                    Email Body *
-                </Label>
-                <div className="flex flex-wrap items-center gap-2">
-                    <ToggleGroup
-                        multiple={false}
-                        value={editorMode ? [editorMode] : []}
-                        onValueChange={(value) => {
-                            const next = value[0] as EditorMode | undefined
-                            if (next) onEditorModeChange(next)
-                        }}
-                    >
-                        <ToggleGroupItem value="visual" className="h-8">
-                            Visual
-                        </ToggleGroupItem>
-                        <ToggleGroupItem value="html" className="h-8">
-                            HTML
-                        </ToggleGroupItem>
-                    </ToggleGroup>
-                    <TemplateVariablePicker
-                        variables={templateVariables}
-                        disabled={variablesLoading || templateVariables.length === 0}
-                        triggerLabel={variablesLoading ? "Loading..." : "Insert Variable"}
-                        onSelect={(variable) => onInsertVariable(variable.name)}
-                    />
-                    <Button type="button" variant="ghost" size="sm" onClick={onInsertLogo}>
-                        Insert Logo
-                    </Button>
-                </div>
-            </div>
-            {editorMode === "visual" ? (
-                <RichTextEditor
-                    ref={visualBodyRef}
-                    content={body}
-                    onChange={onBodyChange}
-                    onFocus={() => onActiveInsertionTargetChange("body_visual")}
-                    ariaLabelledBy="template-body-label"
-                    placeholder="Write your email content here..."
-                    minHeight="220px"
-                    maxHeight="420px"
-                    enableImages
-                    enableEmojiPicker
-                />
-            ) : (
-                <Textarea
-                    id="template-body-html"
-                    aria-labelledby="template-body-label"
-                    ref={htmlBodyRef}
-                    value={body}
-                    onChange={(event) => onBodyChange(event.target.value)}
-                    onFocus={(event) => {
-                        onActiveInsertionTargetChange("body_html")
-                        onHtmlBodySelection(event.currentTarget)
-                    }}
-                    onKeyUp={(event) => onHtmlBodySelection(event.currentTarget)}
-                    onMouseUp={(event) => onHtmlBodySelection(event.currentTarget)}
-                    onSelect={(event) => onHtmlBodySelection(event.currentTarget)}
-                    placeholder="Paste or edit the HTML for this template..."
-                    className="min-h-[240px] max-h-[60vh] overflow-y-auto font-mono text-xs leading-relaxed"
-                />
-            )}
-            {editorMode === "visual" && hasComplexHtml && (
-                <p className="text-xs text-amber-600">
-                    This template contains advanced HTML. Switch to HTML mode to preserve layout.
-                </p>
-            )}
-            <p className="text-xs text-muted-foreground">
-                Use double braces for variables, e.g. <span className="font-mono">{"{{first_name}}"}</span>.
-            </p>
-            <VariableValidationAlert
-                subjectOrBodyHasContent={Boolean(body.trim())}
-                unknownVariables={unknownVariables}
-                missingRequiredVariables={missingRequiredVariables}
-            />
-        </div>
-    )
-}
-
 interface VariableValidationAlertProps {
     subjectOrBodyHasContent: boolean
     unknownVariables: string[]
@@ -1381,38 +1157,9 @@ function VariableValidationAlert({
     )
 }
 
-function PreviewCard({ hasContent, previewHtml }: { hasContent: boolean; previewHtml: string }) {
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <EyeIcon className="size-4" aria-hidden="true" />
-                    Preview
-                </CardTitle>
-            </CardHeader>
-            <CardContent>
-                {/* The preview always carries the unsubscribe footer, so an empty body shows a placeholder instead. */}
-                {hasContent ? (
-                    <TrustedSanitizedHtmlContent
-                        html={previewHtml}
-                        className="prose prose-sm max-w-none overflow-x-auto"
-                    />
-                ) : (
-                    <EmptyState
-                        icon={EyeIcon}
-                        title="No content yet"
-                        headingLevel={3}
-                        className="rounded-md border border-dashed"
-                    />
-                )}
-            </CardContent>
-        </Card>
-    )
-}
-
 type TestSendValues = { agency: string; email: string }
 
-interface SendTestEmailCardProps {
+interface SendTestEmailSectionProps {
     mode: TemplatePageMode
     formRef: MutableRefObject<HTMLFormElement | null>
     agencies: {
@@ -1439,7 +1186,7 @@ interface SendTestEmailCardProps {
     onSendTest: (values: TestSendValues) => void
 }
 
-function SendTestEmailCard({
+function SendTestEmailSection({
     mode,
     formRef,
     agencies,
@@ -1450,17 +1197,16 @@ function SendTestEmailCard({
     onTestEmailChange,
     onTestVariableChange,
     onSendTest,
-}: SendTestEmailCardProps) {
+}: SendTestEmailSectionProps) {
     const isNew = mode === "new"
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Send test email</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <form ref={formRef} noValidate onSubmit={validation.handleSubmit(onSendTest)} className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+        <section aria-labelledby="send-test-heading" className="grid gap-3">
+            <h2 id="send-test-heading" className="text-sm font-medium">
+                Send test email
+            </h2>
+            <form ref={formRef} noValidate onSubmit={validation.handleSubmit(onSendTest)} className="space-y-3">
+                    <div className="grid gap-3">
                         <ValidatedField id="test-agency" label="Agency" error={validation.errorFor("agency")}>
                             {(control) => (
                                 <TestSendAgencySelect
@@ -1542,8 +1288,7 @@ function SendTestEmailCard({
                         )}
                         Send test
                     </Button>
-                </form>
-            </CardContent>
-        </Card>
+            </form>
+        </section>
     )
 }

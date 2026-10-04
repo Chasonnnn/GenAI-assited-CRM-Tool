@@ -65,24 +65,17 @@ function PaletteFieldTile({
             onDragStart={() => onFieldDragStart(field)}
             onDragEnd={onFieldDragEnd}
             aria-label={`${isPreset ? "Add preset" : "Add"} ${field.label} field`}
-            className={cn(
-                "group flex min-h-0 flex-col items-center gap-1.5 rounded-xl border border-transparent px-1.5 py-2 text-center transition-colors active:cursor-grabbing",
-                isPreset
-                    ? "hover:bg-sky-50/75 focus-visible:border-sky-200"
-                    : "hover:bg-emerald-50/70 focus-visible:border-emerald-200",
-            )}
+            className="group flex min-h-0 flex-col items-center gap-1.5 rounded-lg border border-transparent px-1 py-2 text-center transition-colors hover:bg-muted focus-visible:border-ring active:cursor-grabbing"
         >
             <span
                 className={cn(
-                    "flex size-12 items-center justify-center rounded-2xl border bg-white text-zinc-900 transition-transform group-hover:scale-[1.02]",
-                    isPreset
-                        ? "border-sky-200/90 bg-sky-50/70"
-                        : "border-emerald-200/90 bg-emerald-50/65",
+                    "flex size-9 items-center justify-center rounded-lg border bg-background text-foreground",
+                    isPreset ? "border-primary/30" : "border-border",
                 )}
             >
                 <Icon className="size-4" aria-hidden="true" />
             </span>
-            <div className="w-full text-[13px] font-medium leading-tight text-zinc-950">{field.label}</div>
+            <div className="w-full text-xs font-medium leading-tight text-foreground">{field.label}</div>
         </Button>
     )
 }
@@ -135,101 +128,69 @@ export function FormBuilderPalette({
     }
 
     return (
-        <aside
-            data-testid="form-builder-palette"
-            aria-label="Field palette"
-            className={cn(
-                "w-full shrink-0 border-b border-border bg-card xl:min-h-0 xl:min-w-0 xl:w-auto xl:overflow-hidden xl:border-r xl:border-b-0",
-                className,
-            )}
-        >
-            <div className="flex h-full min-h-0 flex-col">
-                <div className="border-b border-border/70 p-4">
-                    <h2 className="text-[1.05rem] font-semibold tracking-tight text-zinc-950">Add form fields</h2>
+        <div data-testid="form-builder-palette" className={cn("flex min-h-0 flex-1 flex-col", className)}>
+            <div className="space-y-3 border-b border-border/70 p-3">
+                <div data-testid="form-builder-palette-search" className="rounded-lg border border-border bg-background">
+                    <Command className="rounded-lg border-0 bg-transparent p-0 shadow-none">
+                        <CommandInput
+                            className="text-sm placeholder:text-muted-foreground"
+                            value={search}
+                            onValueChange={onSearchChange}
+                            placeholder="Search form fields"
+                        />
+                    </Command>
                 </div>
+                <nav className="flex flex-wrap gap-1.5" aria-label="Field categories">
+                    {categories.map((category) => {
+                        const isActive = resolvedActiveCategory === category.id
 
-                <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[8rem_minmax(0,1fr)]">
-                    <aside className="border-b border-border/70 bg-stone-50/75 xl:border-r xl:border-b-0">
-                        <ScrollArea className="h-full">
-                            <nav className="space-y-1 p-2.5" aria-label="Field categories">
-                                {categories.map((category) => {
-                                    const isActive = resolvedActiveCategory === category.id
-
-                                    return (
-                                        <Button unstyled
-                                            key={category.id}
-                                            type="button"
-                                            onClick={() => onCategoryChange(category.id)}
-                                            className={cn(
-                                                "flex w-full items-center rounded-lg px-3 py-2 text-left text-[15px] font-medium leading-5 transition-all",
-                                                isActive
-                                                    ? "bg-sky-100/90 text-zinc-950"
-                                                    : "text-zinc-700 hover:bg-white/90 hover:text-zinc-950",
-                                            )}
-                                        >
-                                            {category.label}
-                                        </Button>
-                                    )
-                                })}
-                            </nav>
-                        </ScrollArea>
-                    </aside>
-
-                    <div className="flex min-h-0 flex-col bg-white">
-                        <div className="border-b border-border/70 bg-white/95 px-4 py-3 supports-[backdrop-filter]:bg-white/80">
-                            <div
-                                data-testid="form-builder-palette-search"
-                                className="rounded-xl border border-stone-200/80 bg-white shadow-none"
-                            >
-                                <Command className="rounded-xl border-0 bg-transparent p-0 shadow-none">
-                                    <CommandInput
-                                        className="text-[15px] placeholder:text-zinc-400"
-                                        value={search}
-                                        onValueChange={onSearchChange}
-                                        placeholder="Search form fields"
-                                    />
-                                </Command>
-                            </div>
-                        </div>
-
-                        <ScrollArea className="min-h-0 flex-1">
-                            <div className="space-y-6 p-4">
-                                {visibleSections.length > 0 ? (
-                                    visibleSections.map((section) => (
-                                        <section key={section.id} className="space-y-3">
-                                            <h3 className="text-[15px] font-semibold tracking-tight text-zinc-950">
-                                                {section.label}
-                                            </h3>
-                                            <div
-                                                data-testid="form-builder-palette-field-grid"
-                                                className="grid grid-cols-4 gap-x-1.5 gap-y-2.5"
-                                            >
-                                                {section.fields.map((field) => (
-                                                    <PaletteFieldTile
-                                                        key={`${section.id}-${field.key}`}
-                                                        field={field}
-                                                        isPreset={section.isPreset}
-                                                        onInsertField={onInsertField}
-                                                        onFieldDragStart={onFieldDragStart}
-                                                        onFieldDragEnd={onFieldDragEnd}
-                                                    />
-                                                ))}
-                                            </div>
-                                        </section>
-                                    ))
-                                ) : (
-                                    <div className="rounded-[22px] border border-dashed border-border/80 bg-stone-50 p-8 text-center">
-                                        <p className="text-base font-semibold text-zinc-900">No matching fields</p>
-                                        <p className="mt-1.5 text-sm text-zinc-500">
-                                            Try a different search or switch categories.
-                                        </p>
-                                    </div>
+                        return (
+                            <Button unstyled
+                                key={category.id}
+                                type="button"
+                                aria-pressed={isActive}
+                                onClick={() => onCategoryChange(category.id)}
+                                className={cn(
+                                    "h-7 rounded-full border px-2.5 text-xs font-medium transition-colors",
+                                    isActive
+                                        ? "border-foreground bg-foreground text-background"
+                                        : "border-border bg-background text-foreground hover:bg-muted",
                                 )}
-                            </div>
-                        </ScrollArea>
-                    </div>
-                </div>
+                            >
+                                {category.label}
+                            </Button>
+                        )
+                    })}
+                </nav>
             </div>
-        </aside>
+
+            <ScrollArea className="min-h-0 flex-1">
+                <div className="space-y-5 p-3">
+                    {visibleSections.length > 0 ? (
+                        visibleSections.map((section) => (
+                            <section key={section.id} className="space-y-2">
+                                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {section.label}
+                                </h3>
+                                <div data-testid="form-builder-palette-field-grid" className="grid grid-cols-3 gap-1">
+                                    {section.fields.map((field) => (
+                                        <PaletteFieldTile
+                                            key={`${section.id}-${field.key}`}
+                                            field={field}
+                                            isPreset={section.isPreset}
+                                            onInsertField={onInsertField}
+                                            onFieldDragStart={onFieldDragStart}
+                                            onFieldDragEnd={onFieldDragEnd}
+                                        />
+                                    ))}
+                                </div>
+                            </section>
+                        ))
+                    ) : (
+                        <p className="py-6 text-center text-sm text-muted-foreground">No matching fields</p>
+                    )}
+                </div>
+            </ScrollArea>
+        </div>
     )
 }
