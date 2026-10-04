@@ -1,6 +1,6 @@
 # CI and test audit — 2026-10-04
 
-The verified batch removes 28 of 8,607 collected tests (0.33%). The requested 20% reduction would require 1,722 removals and remains unmet. Final backend and frontend coverage has no measured loss. CI now has more test shards and earlier frontend coverage merging; a hosted candidate run is still required to establish the requested 20% reduction in total PR CI time.
+The verified batch removes 28 of 8,607 collected tests (0.33%). The requested 20% reduction would require 1,722 removals and remains unmet. Final backend and frontend coverage has no measured loss. The first hosted candidate passed in 5m45s, 18.44% faster than the three-run baseline median of 7m03s. That misses the 20% target; a subsequent reporting optimization is awaiting hosted verification.
 
 ## Test reduction
 
@@ -43,7 +43,11 @@ Pruning alone preserved every frontend per-file coverage count. The four-shard u
 
 Security scans, launch gates, production image checks, required check names, source scope, coverage floors, and test isolation remain unchanged. The partition test executes the actual selector; the gate test executes all 16 dependency-result combinations. No passing result is reused from an earlier commit.
 
-Two successful baseline runs took 369 and 422 seconds from first job creation to final job completion; this excludes any earlier event queue time. The first was frontend-bound and the second backend-bound. Sharding addresses both. Extra jobs increase runner demand, and file-count balance does not guarantee equal execution time. These changes are intended to reduce total CI time by 20%; no achieved hosted percentage is claimed. [First baseline run](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37174608098), [second baseline run](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37174910646), [job timings](ci-baseline.json).
+The first candidate's backend coverage job took 67 seconds, including 41 seconds generating coverage reports. The follow-up removes redundant text reporting: both retained XML and JSON commands enforce the same configured combined floor of 75.85, and the separate line/branch checks still run. The XML artifact and changed-line report remain. Installed Coverage.py source and official [XML](https://coverage.readthedocs.io/en/latest/commands/cmd_xml.html) / [JSON](https://coverage.readthedocs.io/en/latest/commands/cmd_json.html) documentation confirm this behavior. [Independent review](coverage-report-review.md).
+
+Three alternating local report-generation runs reduced median reporting time from 14.17 to 10.15 seconds (28.35%) using identical frozen coverage data. JSON totals were identical. Both remaining commands passed the normal floor and returned exit code 2 when a temporary configuration raised the floor to 100. The 14 CI configuration tests and changed-file Ruff/format checks passed. [Report benchmark and negative controls](coverage-report-benchmark.json).
+
+The three latest successful baseline runs took 370, 423, and 477 seconds from workflow creation to final job completion, including runner queue time. Candidate one took 345 seconds on `0d2943db2`; every job passed. The observed improvement is 18.44% against the baseline median, with substantial runner variability. Extra jobs increase runner demand, and file-count balance does not guarantee equal execution time. Human review and merge availability are outside this timing metric. [Hosted measurements](hosted-ci.json), [first candidate run](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37178294086).
 
 The repository's main branch requires branches to be up to date. Merging one PR can therefore require the others to rerun CI. GitHub merge queues address that workflow, but GitHub documents them for organization-owned repositories; this repository is personal-owned. Protection settings were not changed. [GitHub merge queue requirements](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue).
 
@@ -61,9 +65,9 @@ Across three repetitions of the same 588 tests, the upgraded dependency group re
 - Both backend runs emitted the same pre-existing SQLite connection `ResourceWarning` in `test_donor_approval_seed_is_idempotent_and_preserves_existing_stage_ids`; this unrelated warning remains.
 - The skill's OpenClaw-specific scripts and `$autoreview` were unavailable. Repository validation and independent preservation reviews were used instead; those unavailable tools were not run.
 
-Test pruning removes 306 net test lines. Stronger existing CI guards add 52 net test lines, for a total net reduction of 254 test lines. Production and shared test-support LOC changes are zero; workflow changes add five net lines. Dependency manifests and generated lockfile changes are separate from these counts.
+Test pruning removes 306 net test lines. Stronger existing CI guards add 53 net test lines, for a total net reduction of 253 test lines. Production and shared test-support LOC changes are zero; workflow changes add five net lines. Dependency manifests and generated lockfile changes are separate from these counts.
 
-Changes are committed on the existing branch. The user authorized pushing and opening a PR for hosted CI measurement. No PR merge, release, or deployment is authorized. Hosted validation remains pending.
+Changes are published in [PR #789](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/pull/789) on the existing branch. No PR merge, release, or deployment is authorized. The first hosted run passed; the reporting follow-up awaits its own run.
 
 Before publication, main at `e772a87f4` was merged into the branch without conflicts. Its only additional file change was the already-merged Google Tasks concurrency-test fix; no production source or collected-case count changed. All 21 concurrency and CI configuration tests passed after reconciliation. The repository wrapper could not find the local `createdb` client, so validation used an explicitly created, migrated disposable database through the existing container instead; that database was removed afterward.
 

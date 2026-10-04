@@ -196,7 +196,7 @@ jobs:
         working-directory: apps/api
         run: |
           uv run coverage combine
-          uv run coverage report
+          # XML and JSON each enforce the configured combined coverage floor.
           uv run coverage xml
           uv run coverage json
           uv run python - <<'PYTHON'

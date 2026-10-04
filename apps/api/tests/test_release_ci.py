@@ -226,7 +226,8 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
     assert "needs: backend-test-groups" in workflow
     assert 'test "$GROUP_RESULT" = success' in workflow
     assert "uv run coverage combine" in workflow
-    assert "uv run coverage report" in workflow
+    assert "uv run coverage xml" in workflow
+    assert "uv run coverage json" in workflow
     coverage = tomllib.loads(pyproject)["tool"]["coverage"]["report"]
     assert coverage["fail_under"] > 0
 
