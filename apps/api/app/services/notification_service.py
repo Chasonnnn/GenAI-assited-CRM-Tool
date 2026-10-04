@@ -7,16 +7,28 @@ Provides CRUD for notifications and trigger functions for surrogate/task events.
 import asyncio
 import logging
 import threading
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import anyio
-from sqlalchemy import and_, exists, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import ColumnElement, and_, exists, func, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.core.websocket import send_ws_to_user
-from app.db.enums import NotificationType, OwnerType, Role
+from app.db.enums import (
+    ACTION_NOTIFICATION_TYPES,
+    AppointmentStatus,
+    MatchStatus,
+    NotificationTier,
+    NotificationType,
+    OwnerType,
+    Role,
+    TaskStatus,
+    notification_tier,
+)
 from app.db.models import (
+    Appointment,
     Attachment,
     Donor,
     FormSubmission,
@@ -27,6 +39,7 @@ from app.db.models import (
     Notification,
     StatusChangeRequest,
     Surrogate,
+    SurrogateContactAttempt,
     Task,
     UserNotificationSettings,
 )
@@ -167,6 +180,148 @@ def _user_can_view_donors(db: Session, org_id: UUID, user_id: UUID) -> bool:
 
 
 # =============================================================================
+# Action tier: open/closed is computed from live domain state on every read,
+# so an item clears as soon as anyone finishes the work, on any code path.
+# =============================================================================
+
+# Items that only ask the recipient to look (assignment notices, quarantined files)
+# clear when read, and stop counting after this window so an old backlog of unread
+# notices does not inflate the badge.
+READ_CLEARED_ACTION_WINDOW = timedelta(days=14)
+
+
+def _task_still_owned_and_open(*, require_pending_approval: bool = False) -> ColumnElement[bool]:
+    conditions = [
+        Task.id == Notification.entity_id,
+        Task.organization_id == Notification.organization_id,
+        Task.is_completed.is_(False),
+        Task.owner_type == OwnerType.USER.value,
+        Task.owner_id == Notification.user_id,
+    ]
+    if require_pending_approval:
+        conditions.append(Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]))
+    return exists().where(*conditions).correlate(Notification)
+
+
+def _action_open_condition(now: datetime) -> ColumnElement[bool]:
+    """SQL condition: the notification is an action item whose work is still outstanding."""
+    newer = aliased(Notification)
+    not_superseded = ~exists().where(
+        newer.user_id == Notification.user_id,
+        newer.organization_id == Notification.organization_id,
+        newer.type == Notification.type,
+        newer.entity_id == Notification.entity_id,
+        newer.created_at > Notification.created_at,
+    ).correlate(Notification)
+    read_cleared_open = and_(
+        Notification.read_at.is_(None),
+        Notification.created_at > now - READ_CLEARED_ACTION_WINDOW,
+    )
+
+    per_type = or_(
+        and_(
+            Notification.type == NotificationType.WORKFLOW_APPROVAL_REQUESTED.value,
+            _task_still_owned_and_open(require_pending_approval=True),
+        ),
+        and_(
+            Notification.type == NotificationType.TASK_ASSIGNED.value,
+            read_cleared_open,
+            _task_still_owned_and_open(),
+        ),
+        and_(
+            Notification.type == NotificationType.TASK_OVERDUE.value,
+            _task_still_owned_and_open(),
+            exists()
+            .where(
+                Task.id == Notification.entity_id,
+                Task.due_date < now.date(),
+            )
+            .correlate(Notification),
+        ),
+        and_(
+            Notification.type == NotificationType.STATUS_CHANGE_REQUESTED.value,
+            # Pending requests are unique per entity and target, and each new request
+            # sends its own notification, so match on entity plus request time.
+            exists()
+            .where(
+                StatusChangeRequest.organization_id == Notification.organization_id,
+                StatusChangeRequest.entity_type == Notification.entity_type,
+                StatusChangeRequest.entity_id == Notification.entity_id,
+                StatusChangeRequest.status == "pending",
+                StatusChangeRequest.requested_at <= Notification.created_at,
+            )
+            .correlate(Notification),
+        ),
+        and_(
+            Notification.type == NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
+            exists()
+            .where(
+                Surrogate.id == Notification.entity_id,
+                Surrogate.organization_id == Notification.organization_id,
+                Surrogate.owner_type == OwnerType.QUEUE.value,
+                Surrogate.is_archived.is_(False),
+            )
+            .correlate(Notification),
+        ),
+        and_(
+            Notification.type == NotificationType.APPOINTMENT_REQUESTED.value,
+            exists()
+            .where(
+                Appointment.id == Notification.entity_id,
+                Appointment.organization_id == Notification.organization_id,
+                Appointment.status == AppointmentStatus.PENDING.value,
+            )
+            .correlate(Notification),
+        ),
+        and_(
+            Notification.type == NotificationType.MATCH_CONFLICT.value,
+            exists()
+            .where(
+                Match.id == Notification.entity_id,
+                Match.organization_id == Notification.organization_id,
+                Match.status == MatchStatus.UNDER_REVIEW.value,
+            )
+            .correlate(Notification),
+        ),
+        and_(
+            Notification.type == NotificationType.CONTACT_REMINDER.value,
+            exists()
+            .where(
+                Surrogate.id == Notification.entity_id,
+                Surrogate.organization_id == Notification.organization_id,
+                Surrogate.owner_type == OwnerType.USER.value,
+                Surrogate.owner_id == Notification.user_id,
+                Surrogate.is_archived.is_(False),
+            )
+            .correlate(Notification),
+            ~exists()
+            .where(
+                SurrogateContactAttempt.surrogate_id == Notification.entity_id,
+                SurrogateContactAttempt.organization_id == Notification.organization_id,
+                SurrogateContactAttempt.created_at > Notification.created_at,
+            )
+            .correlate(Notification),
+        ),
+        and_(
+            Notification.type.in_(
+                [
+                    NotificationType.SURROGATE_ASSIGNED.value,
+                    NotificationType.ATTACHMENT_INFECTED.value,
+                ]
+            ),
+            read_cleared_open,
+        ),
+    )
+    return and_(Notification.type.in_(ACTION_NOTIFICATION_TYPES), not_superseded, per_type)
+
+
+def _tier_condition(tier: NotificationTier, now: datetime) -> ColumnElement[bool]:
+    if tier == NotificationTier.ACTION:
+        return _action_open_condition(now)
+    return Notification.type.notin_(ACTION_NOTIFICATION_TYPES)
+
+
+# =============================================================================
 # Notification Settings
 # =============================================================================
 
@@ -191,10 +346,12 @@ EMAIL_SETTING_BY_TYPE: dict[str, str] = {
     NotificationType.WORKFLOW_NOTIFICATION.value: "email_workflow_notifications",
 }
 EMAIL_SETTING_KEYS: tuple[str, ...] = tuple(EMAIL_SETTING_BY_TYPE.values())
+DIGEST_SETTING_KEY = "email_daily_digest"
 
 DEFAULT_SETTINGS: dict[str, bool] = {
     **{key: True for key in IN_APP_SETTING_KEYS},
     **{key: False for key in EMAIL_SETTING_KEYS},
+    DIGEST_SETTING_KEY: False,
 }
 
 
@@ -355,8 +512,8 @@ def create_notification(
     db.refresh(notification)
 
     # Best-effort realtime push for connected clients.
-    unread_count = get_unread_count(db, user_id, org_id)
-    _schedule_ws_send(_send_ws_updates(user_id, notification, unread_count))
+    counts = get_notification_counts(db, user_id, org_id)
+    _schedule_ws_send(_send_ws_updates(user_id, notification, counts))
     return notification
 
 
@@ -388,11 +545,16 @@ def get_notifications(
     org_id: UUID,
     unread_only: bool = False,
     notification_types: list[str] | None = None,
+    tier: NotificationTier | None = None,
+    created_after: datetime | None = None,
     limit: int = 20,
     offset: int = 0,
     cursor: str | None = None,
 ) -> tuple[list[Notification], str | None]:
-    """Get notifications for user with optional cursor pagination."""
+    """Get notifications for user with optional cursor pagination.
+
+    tier=ACTION returns only action items whose work is still outstanding.
+    """
     import base64
     from datetime import datetime
 
@@ -422,6 +584,12 @@ def get_notifications(
     if notification_types:
         query = query.filter(Notification.type.in_(notification_types))
 
+    if tier is not None:
+        query = query.filter(_tier_condition(tier, datetime.now(UTC)))
+
+    if created_after is not None:
+        query = query.filter(Notification.created_at >= created_after)
+
     query = query.order_by(Notification.created_at.desc(), Notification.id.desc())
 
     if cursor:
@@ -446,6 +614,51 @@ def get_notifications(
     return notifications, next_cursor
 
 
+def pending_status_change_request_ids(
+    db: Session,
+    org_id: UUID,
+    notifications: list[Notification],
+) -> dict[UUID, UUID]:
+    """Map each open status change notification to the pending request it asks about.
+
+    Uses the same rule as _action_open_condition: the latest pending request on the
+    entity made at or before the notification.
+    """
+    targets = [
+        n
+        for n in notifications
+        if n.type == NotificationType.STATUS_CHANGE_REQUESTED.value and n.entity_id
+    ]
+    if not targets:
+        return {}
+    rows = (
+        db.query(
+            StatusChangeRequest.id,
+            StatusChangeRequest.entity_type,
+            StatusChangeRequest.entity_id,
+            StatusChangeRequest.requested_at,
+        )
+        .filter(
+            StatusChangeRequest.organization_id == org_id,
+            StatusChangeRequest.status == "pending",
+            StatusChangeRequest.entity_id.in_({n.entity_id for n in targets}),
+        )
+        .all()
+    )
+    request_ids: dict[UUID, UUID] = {}
+    for notification in targets:
+        candidates = [
+            row
+            for row in rows
+            if row.entity_type == notification.entity_type
+            and row.entity_id == notification.entity_id
+            and row.requested_at <= notification.created_at
+        ]
+        if candidates:
+            request_ids[notification.id] = max(candidates, key=lambda row: row.requested_at).id
+    return request_ids
+
+
 def get_unread_count(
     db: Session,
     user_id: UUID,
@@ -460,6 +673,34 @@ def get_unread_count(
     if not _user_can_view_donors(db, org_id, user_id):
         stmt = stmt.where(_visible_without_donor_access())
     return db.scalar(stmt) or 0
+
+
+@dataclass(frozen=True)
+class NotificationCounts:
+    action: int
+    updates_unread: int
+
+
+def get_notification_counts(
+    db: Session,
+    user_id: UUID,
+    org_id: UUID,
+) -> NotificationCounts:
+    """Open action items (the bell badge) and unread updates."""
+    stmt = select(
+        func.count(Notification.id).filter(_action_open_condition(datetime.now(UTC))),
+        func.count(Notification.id).filter(
+            Notification.type.notin_(ACTION_NOTIFICATION_TYPES),
+            Notification.read_at.is_(None),
+        ),
+    ).where(
+        Notification.user_id == user_id,
+        Notification.organization_id == org_id,
+    )
+    if not _user_can_view_donors(db, org_id, user_id):
+        stmt = stmt.where(_visible_without_donor_access())
+    action, updates_unread = db.execute(stmt).one()
+    return NotificationCounts(action=action, updates_unread=updates_unread)
 
 
 def mark_read(
@@ -482,8 +723,8 @@ def mark_read(
         notification.read_at = datetime.now(UTC)
         db.commit()
         db.refresh(notification)
-        unread_count = get_unread_count(db, user_id, org_id)
-        _schedule_ws_send(_send_ws_count_update(user_id, unread_count))
+        counts = get_notification_counts(db, user_id, org_id)
+        _schedule_ws_send(_send_ws_count_update(user_id, counts))
 
     return notification
 
@@ -492,8 +733,9 @@ def mark_all_read(
     db: Session,
     user_id: UUID,
     org_id: UUID,
+    tier: NotificationTier | None = None,
 ) -> int:
-    """Mark all notifications as read. Returns count updated."""
+    """Mark notifications as read, optionally one tier only. Returns count updated."""
     query = db.query(Notification).filter(
         Notification.user_id == user_id,
         Notification.organization_id == org_id,
@@ -501,10 +743,14 @@ def mark_all_read(
     )
     if not _user_can_view_donors(db, org_id, user_id):
         query = query.filter(_visible_without_donor_access())
+    if tier == NotificationTier.ACTION:
+        query = query.filter(Notification.type.in_(ACTION_NOTIFICATION_TYPES))
+    elif tier == NotificationTier.UPDATE:
+        query = query.filter(Notification.type.notin_(ACTION_NOTIFICATION_TYPES))
     count = query.update({"read_at": datetime.now(UTC)}, synchronize_session=False)
     db.commit()
-    unread_count = get_unread_count(db, user_id, org_id)
-    _schedule_ws_send(_send_ws_count_update(user_id, unread_count))
+    counts = get_notification_counts(db, user_id, org_id)
+    _schedule_ws_send(_send_ws_count_update(user_id, counts))
     return count
 
 
@@ -526,11 +772,18 @@ def _schedule_ws_send(coro: asyncio.Future) -> None:
         threading.Thread(target=lambda: anyio.run(_runner), daemon=True).start()
 
 
-async def _send_ws_updates(user_id: UUID, notification: Notification, unread_count: int) -> None:
-    """Send realtime notification + unread count to websocket clients."""
+def _ws_counts_payload(counts: NotificationCounts) -> dict:
+    return {"action_count": counts.action, "updates_unread": counts.updates_unread}
+
+
+async def _send_ws_updates(
+    user_id: UUID, notification: Notification, counts: NotificationCounts
+) -> None:
+    """Send realtime notification + counts to websocket clients."""
     payload = {
         "id": str(notification.id),
         "type": notification.type,
+        "tier": notification_tier(notification.type).value,
         "title": notification.title,
         "body": notification.body,
         "entity_type": notification.entity_type,
@@ -550,18 +803,18 @@ async def _send_ws_updates(user_id: UUID, notification: Notification, unread_cou
         user_id,
         {
             "type": "count_update",
-            "data": {"count": unread_count},
+            "data": _ws_counts_payload(counts),
         },
     )
 
 
-async def _send_ws_count_update(user_id: UUID, unread_count: int) -> None:
-    """Send unread count updates to websocket clients."""
+async def _send_ws_count_update(user_id: UUID, counts: NotificationCounts) -> None:
+    """Send count updates to websocket clients."""
     await send_ws_to_user(
         user_id,
         {
             "type": "count_update",
-            "data": {"count": unread_count},
+            "data": _ws_counts_payload(counts),
         },
     )
 

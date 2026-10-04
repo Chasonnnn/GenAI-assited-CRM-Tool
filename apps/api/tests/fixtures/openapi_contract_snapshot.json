@@ -2579,7 +2579,8 @@
   },
   "/me/notifications/read-all": {
     "POST": [
-      "200"
+      "200",
+      "422"
     ]
   },
   "/me/notifications/{notification_id}/read": {

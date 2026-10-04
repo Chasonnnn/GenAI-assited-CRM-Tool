@@ -95,10 +95,11 @@ vi.mock("@/components/ui/dialog", () => ({
     DialogTitle: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
 }))
 
-const mockNavigation = vi.hoisted(() => ({ search: "" }))
+const mockNavigation = vi.hoisted(() => ({ search: "", pathname: "/settings/appointments", replace: vi.fn() }))
 vi.mock("next/navigation", () => ({
     useSearchParams: () => new URLSearchParams(mockNavigation.search),
-    usePathname: () => "/settings/appointments",
+    usePathname: () => mockNavigation.pathname,
+    useRouter: () => ({ replace: mockNavigation.replace }),
 }))
 
 vi.mock("@/lib/hooks/use-permissions", () => ({
@@ -205,6 +206,7 @@ describe("Appointments Google Meet UI", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockNavigation.search = ""
+        mockNavigation.pathname = "/settings/appointments"
         mockUseAppointmentStatusCounts.mockReturnValue({
             data: { pending: 0, confirmed: 0, completed: 0, cancelled: 0, expired: 0, no_show: 0 },
             isError: false,
@@ -710,6 +712,56 @@ describe("Appointments Google Meet UI", () => {
 
         expect(mockUseApproveAppointment).toHaveBeenCalledWith({ appointmentId: "appt-pending" })
         expect(mockUseAppointment).not.toHaveBeenCalledWith("appt-pending")
+    })
+
+    it("opens the appointment named in the URL and drops the param once handled", () => {
+        mockNavigation.pathname = "/appointments"
+        mockNavigation.search = "appointment=appt-linked"
+        mockUseAppointment.mockReturnValue({
+            data: {
+                id: "appt-linked",
+                user_id: "u1",
+                appointment_type_id: "type1",
+                appointment_type_name: "Initial Interview",
+                client_name: "Linked Client",
+                client_email: "linked@example.com",
+                client_phone: "5550100",
+                client_timezone: "America/Los_Angeles",
+                client_notes: null,
+                scheduled_start: "2026-02-23T20:00:00Z",
+                scheduled_end: "2026-02-23T20:30:00Z",
+                duration_minutes: 30,
+                meeting_mode: "phone",
+                status: "pending",
+                pending_expires_at: null,
+                approved_at: null,
+                approved_by_user_id: null,
+                approved_by_name: null,
+                cancelled_at: null,
+                cancelled_by_client: false,
+                cancellation_reason: null,
+                zoom_join_url: null,
+                google_event_id: null,
+                google_meet_url: null,
+                surrogate_id: null,
+                surrogate_number: null,
+                intended_parent_id: null,
+                intended_parent_name: null,
+                created_at: "2026-02-20T20:00:00Z",
+                updated_at: "2026-02-20T20:00:00Z",
+            },
+            isLoading: false,
+        })
+
+        render(<AppointmentsList />)
+
+        expect(mockUseAppointment).toHaveBeenCalledWith("appt-linked")
+        expect(screen.getAllByText("Linked Client").length).toBeGreaterThan(0)
+        mockUseApproveAppointment.mockImplementation(
+            (_payload: unknown, options?: { onSuccess?: () => void }) => options?.onSuccess?.()
+        )
+        fireEvent.click(screen.getByRole("button", { name: "Approve" }))
+        expect(mockNavigation.replace).toHaveBeenCalledWith("/appointments", { scroll: false })
     })
 
     it("shows reschedule action in appointment details", () => {

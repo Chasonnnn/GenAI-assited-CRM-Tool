@@ -50,7 +50,12 @@ from app.db.enums.integration_health import (
 from app.db.enums.intended_parents import IntendedParentStatus
 from app.db.enums.jobs import JobScope, JobStatus, JobType
 from app.db.enums.matches import MatchEventPerson, MatchEventType, MatchStatus
-from app.db.enums.notifications import NotificationType
+from app.db.enums.notifications import (
+    ACTION_NOTIFICATION_TYPES,
+    NotificationTier,
+    NotificationType,
+    notification_tier,
+)
 from app.db.enums.permissions import (
     ROLES_CAN_ARCHIVE,
     ROLES_CAN_ASSIGN,
@@ -93,6 +98,7 @@ from app.db.enums.workflows import (
 )
 
 __all__ = [
+    "ACTION_NOTIFICATION_TYPES",
     "AlertSeverity",
     "AlertStatus",
     "AlertType",
@@ -145,7 +151,9 @@ __all__ = [
     "LinkConfidence",
     "MailboxKind",
     "MailboxProvider",
+    "NotificationTier",
     "NotificationType",
+    "notification_tier",
     "OwnerType",
     "RecipientSource",
     "RecurrenceMode",

@@ -13,6 +13,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.db.enums import NotificationType
 from app.db.models import Membership, Notification, Organization, User
 from app.services import (
     email_service,
@@ -34,13 +35,16 @@ def idempotency_key(notification_id: UUID) -> str:
 def record_path(notification: Notification) -> str | None:
     """Path of the record the notification points to.
 
-    Mirrors the entity branches of apps/web/lib/utils/notification-routing.ts so the
-    email opens the same page as the in-app click-through.
+    Mirrors apps/web/lib/utils/notification-routing.ts so the email opens the same page
+    as the in-app click-through. Status change requests open the record: the pending
+    request id is not stored on the notification.
     """
     if notification.entity_id is None:
         return None
     entity_id = notification.entity_id
     entity_type = notification.entity_type
+    if notification.type == NotificationType.WORKFLOW_APPROVAL_REQUESTED.value:
+        return f"/tasks?filter=my_tasks&focus=approvals&approval={entity_id}"
     if entity_type in {"surrogate", "case"}:
         return f"/surrogates/{entity_id}"
     if entity_type == "intended_parent":
@@ -50,9 +54,9 @@ def record_path(notification: Notification) -> str | None:
     if entity_type == "donor":
         return f"/donors/{entity_id}"
     if entity_type in {"task", "donor_task"}:
-        return "/tasks?filter=my_tasks&focus=tasks"
+        return f"/tasks?filter=my_tasks&task={entity_id}"
     if entity_type == "appointment":
-        return "/appointments"
+        return f"/appointments?appointment={entity_id}"
     return None
 
 
@@ -70,13 +74,19 @@ def _active_recipient(db: Session, org_id: UUID, user_id: UUID) -> User | None:
     )
 
 
-def _render(
+def render_staff_email(
     db: Session,
     *,
-    notification: Notification,
     org: Organization,
-) -> tuple[str, str, str, str | None]:
-    """Return (subject, html, text, from_email)."""
+    title: str,
+    body_block: str,
+    link_url: str | None,
+    link_label: str,
+) -> tuple[str, str, str | None]:
+    """Render the staff notification system template. Returns (subject, html, from_email).
+
+    body_block is trusted HTML; callers escape any user content in it.
+    """
     template = system_email_template_service.ensure_system_template(
         db, system_key=system_email_template_service.STAFF_NOTIFICATION_SYSTEM_KEY
     )
@@ -88,11 +98,43 @@ def _render(
         )
         subject_template, body_template = defaults["subject"], defaults["body"]
 
-    body = (notification.body or "").strip()
+    link_block = (
+        f'<a href="{html_escape(link_url, quote=True)}" target="_blank" '
+        'style="display: inline-block; padding: 10px 18px; border-radius: 10px; '
+        "background-color: #111827; color: #ffffff; text-decoration: none; "
+        f'font-size: 14px; font-weight: 600;">{html_escape(link_label)}</a>'
+        if link_url
+        else ""
+    )
+    subject, html = email_service.render_template(
+        subject_template,
+        body_template,
+        {
+            "org_name": org_service.get_org_display_name(org),
+            "title": title,
+            "body_block": body_block,
+            "link_block": link_block,
+        },
+        safe_html_vars={"body_block", "link_block"},
+    )
+    return subject, html, template.from_email
+
+
+def record_url(org: Organization, notification: Notification) -> str | None:
     path = record_path(notification)
     base_url = org_service.get_org_portal_base_url(org)
-    record_url = f"{base_url}{path}" if path and base_url else None
+    return f"{base_url}{path}" if path and base_url else None
 
+
+def _render(
+    db: Session,
+    *,
+    notification: Notification,
+    org: Organization,
+) -> tuple[str, str, str, str | None]:
+    """Return (subject, html, text, from_email)."""
+    body = (notification.body or "").strip()
+    url = record_url(org, notification)
     body_block = (
         '<p style="margin: 0; font-size: 15px; line-height: 1.6; color: #374151;">'
         + html_escape(body).replace("\n", "<br>")
@@ -100,32 +142,20 @@ def _render(
         if body
         else ""
     )
-    link_block = (
-        f'<a href="{html_escape(record_url, quote=True)}" target="_blank" '
-        'style="display: inline-block; padding: 10px 18px; border-radius: 10px; '
-        "background-color: #111827; color: #ffffff; text-decoration: none; "
-        'font-size: 14px; font-weight: 600;">View record</a>'
-        if record_url
-        else ""
-    )
-    org_name = org_service.get_org_display_name(org)
-    subject, html = email_service.render_template(
-        subject_template,
-        body_template,
-        {
-            "org_name": org_name,
-            "title": notification.title,
-            "body_block": body_block,
-            "link_block": link_block,
-        },
-        safe_html_vars={"body_block", "link_block"},
+    subject, html, from_email = render_staff_email(
+        db,
+        org=org,
+        title=notification.title,
+        body_block=body_block,
+        link_url=url,
+        link_label="View record",
     )
     text_parts = [notification.title]
     if body:
         text_parts.append(body)
-    if record_url:
-        text_parts.append(f"View record: {record_url}")
-    return subject, html, "\n\n".join(text_parts) + "\n", template.from_email
+    if url:
+        text_parts.append(f"View record: {url}")
+    return subject, html, "\n\n".join(text_parts) + "\n", from_email
 
 
 def queue_notification_email(db: Session, notification: Notification) -> bool:
