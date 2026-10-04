@@ -1,0 +1,45 @@
+# Only sanitized application traces enter this loopback receiver. No logs or metrics.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:4318
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 192
+    spike_limit_mib: 32
+  resource/project:
+    attributes:
+      - action: upsert
+        key: gcp.project_id
+        value: ${env:GOOGLE_CLOUD_PROJECT}
+  batch:
+    send_batch_size: 128
+    send_batch_max_size: 128
+    timeout: 1s
+exporters:
+  otlp_grpc:
+    endpoint: telemetry.googleapis.com:443
+    auth:
+      authenticator: googleclientauth
+    timeout: 5s
+    retry_on_failure:
+      max_elapsed_time: 30s
+    sending_queue:
+      num_consumers: 2
+      queue_size: 256
+extensions:
+  googleclientauth: {}
+  health_check:
+    endpoint: 0.0.0.0:13133
+service:
+  extensions: [googleclientauth, health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/project, batch]
+      exporters: [otlp_grpc]
+  telemetry:
+    metrics:
+      level: none
