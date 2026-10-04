@@ -5,7 +5,11 @@ resource "google_cloud_run_v2_service" "api" {
 
   # Ensure the revision service account has Secret Manager access before we
   # deploy a revision that references Secret Manager env vars.
-  depends_on = [google_secret_manager_secret_iam_member.api_secret_access]
+  # Workers must understand newly enabled job payloads before the API produces them.
+  depends_on = [
+    google_secret_manager_secret_iam_member.api_secret_access,
+    google_cloud_run_v2_service.worker,
+  ]
 
   template {
     service_account = google_service_account.api.email

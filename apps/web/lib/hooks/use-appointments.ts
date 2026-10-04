@@ -301,6 +301,11 @@ export function useCancelAppointment() {
             expectedRevision?: number;
             requestId?: string;
         }) => appointmentsApi.cancelAppointment(appointmentId, reason, { expectedRevision, requestId }),
+        onError: (error) => {
+            toast.error(error instanceof Error && error.message
+                ? error.message
+                : 'Failed to cancel appointment.');
+        },
         onSuccess: (updatedAppt) => {
             queryClient.setQueryData(appointmentKeys.detail(updatedAppt.id), updatedAppt);
             void queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() });

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.81](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.80...surrogacy-crm-platform-v0.91.81) (2026-10-04)
+
+
+### Bug Fixes
+
+* prepare scheduling calendars for production activation ([#792](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/792)) ([2866a6e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/2866a6eb6e6b37ab788d24994e66ba10a0283eaa))
+
 ## [0.91.80](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.79...surrogacy-crm-platform-v0.91.80) (2026-10-04)
 
 

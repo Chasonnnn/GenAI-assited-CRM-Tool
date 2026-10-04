@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from unittest.mock import Mock
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 
 from app.core.config import settings
@@ -196,6 +197,64 @@ async def test_complete_incremental_sync_projects_events_without_creating_crm_re
     db.refresh(binding)
     assert binding.sync_token == "cursor-1"
     observed.assert_called_once_with(db, appointment, remote)
+
+
+@pytest.mark.asyncio
+async def test_zero_duration_google_event_does_not_block_calendar_sync_or_availability(
+    db, test_org, test_user, binding, monkeypatch
+):
+    from app.services import google_scheduling_adapter
+
+    instant = datetime.now(UTC).replace(microsecond=0) + timedelta(days=1)
+    original_client = httpx.AsyncClient
+
+    def provider(_request):
+        return httpx.Response(
+            200,
+            json={
+                "items": [
+                    {
+                        "id": "point-event",
+                        "etag": '"point-v1"',
+                        "status": "confirmed",
+                        "start": {"dateTime": instant.isoformat()},
+                        "end": {"dateTime": instant.isoformat()},
+                    }
+                ],
+                "nextSyncToken": "complete-cursor",
+            },
+        )
+
+    monkeypatch.setattr(
+        google_scheduling_adapter.httpx,
+        "AsyncClient",
+        lambda **kwargs: original_client(transport=httpx.MockTransport(provider), **kwargs),
+    )
+    monkeypatch.setattr(
+        google_scheduling_adapter.calendar_service,
+        "get_google_access_token",
+        lambda *_args: _async_result("synthetic-token"),
+    )
+
+    assert (
+        await calendar_binding_service.sync_binding(db, binding_id=binding.id, org_id=test_org.id)
+        == 1
+    )
+    db.refresh(binding)
+    assert binding.synced_at is not None
+    assert binding.sync_error is None
+    projection = db.query(ExternalCalendarEvent).filter_by(binding_id=binding.id).one()
+    assert projection.scheduled_start == projection.scheduled_end == instant
+    assert (
+        calendar_binding_service.busy_intervals(
+            db,
+            test_org.id,
+            test_user.id,
+            instant - timedelta(hours=1),
+            instant + timedelta(hours=1),
+        )
+        == []
+    )
 
 
 @pytest.mark.asyncio
