@@ -173,6 +173,14 @@ function getYesNoOptions(options: FormOption[]): FormOption[] | null {
     return [yesOption, noOption]
 }
 
+const HALF_WIDTH_FIELD_TYPES = new Set(["text", "email", "phone", "number", "date", "select", "height"])
+
+/** Short single-line answers and Yes/No choices share a row on the hosted form and the builder preview. */
+export function isHalfWidthPublicField(field: Pick<FormField, "type" | "options">): boolean {
+    if (HALF_WIDTH_FIELD_TYPES.has(field.type)) return true
+    return field.type === "radio" && getYesNoOptions(field.options ?? []) !== null
+}
+
 function getChoiceOptions(options: FormOption[]): FormOption[] {
     return getYesNoOptions(options) ?? options
 }
@@ -184,7 +192,7 @@ function getChoiceGridClassName(options: FormOption[], density: PublicFormDensit
     return cn(
         "grid",
         isCompact ? "gap-2" : "gap-3",
-        isYesNoChoice ? "grid-cols-2" : "sm:grid-cols-2",
+        isYesNoChoice ? "grid-cols-2" : "grid-cols-[repeat(auto-fit,minmax(min(11rem,100%),1fr))]",
     )
 }
 

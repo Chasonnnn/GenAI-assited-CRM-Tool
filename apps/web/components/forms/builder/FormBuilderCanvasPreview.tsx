@@ -3,7 +3,11 @@
 import { useState } from "react"
 
 import { Label } from "@/components/ui/label"
-import { PublicFormFieldRenderer, type PublicFormAnswerValue } from "@/components/forms/PublicFormFieldRenderer"
+import {
+    PublicFormFieldRenderer,
+    isHalfWidthPublicField,
+    type PublicFormAnswerValue,
+} from "@/components/forms/PublicFormFieldRenderer"
 import { PublicFormHeader } from "@/components/forms/PublicFormHeader"
 import { FormBuilderFieldPreview } from "@/components/forms/FormBuilderFieldPreview"
 import { buildFormSchema, type BuilderFormPage } from "@/lib/forms/form-builder-document"
@@ -23,9 +27,6 @@ type FormBuilderCanvasPreviewProps = {
 }
 
 type PreviewAnswers = Record<string, PublicFormAnswerValue>
-
-// Mirrors the hosted intake grid: short single-line answers share a row.
-const PREVIEW_HALF_WIDTH_FIELD_TYPES = new Set(["text", "email", "phone", "number", "date", "select", "height"])
 
 function isEmptyValue(value: PublicFormAnswerValue) {
     if (value === null || value === undefined) return true
@@ -190,7 +191,7 @@ export function FormBuilderCanvasPreview({
                                         key={field.key}
                                         className={cn(
                                             "min-w-0",
-                                            !PREVIEW_HALF_WIDTH_FIELD_TYPES.has(field.type) && "sm:col-span-2",
+                                            !isHalfWidthPublicField(field) && "sm:col-span-2",
                                         )}
                                     >
                                         {["address", "file"].includes(field.type) ? (

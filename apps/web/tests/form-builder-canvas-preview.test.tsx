@@ -53,6 +53,22 @@ describe("FormBuilderCanvasPreview", () => {
         expect(screen.queryByRole("button", { name: /next|final page/i })).not.toBeInTheDocument()
     })
 
+    it("pairs Yes/No questions in one row and keeps longer choices full width", () => {
+        renderPreview([
+            {
+                id: 1,
+                name: "Eligibility",
+                fields: [
+                    field("has_child", "Has child", { type: "radio", options: ["Yes", "No"] }),
+                    field("start", "Start", { type: "radio", options: ["Now", "Later", "Unsure"] }),
+                ],
+            },
+        ])
+
+        expect(screen.getByText("Has child").closest(".min-w-0")).not.toHaveClass("sm:col-span-2")
+        expect(screen.getByText("Start").closest(".min-w-0")).toHaveClass("sm:col-span-2")
+    })
+
     it("omits pages whose fields are all hidden", () => {
         renderPreview([
             { id: 1, name: "About You", fields: [field("full_name", "Full Name")] },

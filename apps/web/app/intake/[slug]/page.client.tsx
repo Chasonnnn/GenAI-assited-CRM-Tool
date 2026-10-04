@@ -17,7 +17,11 @@ import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 import { ApiError } from "@/lib/api"
 import type { JsonObject } from "@/lib/types/json"
-import { PublicFormFieldRenderer, getPublicFieldErrorId } from "@/components/forms/PublicFormFieldRenderer"
+import {
+    PublicFormFieldRenderer,
+    getPublicFieldErrorId,
+    isHalfWidthPublicField,
+} from "@/components/forms/PublicFormFieldRenderer"
 import { PublicFormHeader } from "@/components/forms/PublicFormHeader"
 import { PublicSmsConsent } from "@/components/forms/PublicSmsConsent"
 import { FieldError } from "@/components/ui/field"
@@ -66,7 +70,6 @@ type FormField = FormPage["fields"][number]
 const PER_FILE_FIELD_MAX = 5
 
 // Short single-line answers share a row; everything else spans the section width.
-const HALF_WIDTH_FIELD_TYPES = new Set(["text", "email", "phone", "number", "date", "select", "height"])
 
 function getSectionId(pageIndex: number): string {
     return `form-section-${pageIndex + 1}`
@@ -1529,7 +1532,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                                 <div
                                                     className={cn(
                                                         "min-w-0",
-                                                        !HALF_WIDTH_FIELD_TYPES.has(field.type) && "sm:col-span-2",
+                                                        !isHalfWidthPublicField(field) && "sm:col-span-2",
                                                     )}
                                                 >
                                                     {renderFieldInput(field)}
