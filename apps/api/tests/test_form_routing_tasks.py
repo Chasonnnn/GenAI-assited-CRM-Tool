@@ -6,10 +6,107 @@ from zoneinfo import ZoneInfo
 import pytest
 from sqlalchemy import event
 
-from app.db.models import Organization, Task, WorkflowExecution
+from app.db.enums import Role
+from app.db.models import (
+    Organization,
+    OrganizationPermissionPolicy,
+    RolePermission,
+    Task,
+    UserPermissionOverride,
+    WorkflowExecution,
+)
 from app.schemas.workflow import WorkflowCreate
 from app.services import form_intake_service, form_routing_service, task_service, workflow_service
+from tests.test_email_templates_personal_scope import authed_client_for_user, create_user_with_role
 from tests.test_form_routing import routing_submission, tasks
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("policy_version", [1, 2])
+@pytest.mark.parametrize("kind", ["surrogate", "egg_donor"])
+async def test_review_owner_has_the_endpoint_permissions(db, test_org, policy_version, kind):
+    db.add(OrganizationPermissionPolicy(organization_id=test_org.id, version=policy_version))
+    editor = create_user_with_role(db, test_org.id, Role.INTAKE_SPECIALIST)
+    admin = create_user_with_role(db, test_org.id, Role.ADMIN)
+    if policy_version == 2:
+        # Managing form configuration is independent of reviewing applications.
+        db.add(
+            UserPermissionOverride(
+                organization_id=test_org.id,
+                user_id=editor.id,
+                permission="manage_forms",
+                override_type="grant",
+            )
+        )
+        db.add(
+            RolePermission(
+                organization_id=test_org.id,
+                role=Role.INTAKE_SPECIALIST.value,
+                permission="review_form_submissions",
+                is_granted=False,
+            )
+        )
+    form, submission = routing_submission(db, test_org.id, editor.id, kind=kind)
+    form.routing_updated_by_user_id = editor.id
+    db.commit()
+
+    form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+
+    [task] = tasks(db, submission)
+    assert task.owner_id == admin.id
+    async with authed_client_for_user(db, test_org.id, admin, Role.ADMIN) as client:
+        response = await client.post(f"/forms/submissions/{submission.id}/routing/dismiss")
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize(
+    "kind,exact,permission",
+    [("surrogate", "auto", "create_surrogates"), ("egg_donor", "review", "edit_donors")],
+)
+def test_review_owner_needs_the_subject_action_permission(db, test_org, kind, exact, permission):
+    db.add(OrganizationPermissionPolicy(organization_id=test_org.id, version=2))
+    editor = create_user_with_role(db, test_org.id, Role.INTAKE_SPECIALIST)
+    admin = create_user_with_role(db, test_org.id, Role.ADMIN)
+    db.add(
+        RolePermission(
+            organization_id=test_org.id,
+            role=Role.INTAKE_SPECIALIST.value,
+            permission=permission,
+            is_granted=False,
+        )
+    )
+    _, submission = routing_submission(db, test_org.id, editor.id, kind=kind, exact=exact)
+
+    form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+
+    [task] = tasks(db, submission)
+    assert task.owner_id == admin.id
+
+
+def test_review_owner_must_have_queue_scope_and_same_org_membership(db, test_org):
+    db.add(OrganizationPermissionPolicy(organization_id=test_org.id, version=2))
+    editor = create_user_with_role(db, test_org.id, Role.CASE_MANAGER)
+    db.add(
+        UserPermissionOverride(
+            organization_id=test_org.id,
+            user_id=editor.id,
+            permission="review_form_submissions",
+            override_type="grant",
+        )
+    )
+    other = Organization(name="Other", slug=uuid4().hex)
+    db.add(other)
+    db.flush()
+    foreign_admin = create_user_with_role(db, other.id, Role.ADMIN)
+    form, submission = routing_submission(db, test_org.id, editor.id)
+    form.routing_updated_by_user_id = foreign_admin.id
+    db.commit()
+
+    form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+
+    assert submission.match_status == "routing_review"
+    assert submission.routing_review_step == "match"
+    assert tasks(db, submission) == []
 
 
 @pytest.mark.asyncio
@@ -27,6 +124,7 @@ async def test_review_task_reads_include_form_context_and_filterable_due_date(
     local_due = task.due_at.astimezone(ZoneInfo(timezone))
     assert task.due_date == local_due.date()
     assert task.due_time == local_due.time()
+    assert (task.due_time.second, task.due_time.microsecond) == (0, 0)
     assert submission.routing_review_step == step
 
     detail = await authed_client.get(f"/tasks/{task.id}")

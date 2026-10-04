@@ -92,7 +92,7 @@ class FormIntakeLink(Base):
         ),
         nullable=True,
     )
-    expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     max_submissions: Mapped[int | None] = mapped_column(Integer, nullable=True)
     submissions_count: Mapped[int] = mapped_column(
         Integer, server_default=text("0"), nullable=False
@@ -102,10 +102,10 @@ class FormIntakeLink(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(),
+        TIMESTAMP(timezone=True),
         server_default=text("now()"),
         onupdate=text("now()"),
         nullable=False,
@@ -164,7 +164,7 @@ class PublishedIntakeVersion(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     published_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
     organization: Mapped[Organization] = relationship()
@@ -258,15 +258,15 @@ class IntakeLead(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(),
+        TIMESTAMP(timezone=True),
         server_default=text("now()"),
         onupdate=text("now()"),
         nullable=False,
     )
-    promoted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    promoted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     organization: Mapped[Organization] = relationship()
     form: Mapped[Form | None] = relationship()
@@ -316,7 +316,7 @@ class LeadAttribution(Base):
     first_touch_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     last_touch_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
 
@@ -347,7 +347,7 @@ class ConsentRecord(Base):
     consent_text_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     accepted: Mapped[bool] = mapped_column(Boolean, nullable=False)
     accepted_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
     ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -379,10 +379,10 @@ class EmbedSession(Base):
     attribution_snapshot_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(), nullable=False)
-    consumed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
 
@@ -415,7 +415,7 @@ class TrackingEventLog(Base):
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
 
@@ -453,7 +453,7 @@ class FormSubmissionMatchCandidate(Base):
     )
     reason: Mapped[str] = mapped_column(String(120), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
     submission: Mapped[FormSubmission] = relationship()
@@ -525,12 +525,12 @@ class FormIntakeDraft(Base):
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     email_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     phone_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(),
+        TIMESTAMP(timezone=True),
         server_default=text("now()"),
         onupdate=text("now()"),
         nullable=False,

@@ -207,7 +207,7 @@ export function WorkflowCanvas({
     onRequestAddAction: () => void
 }) {
     const { state, options, selection, handlers } = controller
-    const { triggerType, subjectType, conditions, conditionLogic, actions } = state
+    const { triggerType, savedSubjectType, conditions, conditionLogic, actions } = state
     const TriggerIcon = getTriggerIcon(triggerType)
     const triggerLabel = triggerType
         ? options.triggerTypeOptions.find((option) => option.value === triggerType)?.label ?? getTriggerLabel(triggerType)
@@ -235,7 +235,7 @@ export function WorkflowCanvas({
                         subtitle={
                             state.isAppointmentTrigger
                                 ? `Runs on linked ${WORKFLOW_SUBJECT_PLURAL_LABELS[state.actionSubjectType].toLowerCase()}`
-                                : `Runs for ${WORKFLOW_SUBJECT_PLURAL_LABELS[subjectType].toLowerCase()}`
+                                : `Runs for ${WORKFLOW_SUBJECT_PLURAL_LABELS[savedSubjectType].toLowerCase()}`
                         }
                     />
                     <div className="border-t border-border px-3 py-2.5">
