@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -1221,3 +1221,24 @@ async def test_default_surrogate_application_form_reconciles_on_purpose_change(
     by_id = {form["id"]: form for form in after_demote_list_res.json()}
     assert by_id[form_a_id]["is_default_surrogate_application"] is True
     assert by_id[form_b_id]["is_default_surrogate_application"] is False
+
+
+@pytest.mark.asyncio
+async def test_form_timestamps_are_serialized_with_a_utc_offset(authed_client):
+    create_res = await authed_client.post(
+        "/forms",
+        json={"name": "Timestamp Form", "form_schema": _shared_identity_schema()},
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    list_res = await authed_client.get("/forms")
+    assert list_res.status_code == 200
+    form = next(item for item in list_res.json() if item["id"] == form_id)
+    links_res = await authed_client.get(f"/forms/{form_id}/intake-links")
+    assert links_res.status_code == 200
+
+    for value in (form["created_at"], form["updated_at"], links_res.json()[0]["created_at"]):
+        assert datetime.fromisoformat(value).utcoffset() == timedelta(0)
