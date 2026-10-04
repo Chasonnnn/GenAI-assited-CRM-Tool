@@ -1,7 +1,7 @@
 """Add the square organization logo, independent of email signature branding.
 
 Revision ID: 20261004_0900_organization_logo
-Revises: 20261003_1600_notification_daily_digest
+Revises: 20261003_1800_timezone_aware_form_timestamps
 """
 
 import sqlalchemy as sa
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20261004_0900_organization_logo"
-down_revision = "20261003_1600_notification_daily_digest"
+down_revision = "20261003_1800_timezone_aware_form_timestamps"
 branch_labels = None
 depends_on = None
 

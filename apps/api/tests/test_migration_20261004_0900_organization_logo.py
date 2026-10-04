@@ -8,7 +8,7 @@ from alembic import command
 from tests.test_migration_20260928_1300_workflow_fixed_trigger_subjects import _alembic_config
 
 REVISION = "20261004_0900_organization_logo"
-PREVIOUS = "20261003_1600_notification_daily_digest"
+PREVIOUS = "20261003_1800_timezone_aware_form_timestamps"
 
 
 def test_organization_logo_upgrade_and_downgrade(db_engine):
