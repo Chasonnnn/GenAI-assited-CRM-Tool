@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.79](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.78...surrogacy-crm-platform-v0.91.79) (2026-10-04)
+
+
+### Features
+
+* **api:** email an opt-in daily digest of open action items and new updates ([ce57c3b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ce57c3bb5ce6ba3e1f7f783e22ab6c8b88de8be7))
+* **api:** link notification and digest emails to the exact task, approval, or appointment ([969d0fd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/969d0fd991276636a368cb0e9ee50df40d387c93))
+* **api:** return the pending request id on status change notifications ([bd8a337](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bd8a337f6d2c8c7fa02dad5c76a786d56eb134c2))
+* **api:** split notifications into action items and updates ([1f9681b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1f9681b94ce69cb4038838f23c2056884f90ea2e))
+* notification side panel with action tiers, inline actions, and daily digest ([ccb9db1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ccb9db14aa250f26343e62e1bb7cc0e5c50ab29b))
+* **web:** add the Daily Digest email toggle ([7a3c66a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7a3c66a28510a609ede0ec7d146d6897bab68d07))
+* **web:** approve, deny, claim, and complete from the notification panel ([f9cb1a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f9cb1a4690cee17d635868b7d5f085de291fec09))
+* **web:** open notifications in a side panel with Action needed and Updates tabs ([da86df4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/da86df475c99033a53bf8ca6e683a2662b355a9b))
+* **web:** open the exact task, approval, or appointment from a notification ([a49813e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a49813edefdb019ec873f889fa19583727e2e7b4))
+* workflow editor, workflow email, and opt-in notification email ([bd938a2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bd938a2df5eaf68a6d102b573097d514ec4e9b01))
+
+
+### Bug Fixes
+
+* accept plural inch abbreviations in height imports ([acb7658](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/acb765821486a0b45b26eef5af953bbf0e36d0f6))
+* **api:** keep the ORM model import out of the notifications router ([e0ea0d4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e0ea0d4b8a9518b15c4a88899a24d6f68ca28034))
+* **api:** repair system workflows already seeded with dead configurations ([32a817d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/32a817d88a9c1bf6e65320c6ba396e3033547e8a))
+* **api:** seed only system workflows that pass workflow validation ([cb9c50d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cb9c50d113e6df4c16aed91d08d714b0759660a9))
+* **api:** send each workflow notification once across manual retries ([44e7826](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/44e78268f694b78ad37cfefcd6a2196988af52b4))
+* normalize fractional heights without converting twice ([c2e82ad](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c2e82adee2b424661469e17d809f9c2cb3f41d4d))
+* **web:** give the notification panel full width on phones and a light backdrop ([86a4f2b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/86a4f2b05c9c5ff7b430b37f8e33bc3da02e6c40))
+* **web:** label the toast close button Dismiss ([e8f0192](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e8f0192818c63f78abe63731e083f1ff49eae995))
+
+
+### Maintenance
+
+* merge fix/log-client-error-codes for opt-in notification email ([1ae43c4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1ae43c4a585bfee496b02776b66a61f9eb673ac4))
+* merge main into fix/log-client-error-codes ([3d9d7bf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3d9d7bffa04898aec8898fd8f96b44c889b30e31))
+
 ## [0.91.78](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.77...surrogacy-crm-platform-v0.91.78) (2026-10-03)
 
 
