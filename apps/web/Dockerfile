@@ -23,6 +23,8 @@ WORKDIR /app/apps/web
 ENV NPM_CONFIG_OPTIONAL=true
 ENV npm_config_optional=true
 ENV PNPM_CONFIG_OPTIONAL=true
+# pnpm is pinned through packageManager; upgrades go through mise, CI and this file together.
+ENV PNPM_CONFIG_UPDATE_NOTIFIER=false
 
 RUN rm -rf node_modules
 RUN pnpm install --frozen-lockfile
