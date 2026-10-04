@@ -378,7 +378,12 @@ def busy_intervals(
                 if event.scheduled_start and event.scheduled_end
                 else _all_day_interval(event, timezone=timezone)
             )
-            if interval is not None and interval[0] < end and interval[1] > start:
+            if (
+                interval is not None
+                and interval[0] < interval[1]
+                and interval[0] < end
+                and interval[1] > start
+            ):
                 intervals.append(interval)
     return intervals
 
@@ -636,8 +641,10 @@ def _record_sync_error(
     db.commit()
 
 
-async def sync_binding(db: Session, *, binding_id: UUID, org_id: UUID) -> int:
-    """Persist one complete incremental projection snapshot and observe exact links only."""
+async def sync_binding(
+    db: Session, *, binding_id: UUID, org_id: UUID, reconcile_appointments: bool = True
+) -> int:
+    """Persist a complete snapshot; operator preparation can suppress CRM reconciliation."""
     if not _enabled():
         return 0
     _CalendarBinding, ExternalCalendarEvent, _Membership, _UserIntegration = _models()
@@ -793,32 +800,34 @@ async def sync_binding(db: Session, *, binding_id: UUID, org_id: UUID) -> int:
     # The completed page is the availability snapshot used by inbound reconciliation.
     # Flush every projection and its cursor before observing any linked appointment so
     # the observer sees neither a stale binding nor a partial page.
-    binding.sync_token = next_cursor
+    # Preparation must leave changes available for the next normal worker sync.
+    binding.sync_token = next_cursor if reconcile_appointments else cursor
     binding.synced_at = datetime.now(UTC)
     binding.sync_error = None
     db.flush()
 
     external_changes = []
-    for event_id, remote in remotes.items():
-        appointment = (
-            db.query(Appointment)
-            .populate_existing()
-            .with_for_update()
-            .filter(
-                Appointment.organization_id == org_id,
-                Appointment.google_integration_id == binding.integration_id,
-                Appointment.google_calendar_id == binding.calendar_id,
-                Appointment.google_event_id == event_id,
+    if reconcile_appointments:
+        for event_id, remote in remotes.items():
+            appointment = (
+                db.query(Appointment)
+                .populate_existing()
+                .with_for_update()
+                .filter(
+                    Appointment.organization_id == org_id,
+                    Appointment.google_integration_id == binding.integration_id,
+                    Appointment.google_calendar_id == binding.calendar_id,
+                    Appointment.google_event_id == event_id,
+                )
+                .one_or_none()
             )
-            .one_or_none()
-        )
-        if appointment is not None:
-            before = (appointment.status, appointment.scheduled_start)
-            observed = appointment_google_sync_service.observe_remote(db, appointment, remote)
-            if inspect.isawaitable(observed):
-                observed = await observed
-            if observed == "applied":
-                external_changes.append((appointment, *before))
+            if appointment is not None:
+                before = (appointment.status, appointment.scheduled_start)
+                observed = appointment_google_sync_service.observe_remote(db, appointment, remote)
+                if inspect.isawaitable(observed):
+                    observed = await observed
+                if observed == "applied":
+                    external_changes.append((appointment, *before))
     try:
         db.commit()
     except Exception:

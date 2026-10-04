@@ -224,6 +224,7 @@ async def test_incremental_snapshot_requires_last_page_cursor(monkeypatch):
     def handler(request):
         requests.append(request)
         assert request.url.params["showDeleted"] == "true"
+        assert request.url.params["singleEvents"] == "true"
         assert request.url.params["syncToken"] == "old-token"
         if len(requests) == 1:
             return httpx.Response(
@@ -238,8 +239,10 @@ async def test_incremental_snapshot_requires_last_page_cursor(monkeypatch):
         return "synthetic-token"
 
     monkeypatch.setattr(adapter.calendar_service, "get_google_access_token", token)
-    result = await adapter.read_incremental_events(None, uuid4(), "secondary", "old-token")
-    assert result["next_sync_token"] == "new-token"
+    result = await adapter.read_incremental_events(
+        None, uuid4(), "secondary", "instances-v1:old-token"
+    )
+    assert result["next_sync_token"] == "instances-v1:new-token"
     assert result["events"][0]["id"] == "gone"
     assert result["events"][0]["etag"] == ""
     assert len(requests) == 2
@@ -253,4 +256,26 @@ async def test_expired_cursor_is_distinct_from_incomplete_snapshot(monkeypatch):
     monkeypatch.setattr(adapter.calendar_service, "get_google_access_token", token)
     _transport(monkeypatch, lambda _request: httpx.Response(410))
     with pytest.raises(adapter.GoogleSyncTokenExpired):
-        await adapter.read_incremental_events(None, uuid4(), "secondary", "old-token")
+        await adapter.read_incremental_events(None, uuid4(), "secondary", "instances-v1:old-token")
+
+
+@pytest.mark.asyncio
+async def test_unexpanded_cursor_requires_projection_rebuild_before_provider_read(monkeypatch):
+    async def token(_db, _user_id):
+        return "synthetic-token"
+
+    monkeypatch.setattr(adapter.calendar_service, "get_google_access_token", token)
+
+    def provider(_request):
+        pytest.fail("An old cursor must not be reused with changed list parameters")
+
+    _transport(monkeypatch, provider)
+    with pytest.raises(adapter.GoogleSyncTokenExpired, match="projection format changed"):
+        await adapter.read_incremental_events(None, uuid4(), "secondary", "old-unexpanded-token")
+
+
+def test_backwards_google_event_interval_still_rejected():
+    event = _event("backwards-event", {})
+    event["end"] = {"dateTime": "2026-10-01T11:59:00Z"}
+    with pytest.raises(adapter.GoogleProviderError, match="interval is incomplete"):
+        adapter.parse_event(event)

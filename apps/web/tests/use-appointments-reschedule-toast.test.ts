@@ -4,12 +4,14 @@ import { act, renderHook } from '@testing-library/react'
 vi.unmock('@tanstack/react-query')
 
 import { ApiError } from '@/lib/api'
-import { useRescheduleAppointment } from '@/lib/hooks/use-appointments'
+import { useCancelAppointment, useRescheduleAppointment } from '@/lib/hooks/use-appointments'
 
 const rescheduleAppointmentMock = vi.fn()
+const cancelAppointmentMock = vi.fn()
 const toastErrorMock = vi.fn()
 
 vi.mock('@/lib/api/appointments', () => ({
+    cancelAppointment: (appointmentId: string) => cancelAppointmentMock(appointmentId),
     rescheduleAppointment: (appointmentId: string, scheduledStart: string) =>
         rescheduleAppointmentMock(appointmentId, scheduledStart),
 }))
@@ -46,5 +48,25 @@ describe('useRescheduleAppointment', () => {
         expect(toastErrorMock).toHaveBeenCalledWith(
             'Selected time is no longer available.'
         )
+    })
+})
+
+describe('useCancelAppointment', () => {
+    it('shows the rejection reason when cancellation fails and allows retry', async () => {
+        vi.clearAllMocks()
+        const backendError = new ApiError(400, 'Bad Request', 'Google appointment link requires review')
+        cancelAppointmentMock.mockRejectedValueOnce(backendError)
+        const { result } = renderHook(() => useCancelAppointment())
+        await act(async () => {
+            await expect(result.current.mutateAsync({ appointmentId: 'appt-123' })).rejects.toBe(backendError)
+        })
+        expect(toastErrorMock).toHaveBeenCalledWith('Google appointment link requires review')
+        expect(result.current.isPending).toBe(false)
+        cancelAppointmentMock.mockResolvedValueOnce({ id: 'appt-123', status: 'cancelled' })
+        await act(async () => {
+            await result.current.mutateAsync({ appointmentId: 'appt-123' })
+        })
+        expect(result.current.data?.status).toBe('cancelled')
+        expect(toastErrorMock).toHaveBeenCalledTimes(1)
     })
 })

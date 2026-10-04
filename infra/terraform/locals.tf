@@ -61,15 +61,19 @@ locals {
   }, local.optional_env)
 
   api_env = merge(local.common_env, {
-    GCP_SERVICE_NAME       = var.api_service_name
-    TRUST_PROXY_HEADERS    = tostring(var.trust_proxy_headers)
-    TRUST_PROXY_HOSTS      = var.trust_proxy_hosts
-    RATE_LIMIT_AUTH        = tostring(var.rate_limit_auth)
-    RATE_LIMIT_API         = tostring(var.rate_limit_api)
-    RATE_LIMIT_PUBLIC_READ = tostring(var.rate_limit_public_read)
+    SCHEDULING_V2_ENABLED        = tostring(var.scheduling_v2_enabled)
+    MATCH_CASE_EXPANSION_ENABLED = tostring(var.match_case_expansion_enabled)
+    GCP_SERVICE_NAME             = var.api_service_name
+    TRUST_PROXY_HEADERS          = tostring(var.trust_proxy_headers)
+    TRUST_PROXY_HOSTS            = var.trust_proxy_hosts
+    RATE_LIMIT_AUTH              = tostring(var.rate_limit_auth)
+    RATE_LIMIT_API               = tostring(var.rate_limit_api)
+    RATE_LIMIT_PUBLIC_READ       = tostring(var.rate_limit_public_read)
   })
 
   worker_env = merge(local.common_env, {
+    SCHEDULING_V2_ENABLED                     = tostring(var.scheduling_v2_worker_enabled)
+    MATCH_CASE_EXPANSION_ENABLED              = tostring(var.match_case_expansion_worker_enabled)
     GCP_SERVICE_NAME                          = var.worker_job_name
     WORKFLOW_SWEEP_FALLBACK_ENABLED           = tostring(var.workflow_sweep_fallback_enabled)
     WORKFLOW_MAINTENANCE_FALLBACK_ENABLED     = tostring(var.workflow_maintenance_fallback_enabled)

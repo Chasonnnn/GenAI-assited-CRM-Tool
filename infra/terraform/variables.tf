@@ -135,6 +135,38 @@ variable "workflow_sweep_fallback_enabled" {
   default     = true
 }
 
+variable "scheduling_v2_enabled" {
+  description = "Enable Scheduling V2 API producers after the worker and explicit calendar bindings are ready."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !var.scheduling_v2_enabled || var.scheduling_v2_worker_enabled
+    error_message = "Enable the Scheduling V2 worker before the API."
+  }
+}
+
+variable "scheduling_v2_worker_enabled" {
+  description = "Enable Scheduling V2 consumers first; disable only after API rollback and queued binding jobs drain."
+  type        = bool
+  default     = false
+}
+
+variable "match_case_expansion_enabled" {
+  description = "Enable donor and repeat-case matching API producers after migrations and worker activation."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !var.match_case_expansion_enabled || var.match_case_expansion_worker_enabled
+    error_message = "Enable the match expansion worker before the API."
+  }
+}
+
+variable "match_case_expansion_worker_enabled" {
+  description = "Enable match expansion consumers before the API; retain until expansion jobs drain during rollback."
+  type        = bool
+  default     = false
+}
+
 variable "messaging_delivery_dispatch_enabled" {
   description = "Enable Twilio delivery materialization and worker dispatch after readiness is verified."
   type        = bool
