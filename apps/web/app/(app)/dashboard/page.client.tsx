@@ -138,6 +138,7 @@ function DashboardContent() {
         <div className="flex flex-1 flex-col">
             <PageHeader
                 title="Dashboard"
+                className="[&_[data-slot=page-header-eyebrow]]:text-xl"
                 eyebrow={
                     user ? (
                         <DashboardGreeting
