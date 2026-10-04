@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from app.services import attachment_service
+from app.core.config import settings
+from app.services import attachment_service, org_logo_service, storage_url_service
 
 
 async def process_storage_delete(db, job) -> None:
@@ -16,10 +17,19 @@ async def process_storage_delete(db, job) -> None:
         raise ValueError("Storage deletion requires 1 to 100 storage keys")
 
     org_id = str(job.organization_id)
-    allowed_prefixes = (f"{org_id}/", f"messaging/{org_id}/")
+    allowed_prefixes = (f"{org_id}/", f"messaging/{org_id}/", f"logos/{org_id}/")
     for storage_key in storage_keys:
         if not isinstance(storage_key, str) or not storage_key.startswith(allowed_prefixes):
             raise ValueError("Storage key is outside the job organization")
 
     for storage_key in storage_keys:
-        attachment_service.delete_file(storage_key)
+        if storage_key.startswith(f"logos/{org_id}/"):
+            # Logos have a separate local fallback directory from attachments.
+            logo_url = (
+                storage_url_service.build_public_url(settings.S3_BUCKET, storage_key)
+                if settings.STORAGE_BACKEND == "s3"
+                else org_logo_service.build_local_logo_url(storage_key)
+            )
+            org_logo_service.delete_logo_from_storage(logo_url)
+        else:
+            attachment_service.delete_file(storage_key)

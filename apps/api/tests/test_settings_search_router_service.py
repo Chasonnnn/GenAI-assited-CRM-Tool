@@ -6,11 +6,12 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
+from app.core.config import settings
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import Role
 from app.routers import settings as settings_router
 from app.schemas.auth import UserSession
-from app.services import search_service
+from app.services import org_logo_service, search_service
 
 
 def test_settings_signature_validators_and_social_links():
@@ -47,31 +48,31 @@ def test_settings_signature_validators_and_social_links():
 
 
 def test_settings_logo_local_storage_helpers(monkeypatch, tmp_path):
-    monkeypatch.setattr(settings_router, "_get_logo_storage_backend", lambda: "local")
-    monkeypatch.setattr(settings_router, "_get_local_logo_path", lambda: str(tmp_path))
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local")
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path))
 
-    logo_url = settings_router._upload_logo_to_storage(uuid4(), b"img-bytes", "png")
-    assert logo_url.startswith(settings_router.LOCAL_LOGO_URL_PREFIX)
+    logo_url = org_logo_service.upload_logo_to_storage(uuid4(), b"img-bytes", "png")
+    assert logo_url.startswith(org_logo_service.LOCAL_LOGO_URL_PREFIX)
 
-    storage_key = settings_router._extract_local_logo_storage_key(logo_url)
+    storage_key = org_logo_service.extract_local_logo_storage_key(logo_url)
     assert storage_key is not None
     full_path = Path(tmp_path) / storage_key
     assert full_path.exists()
 
-    settings_router._delete_logo_from_storage(logo_url)
+    org_logo_service.delete_logo_from_storage(logo_url)
     assert not full_path.exists()
 
     assert (
-        settings_router._extract_local_logo_storage_key("/static/logos/org/test.png")
+        org_logo_service.extract_local_logo_storage_key("/static/logos/org/test.png")
         == "logos/org/test.png"
     )
     assert (
-        settings_router._extract_local_logo_storage_key("https://cdn.example.com/file.png") is None
+        org_logo_service.extract_local_logo_storage_key("https://cdn.example.com/file.png") is None
     )
 
 
 def test_settings_get_org_logo_local_guards(db, test_org, monkeypatch, tmp_path):
-    monkeypatch.setattr(settings_router, "_get_local_logo_path", lambda: str(tmp_path))
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path))
 
     with pytest.raises(HTTPException) as exc:
         settings_router.get_org_logo_local("..\\evil.png", db=db)
@@ -87,7 +88,7 @@ def test_settings_get_org_logo_local_guards(db, test_org, monkeypatch, tmp_path)
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(b"png")
 
-    test_org.signature_logo_url = settings_router._build_local_logo_url(storage_key)
+    test_org.signature_logo_url = org_logo_service.build_local_logo_url(storage_key)
     db.add(test_org)
     db.commit()
 

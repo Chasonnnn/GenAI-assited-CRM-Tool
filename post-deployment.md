@@ -6,6 +6,13 @@
 - Keep the `/health` route stable so probes don’t break.
 - To force a fresh build (no cached layers), bump `_CACHE_BUST` in the Cloud Build trigger (e.g., set it to a timestamp) for api/web builds.
 
+## Organization square logo
+
+- Apply `20261004_0900_organization_logo` before rolling out the API.
+- Roll out the worker with the API so `storage_delete` jobs accept organization logo keys.
+- Existing organizations keep `logo_url = NULL`; email signature logos are not copied or changed.
+- Verify upload, replacement, deletion, sidebar initials fallback, and journey export branding.
+
 ## Module routing rollout
 
 Before migrating, run this read-only timezone preflight and fix any organization rows it returns:
