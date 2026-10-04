@@ -101,7 +101,7 @@ describe("matchReasonLabel", () => {
 
 describe("submissionStatusLabel", () => {
     it.each([
-        ["pending_review", "Pending Review", "text-stone-700"],
+        ["pending_review", "Pending Review", "text-neutral-700"],
         ["approved", "Approved", "text-emerald-700"],
         ["rejected", "Rejected", "text-red-700"],
     ] as const)("labels and colors %s", (status, label, color) => {

@@ -48,7 +48,8 @@ describe("RichTextEditorToolbar", () => {
         act(() => { editor.commands.setTextSelection(13) })
         expect(screen.getByRole("button", { name: "Bold" })).toHaveAttribute("aria-pressed", "false")
 
-        act(() => { editor.commands.setTextAlign("center") })
+        // React Email retypes the textAlign command, so align the way the toolbar does.
+        act(() => { editor.commands.updateAttributes("paragraph", { textAlign: "center" }) })
         expect(screen.getByRole("button", { name: "Align Center" })).toHaveAttribute("aria-pressed", "true")
         expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled()
 

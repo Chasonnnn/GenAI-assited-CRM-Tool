@@ -1,0 +1,47 @@
+/* Maps the React Email editor UI onto the app tokens so it follows the app theme. */
+:root:root {
+    --re-bg: var(--popover);
+    --re-bg-active: var(--accent);
+    --re-border: var(--border);
+    --re-text: var(--popover-foreground);
+    --re-text-muted: var(--muted-foreground);
+    --re-hover: var(--accent);
+    --re-active: var(--accent);
+    --re-pressed: var(--accent);
+    --re-separator: var(--border);
+    --re-radius: var(--radius);
+    --re-danger: var(--destructive);
+}
+
+.email-design-sheet .tiptap {
+    min-height: 24rem;
+    outline: none;
+    color: #000000;
+}
+
+/* The theme container is 600px wide; on narrow screens it fits the sheet like a mobile client. */
+.email-design-sheet .tiptap .node-container {
+    max-width: 100%;
+}
+
+/* Blocks outside the theme container (the trailing line) keep the container's inset. */
+.email-design-sheet .tiptap > :not(.node-container) {
+    padding-inline: 0.5rem;
+}
+
+.email-design-sheet .tiptap p.is-empty::before {
+    color: #8a8a8a;
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+}
+
+.email-variable-token {
+    border-radius: 0.25rem;
+    background: color-mix(in oklab, var(--primary) 12%, transparent);
+    color: var(--primary);
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    padding: 0.05em 0.3em;
+}

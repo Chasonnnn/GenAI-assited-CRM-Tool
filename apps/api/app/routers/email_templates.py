@@ -21,6 +21,8 @@ from app.schemas.email import (
     EmailTemplateCopyRequest,
     EmailTemplateCreate,
     EmailTemplateListItem,
+    EmailTemplatePreviewRequest,
+    EmailTemplatePreviewResponse,
     EmailTemplateRead,
     EmailTemplateShareRequest,
     EmailTemplateTestSendRequest,
@@ -99,6 +101,7 @@ def _build_template_response(
             subject=template.subject,
             from_email=template.from_email,
             body=template.body,
+            body_design=template.body_design,
             is_active=template.is_active,
             scope=template.scope,
             owner_user_id=template.owner_user_id,
@@ -261,6 +264,7 @@ def create_template(
             subject=data.subject,
             from_email=data.from_email,
             body=data.body,
+            body_design=data.body_design,
             scope=data.scope,
         )
     except ValueError as exc:
@@ -407,6 +411,8 @@ def update_template(
         }
         if "from_email" in data.model_fields_set:
             kwargs["from_email"] = data.from_email
+        if "body_design" in data.model_fields_set:
+            kwargs["body_design"] = data.body_design
 
         updated = email_service.update_template(**kwargs)
     except version_service.VersionConflictError as e:
@@ -583,6 +589,47 @@ def send_email(
 
     email_log, job = result
     return email_log
+
+
+@router.post(
+    "/preview",
+    response_model=EmailTemplatePreviewResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def preview_template(
+    body: EmailTemplatePreviewRequest,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
+) -> EmailTemplatePreviewResponse:
+    """Render unsaved template content with signature and unsubscribe footer."""
+    from app.core.surrogate_access import check_surrogate_access
+    from app.services import email_preview_service, surrogate_service
+
+    surrogate = None
+    if body.variable_mode == "record":
+        surrogate = surrogate_service.get_surrogate(db, session.org_id, body.surrogate_id)
+        if not surrogate:
+            raise HTTPException(status_code=404, detail="Surrogate not found")
+        check_surrogate_access(
+            surrogate, session.role, session.user_id, db=db, org_id=session.org_id
+        )
+
+    preview = email_preview_service.preview_org_template(
+        db,
+        org_id=session.org_id,
+        actor_user_id=session.user_id,
+        actor_display_name=session.display_name,
+        subject=body.subject,
+        body=body.body,
+        scope=body.scope,
+        variable_mode=body.variable_mode,
+        surrogate=surrogate,
+    )
+    return EmailTemplatePreviewResponse(
+        subject=preview.subject,
+        html=preview.html,
+        unresolved_variables=preview.unresolved_variables,
+    )
 
 
 @router.post(
@@ -814,6 +861,9 @@ def copy_platform_email_template(
             name=data.name,
             subject=template.published_subject or template.subject,
             body=template.published_body or template.body,
+            body_design=(
+                template.published_body_design if template.published_body else template.body_design
+            ),
             from_email=template.published_from_email,
             scope="org",
         )

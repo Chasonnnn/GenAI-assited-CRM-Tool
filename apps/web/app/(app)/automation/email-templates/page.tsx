@@ -12,8 +12,6 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
     Dialog,
     DialogContent,
@@ -55,23 +53,19 @@ import {
     BuildingIcon,
     LayoutTemplateIcon,
     AlertTriangleIcon,
-    HistoryIcon,
+    SearchIcon,
 } from "lucide-react"
 import {
     useEmailTemplates,
     useEmailTemplate,
-    useCreateEmailTemplate,
     useUpdateEmailTemplate,
     useDeleteEmailTemplate,
     useCopyTemplateToPersonal,
     useShareTemplateWithOrg,
     useSendTestEmailTemplate,
-    useEmailTemplateVariables,
     useEmailTemplateLibrary,
     useEmailTemplateLibraryItem,
     useCopyTemplateFromLibrary,
-    useEmailTemplateVersions,
-    useRollbackEmailTemplate,
 } from "@/lib/hooks/use-email-templates"
 import {
     useDiscardEmailTemplateDraft,
@@ -86,13 +80,9 @@ import {
     useOrgSignaturePreview,
 } from "@/lib/hooks/use-signature"
 import { getSignaturePreview } from "@/lib/api/signature"
-import { RichTextEditor, type RichTextEditorHandle } from "@/components/rich-text-editor"
-import { TemplateVariablePicker } from "@/components/email/TemplateVariablePicker"
 import type {
-    EmailTemplate,
     EmailTemplateLibraryItem,
     EmailTemplateListItem,
-    EmailTemplateScope,
 } from "@/lib/api/email-templates"
 import type {
     EmailTemplateDraft,
@@ -103,12 +93,8 @@ import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import {
     buildEmailTemplatePreviewHtml,
     extractEmailTemplateVariables as extractTemplateVariables,
-    getEmailTemplateBodyMode as getTemplateBodyMode,
-    hasAdvancedEmailTemplateHtml as hasAdvancedTemplateHtml,
 } from "@/lib/email-template-preview"
-import { insertAtCursor } from "@/lib/insert-at-cursor"
 import { SafeHtmlContent } from "@/components/safe-html-content"
-import { EmailTemplateHistoryDialog } from "@/components/email/EmailTemplateHistoryDialog"
 import { EmailTemplatesPageHeader } from "@/components/email/EmailTemplatesPageHeader"
 import { EmptyState } from "@/components/empty-state"
 import { QueryErrorState } from "@/components/error-state"
@@ -117,10 +103,13 @@ import { SignaturePhotoField } from "@/components/email/SignaturePhotoField"
 import { SignaturePreview } from "@/components/email/SignaturePreview"
 import {
     TemplateCard,
+    TemplateCardSubject,
+    templateCardClassName,
+    templateCardTitleClassName,
     type TemplateCardActionKind,
     type TemplateCardControls,
 } from "@/components/email/TemplateCard"
-import { TemplateDraftSection } from "@/components/email/TemplateDraftSection"
+import { TemplateDraftCard } from "@/components/email/TemplateDraftCard"
 import { SendTestEmailDialog } from "@/components/email/SendTestEmailDialog"
 import { getTemplateStudioHref } from "@/components/email/template-studio-route"
 import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
@@ -199,93 +188,6 @@ function SignatureOverrideField({
 // =============================================================================
 // Available template variables
 // =============================================================================
-
-type EditorMode = "visual" | "html"
-type ActiveInsertionTarget = "subject" | "body_html" | "body_visual" | null
-type TextSelectionRef = React.MutableRefObject<{ start: number; end: number } | null>
-
-type EmailTemplateEditorState = {
-    isOpen: boolean
-    template: EmailTemplateListItem | null
-    name: string
-    subject: string
-    bodyOverride: string | null
-    bodyModeOverride: EditorMode | null
-    scope: EmailTemplateScope
-    currentVersionOverride: number | null
-}
-
-type EmailTemplateEditorAction =
-    | { type: "openCreate"; scope: EmailTemplateScope }
-    | { type: "openEdit"; template: EmailTemplateListItem }
-    | { type: "close" }
-    | { type: "changeName"; value: string }
-    | { type: "changeSubject"; value: string }
-    | { type: "changeBody"; value: string }
-    | { type: "changeBodyMode"; value: EditorMode }
-    | { type: "applyRollback"; template: EmailTemplate }
-
-const initialEmailTemplateEditorState: EmailTemplateEditorState = {
-    isOpen: false,
-    template: null,
-    name: "",
-    subject: "",
-    bodyOverride: null,
-    bodyModeOverride: null,
-    scope: "personal",
-    currentVersionOverride: null,
-}
-
-function emailTemplateEditorReducer(
-    state: EmailTemplateEditorState,
-    action: EmailTemplateEditorAction,
-): EmailTemplateEditorState {
-    switch (action.type) {
-        case "openCreate":
-            return {
-                ...initialEmailTemplateEditorState,
-                isOpen: true,
-                scope: action.scope,
-            }
-        case "openEdit":
-            return {
-                isOpen: true,
-                template: action.template,
-                name: action.template.name,
-                subject: action.template.subject,
-                bodyOverride: null,
-                bodyModeOverride: null,
-                scope: action.template.scope,
-                currentVersionOverride: null,
-            }
-        case "close":
-            return {
-                ...state,
-                isOpen: false,
-            }
-        case "changeName":
-            return { ...state, name: action.value }
-        case "changeSubject":
-            return { ...state, subject: action.value }
-        case "changeBody":
-            return { ...state, bodyOverride: action.value }
-        case "changeBodyMode":
-            return { ...state, bodyModeOverride: action.value }
-        case "applyRollback":
-            return {
-                ...state,
-                template: action.template,
-                name: action.template.name,
-                subject: action.template.subject,
-                bodyOverride: action.template.body,
-                bodyModeOverride: getTemplateBodyMode(action.template.body),
-                scope: action.template.scope,
-                currentVersionOverride: action.template.current_version,
-            }
-        default:
-            return state
-    }
-}
 
 type SignatureDraftState = {
     name: string
@@ -469,36 +371,6 @@ function buildTestVariableSample(
     }
 }
 
-function recordSelection(el: HTMLInputElement | HTMLTextAreaElement, ref: TextSelectionRef) {
-    ref.current = {
-        start: el.selectionStart ?? el.value.length,
-        end: el.selectionEnd ?? el.value.length,
-    }
-}
-
-function insertIntoTextControl(
-    el: HTMLInputElement | HTMLTextAreaElement | null,
-    selectionRef: TextSelectionRef,
-    setValue: React.Dispatch<React.SetStateAction<string>>,
-    token: string
-) {
-    if (!el) {
-        setValue((prev) => `${prev}${token}`)
-        return
-    }
-    const selection = selectionRef.current ?? {
-        start: el.selectionStart ?? el.value.length,
-        end: el.selectionEnd ?? el.value.length,
-    }
-    const result = insertAtCursor(el.value, token, selection.start, selection.end)
-    setValue(result.nextValue)
-    requestAnimationFrame(() => {
-        el.focus()
-        el.setSelectionRange(result.nextSelectionStart, result.nextSelectionEnd)
-        selectionRef.current = { start: result.nextSelectionStart, end: result.nextSelectionEnd }
-    })
-}
-
 async function handleCopySignatureHtml() {
     try {
         const data = await getSignaturePreview()
@@ -535,6 +407,52 @@ function getPersonalTemplateVisibilityLabel(value: string | null) {
         ? personalTemplateVisibilityLabels.all
         : personalTemplateVisibilityLabels.mine
 }
+
+function matchesTemplateSearch(item: { name: string; subject: string }, search: string) {
+    const query = search.trim().toLowerCase()
+    return (
+        !query ||
+        item.name.toLowerCase().includes(query) ||
+        item.subject.toLowerCase().includes(query)
+    )
+}
+
+/**
+ * Drafts of a listed template show as a chip on its card. The rest (unpublished,
+ * or of a template hidden by a filter) render as their own cards.
+ */
+function splitTemplateDrafts(
+    drafts: EmailTemplateDraft[],
+    templates: EmailTemplateListItem[] | undefined,
+) {
+    const listedIds = new Set(templates?.map((template) => template.id))
+    const draftByTemplateId = new Map<string, EmailTemplateDraft>()
+    const standalone: EmailTemplateDraft[] = []
+    for (const draft of drafts) {
+        if (draft.template_id && listedIds.has(draft.template_id)) {
+            draftByTemplateId.set(draft.template_id, draft)
+        } else {
+            standalone.push(draft)
+        }
+    }
+    return { draftByTemplateId, standalone }
+}
+
+function TabCount({ count }: { count: number | undefined }) {
+    return count === undefined ? null : (
+        <span className="text-muted-foreground tabular-nums">{count}</span>
+    )
+}
+
+function NoMatchingTemplates() {
+    return (
+        <Card className="py-0">
+            <EmptyState icon={SearchIcon} title="No matching templates" headingLevel={2} />
+        </Card>
+    )
+}
+
+const templateGridClassName = "grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
 
 // =============================================================================
 // Main Page Component
@@ -574,23 +492,13 @@ function useEmailTemplatesPageView() {
         : isAdmin || permissions.includes("manage_email_templates")
 
     const [activeTab, setActiveTab] = useState("personal")
+    const [search, setSearch] = useState("")
     const [showAllPersonal, setShowAllPersonal] = useState(false)
     const [hideInactivePersonal, setHideInactivePersonal] = useState(true)
     const [hideInactiveOrg, setHideInactiveOrg] = useState(true)
-    const [editorState, dispatchEditor] = useReducer(
-        emailTemplateEditorReducer,
-        initialEmailTemplateEditorState,
-    )
     const [showPreview, setShowPreview] = useState(false)
-    const [historyOpen, setHistoryOpen] = useState(false)
     const [signaturePreviewMode, setSignaturePreviewMode] = useState<"personal" | "org">("personal")
 
-    const subjectRef = useRef<HTMLInputElement | null>(null)
-    const subjectSelectionRef = useRef<{ start: number; end: number } | null>(null)
-    const htmlBodyRef = useRef<HTMLTextAreaElement | null>(null)
-    const htmlBodySelectionRef = useRef<{ start: number; end: number } | null>(null)
-    const visualBodyRef = useRef<RichTextEditorHandle | null>(null)
-    const activeInsertionTargetRef = useRef<ActiveInsertionTarget>(null)
     const signaturePhotoInputRef = useRef<HTMLInputElement>(null)
 
     // Copy/Share dialog state
@@ -621,8 +529,6 @@ function useEmailTemplatesPageView() {
         signatureDraftReducer,
         {},
     )
-
-    const { data: templateVariables = [], isLoading: templateVariablesLoading } = useEmailTemplateVariables()
 
     // API hooks for templates
     const personalTemplatesQuery = useEmailTemplates({
@@ -662,14 +568,12 @@ function useEmailTemplatesPageView() {
     const { data: libraryTemplates, isLoading: loadingLibrary } = libraryTemplatesQuery
     const discardDraft = useDiscardEmailTemplateDraft()
 
-    const createTemplate = useCreateEmailTemplate()
     const updateTemplate = useUpdateEmailTemplate()
     const deleteTemplate = useDeleteEmailTemplate()
     const copyToPersonal = useCopyTemplateToPersonal()
     const shareWithOrg = useShareTemplateWithOrg()
     const copyFromLibrary = useCopyTemplateFromLibrary()
     const sendTest = useSendTestEmailTemplate()
-    const rollbackTemplateMutation = useRollbackEmailTemplate()
 
     // Signature hooks
     const { data: signatureData, refetch: refetchSignature } = useUserSignature()
@@ -695,37 +599,10 @@ function useEmailTemplatesPageView() {
         )
     )
 
-    // Get full template details when editing
-    const { data: fullTemplate } = useEmailTemplate(editorState.template?.id || null)
-    const historyTemplateId = editorState.template?.scope === "org"
-        ? editorState.template.id
-        : null
-    const {
-        data: templateVersions = [],
-        isLoading: templateVersionsLoading,
-        isError: templateVersionsError,
-        refetch: refetchTemplateVersions,
-    } = useEmailTemplateVersions(historyTemplateId, historyOpen)
     const { data: testSendTemplateDetail, isLoading: testSendTemplateLoading } = useEmailTemplate(
         testSendState.target?.id || null
     )
     const { data: libraryTemplateDetail } = useEmailTemplateLibraryItem(libraryPreviewId)
-    const templateBody = editorState.bodyOverride ?? (editorState.template ? fullTemplate?.body ?? "" : "")
-    const templateBodyMode = editorState.bodyModeOverride ?? getTemplateBodyMode(editorState.template ? fullTemplate?.body : null)
-    const hasComplexHtml = hasAdvancedTemplateHtml(templateBody)
-    const changeTemplateSubjectDraft: React.Dispatch<React.SetStateAction<string>> = (nextValue) => {
-        dispatchEditor({
-            type: "changeSubject",
-            value: typeof nextValue === "function" ? nextValue(editorState.subject) : nextValue,
-        })
-    }
-    const setTemplateBodyDraft: React.Dispatch<React.SetStateAction<string>> = (nextValue) => {
-        dispatchEditor({
-            type: "changeBody",
-            value: typeof nextValue === "function" ? nextValue(templateBody) : nextValue,
-        })
-    }
-
     const testSendUsedVariables = testSendTemplateDetail
         ? extractTemplateVariables(`${testSendTemplateDetail.subject}\n${testSendTemplateDetail.body}`)
             .slice()
@@ -745,76 +622,6 @@ function useEmailTemplatesPageView() {
     const testSendVariables = {
         ...testSendDefaultVariables,
         ...testSendState.variables,
-    }
-
-    const canValidateVariables = !templateVariablesLoading && templateVariables.length > 0
-    const allowedVariableNames = new Set(templateVariables.map((variable) => variable.name))
-    const requiredVariableNames: string[] = []
-    for (const variable of templateVariables) {
-        if (variable.required) {
-            requiredVariableNames.push(variable.name)
-        }
-    }
-    const usedVariableNames = extractTemplateVariables(`${editorState.subject}\n${templateBody}`)
-    const usedVariableNamesSet = new Set(usedVariableNames)
-    const unknownVariables = canValidateVariables
-        ? usedVariableNames.filter((variable) => !allowedVariableNames.has(variable))
-        : []
-    const missingRequiredVariables = canValidateVariables
-        ? requiredVariableNames.filter((variable) => !usedVariableNamesSet.has(variable))
-        : []
-
-    const handleSave = () => {
-        if (!editorState.name.trim() || !editorState.subject.trim() || !templateBody.trim()) return
-
-        if (editorState.template) {
-            updateTemplate.mutate(
-                {
-                    id: editorState.template.id,
-                    data: {
-                        name: editorState.name,
-                        subject: editorState.subject,
-                        body: templateBody,
-                    },
-                },
-                { onSuccess: () => dispatchEditor({ type: "close" }) }
-            )
-        } else {
-            createTemplate.mutate(
-                {
-                    name: editorState.name,
-                    subject: editorState.subject,
-                    body: templateBody,
-                    scope: editorState.scope,
-                },
-                { onSuccess: () => dispatchEditor({ type: "close" }) }
-            )
-        }
-    }
-
-    const handleRestoreVersion = async (version: number) => {
-        if (!historyTemplateId) return
-
-        try {
-            const restoredTemplate = await rollbackTemplateMutation.mutateAsync({
-                id: historyTemplateId,
-                version,
-            })
-            dispatchEditor({
-                type: "applyRollback",
-                template: restoredTemplate,
-            })
-            toast.success(
-                `Version ${version} restored as version ${restoredTemplate.current_version}`,
-            )
-        } catch (error) {
-            toast.error(
-                error instanceof Error
-                    ? error.message
-                    : `Couldn’t restore version ${version}`,
-            )
-            throw error
-        }
     }
 
     const handleOpenDeleteDialog = (template: EmailTemplateListItem) => {
@@ -990,14 +797,7 @@ function useEmailTemplatesPageView() {
         )
     }
 
-    const previewScope: EmailTemplateScope = libraryPreviewId
-        ? "org"
-        : editorState.template?.scope === "personal" || editorState.template?.scope === "org"
-          ? editorState.template.scope
-          : editorState.scope
-    const previewSubjectTemplate = libraryPreviewId && libraryTemplateDetail?.subject
-        ? libraryTemplateDetail.subject
-        : editorState.subject
+    const previewSubjectTemplate = libraryTemplateDetail?.subject ?? ""
     const previewOrganizationName =
         signatureData?.org_signature_company_name ||
         user?.org_display_name ||
@@ -1008,19 +808,15 @@ function useEmailTemplatesPageView() {
         .replace(/\{\{org_name\}\}/g, previewOrganizationName)
     const previewHtml = showPreview
         ? buildEmailTemplatePreviewHtml(
-            libraryPreviewId ? libraryTemplateDetail?.body ?? "" : templateBody,
+            libraryTemplateDetail?.body ?? "",
             {
                 orgCompanyName: previewOrganizationName,
-                scope: previewScope,
+                scope: "org",
                 personalSignatureHtml: personalSignaturePreview?.html,
                 orgSignatureHtml: orgSignaturePreview?.html,
             }
         )
         : ""
-
-    const handlePreview = () => {
-        setShowPreview(true)
-    }
 
     const handleLibraryPreview = (templateId: string) => {
         setLibraryPreviewId(templateId)
@@ -1071,40 +867,6 @@ function useEmailTemplatesPageView() {
                 },
             },
         )
-    }
-
-    const insertToken = (token: string) => {
-        const activeInsertionTarget = activeInsertionTargetRef.current
-        if (activeInsertionTarget === "subject") {
-            insertIntoTextControl(subjectRef.current, subjectSelectionRef, changeTemplateSubjectDraft, token)
-            return
-        }
-        if (activeInsertionTarget === "body_html") {
-            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBodyDraft, token)
-            return
-        }
-        if (activeInsertionTarget === "body_visual") {
-            visualBodyRef.current?.insertText(token)
-            return
-        }
-
-        if (templateBodyMode === "html") {
-            insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBodyDraft, token)
-            return
-        }
-        visualBodyRef.current?.insertText(token)
-    }
-
-    const insertOrgLogo = () => {
-        if (templateBody.includes("{{org_logo_url}}")) return
-        const logo = `<p><img src="{{org_logo_url}}" alt="{{org_name}} logo" style="max-width: 160px; height: auto; display: block;" /></p>\n`
-        if (templateBodyMode === "visual") {
-            visualBodyRef.current?.insertHtml(logo)
-            activeInsertionTargetRef.current = "body_visual"
-            return
-        }
-        insertIntoTextControl(htmlBodyRef.current, htmlBodySelectionRef, setTemplateBodyDraft, logo)
-        activeInsertionTargetRef.current = "body_html"
     }
 
     // Save all signature settings
@@ -1163,6 +925,28 @@ function useEmailTemplatesPageView() {
         }
     }
 
+    const personalDraftGroups = splitTemplateDrafts(personalDrafts, personalTemplates)
+    const orgDraftGroups = splitTemplateDrafts(orgDrafts, orgTemplates)
+    const visiblePersonalDrafts = personalDraftGroups.standalone.filter((draft) =>
+        matchesTemplateSearch(draft, search),
+    )
+    const visiblePersonalTemplates = (personalTemplates ?? []).filter((template) =>
+        matchesTemplateSearch(template, search),
+    )
+    const visibleOrgDrafts = orgDraftGroups.standalone.filter((draft) =>
+        matchesTemplateSearch(draft, search),
+    )
+    const visibleOrgTemplates = (orgTemplates ?? []).filter((template) =>
+        matchesTemplateSearch(template, search),
+    )
+    const visibleLibraryTemplates = (libraryTemplates ?? []).filter((template) =>
+        matchesTemplateSearch(template, search),
+    )
+    const canDiscardPersonalDraft = (draft: EmailTemplateDraft) =>
+        canCreatePersonal && (draft.owner_user_id === user?.user_id || isAdmin)
+    const getDiscardDraftHandler = (draft: EmailTemplateDraft | undefined, canDiscard: boolean) =>
+        draft && canDiscard ? () => setDraftToDiscard(draft) : undefined
+
     return (
         <div className="flex min-h-dvh flex-col">
             <EmailTemplatesPageHeader
@@ -1182,66 +966,95 @@ function useEmailTemplatesPageView() {
                             aria-label="Template type"
                             className="max-w-full justify-start overflow-x-auto"
                         >
-                            <TabsTrigger value="personal" className="gap-2">
-                                <UserIcon className="size-4" />
-                                My Email Templates
+                            <TabsTrigger value="personal" className="gap-1.5">
+                                Personal{" "}
+                                <TabCount
+                                    count={
+                                        personalTemplates
+                                            ? personalTemplates.length + personalDraftGroups.standalone.length
+                                            : undefined
+                                    }
+                                />
                             </TabsTrigger>
-                            <TabsTrigger value="org" className="gap-2">
-                                <BuildingIcon className="size-4" />
-                                Organization Templates
+                            <TabsTrigger value="org" className="gap-1.5">
+                                Organization{" "}
+                                <TabCount
+                                    count={
+                                        orgTemplates
+                                            ? orgTemplates.length + orgDraftGroups.standalone.length
+                                            : undefined
+                                    }
+                                />
                             </TabsTrigger>
-                            <TabsTrigger value="platform" className="gap-2">
-                                <LayoutTemplateIcon className="size-4" />
-                                Platform Templates
+                            <TabsTrigger value="platform" className="gap-1.5">
+                                Platform <TabCount count={libraryTemplates?.length} />
                             </TabsTrigger>
-                            <TabsTrigger value="signature">My Signature</TabsTrigger>
+                            <TabsTrigger value="signature">Signature</TabsTrigger>
                         </TabsList>
 
-                        {(activeTab === "personal" ||
-                            (activeTab === "org" && canManageEmailTemplates)) && (
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                                <div className="flex items-center gap-2">
-                                    <Checkbox
-                                        id={`hide-inactive-${activeTab}-templates`}
-                                        checked={
-                                            activeTab === "personal"
-                                                ? hideInactivePersonal
-                                                : hideInactiveOrg
-                                        }
-                                        onCheckedChange={(checked) => {
-                                            if (activeTab === "personal") {
-                                                setHideInactivePersonal(checked === true)
-                                            } else {
-                                                setHideInactiveOrg(checked === true)
-                                            }
-                                        }}
+                        {activeTab !== "signature" && (
+                            <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 sm:w-auto">
+                                <div className="relative w-full sm:w-56">
+                                    <SearchIcon
+                                        aria-hidden="true"
+                                        className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                                     />
-                                    <Label
-                                        htmlFor={`hide-inactive-${activeTab}-templates`}
-                                        className="cursor-pointer text-sm font-normal"
-                                    >
-                                        Hide Inactive
-                                    </Label>
+                                    <Input
+                                        type="search"
+                                        aria-label="Search templates"
+                                        placeholder="Search"
+                                        value={search}
+                                        onChange={(event) => setSearch(event.target.value)}
+                                        className="pl-8"
+                                    />
                                 </div>
-                                {activeTab === "personal" && isAdmin && (
-                                    <Select
-                                        value={showAllPersonal ? "all" : "mine"}
-                                        onValueChange={(v) => setShowAllPersonal(v === "all")}
-                                    >
-                                        <SelectTrigger className="w-auto min-w-[180px]">
-                                            <SelectValue>
-                                                {(value: string | null) =>
-                                                    getPersonalTemplateVisibilityLabel(
-                                                        value,
-                                                    )
+                                {(activeTab === "personal" ||
+                                    (activeTab === "org" && canManageEmailTemplates)) && (
+                                    <>
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox
+                                                id={`hide-inactive-${activeTab}-templates`}
+                                                checked={
+                                                    activeTab === "personal"
+                                                        ? hideInactivePersonal
+                                                        : hideInactiveOrg
                                                 }
-                                            </SelectValue>
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="mine">My Templates</SelectItem>
-                                            <SelectItem value="all">All Personal Templates</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                                onCheckedChange={(checked) => {
+                                                    if (activeTab === "personal") {
+                                                        setHideInactivePersonal(checked === true)
+                                                    } else {
+                                                        setHideInactiveOrg(checked === true)
+                                                    }
+                                                }}
+                                            />
+                                            <Label
+                                                htmlFor={`hide-inactive-${activeTab}-templates`}
+                                                className="cursor-pointer text-sm font-normal"
+                                            >
+                                                Hide Inactive
+                                            </Label>
+                                        </div>
+                                        {activeTab === "personal" && isAdmin && (
+                                            <Select
+                                                value={showAllPersonal ? "all" : "mine"}
+                                                onValueChange={(v) => setShowAllPersonal(v === "all")}
+                                            >
+                                                <SelectTrigger className="w-auto min-w-[180px]">
+                                                    <SelectValue>
+                                                        {(value: string | null) =>
+                                                            getPersonalTemplateVisibilityLabel(
+                                                                value,
+                                                            )
+                                                        }
+                                                    </SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="mine">My Templates</SelectItem>
+                                                    <SelectItem value="all">All Personal Templates</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         )}
@@ -1298,83 +1111,81 @@ function useEmailTemplatesPageView() {
                                     }
                                 />
                             </Card>
+                        ) : !visiblePersonalTemplates.length && !visiblePersonalDrafts.length ? (
+                            <NoMatchingTemplates />
                         ) : (
-                            <>
-                                <TemplateDraftSection
-                                    drafts={personalDrafts}
-                                    scope="personal"
-                                    canDiscard={(draft) =>
-                                        canCreatePersonal && (draft.owner_user_id === user?.user_id || isAdmin)
+                            <div className={templateGridClassName}>
+                                {visiblePersonalDrafts.map((draft) => (
+                                    <TemplateDraftCard
+                                        key={draft.id}
+                                        draft={draft}
+                                        onDiscard={getDiscardDraftHandler(draft, canDiscardPersonalDraft(draft))}
+                                    />
+                                ))}
+                                {visiblePersonalTemplates.map((template) => {
+                                    const draft = personalDraftGroups.draftByTemplateId.get(template.id)
+                                    const isOwner = template.owner_user_id === user?.user_id
+                                    const canManagePersonalTemplate = template.capabilities?.can_edit ?? (isOwner || isAdmin)
+                                    const canSendPersonalTest = template.capabilities?.can_send_test ?? (isOwner || canManageEmailTemplates)
+                                    const actions: TemplateCardActionKind[] = []
+                                    if (canSendPersonalTest) {
+                                        actions.push("send_test")
                                     }
-                                    onDiscard={setDraftToDiscard}
-                                    onResume={(draft) =>
-                                        router.push(
-                                            `/automation/email-templates/personal/${draft.template_id ?? draft.id}` as Route,
-                                        )
+                                    if (canManagePersonalTemplate && !template.is_system_template) {
+                                        actions.push("edit")
+                                        if (template.is_active) {
+                                            actions.push("set_inactive")
+                                        } else {
+                                            actions.push("set_active")
+                                        }
                                     }
-                                />
-                                {!!personalTemplates?.length && (
-                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                        {personalTemplates.map((template) => {
-                                            const isOwner = template.owner_user_id === user?.user_id
-                                            const canManagePersonalTemplate = template.capabilities?.can_edit ?? (isOwner || isAdmin)
-                                            const canSendPersonalTest = template.capabilities?.can_send_test ?? (isOwner || canManageEmailTemplates)
-                                            const actions: TemplateCardActionKind[] = []
-                                            if (canSendPersonalTest) {
-                                                actions.push("send_test")
-                                            }
-                                            if (canManagePersonalTemplate && !template.is_system_template) {
-                                                actions.push("edit")
-                                                if (template.is_active) {
-                                                    actions.push("set_inactive")
-                                                } else {
-                                                    actions.push("set_active")
+                                    if (template.capabilities?.can_publish_to_org ?? isOwner) {
+                                        actions.push("share")
+                                    }
+                                    if (canManagePersonalTemplate && !template.is_system_template) {
+                                        actions.push("delete")
+                                    }
+                                    const controls: TemplateCardControls = !isOwner && !isAdmin
+                                        ? { kind: "read_only" }
+                                        : {
+                                            kind: "actions",
+                                            actions,
+                                            onAction: (action) => {
+                                                if (action === "send_test") {
+                                                    handleOpenTestDialog(template)
+                                                    return
                                                 }
-                                            }
-                                            if (template.capabilities?.can_publish_to_org ?? isOwner) {
-                                                actions.push("share")
-                                            }
-                                            if (canManagePersonalTemplate && !template.is_system_template) {
-                                                actions.push("delete")
-                                            }
-                                            const controls: TemplateCardControls = !isOwner && !isAdmin
-                                                ? { kind: "read_only" }
-                                                : {
-                                                    kind: "actions",
-                                                    actions,
-                                                    onAction: (action) => {
-                                                        if (action === "send_test") {
-                                                            handleOpenTestDialog(template)
-                                                            return
-                                                        }
-                                                        if (action === "edit") {
-                                                            router.push(getTemplateStudioHref(template))
-                                                            return
-                                                        }
-                                                        if (action === "set_inactive" || action === "set_active") {
-                                                            handleOpenTemplateStatusDialog(template)
-                                                            return
-                                                        }
-                                                        if (action === "share") {
-                                                            handleOpenShareDialog(template)
-                                                            return
-                                                        }
-                                                        if (action === "delete") {
-                                                            handleOpenDeleteDialog(template)
-                                                        }
-                                                    },
+                                                if (action === "edit") {
+                                                    router.push(getTemplateStudioHref(template))
+                                                    return
                                                 }
-                                            return (
-                                                <TemplateCard
-                                                    key={template.id}
-                                                    template={template}
-                                                    controls={controls}
-                                                />
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </>
+                                                if (action === "set_inactive" || action === "set_active") {
+                                                    handleOpenTemplateStatusDialog(template)
+                                                    return
+                                                }
+                                                if (action === "share") {
+                                                    handleOpenShareDialog(template)
+                                                    return
+                                                }
+                                                if (action === "delete") {
+                                                    handleOpenDeleteDialog(template)
+                                                }
+                                            },
+                                        }
+                                    return (
+                                        <TemplateCard
+                                            key={template.id}
+                                            template={template}
+                                            controls={controls}
+                                            draft={draft}
+                                            onDiscardDraft={getDiscardDraftHandler(
+                                                draft,
+                                                Boolean(draft && canDiscardPersonalDraft(draft)),
+                                            )}
+                                        />
+                                    )
+                                })}
+                            </div>
                         )}
                     </TabsContent>
 
@@ -1402,76 +1213,73 @@ function useEmailTemplatesPageView() {
                                     }
                                 />
                             </Card>
+                        ) : !visibleOrgTemplates.length && !visibleOrgDrafts.length ? (
+                            <NoMatchingTemplates />
                         ) : (
-                            <>
-                                <TemplateDraftSection
-                                    drafts={orgDrafts}
-                                    scope="org"
-                                    canDiscard={() => canManageEmailTemplates}
-                                    onDiscard={setDraftToDiscard}
-                                    onResume={(draft) =>
-                                        router.push(
-                                            `/automation/email-templates/org/${draft.template_id ?? draft.id}`,
-                                        )
+                            <div className={templateGridClassName}>
+                                {visibleOrgDrafts.map((draft) => (
+                                    <TemplateDraftCard
+                                        key={draft.id}
+                                        draft={draft}
+                                        onDiscard={getDiscardDraftHandler(draft, canManageEmailTemplates)}
+                                    />
+                                ))}
+                                {visibleOrgTemplates.map((template) => {
+                                    const draft = orgDraftGroups.draftByTemplateId.get(template.id)
+                                    const actions: TemplateCardActionKind[] = []
+                                    if (template.capabilities?.can_send_test ?? canManageEmailTemplates) {
+                                        actions.push("send_test")
                                     }
-                                />
-                                {!!orgTemplates?.length && (
-                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                        {orgTemplates.map((template) => {
-                                            const actions: TemplateCardActionKind[] = []
-                                            if (template.capabilities?.can_send_test ?? canManageEmailTemplates) {
-                                                actions.push("send_test")
-                                            }
-                                            if ((template.capabilities?.can_edit ?? canManageEmailTemplates) && !template.is_system_template) {
-                                                actions.push("edit")
-                                                if (template.is_active) {
-                                                    actions.push("set_inactive")
-                                                } else {
-                                                    actions.push("set_active")
+                                    if ((template.capabilities?.can_edit ?? canManageEmailTemplates) && !template.is_system_template) {
+                                        actions.push("edit")
+                                        if (template.is_active) {
+                                            actions.push("set_inactive")
+                                        } else {
+                                            actions.push("set_active")
+                                        }
+                                    }
+                                    if (template.capabilities?.can_copy ?? true) actions.push("copy")
+                                    if ((template.capabilities?.can_edit ?? canManageEmailTemplates) && !template.is_system_template) {
+                                        actions.push("delete")
+                                    }
+                                    const controls: TemplateCardControls = actions.length === 0
+                                        ? { kind: "read_only" }
+                                        : {
+                                            kind: "actions",
+                                            actions,
+                                            onAction: (action) => {
+                                                if (action === "send_test") {
+                                                    handleOpenTestDialog(template)
+                                                    return
                                                 }
-                                            }
-                                            if (template.capabilities?.can_copy ?? true) actions.push("copy")
-                                            if ((template.capabilities?.can_edit ?? canManageEmailTemplates) && !template.is_system_template) {
-                                                actions.push("delete")
-                                            }
-                                            const controls: TemplateCardControls = actions.length === 0
-                                                ? { kind: "read_only" }
-                                                : {
-                                                    kind: "actions",
-                                                    actions,
-                                                    onAction: (action) => {
-                                                        if (action === "send_test") {
-                                                            handleOpenTestDialog(template)
-                                                            return
-                                                        }
-                                                        if (action === "edit") {
-                                                            router.push(getTemplateStudioHref(template))
-                                                            return
-                                                        }
-                                                        if (action === "set_inactive" || action === "set_active") {
-                                                            handleOpenTemplateStatusDialog(template)
-                                                            return
-                                                        }
-                                                        if (action === "copy") {
-                                                            handleOpenCopyDialog(template)
-                                                            return
-                                                        }
-                                                        if (action === "delete") {
-                                                            handleOpenDeleteDialog(template)
-                                                        }
-                                                    },
+                                                if (action === "edit") {
+                                                    router.push(getTemplateStudioHref(template))
+                                                    return
                                                 }
-                                            return (
-                                                <TemplateCard
-                                                    key={template.id}
-                                                    template={template}
-                                                    controls={controls}
-                                                />
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </>
+                                                if (action === "set_inactive" || action === "set_active") {
+                                                    handleOpenTemplateStatusDialog(template)
+                                                    return
+                                                }
+                                                if (action === "copy") {
+                                                    handleOpenCopyDialog(template)
+                                                    return
+                                                }
+                                                if (action === "delete") {
+                                                    handleOpenDeleteDialog(template)
+                                                }
+                                            },
+                                        }
+                                    return (
+                                        <TemplateCard
+                                            key={template.id}
+                                            template={template}
+                                            controls={controls}
+                                            draft={draft}
+                                            onDiscardDraft={getDiscardDraftHandler(draft, canManageEmailTemplates)}
+                                        />
+                                    )
+                                })}
+                            </div>
                         )}
                     </TabsContent>
 
@@ -1491,26 +1299,24 @@ function useEmailTemplatesPageView() {
                                     headingLevel={2}
                                 />
                             </Card>
+                        ) : !visibleLibraryTemplates.length ? (
+                            <NoMatchingTemplates />
                         ) : (
-                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                {libraryTemplates.map((template) => (
-                                    <Card key={template.id}>
-                                        <CardHeader className="pb-2">
-                                            <div className="flex items-start justify-between">
-                                                <div className="space-y-1">
-                                                    <CardTitle className="text-base">{template.name}</CardTitle>
-                                                    <CardDescription className="line-clamp-2">
-                                                        {template.subject}
-                                                    </CardDescription>
-                                                </div>
-                                                {template.category && (
-                                                    <Badge variant="outline" className="capitalize">
-                                                        {template.category}
-                                                    </Badge>
-                                                )}
+                            <div className={templateGridClassName}>
+                                {visibleLibraryTemplates.map((template) => (
+                                    <Card key={template.id} className={templateCardClassName}>
+                                        <h3 className={`${templateCardTitleClassName} px-4`}>
+                                            <span className="line-clamp-2">{template.name}</span>
+                                        </h3>
+                                        <TemplateCardSubject subject={template.subject} />
+                                        {template.category ? (
+                                            <div className="flex flex-wrap items-center gap-1.5 px-4">
+                                                <Badge variant="outline" className="capitalize">
+                                                    {template.category}
+                                                </Badge>
                                             </div>
-                                        </CardHeader>
-                                        <CardContent className="flex items-center justify-between">
+                                        ) : null}
+                                        <div className="flex items-center justify-between gap-2 px-4">
                                             <Button
                                                 size="sm"
                                                 variant="outline"
@@ -1532,7 +1338,7 @@ function useEmailTemplatesPageView() {
                                                 <CopyIcon className="mr-2 size-4" />
                                                 Copy to Org
                                             </Button>
-                                        </CardContent>
+                                        </div>
                                     </Card>
                                 ))}
                             </div>
@@ -1901,252 +1707,6 @@ function useEmailTemplatesPageView() {
                 </Tabs>
             </div>
 
-            {/* Create/Edit Template Modal */}
-            <Dialog
-                open={editorState.isOpen}
-                onOpenChange={(open) => {
-                    if (!open) {
-                        activeInsertionTargetRef.current = null
-                        setHistoryOpen(false)
-                        dispatchEditor({ type: "close" })
-                    }
-                }}
-            >
-                <DialogContent size="3xl" className="max-h-[90vh] overflow-hidden flex flex-col">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {editorState.template ? "Edit Template" : "Create Template"}
-                        </DialogTitle>
-                        <DialogDescription>
-                            Create reusable email templates with dynamic variables.
-                            {!editorState.template && (
-                                <span className="block mt-1">
-                                    Creating a{" "}
-                                    <Badge variant="outline" className="text-xs">
-                                        {editorState.scope === "personal" ? "Personal" : "Organization"}
-                                    </Badge>{" "}
-                                    template
-                                </span>
-                            )}
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="flex-1 overflow-y-auto space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="name">Template Name</Label>
-                            <Input
-                                id="name"
-                                placeholder="Welcome Email"
-                                value={editorState.name}
-                                onChange={(e) =>
-                                    dispatchEditor({
-                                        type: "changeName",
-                                        value: e.target.value,
-                                    })
-                                }
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="subject">Subject Line</Label>
-                            <Input
-                                id="subject"
-                                placeholder="Welcome to {{org_name}}, {{full_name}}!"
-                                ref={subjectRef}
-                                value={editorState.subject}
-                                onChange={(e) =>
-                                    dispatchEditor({
-                                        type: "changeSubject",
-                                        value: e.target.value,
-                                    })
-                                }
-                                onFocus={(e) => {
-                                    activeInsertionTargetRef.current = "subject"
-                                    recordSelection(e.currentTarget, subjectSelectionRef)
-                                }}
-                                onKeyUp={(e) => recordSelection(e.currentTarget, subjectSelectionRef)}
-                                onMouseUp={(e) => recordSelection(e.currentTarget, subjectSelectionRef)}
-                                onSelect={(e) => recordSelection(e.currentTarget, subjectSelectionRef)}
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <Label
-                                    id="template-body-label"
-                                    htmlFor={templateBodyMode === "html" ? "template-body-html" : undefined}
-                                >
-                                    Email Body
-                                </Label>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <ToggleGroup
-                                        multiple={false}
-                                        value={templateBodyMode ? [templateBodyMode] : []}
-                                        onValueChange={(value) => {
-                                            const next = value[0] as EditorMode | undefined
-                                            if (!next) return
-                                            dispatchEditor({
-                                                type: "changeBodyMode",
-                                                value: next,
-                                            })
-                                            const current = activeInsertionTargetRef.current
-                                            activeInsertionTargetRef.current = current === "subject"
-                                                ? current
-                                                : next === "html"
-                                                  ? "body_html"
-                                                  : "body_visual"
-                                        }}
-                                    >
-                                        <ToggleGroupItem value="visual" className="h-8">
-                                            Visual
-                                        </ToggleGroupItem>
-                                        <ToggleGroupItem value="html" className="h-8">
-                                            HTML
-                                        </ToggleGroupItem>
-                                    </ToggleGroup>
-                                    <TemplateVariablePicker
-                                        variables={templateVariables}
-                                        disabled={templateVariablesLoading || templateVariables.length === 0}
-                                        triggerLabel={templateVariablesLoading ? "Loading…" : "Insert Variable"}
-                                        onSelect={(variable) => {
-                                            if (variable.name === "unsubscribe_url") {
-                                                toast.info("Unsubscribe link is added automatically.")
-                                                return
-                                            }
-                                            insertToken(`{{${variable.name}}}`)
-                                        }}
-                                    />
-                                    <Button variant="outline" size="sm" onClick={insertOrgLogo}>
-                                        Insert Logo
-                                    </Button>
-                                </div>
-                            </div>
-                            {templateBodyMode === "visual" ? (
-                                <RichTextEditor
-                                    ref={visualBodyRef}
-                                    content={templateBody}
-                                    onChange={(html) =>
-                                        dispatchEditor({
-                                            type: "changeBody",
-                                            value: html,
-                                        })
-                                    }
-                                    onFocus={() => {
-                                        activeInsertionTargetRef.current = "body_visual"
-                                    }}
-                                    ariaLabelledBy="template-body-label"
-                                    placeholder="Write your email content here… Use the toolbar to format text."
-                                    minHeight="200px"
-                                    maxHeight="350px"
-                                    enableImages
-                                    enableEmojiPicker
-                                />
-                            ) : (
-                                <Textarea
-                                    id="template-body-html"
-                                    aria-labelledby="template-body-label"
-                                    ref={htmlBodyRef}
-                                    value={templateBody}
-                                    onChange={(event) =>
-                                        dispatchEditor({
-                                            type: "changeBody",
-                                            value: event.target.value,
-                                        })
-                                    }
-                                    onFocus={(event) => {
-                                        activeInsertionTargetRef.current = "body_html"
-                                        recordSelection(event.currentTarget, htmlBodySelectionRef)
-                                    }}
-                                    onKeyUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    onMouseUp={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    onSelect={(event) => recordSelection(event.currentTarget, htmlBodySelectionRef)}
-                                    placeholder="Paste or edit the HTML for this template…"
-                                    className="min-h-[220px] font-mono text-xs leading-relaxed"
-                                />
-                            )}
-                            {templateBodyMode === "visual" && hasComplexHtml && (
-                                <p className="text-xs text-amber-600">
-                                    This template contains advanced HTML. Switch to HTML mode to preserve layout.
-                                </p>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                                Use the Insert Variable button above to add dynamic placeholders like {"{{full_name}}"}
-                            </p>
-                            {(unknownVariables.length > 0 || missingRequiredVariables.length > 0) &&
-                                (editorState.subject.trim() || templateBody.trim()) && (
-                                    <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-50">
-                                        <AlertTriangleIcon className="size-4" />
-                                        <AlertTitle>Template variables</AlertTitle>
-                                        <AlertDescription className="text-amber-800 dark:text-amber-100">
-                                            {unknownVariables.length > 0 && (
-                                                <p>
-                                                    Unknown:{" "}
-                                                    <span className="font-mono">
-                                                        {unknownVariables.map((v) => `{{${v}}}`).join(", ")}
-                                                    </span>
-                                                </p>
-                                            )}
-                                            {missingRequiredVariables.length > 0 && (
-                                                <p>
-                                                    Missing required:{" "}
-                                                    <span className="font-mono">
-                                                        {missingRequiredVariables.map((v) => `{{${v}}}`).join(", ")}
-                                                    </span>
-                                                </p>
-                                            )}
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
-                        </div>
-                    </div>
-
-                    <DialogFooter className="flex gap-2">
-                        {editorState.template?.scope === "org" && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setHistoryOpen(true)}
-                            >
-                                <HistoryIcon className="mr-2 size-4" />
-                                View history
-                            </Button>
-                        )}
-                        <Button variant="outline" onClick={handlePreview}>
-                            <EyeIcon className="mr-2 size-4" />
-                            Preview
-                        </Button>
-                        <Button
-                            onClick={handleSave}
-                            disabled={createTemplate.isPending || updateTemplate.isPending}
-                        >
-                            {(createTemplate.isPending || updateTemplate.isPending) && (
-                                <Loader2Icon className="mr-2 size-4 animate-spin" />
-                            )}
-                            {editorState.template ? "Save Changes" : "Create Template"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <EmailTemplateHistoryDialog
-                open={historyOpen && Boolean(historyTemplateId)}
-                onOpenChange={setHistoryOpen}
-                templateName={editorState.name || "Organization template"}
-                currentVersion={
-                    editorState.currentVersionOverride
-                    ?? fullTemplate?.current_version
-                    ?? null
-                }
-                versions={templateVersions}
-                isLoading={templateVersionsLoading}
-                isError={templateVersionsError}
-                onRetry={() => {
-                    void refetchTemplateVersions()
-                }}
-                onRestore={handleRestoreVersion}
-                isRestoring={rollbackTemplateMutation.isPending}
-            />
-
             {/* Copy Template Dialog */}
             <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
                 <DialogContent>
@@ -2497,7 +2057,7 @@ function useEmailTemplatesPageView() {
                             <div className="flex items-center gap-2 text-sm">
                                 <span className="font-medium text-muted-foreground w-16">Signature:</span>
                                 <span className="text-foreground">
-                                    {previewScope === "personal" ? "Personal signature" : "Organization signature"}
+                                    Organization signature
                                 </span>
                             </div>
                         </div>
@@ -2505,7 +2065,7 @@ function useEmailTemplatesPageView() {
                         <div className="p-4">
                             <SafeHtmlContent
                                 html={previewHtml}
-                                className="prose prose-sm prose-stone max-w-none text-stone-900 [&_p]:whitespace-pre-wrap"
+                                className="prose prose-sm prose-neutral max-w-none text-neutral-900 [&_p]:whitespace-pre-wrap"
                             />
                         </div>
                     </div>

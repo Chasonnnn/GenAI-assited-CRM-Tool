@@ -154,7 +154,6 @@ describe("PlatformFormTemplatePage", () => {
         mockUpdate.mockResolvedValue({ ...mockTemplateData, current_version: 2 })
         render(<PlatformFormTemplatePage />)
         fireEvent.click(await screen.findByRole("button", { name: "Select Medical history field" }))
-        fireEvent.click(screen.getByRole("tab", { name: "Advanced" }))
         const classification = screen.getByRole("combobox", { name: "Data classification" })
         fireEvent.mouseDown(classification)
         const healthOption = await screen.findByRole("option", { name: "Health" })
@@ -344,9 +343,7 @@ describe("PlatformFormTemplatePage", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Add Name field" }))
         fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
         fireEvent.click(await screen.findByRole("button", { name: /select email field/i }))
-        fireEvent.click(screen.getByRole("tab", { name: /^advanced$/i }))
-
-        const logicSection = screen.getByText("Logic").closest("section")
+        const logicSection = screen.getByText("Display rule").closest("section")
         expect(logicSection).not.toBeNull()
 
         const displayRuleSelect = requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 0)

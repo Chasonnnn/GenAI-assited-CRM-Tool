@@ -1,14 +1,16 @@
 """Schemas for production-safe email template drafts."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.email import (
+    EmailBodyDesign,
     EmailTemplateTestSendRequest,
     EmailTemplateTestSendResponse,
+    require_body_with_design,
 )
 
 EmailTemplateDraftScope = Literal["org", "personal"]
@@ -19,6 +21,7 @@ class EmailTemplateDraftCreate(BaseModel):
     subject: str = Field(min_length=1, max_length=200)
     from_email: str | None = Field(default=None, max_length=200)
     body: str = Field(min_length=1, max_length=50000)
+    body_design: EmailBodyDesign | None = None
     scope: EmailTemplateDraftScope = "org"
 
 
@@ -27,6 +30,7 @@ class EmailTemplateDraftUpdate(BaseModel):
     subject: str | None = Field(default=None, min_length=1, max_length=200)
     from_email: str | None = Field(default=None, max_length=200)
     body: str | None = Field(default=None, min_length=1, max_length=50000)
+    body_design: EmailBodyDesign | None = None
     is_active: bool | None = None
     expected_revision: int = Field(ge=1)
 
@@ -35,6 +39,7 @@ class EmailTemplateDraftUpdate(BaseModel):
         changed_fields = self.model_fields_set - {"expected_revision"}
         if not changed_fields:
             raise ValueError("At least one draft field must be provided")
+        require_body_with_design(self)
         return self
 
 
@@ -72,6 +77,7 @@ class EmailTemplateDraftRead(BaseModel):
     subject: str
     from_email: str | None
     body: str
+    body_design: dict[str, Any] | None = None
     is_active: bool
     category: str | None
     base_version: int

@@ -85,12 +85,6 @@ function render(ui: React.ReactElement) {
     })
 }
 
-function requiredAt<T>(items: readonly T[], index: number): T {
-    const item = items[index]
-    if (item === undefined) throw new Error(`Expected item at index ${index}`)
-    return item
-}
-
 describe('Shared Intake Public Page', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -166,103 +160,6 @@ describe('Shared Intake Public Page', () => {
         expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
         expect(getSharedPublicFormDraft).toHaveBeenCalledWith('event-abc', 'saved-session-1')
         expect(screen.getByLabelText(/full name/i)).toHaveValue('Saved Applicant')
-    })
-
-    it('shows a date answer as a readable date on the review step', async () => {
-        window.localStorage.setItem('intake-draft-session:event-abc', 'saved-session-1')
-        getSharedPublicForm.mockResolvedValue({
-            ...baseForm,
-            form_schema: {
-                ...baseForm.form_schema,
-                pages: [
-                    {
-                        title: 'Application',
-                        fields: [
-                            { key: 'date_of_birth', label: 'Date of Birth', type: 'date', required: false },
-                        ],
-                    },
-                ],
-            },
-        })
-        getSharedPublicFormDraft.mockResolvedValue({
-            answers: { date_of_birth: '1995-09-15' },
-            started_at: null,
-            updated_at: '2026-07-08T12:00:00.000Z',
-        })
-
-        render(<PublicIntakeFormClient slug="event-abc" />)
-        await screen.findByRole('heading', { name: 'Event Intake Form' })
-        fireEvent.click(await screen.findByRole('button', { name: /continue/i }))
-
-        expect(await screen.findByText('Sep 15, 1995')).toBeInTheDocument()
-        expect(screen.queryByText('1995-09-15')).not.toBeInTheDocument()
-    })
-
-    it('shows choice answers by their option labels on the review step', async () => {
-        window.localStorage.setItem('intake-draft-session:event-abc', 'saved-session-1')
-        getSharedPublicForm.mockResolvedValue({
-            ...baseForm,
-            form_schema: {
-                ...baseForm.form_schema,
-                pages: [
-                    {
-                        title: 'Application',
-                        fields: [
-                            {
-                                key: 'last_delivery',
-                                label: 'Last delivery',
-                                type: 'select',
-                                required: false,
-                                options: [
-                                    { label: '0-3 months ago', value: 'months_0_3' },
-                                    { label: '4-12 months ago', value: 'months_4_12' },
-                                ],
-                            },
-                            {
-                                key: 'delivery_type',
-                                label: 'Delivery type',
-                                type: 'radio',
-                                required: false,
-                                options: [
-                                    { label: 'Vaginal', value: 'vaginal' },
-                                    { label: 'C-section', value: 'c_section' },
-                                ],
-                            },
-                            {
-                                key: 'contact_times',
-                                label: 'Contact times',
-                                type: 'multiselect',
-                                required: false,
-                                options: [
-                                    { label: 'Weekday mornings', value: 'weekday_am' },
-                                    { label: 'Weekday evenings', value: 'weekday_pm' },
-                                ],
-                            },
-                        ],
-                    },
-                ],
-            },
-        })
-        getSharedPublicFormDraft.mockResolvedValue({
-            answers: {
-                last_delivery: 'months_0_3',
-                delivery_type: 'c_section',
-                contact_times: ['weekday_am', 'retired_option'],
-            },
-            started_at: null,
-            updated_at: '2026-07-08T12:00:00.000Z',
-        })
-
-        render(<PublicIntakeFormClient slug="event-abc" />)
-        await screen.findByRole('heading', { name: 'Event Intake Form' })
-        fireEvent.click(await screen.findByRole('button', { name: /continue/i }))
-
-        expect(await screen.findByText('0-3 months ago')).toBeInTheDocument()
-        expect(screen.getByText('C-section')).toBeInTheDocument()
-        // An answer whose option was removed keeps its stored value.
-        expect(screen.getByText('Weekday mornings, retired_option')).toBeInTheDocument()
-        expect(screen.queryByText('months_0_3')).not.toBeInTheDocument()
-        expect(screen.queryByText('c_section')).not.toBeInTheDocument()
     })
 
     it('replaces a stale saved draft session before autosaving new answers', async () => {
@@ -359,7 +256,7 @@ describe('Shared Intake Public Page', () => {
         const shell = field.closest('.public-form-light')
 
         expect(shell).toBeInTheDocument()
-        expect(shell).toHaveClass('text-stone-900')
+        expect(shell).toHaveClass('text-neutral-900')
     })
 
     it('renders the configured public logo in the hosted intake header', async () => {
@@ -476,7 +373,7 @@ describe('Shared Intake Public Page', () => {
         expect(screen.getByText('E')).toBeInTheDocument()
     })
 
-    it('shows the full name of the current page in the step list', async () => {
+    it('renders every page as a titled section on one page', async () => {
         getSharedPublicForm.mockResolvedValue({
             ...baseForm,
             form_schema: {
@@ -500,59 +397,47 @@ describe('Shared Intake Public Page', () => {
 
         render(<PublicIntakeFormClient slug="event-abc" />)
 
-        await screen.findByRole('heading', { name: 'Event Intake Form' })
-        const currentLabel = screen.getByText('Medical & Pregnancy History')
-        expect(currentLabel).not.toHaveClass('truncate')
-        expect(currentLabel).toHaveClass('line-clamp-3', 'break-words')
-        expect(screen.queryByText('Medical Pregnancy')).not.toBeInTheDocument()
-        // Other steps keep their short labels.
-        expect(screen.getByText('Background Family')).toBeInTheDocument()
-        expect(screen.queryByText('Background & Family Details')).not.toBeInTheDocument()
+        await screen.findByRole('heading', { name: 'Event Intake Form', level: 1 })
+        const first = screen.getByRole('region', { name: 'Medical & Pregnancy History' })
+        const second = screen.getByRole('region', { name: 'Background & Family Details' })
+        expect(first).toContainElement(screen.getByLabelText(/full name/i))
+        expect(second).toContainElement(screen.getByRole('combobox', { name: 'Height Feet' }))
+        expect(screen.getByRole('region', { name: 'Review & submit' })).toContainElement(
+            screen.getByRole('button', { name: 'Submit Application' }),
+        )
+        expect(screen.queryByRole('button', { name: /continue/i })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Back' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     })
 
-    it('starts the question card with the first question, not the page name', async () => {
+    it('links every section from the section index and tracks completion', async () => {
         getSharedPublicForm.mockResolvedValue({
             ...baseForm,
             form_schema: {
                 ...baseForm.form_schema,
                 pages: [
                     {
-                        title: 'Page 1',
-                        fields: [
-                            { key: 'full_name', label: 'Full Name', type: 'text', required: true },
-                        ],
-                    },
-                ],
-            },
-            agency_name: 'Sunrise Surrogacy',
-            agency_logo_url: null,
-        })
-
-        render(<PublicIntakeFormClient slug="event-abc" />)
-
-        await screen.findByRole('heading', { name: 'Event Intake Form' })
-        expect(screen.getAllByText('Page 1')).toHaveLength(1)
-        const card = screen.getByLabelText(/full name/i).closest('[data-slot="card"]')
-        expect(card).not.toHaveTextContent('Page 1')
-        expect(card?.querySelector('[data-slot="card-header"]')).toBeNull()
-    })
-
-    it('renders the first intake step as active progress', async () => {
-        getSharedPublicForm.mockResolvedValue({
-            ...baseForm,
-            form_schema: {
-                ...baseForm.form_schema,
-                pages: [
-                    {
-                        title: 'Application',
+                        title: 'About You',
                         fields: [
                             { key: 'full_name', label: 'Full Name', type: 'text', required: true },
                         ],
                     },
                     {
-                        title: 'Medical & Preferences',
+                        title: '',
                         fields: [
-                            { key: 'height', label: 'Height', type: 'height', required: false },
+                            { key: 'notes', label: 'Notes', type: 'textarea', required: false },
+                        ],
+                    },
+                    {
+                        title: 'Hidden',
+                        fields: [
+                            {
+                                key: 'partner_name',
+                                label: 'Partner Name',
+                                type: 'text',
+                                required: false,
+                                show_if: { field_key: 'full_name', operator: 'equals', value: 'Partnered' },
+                            },
                         ],
                     },
                 ],
@@ -561,18 +446,27 @@ describe('Shared Intake Public Page', () => {
 
         render(<PublicIntakeFormClient slug="event-abc" />)
 
-        expect(await screen.findByRole('heading', { name: 'Event Intake Form' })).toBeInTheDocument()
-        const progress = screen.getByRole('progressbar', { name: /application progress/i })
-        expect(progress.tagName).toBe('PROGRESS')
-        expect(progress).toHaveAttribute('value', '33')
-        expect(progress).toHaveAttribute('max', '100')
-        expect(progress).toHaveClass('[&::-webkit-progress-value]:bg-primary')
-        // The page title shows only as its step label.
-        expect(screen.getAllByText('Application')).toHaveLength(1)
-        expect(screen.getByText('Step 1 of 3')).toBeInTheDocument()
+        await screen.findByRole('heading', { name: 'Event Intake Form', level: 1 })
+        const index = screen.getByRole('navigation', { name: 'Sections' })
+        const links = Array.from(index.querySelectorAll('a'))
+        expect(links.map((link) => link.getAttribute('href'))).toEqual([
+            '#form-section-1',
+            '#form-section-2',
+            '#form-section-review',
+        ])
+        expect(links[0]).toHaveTextContent('About You, Not complete')
+        expect(links[0]).toHaveAttribute('aria-current', 'location')
+        expect(links[1]).toHaveTextContent('Section 2')
+        expect(links[2]).toHaveTextContent('Review & submit')
+        expect(screen.queryByRole('region', { name: 'Hidden' })).not.toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Jane Applicant' } })
+        expect(links[0]).toHaveTextContent('About You, Complete')
+        fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
+        expect(links[2]).toHaveTextContent('Review & submit, Complete')
     })
 
-    it('marks every invalid field inline on Continue and focuses the first one', async () => {
+    it('marks every invalid field across sections on submit and focuses the first one', async () => {
         const { toast } = await import('@/components/ui/toast')
         getSharedPublicForm.mockResolvedValue({
             ...baseForm,
@@ -584,6 +478,11 @@ describe('Shared Intake Public Page', () => {
                         fields: [
                             { key: 'full_name', label: 'Full Name', type: 'text', required: true },
                             { key: 'email', label: 'Email', type: 'email', required: true },
+                        ],
+                    },
+                    {
+                        title: 'Health',
+                        fields: [
                             {
                                 key: 'smoker',
                                 label: 'Do you smoke?',
@@ -603,7 +502,8 @@ describe('Shared Intake Public Page', () => {
         render(<PublicIntakeFormClient slug="event-abc" />)
         await screen.findByRole('heading', { name: 'Event Intake Form' })
         fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'not-an-email' } })
-        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+        fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
 
         const fullName = screen.getByLabelText(/full name/i)
         expect(fullName).toHaveAttribute('aria-invalid', 'true')
@@ -616,14 +516,15 @@ describe('Shared Intake Public Page', () => {
         )
         await waitFor(() => expect(fullName).toHaveFocus())
         expect(toast.error).not.toHaveBeenCalled()
-        expect(screen.queryByRole('button', { name: 'Submit Application' })).not.toBeInTheDocument()
+        expect(submitSharedPublicForm).not.toHaveBeenCalled()
+        expect(screen.getByRole('link', { name: 'Application, Needs attention' })).toBeInTheDocument()
 
         fireEvent.change(fullName, { target: { value: 'Jane Applicant' } })
         expect(fullName).not.toHaveAttribute('aria-invalid')
         expect(screen.queryByText('Full Name is required.')).not.toBeInTheDocument()
     })
 
-    it('returns to the page with a missing required upload and marks it inline', async () => {
+    it('marks a missing required upload inline on submit', async () => {
         getSharedPublicForm.mockResolvedValue({
             ...baseForm,
             form_schema: {
@@ -641,8 +542,7 @@ describe('Shared Intake Public Page', () => {
 
         render(<PublicIntakeFormClient slug="event-abc" />)
         await screen.findByRole('heading', { name: 'Event Intake Form' })
-        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-        fireEvent.click(await screen.findByRole('checkbox'))
+        fireEvent.click(screen.getByRole('checkbox'))
         fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
 
         const uploadGroup = await screen.findByRole('group', { name: 'Profile Photo' })
@@ -917,7 +817,7 @@ describe('Shared Intake Public Page', () => {
 
         await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message))
         expect(toast.error).toHaveBeenCalledTimes(1)
-        expect(screen.getByText('Review Your Application')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Submit Application' })).toBeEnabled()
         expect(JSON.stringify(vi.mocked(toast.error).mock.calls)).not.toContain(error.message)
         expect(document.body).not.toHaveTextContent(error.message)
     })
@@ -961,8 +861,6 @@ describe('Shared Intake Public Page', () => {
         expect(promotional).not.toBeChecked()
         expect(screen.getAllByRole('link', { name: 'Terms of Service' })).toHaveLength(2)
 
-        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-        await screen.findByText('Review Your Application')
         fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
         fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
 
@@ -1023,10 +921,6 @@ describe('Shared Intake Public Page', () => {
             return screen.getByRole('checkbox', { name: /application and appointment texts/i })
         }
 
-        function querySmsCheckbox() {
-            return screen.queryByRole('checkbox', { name: /application and appointment texts/i })
-        }
-
         function submitReviewStep() {
             fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
             fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
@@ -1044,7 +938,7 @@ describe('Shared Intake Public Page', () => {
             expect(isBefore(smsCheckbox, screen.getByText(/you consent to intake screening/i))).toBe(true)
             expect(smsCheckbox).not.toBeChecked()
 
-            expect(screen.getByText(/application and appointment texts/i)).toHaveClass('text-sm', 'text-stone-700')
+            expect(screen.getByText(/application and appointment texts/i)).toHaveClass('text-sm', 'text-neutral-700')
             const termsLink = screen.getByRole('link', { name: 'Terms of Service' })
             expect(termsLink).toHaveAttribute('href', 'https://example.com/sms-terms')
             expect(termsLink).toHaveAttribute('target', '_blank')
@@ -1054,7 +948,7 @@ describe('Shared Intake Public Page', () => {
             expect(screen.queryByRole('link', { name: 'SMS Terms' })).not.toBeInTheDocument()
         })
 
-        it('renders the SMS consent only on the later step that holds the phone field', async () => {
+        it('renders the SMS consent after the phone field in a later section', async () => {
             getSharedPublicForm.mockResolvedValue({
                 ...smsIntakeForm,
                 form_schema: {
@@ -1067,31 +961,21 @@ describe('Shared Intake Public Page', () => {
             })
             render(<PublicIntakeFormClient slug="event-abc" />)
 
-            await screen.findByLabelText(/full name/i)
-            expect(querySmsCheckbox()).not.toBeInTheDocument()
-            fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Jane Applicant' } })
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-
             const phoneInput = await screen.findByLabelText('Mobile Phone')
             const smsCheckbox = getSmsCheckbox()
+            expect(screen.getByRole('region', { name: 'About You' })).not.toContainElement(smsCheckbox)
+            expect(screen.getByRole('region', { name: 'Contact' })).toContainElement(smsCheckbox)
             expect(isBefore(phoneInput, smsCheckbox)).toBe(true)
             expect(isBefore(smsCheckbox, screen.getByLabelText(/email/i))).toBe(true)
-
-            fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'jane@example.com' } })
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-            await screen.findByText('Review Your Application')
-            expect(querySmsCheckbox()).not.toBeInTheDocument()
+            expect(screen.getAllByRole('checkbox', { name: /application and appointment texts/i })).toHaveLength(1)
         })
 
-        it('continues and submits with SMS unchecked and no phone number', async () => {
+        it('submits with SMS unchecked and no phone number', async () => {
             getSharedPublicForm.mockResolvedValue(smsIntakeForm)
             render(<PublicIntakeFormClient slug="event-abc" />)
             await screen.findByLabelText('Mobile Phone')
 
             fillRequiredContactFields()
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-            await screen.findByText('Review Your Application')
-            expect(querySmsCheckbox()).not.toBeInTheDocument()
             submitReviewStep()
 
             await waitFor(() => {
@@ -1109,7 +993,7 @@ describe('Shared Intake Public Page', () => {
             })
         })
 
-        it('shows an inline message and stays on the step when SMS is checked without a phone number', async () => {
+        it('shows an inline message and focuses the phone when SMS is checked without a phone number', async () => {
             getSharedPublicForm.mockResolvedValue(smsIntakeForm)
             render(<PublicIntakeFormClient slug="event-abc" />)
             await screen.findByLabelText('Mobile Phone')
@@ -1117,20 +1001,20 @@ describe('Shared Intake Public Page', () => {
             fillRequiredContactFields()
             const smsCheckbox = getSmsCheckbox()
             fireEvent.click(smsCheckbox)
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            submitReviewStep()
 
             const message = await screen.findByText('Enter your phone number to receive text messages.')
             expect(message).toHaveAttribute('role', 'alert')
-            expect(screen.queryByText('Review Your Application')).not.toBeInTheDocument()
             expect(smsCheckbox).toHaveAttribute('aria-invalid', 'true')
             expect(smsCheckbox).toHaveAccessibleDescription(message.textContent ?? '')
             expect(screen.getByLabelText('Mobile Phone')).toHaveFocus()
+            expect(toast.error).not.toHaveBeenCalled()
+            expect(submitSharedPublicForm).not.toHaveBeenCalled()
+            expect(screen.getByRole('link', { name: 'Contact, Needs attention' })).toBeInTheDocument()
 
             fireEvent.change(screen.getByLabelText('Mobile Phone'), { target: { value: '(555) 123-4567' } })
             expect(screen.queryByText('Enter your phone number to receive text messages.')).not.toBeInTheDocument()
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-            await screen.findByText('Review Your Application')
-            submitReviewStep()
+            fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
 
             await waitFor(() => {
                 expect(submitSharedPublicForm).toHaveBeenCalledWith(
@@ -1147,7 +1031,7 @@ describe('Shared Intake Public Page', () => {
             })
         })
 
-        it('reports a malformed phone inline on the first Continue when SMS is checked', async () => {
+        it('reports a malformed phone inline on submit when SMS is checked', async () => {
             getSharedPublicForm.mockResolvedValue(smsIntakeForm)
             render(<PublicIntakeFormClient slug="event-abc" />)
             await screen.findByLabelText('Mobile Phone')
@@ -1156,33 +1040,32 @@ describe('Shared Intake Public Page', () => {
             fireEvent.change(screen.getByLabelText('Mobile Phone'), { target: { value: '123' } })
             const smsCheckbox = getSmsCheckbox()
             fireEvent.click(smsCheckbox)
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            submitReviewStep()
 
             const message = await screen.findByText('Enter a valid phone number to receive text messages.')
             expect(message).toHaveAttribute('role', 'alert')
             expect(smsCheckbox).toHaveAttribute('aria-invalid', 'true')
             expect(smsCheckbox).toHaveAccessibleDescription(message.textContent ?? '')
-            expect(screen.getByLabelText('Mobile Phone')).toHaveFocus()
+            // The malformed number is also a field error, so focus follows the first invalid field.
+            await waitFor(() => expect(screen.getByLabelText('Mobile Phone')).toHaveFocus())
             expect(toast.error).not.toHaveBeenCalled()
-            expect(screen.queryByText('Review Your Application')).not.toBeInTheDocument()
+            expect(submitSharedPublicForm).not.toHaveBeenCalled()
         })
 
-        it('continues after unchecking SMS that blocked an empty phone', async () => {
+        it('submits after unchecking SMS that blocked an empty phone', async () => {
             getSharedPublicForm.mockResolvedValue(smsIntakeForm)
             render(<PublicIntakeFormClient slug="event-abc" />)
             await screen.findByLabelText('Mobile Phone')
 
             fillRequiredContactFields()
             fireEvent.click(getSmsCheckbox())
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+            submitReviewStep()
             await screen.findByText('Enter your phone number to receive text messages.')
 
             fireEvent.click(getSmsCheckbox())
             expect(screen.queryByRole('alert')).not.toBeInTheDocument()
             expect(getSmsCheckbox()).not.toHaveAttribute('aria-invalid')
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-            await screen.findByText('Review Your Application')
-            submitReviewStep()
+            fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
 
             await waitFor(() => {
                 expect(submitSharedPublicForm).toHaveBeenCalledWith(
@@ -1199,7 +1082,7 @@ describe('Shared Intake Public Page', () => {
             })
         })
 
-        it('blocks checked SMS on review after conditional logic hides the phone field until SMS is unchecked', async () => {
+        it('moves checked SMS to the review section when conditional logic hides the phone field', async () => {
             getSharedPublicForm.mockResolvedValue({
                 ...smsIntakeForm,
                 form_schema: {
@@ -1231,11 +1114,9 @@ describe('Shared Intake Public Page', () => {
             fireEvent.click(getSmsCheckbox())
             fireEvent.change(screen.getByLabelText('Contact Preference'), { target: { value: 'Email only' } })
             expect(screen.queryByLabelText('Mobile Phone')).not.toBeInTheDocument()
-            expect(querySmsCheckbox()).not.toBeInTheDocument()
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
 
-            await screen.findByText('Review Your Application')
             const smsCheckbox = getSmsCheckbox()
+            expect(screen.getByRole('region', { name: 'Review & submit' })).toContainElement(smsCheckbox)
             expect(smsCheckbox).toBeChecked()
             submitReviewStep()
 
@@ -1265,7 +1146,7 @@ describe('Shared Intake Public Page', () => {
             })
         })
 
-        it('returns to the phone step and focuses the phone when a later answer reveals it after SMS was checked on review', async () => {
+        it('focuses the phone revealed by a later answer after SMS was checked in the review section', async () => {
             getSharedPublicForm.mockResolvedValue({
                 ...smsIntakeForm,
                 form_schema: {
@@ -1295,27 +1176,17 @@ describe('Shared Intake Public Page', () => {
 
             await screen.findByLabelText(/full name/i)
             expect(screen.queryByLabelText('Mobile Phone')).not.toBeInTheDocument()
-            fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: 'Jane Applicant' } })
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-            fireEvent.change(await screen.findByLabelText(/email/i), { target: { value: 'jane@example.com' } })
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-
-            await screen.findByText('Review Your Application')
+            fillRequiredContactFields()
             fireEvent.click(getSmsCheckbox())
-            fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
-            fireEvent.click(requiredAt(screen.getAllByRole('button', { name: /edit/i }), 1))
+            fireEvent.change(screen.getByLabelText('Contact Preference'), { target: { value: 'Text' } })
 
-            fireEvent.change(await screen.findByLabelText('Contact Preference'), { target: { value: 'Text' } })
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-            await screen.findByText('Review Your Application')
-            expect(querySmsCheckbox()).not.toBeInTheDocument()
-            const submitButton = screen.getByRole('button', { name: 'Submit Application' })
-            submitButton.focus()
-            fireEvent.click(submitButton)
+            const smsCheckbox = getSmsCheckbox()
+            expect(screen.getByRole('region', { name: 'Contact' })).toContainElement(smsCheckbox)
+            expect(smsCheckbox).toBeChecked()
+            submitReviewStep()
 
             const message = await screen.findByText('Enter your phone number to receive text messages.')
             expect(message).toHaveAttribute('role', 'alert')
-            expect(screen.queryByText('Review Your Application')).not.toBeInTheDocument()
             expect(getSmsCheckbox()).toHaveAttribute('aria-invalid', 'true')
             expect(screen.getByLabelText('Mobile Phone')).toHaveFocus()
             expect(submitSharedPublicForm).not.toHaveBeenCalled()
@@ -1332,8 +1203,6 @@ describe('Shared Intake Public Page', () => {
             fillRequiredContactFields()
             fireEvent.change(screen.getByLabelText('Mobile Phone'), { target: { value: '(555) 123-4567' } })
             fireEvent.click(getSmsCheckbox())
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-            await screen.findByText('Review Your Application')
             submitReviewStep()
 
             await waitFor(() => {
@@ -1350,7 +1219,20 @@ describe('Shared Intake Public Page', () => {
                 expect.any(String),
                 expect.objectContaining({ landing_url: expect.any(String) }),
             )
-            expect(screen.getByText('Review Your Application')).toBeInTheDocument()
+            expect(screen.getByLabelText('Mobile Phone')).toHaveValue('(555) 123-4567')
+        })
+
+        it('leaves no empty grid cell after the phone field without SMS options', async () => {
+            getSharedPublicForm.mockResolvedValue({
+                ...smsIntakeForm,
+                messaging_consent: { phone_field_key: 'mobile_number', operational: null, promotional: null },
+            })
+            render(<PublicIntakeFormClient slug="event-abc" />)
+
+            const phone = await screen.findByLabelText('Mobile Phone')
+            const cells = Array.from(phone.closest('.grid')?.children ?? [])
+            const phoneIndex = cells.findIndex((cell) => cell.contains(phone))
+            expect(cells[phoneIndex + 1]).toContainElement(screen.getByLabelText(/email/i))
         })
 
         it.each([
@@ -1364,13 +1246,10 @@ describe('Shared Intake Public Page', () => {
             render(<PublicIntakeFormClient slug="event-abc" />)
 
             await screen.findByLabelText('Mobile Phone')
-            expect(screen.queryAllByRole('checkbox')).toHaveLength(0)
+            expect(screen.getAllByRole('checkbox')).toEqual([
+                screen.getByRole('checkbox', { name: /information provided is accurate/i }),
+            ])
             expect(screen.queryByRole('link', { name: 'Terms of Service' })).not.toBeInTheDocument()
-
-            fillRequiredContactFields()
-            fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-            await screen.findByText('Review Your Application')
-            expect(screen.getAllByRole('checkbox')).toHaveLength(1)
         })
     })
 
@@ -1415,7 +1294,6 @@ describe('Shared Intake Public Page', () => {
             target: { files: [insuranceFile] },
         })
 
-        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
         fireEvent.click(screen.getByRole('checkbox'))
         fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
 
@@ -1470,16 +1348,14 @@ describe('Shared Intake Public Page', () => {
         const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
         expect(fileInput).toHaveAttribute('accept', 'image/png,image/jpeg')
 
-        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
-        expect(submitSharedPublicForm).not.toHaveBeenCalled()
-        expect(await screen.findByRole('button', { name: 'Submit Application' })).toBeDisabled()
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-
-        const activeFileInput = container.querySelector('input[type="file"]') as HTMLInputElement
-        fireEvent.change(activeFileInput, { target: { files: [photo] } })
-
-        fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+        expect(screen.getByRole('button', { name: 'Submit Application' })).toBeDisabled()
         fireEvent.click(screen.getByRole('checkbox'))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+        expect(screen.getByRole('group', { name: 'Profile Photo' })).toHaveAttribute('aria-invalid', 'true')
+        expect(submitSharedPublicForm).not.toHaveBeenCalled()
+
+        fireEvent.change(fileInput, { target: { files: [photo] } })
+        expect(screen.getByRole('group', { name: 'Profile Photo' })).not.toHaveAttribute('aria-invalid')
         fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
 
         await waitFor(() => {

@@ -74,13 +74,13 @@ function FieldTile({
                 className={cn(
                     "flex size-12 items-center justify-center rounded-2xl border transition-transform group-hover:scale-[1.02]",
                     isPreset
-                        ? "border-sky-200/90 bg-sky-50/70 text-stone-900"
-                        : "border-emerald-200/90 bg-emerald-50/65 text-stone-900",
+                        ? "border-sky-200/90 bg-sky-50/70 text-neutral-900"
+                        : "border-emerald-200/90 bg-emerald-50/65 text-neutral-900",
                 )}
             >
                 <Icon className="size-4" aria-hidden="true" />
             </span>
-            <span className="w-full text-[13px] font-medium leading-tight text-stone-900">{field.label}</span>
+            <span className="w-full text-[13px] font-medium leading-tight text-neutral-900">{field.label}</span>
         </Button>
     )
 }
@@ -142,7 +142,7 @@ export function FieldLibraryDialog({
                 </DialogHeader>
 
                 <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[12rem_minmax(0,1fr)] md:grid-rows-1">
-                    <aside className="border-b border-border/70 bg-stone-50/75 md:border-r md:border-b-0">
+                    <aside className="border-b border-border/70 bg-neutral-50/75 md:border-r md:border-b-0">
                         <ScrollArea className="max-h-36 md:h-full md:max-h-none">
                             <nav
                                 className="flex gap-1 overflow-x-auto p-2.5 md:block md:space-y-1 md:overflow-x-visible"
@@ -160,8 +160,8 @@ export function FieldLibraryDialog({
                                                 "flex shrink-0 items-center justify-between rounded-lg px-3 py-2 text-left text-[15px] font-medium leading-5 transition-all md:w-full",
                                                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                                                 isActive
-                                                    ? "bg-sky-100/90 text-stone-950"
-                                                    : "text-stone-700 hover:bg-white/90 hover:text-stone-950",
+                                                    ? "bg-sky-100/90 text-neutral-950"
+                                                    : "text-neutral-700 hover:bg-white/90 hover:text-neutral-950",
                                             )}
                                         >
                                             {category.label}
@@ -174,10 +174,10 @@ export function FieldLibraryDialog({
 
                     <div className="flex min-h-0 flex-col bg-white">
                         <div className="shrink-0 border-b border-border/70 bg-white/95 px-4 py-3 supports-[backdrop-filter]:bg-white/80">
-                            <div className="rounded-xl border border-stone-200/80 bg-white shadow-none">
+                            <div className="rounded-xl border border-neutral-200/80 bg-white shadow-none">
                                 <Command className="rounded-xl border-0 bg-transparent p-0 shadow-none">
                                     <CommandInput
-                                        className="text-[15px] placeholder:text-stone-400"
+                                        className="text-[15px] placeholder:text-neutral-400"
                                         value={search}
                                         onValueChange={onSearchChange}
                                         placeholder="Search form fields"
@@ -191,7 +191,7 @@ export function FieldLibraryDialog({
                                 {visibleSections.length > 0 ? (
                                     visibleSections.map((section) => (
                                         <section key={section.id} className="space-y-3">
-                                            <h3 className="text-[15px] font-semibold tracking-tight text-stone-950">
+                                            <h3 className="text-[15px] font-semibold tracking-tight text-neutral-950">
                                                 {section.label}
                                             </h3>
                                             <div className="grid grid-cols-2 gap-x-1.5 gap-y-2.5 sm:grid-cols-4">
@@ -207,9 +207,9 @@ export function FieldLibraryDialog({
                                         </section>
                                     ))
                                 ) : (
-                                    <div className="rounded-[22px] border border-dashed border-border/80 bg-stone-50 p-8 text-center">
-                                        <p className="text-base font-semibold text-stone-900">No matching fields</p>
-                                        <p className="mt-1.5 text-sm text-stone-500">
+                                    <div className="rounded-[22px] border border-dashed border-border/80 bg-neutral-50 p-8 text-center">
+                                        <p className="text-base font-semibold text-neutral-900">No matching fields</p>
+                                        <p className="mt-1.5 text-sm text-neutral-500">
                                             Try a different search or switch categories.
                                         </p>
                                     </div>

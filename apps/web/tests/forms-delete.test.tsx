@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
 import FormsListPage from "../app/(app)/automation/forms/page"
 import { ApiError } from "@/lib/api"
 
@@ -14,6 +14,7 @@ let mockForms: Array<{
     created_at: string
     updated_at: string
     lead_kind?: "surrogate" | "egg_donor" | "sperm_donor"
+    submission_count: number
 }> = []
 let mockTemplates: Array<{
     id: string
@@ -98,6 +99,7 @@ describe("FormsListPage delete", () => {
                 name: "Test Form",
                 status: "draft",
                 created_at: new Date().toISOString(),
+                submission_count: 0,
                 updated_at: new Date().toISOString(),
             },
         ]
@@ -154,6 +156,7 @@ describe("FormsListPage delete", () => {
                 name: "Test Form",
                 status: "draft",
                 created_at: "2026-03-20T23:29:29Z",
+                submission_count: 0,
                 updated_at: "2026-03-21T07:29:29Z",
             },
         ]
@@ -169,6 +172,27 @@ describe("FormsListPage delete", () => {
         expect(screen.queryByText(/Updated -/i)).not.toBeInTheDocument()
     })
 
+    it("shows a form saved within the current minute as just updated", () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date("2026-10-04T01:56:50Z"))
+
+        mockForms = [
+            {
+                id: "form-1",
+                name: "Test Form",
+                status: "draft",
+                created_at: "2026-10-04T01:56:40Z",
+                submission_count: 0,
+                updated_at: "2026-10-04T01:56:45Z",
+            },
+        ]
+
+        render(<FormsListPage />)
+
+        expect(screen.getByText("Updated just now")).toBeInTheDocument()
+        expect(screen.queryByText(/^Saved /)).not.toBeInTheDocument()
+    })
+
     it("creates and labels an egg donor form", async () => {
         mockForms = [
             {
@@ -177,6 +201,7 @@ describe("FormsListPage delete", () => {
                 status: "draft",
                 lead_kind: "egg_donor",
                 created_at: new Date().toISOString(),
+                submission_count: 1208,
                 updated_at: new Date().toISOString(),
             },
         ]
@@ -281,8 +306,56 @@ describe("FormsListPage delete", () => {
         const menuButton = screen.getByLabelText(
             "Open menu for template Surrogate Application Form Template",
         )
-        const title = screen.getByText("Surrogate Application Form Template")
-        expect(useButton.closest('[data-slot="card-header"]')).toBeNull()
-        expect(menuButton.closest('[data-slot="card-header"]')).toContainElement(title)
+        const title = screen.getByRole("heading", { name: "Surrogate Application Form Template" })
+        expect(menuButton.parentElement).toContainElement(title)
+        expect(menuButton.parentElement).not.toContainElement(useButton)
+    })
+
+    it("opens a form from its name link and shows status and lead type chips", () => {
+        mockForms = [
+            {
+                id: "form-1",
+                name: "Donor Intake",
+                status: "published",
+                lead_kind: "egg_donor",
+                created_at: new Date().toISOString(),
+                submission_count: 1208,
+                updated_at: new Date().toISOString(),
+            },
+        ]
+
+        render(<FormsListPage />)
+
+        const link = screen.getByRole("link", { name: "Donor Intake" })
+        expect(link).toHaveAttribute("href", "/automation/forms/form-1")
+        const card = within(link.closest('[data-slot="card"]') as HTMLElement)
+        expect(card.getByText("Published")).toBeInTheDocument()
+        expect(card.getByText("Egg Donor")).toBeInTheDocument()
+        expect(card.getByText("1,208 submissions")).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: "Forms 1" })).toBeInTheDocument()
+    })
+
+    it("filters forms by status and search without hiding the first-run state", () => {
+        const now = new Date().toISOString()
+        mockForms = [
+            { id: "form-1", name: "Surrogate Application", status: "published", created_at: now, updated_at: now, submission_count: 0 },
+            { id: "form-2", name: "Donor Pre-Screen", status: "draft", created_at: now, updated_at: now, submission_count: 0 },
+            { id: "form-3", name: "Old Survey", status: "archived", created_at: now, updated_at: now, submission_count: 0 },
+        ]
+
+        render(<FormsListPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Drafts" }))
+        expect(screen.getByRole("link", { name: "Donor Pre-Screen" })).toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Surrogate Application" })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole("button", { name: "All" }))
+        fireEvent.change(screen.getByRole("searchbox", { name: "Search forms" }), { target: { value: "survey" } })
+        expect(screen.getByRole("link", { name: "Old Survey" })).toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Donor Pre-Screen" })).not.toBeInTheDocument()
+
+        fireEvent.change(screen.getByRole("searchbox", { name: "Search forms" }), { target: { value: "missing" } })
+        expect(screen.getByRole("heading", { level: 2, name: "No matching forms" })).toBeInTheDocument()
+        expect(screen.queryByText("No forms yet")).not.toBeInTheDocument()
     })
 })

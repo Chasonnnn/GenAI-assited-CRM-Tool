@@ -17,6 +17,7 @@ from email_validator import EmailNotValidError, validate_email
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.email_body_design import validate_body_design
 from app.db.enums import EmailStatus
 from app.db.models import (
     Attachment,
@@ -197,10 +198,34 @@ class ProviderAttachment(TypedDict):
     content_bytes: bytes
 
 
+_STYLE_ATTR_RE = re.compile(r"""(\bstyle\s*=\s*)(["'])(.*?)\2""", re.IGNORECASE | re.DOTALL)
+# A `background:` declaration whose whole value is one color. Values with images,
+# gradients, or positions do not match and are dropped by the property allowlist.
+_COLOR_BACKGROUND_RE = re.compile(
+    r"(^|;)(\s*)background\s*:\s*"
+    r"(#[0-9a-f]{3,8}|(?:rgba?|hsla?)\([^()]*\)|[a-z]+)"
+    r"(\s*!\s*important)?\s*(?=;|$)",
+    re.IGNORECASE,
+)
+
+
+def _color_background_to_background_color(html: str) -> str:
+    """Keep the fill of color-only `background:` shorthands, which the allowlist drops."""
+
+    def rewrite_style(match: re.Match[str]) -> str:
+        prefix, quote, style = match.groups()
+        style = _COLOR_BACKGROUND_RE.sub(
+            lambda m: f"{m[1]}{m[2]}background-color: {m[3]}{m[4] or ''}", style
+        )
+        return f"{prefix}{quote}{style}{quote}"
+
+    return _STYLE_ATTR_RE.sub(rewrite_style, html)
+
+
 def sanitize_template_html(html: str) -> str:
     """Sanitize email template HTML to prevent XSS."""
     cleaned = nh3.clean(
-        html,
+        _color_background_to_background_color(html),
         tags=ALLOWED_TEMPLATE_TAGS,
         attributes=ALLOWED_TEMPLATE_ATTRS,
         filter_style_properties=ALLOWED_TEMPLATE_STYLE_PROPERTIES,
@@ -242,14 +267,21 @@ def normalize_template_from_email(value: str | None) -> str | None:
 
 
 def _template_payload(template: EmailTemplate) -> dict:
-    """Extract versionable payload from template."""
-    return {
+    """Extract versionable payload from template.
+
+    ``body_design`` is only recorded when present, so payloads of templates
+    without an editor document keep the shape recorded before ADR 0006.
+    """
+    payload = {
         "name": template.name,
         "subject": template.subject,
         "from_email": template.from_email,
         "body": template.body,
         "is_active": template.is_active,
     }
+    if template.body_design is not None:
+        payload["body_design"] = template.body_design
+    return payload
 
 
 class TemplateVersionHistoryConflictError(Exception):
@@ -330,6 +362,7 @@ def create_template(
     scope: str = "org",
     category: str | None = None,
     *,
+    body_design: dict | None = None,
     commit: bool = True,
 ) -> EmailTemplate:
     """Create a new email template with initial version snapshot."""
@@ -345,6 +378,7 @@ def create_template(
         subject=subject,
         from_email=_normalize_from_email(from_email),
         body=clean_body,
+        body_design=validate_body_design(body_design),
         is_active=True,
         scope=scope,
         owner_user_id=owner_user_id,
@@ -385,6 +419,7 @@ def update_template(
     expected_version: int | None = None,
     comment: str | None = None,
     *,
+    body_design: dict | None | object = _UNSET,
     commit: bool = True,
 ) -> EmailTemplate:
     """
@@ -392,7 +427,10 @@ def update_template(
 
     Creates version snapshot on changes.
     Supports optimistic locking via expected_version.
+    A new ``body`` without ``body_design`` clears the stored editor document.
     """
+    if body_design is not _UNSET and body_design is not None and body is None:
+        raise ValueError("body_design must be sent with the body compiled from it")
     # Optimistic locking
     if expected_version is not None:
         version_service.check_version(template.current_version, expected_version)
@@ -409,6 +447,7 @@ def update_template(
         )
     if body is not None:
         template.body = sanitize_template_html(body)
+        template.body_design = None if body_design is _UNSET else validate_body_design(body_design)
     if is_active is not None:
         template.is_active = is_active
 
@@ -481,6 +520,7 @@ def rollback_template(
     template.from_email = payload.get("from_email", template.from_email)
     if "body" in payload:
         template.body = sanitize_template_html(payload.get("body") or "")
+        template.body_design = payload.get("body_design")
     template.is_active = payload.get("is_active", template.is_active)
     template.current_version = new_version.version
     template.updated_at = datetime.now(UTC)
@@ -714,6 +754,7 @@ def copy_template_to_personal(
         subject=source.subject,
         from_email=source.from_email,
         body=source.body,
+        body_design=source.body_design,
         is_active=True,
         scope="personal",
         owner_user_id=user_id,
@@ -798,6 +839,7 @@ def share_template_with_org(
         subject=source.subject,
         from_email=source.from_email,
         body=source.body,
+        body_design=source.body_design,
         is_active=True,
         scope="org",
         owner_user_id=None,  # Org templates have no owner
@@ -906,13 +948,23 @@ def find_unresolved_template_variables(
     return sorted(unresolved)
 
 
-def build_surrogate_template_variables(db: Session, surrogate: Surrogate) -> dict[str, str]:
-    """Build flat template variables for a surrogate context."""
+def build_surrogate_template_variables(
+    db: Session,
+    surrogate: Surrogate,
+    *,
+    unsubscribe_url: str | None = None,
+) -> dict[str, str]:
+    """Build flat template variables for a surrogate context.
+
+    ``unsubscribe_url`` replaces the tokenized link; previews pass one so they write no token.
+    """
     from app.db.enums import FormPurpose, FormStatus, OwnerType
     from app.db.models import BookingLink, Form
 
     org = db.query(Organization).filter(Organization.id == surrogate.organization_id).first()
-    contact_variables = _build_record_contact_template_variables(db, surrogate, org)
+    contact_variables = _build_record_contact_template_variables(
+        db, surrogate, org, unsubscribe_url=unsubscribe_url
+    )
 
     form_link = ""
     appointment_link = ""
@@ -1155,6 +1207,8 @@ def _build_record_contact_template_variables(
     db: Session,
     record: Surrogate | IntendedParent | Donor,
     org: Organization | None,
+    *,
+    unsubscribe_url: str | None = None,
 ) -> dict[str, str]:
     """Resolve contact, owner, branding, and unsubscribe context consistently."""
     from app.db.enums import OwnerType
@@ -1190,8 +1244,9 @@ def _build_record_contact_template_variables(
 
     full_name = record.full_name or ""
     email = record.email or ""
-    unsubscribe_url = ""
-    if email:
+    if unsubscribe_url is None:
+        unsubscribe_url = ""
+    if email and not unsubscribe_url:
         from app.services import org_service, unsubscribe_service
 
         unsubscribe_url = unsubscribe_service.build_unsubscribe_url(

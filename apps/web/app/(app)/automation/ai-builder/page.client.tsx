@@ -464,10 +464,16 @@ function useAIBuilderController() {
         }
 
         try {
+            // Generated HTML opens as editor blocks. A body the converter rejects is saved as
+            // HTML and opens as one HTML block instead.
+            const converted = await import("@/components/email/design/compile")
+                .then(({ convertHtmlToDesign }) => convertHtmlToDesign(templateBody))
+                .catch(() => null)
             const draft = await createEmailTemplateDraft.mutateAsync({
                 name: templateName.trim(),
                 subject: templateSubject.trim(),
-                body: templateBody,
+                body: converted?.bodyDesign ? converted.body : templateBody,
+                ...(converted?.bodyDesign ? { body_design: converted.bodyDesign } : {}),
                 scope: "personal",
             })
             toast.success("Template saved as a personal Studio draft.")

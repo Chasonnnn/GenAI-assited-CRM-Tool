@@ -109,11 +109,11 @@ export function TemplateFormSettingsPanel({
                         />
                     </div>
 
-                    <div className="space-y-4 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
+                    <div className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
                         <div className="flex items-center justify-between gap-3">
                             <div>
                                 <h4 className="text-sm font-semibold">Public Header</h4>
-                                <p className="text-xs text-stone-500">
+                                <p className="text-xs text-neutral-500">
                                     These lines appear at the top of forms created from this template.
                                 </p>
                             </div>
@@ -170,7 +170,7 @@ export function TemplateFormSettingsPanel({
                             </Button>
                         )}
                         {logoUrl && (
-                            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
                                 <NextImage
                                     src={resolvedLogoUrl}
                                     alt="Form logo preview"
@@ -237,7 +237,7 @@ export function TemplateFormSettingsPanel({
                                 onChange={(e) => onAllowedMimeTypesTextChange(e.target.value)}
                                 placeholder="image/*,application/pdf"
                             />
-                            <p className="text-xs text-stone-500">
+                            <p className="text-xs text-neutral-500">
                                 Leave blank to use the platform safe file allowlist. Per-field uploads are still capped at 5 files.
                             </p>
                         </div>

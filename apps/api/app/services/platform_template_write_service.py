@@ -42,7 +42,7 @@ SCHEMAS = {
     "workflow": PlatformWorkflowTemplateDraft,
 }
 FIELDS = {
-    "email": ("name", "subject", "body", "from_email", "category"),
+    "email": ("name", "subject", "body", "body_design", "from_email", "category"),
     "form": ("name", "description", "schema_json", "settings_json"),
     "workflow": (
         "name",
@@ -318,6 +318,9 @@ def _apply_template(
             raise TemplateConflict("Template no longer exists")
         old_draft = content(template, kind) if template else {}
         desired = old_draft if draft is None else ({**old_draft, **draft} if patch else draft)
+        if kind == "email" and patch and draft and "body" in draft and "body_design" not in draft:
+            # A new body without its editor document must not keep a stale design.
+            desired["body_design"] = None
         checked = validate_template(
             kind, desired, publishing=mode == "publish" or portable, portable=portable
         )

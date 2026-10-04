@@ -8,6 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.email import EmailBodyDesign, require_body_with_design
 from app.schemas.forms import FormSchema
 
 TemplateStatus = Literal["draft", "published", "archived"]
@@ -31,6 +32,7 @@ class PlatformEmailTemplateDraft(BaseModel):
     name: str = Field(max_length=120)
     subject: str = Field(max_length=200)
     body: str
+    body_design: EmailBodyDesign | None = None
     from_email: str | None = Field(default=None, max_length=200)
     category: str | None = Field(default=None, max_length=50)
 
@@ -43,9 +45,15 @@ class PlatformEmailTemplateUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=120)
     subject: str | None = Field(default=None, max_length=200)
     body: str | None = None
+    body_design: EmailBodyDesign | None = None
     from_email: str | None = Field(default=None, max_length=200)
     category: str | None = Field(default=None, max_length=50)
     expected_version: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def design_needs_body(self):
+        require_body_with_design(self)
+        return self
 
 
 class PlatformEmailTemplateRead(BaseModel):

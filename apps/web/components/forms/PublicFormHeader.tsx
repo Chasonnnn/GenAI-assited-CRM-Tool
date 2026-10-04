@@ -19,7 +19,7 @@ interface PublicFormHeaderProps {
 function getInitials(name: string): string {
     return name
         .split(/\s+/)
-        .map((part) => part.replace(/^[^A-Za-z0-9\u00C0-\uFFFF]+/, ""))
+        .map((part) => part.replace(/^[^A-Za-z0-9À-￿]+/, ""))
         .filter(Boolean)
         .slice(0, 2)
         .map((part) => part.charAt(0))
@@ -54,105 +54,86 @@ export function PublicFormHeader({
     const descriptionText = description?.trim()
 
     return (
-        <header className="py-5 md:py-7">
-            <div className="mx-auto max-w-3xl px-4">
-                <div className="rounded-lg border border-stone-200/80 bg-white/95 p-5 shadow-[0_18px_45px_rgba(15,23,42,0.07)] md:p-6">
-                    <div className="flex flex-col gap-5">
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="flex min-w-0 items-start gap-4">
-                                {/* With an agency name the tile moves into the agency row above the title;
-                                    the builder preview passes none and keeps the tile beside the title. */}
-                                {agencyText ? null : showLogo && resolvedLogoUrl ? (
-                                    <div className="flex size-12 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 px-2 py-1">
-                                        <Image
-                                            src={resolvedLogoUrl}
-                                            alt={titleText ? `${titleText} logo` : "Form logo"}
-                                            width={112}
-                                            height={56}
-                                            unoptimized
-                                            className="max-h-10 max-w-full rounded-md object-contain"
-                                            onError={onLogoError}
-                                        />
-                                    </div>
-                                ) : fallbackInitial ? (
-                                    <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary">
-                                        <span className="text-lg font-semibold text-primary-foreground">
-                                            {fallbackInitial}
-                                        </span>
-                                    </div>
-                                ) : null}
-                                <div className="min-w-0">
-                                    {agencyText ? (
-                                        <div
-                                            data-slot="public-form-agency"
-                                            className="mb-3 flex min-w-0 items-center gap-2.5"
-                                        >
-                                            {showLogo && resolvedLogoUrl ? (
-                                                <div className="flex h-9 min-w-9 max-w-40 shrink-0 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 px-1.5">
-                                                    <Image
-                                                        src={resolvedLogoUrl}
-                                                        alt={`${agencyText} logo`}
-                                                        width={112}
-                                                        height={56}
-                                                        unoptimized
-                                                        className="max-h-7 w-auto max-w-full rounded-sm object-contain"
-                                                        onError={onLogoError}
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <div
-                                                    aria-hidden="true"
-                                                    className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-[13px] font-semibold text-primary-foreground"
-                                                >
-                                                    {getInitials(agencyText)}
-                                                </div>
-                                            )}
-                                            <p className="line-clamp-2 min-w-0 break-words text-[15px] font-medium leading-5 text-stone-900">
-                                                {agencyText}
-                                            </p>
-                                        </div>
-                                    ) : null}
-                                    {eyebrowText ? (
-                                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
-                                            {eyebrowText}
-                                        </p>
-                                    ) : null}
-                                    {titleText ? (
-                                        <h1 className="text-2xl font-semibold leading-tight tracking-tight text-stone-950 md:text-[28px]">
-                                            {titleText}
-                                        </h1>
-                                    ) : null}
-                                    {descriptionText ? (
-                                        <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600 md:text-base">
-                                            {descriptionText}
-                                        </p>
-                                    ) : null}
+        <header>
+            <div className="border-b border-neutral-200/80 bg-white">
+                <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-12">
+                    {agencyText ? (
+                        <div data-slot="public-form-agency" className="flex min-w-0 items-center gap-3">
+                            {showLogo && resolvedLogoUrl ? (
+                                <div className="flex h-9 min-w-9 max-w-40 shrink-0 items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50 px-1.5">
+                                    <Image
+                                        src={resolvedLogoUrl}
+                                        alt={`${agencyText} logo`}
+                                        width={112}
+                                        height={56}
+                                        unoptimized
+                                        className="max-h-7 w-auto max-w-full rounded-sm object-contain"
+                                        onError={onLogoError}
+                                    />
                                 </div>
-                            </div>
-                            <div
-                                className={cn(
-                                    "inline-flex w-fit shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
-                                    metadataTone === "success" && "border-emerald-200 bg-emerald-50 text-emerald-700",
-                                    metadataTone === "warning" && "border-amber-200 bg-amber-50 text-amber-700",
-                                    metadataTone === "error" && "border-red-200 bg-red-50 text-red-700",
-                                    metadataTone === "neutral" && "border-stone-200 bg-stone-50 text-stone-600",
-                                )}
-                            >
-                                <span
-                                    className={cn(
-                                        "size-1.5 rounded-full",
-                                        metadataTone === "success" && "bg-emerald-500",
-                                        metadataTone === "warning" && "bg-amber-500",
-                                        metadataTone === "error" && "bg-red-500",
-                                        metadataTone === "neutral" && "bg-stone-400",
-                                    )}
-                                />
-                                {metadata}
-                            </div>
+                            ) : (
+                                <div
+                                    aria-hidden="true"
+                                    className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-[13px] font-semibold text-primary-foreground"
+                                >
+                                    {getInitials(agencyText)}
+                                </div>
+                            )}
+                            <p className="line-clamp-2 min-w-0 break-words text-[15px] font-semibold leading-5 text-neutral-900">
+                                {agencyText}
+                            </p>
                         </div>
-                        {children ? <div className="space-y-4">{children}</div> : null}
+                    ) : showLogo && resolvedLogoUrl ? (
+                        <div className="flex h-10 max-w-40 shrink-0 items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50 px-2">
+                            <Image
+                                src={resolvedLogoUrl}
+                                alt={titleText ? `${titleText} logo` : "Form logo"}
+                                width={112}
+                                height={56}
+                                unoptimized
+                                className="max-h-8 w-auto max-w-full rounded-md object-contain"
+                                onError={onLogoError}
+                            />
+                        </div>
+                    ) : fallbackInitial ? (
+                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary">
+                            <span className="text-[15px] font-semibold text-primary-foreground">{fallbackInitial}</span>
+                        </div>
+                    ) : (
+                        <span />
+                    )}
+                    <div className="inline-flex items-center gap-2 text-[13px] font-medium text-neutral-600">
+                        <span
+                            aria-hidden="true"
+                            className={cn(
+                                "size-1.5 rounded-full",
+                                metadataTone === "success" && "bg-emerald-600",
+                                metadataTone === "warning" && "bg-amber-500",
+                                metadataTone === "error" && "bg-red-600",
+                                metadataTone === "neutral" && "bg-neutral-400",
+                            )}
+                        />
+                        <span className={cn(metadataTone === "error" && "text-red-700")}>{metadata}</span>
                     </div>
                 </div>
+            </div>
+            <div className="mx-auto max-w-6xl px-4 pt-10 pb-8 sm:px-6 lg:px-12">
+                <div className="flex max-w-3xl flex-col gap-2.5">
+                    {eyebrowText ? (
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
+                            {eyebrowText}
+                        </p>
+                    ) : null}
+                    {titleText ? (
+                        <h1 className="text-[28px] font-semibold leading-tight tracking-tight text-neutral-950 md:text-4xl">
+                            {titleText}
+                        </h1>
+                    ) : null}
+                    {descriptionText ? (
+                        <p className="text-base leading-7 text-neutral-600">{descriptionText}</p>
+                    ) : null}
+                </div>
+                {children ? <div className="mt-6 flex max-w-3xl flex-col gap-3">{children}</div> : null}
             </div>
         </header>
     )

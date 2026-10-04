@@ -223,12 +223,12 @@ export function ShareApplicationDialog({
 
 function HostedLinkTabContent({ link }: { link: FormIntakeLinkRead | null }) {
     if (!link?.intake_url) {
-        return <p className="text-sm text-stone-500">No shared intake link is available yet.</p>
+        return <p className="text-sm text-neutral-500">No shared intake link is available yet.</p>
     }
 
     return (
-        <div className="min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
-            <div className="font-medium text-stone-900 dark:text-stone-100">
+        <div className="min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40">
+            <div className="font-medium text-neutral-900 dark:text-neutral-100">
                 {link.event_name || link.campaign_name || "Shared intake link"}
             </div>
             <div className="break-all">{link.intake_url}</div>
@@ -238,7 +238,7 @@ function HostedLinkTabContent({ link }: { link: FormIntakeLinkRead | null }) {
 
 function QrTabContent() {
     return (
-        <div className="min-w-0 max-w-full rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
+        <div className="min-w-0 max-w-full rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40">
             Use the QR download actions below for the selected hosted link.
         </div>
     )
@@ -255,7 +255,7 @@ function DonorEmbedUnavailable({
     onUpdateEmbedSettings: ShareApplicationDialogProps["onUpdateEmbedSettings"]
 }) {
     return (
-        <div className="min-w-0 max-w-full space-y-3 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
+        <div className="min-w-0 max-w-full space-y-3 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40">
             <p>Donor forms can only be shared with the hosted link.</p>
             {link?.embed_enabled ? (
                 <Button
@@ -303,7 +303,7 @@ function EmbedTabContent({
     onSaveEmbedSettings: () => Promise<void>
 }) {
     if (!link) {
-        return <p className="text-sm text-stone-500">No shared intake link is available yet.</p>
+        return <p className="text-sm text-neutral-500">No shared intake link is available yet.</p>
     }
 
     return (
@@ -347,12 +347,12 @@ function EmbedSettingsPanel({
     onSaveEmbedSettings: () => Promise<void>
 }) {
     return (
-        <div className="min-w-0 max-w-full space-y-4 overflow-hidden rounded-md border border-stone-200 p-3 dark:border-stone-800">
+        <div className="min-w-0 max-w-full space-y-4 overflow-hidden rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <EmbedHealthStatusBadge health={health} />
                     {health?.updated_at ? (
-                        <span className="text-xs text-stone-500">
+                        <span className="text-xs text-neutral-500">
                             Checked {formatUtcDateLabel(health.updated_at, { month: "long" })}
                         </span>
                     ) : null}
@@ -391,13 +391,13 @@ function EmbedHealthChecks({ health }: { health?: FormEmbedHealthRead | null | u
     if (!health) return null
 
     return (
-        <div className="min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 dark:border-stone-800 dark:bg-stone-900/40">
+        <div className="min-w-0 max-w-full space-y-2 overflow-hidden rounded-md border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-800 dark:bg-neutral-900/40">
             {health.checks.map((check) => (
                 <div key={check.key} className="flex min-w-0 gap-2 text-xs">
                     <EmbedHealthCheckIcon status={check.status} />
                     <div className="min-w-0">
-                        <div className="font-medium text-stone-900 dark:text-stone-100">{check.label}</div>
-                        <div className="break-words text-stone-500">{check.message}</div>
+                        <div className="font-medium text-neutral-900 dark:text-neutral-100">{check.label}</div>
+                        <div className="break-words text-neutral-500">{check.message}</div>
                     </div>
                 </div>
             ))}
@@ -507,12 +507,12 @@ function EmbedSnippetPanel({
 }) {
     return (
         <>
-            <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-stone-200 bg-stone-50 p-3 text-xs text-stone-600 dark:border-stone-800 dark:bg-stone-900/40">
-                <div className="mb-2 flex items-center gap-2 font-medium text-stone-900 dark:text-stone-100">
+            <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40">
+                <div className="mb-2 flex items-center gap-2 font-medium text-neutral-900 dark:text-neutral-100">
                     <Code2Icon className="size-4" />
                     Website embed
                 </div>
-                <pre className="max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded border border-stone-200 bg-white p-3 font-mono text-[11px] leading-5 dark:border-stone-800 dark:bg-stone-950">
+                <pre className="max-h-48 max-w-full overflow-auto whitespace-pre-wrap break-all rounded border border-neutral-200 bg-white p-3 font-mono text-[11px] leading-5 dark:border-neutral-800 dark:bg-neutral-950">
                     {embedSnippet}
                 </pre>
             </div>
@@ -521,7 +521,7 @@ function EmbedSnippetPanel({
                     Embedding is disabled for this link until allowed origins are configured.
                 </p>
             ) : link.allowed_embed_origins.length > 0 ? (
-                <p className="break-words text-xs text-stone-500">
+                <p className="break-words text-xs text-neutral-500">
                     Allowed origins: {link.allowed_embed_origins.join(", ")}
                 </p>
             ) : null}

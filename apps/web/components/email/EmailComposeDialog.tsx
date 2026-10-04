@@ -926,12 +926,12 @@ function MessagePreview({
                     contentEditable
                     suppressContentEditableWarning
                     onBlur={onPreviewBlur}
-                    className="prose prose-sm prose-stone max-w-none min-h-40 rounded-md border border-transparent px-1 text-stone-900 outline-none transition-colors [&_p]:whitespace-pre-wrap focus:border-ring"
+                    className="prose prose-sm prose-neutral max-w-none min-h-40 rounded-md border border-transparent px-1 text-neutral-900 outline-none transition-colors [&_p]:whitespace-pre-wrap focus:border-ring"
                 >
                     <TrustedSanitizedHtmlFragment html={previewMessageHtml} />
                 </div>
-                <div className="border-t border-stone-200 pt-4">
-                    <div className="prose prose-sm prose-stone max-w-none text-stone-900 [&_p]:whitespace-pre-wrap">
+                <div className="border-t border-neutral-200 pt-4">
+                    <div className="prose prose-sm prose-neutral max-w-none text-neutral-900 [&_p]:whitespace-pre-wrap">
                         <TrustedSanitizedHtmlFragment html={previewFooterHtml} />
                     </div>
                 </div>

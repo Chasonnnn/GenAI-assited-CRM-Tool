@@ -70,8 +70,8 @@ function formatDate(value: string | null): string {
 }
 
 const publicFieldShellClassName = "space-y-2"
-const publicFieldGroupShellClassName = "space-y-3 rounded-lg border border-stone-200/80 bg-stone-50/60 p-4"
-const publicControlClassName = "h-11 rounded-md border-stone-200 bg-white shadow-none"
+const publicFieldGroupShellClassName = "space-y-3 rounded-lg border border-neutral-200/80 bg-neutral-50/60 p-4"
+const publicControlClassName = "h-11 rounded-md border-neutral-200 bg-white shadow-none"
 const HEIGHT_FEET_OPTIONS = Array.from({ length: 9 }, (_, value) => ({
     label: `${value} ft`,
     value: String(value),
@@ -144,7 +144,7 @@ function getPublicFieldDensityStyles(density: PublicFormDensity) {
             publicFieldGroupShellClassName,
             isCompact && "space-y-2 rounded-md bg-white p-3",
         ),
-        labelClassName: cn("text-sm font-semibold leading-5 text-stone-900", isCompact && "text-stone-800"),
+        labelClassName: cn("text-sm font-semibold leading-5 text-neutral-900", isCompact && "text-neutral-800"),
         controlClassName: cn(publicControlClassName, isCompact && "h-10 text-sm"),
         optionSize: (isCompact ? "compact" : "default") as "compact" | "default",
         isCompact,
@@ -173,6 +173,14 @@ function getYesNoOptions(options: FormOption[]): FormOption[] | null {
     return [yesOption, noOption]
 }
 
+const HALF_WIDTH_FIELD_TYPES = new Set(["text", "email", "phone", "number", "date", "select", "height"])
+
+/** Short single-line answers and Yes/No choices share a row on the hosted form and the builder preview. */
+export function isHalfWidthPublicField(field: Pick<FormField, "type" | "options">): boolean {
+    if (HALF_WIDTH_FIELD_TYPES.has(field.type)) return true
+    return field.type === "radio" && getYesNoOptions(field.options ?? []) !== null
+}
+
 function getChoiceOptions(options: FormOption[]): FormOption[] {
     return getYesNoOptions(options) ?? options
 }
@@ -184,7 +192,7 @@ function getChoiceGridClassName(options: FormOption[], density: PublicFormDensit
     return cn(
         "grid",
         isCompact ? "gap-2" : "gap-3",
-        isYesNoChoice ? "grid-cols-2" : "sm:grid-cols-2",
+        isYesNoChoice ? "grid-cols-2" : "grid-cols-[repeat(auto-fit,minmax(min(11rem,100%),1fr))]",
     )
 }
 
@@ -406,7 +414,7 @@ function TableFieldInput({
                 <Label className="text-sm font-medium">
                     {field.label} {requiredMark}
                 </Label>
-                <p className="text-sm text-stone-500">Configure rows and columns to use this table field.</p>
+                <p className="text-sm text-neutral-500">Configure rows and columns to use this table field.</p>
             </div>
         )
     }
@@ -417,7 +425,7 @@ function TableFieldInput({
                 <Label className="text-sm font-medium">
                     {field.label} {requiredMark}
                 </Label>
-                {field.help_text ? <p className="text-xs text-stone-500">{field.help_text}</p> : null}
+                {field.help_text ? <p className="text-xs text-neutral-500">{field.help_text}</p> : null}
             </div>
 
             {repeatable && <Button type="button" variant="outline" size="sm"
@@ -435,11 +443,11 @@ function TableFieldInput({
                             key={rowKey || rowLabel}
                             role="group"
                             aria-label={`${rowLabel} row`}
-                            className="rounded-lg border border-stone-200 bg-white p-4 @container/table-row @xl/table-row:grid @xl/table-row:grid-cols-[minmax(0,10rem)_minmax(0,12rem)_minmax(0,1fr)] @xl/table-row:items-start @xl/table-row:gap-4"
+                            className="rounded-lg border border-neutral-200 bg-white p-4 @container/table-row @xl/table-row:grid @xl/table-row:grid-cols-[minmax(0,10rem)_minmax(0,12rem)_minmax(0,1fr)] @xl/table-row:items-start @xl/table-row:gap-4"
                         >
                             <div className="mb-4 space-y-1 @xl/table-row:mb-0 @xl/table-row:pr-2">
-                                <div className="text-base font-semibold text-stone-900">{rowLabel}</div>
-                                {rowHelpText ? <p className="mt-1 text-xs text-stone-500">{rowHelpText}</p> : null}
+                                <div className="text-base font-semibold text-neutral-900">{rowLabel}</div>
+                                {rowHelpText ? <p className="mt-1 text-xs text-neutral-500">{rowHelpText}</p> : null}
                                 {repeatable && <Button type="button" variant="ghost" size="sm"
                                     aria-label={`Remove row ${rowIndex + 1}`} disabled={rows.length <= minRows}
                                     onClick={() => updateField(field.key, rows.filter((_, index) => index !== rowIndex))}>Remove</Button>}
@@ -466,7 +474,7 @@ function TableFieldInput({
                                         <Label
                                             id={fieldInputLabelId}
                                             htmlFor={fieldInputId}
-                                            className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500"
+                                            className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500"
                                         >
                                             {column.label}
                                             {column.required ? <span className="text-red-500"> *</span> : null}
@@ -494,7 +502,7 @@ function TableFieldInput({
                                                 }
                                                 placeholder="Select…"
                                                 options={options}
-                                                className="h-11 border-stone-200 bg-white shadow-none"
+                                                className="h-11 border-neutral-200 bg-white shadow-none"
                                             />
                                         ) : column.type === "textarea" ? (
                                             <Input
@@ -573,7 +581,7 @@ function HeightFieldInput({
                 <div className="space-y-2">
                     <Label
                         htmlFor={`${field.key}_ft`}
-                        className="text-xs font-medium uppercase tracking-[0.2em] text-stone-500"
+                        className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-500"
                     >
                         Feet
                     </Label>
@@ -584,14 +592,14 @@ function HeightFieldInput({
                         onValueChange={(nextValue) => syncHeight(nextValue, inchesValue)}
                         placeholder="e.g. 5 ft"
                         options={HEIGHT_FEET_OPTIONS}
-                        className="h-11 border-stone-200 bg-white shadow-none"
+                        className="h-11 border-neutral-200 bg-white shadow-none"
                         invalidProps={invalidProps}
                     />
                 </div>
                 <div className="space-y-2">
                     <Label
                         htmlFor={`${field.key}_in`}
-                        className="text-xs font-medium uppercase tracking-[0.2em] text-stone-500"
+                        className="text-xs font-medium uppercase tracking-[0.2em] text-neutral-500"
                     >
                         Inches
                     </Label>
@@ -602,13 +610,13 @@ function HeightFieldInput({
                         onValueChange={(nextValue) => syncHeight(feetValue, nextValue)}
                         placeholder="e.g. 6 in"
                         options={HEIGHT_INCHES_OPTIONS}
-                        className="h-11 border-stone-200 bg-white shadow-none"
+                        className="h-11 border-neutral-200 bg-white shadow-none"
                         invalidProps={invalidProps}
                     />
                 </div>
             </div>
             <PublicFieldError fieldKey={field.key} error={error} />
-            {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+            {field.help_text && <p className="text-xs text-neutral-500">{field.help_text}</p>}
         </div>
     )
 }
@@ -633,13 +641,13 @@ function OptionCard({
             aria-checked={selected}
             onClick={onClick}
             className={cn(
-                "min-h-11 w-full border border-stone-200 bg-white text-left transition-all",
+                "min-h-11 w-full border border-neutral-200 bg-white text-left transition-all",
                 size === "compact" ? "min-h-10 rounded-md px-3 py-2" : "rounded-lg px-4 py-3",
-                "hover:border-primary/25 hover:bg-stone-50",
+                "hover:border-primary/25 hover:bg-neutral-50",
                 "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
                 selected
                     ? "border-primary/45 bg-primary/[0.04] shadow-[0_0_0_1px_rgba(31,41,55,0.08)]"
-                    : "border-stone-200",
+                    : "border-neutral-200",
             )}
         >
             <div className="flex items-center gap-3">
@@ -647,12 +655,12 @@ function OptionCard({
                     className={cn(
                         "flex items-center justify-center rounded-full border-2 transition-all",
                         size === "compact" ? "size-4" : "size-5",
-                        selected ? "border-primary bg-primary" : "border-stone-300 bg-white",
+                        selected ? "border-primary bg-primary" : "border-neutral-300 bg-white",
                     )}
                 >
                     {selected && <CheckIcon className={cn("text-white", size === "compact" ? "size-3" : "size-3.5")} />}
                 </div>
-                <div className="text-sm font-medium leading-5 text-stone-900">
+                <div className="text-sm font-medium leading-5 text-neutral-900">
                     {label}
                 </div>
             </div>
@@ -687,13 +695,13 @@ export function PublicFormFieldRenderer({
                     onChange={(event) => updateField(field.key, event.target.value)}
                     placeholder={getFieldPlaceholder(field)}
                     className={cn(
-                        "min-h-24 rounded-md border-stone-200 bg-white shadow-none",
+                        "min-h-24 rounded-md border-neutral-200 bg-white shadow-none",
                         densityStyles.isCompact && "min-h-20 text-[15px]",
                     )}
                     {...invalidProps}
                 />
                 {errorMessage}
-                {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                {field.help_text && <p className="text-xs text-neutral-500">{field.help_text}</p>}
             </div>
         )
     }
@@ -721,7 +729,7 @@ export function PublicFormFieldRenderer({
                                 className={cn(
                                     densityStyles.controlClassName,
                                     "w-full justify-start text-left font-normal",
-                                    !value && "text-stone-500",
+                                    !value && "text-neutral-500",
                                 )}
                                 {...invalidProps}
                             >
@@ -749,7 +757,7 @@ export function PublicFormFieldRenderer({
                     </PopoverContent>
                 </Popover>
                 {errorMessage}
-                {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                {field.help_text && <p className="text-xs text-neutral-500">{field.help_text}</p>}
             </div>
         )
     }
@@ -806,7 +814,7 @@ export function PublicFormFieldRenderer({
                     invalidProps={invalidProps}
                 />
                 {errorMessage}
-                {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                {field.help_text && <p className="text-xs text-neutral-500">{field.help_text}</p>}
             </div>
         )
     }
@@ -823,7 +831,7 @@ export function PublicFormFieldRenderer({
                     {field.label} {requiredMark}
                 </legend>
                 {options.length === 0 ? (
-                    <p className="text-sm text-stone-500">No options configured.</p>
+                    <p className="text-sm text-neutral-500">No options configured.</p>
                 ) : (
                     <div
                         role="radiogroup"
@@ -843,7 +851,7 @@ export function PublicFormFieldRenderer({
                     </div>
                 )}
                 {errorMessage}
-                {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                {field.help_text && <p className="text-xs text-neutral-500">{field.help_text}</p>}
             </fieldset>
         )
     }
@@ -863,7 +871,7 @@ export function PublicFormFieldRenderer({
                     {field.label} {requiredMark}
                 </legend>
                 {options.length === 0 ? (
-                    <p className="text-sm text-stone-500">No options configured.</p>
+                    <p className="text-sm text-neutral-500">No options configured.</p>
                 ) : (
                     <div role="group" aria-labelledby={legendId} className={gridClassName} {...invalidGroupProps}>
                         {options.map((option) => {
@@ -887,7 +895,7 @@ export function PublicFormFieldRenderer({
                     </div>
                 )}
                 {errorMessage}
-                {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                {field.help_text && <p className="text-xs text-neutral-500">{field.help_text}</p>}
             </fieldset>
         )
     }
@@ -908,7 +916,7 @@ export function PublicFormFieldRenderer({
                             {field.label} {requiredMark}
                         </Label>
                         {errorMessage}
-                        {field.help_text && <AssistantRichText content={field.help_text} className="text-xs text-stone-500" />}
+                        {field.help_text && <AssistantRichText content={field.help_text} className="text-xs text-neutral-500" />}
                     </div>
                 </div>
             </div>
@@ -942,7 +950,7 @@ export function PublicFormFieldRenderer({
                 {...invalidProps}
             />
             {errorMessage}
-            {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+            {field.help_text && <p className="text-xs text-neutral-500">{field.help_text}</p>}
         </div>
     )
 }

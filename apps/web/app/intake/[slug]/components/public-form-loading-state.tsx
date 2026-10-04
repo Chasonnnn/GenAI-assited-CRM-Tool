@@ -8,7 +8,7 @@ export function PublicFormLoadingState() {
         <div className={cn(publicFormPageClassName, "flex items-center justify-center p-4")}>
             <div className="text-center">
                 <Loader2Icon className="size-10 animate-spin text-primary mx-auto mb-4" />
-                <p className="text-stone-600">Loading application form…</p>
+                <p className="text-neutral-600">Loading application form…</p>
             </div>
         </div>
     )

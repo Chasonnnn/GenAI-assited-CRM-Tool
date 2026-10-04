@@ -43,6 +43,8 @@ type FormBuilderHeaderProps = {
     /** Disables Publish and explains why in a tooltip and to screen readers. */
     publishDisabledReason?: string | null
     deleteAction?: DeleteAction
+    /** Workspace tabs, shown between the form identity and the actions. */
+    navigation?: React.ReactNode
 }
 
 export function FormBuilderHeader({
@@ -62,6 +64,7 @@ export function FormBuilderHeader({
     publishDisabled = false,
     publishDisabledReason = null,
     deleteAction,
+    navigation,
 }: FormBuilderHeaderProps) {
     const publishReasonId = React.useId()
     // A published form with nothing new has nothing to explain. The reason ignores
@@ -97,6 +100,8 @@ export function FormBuilderHeader({
                     </Badge>
                 ) : null}
             </div>
+
+            {navigation ? <div className="order-last w-full lg:order-none lg:w-auto">{navigation}</div> : null}
 
             <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
                 {deleteAction ? (

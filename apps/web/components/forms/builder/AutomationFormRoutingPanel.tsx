@@ -367,7 +367,7 @@ export function AutomationFormRoutingPanel({ formId, canEdit, canCreateWorkflows
                 <RoutingSettings formId={formId} canEdit={canEdit} canCreateWorkflows={canCreateWorkflows} />
             ) : (
                 <Card>
-                    <CardContent className="p-6 text-sm text-stone-600">
+                    <CardContent className="p-6 text-sm text-neutral-600">
                         Save the form before configuring routing.
                     </CardContent>
                 </Card>

@@ -181,7 +181,7 @@ Respond with ONLY a valid JSON object (no markdown, no explanation) in this exac
     ),
     "email_template_generation": PromptTemplate(
         key="email_template_generation",
-        version="v1",
+        version="v2",
         system="You are an email template generator. Always respond with ONLY valid JSON, no markdown or explanation.",
         user="""You are generating a reusable EMAIL TEMPLATE (HTML) for a surrogacy agency using Surrogacy Force.
 
@@ -209,6 +209,7 @@ Respond with ONLY a valid JSON object (no markdown, no explanation) in this exac
 2. Use ONLY the allowed variables
 3. Do NOT include org signature content
 4. Do NOT include unsubscribe content
+5. Use only these tags: p, h1, h2, h3, strong, em, a, ul, ol, li, br, hr. No tables, divs, images, or inline styles.
 """,
     ),
     "schedule_parse": PromptTemplate(

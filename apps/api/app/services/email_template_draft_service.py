@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.email_body_design import validate_body_design
 from app.db.models import EmailTemplate, EmailTemplateDraft
 from app.services import email_service, version_service
 
@@ -137,6 +138,7 @@ def create_new_draft(
     body: str,
     from_email: str | None,
     scope: str,
+    body_design: dict | None = None,
 ) -> EmailTemplateDraft:
     draft = EmailTemplateDraft(
         organization_id=org_id,
@@ -149,6 +151,7 @@ def create_new_draft(
         subject=subject,
         from_email=email_service.normalize_template_from_email(from_email),
         body=email_service.sanitize_template_html(body),
+        body_design=validate_body_design(body_design),
         is_active=True,
         category=None,
         base_version=0,
@@ -205,6 +208,7 @@ def create_draft_from_template(
         subject=template.subject,
         from_email=template.from_email,
         body=template.body,
+        body_design=template.body_design,
         is_active=template.is_active,
         category=template.category,
         base_version=template.current_version,
@@ -227,7 +231,10 @@ def update_draft(
     from_email: str | None | object = _UNSET,
     body: str | None = None,
     is_active: bool | None = None,
+    body_design: dict | None | object = _UNSET,
 ) -> EmailTemplateDraft:
+    if body_design is not _UNSET and body_design is not None and body is None:
+        raise ValueError("body_design must be sent with the body compiled from it")
     if draft.revision != expected_revision:
         raise DraftRevisionConflictError(
             f"Draft revision mismatch: expected {expected_revision}, got {draft.revision}"
@@ -243,6 +250,7 @@ def update_draft(
         )
     if body is not None:
         draft.body = email_service.sanitize_template_html(body)
+        draft.body_design = None if body_design is _UNSET else validate_body_design(body_design)
     if is_active is not None:
         draft.is_active = is_active
 
@@ -256,8 +264,14 @@ def update_draft(
 
 def _validate_version_payload(payload: object) -> None:
     expected_fields = {"name", "subject", "from_email", "body", "is_active"}
-    if not isinstance(payload, dict) or set(payload) != expected_fields:
+    if not isinstance(payload, dict) or set(payload) - {"body_design"} != expected_fields:
         raise DraftVersionIntegrityError("Published template version payload has an invalid shape")
+    try:
+        validate_body_design(payload.get("body_design"))
+    except ValueError as exc:
+        raise DraftVersionIntegrityError(
+            "Published template version payload has invalid field values"
+        ) from exc
     if (
         not isinstance(payload["name"], str)
         or not 1 <= len(payload["name"]) <= 100
@@ -330,6 +344,7 @@ def restore_version_to_draft(
     draft.subject = payload["subject"]
     draft.from_email = payload["from_email"]
     draft.body = payload["body"]
+    draft.body_design = payload.get("body_design")
     draft.is_active = payload["is_active"]
     draft.revision += 1
     draft.updated_by_user_id = user_id
@@ -426,6 +441,7 @@ def publish_draft(
                 subject=draft.subject,
                 from_email=draft.from_email,
                 body=draft.body,
+                body_design=draft.body_design,
                 scope=draft.scope,
                 category=draft.category,
                 commit=False,
@@ -462,8 +478,9 @@ def publish_draft(
                 changes["subject"] = draft.subject
             if draft.from_email != template.from_email:
                 changes["from_email"] = draft.from_email
-            if draft.body != template.body:
+            if draft.body != template.body or draft.body_design != template.body_design:
                 changes["body"] = draft.body
+                changes["body_design"] = draft.body_design
             if draft.is_active != template.is_active:
                 changes["is_active"] = draft.is_active
 

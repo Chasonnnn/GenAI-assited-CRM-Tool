@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -13,6 +13,7 @@ from app.db.models import (
     Form,
     FormIntakeLink,
     FormSubmission,
+    Organization,
     ResendSettings,
     Surrogate,
 )
@@ -1224,3 +1225,53 @@ async def test_default_surrogate_application_form_reconciles_on_purpose_change(
     by_id = {form["id"]: form for form in after_demote_list_res.json()}
     assert by_id[form_a_id]["is_default_surrogate_application"] is True
     assert by_id[form_b_id]["is_default_surrogate_application"] is False
+
+
+@pytest.mark.asyncio
+async def test_form_list_counts_only_the_session_org_submissions(authed_client, db, test_org):
+    create_res = await authed_client.post("/forms", json={"name": "Counted Form"})
+    assert create_res.status_code == 200
+    form_id = uuid.UUID(create_res.json()["id"])
+    other_org = Organization(id=uuid.uuid4(), name="Other Agency", slug=f"other-{uuid.uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    other_form = Form(organization_id=other_org.id, name="Other Form")
+    db.add(other_form)
+    db.flush()
+    for org_id, submission_form_id in (
+        (test_org.id, form_id),
+        (test_org.id, form_id),
+        (other_org.id, form_id),
+        (other_org.id, other_form.id),
+    ):
+        db.add(FormSubmission(organization_id=org_id, form_id=submission_form_id, answers_json={}))
+    db.flush()
+
+    list_res = await authed_client.get("/forms")
+
+    assert list_res.status_code == 200
+    by_id = {form["id"]: form for form in list_res.json()}
+    assert str(other_form.id) not in by_id
+    assert by_id[str(form_id)]["submission_count"] == 2
+    assert all(form["submission_count"] == 0 for key, form in by_id.items() if key != str(form_id))
+
+
+@pytest.mark.asyncio
+async def test_form_timestamps_are_serialized_with_a_utc_offset(authed_client):
+    create_res = await authed_client.post(
+        "/forms",
+        json={"name": "Timestamp Form", "form_schema": _shared_identity_schema()},
+    )
+    assert create_res.status_code == 200
+    form_id = create_res.json()["id"]
+    publish_res = await authed_client.post(f"/forms/{form_id}/publish")
+    assert publish_res.status_code == 200
+
+    list_res = await authed_client.get("/forms")
+    assert list_res.status_code == 200
+    form = next(item for item in list_res.json() if item["id"] == form_id)
+    links_res = await authed_client.get(f"/forms/{form_id}/intake-links")
+    assert links_res.status_code == 200
+
+    for value in (form["created_at"], form["updated_at"], links_res.json()[0]["created_at"]):
+        assert datetime.fromisoformat(value).utcoffset() == timedelta(0)

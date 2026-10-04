@@ -344,7 +344,7 @@ function SignaturePreviewPanel({ html }: { html: string }) {
       </p>
       <SafeHtmlContent
         html={html}
-        className="prose prose-sm prose-stone max-w-none text-stone-900"
+        className="prose prose-sm prose-neutral max-w-none text-neutral-900"
       />
     </div>
   )

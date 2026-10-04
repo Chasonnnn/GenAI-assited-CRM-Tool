@@ -6,6 +6,7 @@
 
 import api from '../api'
 import type {
+    EmailBodyDesign,
     EmailTemplate,
     EmailTemplateTestSendRequest,
     EmailTemplateTestSendResponse,
@@ -26,6 +27,7 @@ export interface EmailTemplateDraft {
     subject: string
     from_email: string | null
     body: string
+    body_design?: EmailBodyDesign | null
     is_active: boolean
     category: string | null
     base_version: number
@@ -43,6 +45,7 @@ export interface EmailTemplateDraftCreate {
     subject: string
     from_email?: string | null
     body: string
+    body_design?: EmailBodyDesign | null
     scope?: EmailTemplateDraftScope
 }
 
@@ -51,6 +54,7 @@ export interface EmailTemplateDraftUpdate {
     subject?: string
     from_email?: string | null
     body?: string
+    body_design?: EmailBodyDesign | null
     is_active?: boolean
     expected_revision: number
 }
