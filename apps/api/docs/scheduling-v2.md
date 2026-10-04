@@ -55,6 +55,28 @@ cd apps/api
 mise exec -- uv run python scripts/scheduling_inventory.py --organization-id <organization-uuid>
 ```
 
+After explicit approval of an owner's primary calendar, prepare its binding and
+busy snapshot with the deployed release's operator command. The environment
+override applies only to this process; keep API and worker service flags off:
+
+```bash
+SCHEDULING_V2_ENABLED=true mise exec -- uv run python scripts/scheduling_prepare.py \
+  --organization-id <organization-uuid> --user-id <member-uuid> --primary
+```
+
+Use the production database and provider credentials only inside the approved
+operator environment, such as a one-off migration-job execution. The command
+requires an active membership and writable discovered primary calendar, refuses
+to replace a different existing selection, and prints aggregate readiness only.
+A failed sync may leave the explicit binding prepared; repeat the command after
+repair and keep the service flags off until every required snapshot is complete.
+
+Enable the worker first, verify current binding sync jobs complete, then enable
+the API. During rollback, disable the API first, drain queued binding work with
+the worker still enabled, then disable the worker. Legacy user-scoped calendar
+jobs are intentionally ignored by the V2 worker; polling the explicit bindings
+replaces that import path.
+
 Do not adopt, relink, or write Google events for `legacy_unknown` appointments based on inventory output. Ambiguous historical links require manual review. Recovery uses the persisted sync state and conflict record: restore or choose a writable binding, retry a failed delivery, resolve an observed conflict with a current revision and ETag, or manually review deleted and ambiguous resources. Disabling the flag prevents new V2 command and worker behavior; it does not remove migrated data or undo a provider operation already completed.
 
 ## Verification boundary
