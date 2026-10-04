@@ -23,4 +23,4 @@ Preview calls a server endpoint that runs draft content through the real composi
 - The editor pins TipTap 3.31.x. The app's TipTap packages and the bubble/floating menu overrides in `apps/web/pnpm-workspace.yaml` must stay on the same minor so only one `@tiptap/core` is installed.
 - `@react-email/components` and the per-component packages are deprecated; import from `react-email` and `@react-email/editor`.
 - React Email output is a full document. Only the `<body>` fragment is stored, because the sanitizer strips `<title>` but keeps its text.
-- Version history payloads move to `schema_version` 2 with `body_design`. Restore accepts versions 1 and 2. A version 1 restore clears `body_design`.
+- Version history payloads gain an optional `body_design` key, present only when a template has a design. Payloads recorded earlier keep their exact shape, so the published-state integrity check still matches them, and restoring one clears `body_design`.

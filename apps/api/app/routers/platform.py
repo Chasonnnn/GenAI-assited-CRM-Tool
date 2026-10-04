@@ -9,7 +9,7 @@ import logging
 import mimetypes
 import os
 import uuid as uuid_lib
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import (
@@ -39,6 +39,7 @@ from app.core.deps import (
 from app.core.rate_limit import limiter
 from app.db.enums import Role
 from app.schemas.email import (
+    EmailBodyDesign,
     EmailTemplateTestSendResponse,
     PlatformEmailTemplateTestSendRequest,
     TemplateVariableRead,
@@ -191,6 +192,7 @@ class SystemEmailTemplateRead(BaseModel):
     subject: str
     from_email: str | None = None
     body: str
+    body_design: dict[str, Any] | None = None
     is_active: bool
     current_version: int
     updated_at: str | None
@@ -218,6 +220,7 @@ class CreateSystemEmailTemplateRequest(BaseModel):
     subject: str
     from_email: str | None = None
     body: str
+    body_design: EmailBodyDesign | None = None
     is_active: bool = True
 
     @field_validator("system_key")
@@ -281,6 +284,7 @@ class UpdateSystemEmailTemplateRequest(BaseModel):
     subject: str
     from_email: str | None = None
     body: str
+    body_design: EmailBodyDesign | None = None
     is_active: bool = True
     expected_version: int | None = None
 
@@ -1198,6 +1202,7 @@ def create_platform_system_email_template(
             name=body.name,
             subject=body.subject,
             body=body.body,
+            body_design=body.body_design,
             from_email=body.from_email,
             is_active=body.is_active,
         )
@@ -1221,6 +1226,7 @@ def create_platform_system_email_template(
         subject=template.subject,
         from_email=template.from_email,
         body=template.body,
+        body_design=template.body_design,
         is_active=template.is_active,
         current_version=template.current_version,
         updated_at=template.updated_at.isoformat() if template.updated_at else None,
@@ -1272,6 +1278,7 @@ def list_platform_system_email_templates(
             subject=template.subject,
             from_email=template.from_email,
             body=template.body,
+            body_design=template.body_design,
             is_active=template.is_active,
             current_version=template.current_version,
             updated_at=template.updated_at.isoformat() if template.updated_at else None,
@@ -1303,6 +1310,7 @@ def get_platform_system_email_template(
         subject=template.subject,
         from_email=template.from_email,
         body=template.body,
+        body_design=template.body_design,
         is_active=template.is_active,
         current_version=template.current_version,
         updated_at=template.updated_at.isoformat() if template.updated_at else None,
@@ -1333,6 +1341,7 @@ def update_platform_system_email_template(
         from app.services import email_service
 
         template.body = email_service.sanitize_template_html(body.body)
+        template.body_design = body.body_design
         template.is_active = body.is_active
         if "from_email" in body.model_fields_set:
             template.from_email = body.from_email
@@ -1356,6 +1365,7 @@ def update_platform_system_email_template(
         subject=template.subject,
         from_email=template.from_email,
         body=template.body,
+        body_design=template.body_design,
         is_active=template.is_active,
         current_version=template.current_version,
         updated_at=template.updated_at.isoformat() if template.updated_at else None,
@@ -1546,6 +1556,7 @@ def get_org_system_email_template(
         subject=template.subject,
         from_email=template.from_email,
         body=template.body,
+        body_design=template.body_design,
         is_active=template.is_active,
         current_version=template.current_version,
         updated_at=template.updated_at.isoformat() if template.updated_at else None,
@@ -1577,6 +1588,7 @@ def update_org_system_email_template(
         from app.services import email_service
 
         template.body = email_service.sanitize_template_html(body.body)
+        template.body_design = body.body_design
         template.is_active = body.is_active
         if "from_email" in body.model_fields_set:
             template.from_email = body.from_email
@@ -1600,6 +1612,7 @@ def update_org_system_email_template(
         subject=template.subject,
         from_email=template.from_email,
         body=template.body,
+        body_design=template.body_design,
         is_active=template.is_active,
         current_version=template.current_version,
         updated_at=template.updated_at.isoformat() if template.updated_at else None,
@@ -1731,6 +1744,7 @@ def _email_draft_from_model(template) -> PlatformEmailTemplateDraft:
         name=template.name,
         subject=template.subject,
         body=template.body,
+        body_design=template.body_design,
         from_email=template.from_email,
         category=template.category,
     )
@@ -1745,6 +1759,7 @@ def _email_published_from_model(template) -> PlatformEmailTemplateDraft | None:
         name=template.published_name or template.name,
         subject=template.published_subject,
         body=template.published_body,
+        body_design=template.published_body_design,
         from_email=template.published_from_email,
         category=template.published_category,
     )

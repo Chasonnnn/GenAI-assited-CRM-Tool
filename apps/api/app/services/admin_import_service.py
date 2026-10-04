@@ -18,6 +18,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.email_body_design import validate_body_design
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import OwnerType
 from app.db.models import (
@@ -507,6 +508,7 @@ def import_org_config_zip(
             subject=template_data.get("subject"),
             from_email=template_data.get("from_email"),
             body=template_data.get("body"),
+            body_design=validate_body_design(template_data.get("body_design")),
             is_active=template_data.get("is_active", True),
             is_system_template=template_data.get("is_system_template", False),
             system_key=template_data.get("system_key"),

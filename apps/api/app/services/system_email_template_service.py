@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.core.email_body_design import validate_body_design
 from app.db.models import EmailTemplate, PlatformSystemEmailTemplate
 
 ORG_INVITE_SYSTEM_KEY = "org_invite"
@@ -316,6 +317,7 @@ def create_platform_system_template(
     subject: str,
     body: str,
     from_email: str | None,
+    body_design: dict | None = None,
     is_active: bool,
 ) -> PlatformSystemEmailTemplate:
     """Create a custom platform system email template."""
@@ -331,6 +333,7 @@ def create_platform_system_template(
         name=name,
         subject=subject,
         body=email_service.sanitize_template_html(body),
+        body_design=validate_body_design(body_design),
         from_email=(from_email.strip() or None) if from_email else None,
         is_active=is_active,
         current_version=1,

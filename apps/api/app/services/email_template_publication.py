@@ -88,6 +88,7 @@ def publish_template_to_org(
         subject=source.subject,
         from_email=source.from_email,
         body=source.body,
+        body_design=source.body_design,
         scope="org",
         category=source.category,
         commit=False,

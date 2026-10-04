@@ -99,6 +99,7 @@ def _build_template_response(
             subject=template.subject,
             from_email=template.from_email,
             body=template.body,
+            body_design=template.body_design,
             is_active=template.is_active,
             scope=template.scope,
             owner_user_id=template.owner_user_id,
@@ -261,6 +262,7 @@ def create_template(
             subject=data.subject,
             from_email=data.from_email,
             body=data.body,
+            body_design=data.body_design,
             scope=data.scope,
         )
     except ValueError as exc:
@@ -407,6 +409,8 @@ def update_template(
         }
         if "from_email" in data.model_fields_set:
             kwargs["from_email"] = data.from_email
+        if "body_design" in data.model_fields_set:
+            kwargs["body_design"] = data.body_design
 
         updated = email_service.update_template(**kwargs)
     except version_service.VersionConflictError as e:
@@ -814,6 +818,9 @@ def copy_platform_email_template(
             name=data.name,
             subject=template.published_subject or template.subject,
             body=template.published_body or template.body,
+            body_design=(
+                template.published_body_design if template.published_body else template.body_design
+            ),
             from_email=template.published_from_email,
             scope="org",
         )
