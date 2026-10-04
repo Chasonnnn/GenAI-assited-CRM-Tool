@@ -3,6 +3,7 @@
 from fastapi import HTTPException
 from sqlalchemy import and_, or_, true
 
+from app.core.policies import POLICIES
 from app.db.models import FormSubmission
 from app.services import permission_policy_service, permission_service, record_scope_service
 
@@ -57,6 +58,20 @@ def check_submission(db, session, submission, *, write=False):
             get_record_with_access(
                 db, session, kind, getattr(submission, f"{kind}_id"), action="edit"
             )
+
+
+def require_routing_review(db, session, submission):
+    """Shared authorization for routing review endpoints and their task owners."""
+    if submission.organization_id != session.org_id:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    require_action(db, session, write=True)
+    check_submission(db, session, submission, write=True)
+    if submission.lead_kind in {"egg_donor", "sperm_donor"}:
+        permission = POLICIES["donors"].actions["edit"].value
+        if not permission_service.check_permission(
+            db, session.org_id, session.user_id, session.role.value, permission
+        ):
+            raise HTTPException(status_code=403, detail=f"Missing permission: {permission}")
 
 
 def check_intake_lead(db, session, lead, *, write=False):
