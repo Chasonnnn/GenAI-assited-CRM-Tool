@@ -35,13 +35,13 @@ export function useUpdateOrgSettings() {
 /** The sidebar reads the logo from /auth/me, so both logo mutations refresh it with the org settings. */
 function useOrganizationLogoMutation<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
     const queryClient = useQueryClient()
-    const { refetch } = useAuth()
+    const { refresh } = useAuth()
 
     return useMutation({
         mutationFn,
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: settingsKeys.organization() })
-            refetch()
+            void refresh()
         },
     })
 }

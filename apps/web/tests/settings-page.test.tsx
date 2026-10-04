@@ -27,12 +27,12 @@ let mockUser: Record<string, string> = {
     email: 'dana@example.com',
 }
 
-const mockRefetchUser = vi.fn()
+const mockRefreshUser = vi.fn()
 
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({
         user: mockUser,
-        refetch: mockRefetchUser,
+        refresh: mockRefreshUser,
     }),
 }))
 
@@ -281,7 +281,7 @@ describe('SettingsPage', () => {
         mockUpdateIntelligentSuggestionRule.mockResolvedValue({})
         mockDeleteIntelligentSuggestionRule.mockResolvedValue({})
         mockUpdateIntelligentSuggestionSettings.mockResolvedValue({})
-        mockRefetchUser.mockReset()
+        mockRefreshUser.mockReset().mockResolvedValue(undefined)
         mockUploadOrganizationLogo.mockReset()
         mockUploadOrganizationLogo.mockResolvedValue({ logo_url: 'https://cdn.example.test/new-logo.png' })
         mockDeleteOrganizationLogo.mockReset()
@@ -351,7 +351,7 @@ describe('SettingsPage', () => {
             expect(mockUploadOrganizationLogo).toHaveBeenCalledWith(file)
         })
         await waitFor(() => {
-            expect(mockRefetchUser).toHaveBeenCalledTimes(1)
+            expect(mockRefreshUser).toHaveBeenCalledTimes(1)
         })
         await waitFor(() => {
             expect(mockGetOrgSettings.mock.calls.length).toBeGreaterThan(orgSettingsReads)
@@ -369,7 +369,7 @@ describe('SettingsPage', () => {
         })
 
         expect(await screen.findByRole('alert')).toHaveTextContent('Logo must be square')
-        expect(mockRefetchUser).not.toHaveBeenCalled()
+        expect(mockRefreshUser).not.toHaveBeenCalled()
     })
 
     it('replaces or removes an uploaded sidebar logo after confirmation', async () => {
@@ -394,7 +394,7 @@ describe('SettingsPage', () => {
             expect(mockDeleteOrganizationLogo).toHaveBeenCalledTimes(1)
         })
         await waitFor(() => {
-            expect(mockRefetchUser).toHaveBeenCalledTimes(1)
+            expect(mockRefreshUser).toHaveBeenCalledTimes(1)
         })
         expect(mockToastSuccess).toHaveBeenCalledWith('Sidebar logo removed')
     })

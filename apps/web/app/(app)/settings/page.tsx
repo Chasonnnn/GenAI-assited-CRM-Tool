@@ -517,7 +517,7 @@ function validateProfileForm(values: ProfileFormState) {
 }
 
 function ProfileSection() {
-  const { user, refetch } = useAuth()
+  const { user, refresh } = useAuth()
   const uploadAvatarMutation = useUploadAvatar()
   const deleteAvatarMutation = useDeleteAvatar()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -529,8 +529,8 @@ function ProfileSection() {
   const userPhone = user?.phone || ""
   const userTitle = user?.title || ""
   const activeProfileKey = createProfileDraftKey(userId, userDisplayName, userPhone, userTitle)
-  // useAuth().refetch is not awaitable. The saved values stand in as the baseline until the refreshed
-  // user changes activeProfileKey, so the save bar does not reappear between save and refetch.
+  // The save does not await useAuth().refresh. The saved values stand in as the baseline until the refreshed
+  // user changes activeProfileKey, so the save bar does not reappear between save and refresh.
   const [savedProfile, setSavedProfile] = useState<{ profileKey: string; form: ProfileFormState } | null>(null)
   const profileBaseline = savedProfile?.profileKey === activeProfileKey
     ? savedProfile.form
@@ -584,7 +584,7 @@ function ProfileSection() {
     }
 
     uploadAvatarMutation.mutate(file, {
-      onSuccess: () => refetch(),
+      onSuccess: () => { void refresh() },
     })
   }
 
@@ -592,7 +592,7 @@ function ProfileSection() {
 
   const handleDeleteAvatar = async () => {
     await deleteAvatarMutation.mutateAsync()
-    void refetch()
+    void refresh()
   }
 
   const profileChangeCount = (["name", "title", "phone"] as const).filter(
@@ -626,7 +626,7 @@ function ProfileSection() {
       setProfileDraft({ profileKey: activeProfileKey, form: saved })
       profileValidation.reset()
       toast.success("Profile saved")
-      refetch()
+      void refresh()
     } catch (error) {
       const message = profileValidation.applyApiError(error, {
         fields: ["name", "phone", "title"],
@@ -1073,7 +1073,7 @@ function SocialLinksFields({
 
 /** Email Signature tab: branding fields and social links share one draft and one save bar. */
 function EmailSignatureSettings() {
-  const { user, refetch } = useAuth()
+  const { user, refresh } = useAuth()
   const { data: orgSig, isLoading: sigLoading } = useOrgSignature()
   const updateOrgSig = useUpdateOrgSignature()
   const uploadLogo = useUploadOrgLogo()
@@ -1228,7 +1228,7 @@ function EmailSignatureSettings() {
             ...(trimmedEmail ? { email: trimmedEmail } : {}),
           }),
         ])
-        refetch()
+        void refresh()
       }
 
       setRevealedLinkIds(new Set())
