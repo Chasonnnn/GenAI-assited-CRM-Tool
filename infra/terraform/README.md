@@ -93,13 +93,21 @@ Runtime activation belongs in the deployment's uncommitted `terraform.tfvars`:
 
 ```hcl
 scheduling_v2_enabled = false
+scheduling_v2_worker_enabled = false
 match_case_expansion_enabled = false
+match_case_expansion_worker_enabled = false
 workflow_maintenance_fallback_enabled = false
 workflow_approval_expiry_fallback_enabled = false
 ```
 
-Scheduling and match switches configure both API and worker. Terraform waits
-for the worker update before updating the API. Enable scheduling
+Scheduling and match API/worker switches are separate. Prepare scheduling with
+the [operator command](../../apps/api/docs/scheduling-v2.md#rollout-and-recovery)
+while both services remain off. Enable the worker in one apply, verify its ready
+revision, then enable the API in a second apply. Legacy user-scoped calendar sync
+jobs become no-ops in the enabled worker; prepared binding projections replace
+that import path. Roll back in reverse order: disable the API, retain the enabled
+worker until queued binding jobs drain, then disable the worker in another apply.
+Do not flip both switches off in one apply. Enable scheduling
 after selecting writable calendar bindings and synchronizing their busy data;
 historical ambiguous appointment links require separate review. Enable match
 expansion after its migrations and compatible API/worker images are deployed.

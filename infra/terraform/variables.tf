@@ -136,13 +136,33 @@ variable "workflow_sweep_fallback_enabled" {
 }
 
 variable "scheduling_v2_enabled" {
-  description = "Enable Scheduling V2 on API and worker after explicit calendar bindings and busy projections are ready."
+  description = "Enable Scheduling V2 API producers after the worker and explicit calendar bindings are ready."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !var.scheduling_v2_enabled || var.scheduling_v2_worker_enabled
+    error_message = "Enable the Scheduling V2 worker before the API."
+  }
+}
+
+variable "scheduling_v2_worker_enabled" {
+  description = "Enable Scheduling V2 consumers first; disable only after API rollback and queued binding jobs drain."
   type        = bool
   default     = false
 }
 
 variable "match_case_expansion_enabled" {
-  description = "Enable donor and repeat-case matching on compatible API and worker revisions after the expansion migrations."
+  description = "Enable donor and repeat-case matching API producers after migrations and worker activation."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !var.match_case_expansion_enabled || var.match_case_expansion_worker_enabled
+    error_message = "Enable the match expansion worker before the API."
+  }
+}
+
+variable "match_case_expansion_worker_enabled" {
+  description = "Enable match expansion consumers before the API; retain until expansion jobs drain during rollback."
   type        = bool
   default     = false
 }

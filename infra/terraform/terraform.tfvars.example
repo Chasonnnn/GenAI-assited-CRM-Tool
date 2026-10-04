@@ -40,7 +40,9 @@ enable_domain_mapping = true
 # worker_cpu_idle = false
 # messaging_delivery_dispatch_enabled = false
 # scheduling_v2_enabled = false
+# scheduling_v2_worker_enabled = false
 # match_case_expansion_enabled = false
+# match_case_expansion_worker_enabled = false
 # workflow_maintenance_fallback_enabled = false
 # workflow_approval_expiry_fallback_enabled = false
 

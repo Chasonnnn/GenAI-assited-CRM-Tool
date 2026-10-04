@@ -72,8 +72,8 @@ locals {
   })
 
   worker_env = merge(local.common_env, {
-    SCHEDULING_V2_ENABLED                     = tostring(var.scheduling_v2_enabled)
-    MATCH_CASE_EXPANSION_ENABLED              = tostring(var.match_case_expansion_enabled)
+    SCHEDULING_V2_ENABLED                     = tostring(var.scheduling_v2_worker_enabled)
+    MATCH_CASE_EXPANSION_ENABLED              = tostring(var.match_case_expansion_worker_enabled)
     GCP_SERVICE_NAME                          = var.worker_job_name
     WORKFLOW_SWEEP_FALLBACK_ENABLED           = tostring(var.workflow_sweep_fallback_enabled)
     WORKFLOW_MAINTENANCE_FALLBACK_ENABLED     = tostring(var.workflow_maintenance_fallback_enabled)
