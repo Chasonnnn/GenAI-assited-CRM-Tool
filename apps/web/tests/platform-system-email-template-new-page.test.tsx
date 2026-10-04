@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import * as React from "react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import PlatformSystemEmailTemplateNewPage from "../app/ops/templates/system/new/page"
 import { toast } from "@/components/ui/toast"
 import { ApiError } from "@/lib/api"
+import { emailDesignEditorMock } from "./fixtures/email-design-editor-mock"
 
 const mockPush = vi.fn()
-const richTextEditorSpy = vi.fn()
+const mockPreview = vi.fn()
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({
@@ -30,11 +32,10 @@ vi.mock("@/components/app-link", () => ({
     ),
 }))
 
-vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: function MockRichTextEditor(props: unknown) {
-        richTextEditorSpy(props)
-        return <div data-testid="rich-text-editor" />
-    },
+vi.mock("@/components/email/design/email-design-editor", () => import("./fixtures/email-design-editor-mock"))
+
+vi.mock("@/lib/api/platform", () => ({
+    previewPlatformSystemEmailTemplate: (...args: unknown[]) => mockPreview(...args),
 }))
 
 const mockCreate = vi.fn()
@@ -60,7 +61,8 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
     beforeEach(() => {
         mockPush.mockReset()
         mockCreate.mockReset()
-        richTextEditorSpy.mockClear()
+        emailDesignEditorMock.reset()
+        mockPreview.mockReset()
     })
 
     it("creates a system email template and navigates to the detail page", async () => {
@@ -87,8 +89,7 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
             target: { value: "Announcement for {{org_name}}" },
         })
 
-        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
-        fireEvent.change(screen.getByPlaceholderText("Paste or edit the HTML for this template..."), {
+        fireEvent.change(screen.getByLabelText("Email body"), {
             target: { value: "<p>Hello</p>" },
         })
 
@@ -100,20 +101,30 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
                     system_key: "custom_announcement",
                     name: "Custom Announcement",
                     subject: "Announcement for {{org_name}}",
+                    body: "<p>Hello</p>",
                 })
             )
         )
+        expect(mockCreate.mock.calls[0][0]).not.toHaveProperty("body_design")
         expect(mockPush).toHaveBeenCalledWith("/ops/templates/system/custom_announcement")
     })
 
-    it("enables emoji picker in visual editor mode", () => {
+    it("creates with the block design beside the compiled body", async () => {
+        const design = { type: "doc" as const, content: [{ type: "paragraph" }] }
+        emailDesignEditorMock.nextDesign = design
+        mockCreate.mockResolvedValueOnce({ system_key: "welcome" })
         render(<PlatformSystemEmailTemplateNewPage />)
-        expect(screen.getByTestId("rich-text-editor")).toBeInTheDocument()
 
-        const hasEmojiEnabled = richTextEditorSpy.mock.calls.some(
-            ([props]) => Boolean((props as { enableEmojiPicker?: boolean }).enableEmojiPicker)
+        fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Welcome" } })
+        fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "Hi" } })
+        fireEvent.change(screen.getByLabelText("Email body"), { target: { value: "<p>Designed</p>" } })
+        fireEvent.click(screen.getByRole("button", { name: "Create" }))
+
+        await waitFor(() =>
+            expect(mockCreate).toHaveBeenCalledWith(
+                expect.objectContaining({ body: "<p>Designed</p>", body_design: design }),
+            ),
         )
-        expect(hasEmojiEnabled).toBe(true)
     })
 
     it("derives the system key from the name until the key is edited manually", async () => {
@@ -131,19 +142,6 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
         expect(systemKeyInput).toHaveValue("manual_key")
     })
 
-    it("switches to HTML editing when visual content contains complex HTML", async () => {
-        render(<PlatformSystemEmailTemplateNewPage />)
-
-        const latestEditorProps = richTextEditorSpy.mock.calls.at(-1)?.[0] as {
-            onChange?: (html: string) => void
-        }
-        act(() => {
-            latestEditorProps.onChange?.("<table><tbody><tr><td>Hello</td></tr></tbody></table>")
-        })
-
-        expect(await screen.findByPlaceholderText("Paste or edit the HTML for this template...")).toBeInTheDocument()
-    })
-
     it("reenables creation after a create failure", async () => {
         mockCreate.mockRejectedValueOnce(new Error("System key already exists"))
 
@@ -158,8 +156,7 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
         fireEvent.change(screen.getByLabelText("Subject"), {
             target: { value: "Announcement for {{org_name}}" },
         })
-        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
-        fireEvent.change(screen.getByPlaceholderText("Paste or edit the HTML for this template..."), {
+        fireEvent.change(screen.getByLabelText("Email body"), {
             target: { value: "<p>Hello</p>" },
         })
 
@@ -170,22 +167,31 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
         expect(toast.error).toHaveBeenCalledWith("Couldn't create system email.")
     })
 
-    it("shows a preview placeholder until the body has content", async () => {
-        render(<PlatformSystemEmailTemplateNewPage />)
-
-        expect(screen.getByRole("heading", { name: "No content yet" })).toBeInTheDocument()
-
-        const latestEditorProps = richTextEditorSpy.mock.calls.at(-1)?.[0] as {
-            onChange?: (html: string) => void
-        }
-        act(() => {
-            latestEditorProps.onChange?.("<p>Hello preview</p>")
+    it("previews unsaved content through the system template endpoint", async () => {
+        mockPreview.mockResolvedValue({
+            subject: "Hi",
+            html: "<!doctype html><html><body><p>Hello preview</p></body></html>",
+            unresolved_variables: [],
         })
+        render(
+            <QueryClientProvider client={new QueryClient()}>
+                <PlatformSystemEmailTemplateNewPage />
+            </QueryClientProvider>,
+        )
+        fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "Hi" } })
+        fireEvent.change(screen.getByLabelText("Email body"), { target: { value: "<p>Hello preview</p>" } })
+
+        fireEvent.click(screen.getByRole("tab", { name: "Preview" }))
 
         await waitFor(() =>
-            expect(screen.queryByRole("heading", { name: "No content yet" })).not.toBeInTheDocument(),
+            expect(mockPreview).toHaveBeenCalledWith({
+                subject: "Hi",
+                body: "<p>Hello preview</p>",
+                variable_mode: "sample",
+                org_id: null,
+            }),
         )
-        expect(screen.getByText("Hello preview")).toBeInTheDocument()
+        expect(await screen.findByTitle("Desktop email preview")).toBeInTheDocument()
     })
 
     it("hides required errors on an untouched form and keeps Create enabled", () => {
@@ -220,7 +226,7 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
         expect(screen.getByText("Body is required.")).toBeInTheDocument()
         expect(subject).toHaveAttribute("aria-invalid", "true")
         expect(subject).toHaveAttribute("aria-describedby", "subject-error")
-        // The subject error sits directly under its input, not under Insert Variable.
+        // The subject error sits directly under its input.
         expect(subject.nextElementSibling).toHaveTextContent("Subject is required.")
         await waitFor(() => expect(screen.getByLabelText("System key")).toHaveFocus())
         expect(mockCreate).not.toHaveBeenCalled()
@@ -238,8 +244,7 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
         fireEvent.change(screen.getByLabelText("System key"), { target: { value: "org_invite" } })
         fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Invite" } })
         fireEvent.change(screen.getByLabelText("Subject"), { target: { value: "Hi" } })
-        fireEvent.click(screen.getByRole("button", { name: "HTML" }))
-        fireEvent.change(screen.getByPlaceholderText("Paste or edit the HTML for this template..."), {
+        fireEvent.change(screen.getByLabelText("Email body"), {
             target: { value: "<p>Hello</p>" },
         })
         fireEvent.click(screen.getByRole("button", { name: "Create" }))
