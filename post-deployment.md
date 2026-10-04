@@ -8,7 +8,7 @@
 
 ## Organization square logo
 
-- Apply `20261004_0900_organization_logo` before rolling out the API.
+- Apply `20261004_1100_organization_logo` before rolling out the API.
 - Roll out the worker with the API so `storage_delete` jobs accept organization logo keys.
 - Existing organizations keep `logo_url = NULL`; email signature logos are not copied or changed.
 - Verify upload, replacement, deletion, sidebar initials fallback, and journey export branding.
