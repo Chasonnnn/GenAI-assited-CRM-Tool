@@ -155,7 +155,7 @@ class PipelineStage(Base):
 
     # Soft-delete
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
-    deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     # Contact attempts UI gating
     is_intake_stage: Mapped[bool] = mapped_column(
@@ -166,10 +166,10 @@ class PipelineStage(Base):
     allowed_next_slugs: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
     # Relationships

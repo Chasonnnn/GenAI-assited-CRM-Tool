@@ -2,6 +2,86 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.79](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.78...surrogacy-crm-platform-v0.91.79) (2026-10-04)
+
+
+### Features
+
+* add dated medical records and import flat medical sections ([a42f8ca](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a42f8ca53e628d68279a0e74b363f5a3d6b4029a))
+* add medical record API client and query hooks ([bcdb20c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bcdb20c5e9c991a02113e0271cefb602ea6269da))
+* add medical record history endpoints for surrogates and donors ([9aa14f2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9aa14f20c469a17f2a1e107e1162a054978ea94f))
+* **api:** email an opt-in daily digest of open action items and new updates ([ce57c3b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ce57c3bb5ce6ba3e1f7f783e22ab6c8b88de8be7))
+* **api:** expose appointment completion and refuse outcomes before the start ([4449098](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/44490980c08772e753bb4077c147e07cef2223de))
+* **api:** fire appointment workflows for every scheduling change ([1cd2d90](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1cd2d90ca2f8d1cf3c9768da268841362908a3bf))
+* **api:** link notification and digest emails to the exact task, approval, or appointment ([969d0fd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/969d0fd991276636a368cb0e9ee50df40d387c93))
+* **api:** link public bookings to the record whose email carried the link ([cd949a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cd949a4787d58c037754cbb2055215c8390a33d9))
+* **api:** list the workflows that filter on an appointment type name ([5233f72](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5233f72fbac4582e880bc74020702b3cf104113f))
+* **api:** return the pending request id on status change notifications ([bd8a337](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bd8a337f6d2c8c7fa02dad5c76a786d56eb134c2))
+* **api:** route form submissions from per-form routing settings ([c8e6a8a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c8e6a8a451cffba56e4b6f4315157f2e6e16e528))
+* **api:** route legacy submissions when their paused workflow ends without approval ([24f7617](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/24f7617e8975588049ed5429b3f3ab3aeda7ca59))
+* **api:** run appointment workflows on the linked surrogate or donor ([3bbf0ac](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3bbf0ac04ed3199a556ccc098a502b12bd65d50a))
+* **api:** run workflows hours before an appointment starts or after it ends ([d1d874d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d1d874ddcf37e071779895456233eab2449efa67))
+* **api:** split notifications into action items and updates ([1f9681b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1f9681b94ce69cb4038838f23c2056884f90ea2e))
+* **api:** turn appointment client emails on or off and pick templates per type ([9cafe38](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9cafe38c3958482fa6a59d402247222c47d8cc39))
+* dated medical record history for surrogates and donors ([b1facc6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b1facc67bc3d7144fffe74eca62fefe6be5d4098))
+* notification side panel with action tiers, inline actions, and daily digest ([ccb9db1](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ccb9db14aa250f26343e62e1bb7cc0e5c50ab29b))
+* replace the medical card with dated record history ([5d97105](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5d97105a0d4d956712fb778091d0a15de252dfb3))
+* **web:** add the Daily Digest email toggle ([7a3c66a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7a3c66a28510a609ede0ec7d146d6897bab68d07))
+* **web:** approve, deny, claim, and complete from the notification panel ([f9cb1a4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/f9cb1a4690cee17d635868b7d5f085de291fec09))
+* **web:** configure appointment workflows by linked record and type ([6732287](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6732287c6ce49b3f6a54e0ab6a5251ef3b0004dd))
+* **web:** configure form routing in a Routing tab and review routing in Submissions ([d8d3636](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d8d36367cde3eabbf57a4fbffe90f546b8785fe8))
+* **web:** configure the before or after appointment trigger ([885414d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/885414d0906ea2a5ab35df3b08b3751a759972b3))
+* **web:** open a new workflow on an appointment trigger and type from a link ([a574c60](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a574c602692e1a017a0e047ddfbc4d659a121b09))
+* **web:** open notifications in a side panel with Action needed and Updates tabs ([da86df4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/da86df475c99033a53bf8ca6e683a2662b355a9b))
+* **web:** open the exact task, approval, or appointment from a notification ([a49813e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a49813edefdb019ec873f889fa19583727e2e7b4))
+* **web:** record Completed or No-show from the appointment dialog ([a153562](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a153562bd2891e60e0d8f58cb16f1297714dcef4))
+* **web:** send the booking link's record token with public bookings ([375c0ac](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/375c0acede22a9984b6185976d8dbe928c427476))
+* **web:** set client messages and see workflows in the appointment type dialog ([e42b609](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e42b609abb918bbcdf7d687d2dd0896cbbde764c))
+* workflow editor, workflow email, and opt-in notification email ([bd938a2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bd938a2df5eaf68a6d102b573097d514ec4e9b01))
+* workflow options refresh, scheduling integration, and form routing in Forms ([6fd23c6](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6fd23c6647fd53f0c93c0b73da5d960d73e8d396))
+
+
+### Bug Fixes
+
+* accept plural inch abbreviations in height imports ([acb7658](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/acb765821486a0b45b26eef5af953bbf0e36d0f6))
+* allow corrections to imported medical records without a name ([d6a2e89](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d6a2e89e3aa44534bfb8a511f9742863f3fce5b4))
+* **api:** assign routing review tasks only to members who can review the submission ([32f1b27](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/32f1b276eb86db6983fab318a6f32553c6bf35d3))
+* **api:** close a resumed execution when routing fails after its actions commit ([908581b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/908581b0c77d303636f8f70fe45c13742fb18c81))
+* **api:** keep batch cancellations atomic when legacy routing fails ([1dfebdd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1dfebdd951a6f5b358ae98ad90d0d20d46b84d43))
+* **api:** keep edited routing workflows visible, bound the repair window, and close retired resumes ([e95c808](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e95c808ab8dff56f75274dab6de8688e15e40d8f))
+* **api:** keep routing migration history-safe and conservative, and fix review task gaps ([28f2f13](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/28f2f13e60bc5c908218be244afb9d00b0bec657))
+* **api:** keep the ORM model import out of the notifications router ([e0ea0d4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e0ea0d4b8a9518b15c4a88899a24d6f68ca28034))
+* **api:** order the form routing migration after appointment type client messages ([0b7e8cc](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0b7e8cc5b61fb3bc86abe576622f2c782f59d7cd))
+* **api:** order the timestamp migration after the medical records migration ([eb0721f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/eb0721fd49e1707a67eb5613b38a680940ad64a6))
+* **api:** repair only seeded system workflows that still match their original configuration ([bed06af](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/bed06afcec6289a8d56dde1d7ec7cd44a219868e))
+* **api:** repair system workflows already seeded with dead configurations ([32a817d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/32a817d88a9c1bf6e65320c6ba396e3033547e8a))
+* **api:** route submissions after a resume skips retired routing actions ([6c2cd96](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6c2cd963e7e2ba332eff53b06d8d2d62fca0af7e))
+* **api:** seed only system workflows that pass workflow validation ([cb9c50d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/cb9c50d113e6df4c16aed91d08d714b0759660a9))
+* **api:** send each workflow notification once across manual retries ([44e7826](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/44e78268f694b78ad37cfefcd6a2196988af52b4))
+* **api:** set routing review task due times in whole minutes ([d6be01a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d6be01a5e2d3093d7f97bbcc938a242b43a17f95))
+* **api:** store form, intake, and pipeline stage timestamps with their time zone ([e1cbaa2](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e1cbaa24a2e31a43bb92782d1d057bd4823a5ab9))
+* follow-ups to form routing and scheduling (review findings, timestamps, labels) ([6bce118](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6bce1184112f7ba6ae53348c15f97c6566e46253))
+* keep medical record routes within router boundaries and update OpenAPI snapshot ([e70662c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e70662c0e133f8df6fe63ce273684a2189265c14))
+* keep retired flat medical columns out of the Alembic model check until they are dropped ([e1ab97d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e1ab97d27ffef56ce1ca031372d58228c8b6c123))
+* normalize fractional heights without converting twice ([c2e82ad](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c2e82adee2b424661469e17d809f9c2cb3f41d4d))
+* order the medical records migration after the notification digest migration ([7ef8dbd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7ef8dbd1328729a834249ff3ef5cf8937c186a4f))
+* **web:** build new workflow presets without client-only values in the server page ([3f76faa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3f76faa6305162e1ea64c76327193c049f8003fc))
+* **web:** give the notification panel full width on phones and a light backdrop ([86a4f2b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/86a4f2b05c9c5ff7b430b37f8e33bc3da02e6c40))
+* **web:** label the toast close button Dismiss ([e8f0192](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/e8f0192818c63f78abe63731e083f1ff49eae995))
+* **web:** make routing screens usable on phones and link review tasks to submissions ([12ce368](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/12ce3685795e5314555c71d4d4558fd349f93dd9))
+* **web:** show choice answers by their option labels on the review step and in submissions ([8e2faaa](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8e2faaa64b235574665924288b9eec984593dab4))
+* **web:** show date-only values as their calendar day and the due time in the read-only task view ([ad2993a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ad2993adab62ae8595be946dd113293cfc4c8956))
+* **web:** show the linked record on appointment workflow steps and fit the reminder timing ([88b88fd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/88b88fd7a41254b63a42a8e06983cf9b19429859))
+* **web:** show the trigger's record type on new workflows and fit the editor header on phones ([5279a21](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/5279a21b0aef4f644600536cb1f0eab4b92e8fb2))
+* wrap long medical record values and keep section actions on one row ([6814d0b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6814d0b6bad8f7a7b884223431dc4d32146db0af))
+
+
+### Maintenance
+
+* merge fix/log-client-error-codes for opt-in notification email ([1ae43c4](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/1ae43c4a585bfee496b02776b66a61f9eb673ac4))
+* merge main into fix/log-client-error-codes ([3d9d7bf](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/3d9d7bffa04898aec8898fd8f96b44c889b30e31))
+* merge main into refactor/module-owned-automation ([304da53](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/304da538ad319e848d156c695e2aed4fc94b6202))
+
 ## [0.91.78](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.77...surrogacy-crm-platform-v0.91.78) (2026-10-03)
 
 

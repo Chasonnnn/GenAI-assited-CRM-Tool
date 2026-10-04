@@ -40,6 +40,9 @@ const NARROW_CANVAS_QUERY = "(max-width: 1279px)"
 const PALETTE_INSET = "17rem"
 const INSPECTOR_INSET = "25rem"
 
+// Phones give each save button an equal share of the actions row.
+const SAVE_BUTTON_CLASS = "flex-1 sm:flex-none"
+
 const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
 
 const FLOATING_PANEL_CLASS =
@@ -131,7 +134,7 @@ function WorkflowEditorToolbar({
                     {statusLabel}
                 </Badge>
             </nav>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
                 <IconAction
                     label="Undo"
                     shortcut={`${modifier}+Z`}
@@ -150,6 +153,7 @@ function WorkflowEditorToolbar({
                 <WorkflowTestRunButton testRun={testRun} disabledReason={workflowValidationError} />
                 {isEditing ? (
                     <ReasonButton
+                        className={SAVE_BUTTON_CLASS}
                         reason={workflowValidationError}
                         onClick={() => handlers.saveWorkflow({ isEnabled: true })}
                         disabled={saveDisabled}
@@ -160,6 +164,7 @@ function WorkflowEditorToolbar({
                 ) : (
                     <>
                         <ReasonButton
+                            className={SAVE_BUTTON_CLASS}
                             reason={workflowValidationError}
                             variant="outline"
                             onClick={() => handlers.saveWorkflow({ isEnabled: false })}
@@ -169,6 +174,7 @@ function WorkflowEditorToolbar({
                             Save draft
                         </ReasonButton>
                         <ReasonButton
+                            className={SAVE_BUTTON_CLASS}
                             reason={workflowValidationError}
                             onClick={() => handlers.saveWorkflow({ isEnabled: true })}
                             disabled={saveDisabled}
