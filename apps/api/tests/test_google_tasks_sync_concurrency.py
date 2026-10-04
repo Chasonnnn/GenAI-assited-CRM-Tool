@@ -8,8 +8,9 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import NullPool
 
 from app.services import google_tasks_sync_service as service
 
@@ -63,7 +64,9 @@ def sync_sessions(db_engine):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("same_user", [True, False])
-async def test_overlapping_sync_keeps_event_loop_responsive(sync_sessions, monkeypatch, same_user):
+async def test_overlapping_sync_keeps_event_loop_responsive(
+    sync_sessions, db_engine, monkeypatch, same_user
+):
     open_session, user_id, org_id = sync_sessions
     second_user_id = user_id if same_user else uuid4()
     if not same_user:
@@ -81,20 +84,53 @@ async def test_overlapping_sync_keeps_event_loop_responsive(sync_sessions, monke
             )
             db.commit()
     entered = threading.Event()
+    second_waiting = threading.Event()
+    loop_ran_during_wait = threading.Event()
     calls = []
-    heartbeat_gaps = []
     main_thread = threading.get_ident()
+    # Room for slow runners: the lock holder waits on events below, not on fixed sleeps.
+    monkeypatch.setattr(service, "GOOGLE_TASKS_LOCK_TIMEOUT_MS", 10_000)
     monkeypatch.setattr(
         service.oauth_service,
         "get_user_integration",
         lambda *_args: SimpleNamespace(granted_scopes=None),
     )
 
+    async def wait_for(event, timeout):
+        deadline = time.monotonic() + timeout
+        while not event.is_set() and time.monotonic() < deadline:
+            await asyncio.sleep(0.01)
+        return event.is_set()
+
+    # Both syncs use the test engine's two pooled connections; the probe needs its own.
+    probe_engine = create_engine(db_engine.url, poolclass=NullPool)
+
+    def second_sync_blocked_on_lock():
+        with probe_engine.connect() as probe:
+            return probe.execute(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity "
+                    "WHERE datname = current_database() AND wait_event_type = 'Lock' "
+                    "AND cardinality(pg_blocking_pids(pid)) > 0 "
+                    "AND query ILIKE '%memberships%')"
+                )
+            ).scalar_one()
+
     async def token(sync_db, *_args):
         calls.append(threading.get_ident())
         sync_db.commit()  # A token refresh must not release the authorization lock.
         entered.set()
-        await asyncio.sleep(0.2)
+        if not same_user:
+            await asyncio.sleep(0.2)
+            return None
+        if len(calls) == 1:
+            # Hold the membership lock until the second sync waits on it, then until the
+            # shared loop has run during that wait. A blocked loop never acknowledges.
+            deadline = time.monotonic() + 5
+            while not second_sync_blocked_on_lock() and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            second_waiting.set()
+            await wait_for(loop_ran_during_wait, 5)
         return None
 
     monkeypatch.setattr(service.oauth_service, "get_access_token_async", token)
@@ -107,25 +143,28 @@ async def test_overlapping_sync_keeps_event_loop_responsive(sync_sessions, monke
             db.commit()
             return result
 
-    async def heartbeat():
-        while True:
-            start = time.monotonic()
-            await asyncio.sleep(0.01)
-            heartbeat_gaps.append(time.monotonic() - start)
+    async def acknowledge_loop_during_wait():
+        if await wait_for(second_waiting, 10):
+            loop_ran_during_wait.set()
 
-    beat = asyncio.create_task(heartbeat())
     first = asyncio.create_task(sync(user_id))
+    acknowledge = asyncio.create_task(acknowledge_loop_during_wait()) if same_user else None
     try:
         while not entered.is_set() and not first.done():
             await asyncio.sleep(0.005)
         results = await asyncio.gather(first, sync(second_user_id))
         assert results == [0, 0]
         assert len(calls) == 2
-        assert max(heartbeat_gaps) < 0.5
         assert all(thread_id != main_thread for thread_id in calls)
+        if same_user:
+            assert second_waiting.is_set()
+            assert loop_ran_during_wait.is_set()
     finally:
-        beat.cancel()
-        await asyncio.gather(beat, first, return_exceptions=True)
+        pending = [task for task in (first, acknowledge) if task is not None]
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        probe_engine.dispose()
 
 
 @pytest.mark.asyncio
