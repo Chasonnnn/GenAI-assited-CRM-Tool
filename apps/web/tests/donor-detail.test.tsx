@@ -112,6 +112,14 @@ vi.mock("@/lib/hooks/use-donors", () => ({
     useDeleteDonorNote: () => ({ mutateAsync: mockDeleteDonorNote, isPending: false }),
 }))
 
+vi.mock("@/lib/hooks/use-medical-records", () => ({
+    useMedicalRecords: () => ({ data: { today: "2026-10-03", records: [] }, isLoading: false, isError: false }),
+    useCreateMedicalRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCorrectMedicalRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useArchiveMedicalRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useRestoreMedicalRecordSection: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
+
 vi.mock("@/lib/hooks/use-forms", async (importOriginal) => ({
     ...await importOriginal<typeof import("@/lib/hooks/use-forms")>(),
     useDonorSubmissions: (donorId: string | null) => mockUseDonorSubmissions(donorId),
