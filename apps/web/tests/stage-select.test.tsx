@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 
 import { StageOptionLabel, StageSelect, groupStageOptions } from "@/components/stage-select"
+import { stageDisplayColor } from "@/lib/stage-colors"
 import {
     getMatchStatusFilterLabel,
     getStageOptionLabel,
@@ -145,7 +146,7 @@ describe("StageSelect", () => {
         expect(onChange).toHaveBeenCalledWith("s-matched")
         await waitFor(() => expect(trigger).toHaveTextContent("Matched"))
         const dot = trigger.querySelector('[data-slot="stage-dot"]') as HTMLElement
-        expect(dot).toHaveStyle({ backgroundColor: "#6366F1" })
+        expect(dot).toHaveStyle({ backgroundColor: stageDisplayColor("#6366F1") })
         expect(dot).toHaveAttribute("aria-hidden", "true")
     })
 

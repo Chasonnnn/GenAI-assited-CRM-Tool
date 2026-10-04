@@ -23,7 +23,7 @@ from app.db.models import (
     Surrogate,
     SurrogateStatusHistory,
 )
-from app.services import attachment_service, pipeline_semantics_service
+from app.services import attachment_service, media_service, pipeline_semantics_service
 
 # Journey version for audit trails and export stability
 JOURNEY_VERSION = 1
@@ -377,7 +377,9 @@ def get_journey(
     # Get organization info
     org = surrogate.organization
     org_name = org.name if org else "Unknown Organization"
-    org_logo_url = org.logo_url if org and hasattr(org, "logo_url") else None
+    org_logo_url = media_service.get_signed_media_url(
+        (org.logo_url or org.signature_logo_url) if org else None
+    )
 
     # Get pipeline stages for order lookup (cached per request)
     pipeline_id = surrogate.stage.pipeline_id if surrogate.stage else None

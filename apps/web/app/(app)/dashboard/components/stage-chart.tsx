@@ -21,6 +21,7 @@ import { useSurrogateStats } from "@/lib/hooks/use-surrogates"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import { useDashboardFilters } from "../context/dashboard-filters"
 import { ApiError } from "@/lib/api"
+import { stageDisplayColor } from "@/lib/stage-colors"
 import { buildStageChartData, type StageChartBuildResult } from "./stage-chart-utils"
 
 type ViewMode = "count" | "percent"
@@ -238,7 +239,7 @@ export function StageChart() {
 
     // Build stage color map from pipeline (NOT from API)
     const stageColorMap = pipeline?.stages
-        ? new Map(pipeline.stages.map((s) => [s.id, s.color]))
+        ? new Map(pipeline.stages.map((s) => [s.id, stageDisplayColor(s.color)]))
         : new Map<string, string>()
 
     // Transform and sort data by order

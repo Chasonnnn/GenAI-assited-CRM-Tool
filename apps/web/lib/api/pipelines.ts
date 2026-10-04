@@ -244,10 +244,6 @@ interface PipelineVersion {
     created_at: string;
 }
 
-interface PipelineVersionsResponse {
-    versions: PipelineVersion[];
-}
-
 // ============================================================================
 // Pipelines API
 // ============================================================================
@@ -392,10 +388,10 @@ export async function getPipelineVersions(
     id: string,
     entityType?: PipelineEntityType,
 ): Promise<PipelineVersion[]> {
-    const response = await api.get<PipelineVersionsResponse>(
+    const versions = await api.get<PipelineVersion[]>(
         withOptionalEntityType(`/settings/pipelines/${id}/versions`, entityType),
     );
-    return response?.versions ?? [];
+    return versions ?? [];
 }
 
 export async function rollbackPipeline(

@@ -8,6 +8,7 @@ import { usePathname, useSearchParams } from "next/navigation"
 import { useSearchHotkey, SearchCommandDialog } from "@/components/search-command"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { OrgLogoTile } from "@/components/org-logo-tile"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -282,6 +283,7 @@ type SidebarSubItem = { title: string; url: string; tab?: string | null }
 type SidebarUser = {
     org_display_name?: string | null
     org_name?: string | null
+    org_logo_url?: string | null
     display_name?: string | null
     email?: string | null
     role?: string | null
@@ -326,21 +328,20 @@ function AppSidebarContent({
     dispatch,
 }: AppSidebarContentProps) {
     const { collapsed, reportsVisible, sections } = viewState
+    const orgName = user?.org_display_name || user?.org_name || ""
 
     return (
         <div className="flex h-full flex-col">
             <div className="p-2">
                 <div className={cn("flex items-center gap-2 rounded-lg p-2", collapsed && "justify-center")}
                 >
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                        <Users className="size-4" />
-                    </div>
-                    {!collapsed && (
+                    <OrgLogoTile name={orgName} logoUrl={user?.org_logo_url} />
+                    {collapsed ? (
+                        <span className="sr-only">{orgName || "Surrogacy Force"}</span>
+                    ) : (
                         <div className="grid flex-1 text-left text-sm leading-tight">
-                            <span className="truncate font-semibold">Surrogacy Force</span>
-                            <span className="truncate text-xs text-muted-foreground">
-                                {user?.org_display_name || user?.org_name || "Loading..."}
-                            </span>
+                            <span className="truncate font-semibold">{orgName || "Loading..."}</span>
+                            <span className="truncate text-xs text-muted-foreground">Surrogacy Force</span>
                         </div>
                     )}
                 </div>

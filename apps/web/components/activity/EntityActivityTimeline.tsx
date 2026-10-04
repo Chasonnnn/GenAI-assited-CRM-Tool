@@ -29,6 +29,7 @@ import { getActivityOutcomePresentation, type ActivityOutcomeKind } from "@/comp
 import type { TaskListItem } from "@/lib/types/task"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { stageDisplayColor } from "@/lib/stage-colors"
 
 // ============================================================================
 // Constants
@@ -581,7 +582,7 @@ function buildTimelineData(
         return {
             id: stage.id,
             label: stage.label,
-            color: stage.color || "#6b7280", // Fallback to gray if no color
+            color: stageDisplayColor(stage.color || "#6b7280"), // Fallback to gray if no color
             order: stage.order,
             date: entryAt ? formatDistanceToNow(new Date(entryAt), { addSuffix: true }) : null,
             rawDate: entryAt,

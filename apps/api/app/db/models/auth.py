@@ -74,6 +74,9 @@ class Organization(Base):
         default=1, server_default=text("1"), nullable=False
     )
 
+    # Square app branding, independent of the email signature logo.
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     # Email signature branding (org-level, admin-controlled)
     signature_template: Mapped[str | None] = mapped_column(
         String(50),

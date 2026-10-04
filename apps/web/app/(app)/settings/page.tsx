@@ -60,6 +60,7 @@ import { toast } from "@/components/ui/toast"
 import { getOrgSignaturePreview } from "@/lib/api/signature"
 import { SafeHtmlContent } from "@/components/safe-html-content"
 import { IntelligentSuggestionsSection } from "./intelligent-suggestions-section"
+import { SidebarLogoField } from "./sidebar-logo-field"
 
 const ROLE_LABELS: Record<string, string> = {
   intake_specialist: "Intake Specialist",
@@ -270,13 +271,13 @@ function OrganizationLogoField({
 }) {
   return (
     <div className="space-y-3">
-      <Label>Organization Logo</Label>
+      <Label>Signature logo</Label>
       <div className="flex items-center gap-4">
         {logoUrl ? (
           <div className="group relative">
             <NextImage
               src={logoUrl}
-              alt="Organization Logo"
+              alt="Signature logo"
               width={200}
               height={80}
               unoptimized
@@ -288,12 +289,12 @@ function OrganizationLogoField({
                   type="button"
                   disabled={deletePending}
                   className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 dark:bg-destructive/60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                  aria-label="Remove organization logo"
+                  aria-label="Remove signature logo"
                 >
                   <TrashIcon className="size-3" aria-hidden="true" />
                 </Button>
               }
-              title="Remove the organization logo?"
+              title="Remove the signature logo?"
               description="Email signatures show no logo until a new one is uploaded."
               confirmLabel="Remove logo"
               errorFallback="Couldn't remove the logo. Try again."
@@ -313,7 +314,7 @@ function OrganizationLogoField({
             ref={fileInputRef}
             onChange={onUpload}
             accept="image/png,image/jpeg"
-            aria-label="Organization logo upload"
+            aria-label="Signature logo upload"
             className="hidden"
           />
           <Button
@@ -516,7 +517,7 @@ function validateProfileForm(values: ProfileFormState) {
 }
 
 function ProfileSection() {
-  const { user, refetch } = useAuth()
+  const { user, refresh } = useAuth()
   const uploadAvatarMutation = useUploadAvatar()
   const deleteAvatarMutation = useDeleteAvatar()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -528,8 +529,8 @@ function ProfileSection() {
   const userPhone = user?.phone || ""
   const userTitle = user?.title || ""
   const activeProfileKey = createProfileDraftKey(userId, userDisplayName, userPhone, userTitle)
-  // useAuth().refetch is not awaitable. The saved values stand in as the baseline until the refreshed
-  // user changes activeProfileKey, so the save bar does not reappear between save and refetch.
+  // The save does not await useAuth().refresh. The saved values stand in as the baseline until the refreshed
+  // user changes activeProfileKey, so the save bar does not reappear between save and refresh.
   const [savedProfile, setSavedProfile] = useState<{ profileKey: string; form: ProfileFormState } | null>(null)
   const profileBaseline = savedProfile?.profileKey === activeProfileKey
     ? savedProfile.form
@@ -583,7 +584,7 @@ function ProfileSection() {
     }
 
     uploadAvatarMutation.mutate(file, {
-      onSuccess: () => refetch(),
+      onSuccess: () => { void refresh() },
     })
   }
 
@@ -591,7 +592,7 @@ function ProfileSection() {
 
   const handleDeleteAvatar = async () => {
     await deleteAvatarMutation.mutateAsync()
-    void refetch()
+    void refresh()
   }
 
   const profileChangeCount = (["name", "title", "phone"] as const).filter(
@@ -625,7 +626,7 @@ function ProfileSection() {
       setProfileDraft({ profileKey: activeProfileKey, form: saved })
       profileValidation.reset()
       toast.success("Profile saved")
-      refetch()
+      void refresh()
     } catch (error) {
       const message = profileValidation.applyApiError(error, {
         fields: ["name", "phone", "title"],
@@ -1072,7 +1073,7 @@ function SocialLinksFields({
 
 /** Email Signature tab: branding fields and social links share one draft and one save bar. */
 function EmailSignatureSettings() {
-  const { user, refetch } = useAuth()
+  const { user, refresh } = useAuth()
   const { data: orgSig, isLoading: sigLoading } = useOrgSignature()
   const updateOrgSig = useUpdateOrgSignature()
   const uploadLogo = useUploadOrgLogo()
@@ -1227,7 +1228,7 @@ function EmailSignatureSettings() {
             ...(trimmedEmail ? { email: trimmedEmail } : {}),
           }),
         ])
-        refetch()
+        void refresh()
       }
 
       setRevealedLinkIds(new Set())
@@ -1328,6 +1329,11 @@ function EmailSignatureSettings() {
         templates={templates}
         selectedTemplate={brandingForm.template}
         onSelect={(templateId) => updateBrandingForm("template", templateId)}
+      />
+
+      <SidebarLogoField
+        orgName={user?.org_display_name || user?.org_name || ""}
+        logoUrl={(orgSettings ? orgSettings.logo_url : user?.org_logo_url) ?? null}
       />
 
       <OrganizationLogoField
