@@ -172,6 +172,27 @@ describe("FormsListPage delete", () => {
         expect(screen.queryByText(/Updated -/i)).not.toBeInTheDocument()
     })
 
+    it("shows a form saved within the current minute as just updated", () => {
+        vi.useFakeTimers()
+        vi.setSystemTime(new Date("2026-10-04T01:56:50Z"))
+
+        mockForms = [
+            {
+                id: "form-1",
+                name: "Test Form",
+                status: "draft",
+                created_at: "2026-10-04T01:56:40Z",
+                submission_count: 0,
+                updated_at: "2026-10-04T01:56:45Z",
+            },
+        ]
+
+        render(<FormsListPage />)
+
+        expect(screen.getByText("Updated just now")).toBeInTheDocument()
+        expect(screen.queryByText(/^Saved /)).not.toBeInTheDocument()
+    })
+
     it("creates and labels an egg donor form", async () => {
         mockForms = [
             {

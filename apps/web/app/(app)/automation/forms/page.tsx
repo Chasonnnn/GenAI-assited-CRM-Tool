@@ -114,7 +114,9 @@ function formatRelativeTime(dateString: string, nowTimestamp: number, timeZone: 
         return "Updated recently"
     }
 
-    if (date.getTime() > nowTimestamp) {
+    // nowTimestamp is floored to the minute, so a save in the current minute is up to a minute ahead of it.
+    const diffMs = nowTimestamp - date.getTime()
+    if (diffMs < -60000) {
         return `Saved ${date.toLocaleTimeString("en-US", {
             hour: "numeric",
             minute: "2-digit",
@@ -122,11 +124,11 @@ function formatRelativeTime(dateString: string, nowTimestamp: number, timeZone: 
         })}`
     }
 
-    const diffMs = nowTimestamp - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
+    const diffMins = Math.floor(Math.max(diffMs, 0) / 60000)
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
 
+    if (diffMins < 1) return "Updated just now"
     if (diffMins < 60) return `Updated ${diffMins}m ago`
     if (diffHours < 24) return `Updated ${diffHours}h ago`
     if (diffDays === 1) return "Updated Yesterday"
