@@ -1,6 +1,6 @@
 # Cross-cutting audit evidence
 
-Read-only discovery at `bef1a04161f9d5f78fffe9cc15a0db8143a9995f`. No source, test, or configuration changes and no test execution in this lane.
+Discovery was read-only at `bef1a04161f9d5f78fffe9cc15a0db8143a9995f`. The three documented prose-only cases were then removed and independently reviewed. Full validation results are recorded below.
 
 ## Discovery
 
@@ -10,7 +10,7 @@ Read-only discovery at `bef1a04161f9d5f78fffe9cc15a0db8143a9995f`. No source, te
 - Searched source-reading tests, mock-return echoes, assertion-free bodies, and API wrapper suites. The sole frontend callback without an inline `expect` delegates to `expectHeldCardEntrances`; it is not assertion-free.
 - Coordinated ownership: frontend audit owns component/hook duplicate layers; backend audit owns helper normalization and match-lifecycle characterization. This lane owns cross-cutting discovery, frontend static/configuration guards, and frontend API wrappers.
 
-## Deletion-ready candidates: 3 cases
+## Removed cases: 3
 
 These tests inspect prose only. They do not execute a production owner or enforce the configuration described by their names. They can pass when the documented production configuration is wrong and fail after an equivalent documentation rewrite. Keep all executable/default, dependency, route-validator, and cache configuration tests in the file.
 

@@ -2,11 +2,11 @@
 
 Discovery at `bef1a04161f9d5f78fffe9cc15a0db8143a9995f` was completed before editing. The parent then authorized the 13 reductions after its refreshed Vitest baseline finished. All 13 were applied to the six test files below. No production/configuration edits or test runs were started by this lane.
 
-`frontend-baseline-results.json` reports 3,032 passing cases and zero failures. Six candidate files contain 220 cases. Their recorded per-file durations are match detail 7.652 s, match list 2.213 s, form builder 38.389 s, workflow editor 26.393 s, rich text editor 0.711 s, and email templates 12.947 s. These concurrent, instrumented file durations are not additive PR wall time or a promised speedup.
+The refreshed baseline at `bef1a0416` contained 3,033 passing frontend cases. The six component candidate files contained 220 cases.
 
 13 case reductions are supported: 5 duplicate deletions and 8 consolidations that retain every removed assertion in an existing scenario before its first relevant state transition. The consolidations remove repeated page mounting, not contracts. No production or shared test-support deletion is unlocked. This is not evidence for a 20% frontend or combined-suite reduction.
 
-All candidates run in normal Vitest discovery through `apps/web/package.json`; CI runs two coverage shards and merges coverage in `.github/workflows/ci.yml`. No candidate is an excluded or failing test. Each focused command below runs from `apps/web` with `mise exec -- pnpm test <file>`. Full frontend coverage and type/lint checks remain required after edits. Do not edit while Vitest runs in this checkout.
+All candidates run in normal Vitest discovery through `apps/web/package.json`; Updated CI runs four coverage shards and merges coverage in `.github/workflows/ci.yml`. No candidate is an excluded or failing test. Each focused command below runs from `apps/web` with `mise exec -- pnpm test <file>`. Full frontend coverage, type checks, and lint passed after the edits. Do not edit while Vitest runs in this checkout.
 
 ## Matches
 

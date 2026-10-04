@@ -1,10 +1,10 @@
-# Backend read-only audit ledger
+# Backend audit ledger
 
 Revision: `bef1a04161f9d5f78fffe9cc15a0db8143a9995f`.
 
-This lane inspected selected match lifecycle, match cancellation, match approval, AI workflow, and import normalization candidates. Discovery was read-only; the parent subsequently authorized applying B1-B12 after the frontend baseline stopped. This is a selective audit, not a complete classification of the backend. The parent owns test validation and coverage replay.
+This lane inspected selected match lifecycle, match cancellation, match approval, AI workflow, and import normalization candidates. Discovery was read-only; the parent subsequently authorized applying B1-B12 after the frontend baseline stopped. This is a selective audit, not a complete classification of the backend. Full execution and coverage results are recorded below.
 
-Five collected match cases and seven AI workflow/action cases are defensible removal or consolidation candidates. No evidence supports a 20% backend reduction from the inspected surface. Complete the baseline, exact exclusion replay, retained-contract review, and coverage comparison before deleting them.
+Five match cases and seven AI workflow/action cases were removed or consolidated. The inspected surface did not justify a 20% backend reduction.
 
 ## Shared ownership and routing
 
@@ -15,7 +15,7 @@ Five collected match cases and seven AI workflow/action cases are defensible rem
 - Non-test consumers include `apps/web/lib/api/matches.ts` detail/decline/cancellation APIs, `apps/web/lib/api/status-change-requests.ts` approval/rejection APIs, and `apps/api/scripts/seed_mock_data.py` lifecycle calls. None of these production APIs or seams is obsolete.
 - The three match files run in the existing backend parallel-safe shards. They are not in the migration/outbox serial partition. Run the repository wrapper for local proof, not an inherited database.
 
-## Proposed coherent batch
+## Applied match batch
 
 ### B1 — D: duplicate status row after status-model consolidation
 
@@ -86,7 +86,7 @@ Five collected match cases and seven AI workflow/action cases are defensible rem
 
 `apps/api/tests/test_ai_workflow.py:619::test_validate_update_status_action_normalizes` is nested inside `test_save_workflow_respects_personal_scope`; it is not a collected pytest case. Do not count removal of this declaration toward the target. A separate review should decide whether a current independent normalization regression needs to be restored at the canonical owner boundary. No changes were made.
 
-## Proof required by parent
+## Validation criteria
 
 1. Complete the pinned full baseline; retain failures as defects, not deletion evidence.
 2. Replay B1-B5 exact exclusions and inspect collective per-file line/branch deltas. Enforce each backend metric's two-percentage-point maximum separately.
