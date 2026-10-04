@@ -67,6 +67,7 @@ import { cn } from "@/lib/utils"
 
 export type EmailDesignEditorHandle = {
     insertText: (text: string) => void
+    insertImage: (src: string, alt: string) => void
 }
 
 type EmailDesignEditorProps = {
@@ -230,6 +231,11 @@ export const EmailDesignEditor = forwardRef<EmailDesignEditorHandle, EmailDesign
             () => ({
                 insertText: (text: string) => {
                     if (editor) insertTextAtSelection(editor, text)
+                },
+                insertImage: (src: string, alt: string) => {
+                    if (!editor) return
+                    openLineAfterSelection(editor)
+                    editor.chain().focus().setImage({ src, alt }).run()
                 },
             }),
             [editor],

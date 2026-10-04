@@ -10,6 +10,7 @@ import {
     EmailDesignEditor,
     type EmailDesignEditorHandle,
 } from "@/components/email/design/email-design-editor"
+import { EmailHtmlSource } from "@/components/email/design/email-html-source"
 import { EmailPreviewPane } from "@/components/email/design/email-preview-pane"
 import { SendTestEmailDialog } from "@/components/email/SendTestEmailDialog"
 import {
@@ -33,7 +34,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
-import { CopyButton } from "@/components/ui/copy-button"
 import { FieldError, ValidatedField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -1055,19 +1055,7 @@ function OrganizationEmailTemplateEditor({
                 />
             </TabsContent>
             <TabsContent value="html" className="mt-0 min-h-0 flex-1 overflow-y-auto bg-muted/40 p-4 sm:p-6">
-                <section aria-labelledby="template-html-heading" className="mx-auto grid max-w-4xl gap-2">
-                    <div className="flex items-center justify-between gap-3">
-                        <h2 id="template-html-heading" className="text-sm font-medium">
-                            Email HTML
-                        </h2>
-                        <CopyButton value={fields.body} variant="outline" size="sm">
-                            Copy HTML
-                        </CopyButton>
-                    </div>
-                    <pre className="overflow-x-auto rounded-md border border-border bg-card p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all">
-                        {fields.body}
-                    </pre>
-                </section>
+                <EmailHtmlSource html={fields.body} />
             </TabsContent>
             </Tabs>
 

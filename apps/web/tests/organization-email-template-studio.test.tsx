@@ -1,3 +1,4 @@
+import { emailDesignEditorMock } from "./fixtures/email-design-editor-mock"
 import * as React from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
@@ -16,7 +17,6 @@ const mocks = vi.hoisted(() => ({
     publishDraft: vi.fn(),
     restoreDraftVersion: vi.fn(),
     sendTestDraft: vi.fn(),
-    designEditor: vi.fn(),
     preview: vi.fn(),
     draftListParams: vi.fn(),
     refetchDrafts: vi.fn(),
@@ -24,7 +24,6 @@ const mocks = vi.hoisted(() => ({
     refetchDraft: vi.fn(),
     refetchVersions: vi.fn(),
     state: {
-        nextDesign: null as Record<string, unknown> | null,
         permissionPolicy: 1,
         permissions: [] as string[],
         publishedTemplate: null as Record<string, unknown> | null,
@@ -73,53 +72,7 @@ vi.mock("@/lib/auth-context", () => ({
     }),
 }))
 
-type MockDesignEditorProps = {
-    initialValue: { body: string; bodyDesign: Record<string, unknown> | null }
-    onChange: (value: { body: string; bodyDesign: Record<string, unknown> | null }) => void
-    variables: Array<{ name: string }>
-    onSelectVariable?: (variable: { name: string }) => void
-    onFocus?: () => void
-    fields?: React.ReactNode
-    settings?: React.ReactNode
-    error?: React.ReactNode
-}
-
-vi.mock("@/components/email/design/email-design-editor", () => ({
-    EmailDesignEditor: React.forwardRef(function MockEmailDesignEditor(
-        props: MockDesignEditorProps,
-        ref: React.ForwardedRef<{ insertText: (text: string) => void }>,
-    ) {
-        mocks.designEditor(props)
-        const [body, setBody] = React.useState(props.initialValue.body)
-        const update = (next: string) => {
-            setBody(next)
-            props.onChange({ body: next, bodyDesign: mocks.state.nextDesign })
-        }
-        React.useImperativeHandle(ref, () => ({ insertText: (text: string) => update(`${body}${text}`) }))
-        return (
-            <>
-                {props.fields}
-                <textarea
-                    aria-label="Email body"
-                    value={body}
-                    onFocus={props.onFocus}
-                    onChange={(event) => update(event.target.value)}
-                />
-                {props.variables.map((variable) => (
-                    <button
-                        key={variable.name}
-                        type="button"
-                        onClick={() => props.onSelectVariable?.(variable)}
-                    >
-                        {`Insert {{${variable.name}}}`}
-                    </button>
-                ))}
-                {props.settings}
-                {props.error}
-            </>
-        )
-    }),
-}))
+vi.mock("@/components/email/design/email-design-editor", () => import("./fixtures/email-design-editor-mock"))
 
 vi.mock("@/lib/api/email-templates", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/api/email-templates")>()),
@@ -276,9 +229,8 @@ describe("OrganizationEmailTemplateStudio", () => {
         mocks.publishDraft.mockReset()
         mocks.restoreDraftVersion.mockReset()
         mocks.sendTestDraft.mockReset()
-        mocks.designEditor.mockReset()
+        emailDesignEditorMock.reset()
         mocks.preview.mockReset()
-        mocks.state.nextDesign = null
         mocks.draftListParams.mockReset()
         mocks.refetchDrafts.mockReset()
         mocks.refetchPublished.mockReset()
@@ -588,7 +540,7 @@ describe("OrganizationEmailTemplateStudio", () => {
 
         render(<OrganizationEmailTemplateStudio templateId="template-1" />)
 
-        expect(mocks.designEditor).toHaveBeenCalledWith(
+        expect(emailDesignEditorMock.render).toHaveBeenCalledWith(
             expect.objectContaining({
                 initialValue: { body: publishedTemplate.body, bodyDesign: null },
             }),
@@ -599,7 +551,7 @@ describe("OrganizationEmailTemplateStudio", () => {
     it("saves the compiled body and its design together", async () => {
         const design = { type: "doc", content: [{ type: "paragraph" }] }
         mocks.state.draft = draftFromPublished
-        mocks.state.nextDesign = design
+        emailDesignEditorMock.nextDesign = design
         mocks.updateDraft.mockResolvedValue({
             ...draftFromPublished,
             body: "<p>Designed</p>",
