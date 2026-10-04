@@ -1,5 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getOrgSettings, updateOrgSettings } from '@/lib/api/settings'
+import { useAuth } from '@/lib/auth-context'
+import {
+    deleteOrganizationLogo,
+    getOrgSettings,
+    updateOrgSettings,
+    uploadOrganizationLogo,
+} from '@/lib/api/settings'
 import type { UpdateOrgRequest } from '@/lib/api/settings'
 
 const settingsKeys = {
@@ -24,4 +30,26 @@ export function useUpdateOrgSettings() {
             void queryClient.invalidateQueries({ queryKey: settingsKeys.organization() })
         },
     })
+}
+
+/** The sidebar reads the logo from /auth/me, so both logo mutations refresh it with the org settings. */
+function useOrganizationLogoMutation<TVariables, TData>(mutationFn: (variables: TVariables) => Promise<TData>) {
+    const queryClient = useQueryClient()
+    const { refresh } = useAuth()
+
+    return useMutation({
+        mutationFn,
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: settingsKeys.organization() })
+            void refresh()
+        },
+    })
+}
+
+export function useUploadOrganizationLogo() {
+    return useOrganizationLogoMutation((file: File) => uploadOrganizationLogo(file))
+}
+
+export function useDeleteOrganizationLogo() {
+    return useOrganizationLogoMutation<void, void>(() => deleteOrganizationLogo())
 }

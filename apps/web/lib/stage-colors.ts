@@ -14,6 +14,8 @@ const TARGET_MAX_L = 0.6
 type Rgb = [number, number, number]
 
 function parseHex(color: string): Rgb | null {
+    // Stage payloads are typed as strings, but a missing color must render, not throw.
+    if (typeof color !== "string") return null
     const hex = color.trim().replace(/^#/, "")
     if (!/^[0-9a-f]{6}$/i.test(hex)) return null
     return [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255) as Rgb
@@ -91,14 +93,17 @@ function maxReadableLightness([lightness, chroma, hue]: Rgb): number {
     return low
 }
 
-const badgeBackgrounds = new Map<string, string>()
+const displayColors = new Map<string, string>()
 
 /**
- * Badge fill for a stage color: unchanged when white text already reaches AA, otherwise
- * darkened (hue kept) so white text does, keeping lighter stages lighter than darker ones.
+ * The one color shown for a stage everywhere: badges, dots, swatches, charts and the Pipelines
+ * color picker. Unchanged when white text already reaches AA, otherwise darkened (hue kept) so
+ * white text does, keeping lighter stages lighter than darker ones. Idempotent: a displayed
+ * color passes AA, so it maps to itself, which is why Pipelines can store it as-is and stored
+ * colors from before this rule need no migration.
  */
-export function stageBadgeBackground(color: string): string {
-    const cached = badgeBackgrounds.get(color)
+export function stageDisplayColor(color: string): string {
+    const cached = displayColors.get(color)
     if (cached) return cached
     const rgb = parseHex(color)
     if (!rgb) return color
@@ -116,11 +121,11 @@ export function stageBadgeBackground(color: string): string {
             background = toHex(fromOklch(target, chroma, hue))
         }
     }
-    badgeBackgrounds.set(color, background)
+    displayColors.set(color, background)
     return background
 }
 
 /** Inline style for a stage badge: white text on the stage color, darkened only as needed. */
 export function stageBadgeStyle(color: string): { backgroundColor: string; borderColor: string; color: string } {
-    return { backgroundColor: stageBadgeBackground(color), borderColor: "transparent", color: BADGE_FOREGROUND }
+    return { backgroundColor: stageDisplayColor(color), borderColor: "transparent", color: BADGE_FOREGROUND }
 }

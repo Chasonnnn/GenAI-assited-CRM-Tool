@@ -51,6 +51,7 @@ class MeResponse(BaseModel):
     org_slug: str
     org_timezone: str
     org_portal_base_url: str
+    org_logo_url: str | None = None
     role: Role
     ai_enabled: bool = False
     mfa_enabled: bool = False

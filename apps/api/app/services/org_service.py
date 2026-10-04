@@ -102,11 +102,18 @@ def get_org_by_slug(
     return query.first()
 
 
-def get_org_by_signature_logo_urls(db: Session, urls: list[str]) -> Organization | None:
-    """Get organization matching one of the provided signature logo URLs."""
+def get_org_by_logo_urls(db: Session, urls: list[str]) -> Organization | None:
+    """Resolve a public local asset by its stored, unguessable logo URL."""
     if not urls:
         return None
-    return db.query(Organization).filter(Organization.signature_logo_url.in_(urls)).first()
+    return (
+        db.query(Organization)
+        .filter(
+            Organization.deleted_at.is_(None),
+            Organization.signature_logo_url.in_(urls) | Organization.logo_url.in_(urls),
+        )
+        .first()
+    )
 
 
 def create_org(

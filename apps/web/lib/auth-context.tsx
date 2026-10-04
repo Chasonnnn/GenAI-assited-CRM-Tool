@@ -18,6 +18,7 @@ export interface User {
     org_slug: string;
     org_timezone: string;
     org_portal_base_url: string;
+    org_logo_url?: string | null;
     role: string;
     ai_enabled: boolean;
     mfa_enabled: boolean;
@@ -31,6 +32,8 @@ interface AuthContextType {
     isLoading: boolean;
     error: Error | null;
     refetch: () => void;
+    /** Reloads the user without setting isLoading, so the app shell stays mounted. */
+    refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,8 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [isLoading, setIsLoading] = useState(() => !shouldSkipAuthFetch());
     const [error, setError] = useState<Error | null>(null);
 
-    const fetchUser = async () => {
-        setIsLoading(true);
+    const fetchUser = async ({ showLoading = true }: { showLoading?: boolean } = {}) => {
+        if (showLoading) setIsLoading(true);
         setError(null);
         const result = await api.get<User>('/auth/me').then((data) => ({
             status: 'success' as const,
@@ -65,17 +68,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (result.status === 'success') {
             setUser(result.data);
         } else {
-            setUser(null);
-            if (result.err instanceof Error) {
-                // Don't treat 401 as error - just means not logged in
-                if ('status' in result.err && (result.err as { status: number }).status === 401) {
-                    setError(null);
-                } else {
-                    setError(result.err);
-                }
-            }
+            const isUnauthorized = result.err instanceof Error && 'status' in result.err
+                && (result.err as { status: number }).status === 401;
+            // A failed background refresh keeps the signed-in user; only a 401 signs them out.
+            if (showLoading || isUnauthorized) setUser(null);
+            // Don't treat 401 as error - just means not logged in
+            if (result.err instanceof Error && !isUnauthorized) setError(result.err);
         }
-        setIsLoading(false);
+        if (showLoading) setIsLoading(false);
     };
 
     useMountEffect(() => {
@@ -88,7 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return (
-        <AuthContext.Provider value={{ user, isLoading, error, refetch: () => { void fetchUser() } }}>
+        <AuthContext.Provider value={{
+            user,
+            isLoading,
+            error,
+            refetch: () => { void fetchUser() },
+            refresh: () => fetchUser({ showLoading: false }),
+        }}>
             {children}
         </AuthContext.Provider>
     );

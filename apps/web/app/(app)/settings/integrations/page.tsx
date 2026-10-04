@@ -1224,7 +1224,7 @@ function AIConfigurationSectionContent({
     const { data: userIntegrations } = useUserIntegrations()
     const connectGcp = useConnectGcp()
     const disconnectIntegration = useDisconnectIntegration()
-    const { refetch: refetchAuth } = useAuth()
+    const { refresh: refreshAuth } = useAuth()
 
     const [aiForm, setAiForm] = useState<AiConfigurationFormState>(() => ({
         isEnabled: aiSettings?.is_enabled ?? false,
@@ -1348,7 +1348,7 @@ function AIConfigurationSectionContent({
             saved: true,
             editingKey: false,
         }))
-        refetchAuth()
+        void refreshAuth()
         setTimeout(() => {
             setAiUi((current) => ({ ...current, saved: false }))
         }, 2000)

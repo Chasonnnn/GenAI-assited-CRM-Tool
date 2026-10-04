@@ -14,9 +14,14 @@ export interface OrgSettings {
     name: string;
     slug: string;
     portal_base_url: string;
+    logo_url?: string | null;
     address: string | null;
     phone: string | null;
     email: string | null;
+}
+
+export interface OrganizationLogoResponse {
+    logo_url: string;
 }
 
 export interface UpdateOrgRequest {
@@ -127,6 +132,17 @@ export async function getOrgSettings(): Promise<OrgSettings> {
 
 export async function updateOrgSettings(data: UpdateOrgRequest): Promise<OrgSettings> {
     return api.patch<OrgSettings>('/settings/organization', data);
+}
+
+/** Square organization logo shown in the sidebar (separate from the email signature logo). */
+export async function uploadOrganizationLogo(file: File): Promise<OrganizationLogoResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.upload<OrganizationLogoResponse>('/settings/organization/logo', formData);
+}
+
+export async function deleteOrganizationLogo(): Promise<void> {
+    return api.delete<void>('/settings/organization/logo');
 }
 
 export async function getIntelligentSuggestionSettings(): Promise<IntelligentSuggestionSettings> {

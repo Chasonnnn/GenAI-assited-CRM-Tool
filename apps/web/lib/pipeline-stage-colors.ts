@@ -1,13 +1,22 @@
 import type { StageType } from "@/lib/api/pipelines"
+import { stageDisplayColor } from "@/lib/stage-colors"
 
 const DEFAULT_CUSTOM_STAGE_COLOR = "#6b7280"
 const FALLBACK_GRAY_STAGE_COLORS = new Set([DEFAULT_CUSTOM_STAGE_COLOR])
 
-export const CUSTOM_STAGE_COLOR_PRESETS: Record<StageType, string[]> = {
+const SOURCE_STAGE_COLOR_PRESETS: Record<StageType, string[]> = {
     intake: ["#2563eb", "#0ea5e9", "#14b8a6", "#22c55e", "#8b5cf6", "#f59e0b"],
     post_approval: ["#0f766e", "#0891b2", "#4f46e5", "#8b5cf6", "#db2777", "#ea580c"],
     paused: ["#b4536a"],
     terminal: ["#ef4444", "#dc2626"],
+}
+
+/** Picker presets as they display and save: each source color through stageDisplayColor. */
+export const CUSTOM_STAGE_COLOR_PRESETS: Record<StageType, string[]> = {
+    intake: SOURCE_STAGE_COLOR_PRESETS.intake.map(stageDisplayColor),
+    post_approval: SOURCE_STAGE_COLOR_PRESETS.post_approval.map(stageDisplayColor),
+    paused: SOURCE_STAGE_COLOR_PRESETS.paused.map(stageDisplayColor),
+    terminal: SOURCE_STAGE_COLOR_PRESETS.terminal.map(stageDisplayColor),
 }
 
 const KEYWORD_STAGE_COLOR_RULES: Array<{ keywords: string[]; color: string }> = [
@@ -57,7 +66,7 @@ function matchesKeyword(text: string, keywords: string[]) {
 }
 
 function getFallbackPaletteColor(stageType: StageType | string | null | undefined, stageKey: string | null | undefined, order?: number | null) {
-    const palette = CUSTOM_STAGE_COLOR_PRESETS[(stageType as StageType) ?? "intake"] ?? [DEFAULT_CUSTOM_STAGE_COLOR]
+    const palette = SOURCE_STAGE_COLOR_PRESETS[(stageType as StageType) ?? "intake"] ?? [DEFAULT_CUSTOM_STAGE_COLOR]
     if (order && order > 0) {
         return palette[(order - 1) % palette.length] ?? DEFAULT_CUSTOM_STAGE_COLOR
     }
@@ -66,7 +75,8 @@ function getFallbackPaletteColor(stageType: StageType | string | null | undefine
     return palette[hash % palette.length] ?? DEFAULT_CUSTOM_STAGE_COLOR
 }
 
-export function suggestStageColor(stage: StageColorInput) {
+/** The keyword or palette color before display darkening; earlier drafts stored this value. */
+function suggestSourceStageColor(stage: StageColorInput) {
     const normalizedText = normalizeStageText(stage.label, stage.slug, stage.stage_key)
     for (const rule of KEYWORD_STAGE_COLOR_RULES) {
         if (matchesKeyword(normalizedText, rule.keywords)) {
@@ -74,6 +84,11 @@ export function suggestStageColor(stage: StageColorInput) {
         }
     }
     return getFallbackPaletteColor(stage.stage_type, stage.stage_key ?? stage.slug, stage.order)
+}
+
+/** Suggested stage color, already in its displayed (and saved) form. */
+export function suggestStageColor(stage: StageColorInput) {
+    return stageDisplayColor(suggestSourceStageColor(stage))
 }
 
 export function resolveStageColor(stage: StageColorInput) {
@@ -89,13 +104,15 @@ export function resolveStageColor(stage: StageColorInput) {
 
 export function shouldAutoRefreshStageColor(stage: StageColorInput) {
     if (stage.is_locked) return false
-    const normalizedColor = normalizeHexColor(stage.color)
+    const normalizedColor = normalizeHexColor(stage.color)?.toLowerCase()
     const autoKey = (stage.stage_key ?? stage.slug ?? "").toLowerCase()
+    // Stages saved before suggestions were darkened still hold the source color.
     return (
         !normalizedColor
-        || FALLBACK_GRAY_STAGE_COLORS.has(normalizedColor.toLowerCase())
+        || FALLBACK_GRAY_STAGE_COLORS.has(normalizedColor)
         || stage.label === "New Stage"
         || autoKey.startsWith("custom_stage")
-        || normalizedColor === suggestStageColor(stage)
+        || normalizedColor === suggestStageColor(stage).toLowerCase()
+        || normalizedColor === suggestSourceStageColor(stage).toLowerCase()
     )
 }
