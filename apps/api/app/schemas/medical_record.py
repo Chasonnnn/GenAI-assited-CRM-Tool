@@ -55,6 +55,29 @@ REDACTED_FIELDS = frozenset({"member_id", "policy_number", "subscriber_dob"})
 RECORD_FIELDS = tuple(dict.fromkeys(f for fields in SECTION_FIELDS.values() for f in fields))
 
 
+def _legacy_names(section: str, prefix: str) -> dict[str, tuple[str, str]]:
+    return {f"{prefix}_{field}": (section, field) for field in SECTION_FIELDS[section]}
+
+
+# Former flat surrogate/donor column names that forms may still map answers to,
+# keyed to (section, record field). Insurance and OB used their own naming.
+LEGACY_MEDICAL_FIELDS: dict[str, tuple[str, str]] = {
+    **{
+        f"insurance_{'company' if field == 'name' else field}": ("insurance", field)
+        for field in SECTION_FIELDS["insurance"]
+    },
+    **_legacy_names("pcp", "pcp"),
+    **_legacy_names("lab_clinic", "lab_clinic"),
+    **_legacy_names("clinic", "clinic"),
+    **_legacy_names("monitoring_clinic", "monitoring_clinic"),
+    **{
+        ("ob_clinic_name" if field == "name" else f"ob_{field}"): ("ob", field)
+        for field in SECTION_FIELDS["ob"]
+    },
+    **_legacy_names("delivery_hospital", "delivery_hospital"),
+}
+
+
 class MedicalRecordFields(BaseModel):
     """Editable record fields. Blank strings clear a field."""
 

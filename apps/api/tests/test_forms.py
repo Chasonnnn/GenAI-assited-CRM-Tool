@@ -1024,8 +1024,11 @@ async def test_form_mapping_allows_extended_surrogate_fields(
     )
     assert approve_res.status_code == 200
 
-    db.refresh(surrogate)
-    assert surrogate.insurance_company == "Northwest Mutual"
+    from app.db.models import MedicalRecord
+
+    (record,) = db.query(MedicalRecord).filter(MedicalRecord.surrogate_id == surrogate.id).all()
+    assert (record.section, record.name, record.source) == ("insurance", "Northwest Mutual", "form")
+    assert record.effective_date is not None
 
 
 @pytest.mark.asyncio

@@ -398,3 +398,53 @@ async def test_writes_require_edit_permission_and_csrf(db, test_org, surrogate):
             headers={"X-CSRF-Token": ""},
         )
         assert no_csrf.status_code == 403
+
+
+def test_form_values_correct_current_record_or_start_one(db, test_org, test_user, surrogate):
+    owner = medical_record_service.RecordOwner.for_surrogate(surrogate)
+    today = _today(db, test_org)
+    db.add(
+        MedicalRecord(
+            organization_id=test_org.id,
+            surrogate_id=surrogate.id,
+            section="insurance",
+            name="Blue Harbor Health",
+            effective_date=today - timedelta(days=10),
+        )
+    )
+    db.flush()
+
+    changed = medical_record_service.apply_form_values(
+        db,
+        owner,
+        test_user.id,
+        {
+            "insurance": {"name": "Blue Harbor Health", "member_id": "M-1", "plan_name": ""},
+            "clinic": {"name": "Cedar Ridge Fertility", "phone": "(555) 201-4400"},
+            "lab_clinic": {"name": ""},
+        },
+        today - timedelta(days=2),
+    )
+    assert changed == ["clinic", "insurance"]
+    records = {r.section: r for r in db.scalars(select(MedicalRecord)).all()}
+    insurance = records["insurance"]
+    assert (insurance.member_id, insurance.revision) == ("M-1", 2)
+    assert [(c.field, c.redacted, c.source) for c in insurance.corrections] == [
+        ("member_id", True, "form")
+    ]
+    clinic = records["clinic"]
+    assert clinic.source == "form" and clinic.effective_date == today - timedelta(days=2)
+    assert clinic.phone == "+15552014400"
+    assert "lab_clinic" not in records
+
+
+def test_legacy_field_map_matches_imported_columns():
+    from app.schemas.medical_record import LEGACY_MEDICAL_FIELDS
+    from tests.test_migration_20261003_medical_records import _load_migration
+
+    imported = {
+        legacy: (section, field)
+        for section, columns in _load_migration().SECTION_COLUMNS.items()
+        for field, legacy in columns.items()
+    }
+    assert LEGACY_MEDICAL_FIELDS == imported

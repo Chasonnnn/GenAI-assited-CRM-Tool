@@ -10,6 +10,7 @@ from typing import Any, Union, get_args, get_origin
 
 from pydantic import EmailStr, ValidationError
 
+from app.schemas.medical_record import LEGACY_MEDICAL_FIELDS
 from app.schemas.surrogate import SurrogateCreate, SurrogateUpdate
 from app.services.import_transformers import get_suggested_transformer, transform_value
 from app.utils.journey_timing import normalize_journey_timing_preference
@@ -77,6 +78,14 @@ def _build_surrogate_field_types() -> dict[str, str]:
 
 SURROGATE_FIELD_TYPES: dict[str, str] = _build_surrogate_field_types()
 
+# Form answers may still target the former flat medical fields. They are applied
+# to medical records, never to SurrogateCreate/SurrogateUpdate.
+MEDICAL_FORM_FIELD_TYPES: dict[str, str] = {
+    legacy: "date" if field == "subscriber_dob" else "str"
+    for legacy, (_section, field) in LEGACY_MEDICAL_FIELDS.items()
+}
+FORM_SURROGATE_FIELD_TYPES: dict[str, str] = {**SURROGATE_FIELD_TYPES, **MEDICAL_FORM_FIELD_TYPES}
+
 
 def coerce_surrogate_field_value(surrogate_field: str, value: Any) -> Any:
     """Normalize one mapped value into the shape expected by SurrogateCreate/Update."""
@@ -98,7 +107,7 @@ def coerce_surrogate_field_value(surrogate_field: str, value: Any) -> Any:
             return transformed.value
         raise ValueError(transformed.error or f"Invalid value for {surrogate_field}: {value}")
 
-    field_type = SURROGATE_FIELD_TYPES.get(surrogate_field)
+    field_type = FORM_SURROGATE_FIELD_TYPES.get(surrogate_field)
     if field_type == "str":
         return str(value)
     if field_type == "bool":

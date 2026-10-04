@@ -61,6 +61,7 @@ from app.services import (
     form_service,
     form_submission_service,
     job_service,
+    medical_record_service,
     meta_capi,
     meta_crm_dataset_service,
     org_service,
@@ -4146,6 +4147,7 @@ def promote_intake_lead(
         raise ValueError("Intake lead is missing email")
 
     mapped_payload: dict[str, Any] = {}
+    medical_updates: list[tuple[date, dict[str, dict[str, Any]]]] = []
     linked_submissions = (
         db.query(FormSubmission)
         .filter(
@@ -4159,13 +4161,23 @@ def promote_intake_lead(
         .all()
     )
     for submission in linked_submissions:
-        mapped_payload.update(
+        submission_values, medical_values = medical_record_service.split_legacy_values(
             form_submission_service.build_surrogate_updates_for_submission(
                 db,
                 submission,
                 strict=False,
             )
         )
+        mapped_payload.update(submission_values)
+        if medical_values:
+            medical_updates.append(
+                (
+                    medical_record_service.org_local_date(
+                        db, lead.organization_id, submission.submitted_at
+                    ),
+                    medical_values,
+                )
+            )
 
     source_value = source or "manual"
     mapped_payload.update(
@@ -4193,6 +4205,11 @@ def promote_intake_lead(
         user_id=user_id,
         data=surrogate_payload,
     )
+    medical_owner = medical_record_service.RecordOwner.for_surrogate(surrogate)
+    for submitted_on, medical_values in medical_updates:
+        medical_record_service.apply_form_values(
+            db, medical_owner, user_id, medical_values, submitted_on
+        )
     if dropped_invalid_fields:
         surrogate.import_metadata = {
             **(surrogate.import_metadata or {}),

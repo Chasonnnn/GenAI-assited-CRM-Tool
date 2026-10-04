@@ -7,6 +7,7 @@ entry are written in the caller's transaction so they commit or roll back togeth
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
@@ -28,6 +29,7 @@ from app.db.models import (
     User,
 )
 from app.schemas.medical_record import (
+    LEGACY_MEDICAL_FIELDS,
     REDACTED_FIELDS,
     SECTION_FIELDS,
     MedicalRecordCorrectionRead,
@@ -99,13 +101,41 @@ class Placement:
     end_date: date | None
 
 
-def org_today(db: Session, org_id: UUID) -> date:
+def _org_zone(db: Session, org_id: UUID) -> ZoneInfo:
     timezone_name = db.scalar(select(Organization.timezone).where(Organization.id == org_id))
     try:
-        zone = ZoneInfo(timezone_name or DEFAULT_TIMEZONE)
+        return ZoneInfo(timezone_name or DEFAULT_TIMEZONE)
     except ZoneInfoNotFoundError:
-        zone = ZoneInfo(DEFAULT_TIMEZONE)
-    return datetime.now(zone).date()
+        return ZoneInfo(DEFAULT_TIMEZONE)
+
+
+def org_today(db: Session, org_id: UUID) -> date:
+    return datetime.now(_org_zone(db, org_id)).date()
+
+
+def org_local_date(db: Session, org_id: UUID, moment: datetime | None) -> date:
+    """Organization-local calendar date of a timestamp; today when it is missing."""
+    if moment is None:
+        return org_today(db, org_id)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return moment.astimezone(_org_zone(db, org_id)).date()
+
+
+def split_legacy_values(
+    values: Mapping[str, object],
+) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
+    """Separate former flat medical field values, grouped by record section."""
+    other: dict[str, object] = {}
+    by_section: dict[str, dict[str, object]] = defaultdict(dict)
+    for key, value in values.items():
+        target = LEGACY_MEDICAL_FIELDS.get(key)
+        if target is None:
+            other[key] = value
+        else:
+            section, field = target
+            by_section[section][field] = value
+    return other, dict(by_section)
 
 
 def _sort_key(record: MedicalRecord) -> tuple[date, datetime, str]:
