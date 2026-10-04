@@ -10,9 +10,8 @@ import { DONOR_SOURCE_LABELS } from "@/lib/donor-source-labels"
 import { isPermissionError } from "@/lib/error-utils"
 import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
+import { FORM_TRIGGER_TYPES, INTAKE_LEAD_KIND_CONFIG_KEYS } from "@/lib/workflows/form-trigger-types"
 import {
-    FORM_TRIGGER_TYPES,
-    INTAKE_LEAD_KIND_CONFIG_KEYS,
     LIST_OPERATORS,
     MULTISELECT_FIELDS,
     VALUELESS_OPERATORS,
@@ -423,13 +422,6 @@ export function getActionValidationError(action: ActionConfig): string | null {
 
 export function getActionsValidationError(triggerType: string, actions: ActionConfig[]): string | null {
     if (actions.length === 0) return "Add at least one action."
-    if (triggerType === "form_submitted") {
-        const autoMatchIndex = actions.findIndex((action) => action.action_type === "auto_match_submission")
-        const createLeadIndex = actions.findIndex((action) => action.action_type === "create_intake_lead")
-        if (autoMatchIndex >= 0 && createLeadIndex >= 0 && autoMatchIndex > createLeadIndex) {
-            return "Place Auto-Match Submission before Create Intake Lead for form-submitted workflows."
-        }
-    }
     for (const action of actions) {
         const error = getActionValidationError(action)
         if (error) return error
@@ -506,7 +498,7 @@ export type WorkflowBuilderAction =
     | { type: "reorderAction"; from: number; to: number }
     | { type: "updateAction"; index: number; updates: Partial<ActionConfig> }
 
-/** Trigger a new workflow starts on, e.g. when opened from an appointment type. */
+/** Trigger and filter a new workflow starts on, e.g. when opened from an appointment type or a form. Runs in Server Components. */
 export type WorkflowEditorPreset = { triggerType: string; triggerConfig: JsonObject }
 
 export function getWorkflowEditorPreset(
@@ -514,7 +506,11 @@ export function getWorkflowEditorPreset(
 ): WorkflowEditorPreset | null {
     const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value)
     const triggerType = first(searchParams.trigger)
-    if (!triggerType || FIXED_TRIGGER_SUBJECT_TYPES[triggerType] !== "appointment") return null
+    if (!triggerType) return null
+    if (FORM_TRIGGER_TYPES.has(triggerType)) {
+        return { triggerType, triggerConfig: { form_id: first(searchParams.form_id)?.trim() ?? "" } }
+    }
+    if (FIXED_TRIGGER_SUBJECT_TYPES[triggerType] !== "appointment") return null
     const typeName = first(searchParams.appointment_type)?.trim()
     return { triggerType, triggerConfig: typeName ? { appointment_type_names: [typeName] } : {} }
 }

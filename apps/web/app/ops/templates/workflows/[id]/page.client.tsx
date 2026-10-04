@@ -227,8 +227,6 @@ const FALLBACK_ACTION_TYPES = [
     { value: "update_field", label: "Update Field", description: "Update a case field" },
     { value: "add_note", label: "Add Note", description: "Add a note to the case" },
     { value: "promote_intake_lead", label: "Promote Intake Lead", description: "Promote lead into surrogate case" },
-    { value: "auto_match_submission", label: "Auto-Match Submission", description: "Deterministically match submission" },
-    { value: "create_intake_lead", label: "Create Intake Lead", description: "Create lead for unmatched submission" },
 ]
 
 const FALLBACK_DONOR_TRIGGER_TYPES = [
@@ -518,7 +516,6 @@ type WorkflowTemplateEditorAction =
         statusOptions: WorkflowStatusOption[]
     }
     | { type: "loadZapierSample" }
-    | { type: "loadSharedIntakeSample" }
     | { type: "setName"; value: string }
     | { type: "setDescription"; value: string }
     | { type: "setIcon"; value: string }
@@ -661,26 +658,6 @@ function workflowTemplateEditorReducer(
                 conditions: normalizeConditionsForUi(ZAPIER_CONVERSION_SAMPLE.conditions),
                 conditionLogic: ZAPIER_CONVERSION_SAMPLE.condition_logic,
                 actions: normalizeActionsForUi(ZAPIER_CONVERSION_SAMPLE.actions),
-            }
-        case "loadSharedIntakeSample":
-            return {
-                ...state,
-                name: "Shared Intake Routing: Match Then Lead",
-                description:
-                    "When a shared application is submitted, auto-match to an existing surrogate first; if no deterministic match exists, create an intake lead.",
-                icon: "activity",
-                category: "intake",
-                subjectType: "form_submission",
-                triggerType: "form_submitted",
-                triggerConfig: {},
-                conditions: normalizeConditionsForUi([
-                    { field: "source_mode", operator: "equals", value: "shared" },
-                ]),
-                conditionLogic: "AND",
-                actions: normalizeActionsForUi([
-                    { action_type: "auto_match_submission" },
-                    { action_type: "create_intake_lead", source: "shared_form_workflow" },
-                ]),
             }
         case "setName":
             return { ...state, name: action.value }
@@ -904,7 +881,6 @@ type WorkflowTemplateDetailsSectionProps = {
     setSubjectType: (value: WorkflowSubjectType) => void
     /** Samples replace the whole draft, so they are offered only on a new, empty workflow. */
     showSampleLoaders: boolean
-    onLoadSharedIntakeSample: () => void
     onLoadZapierSample: () => void
 }
 
@@ -918,7 +894,6 @@ function WorkflowTemplateDetailsSection({
     subjectType,
     setSubjectType,
     showSampleLoaders,
-    onLoadSharedIntakeSample,
     onLoadZapierSample,
 }: WorkflowTemplateDetailsSectionProps) {
     return (
@@ -931,9 +906,6 @@ function WorkflowTemplateDetailsSection({
                 {showSampleLoaders ? (
                     <div className="md:col-span-2">
                         <div className="flex flex-wrap gap-2">
-                            <Button type="button" variant="outline" size="sm" onClick={onLoadSharedIntakeSample}>
-                                Load Shared Intake Sample
-                            </Button>
                             <Button type="button" variant="outline" size="sm" onClick={onLoadZapierSample}>
                                 Load Zapier Conversion Sample
                             </Button>
@@ -2168,35 +2140,6 @@ function WorkflowTemplateActionFields({
         )
     }
 
-    if (action.action_type === "auto_match_submission") {
-        return (
-            <p className="rounded-md border p-3 text-sm text-muted-foreground">
-                Matches existing applicants and holds conflicting identities for review.
-            </p>
-        )
-    }
-
-    if (action.action_type === "create_intake_lead") {
-        return (
-            <div className="space-y-2">
-                <Label>Source (optional)</Label>
-                <Input
-                    placeholder="shared_form_workflow"
-                    value={typeof action.source === "string" ? action.source : ""}
-                    onChange={(event) => updateAction(index, { source: event.target.value })}
-                />
-                <div className="flex items-center justify-between rounded-md border p-3">
-                    <Label htmlFor={`auto-promote-donor-${index}`}>Create donor after photo scan</Label>
-                    <Switch
-                        id={`auto-promote-donor-${index}`}
-                        checked={action.auto_promote === true}
-                        onCheckedChange={(checked) => updateAction(index, { auto_promote: checked })}
-                    />
-                </div>
-            </div>
-        )
-    }
-
     if (action.action_type === "send_zapier_conversion_event") {
         return (
             <p className="rounded-md border p-3 text-sm text-muted-foreground">
@@ -2597,11 +2540,6 @@ function useWorkflowTemplatePageState() {
         editDraft({ type: "updateAction", index, updates })
     }
 
-    const applySharedIntakeSample = () => {
-        editDraft({ type: "loadSharedIntakeSample" })
-        toast.success("Loaded sample workflow template")
-    }
-
     const getConditionOptions = (field: string): SelectOption[] | null => {
         if (field === "stage_id") return stageIdOptions
         if (field === "status_label") return stageLabelOptions
@@ -2652,17 +2590,6 @@ function useWorkflowTemplatePageState() {
         const stageConditionError = getWorkflowStageConditionValidationError(conditions)
         if (stageConditionError) return stageConditionError
         if (actions.length === 0) return "Add at least one action."
-        if (triggerType === "form_submitted") {
-            const autoMatchIndex = actions.findIndex(
-                (action) => action.action_type === "auto_match_submission"
-            )
-            const createLeadIndex = actions.findIndex(
-                (action) => action.action_type === "create_intake_lead"
-            )
-            if (autoMatchIndex >= 0 && createLeadIndex >= 0 && autoMatchIndex > createLeadIndex) {
-                return "Place Auto-Match Submission before Create Intake Lead for form-submitted templates."
-            }
-        }
         for (const action of actions) {
             const error = getWorkflowActionValidationErrorForSubject(action, isDonorSubject)
             if (error) return error
@@ -2879,7 +2806,6 @@ function useWorkflowTemplatePageState() {
         addAction,
         updateAction,
         removeAction,
-        applySharedIntakeSample,
         applyZapierConversionSample,
         handleSave,
         handlePublish,
@@ -2944,7 +2870,6 @@ export default function PlatformWorkflowTemplatePage() {
         addAction,
         updateAction,
         removeAction,
-        applySharedIntakeSample,
         applyZapierConversionSample,
         handleSave,
         handlePublish,
@@ -3006,7 +2931,6 @@ export default function PlatformWorkflowTemplatePage() {
                         subjectType={subjectType}
                         setSubjectType={setSubjectType}
                         showSampleLoaders={showSampleLoaders}
-                        onLoadSharedIntakeSample={applySharedIntakeSample}
                         onLoadZapierSample={applyZapierConversionSample}
                     />
 

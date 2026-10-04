@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
+import type { Route } from "next"
 import {
     CalendarClockIcon,
     CrosshairIcon,
@@ -36,6 +38,7 @@ import {
     APPLICANT_TYPE_BOTH,
     APPLICANT_TYPE_OPTIONS,
     ConditionValueInput,
+    FORM_SUBMISSION_TRIGGER_TYPES,
     FORM_TRIGGER_TYPES,
     getApplicantTypeLabel,
     isDonorLeadKind,
@@ -336,6 +339,20 @@ function TriggerConfigFields({ controller }: { controller: WorkflowEditorControl
                     )}
                 </FieldRow>
             )}
+
+            {FORM_SUBMISSION_TRIGGER_TYPES.has(triggerType) &&
+            typeof triggerConfig.form_id === "string" &&
+            triggerConfig.form_id ? (
+                <Link
+                    href={`/automation/forms/${encodeURIComponent(triggerConfig.form_id)}?tab=routing` as Route}
+                    className="text-xs font-medium text-primary hover:underline"
+                >
+                    Matching and lead creation:{" "}
+                    <span className="whitespace-nowrap">
+                        Routing tab<span aria-hidden="true">{"\u00a0→"}</span>
+                    </span>
+                </Link>
+            ) : null}
 
             {isSharedDonorTriggerForm && (
                 <FieldRow label="Applicant type">

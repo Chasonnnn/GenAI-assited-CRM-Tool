@@ -1161,6 +1161,34 @@
       "422"
     ]
   },
+  "/donors/{donor_id}/medical-records": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/medical-records/sections/{section}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/medical-records/{record_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/medical-records/{record_id}/archive": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/donors/{donor_id}/meta-lead": {
     "GET": [
       "200",
@@ -1612,6 +1640,24 @@
       "422"
     ]
   },
+  "/forms/submissions/{submission_id}/routing/create-lead": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/routing/dismiss": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/submissions/{submission_id}/routing/run-match": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/surrogates/{surrogate_id}/application-forms": {
     "GET": [
       "200",
@@ -1697,6 +1743,16 @@
       "422"
     ]
   },
+  "/forms/{form_id}/routing": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "PUT": [
+      "200",
+      "422"
+    ]
+  },
   "/forms/{form_id}/set-default-surrogate-application": {
     "POST": [
       "200",
@@ -1716,6 +1772,12 @@
     ]
   },
   "/forms/{form_id}/surrogates/{surrogate_id}/submission": {
+    "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/forms/{form_id}/workflows": {
     "GET": [
       "200",
       "422"
@@ -2579,7 +2641,8 @@
   },
   "/me/notifications/read-all": {
     "POST": [
-      "200"
+      "200",
+      "422"
     ]
   },
   "/me/notifications/{notification_id}/read": {
@@ -4113,6 +4176,34 @@
   },
   "/surrogates/{surrogate_id}/interviews/export": {
     "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/medical-records": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/medical-records/sections/{section}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/medical-records/{record_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/medical-records/{record_id}/archive": {
+    "POST": [
       "200",
       "422"
     ]

@@ -3,6 +3,7 @@ import type { FormSubmissionRead } from "@/lib/api/forms"
 import {
     matchReasonLabel,
     readAnswerValue,
+    submissionOutcomeLabel,
     submissionStatusBadgeClass,
     submissionStatusLabel,
 } from "@/lib/forms/submission-presentation"
@@ -49,7 +50,10 @@ describe("matchReasonLabel", () => {
         ["donor_email_phone_match", "Email and phone match"],
         ["manually_linked", "Linked by reviewer"],
         ["phone_dob_name_ambiguous", "Several records share name, date of birth and phone"],
-        ["workflow_pending", "Waiting for routing workflow"],
+        ["workflow_pending", "Waiting for routing"],
+        ["routing_review_dismissed", "Routing review dismissed"],
+        ["routing_lead_creation", "Lead created by routing"],
+        ["workflow_lead_creation", "Lead created by workflow"],
     ])("labels %s", (reason, label) => {
         expect(matchReasonLabel(reason)).toBe(label)
     })
@@ -69,5 +73,17 @@ describe("submissionStatusLabel", () => {
     ] as const)("labels and colors %s", (status, label, color) => {
         expect(submissionStatusLabel(status)).toBe(label)
         expect(submissionStatusBadgeClass(status)).toContain(color)
+    })
+})
+
+describe("submissionOutcomeLabel", () => {
+    it.each([
+        ["linked", "Matched"],
+        ["lead_created", "Lead Created"],
+        ["routing_review", "Routing Review"],
+        ["ambiguous_review", "Pending Match"],
+        ["workflow_pending", "Pending Match"],
+    ] as const)("labels %s", (matchStatus, label) => {
+        expect(submissionOutcomeLabel({ match_status: matchStatus } as FormSubmissionRead)).toBe(label)
     })
 })

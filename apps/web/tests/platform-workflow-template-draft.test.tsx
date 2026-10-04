@@ -154,27 +154,25 @@ describe("platform workflow template draft ownership", () => {
         }
     })
 
-    it("saves donor-only conditions and the explicit automatic creation option", async () => {
+    it("saves donor-only conditions on a form-submitted template", async () => {
         templateState.data = {
             ...templateState.data,
             draft: {
                 ...templateState.data.draft,
                 trigger_type: "form_submitted",
                 conditions: [{ field: "lead_kind", operator: "in", value: ["egg_donor", "sperm_donor"] }],
-                actions: [{ action_type: "create_intake_lead", source: "website" }],
+                actions: [{ action_type: "add_note", content: "Review the application." }],
             },
         }
         mutationMocks.update.mockResolvedValue(templateState.data)
         render(<PlatformWorkflowTemplatePage />)
-        const automaticCreation = screen.getByRole("switch", { name: "Create donor after photo scan" })
-        expect(automaticCreation).not.toBeChecked()
-        fireEvent.click(automaticCreation)
+        expect(screen.queryByRole("switch", { name: "Create donor after photo scan" })).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
         await waitFor(() => expect(mutationMocks.update).toHaveBeenCalledWith({
             id: "workflow-template-1",
             payload: expect.objectContaining({
                 conditions: [{ field: "lead_kind", operator: "in", value: ["egg_donor", "sperm_donor"] }],
-                actions: [{ action_type: "create_intake_lead", source: "website", auto_promote: true }],
+                actions: [{ action_type: "add_note", content: "Review the application." }],
             }),
         }))
     })
@@ -512,13 +510,13 @@ describe("platform workflow template draft ownership", () => {
 
     it("offers sample loaders only on a new, empty workflow", () => {
         const { unmount } = render(<PlatformWorkflowTemplatePage />)
-        expect(screen.queryByRole("button", { name: "Load Shared Intake Sample" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Load Zapier Conversion Sample" })).not.toBeInTheDocument()
         unmount()
 
         routeState.id = "new"
         render(<PlatformWorkflowTemplatePage />)
-        expect(screen.getByRole("button", { name: "Load Shared Intake Sample" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Load Zapier Conversion Sample" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Load Shared Intake Sample" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument()
     })
 

@@ -1,6 +1,7 @@
 "use client"
 
 import { TaskEditModal } from "@/components/tasks/TaskEditModal"
+import { TaskFormSubmissionField } from "@/components/tasks/TaskRelatedRecordLinks"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { TaskUpdatePayload } from "@/lib/api/tasks"
@@ -56,6 +57,7 @@ export function TaskDetailDialog({ taskId, onClose, onSave, onDelete, isDeleting
                     <>
                         <p className="whitespace-pre-wrap text-sm">{task.description || "No description"}</p>
                         <p className="text-sm text-muted-foreground">{formatDate(task.due_date, undefined, "No due date")}</p>
+                        <TaskFormSubmissionField task={task} />
                     </>
                 )}
             </DialogContent>

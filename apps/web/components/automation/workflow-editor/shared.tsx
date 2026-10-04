@@ -133,6 +133,7 @@ export const FORM_MATCH_STATUS_OPTIONS: SelectOption[] = [
     { value: "linked", label: "Linked" },
     { value: "ambiguous_review", label: "Ambiguous Review" },
     { value: "lead_created", label: "Lead Created" },
+    { value: "routing_review", label: "Routing Review" },
 ]
 
 export const OWNER_TYPE_OPTIONS: SelectOption[] = [
@@ -169,16 +170,14 @@ export function isDonorLeadKind(value: unknown): value is DonorLeadKind {
     return value === "egg_donor" || value === "sperm_donor"
 }
 
-// Intake triggers store the applicant type under a trigger-specific key.
-export const INTAKE_LEAD_KIND_CONFIG_KEYS: Partial<Record<string, string>> = {
-    form_submitted: "lead_kind",
-    form_submission_approved: "lead_kind",
-    form_submission_rejected: "lead_kind",
-    intake_lead_created: "lead_type",
-}
+export { FORM_TRIGGER_TYPES, INTAKE_LEAD_KIND_CONFIG_KEYS } from "@/lib/workflows/form-trigger-types"
 
-// Triggers configured with a form; the form also sets the workflow's surrogate or donor context.
-export const FORM_TRIGGER_TYPES = new Set(Object.keys(INTAKE_LEAD_KIND_CONFIG_KEYS))
+// Submission triggers; the form's Routing tab owns matching and lead creation for them.
+export const FORM_SUBMISSION_TRIGGER_TYPES = new Set([
+    "form_submitted",
+    "form_submission_approved",
+    "form_submission_rejected",
+])
 
 // "Both" leaves the applicant type unset, so the workflow runs for either donor type.
 export const APPLICANT_TYPE_BOTH = "both"

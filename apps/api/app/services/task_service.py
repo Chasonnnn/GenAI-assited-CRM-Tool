@@ -13,6 +13,8 @@ from app.core.permissions import PermissionKey as P
 from app.db.enums import OwnerType, Role, TaskStatus, TaskType
 from app.db.models import (
     Donor,
+    Form,
+    FormSubmission,
     IntendedParent,
     Membership,
     Queue,
@@ -640,6 +642,24 @@ def check_task_subject_access(db: Session, task: Task, session: UserSession) -> 
 
     if task.organization_id != session.org_id:
         raise HTTPException(status_code=404, detail="Task not found")
+    if task.form_submission_id:
+        submission = (
+            db.query(FormSubmission.id)
+            .join(
+                Form,
+                and_(
+                    Form.id == FormSubmission.form_id,
+                    Form.organization_id == FormSubmission.organization_id,
+                ),
+            )
+            .filter(
+                FormSubmission.id == task.form_submission_id,
+                FormSubmission.organization_id == session.org_id,
+            )
+            .first()
+        )
+        if submission is None:
+            raise HTTPException(status_code=404, detail="Task not found")
     if task.match_id:
         from app.services.match_access import load as get_match_with_access
 
@@ -724,12 +744,14 @@ def get_task_context(
             "queue_names": {},
             "surrogate_numbers": {},
             "donor_metadata": {},
+            "submission_metadata": {},
         }
 
     user_ids = set()
     queue_ids = set()
     surrogate_ids = set()
     donor_ids = set()
+    submission_ids = set()
 
     for task in tasks:
         if task.owner_type == OwnerType.USER.value:
@@ -746,6 +768,8 @@ def get_task_context(
             surrogate_ids.add(task.surrogate_id)
         if task.donor_id:
             donor_ids.add(task.donor_id)
+        if task.form_submission_id:
+            submission_ids.add(task.form_submission_id)
 
     user_names = {}
     if user_ids:
@@ -801,11 +825,38 @@ def get_task_context(
             for donor in donors
         }
 
+    submission_metadata = {}
+    if submission_ids:
+        submissions = (
+            db.query(FormSubmission.id, Form.id.label("form_id"), Form.name.label("form_name"))
+            .join(
+                Form,
+                and_(
+                    Form.id == FormSubmission.form_id,
+                    Form.organization_id == FormSubmission.organization_id,
+                ),
+            )
+            .filter(
+                FormSubmission.organization_id == org_id,
+                FormSubmission.id.in_(submission_ids),
+            )
+            .all()
+        )
+        submission_metadata = {
+            row.id: {
+                "form_submission_id": row.id,
+                "form_id": row.form_id,
+                "form_name": row.form_name,
+            }
+            for row in submissions
+        }
+
     return {
         "user_names": user_names,
         "queue_names": queue_names,
         "surrogate_numbers": surrogate_numbers,
         "donor_metadata": donor_metadata,
+        "submission_metadata": submission_metadata,
     }
 
 
@@ -822,6 +873,7 @@ def to_task_read(task: Task, context: dict[str, dict]) -> TaskRead:
     triggered_by_name = context["user_names"].get(task.workflow_triggered_by_user_id)
     surrogate_number = context["surrogate_numbers"].get(task.surrogate_id)
     donor_metadata = context["donor_metadata"].get(task.donor_id, {})
+    submission_metadata = context.get("submission_metadata", {}).get(task.form_submission_id, {})
 
     return TaskRead(
         work_source=task.work_source,
@@ -831,6 +883,9 @@ def to_task_read(task: Task, context: dict[str, dict]) -> TaskRead:
         surrogate_id=task.surrogate_id,
         intended_parent_id=task.intended_parent_id,
         donor_id=task.donor_id,
+        form_submission_id=submission_metadata.get("form_submission_id"),
+        form_id=submission_metadata.get("form_id"),
+        form_name=submission_metadata.get("form_name"),
         surrogate_number=surrogate_number,
         donor_number=donor_metadata.get("donor_number"),
         donor_type=donor_metadata.get("donor_type"),
@@ -875,6 +930,7 @@ def to_task_list_item(
 
     surrogate_number = context["surrogate_numbers"].get(task.surrogate_id)
     donor_metadata = context["donor_metadata"].get(task.donor_id, {})
+    submission_metadata = context.get("submission_metadata", {}).get(task.form_submission_id, {})
 
     return TaskListItem(
         work_source=task.work_source,
@@ -885,6 +941,9 @@ def to_task_list_item(
         surrogate_id=task.surrogate_id,
         intended_parent_id=task.intended_parent_id,
         donor_id=task.donor_id,
+        form_submission_id=submission_metadata.get("form_submission_id"),
+        form_id=submission_metadata.get("form_id"),
+        form_name=submission_metadata.get("form_name"),
         surrogate_number=surrogate_number,
         donor_number=donor_metadata.get("donor_number"),
         donor_type=donor_metadata.get("donor_type"),
@@ -1395,6 +1454,17 @@ def task_subjects_belong_to_org(org_id: UUID):
     """Fail closed if any linked task subject belongs to another organization."""
     return and_(
         or_(
+            Task.form_submission_id.is_(None),
+            exists()
+            .where(
+                FormSubmission.id == Task.form_submission_id,
+                FormSubmission.organization_id == org_id,
+                Form.id == FormSubmission.form_id,
+                Form.organization_id == FormSubmission.organization_id,
+            )
+            .correlate(Task),
+        ),
+        or_(
             Task.surrogate_id.is_(None),
             exists()
             .where(
@@ -1727,9 +1797,16 @@ def invalidate_pending_approvals_for_surrogate(
     Returns count of invalidated tasks.
     """
     from app.db.enums import WorkflowExecutionStatus
+    from app.db.models import AutomationWorkflow
+    from app.services.workflow_engine_core import complete_paused_executions
 
     pending_tasks = (
         db.query(Task)
+        .join(
+            Surrogate,
+            (Surrogate.id == Task.surrogate_id)
+            & (Surrogate.organization_id == Task.organization_id),
+        )
         .filter(
             Task.surrogate_id == surrogate_id,
             Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
@@ -1747,13 +1824,34 @@ def invalidate_pending_approvals_for_surrogate(
     executions_by_id: dict[UUID, WorkflowExecution] = {}
     if execution_ids:
         executions = db.scalars(
-            select(WorkflowExecution).where(
+            select(WorkflowExecution)
+            .where(
                 WorkflowExecution.id.in_(execution_ids),
                 WorkflowExecution.organization_id.in_(organization_ids),
             )
+            .order_by(WorkflowExecution.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         ).all()
         executions_by_id = {execution.id: execution for execution in executions}
 
+    workflow_ids = {
+        e.workflow_id for e in executions_by_id.values() if e.entity_type == "form_submission"
+    }
+    workflows_by_id = (
+        {
+            w.id: w
+            for w in db.query(AutomationWorkflow)
+            .filter(
+                AutomationWorkflow.id.in_(workflow_ids),
+                AutomationWorkflow.organization_id.in_(organization_ids),
+            )
+            .all()
+        }
+        if workflow_ids
+        else {}
+    )
+    completions = []
     count = 0
     for task in pending_tasks:
         # Mark task as denied
@@ -1765,7 +1863,18 @@ def invalidate_pending_approvals_for_surrogate(
         if task.workflow_execution_id:
             execution = executions_by_id.get(task.workflow_execution_id)
 
-            if execution and execution.status == WorkflowExecutionStatus.PAUSED.value:
+            if (
+                execution
+                and execution.organization_id == task.organization_id
+                and execution.status == WorkflowExecutionStatus.PAUSED.value
+            ):
+                completions.append(
+                    (
+                        execution,
+                        workflows_by_id.get(execution.workflow_id),
+                        execution.paused_at_action_index,
+                    )
+                )
                 execution.status = WorkflowExecutionStatus.CANCELED.value
                 execution.error_message = reason
                 execution.paused_at_action_index = None
@@ -1774,7 +1883,7 @@ def invalidate_pending_approvals_for_surrogate(
         count += 1
 
     if count > 0:
-        db.commit()
+        complete_paused_executions(db, completions)
         logger.info(
             f"Invalidated {count} pending approval(s) for surrogate {surrogate_id}: {reason}"
         )

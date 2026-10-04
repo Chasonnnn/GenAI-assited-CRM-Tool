@@ -30,7 +30,7 @@ describe("getNotificationHref", () => {
             entity_id: "task-2",
         })
 
-        expect(href).toBe("/tasks?filter=my_tasks")
+        expect(href).toBe("/tasks?filter=my_tasks&task=task-2")
     })
 
     it("routes donor notifications to donor detail", () => {
@@ -41,6 +41,19 @@ describe("getNotificationHref", () => {
         })
 
         expect(href).toBe("/donors/donor-1")
+    })
+
+    it("routes routing review notifications to Form Submissions on their form", () => {
+        expect(getNotificationHref({
+            type: "form_submission_routing_review",
+            entity_type: "form",
+            entity_id: "form-1",
+        })).toBe("/automation/form-submissions?form=form-1")
+        expect(getNotificationHref({
+            type: "form_submission_routing_review",
+            entity_type: "form",
+            entity_id: null,
+        })).toBe("/notifications")
     })
 
     it("routes intelligent suggestion digests to dynamic surrogate filter", () => {
@@ -63,7 +76,26 @@ describe("match notifications", () => {
         expect(getNotificationHref({ type: "status_change_approved", entity_type: "match", entity_id: "match-2" })).toBe("/intended-parents/matches/match-2")
     })
 
-    it("keeps pending match cancellation approvals in the approvals queue", () => {
-        expect(getNotificationHref({ type: "status_change_requested", entity_type: "match", entity_id: "match-3" })).toBe("/tasks?filter=my_tasks&focus=approvals")
+    it("points pending match cancellation approvals at their approval row", () => {
+        expect(getNotificationHref({ type: "status_change_requested", entity_type: "match", entity_id: "match-3", request_id: "req-3" })).toBe("/tasks?filter=my_tasks&focus=approvals&approval=req-3")
+    })
+
+    it("opens the match once its cancellation request is no longer pending", () => {
+        expect(getNotificationHref({ type: "status_change_requested", entity_type: "match", entity_id: "match-3", request_id: null })).toBe("/intended-parents/matches/match-3")
+    })
+})
+
+describe("record deep links", () => {
+    it("points workflow approvals at their approval row", () => {
+        expect(getNotificationHref({ type: "workflow_approval_requested", entity_type: "task", entity_id: "task-9" })).toBe("/tasks?filter=my_tasks&focus=approvals&approval=task-9")
+    })
+
+    it("opens the assigned or overdue task", () => {
+        expect(getNotificationHref({ type: "task_assigned", entity_type: "task", entity_id: "task-4" })).toBe("/tasks?filter=my_tasks&focus=tasks&task=task-4")
+        expect(getNotificationHref({ type: "task_overdue", entity_type: "donor_task", entity_id: "task-5" })).toBe("/tasks?filter=my_tasks&focus=overdue&task=task-5")
+    })
+
+    it("opens the requested appointment", () => {
+        expect(getNotificationHref({ type: "appointment_requested", entity_type: "appointment", entity_id: "appt-1" })).toBe("/appointments?appointment=appt-1")
     })
 })

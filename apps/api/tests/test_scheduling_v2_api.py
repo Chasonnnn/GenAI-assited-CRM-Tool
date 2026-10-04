@@ -596,3 +596,273 @@ async def test_staff_create_rejects_record_token(authed_client, booking_surface)
     response = await authed_client.post("/appointments", json=payload)
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("existing_status", ["pending", "running", "completed"])
+async def test_binding_manual_sync_reuses_scheduled_work_in_same_window(
+    authed_client, db, test_org, test_user, monkeypatch, existing_status
+):
+    from app.db.models import Job
+
+    fixed_now = datetime(2026, 9, 29, 12, tzinfo=UTC)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
+
+    monkeypatch.setattr(calendar_binding_service, "datetime", FixedDateTime)
+    integration = UserIntegration(
+        user_id=test_user.id,
+        integration_type="google_calendar",
+        account_email="sync-regression@example.test",
+        access_token_encrypted="local-test-token",
+    )
+    db.add(integration)
+    db.flush()
+    binding = CalendarBinding(
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        integration_id=integration.id,
+        account_email=integration.account_email,
+        calendar_id="sync-regression-calendar",
+        display_name="Regression Calendar",
+        access_role="owner",
+        timezone="UTC",
+        write_bookings=True,
+    )
+    db.add(binding)
+    db.commit()
+    scheduled = calendar_binding_service.enqueue_binding_sync(
+        db, binding_id=binding.id, org_id=test_org.id, now=fixed_now
+    )
+    scheduled_id = scheduled.id
+    scheduled.status = existing_status
+    db.commit()
+    db.add(
+        CalendarBinding(
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            integration_id=integration.id,
+            account_email=integration.account_email,
+            calendar_id="new-sync-regression-calendar",
+            display_name="New Calendar",
+            access_role="reader",
+            timezone="UTC",
+            write_bookings=False,
+        )
+    )
+    db.commit()
+
+    foreign = Organization(name="Other organization", slug=f"foreign-sync-{uuid4().hex[:8]}")
+    foreign_user = User(
+        email=f"foreign-sync-{uuid4().hex[:8]}@example.test", display_name="Foreign calendar owner"
+    )
+    db.add_all([foreign, foreign_user])
+    db.flush()
+    db.add(Membership(organization_id=foreign.id, user_id=foreign_user.id, role="admin"))
+    foreign_integration = UserIntegration(
+        user_id=foreign_user.id,
+        integration_type="google_calendar",
+        account_email="foreign-sync@example.test",
+        access_token_encrypted="local-test-token",
+    )
+    db.add(foreign_integration)
+    db.flush()
+    db.add(
+        CalendarBinding(
+            organization_id=foreign.id,
+            user_id=foreign_user.id,
+            integration_id=foreign_integration.id,
+            account_email=foreign_integration.account_email,
+            calendar_id="foreign-sync-calendar",
+            display_name="Foreign Calendar",
+            access_role="reader",
+            timezone="UTC",
+            write_bookings=False,
+        )
+    )
+    db.commit()
+    denied = await authed_client.post(
+        "/integrations/google-calendar/bindings/sync", headers={CSRF_HEADER: "invalid"}
+    )
+    assert denied.status_code == 403
+
+    for expected_queued in (1, 0):
+        response = await authed_client.post("/integrations/google-calendar/bindings/sync")
+        assert response.status_code == 200, response.text
+        assert response.json()["accepted"] is True
+        assert response.json()["queued"] == expected_queued
+
+    jobs = (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == "google_calendar_sync",
+        )
+        .all()
+    )
+    assert len(jobs) == 2
+    assert scheduled_id in {job.id for job in jobs}
+    assert next(job for job in jobs if job.id == scheduled_id).status == existing_status
+    assert db.query(Job).filter(Job.organization_id == foreign.id).count() == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("access_role", ["reader", "freeBusyReader"])
+async def test_binding_rejects_discovered_readonly_booking_destination(
+    authed_client, db, test_org, test_user, monkeypatch, rollback_safe_request_db, access_role
+):
+    integration = UserIntegration(
+        user_id=test_user.id,
+        integration_type="google_calendar",
+        account_email="readonly-regression@example.test",
+        access_token_encrypted="local-test-token",
+    )
+    db.add(integration)
+    db.commit()
+
+    async def discovered(*_args, **_kwargs):
+        return [
+            {
+                "calendar_id": "readonly-regression-calendar",
+                "display_name": "Read only",
+                "access_role": access_role,
+                "timezone": "UTC",
+                "primary": False,
+            }
+        ]
+
+    monkeypatch.setattr(calendar_binding_service, "discover_calendars", discovered)
+    response = await authed_client.put(
+        "/integrations/google-calendar/bindings",
+        json={
+            "items": [
+                {
+                    "calendar_id": "readonly-regression-calendar",
+                    "check_busy": True,
+                    "show_events": True,
+                    "write_bookings": True,
+                    "is_active": True,
+                }
+            ]
+        },
+    )
+    assert response.status_code == 409, response.text
+    assert (
+        db.query(CalendarBinding)
+        .filter(
+            CalendarBinding.organization_id == test_org.id,
+            CalendarBinding.user_id == test_user.id,
+            CalendarBinding.write_bookings.is_(True),
+        )
+        .count()
+        == 0
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["foreign_job", "unrelated_constraint", "failed_job"])
+async def test_binding_manual_sync_rejects_unusable_collision_atomically(
+    authed_client, db, test_org, test_user, monkeypatch, failure, rollback_safe_request_db
+):
+    from types import SimpleNamespace
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.db.models import Job
+
+    fixed_now = datetime(2026, 9, 29, 12, tzinfo=UTC)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
+
+    monkeypatch.setattr(calendar_binding_service, "datetime", FixedDateTime)
+    integration = UserIntegration(
+        user_id=test_user.id,
+        integration_type="google_calendar",
+        account_email="atomic-sync@example.test",
+        access_token_encrypted="local-test-token",
+    )
+    db.add(integration)
+    db.flush()
+    bindings = [
+        CalendarBinding(
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            integration_id=integration.id,
+            account_email=integration.account_email,
+            calendar_id=calendar_id,
+            display_name=name,
+            access_role="reader",
+            timezone="UTC",
+            write_bookings=False,
+        )
+        for calendar_id, name in [("first-new-calendar", "A new"), ("last-calendar", "Z existing")]
+    ]
+    db.add_all(bindings)
+    db.commit()
+    first_id, last_id = [binding.id for binding in bindings]
+    existing = calendar_binding_service.enqueue_binding_sync(
+        db, binding_id=last_id, org_id=test_org.id, now=fixed_now
+    )
+    existing_id = existing.id
+    if failure == "foreign_job":
+        foreign = Organization(name="Other organization", slug=f"other-sync-{uuid4().hex[:8]}")
+        db.add(foreign)
+        db.flush()
+        existing.organization_id = foreign.id
+        db.commit()
+    elif failure == "unrelated_constraint":
+        original_enqueue = calendar_binding_service.enqueue_binding_sync
+
+        def unrelated_failure(db, *, binding_id, **kwargs):
+            if binding_id == last_id:
+                raise IntegrityError(
+                    "synthetic unrelated constraint failure",
+                    {},
+                    SimpleNamespace(
+                        sqlstate="23505", diag=SimpleNamespace(constraint_name="unrelated_unique")
+                    ),
+                )
+            return original_enqueue(db, binding_id=binding_id, **kwargs)
+
+        monkeypatch.setattr(calendar_binding_service, "enqueue_binding_sync", unrelated_failure)
+    else:
+        existing.status = "failed"
+        existing.attempts = existing.max_attempts
+        db.commit()
+
+    response = await authed_client.post("/integrations/google-calendar/bindings/sync")
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "Google Calendar synchronization could not be queued"
+    assert (
+        db.query(Job)
+        .filter(
+            Job.organization_id == test_org.id,
+            Job.job_type == "google_calendar_sync",
+            Job.payload["binding_id"].astext == str(first_id),
+        )
+        .count()
+        == 0
+    )
+    assert db.query(Job).filter(Job.id == existing_id).count() == 1
+
+
+@pytest.fixture
+def rollback_safe_request_db(authed_client, db, monkeypatch):
+    from sqlalchemy.orm import Session
+
+    from app.core.deps import get_db
+    from app.main import app
+
+    # Isolate request rollback from fixture data in the enclosing test transaction.
+    with Session(bind=db.connection(), join_transaction_mode="create_savepoint") as session:
+
+        def request_db():
+            yield session
+
+        monkeypatch.setitem(app.dependency_overrides, get_db, request_db)
+        yield session

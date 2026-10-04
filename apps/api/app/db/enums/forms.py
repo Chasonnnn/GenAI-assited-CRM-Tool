@@ -71,6 +71,7 @@ class FormSubmissionMatchStatus(str, Enum):
     """Identity matching outcome for shared-link submissions."""
 
     WORKFLOW_PENDING = "workflow_pending"
+    ROUTING_REVIEW = "routing_review"
     LINKED = "linked"
     AMBIGUOUS_REVIEW = "ambiguous_review"
     LEAD_CREATED = "lead_created"

@@ -126,6 +126,9 @@ class UserNotificationSettings(Base):
     email_workflow_notifications: Mapped[bool] = mapped_column(
         default=False, server_default=text("false")
     )  # Workflow "Send Notification" action
+    email_daily_digest: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false")
+    )  # One morning email with open action items and new updates
 
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False

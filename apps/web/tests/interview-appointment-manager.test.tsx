@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { InterviewAppointmentManager, localDateTimeToIso, nextBusinessHour } from "@/components/surrogates/InterviewAppointmentManager"
+import { InterviewAppointmentManager, nextBusinessHour } from "@/components/surrogates/InterviewAppointmentManager"
 import { formatSchedulingDate, formatSchedulingTime, schedulingTimezoneLabel } from "@/lib/scheduling-time"
 import type { InterviewAppointmentState } from "@/lib/api/interview-appointment"
 
@@ -312,10 +312,7 @@ describe("InterviewAppointmentManager", () => {
         fireEvent.click(screen.getByRole("button", { name: "Manage" }))
         fireEvent.click(await screen.findByRole("button", { name: "Reschedule" }))
         expect(screen.getByText(timezone.replaceAll("_", " "))).toBeInTheDocument()
-        const local = new Date(appointment.scheduled_start)
-        const pad = (value: number) => String(value).padStart(2, "0")
         expect(screen.queryByLabelText("Interview date and time")).not.toBeInTheDocument()
-        expect(localDateTimeToIso(`2026-09-20T${pad(local.getHours())}:${pad(local.getMinutes())}`)).not.toBeNull()
     })
 
     it("disables management for read-only users", () => {

@@ -28,7 +28,7 @@ import {
 import { TabsContent } from "@/components/ui/tabs"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
-import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
+import { MedicalRecordsCard } from "@/components/medical-records/MedicalRecordsCard"
 import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverviewCard"
 import {
     CalendarDaysIcon,
@@ -660,12 +660,7 @@ function DonorOverviewContent({ donor, profile, canEdit, activityPanel }: {
                             </AlertDialog>
                         </>
 
-                    <CombinedMedicalInsuranceCard
-                        surrogateData={donorData}
-                        onUpdate={async (data) => {
-                            await onUpdate(data)
-                        }}
-                    />
+                    <MedicalRecordsCard owner={{ kind: "donor", id }} readOnly={!canEdit} />
                 </div>
 
                 <div className="space-y-4">

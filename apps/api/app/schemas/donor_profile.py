@@ -32,71 +32,6 @@ class DonorProfileFields(BaseModel):
     race: str | None = Field(None, max_length=100)
     height_ft: Decimal | None = Field(None, ge=0, le=10)
     weight_lb: int | None = Field(None, ge=0, le=1000)
-    insurance_company: str | None = Field(None, max_length=255)
-    insurance_plan_name: str | None = Field(None, max_length=255)
-    insurance_phone: str | None = None
-    insurance_policy_number: str | None = None
-    insurance_member_id: str | None = None
-    insurance_group_number: str | None = Field(None, max_length=100)
-    insurance_subscriber_name: str | None = None
-    insurance_subscriber_dob: date | None = None
-    insurance_fax: str | None = None
-    clinic_name: str | None = Field(None, max_length=255)
-    clinic_address_line1: str | None = None
-    clinic_address_line2: str | None = None
-    clinic_city: str | None = Field(None, max_length=100)
-    clinic_state: str | None = None
-    clinic_postal: str | None = Field(None, max_length=20)
-    clinic_phone: str | None = None
-    clinic_email: EmailStr | None = None
-    clinic_fax: str | None = None
-    monitoring_clinic_name: str | None = Field(None, max_length=255)
-    monitoring_clinic_address_line1: str | None = None
-    monitoring_clinic_address_line2: str | None = None
-    monitoring_clinic_city: str | None = Field(None, max_length=100)
-    monitoring_clinic_state: str | None = None
-    monitoring_clinic_postal: str | None = Field(None, max_length=20)
-    monitoring_clinic_phone: str | None = None
-    monitoring_clinic_email: EmailStr | None = None
-    monitoring_clinic_fax: str | None = None
-    ob_provider_name: str | None = Field(None, max_length=255)
-    ob_clinic_name: str | None = Field(None, max_length=255)
-    ob_address_line1: str | None = None
-    ob_address_line2: str | None = None
-    ob_city: str | None = Field(None, max_length=100)
-    ob_state: str | None = None
-    ob_postal: str | None = Field(None, max_length=20)
-    ob_phone: str | None = None
-    ob_email: EmailStr | None = None
-    ob_fax: str | None = None
-    delivery_hospital_name: str | None = Field(None, max_length=255)
-    delivery_hospital_address_line1: str | None = None
-    delivery_hospital_address_line2: str | None = None
-    delivery_hospital_city: str | None = Field(None, max_length=100)
-    delivery_hospital_state: str | None = None
-    delivery_hospital_postal: str | None = Field(None, max_length=20)
-    delivery_hospital_phone: str | None = None
-    delivery_hospital_email: EmailStr | None = None
-    delivery_hospital_fax: str | None = None
-    pcp_provider_name: str | None = Field(None, max_length=255)
-    pcp_name: str | None = Field(None, max_length=255)
-    pcp_address_line1: str | None = None
-    pcp_address_line2: str | None = None
-    pcp_city: str | None = Field(None, max_length=100)
-    pcp_state: str | None = None
-    pcp_postal: str | None = Field(None, max_length=20)
-    pcp_phone: str | None = None
-    pcp_fax: str | None = None
-    pcp_email: EmailStr | None = None
-    lab_clinic_name: str | None = Field(None, max_length=255)
-    lab_clinic_address_line1: str | None = None
-    lab_clinic_address_line2: str | None = None
-    lab_clinic_city: str | None = Field(None, max_length=100)
-    lab_clinic_state: str | None = None
-    lab_clinic_postal: str | None = Field(None, max_length=20)
-    lab_clinic_phone: str | None = None
-    lab_clinic_fax: str | None = None
-    lab_clinic_email: EmailStr | None = None
     education: str | None = Field(None, max_length=255)
     college: str | None = Field(None, max_length=255)
     nicotine: str | None = Field(None, max_length=255)
@@ -111,20 +46,6 @@ class DonorProfileFields(BaseModel):
 
     @field_validator(
         "partner_phone",
-        "insurance_phone",
-        "insurance_fax",
-        "clinic_phone",
-        "clinic_fax",
-        "monitoring_clinic_phone",
-        "monitoring_clinic_fax",
-        "ob_phone",
-        "ob_fax",
-        "delivery_hospital_phone",
-        "delivery_hospital_fax",
-        "pcp_phone",
-        "pcp_fax",
-        "lab_clinic_phone",
-        "lab_clinic_fax",
     )
     @classmethod
     def validate_phone(cls, value: str | None) -> str | None:
@@ -133,12 +54,6 @@ class DonorProfileFields(BaseModel):
     @field_validator(
         "address_state",
         "partner_state",
-        "clinic_state",
-        "monitoring_clinic_state",
-        "ob_state",
-        "delivery_hospital_state",
-        "pcp_state",
-        "lab_clinic_state",
     )
     @classmethod
     def validate_state(cls, value: str | None) -> str | None:

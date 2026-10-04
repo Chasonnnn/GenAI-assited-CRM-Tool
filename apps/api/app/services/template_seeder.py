@@ -631,6 +631,27 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
         .all()
     }
 
+    # Pre-fetch pipeline stages to avoid N+1 queries
+    slugs_to_resolve = []
+    for workflow_data in SYSTEM_WORKFLOWS:
+        if workflow_data["system_key"] in existing_workflow_keys:
+            continue
+        if workflow_data.get("trigger_type") == "status_changed":
+            trigger_config = workflow_data.get("trigger_config", {})
+            if "to_stage_slug" in trigger_config:
+                slugs_to_resolve.append(trigger_config["to_stage_slug"])
+            if "from_stage_slug" in trigger_config:
+                slugs_to_resolve.append(trigger_config["from_stage_slug"])
+        for condition in workflow_data.get("conditions", []):
+            slugs_to_resolve.extend(condition.get("stage_slugs") or [])
+
+    resolved_stages = pipeline_service.resolve_stages_bulk(
+        db, org_id, pipeline.id, slugs_to_resolve
+    )
+    stage_map = {
+        slug: stage for slug, stage in zip(slugs_to_resolve, resolved_stages) if stage is not None
+    }
+
     for workflow_data in SYSTEM_WORKFLOWS:
         if workflow_data["system_key"] in existing_workflow_keys:
             continue
@@ -639,10 +660,8 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
         if workflow_data.get("trigger_type") == "status_changed":
             to_slug = trigger_config.pop("to_stage_slug", None)
             from_slug = trigger_config.pop("from_stage_slug", None)
-            to_stage = pipeline_service.resolve_stage(db, pipeline.id, to_slug) if to_slug else None
-            from_stage = (
-                pipeline_service.resolve_stage(db, pipeline.id, from_slug) if from_slug else None
-            )
+            to_stage = stage_map.get(to_slug) if to_slug else None
+            from_stage = stage_map.get(from_slug) if from_slug else None
             # Without its stage the trigger would match every stage change. Skip it;
             # a later idempotent seed creates it once the stage exists.
             if (to_slug and to_stage is None) or (from_slug and from_stage is None):
@@ -661,9 +680,7 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
             condition_copy = condition.copy()
             stage_slugs = condition_copy.pop("stage_slugs", None)
             if stage_slugs:
-                stages = [
-                    pipeline_service.resolve_stage(db, pipeline.id, slug) for slug in stage_slugs
-                ]
+                stages = [stage_map.get(slug) for slug in stage_slugs]
                 if any(stage is None for stage in stages):
                     missing_condition_stage = True
                     break

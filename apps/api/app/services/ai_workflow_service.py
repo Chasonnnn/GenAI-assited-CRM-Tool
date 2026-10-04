@@ -171,16 +171,6 @@ AVAILABLE_ACTIONS = {
         "required_fields": [],
         "optional_fields": ["source", "is_priority", "assign_to_user"],
     },
-    "auto_match_submission": {
-        "description": "Deterministically match a form submission to an existing surrogate",
-        "required_fields": [],
-        "optional_fields": [],
-    },
-    "create_intake_lead": {
-        "description": "Create an intake lead from an unmatched form submission",
-        "required_fields": [],
-        "optional_fields": ["source"],
-    },
 }
 
 CONDITION_OPERATORS = [

@@ -52,6 +52,7 @@ const TYPE_GROUPS: Record<string, string[]> = {
         "workflow_approval_expired",
         "workflow_notification",
         "workflow_approval_requested",
+        "form_submission_routing_review",
         "status_change_requested",
         "status_change_approved",
         "status_change_rejected",
@@ -146,7 +147,7 @@ export default function NotificationsPage() {
     }
 
     const handleMarkAllRead = () => {
-        markAllRead.mutate()
+        markAllRead.mutate(undefined)
     }
 
     const getDaysOverdue = (dueDate: string) =>

@@ -39,6 +39,7 @@ JOB_HANDLERS: Mapping[str, JobHandler] = {
     JobType.REMINDER.value: reminders.process_reminder,
     JobType.WEBHOOK_RETRY.value: webhooks.process_webhook_retry,
     JobType.NOTIFICATION.value: notifications.process_notification,
+    JobType.NOTIFICATION_DIGEST.value: notifications.process_notification_digest,
     JobType.META_LEAD_FETCH.value: meta.process_meta_lead_fetch,
     JobType.META_LEAD_REPROCESS_FORM.value: meta.process_meta_lead_reprocess_form,
     JobType.META_CAPI_EVENT.value: meta.process_meta_capi_event,

@@ -245,27 +245,22 @@ async def send_lead_event_for_account(
             resp = await client.post(url, json=payload)
 
             if resp.status_code != 200:
-                error_body = resp.text[:500]
-                logger.error(f"Meta CAPI error {resp.status_code}: {error_body}")
-                return False, f"CAPI error {resp.status_code}: {error_body}"
+                logger.error("Meta CAPI HTTP error %s", resp.status_code)
+                return False, f"CAPI error {resp.status_code}"
 
-            result = resp.json()
-            events_received = result.get("events_received", 0)
-            logger.info(
-                f"Meta CAPI: sent {event_name} to pixel {ad_account.pixel_id} "
-                f"for lead {lead_id}, received: {events_received}"
-            )
+            resp.json()
+            logger.info("Meta CAPI event sent")
             return True, None
 
     except httpx.TimeoutException:
-        logger.error(f"Meta CAPI timeout for lead {lead_id}")
+        logger.error("Meta CAPI timeout")
         return False, "Meta CAPI timeout"
     except httpx.ConnectError:
-        logger.error(f"Meta CAPI connection failed for lead {lead_id}")
+        logger.error("Meta CAPI connection failed")
         return False, "Meta CAPI connection failed"
-    except Exception as e:
-        logger.error(f"Meta CAPI error for lead {lead_id}: {e}")
-        return False, f"Meta CAPI error: {str(e)[:200]}"
+    except Exception:
+        logger.error("Meta CAPI request failed")
+        return False, "Meta CAPI request failed"
 
 
 async def send_status_event_for_account(

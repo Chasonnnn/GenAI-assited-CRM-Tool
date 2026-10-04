@@ -21,6 +21,7 @@ from app.db.enums import (
 )
 from app.db.models import (
     AutomationWorkflow,
+    Form,
     FormSubmission,
     IntakeLead,
     Membership,
@@ -35,18 +36,132 @@ from app.services.workflow_definition_rules import (
     appointment_timing_key,
 )
 from app.services.workflow_engine_adapters import WorkflowDomainAdapter
+from app.services.workflow_routing_retirement import (
+    RETIRED_ROUTING_ACTIONS,
+    cancel_paused_routing_execution,
+    has_retired_routing_actions,
+    retired_action_skip,
+)
 
 logger = logging.getLogger(__name__)
 
 # Maximum recursion depth for workflow-triggered events
 MAX_DEPTH = 3
 FORM_SUBMISSION_ACTION_SNAPSHOT_KEY = "_form_submission_workflow_actions"
-RECOVERABLE_FORM_SUBMISSION_ACTIONS = frozenset(
-    {
-        "auto_match_submission",
-        "create_intake_lead",
-    }
-)
+
+
+def _lock_pending_routing_submission(
+    db: Session, execution: WorkflowExecution
+) -> FormSubmission | None:
+    if execution.entity_type != "form_submission":
+        return None
+    return (
+        db.query(FormSubmission)
+        .join(
+            Form,
+            (Form.id == FormSubmission.form_id)
+            & (Form.organization_id == FormSubmission.organization_id),
+        )
+        .filter(
+            FormSubmission.id == execution.entity_id,
+            FormSubmission.organization_id == execution.organization_id,
+            FormSubmission.source_mode == "shared",
+            FormSubmission.status == "pending_review",
+            FormSubmission.match_status == "workflow_pending",
+            FormSubmission.surrogate_id.is_(None),
+            FormSubmission.donor_id.is_(None),
+            FormSubmission.intake_lead_id.is_(None),
+        )
+        .with_for_update(of=FormSubmission)
+        .populate_existing()
+        .first()
+    )
+
+
+def complete_paused_executions(
+    db: Session,
+    completions: list[tuple[WorkflowExecution, AutomationWorkflow | None, int | None]],
+) -> list[UUID]:
+    """Commit terminal states and remaining form routing in the caller's transaction.
+
+    Callers lock executions, set their terminal result, and retain the original paused
+    index. Batches keep policy/owner changes and all cancellations atomic; routing
+    notifications run only after that shared commit.
+    """
+    from app.services import form_routing_service
+
+    terminal_states = [
+        (e.id, e.organization_id, e.status, e.error_message, copy.deepcopy(e.actions_executed))
+        for e, _, _ in completions
+    ]
+    routed = []
+    try:
+        for execution, workflow, paused_index in completions:
+            execution.paused_task_id = None
+            execution.paused_at_action_index = None
+            if (
+                execution.entity_type != "form_submission"
+                or workflow is None
+                or workflow.organization_id != execution.organization_id
+                or not isinstance(paused_index, int)
+                or paused_index < 0
+            ):
+                continue
+            event = execution.trigger_event
+            actions = workflow.actions
+            if isinstance(event, dict) and FORM_SUBMISSION_ACTION_SNAPSHOT_KEY in event:
+                actions = event[FORM_SUBMISSION_ACTION_SNAPSHOT_KEY]
+            if not isinstance(actions, list) or not any(
+                isinstance(action, dict) and action.get("action_type") in RETIRED_ROUTING_ACTIONS
+                for action in actions[paused_index:]
+            ):
+                continue
+            submission = _lock_pending_routing_submission(db, execution)
+            if submission is not None:
+                callbacks = []
+                form_routing_service.route_submission(
+                    db,
+                    org_id=execution.organization_id,
+                    submission_id=submission.id,
+                    commit=False,
+                    after_commit=callbacks,
+                )
+                routed.append((submission, callbacks))
+        db.commit()
+    except Exception:
+        db.rollback()
+        # A set pointer means nothing committed: the rollback leaves the caller's whole
+        # transaction retryable. A cleared pointer means an adapter action committed, so
+        # record the terminal result; a retry must never execute that action again.
+        recovered = False
+        for execution_id, org_id, status, error, results in terminal_states:
+            execution = (
+                db.query(WorkflowExecution)
+                .filter(
+                    WorkflowExecution.id == execution_id,
+                    WorkflowExecution.organization_id == org_id,
+                )
+                .with_for_update()
+                .populate_existing()
+                .first()
+            )
+            if (
+                execution is not None
+                and execution.status == WorkflowExecutionStatus.PAUSED.value
+                and execution.paused_task_id is None
+            ):
+                execution.status = status
+                execution.error_message = error
+                execution.actions_executed = results
+                recovered = True
+        if recovered:
+            db.commit()
+        else:
+            db.rollback()
+        raise
+    for submission, callbacks in routed:
+        form_routing_service.run_after_commit(db, submission, callbacks)
+    return [submission.id for submission, _ in routed]
 
 
 class WorkflowEngineCore:
@@ -343,6 +458,13 @@ class WorkflowEngineCore:
         """Execute a single workflow and log the result."""
         from app.services import permission_policy_service
 
+        if has_retired_routing_actions(workflow.actions):
+            logger.warning(
+                "Skipped retired routing workflow: workflow_id=%s organization_id=%s",
+                workflow.id,
+                workflow.organization_id,
+            )
+            return None
         permission_policy_service.lock_configuration(db, workflow.organization_id)
         start_time = time.time()
         if subject_type is None or subject_id is None or subject_type != workflow.subject_type:
@@ -709,6 +831,7 @@ class WorkflowEngineCore:
                 approval_task = (
                     db.query(Task)
                     .filter(
+                        Task.organization_id == workflow.organization_id,
                         Task.workflow_execution_id == execution.id,
                         Task.workflow_action_index == index,
                         Task.status == TaskStatus.PENDING.value,
@@ -721,37 +844,12 @@ class WorkflowEngineCore:
                     execution.paused_task_id = approval_task.id
                     db.commit()
                 return execution
-            if action.get("action_type") not in RECOVERABLE_FORM_SUBMISSION_ACTIONS:
-                execution.status = WorkflowExecutionStatus.FAILED.value
-                execution.error_message = "Workflow action requires manual recovery review"
-                db.commit()
-                return execution
-
-            result = self._execute_authorized_action(
-                workflow=workflow,
-                execution=execution,
-                db=db,
-                action=action,
-                entity=entity,
-                entity_type=execution.entity_type,
-                event_id=execution.event_id,
-                depth=execution.depth,
-                workflow_scope=workflow.scope,
-                workflow_owner_id=workflow.owner_user_id,
-                workflow_creator_user_id=workflow.created_by_user_id,
-                trigger_callback=self.trigger,
-                workflow_execution_id=execution.id,
-                workflow_action_index=index,
-                subject_type=execution.subject_type,
-                subject_id=execution.subject_id,
-            )
-            if index < len(action_results):
-                action_results[index] = result
-            else:
-                action_results.append(result)
-            execution.actions_executed = action_results
-            execution.status = WorkflowExecutionStatus.RUNNING.value
+            # Record actions and communications may already have taken effect before
+            # the crash; review their outcome before replaying them.
+            execution.status = WorkflowExecutionStatus.FAILED.value
+            execution.error_message = "Workflow action requires manual recovery review"
             db.commit()
+            return execution
 
         all_success = len(action_results) == len(actions_snapshot) and all(
             result.get("success") is True for result in action_results
@@ -791,7 +889,7 @@ class WorkflowEngineCore:
         Called by the resume job processor after task is resolved.
         """
 
-        from app.services import permission_policy_service
+        from app.services import form_routing_service, permission_policy_service
 
         resume_org = (
             db.query(WorkflowExecution.organization_id)
@@ -804,8 +902,12 @@ class WorkflowEngineCore:
         # Lock execution row
         execution = (
             db.query(WorkflowExecution)
-            .filter(WorkflowExecution.id == execution_id)
+            .filter(
+                WorkflowExecution.id == execution_id,
+                WorkflowExecution.organization_id == resume_org,
+            )
             .with_for_update()
+            .populate_existing()
             .first()
         )
 
@@ -842,6 +944,36 @@ class WorkflowEngineCore:
             logger.error(f"Workflow {execution.workflow_id} not found for resume")
             return
 
+        action_index = execution.paused_at_action_index
+        if task.status in {TaskStatus.DENIED.value, TaskStatus.EXPIRED.value}:
+            denied = task.status == TaskStatus.DENIED.value
+            execution.status = (
+                WorkflowExecutionStatus.CANCELED.value
+                if denied
+                else WorkflowExecutionStatus.EXPIRED.value
+            )
+            execution.error_message = (
+                f"Approval denied: {task.workflow_denial_reason or 'No reason given'}"
+                if denied
+                else "Approval timed out"
+            )
+            execution.actions_executed = [
+                *(execution.actions_executed or []),
+                {
+                    "success": False,
+                    "action_type": task.workflow_action_type,
+                    "skipped": True,
+                    "reason": "denied" if denied else "expired",
+                },
+            ]
+            complete_paused_executions(db, [(execution, workflow, action_index)])
+            return
+
+        if has_retired_routing_actions(workflow.actions):
+            cancel_paused_routing_execution(db, execution)
+            complete_paused_executions(db, [(execution, workflow, action_index)])
+            return
+
         # Get entity
         entity = self.adapter.get_entity(db, execution.entity_type, execution.entity_id)
         if not entity:
@@ -850,7 +982,7 @@ class WorkflowEngineCore:
             execution.error_message = "Entity not found during resume"
             execution.paused_at_action_index = None
             execution.paused_task_id = None
-            db.commit()
+            complete_paused_executions(db, [(execution, workflow, action_index)])
             return
 
         if (
@@ -872,11 +1004,10 @@ class WorkflowEngineCore:
                 execution.error_message = "Donor subject unavailable during resume"
                 execution.paused_at_action_index = None
                 execution.paused_task_id = None
-                db.commit()
+                complete_paused_executions(db, [(execution, workflow, action_index)])
                 return
 
         # Clear paused state
-        action_index = execution.paused_at_action_index
         execution.paused_at_action_index = None
         execution.paused_task_id = None
 
@@ -891,7 +1022,7 @@ class WorkflowEngineCore:
                     execution.error_message = (
                         "Workflow action snapshot unavailable for safe continuation"
                     )
-                    db.commit()
+                    complete_paused_executions(db, [(execution, workflow, action_index)])
                     return
                 if FORM_SUBMISSION_ACTION_SNAPSHOT_KEY in execution_event:
                     actions_snapshot = execution_event[FORM_SUBMISSION_ACTION_SNAPSHOT_KEY]
@@ -902,7 +1033,7 @@ class WorkflowEngineCore:
                         execution.error_message = (
                             "Workflow action snapshot unavailable for safe continuation"
                         )
-                        db.commit()
+                        complete_paused_executions(db, [(execution, workflow, action_index)])
                         return
                     remaining_action_source = actions_snapshot
 
@@ -919,11 +1050,11 @@ class WorkflowEngineCore:
                 )
                 execution.actions_executed = action_results
                 execution.status = WorkflowExecutionStatus.FAILED.value
-                db.commit()
+                complete_paused_executions(db, [(execution, workflow, action_index)])
                 return
 
             # Execute the approved action
-            result = self._execute_authorized_action(
+            result = retired_action_skip(action) or self._execute_authorized_action(
                 workflow=workflow,
                 execution=execution,
                 db=db,
@@ -948,6 +1079,10 @@ class WorkflowEngineCore:
             for idx, next_action in enumerate(remaining_actions):
                 actual_idx = action_index + 1 + idx
 
+                retired = retired_action_skip(next_action)
+                if retired:
+                    action_results.append(retired)
+                    continue
                 denied = self._action_authority_error(db, workflow, execution, next_action)
                 if denied:
                     action_results.append(denied)
@@ -978,7 +1113,7 @@ class WorkflowEngineCore:
                         execution.error_message = (
                             approval_error or "Approver not found for approval"
                         )
-                        db.commit()
+                        complete_paused_executions(db, [(execution, workflow, action_index)])
                         return
 
                     new_task = self.adapter.create_approval_task(
@@ -1013,7 +1148,7 @@ class WorkflowEngineCore:
                     execution.actions_executed = action_results
                     execution.status = WorkflowExecutionStatus.FAILED.value
                     execution.error_message = "Failed to create approval task"
-                    db.commit()
+                    complete_paused_executions(db, [(execution, workflow, action_index)])
                     return
 
                 # Execute non-approval action
@@ -1039,56 +1174,43 @@ class WorkflowEngineCore:
 
             # All done - determine final status
             all_success = all(r.get("success") for r in action_results)
-            execution.status = (
-                WorkflowExecutionStatus.SUCCESS.value
-                if all_success
-                else WorkflowExecutionStatus.PARTIAL.value
-            )
-            execution.actions_executed = action_results
-            db.commit()
-
-            # Update workflow stats
-            workflow.run_count += 1
-            workflow.last_run_at = datetime.now(UTC)
-            db.commit()
-
-        elif task.status == TaskStatus.DENIED.value:
-            # DENIED: Mark execution as canceled
-            action_results.append(
-                {
-                    "success": False,
-                    "action_type": task.workflow_action_type,
-                    "skipped": True,
-                    "reason": "denied",
-                }
-            )
-            execution.status = WorkflowExecutionStatus.CANCELED.value
-            execution.error_message = (
-                f"Approval denied: {task.workflow_denial_reason or 'No reason given'}"
-            )
-            execution.actions_executed = action_results
-            db.commit()
-
-        elif task.status == TaskStatus.EXPIRED.value:
-            # EXPIRED: Mark execution as expired
-            action_results.append(
-                {
-                    "success": False,
-                    "action_type": task.workflow_action_type,
-                    "skipped": True,
-                    "reason": "expired",
-                }
-            )
-            execution.status = WorkflowExecutionStatus.EXPIRED.value
-            execution.error_message = "Approval timed out"
-            execution.actions_executed = action_results
-            db.commit()
+            submission = None
+            try:
+                # Include prior resumes: a retired action may precede a later approval.
+                if any(
+                    result.get("success")
+                    and result.get("skipped")
+                    and result.get("action_type") in RETIRED_ROUTING_ACTIONS
+                    for result in action_results
+                ):
+                    submission = _lock_pending_routing_submission(db, execution)
+                execution.status = (
+                    WorkflowExecutionStatus.SUCCESS.value
+                    if all_success
+                    else WorkflowExecutionStatus.PARTIAL.value
+                )
+                execution.actions_executed = action_results
+                workflow.run_count += 1
+                workflow.last_run_at = datetime.now(UTC)
+                if submission is not None:
+                    # Routing commits the final execution result, stats, and routing audit together.
+                    form_routing_service.route_submission(
+                        db, org_id=execution.organization_id, submission_id=submission.id
+                    )
+                else:
+                    db.commit()
+            except Exception:
+                db.rollback()
+                self._record_failed_resume_completion(
+                    db, execution.id, execution.organization_id, action_results
+                )
+                raise
 
         else:
             logger.warning(f"Unexpected task status for resume: {task.status}")
             execution.status = WorkflowExecutionStatus.FAILED.value
             execution.error_message = f"Unexpected task status: {task.status}"
-            db.commit()
+            complete_paused_executions(db, [(execution, workflow, action_index)])
 
     def _action_authority_error(self, db, workflow, execution, action):
         try:
@@ -1245,6 +1367,34 @@ class WorkflowEngineCore:
             return None, fallback_admin, None
 
         return None, None, "Workflow requires approval but no approver could be resolved"
+
+    def _record_failed_resume_completion(
+        self, db: Session, execution_id: UUID, org_id: UUID, action_results: list[dict]
+    ) -> None:
+        """Close an execution whose committed actions can no longer resume."""
+        execution = (
+            db.query(WorkflowExecution)
+            .filter(
+                WorkflowExecution.id == execution_id,
+                WorkflowExecution.organization_id == org_id,
+            )
+            .with_for_update()
+            .populate_existing()
+            .first()
+        )
+        # A set pointer means nothing committed, so the resume job can retry. A cleared
+        # pointer means an action committed; retrying must not run it again.
+        if (
+            execution is None
+            or execution.status != WorkflowExecutionStatus.PAUSED.value
+            or execution.paused_task_id is not None
+        ):
+            db.rollback()
+            return
+        execution.status = WorkflowExecutionStatus.FAILED.value
+        execution.actions_executed = action_results
+        execution.error_message = "Form routing failed after workflow actions"
+        db.commit()
 
     def _get_dedupe_key(
         self,

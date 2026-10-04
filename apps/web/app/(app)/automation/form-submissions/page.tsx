@@ -1,11 +1,12 @@
 "use client"
 
 import { Suspense, useState, type ReactNode } from "react"
-import { useSearchParams } from "next/navigation"
+import type { Route } from "next"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
-import { canCreateIntakeRecord } from "@/lib/forms/record-creation-access"
+import { canCreateIntakeRecord, canReviewFormSubmissions, canReviewRoutingSubmission } from "@/lib/forms/record-creation-access"
 import { isDonorFormLeadKind } from "@/lib/forms/form-lead-kind"
 import type { FormSubmissionRead } from "@/lib/api/forms"
 import { listSubmissionReviewForms } from "@/lib/api/forms"
@@ -45,23 +46,33 @@ export default function FormSubmissionsPage() {
     return <Suspense fallback={<FormSubmissionsShell><div className="p-6"><Skeleton className="h-48" /></div></FormSubmissionsShell>}>
         <SubmissionWorkspace
             canPromoteLead={submission => canCreateIntakeRecord(access.data, submission.lead_kind)}
+            canReviewRouting={(submission, action) => canReviewRoutingSubmission(access.data, submission.lead_kind, action)}
             canEditSubject={submission => permissions.includes(isDonorFormLeadKind(submission.lead_kind) ? "edit_donors" : "edit_surrogates")}
-            canReview={permissions.includes(v2 ? "review_form_submissions" : "manage_forms")} />
+            canReview={canReviewFormSubmissions(access.data)} />
     </Suspense>
 }
 
 type SubmissionAccess = {
     canReview: boolean
     canPromoteLead: (submission: FormSubmissionRead) => boolean
+    canReviewRouting: (submission: FormSubmissionRead, action: "review" | "create_lead") => boolean
     canEditSubject: (submission: FormSubmissionRead) => boolean
 }
 
-function SubmissionWorkspace({canReview, canPromoteLead, canEditSubject}: SubmissionAccess) {
+function SubmissionWorkspace({canReview, canPromoteLead, canReviewRouting, canEditSubject}: SubmissionAccess) {
+    const { replace } = useRouter()
     const searchParams = useSearchParams()
-    const [chosenForm, setChosenForm] = useState<string | null>(() => searchParams.get("form"))
+    // The URL holds the chosen form, so a notification link for another form switches the queue.
+    const chosenForm = searchParams.get("form")
+    const chooseForm = (value: string | null) => {
+        if (!value) return
+        const params = new URLSearchParams(searchParams.toString())
+        params.set("form", value)
+        replace(`/automation/form-submissions?${params.toString()}` as Route, {scroll: false})
+    }
     const forms = useQuery({queryKey: ["forms", "submission-review"], queryFn: listSubmissionReviewForms})
     const formId = forms.data?.find(form => form.id === chosenForm)?.id ?? forms.data?.[0]?.id ?? null
-    const formSelect = <Select value={formId} onValueChange={setChosenForm} disabled={forms.isLoading || !forms.data?.length}>
+    const formSelect = <Select value={formId} onValueChange={chooseForm} disabled={forms.isLoading || !forms.data?.length}>
         <SelectTrigger className="w-full sm:w-72" aria-label="Form"><SelectValue>{() => forms.data?.find(form => form.id === formId)?.name ?? "Select form"}</SelectValue></SelectTrigger>
         <SelectContent>{forms.data?.map(form => <SelectItem key={form.id} value={form.id}>{form.name}</SelectItem>)}</SelectContent>
     </Select>
@@ -69,12 +80,12 @@ function SubmissionWorkspace({canReview, canPromoteLead, canEditSubject}: Submis
     if (!forms.isLoading && !formId) return <FormSubmissionsShell actions={formSelect}><EmptyState icon={FileTextIcon} title="No submissions available" /></FormSubmissionsShell>
     return <FormSubmissionsShell actions={formSelect}>
         <div className="flex-1 space-y-6 p-6">
-            {forms.isLoading || !formId ? <Skeleton className="h-48" /> : <SubmissionQueue key={formId} formId={formId} canReview={canReview} canPromoteLead={canPromoteLead} canEditSubject={canEditSubject} />}
+            {forms.isLoading || !formId ? <Skeleton className="h-48" /> : <SubmissionQueue key={formId} formId={formId} canReview={canReview} canPromoteLead={canPromoteLead} canReviewRouting={canReviewRouting} canEditSubject={canEditSubject} />}
         </div>
     </FormSubmissionsShell>
 }
 
-function SubmissionQueue({formId, canReview, canPromoteLead, canEditSubject}: SubmissionAccess & {formId: string}) {
+function SubmissionQueue({formId, canReview, canPromoteLead, canReviewRouting, canEditSubject}: SubmissionAccess & {formId: string}) {
     const [filter, setFilter] = useState<"all" | "pending" | "processed">("all")
     const [selected, setSelected] = useState<string | null>(null)
     const [manualId, setManualId] = useState("")
@@ -100,8 +111,11 @@ function SubmissionQueue({formId, canReview, canPromoteLead, canEditSubject}: Su
     return <>
         {candidates.isError && <div role="alert" className="flex items-center gap-3"><p>Unable to load matching records.</p><Button variant="outline" onClick={() => {void candidates.refetch()}}>Retry matches</Button></div>}
         <AutomationFormSubmissionsPanel {...presentation}
-            canReview={canReview} canPromoteLead={canPromoteLead} canEditSubject={canEditSubject} showWorkflowApprovals={false} formId={formId}
+            canReview={canReview} canPromoteLead={canPromoteLead} canReviewRouting={canReviewRouting} canEditSubject={canEditSubject} formId={formId}
             pendingSubmissionHistory={pending} processedSubmissionHistory={processed}
+            routingReviewSubmissions={rows.filter(row => row.match_status === "routing_review")}
+            routingReviewQueueStatus={submissions.isLoading ? "loading" : "ready"} isRoutingReviewRetrying={submissions.isFetching}
+            onRetryRoutingReview={() => {void submissions.refetch()}}
             ambiguousSubmissions={rows.filter(row => row.match_status === "ambiguous_review")}
             leadQueueSubmissions={rows.filter(row => row.match_status === "lead_created" && !row.surrogate_id && !row.donor_id)}
             visibleSubmissionHistory={filter === "pending" ? pending : filter === "processed" ? processed : rows}
@@ -110,7 +124,7 @@ function SubmissionQueue({formId, canReview, canPromoteLead, canEditSubject}: Su
             isMatchCandidatesLoading={candidates.isLoading} retrySubmissionMatchPending={retry.isPending}
             resolveSubmissionMatchPending={resolve.isPending} promoteIntakeLeadPending={promote.isPending}
             manualSurrogateId={manualId} resolveReviewNotes={notes}
-            onOpenApprovalQueue={() => {}} onSubmissionHistoryFilterChange={setFilter}
+            onSubmissionHistoryFilterChange={setFilter}
             onSelectQueueSubmission={setSelected} onManualSurrogateIdChange={setManualId}
             onResolveReviewNotesChange={setNotes}
             onLinkByManualSurrogateId={() => {if (selected && manualId.trim()) return link(selected, manualId.trim())}}

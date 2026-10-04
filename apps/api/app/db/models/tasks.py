@@ -44,6 +44,19 @@ class Task(Base):
 
     __tablename__ = "tasks"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "form_submission_id"],
+            ["form_submissions.organization_id", "form_submissions.id"],
+            name="fk_tasks_form_submission_org",
+            ondelete="CASCADE",
+        ),
+        Index("idx_tasks_form_submission", "form_submission_id"),
+        Index(
+            "uq_tasks_open_submission_review",
+            "form_submission_id",
+            unique=True,
+            postgresql_where=text("task_type = 'review' AND status IN ('pending', 'in_progress')"),
+        ),
         Index(
             "idx_tasks_org_owner",
             "organization_id",
@@ -117,6 +130,7 @@ class Task(Base):
     surrogate_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("surrogates.id", ondelete="CASCADE"), nullable=True
     )
+    form_submission_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     intended_parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("intended_parents.id", ondelete="CASCADE"),

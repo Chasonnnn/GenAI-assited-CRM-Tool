@@ -353,3 +353,24 @@ def test_workflow_send_notification_emails_opted_in_owner(db, test_user, test_or
     [email_log] = _notification_emails(db)
     assert email_log.subject == "New lead"
     assert f"/surrogates/{surrogate.id}" in email_log.body
+
+
+@pytest.mark.parametrize(
+    ("type_", "entity_type", "expected"),
+    [
+        (
+            NotificationType.WORKFLOW_APPROVAL_REQUESTED,
+            "task",
+            "/tasks?filter=my_tasks&focus=approvals&approval={id}",
+        ),
+        (NotificationType.TASK_ASSIGNED, "donor_task", "/tasks?filter=my_tasks&task={id}"),
+        (NotificationType.APPOINTMENT_REQUESTED, "appointment", "/appointments?appointment={id}"),
+        (NotificationType.STATUS_CHANGE_REQUESTED, "match", "/intended-parents/matches/{id}"),
+    ],
+)
+def test_record_path_opens_the_exact_record(type_, entity_type, expected):
+    from app.db.models import Notification
+
+    entity_id = uuid.uuid4()
+    notification = Notification(type=type_.value, entity_type=entity_type, entity_id=entity_id)
+    assert notification_email_service.record_path(notification) == expected.format(id=entity_id)

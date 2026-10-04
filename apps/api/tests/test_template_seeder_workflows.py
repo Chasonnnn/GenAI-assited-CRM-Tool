@@ -28,6 +28,30 @@ def test_seed_system_workflows_includes_zapier_meta_conversion_sync(db, test_org
     assert created_again == 0
 
 
+def test_workflow_seeding_batches_stage_reads(db, test_org, test_user, default_stage):
+    from sqlalchemy import event
+
+    reads = []
+
+    def record_read(_conn, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT") and "FROM pipeline_stages" in statement:
+            reads.append(statement)
+
+    connection = db.connection()
+    event.listen(connection, "before_cursor_execute", record_read)
+    try:
+        assert seed_system_workflows(db, test_org.id, test_user.id) > 0
+    finally:
+        event.remove(connection, "before_cursor_execute", record_read)
+    assert len(reads) <= 5  # Pipeline setup plus one lookup for all workflow stage references.
+    workflows = db.query(AutomationWorkflow).filter_by(organization_id=test_org.id).all()
+    scoped = [row for row in workflows if row.trigger_config.get("to_stage_id")]
+    assert scoped
+    for row in scoped:
+        assert row.trigger_config["to_stage_key"]
+    assert seed_system_workflows(db, test_org.id, test_user.id) == 0
+
+
 def _stage_scoped_system_keys() -> set[str]:
     from app.services.template_seeder import SYSTEM_WORKFLOWS
 
@@ -65,14 +89,13 @@ def test_seed_system_workflows_skips_stage_trigger_when_stage_is_missing(
 ):
     from app.services import pipeline_service
 
-    original_resolve_stage = pipeline_service.resolve_stage
+    original_resolve_stages_bulk = pipeline_service.resolve_stages_bulk
 
-    def resolve_without_lost(db_session, pipeline_id, ref):
-        if ref == "lost":
-            return None
-        return original_resolve_stage(db_session, pipeline_id, ref)
+    def resolve_without_lost(db_session, org_id, pipeline_id, refs):
+        stages = original_resolve_stages_bulk(db_session, org_id, pipeline_id, refs)
+        return [None if ref == "lost" else stage for ref, stage in zip(refs, stages)]
 
-    monkeypatch.setattr(pipeline_service, "resolve_stage", resolve_without_lost)
+    monkeypatch.setattr(pipeline_service, "resolve_stages_bulk", resolve_without_lost)
 
     seed_system_workflows(db, test_org.id, test_user.id)
 
@@ -86,7 +109,7 @@ def test_seed_system_workflows_skips_stage_trigger_when_stage_is_missing(
     assert "lead_marked_lost" not in seeded_keys
     assert "application_followup" in seeded_keys
 
-    monkeypatch.setattr(pipeline_service, "resolve_stage", original_resolve_stage)
+    monkeypatch.setattr(pipeline_service, "resolve_stages_bulk", original_resolve_stages_bulk)
     assert seed_system_workflows(db, test_org.id, test_user.id) == 1
     assert (
         db.query(AutomationWorkflow)

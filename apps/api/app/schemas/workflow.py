@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 from app.db.enums import (
     OwnerType,
     Role,
+    WorkflowActionType,
     WorkflowConditionOperator,
     WorkflowTriggerType,
 )
@@ -459,20 +460,6 @@ class PromoteIntakeLeadActionConfig(BaseModel):
     assign_to_user: bool | None = None
 
 
-class AutoMatchSubmissionActionConfig(BaseModel):
-    """Config for auto_match_submission action."""
-
-    action_type: Literal["auto_match_submission"] = "auto_match_submission"
-
-
-class CreateIntakeLeadActionConfig(BaseModel):
-    """Config for create_intake_lead action."""
-
-    action_type: Literal["create_intake_lead"] = "create_intake_lead"
-    source: str | None = None
-    auto_promote: bool = False
-
-
 # Union of all action configs
 ActionConfig = (
     SendEmailActionConfig
@@ -485,14 +472,24 @@ ActionConfig = (
     | UpdateFieldActionConfig
     | AddNoteActionConfig
     | PromoteIntakeLeadActionConfig
-    | AutoMatchSubmissionActionConfig
-    | CreateIntakeLeadActionConfig
 )
 
 
 # =============================================================================
 # Workflow CRUD Schemas
 # =============================================================================
+
+
+def validate_workflow_action_types(actions):
+    """Reject retired/unknown actions at every workflow input boundary."""
+    for action in actions or []:
+        action_type = action.get("action_type") if isinstance(action, dict) else None
+        # The existing status shorthand is canonicalized by workflow_service.
+        if not isinstance(action_type, str) or (
+            action_type != "update_status" and action_type not in WorkflowActionType
+        ):
+            raise ValueError(f"Unknown workflow action type: {action_type}")
+    return actions
 
 
 class WorkflowCreate(BaseModel):
@@ -514,6 +511,8 @@ class WorkflowCreate(BaseModel):
     rate_limit_per_hour: int | None = Field(default=None, ge=1, le=1000)
     rate_limit_per_entity_per_day: int | None = Field(default=None, ge=1, le=100)
 
+    _validate_action_types = field_validator("actions")(validate_workflow_action_types)
+
 
 class WorkflowUpdate(BaseModel):
     """Schema for updating a workflow."""
@@ -530,6 +529,8 @@ class WorkflowUpdate(BaseModel):
     # Rate limits (None = unlimited)
     rate_limit_per_hour: int | None = Field(default=None, ge=1, le=1000)
     rate_limit_per_entity_per_day: int | None = Field(default=None, ge=1, le=100)
+
+    _validate_action_types = field_validator("actions")(validate_workflow_action_types)
 
 
 class WorkflowRead(BaseModel):

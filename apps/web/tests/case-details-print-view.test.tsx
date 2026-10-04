@@ -27,6 +27,7 @@ describe("CaseDetailsPrintView", () => {
                         activities: [],
                         tasks: [],
                         show_pregnancy: false,
+                        medical_records: [],
                     } as never
                 }
             />,
@@ -40,7 +41,37 @@ describe("CaseDetailsPrintView", () => {
         expect(screen.getAllByText("—").length).toBeGreaterThan(0)
     })
 
-    it("shows medical information even when the old stage gate flag is absent", () => {
+    it("renders each current medical record as its own section", () => {
+        const record = {
+            id: "rec-1",
+            section: "clinic",
+            status: "current",
+            effective_date: "2026-01-05",
+            end_date: null,
+            source: "manual",
+            provider_name: null,
+            name: "Austin Fertility Center",
+            address_line1: "100 Main St",
+            address_line2: null,
+            city: "Austin",
+            state: "TX",
+            postal: "78701",
+            phone: null,
+            fax: null,
+            email: null,
+            plan_name: null,
+            policy_number: null,
+            member_id: null,
+            group_number: null,
+            subscriber_name: null,
+            subscriber_dob: null,
+            archived_on: null,
+            archived_by_name: null,
+            revision: 1,
+            created_by_name: "Case Manager",
+            created_at: "2026-01-05T12:00:00Z",
+            corrections: [],
+        }
         render(
             <CaseDetailsPrintView
                 data={
@@ -58,64 +89,25 @@ describe("CaseDetailsPrintView", () => {
                             height_ft: null,
                             weight_lb: null,
                             bmi: null,
-                            source: "manual",
-                            insurance_company: "Blue Shield",
-                            insurance_plan_name: null,
-                            insurance_policy_number: null,
-                            insurance_member_id: null,
-                            insurance_group_number: null,
-                            insurance_phone: null,
-                            insurance_subscriber_name: null,
-                            insurance_subscriber_dob: null,
-                            clinic_name: "Austin Fertility Center",
-                            clinic_address_line1: null,
-                            clinic_address_line2: null,
-                            clinic_city: null,
-                            clinic_state: null,
-                            clinic_postal: null,
-                            clinic_phone: null,
-                            clinic_email: null,
-                            monitoring_clinic_name: "Austin Monitoring",
-                            monitoring_clinic_address_line1: null,
-                            monitoring_clinic_address_line2: null,
-                            monitoring_clinic_city: null,
-                            monitoring_clinic_state: null,
-                            monitoring_clinic_postal: null,
-                            monitoring_clinic_phone: null,
-                            monitoring_clinic_email: null,
-                            ob_provider_name: null,
-                            ob_clinic_name: null,
-                            ob_address_line1: null,
-                            ob_address_line2: null,
-                            ob_city: null,
-                            ob_state: null,
-                            ob_postal: null,
-                            ob_phone: null,
-                            ob_email: null,
-                            delivery_hospital_name: null,
-                            delivery_hospital_address_line1: null,
-                            delivery_hospital_address_line2: null,
-                            delivery_hospital_city: null,
-                            delivery_hospital_state: null,
-                            delivery_hospital_postal: null,
-                            delivery_hospital_phone: null,
-                            delivery_hospital_email: null,
-                            pregnancy_start_date: null,
-                            pregnancy_due_date: null,
-                            actual_delivery_date: null,
-                            delivery_baby_gender: null,
-                            delivery_baby_weight: null,
                         },
                         activities: [],
                         tasks: [],
                         show_pregnancy: false,
+                        medical_records: [
+                            record,
+                            { ...record, id: "rec-2", section: "insurance", name: "Blue Shield", subscriber_dob: "1990-05-14" },
+                        ],
                     } as never
                 }
             />,
         )
 
-        expect(screen.getByText("Medical Information")).toBeInTheDocument()
+        const headings = screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)
+        expect(headings.indexOf("Insurance")).toBeLessThan(headings.indexOf("IVF Clinic"))
         expect(screen.getByText("Austin Fertility Center")).toBeInTheDocument()
+        expect(screen.getByText("100 Main St, Austin, TX, 78701")).toBeInTheDocument()
+        expect(screen.getByText("Blue Shield")).toBeInTheDocument()
+        expect(screen.getByText("May 14, 1990")).toBeInTheDocument()
         expect(screen.queryByText("Pregnancy Tracker")).not.toBeInTheDocument()
     })
 
@@ -160,6 +152,7 @@ describe("CaseDetailsPrintView", () => {
                         activities: [],
                         tasks: [],
                         show_pregnancy: false,
+                        medical_records: [],
                     } as never
                 }
             />,

@@ -41,6 +41,7 @@ const SETTINGS: NotificationSettings = {
     approval_timeouts: true,
     security_alerts: true,
     email_workflow_notifications: false,
+    email_daily_digest: false,
 }
 
 function emailSwitch() {
@@ -86,6 +87,20 @@ describe("Email notification settings", () => {
             expect(mocks.mutateAsync).toHaveBeenCalledWith({ email_workflow_notifications: true })
         )
         expect(mocks.toastError).not.toHaveBeenCalled()
+    })
+
+    it("saves the daily digest preference", async () => {
+        mocks.settings = { ...SETTINGS }
+        mocks.mutateAsync.mockResolvedValue({ ...SETTINGS, email_daily_digest: true })
+
+        render(<NotificationSettingsPage />)
+        const digestSwitch = screen.getByRole("switch", { name: "Daily Digest email" })
+        expect(digestSwitch).not.toBeChecked()
+        fireEvent.click(digestSwitch)
+
+        await waitFor(() =>
+            expect(mocks.mutateAsync).toHaveBeenCalledWith({ email_daily_digest: true })
+        )
     })
 
     it("shows an error toast when saving fails", async () => {

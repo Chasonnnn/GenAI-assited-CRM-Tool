@@ -64,8 +64,6 @@ class WorkflowActionType(str, Enum):
     SEND_ZAPIER_CONVERSION_EVENT = "send_zapier_conversion_event"
     UPDATE_FIELD = "update_field"
     ADD_NOTE = "add_note"
-    AUTO_MATCH_SUBMISSION = "auto_match_submission"
-    CREATE_INTAKE_LEAD = "create_intake_lead"
     PROMOTE_INTAKE_LEAD = "promote_intake_lead"
 
 

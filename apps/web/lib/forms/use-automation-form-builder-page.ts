@@ -8,7 +8,11 @@ import { toast } from "@/components/ui/toast"
 
 import { useAuth } from "@/lib/auth-context"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
-import { canCreateIntakeRecord } from "@/lib/forms/record-creation-access"
+import {
+    canCreateIntakeRecord,
+    canReviewFormSubmissions,
+    canReviewRoutingSubmission,
+} from "@/lib/forms/record-creation-access"
 import {
     DEFAULT_FORM_DONOR_FIELD_OPTIONS,
     DEFAULT_FORM_SURROGATE_FIELD_OPTIONS,
@@ -41,6 +45,7 @@ import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 import { useFormBuilderSaveQueue, type SaveTicket } from "@/lib/forms/use-form-builder-save-queue"
 import { useAutomationFormBuilderState } from "@/lib/forms/use-automation-form-builder-state"
 import type { AutomationBuilderState } from "@/lib/forms/use-automation-form-builder-state"
+import { parseWorkspaceTab, type WorkspaceTab } from "@/lib/forms/form-builder-workspace-tab"
 import { useFormBuilderDocument } from "@/lib/forms/use-form-builder-document"
 import { useEmailTemplates } from "@/lib/hooks/use-email-templates"
 import { useFormMappingOptions } from "@/lib/hooks/use-form-mapping-options"
@@ -241,7 +246,13 @@ async function handleCopySharedLink(link: FormIntakeLinkRead) {
     }
 }
 
-export function useAutomationFormBuilderPage() {
+// Mirrors the workflow create route for org workflows, which "New workflow" opens.
+function canCreateOrgWorkflows(access: { policy_version?: number; permissions: string[] } | undefined) {
+    const permissions = access?.permissions ?? []
+    return permissions.includes("manage_automation") && (access?.policy_version !== 2 || permissions.includes("manage_org_workflows"))
+}
+
+export function useAutomationFormBuilderPage({ initialTab = "edit" }: { initialTab?: WorkspaceTab } = {}) {
     const params = useParams<{ id: string }>()
     const idParam = params?.id
     const id = Array.isArray(idParam) ? idParam[0] : idParam ?? "new"
@@ -252,7 +263,7 @@ export function useAutomationFormBuilderPage() {
     const formId = isNewForm ? null : id
     const formKey = formId ?? "new"
     const { state, patchState, resetForForm, hydrateFromForm } =
-        useAutomationFormBuilderState(formKey, isNewForm)
+        useAutomationFormBuilderState(formKey, isNewForm, initialTab)
     const saveQueue = useFormBuilderSaveQueue(formKey)
 
     const formQuery = useForm(formId)
@@ -291,6 +302,15 @@ export function useAutomationFormBuilderPage() {
         match_status: "ambiguous_review",
         limit: 50,
     })
+    const routingReviewQuery = useFormSubmissions(formId, {
+        source_mode: "shared",
+        match_status: "routing_review",
+        limit: 50,
+    })
+    const {
+        data: routingReviewSubmissions = [],
+        refetch: refetchRoutingReviewSubmissions,
+    } = routingReviewQuery
     const {
         data: leadQueueSubmissions = [],
         refetch: refetchLeadQueueSubmissions,
@@ -377,7 +397,7 @@ export function useAutomationFormBuilderPage() {
     const publishBlockedReason = getPublishReadinessReason(publishReadiness)
 
     if (state.formKey !== formKey) {
-        resetForForm(formKey, isNewForm)
+        resetForForm(formKey, isNewForm, initialTab)
         resetDocument()
     } else if (
         !isNewForm &&
@@ -625,12 +645,14 @@ export function useAutomationFormBuilderPage() {
     }
 
     const handleWorkspaceTabChange = (value: string) => {
-        const workspaceTab = value as typeof state.workspaceTab
+        const workspaceTab = parseWorkspaceTab(value)
+        if (!workspaceTab) return
         patchState(
             workspaceTab === "submissions"
                 ? { workspaceTab }
                 : {
                     workspaceTab,
+                    ...(workspaceTab === "routing" ? { routingTabOpened: true } : {}),
                     selectedQueueSubmissionId: null,
                     manualSurrogateId: "",
                     resolveReviewNotes: "",
@@ -799,6 +821,7 @@ export function useAutomationFormBuilderPage() {
 
     const refreshSubmissionQueues = async () => {
         await Promise.all([
+            refetchRoutingReviewSubmissions(),
             refetchAmbiguousSubmissions(),
             refetchLeadQueueSubmissions(),
             refetchSubmissionHistory(),
@@ -1031,6 +1054,7 @@ export function useAutomationFormBuilderPage() {
                 !isNewForm &&
                 (isSubmissionHistoryLoading ||
                     ambiguousSubmissions.length > 0 ||
+                    routingReviewSubmissions.length > 0 ||
                     leadQueueSubmissions.length > 0 ||
                     submissionHistory.length > 0),
             publicEyebrow: state.publicEyebrow,
@@ -1079,11 +1103,33 @@ export function useAutomationFormBuilderPage() {
             onMaxFileCountChange: (value: number) => patchState({ maxFileCount: value }),
             onAllowedMimeTypesTextChange: (value: string) => patchState({ allowedMimeTypesText: value }),
         },
+        routingPanelProps: {
+            formId,
+            // Routing saves go through the form's manage check, plus donor edit on donor forms.
+            canEdit:
+                !isDonorFormLeadKind(formData?.lead_kind ?? state.formLeadKind) ||
+                permissions?.permissions.includes("edit_donors") === true,
+            canCreateWorkflows: canCreateOrgWorkflows(permissions),
+        },
         submissionsPanelProps: {
+            canReview: canReviewFormSubmissions(permissions),
             canPromoteLead: (submission: FormSubmissionRead) => canCreateIntakeRecord(permissions, submission.lead_kind),
+            canReviewRouting: (submission: FormSubmissionRead, action: "review" | "create_lead") =>
+                canReviewRoutingSubmission(permissions, submission.lead_kind, action),
             formId,
             pendingSubmissionHistory,
             processedSubmissionHistory,
+            routingReviewSubmissions,
+            // A failed background refetch keeps the last rows on screen.
+            routingReviewQueueStatus: routingReviewQuery.isLoading
+                ? ("loading" as const)
+                : routingReviewQuery.isError && routingReviewQuery.data === undefined
+                  ? ("error" as const)
+                  : ("ready" as const),
+            isRoutingReviewRetrying: routingReviewQuery.isFetching,
+            onRetryRoutingReview: () => {
+                void refetchRoutingReviewSubmissions()
+            },
             ambiguousSubmissions,
             leadQueueSubmissions,
             visibleSubmissionHistory,
@@ -1108,7 +1154,6 @@ export function useAutomationFormBuilderPage() {
             submissionOutcomeBadgeClass,
             submissionReviewLabel,
             submissionReviewBadgeClass,
-            onOpenApprovalQueue: () => router.push("/tasks?filter=my_tasks&focus=approvals"),
             onSubmissionHistoryFilterChange: (value: typeof state.submissionHistoryFilter) =>
                 patchState({ submissionHistoryFilter: value }),
             onSelectQueueSubmission: (submissionId: string | null) => {
