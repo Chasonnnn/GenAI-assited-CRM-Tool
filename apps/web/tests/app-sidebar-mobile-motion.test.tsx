@@ -98,4 +98,41 @@ describe("AppSidebar mobile motion", () => {
             "fade-in-0",
         )
     })
+
+    it("closes on Escape from the trigger or inside the sidebar and returns focus to the trigger", () => {
+        const view = render(
+            <AppSidebar>
+                <div>content</div>
+            </AppSidebar>
+        )
+        const sidebar = view.container.querySelector("aside")!
+        const trigger = screen.getByRole("button", { name: "Toggle sidebar" })
+
+        fireEvent.click(trigger)
+        trigger.focus()
+        fireEvent.keyDown(trigger, { key: "Escape" })
+        expect(sidebar).toHaveClass("-translate-x-full")
+        expect(screen.queryByRole("button", { name: "Close sidebar overlay" })).not.toBeInTheDocument()
+
+        fireEvent.click(trigger)
+        const link = sidebar.querySelector("a[href]") as HTMLElement
+        link.focus()
+        fireEvent.keyDown(link, { key: "Escape" })
+        expect(sidebar).toHaveClass("-translate-x-full")
+        expect(trigger).toHaveFocus()
+    })
+
+    it("leaves the sidebar open when Escape comes from an open menu", () => {
+        const view = render(
+            <AppSidebar>
+                <div role="menu" tabIndex={-1} data-testid="menu" />
+            </AppSidebar>
+        )
+        const sidebar = view.container.querySelector("aside")!
+
+        fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }))
+        fireEvent.keyDown(screen.getByTestId("menu"), { key: "Escape" })
+
+        expect(sidebar).toHaveClass("translate-x-0")
+    })
 })
