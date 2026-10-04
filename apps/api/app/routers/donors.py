@@ -17,6 +17,7 @@ from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.core.record_creation import require_record_creation
 from app.db.enums import AuditEventType, EntityType, Role, SurrogateSource
+from app.routers.medical_records_shared import raise_medical_record_error
 from app.schemas.activity import EntityActivityRead, EntityActivityResponse
 from app.schemas.auth import UserSession
 from app.schemas.donor import (
@@ -31,6 +32,14 @@ from app.schemas.donor import (
 )
 from app.schemas.donor_profile import DonorProfileRead, DonorSensitiveInfoRead
 from app.schemas.entity_note import EntityNoteCreate, EntityNoteListItem, EntityNoteRead
+from app.schemas.medical_record import (
+    MedicalRecordArchive,
+    MedicalRecordCreate,
+    MedicalRecordListResponse,
+    MedicalRecordRestore,
+    MedicalRecordSection,
+    MedicalRecordUpdate,
+)
 from app.schemas.record_owner import RecordOwnerOptions
 from app.services import (
     approval_handoff_service,
@@ -38,6 +47,7 @@ from app.services import (
     donor_profile_service,
     donor_service,
     entity_activity_service,
+    medical_record_service,
     meta_lead_service,
     note_service,
     permission_policy_service,
@@ -287,6 +297,144 @@ def get_donor_profile(
         details={"view": "donor_profile"},
     )
     return profile
+
+
+def _editable_donor_owner(db: Session, session: UserSession, donor_id: UUID):
+    donor = _get_or_404(db, session, donor_id)
+    if not permission_service.check_permission(
+        db, session.org_id, session.user_id, session.role.value, "edit_donors"
+    ):
+        raise HTTPException(status_code=403, detail="Missing permission: edit_donors")
+    if donor.is_archived:
+        raise HTTPException(
+            status_code=400, detail="Restore the donor before editing profile information"
+        )
+    return donor, medical_record_service.RecordOwner.for_donor(donor)
+
+
+def _medical_records_after_write(
+    db: Session, donor, owner: medical_record_service.RecordOwner, section: str
+) -> MedicalRecordListResponse:
+    db.commit()
+    donor_service.dispatch_donor_updated_workflow(db, donor, [f"medical_records.{section}"])
+    return medical_record_service.list_records(db, owner)
+
+
+@router.get("/{donor_id}/medical-records", response_model=MedicalRecordListResponse)
+def list_donor_medical_records(
+    donor_id: UUID,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> MedicalRecordListResponse:
+    donor = _get_or_404(db, session, donor_id)
+    response.headers["Cache-Control"] = "no-store"
+    phi_access_service.log_phi_access(
+        db=db,
+        org_id=session.org_id,
+        user_id=session.user_id,
+        target_type="donor",
+        target_id=donor.id,
+        request=request,
+        details={"view": "donor_medical_records"},
+    )
+    return medical_record_service.list_records(
+        db, medical_record_service.RecordOwner.for_donor(donor)
+    )
+
+
+@router.post(
+    "/{donor_id}/medical-records",
+    response_model=MedicalRecordListResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def create_donor_medical_record(
+    donor_id: UUID,
+    data: MedicalRecordCreate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> MedicalRecordListResponse:
+    donor, owner = _editable_donor_owner(db, session, donor_id)
+    try:
+        with db.begin_nested():
+            medical_record_service.create_record(db, owner, session.user_id, data, request=request)
+    except medical_record_service.MedicalRecordError as exc:
+        raise_medical_record_error(exc)
+    return _medical_records_after_write(db, donor, owner, data.section)
+
+
+@router.patch(
+    "/{donor_id}/medical-records/{record_id}",
+    response_model=MedicalRecordListResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def correct_donor_medical_record(
+    donor_id: UUID,
+    record_id: UUID,
+    data: MedicalRecordUpdate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> MedicalRecordListResponse:
+    donor, owner = _editable_donor_owner(db, session, donor_id)
+    try:
+        with db.begin_nested():
+            record = medical_record_service.correct_record(
+                db, owner, session.user_id, record_id, data, request=request
+            )
+    except medical_record_service.MedicalRecordError as exc:
+        raise_medical_record_error(exc)
+    return _medical_records_after_write(db, donor, owner, record.section)
+
+
+@router.post(
+    "/{donor_id}/medical-records/{record_id}/archive",
+    response_model=MedicalRecordListResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def archive_donor_medical_record(
+    donor_id: UUID,
+    record_id: UUID,
+    data: MedicalRecordArchive,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> MedicalRecordListResponse:
+    donor, owner = _editable_donor_owner(db, session, donor_id)
+    try:
+        with db.begin_nested():
+            record = medical_record_service.archive_record(
+                db, owner, session.user_id, record_id, data.expected_revision, request=request
+            )
+    except medical_record_service.MedicalRecordError as exc:
+        raise_medical_record_error(exc)
+    return _medical_records_after_write(db, donor, owner, record.section)
+
+
+@router.post(
+    "/{donor_id}/medical-records/sections/{section}/restore",
+    response_model=MedicalRecordListResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def restore_donor_medical_section(
+    donor_id: UUID,
+    section: MedicalRecordSection,
+    data: MedicalRecordRestore,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(get_current_session)],
+) -> MedicalRecordListResponse:
+    donor, owner = _editable_donor_owner(db, session, donor_id)
+    try:
+        with db.begin_nested():
+            medical_record_service.restore_section(
+                db, owner, session.user_id, section, data.idempotency_key, request=request
+            )
+    except medical_record_service.MedicalRecordError as exc:
+        raise_medical_record_error(exc)
+    return _medical_records_after_write(db, donor, owner, section)
 
 
 @router.post(

@@ -138,7 +138,9 @@ def _parse_date(value: str | None) -> date | None:
 def _parse_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    # Older archives exported UTC database timestamps without an offset.
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
 
 
 def _parse_json(value: str | None) -> dict | list | None:

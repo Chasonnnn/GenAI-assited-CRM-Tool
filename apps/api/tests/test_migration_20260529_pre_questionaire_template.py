@@ -88,7 +88,7 @@ def test_pre_questionaire_template_schema_matches_requested_short_form():
 
 
 def test_pre_questionaire_template_mappings_sync_supported_surrogate_fields_only():
-    from app.services.form_submission_service import SURROGATE_FIELD_TYPES
+    from app.services.form_submission_service import FORM_SURROGATE_FIELD_TYPES
 
     migration = _load_migration_module()
 
@@ -111,5 +111,5 @@ def test_pre_questionaire_template_mappings_sync_supported_surrogate_fields_only
         {"field_key": "num_deliveries", "surrogate_field": "num_deliveries"},
         {"field_key": "num_csections", "surrogate_field": "num_csections"},
     ]
-    assert all(mapping["surrogate_field"] in SURROGATE_FIELD_TYPES for mapping in mappings)
+    assert all(mapping["surrogate_field"] in FORM_SURROGATE_FIELD_TYPES for mapping in mappings)
     assert all(mapping["field_key"] != "nicotine_or_tobacco_use" for mapping in mappings)

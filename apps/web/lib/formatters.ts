@@ -1,3 +1,5 @@
+import { parseDateInput } from "@/lib/utils/date"
+
 const relativeTimeFormatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" })
 
 const RELATIVE_UNITS: Array<{ unit: Intl.RelativeTimeFormatUnit; ms: number }> = [
@@ -28,9 +30,15 @@ function getDateFormatter(options: Intl.DateTimeFormatOptions | undefined): Intl
   return formatter
 }
 
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
 function toDate(input: Date | string | null | undefined): Date | null {
   if (!input) return null
-  const date = input instanceof Date ? input : new Date(input)
+  // A YYYY-MM-DD value is a calendar date. `new Date` reads it as UTC midnight, which is the
+  // previous day west of UTC, so read it as local midnight instead.
+  const date = input instanceof Date
+    ? input
+    : DATE_ONLY_PATTERN.test(input) ? parseDateInput(input) : new Date(input)
   if (Number.isNaN(date.getTime())) return null
   return date
 }

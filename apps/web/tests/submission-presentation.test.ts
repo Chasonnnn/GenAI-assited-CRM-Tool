@@ -32,6 +32,40 @@ describe("readAnswerValue", () => {
         expect(readAnswerValue(record, ["full_name", "name"])).toBe("Sam Sample")
     })
 
+    it("shows a choice answer by its option label from the submission schema", () => {
+        const record = {
+            ...submission({ education_level: "bachelors", state: "TX", donor_state: "custom_value" }),
+            schema_snapshot: {
+                pages: [
+                    {
+                        title: "Profile",
+                        fields: [
+                            {
+                                key: "education_level",
+                                label: "Education",
+                                type: "select",
+                                options: [{ label: "Bachelor's degree", value: "bachelors" }],
+                            },
+                            {
+                                key: "donor_state",
+                                label: "State",
+                                type: "radio",
+                                options: [{ label: "Texas", value: "TX" }],
+                            },
+                        ],
+                    },
+                ],
+            },
+        } as FormSubmissionRead
+        const mappings = [{ field_key: "donor_state", surrogate_field: "state" }]
+
+        expect(readAnswerValue(record, ["education", "education_level"])).toBe("Bachelor's degree")
+        // A value outside the field's options stays as stored.
+        expect(readAnswerValue(record, ["state"], mappings)).toBe("custom_value")
+        // A key with no schema field is returned as stored.
+        expect(readAnswerValue(record, ["state"])).toBe("TX")
+    })
+
     it("returns a placeholder for blank, missing, and non-text answers", () => {
         const record = submission({ full_name: "  ", phone: 5550100, email: null })
 

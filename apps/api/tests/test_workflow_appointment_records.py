@@ -535,6 +535,33 @@ def test_time_sweep_runs_hours_after_end_for_held_appointments_of_the_type(db, t
     assert all(result["success"] for result in _results(db, test_org.id, workflow.id))
 
 
+def test_late_before_start_sweep_runs_only_until_the_start_and_dedupes(db, test_org, test_user):
+    now = datetime.now(UTC).replace(microsecond=0)
+    workflow = _workflow(
+        db,
+        test_org.id,
+        test_user.id,
+        [{"action_type": "send_notification", "title": "Reminder", "recipients": "host"}],
+        trigger_config={"when": "before_start", "hours": 1},
+        trigger_type=TIME,
+    )
+    # Due 30 minutes ago and still upcoming: the late sweep runs it.
+    upcoming = _appointment(db, test_org.id, test_user.id, start=now + timedelta(minutes=30))
+    # Due 90 minutes ago but already started: skipped.
+    started = _appointment(db, test_org.id, test_user.id, start=now - timedelta(minutes=30))
+    for start in (now - timedelta(days=2), now + timedelta(hours=2)):
+        _appointment(db, test_org.id, test_user.id, start=start).status = "confirmed"
+    upcoming.status = "confirmed"
+    started.status = "confirmed"
+    db.flush()
+
+    workflow_triggers.trigger_appointment_time_sweep(db, test_org.id, now=now)
+    workflow_triggers.trigger_appointment_time_sweep(db, test_org.id, now=now)
+
+    assert _executions(db, test_org.id, workflow.id) == [upcoming.id]
+    assert all(result["success"] for result in _results(db, test_org.id, workflow.id))
+
+
 @pytest.mark.parametrize(
     "trigger_config",
     [{"when": "during", "hours": 2}, {"when": "after_end", "hours": 0}, {"hours": 169}],

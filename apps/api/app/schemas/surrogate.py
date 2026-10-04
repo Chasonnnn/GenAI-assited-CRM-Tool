@@ -16,6 +16,7 @@ from pydantic import (
 )
 
 from app.db.enums import OwnerType, SurrogateSource
+from app.schemas.medical_record import LEGACY_MEDICAL_FIELDS
 from app.utils.height import canonicalize_height_ft
 from app.utils.journey_timing import normalize_journey_timing_preference
 from app.utils.normalization import format_race_label, normalize_phone, normalize_state
@@ -49,12 +50,28 @@ def normalize_ssn(value: str | None) -> str | None:
     raise ValueError("SSN must be 9 digits or XXX-XX-XXXX")
 
 
+def reject_flat_medical_fields(data: object) -> object:
+    """Medical and insurance details live in medical records, not on the surrogate."""
+    if isinstance(data, dict):
+        flat = sorted(set(data) & LEGACY_MEDICAL_FIELDS.keys())
+        if flat:
+            raise ValueError(
+                f"Use the medical records endpoints for these fields: {', '.join(flat)}"
+            )
+    return data
+
+
 def mask_ssn_last4(last4: str | None) -> str | None:
     return f"***-**-{last4}" if last4 else None
 
 
 class SurrogateCreate(BaseModel):
     """Request schema for creating a surrogate."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_flat_medical_fields(cls, data: object) -> object:
+        return reject_flat_medical_fields(data)
 
     # Contact (required)
     full_name: str = Field(min_length=1, max_length=255)
@@ -105,99 +122,6 @@ class SurrogateCreate(BaseModel):
     assign_to_user: bool | None = None
 
     # =========================================================================
-    # INSURANCE INFO
-    # =========================================================================
-    insurance_company: str | None = Field(None, max_length=255)
-    insurance_plan_name: str | None = Field(None, max_length=255)
-    insurance_phone: str | None = None
-    insurance_policy_number: str | None = None
-    insurance_member_id: str | None = None
-    insurance_group_number: str | None = Field(None, max_length=100)
-    insurance_subscriber_name: str | None = None
-    insurance_subscriber_dob: date | None = None
-    insurance_fax: str | None = None
-
-    # =========================================================================
-    # IVF CLINIC
-    # =========================================================================
-    clinic_name: str | None = Field(None, max_length=255)
-    clinic_address_line1: str | None = None
-    clinic_address_line2: str | None = None
-    clinic_city: str | None = Field(None, max_length=100)
-    clinic_state: str | None = None
-    clinic_postal: str | None = Field(None, max_length=20)
-    clinic_phone: str | None = None
-    clinic_email: EmailStr | None = None
-    clinic_fax: str | None = None
-
-    # =========================================================================
-    # MONITORING CLINIC
-    # =========================================================================
-    monitoring_clinic_name: str | None = Field(None, max_length=255)
-    monitoring_clinic_address_line1: str | None = None
-    monitoring_clinic_address_line2: str | None = None
-    monitoring_clinic_city: str | None = Field(None, max_length=100)
-    monitoring_clinic_state: str | None = None
-    monitoring_clinic_postal: str | None = Field(None, max_length=20)
-    monitoring_clinic_phone: str | None = None
-    monitoring_clinic_email: EmailStr | None = None
-    monitoring_clinic_fax: str | None = None
-
-    # =========================================================================
-    # OB PROVIDER
-    # =========================================================================
-    ob_provider_name: str | None = Field(None, max_length=255)
-    ob_clinic_name: str | None = Field(None, max_length=255)
-    ob_address_line1: str | None = None
-    ob_address_line2: str | None = None
-    ob_city: str | None = Field(None, max_length=100)
-    ob_state: str | None = None
-    ob_postal: str | None = Field(None, max_length=20)
-    ob_phone: str | None = None
-    ob_email: EmailStr | None = None
-    ob_fax: str | None = None
-
-    # =========================================================================
-    # DELIVERY HOSPITAL
-    # =========================================================================
-    delivery_hospital_name: str | None = Field(None, max_length=255)
-    delivery_hospital_address_line1: str | None = None
-    delivery_hospital_address_line2: str | None = None
-    delivery_hospital_city: str | None = Field(None, max_length=100)
-    delivery_hospital_state: str | None = None
-    delivery_hospital_postal: str | None = Field(None, max_length=20)
-    delivery_hospital_phone: str | None = None
-    delivery_hospital_email: EmailStr | None = None
-    delivery_hospital_fax: str | None = None
-
-    # =========================================================================
-    # PCP PROVIDER
-    # =========================================================================
-    pcp_provider_name: str | None = Field(None, max_length=255)
-    pcp_name: str | None = Field(None, max_length=255)
-    pcp_address_line1: str | None = None
-    pcp_address_line2: str | None = None
-    pcp_city: str | None = Field(None, max_length=100)
-    pcp_state: str | None = None
-    pcp_postal: str | None = Field(None, max_length=20)
-    pcp_phone: str | None = None
-    pcp_fax: str | None = None
-    pcp_email: EmailStr | None = None
-
-    # =========================================================================
-    # LAB CLINIC
-    # =========================================================================
-    lab_clinic_name: str | None = Field(None, max_length=255)
-    lab_clinic_address_line1: str | None = None
-    lab_clinic_address_line2: str | None = None
-    lab_clinic_city: str | None = Field(None, max_length=100)
-    lab_clinic_state: str | None = None
-    lab_clinic_postal: str | None = Field(None, max_length=20)
-    lab_clinic_phone: str | None = None
-    lab_clinic_fax: str | None = None
-    lab_clinic_email: EmailStr | None = None
-
-    # =========================================================================
     # PREGNANCY TRACKING
     # =========================================================================
     embryo_stage: EmbryoStage | None = None
@@ -230,20 +154,6 @@ class SurrogateCreate(BaseModel):
 
     @field_validator(
         "partner_phone",
-        "insurance_phone",
-        "insurance_fax",
-        "clinic_phone",
-        "clinic_fax",
-        "monitoring_clinic_phone",
-        "monitoring_clinic_fax",
-        "ob_phone",
-        "ob_fax",
-        "delivery_hospital_phone",
-        "delivery_hospital_fax",
-        "pcp_phone",
-        "pcp_fax",
-        "lab_clinic_phone",
-        "lab_clinic_fax",
     )
     @classmethod
     def validate_optional_phone(cls, v: str | None) -> str | None:
@@ -255,12 +165,6 @@ class SurrogateCreate(BaseModel):
         return normalize_phone(v)
 
     @field_validator(
-        "clinic_state",
-        "monitoring_clinic_state",
-        "ob_state",
-        "delivery_hospital_state",
-        "pcp_state",
-        "lab_clinic_state",
         "address_state",
     )
     @classmethod
@@ -300,6 +204,11 @@ class SurrogateCreate(BaseModel):
 class SurrogateUpdate(BaseModel):
     """Request schema for updating a surrogate (partial)."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_flat_medical_fields(cls, data: object) -> object:
+        return reject_flat_medical_fields(data)
+
     full_name: str | None = Field(None, min_length=1, max_length=255)
     email: EmailStr | None = None
     phone: str | None = None
@@ -336,99 +245,6 @@ class SurrogateUpdate(BaseModel):
     is_priority: bool | None = None
 
     # =========================================================================
-    # INSURANCE INFO
-    # =========================================================================
-    insurance_company: str | None = Field(None, max_length=255)
-    insurance_plan_name: str | None = Field(None, max_length=255)
-    insurance_phone: str | None = None
-    insurance_policy_number: str | None = None
-    insurance_member_id: str | None = None
-    insurance_group_number: str | None = Field(None, max_length=100)
-    insurance_subscriber_name: str | None = None
-    insurance_subscriber_dob: date | None = None
-    insurance_fax: str | None = None
-
-    # =========================================================================
-    # IVF CLINIC
-    # =========================================================================
-    clinic_name: str | None = Field(None, max_length=255)
-    clinic_address_line1: str | None = None
-    clinic_address_line2: str | None = None
-    clinic_city: str | None = Field(None, max_length=100)
-    clinic_state: str | None = None
-    clinic_postal: str | None = Field(None, max_length=20)
-    clinic_phone: str | None = None
-    clinic_email: EmailStr | None = None
-    clinic_fax: str | None = None
-
-    # =========================================================================
-    # MONITORING CLINIC
-    # =========================================================================
-    monitoring_clinic_name: str | None = Field(None, max_length=255)
-    monitoring_clinic_address_line1: str | None = None
-    monitoring_clinic_address_line2: str | None = None
-    monitoring_clinic_city: str | None = Field(None, max_length=100)
-    monitoring_clinic_state: str | None = None
-    monitoring_clinic_postal: str | None = Field(None, max_length=20)
-    monitoring_clinic_phone: str | None = None
-    monitoring_clinic_email: EmailStr | None = None
-    monitoring_clinic_fax: str | None = None
-
-    # =========================================================================
-    # OB PROVIDER
-    # =========================================================================
-    ob_provider_name: str | None = Field(None, max_length=255)
-    ob_clinic_name: str | None = Field(None, max_length=255)
-    ob_address_line1: str | None = None
-    ob_address_line2: str | None = None
-    ob_city: str | None = Field(None, max_length=100)
-    ob_state: str | None = None
-    ob_postal: str | None = Field(None, max_length=20)
-    ob_phone: str | None = None
-    ob_email: EmailStr | None = None
-    ob_fax: str | None = None
-
-    # =========================================================================
-    # DELIVERY HOSPITAL
-    # =========================================================================
-    delivery_hospital_name: str | None = Field(None, max_length=255)
-    delivery_hospital_address_line1: str | None = None
-    delivery_hospital_address_line2: str | None = None
-    delivery_hospital_city: str | None = Field(None, max_length=100)
-    delivery_hospital_state: str | None = None
-    delivery_hospital_postal: str | None = Field(None, max_length=20)
-    delivery_hospital_phone: str | None = None
-    delivery_hospital_email: EmailStr | None = None
-    delivery_hospital_fax: str | None = None
-
-    # =========================================================================
-    # PCP PROVIDER
-    # =========================================================================
-    pcp_provider_name: str | None = Field(None, max_length=255)
-    pcp_name: str | None = Field(None, max_length=255)
-    pcp_address_line1: str | None = None
-    pcp_address_line2: str | None = None
-    pcp_city: str | None = Field(None, max_length=100)
-    pcp_state: str | None = None
-    pcp_postal: str | None = Field(None, max_length=20)
-    pcp_phone: str | None = None
-    pcp_fax: str | None = None
-    pcp_email: EmailStr | None = None
-
-    # =========================================================================
-    # LAB CLINIC
-    # =========================================================================
-    lab_clinic_name: str | None = Field(None, max_length=255)
-    lab_clinic_address_line1: str | None = None
-    lab_clinic_address_line2: str | None = None
-    lab_clinic_city: str | None = Field(None, max_length=100)
-    lab_clinic_state: str | None = None
-    lab_clinic_postal: str | None = Field(None, max_length=20)
-    lab_clinic_phone: str | None = None
-    lab_clinic_fax: str | None = None
-    lab_clinic_email: EmailStr | None = None
-
-    # =========================================================================
     # PREGNANCY TRACKING
     # =========================================================================
     embryo_stage: EmbryoStage | None = None
@@ -463,20 +279,6 @@ class SurrogateUpdate(BaseModel):
 
     @field_validator(
         "partner_phone",
-        "insurance_phone",
-        "insurance_fax",
-        "clinic_phone",
-        "clinic_fax",
-        "monitoring_clinic_phone",
-        "monitoring_clinic_fax",
-        "ob_phone",
-        "ob_fax",
-        "delivery_hospital_phone",
-        "delivery_hospital_fax",
-        "pcp_phone",
-        "pcp_fax",
-        "lab_clinic_phone",
-        "lab_clinic_fax",
     )
     @classmethod
     def validate_optional_phone(cls, v: str | None) -> str | None:
@@ -488,12 +290,6 @@ class SurrogateUpdate(BaseModel):
         return normalize_phone(v)
 
     @field_validator(
-        "clinic_state",
-        "monitoring_clinic_state",
-        "ob_state",
-        "delivery_hospital_state",
-        "pcp_state",
-        "lab_clinic_state",
         "address_state",
     )
     @classmethod
@@ -673,99 +469,6 @@ class SurrogateRead(BaseModel):
     num_deliveries: int | None
     num_csections: int | None
     eligibility_checklist: list[SurrogateEligibilityChecklistItem] = Field(default_factory=list)
-
-    # =========================================================================
-    # INSURANCE INFO
-    # =========================================================================
-    insurance_company: str | None = None
-    insurance_plan_name: str | None = None
-    insurance_phone: str | None = None
-    insurance_policy_number: str | None = None
-    insurance_member_id: str | None = None
-    insurance_group_number: str | None = None
-    insurance_subscriber_name: str | None = None
-    insurance_subscriber_dob: date | None = None
-    insurance_fax: str | None = None
-
-    # =========================================================================
-    # IVF CLINIC
-    # =========================================================================
-    clinic_name: str | None = None
-    clinic_address_line1: str | None = None
-    clinic_address_line2: str | None = None
-    clinic_city: str | None = None
-    clinic_state: str | None = None
-    clinic_postal: str | None = None
-    clinic_phone: str | None = None
-    clinic_email: str | None = None
-    clinic_fax: str | None = None
-
-    # =========================================================================
-    # MONITORING CLINIC
-    # =========================================================================
-    monitoring_clinic_name: str | None = None
-    monitoring_clinic_address_line1: str | None = None
-    monitoring_clinic_address_line2: str | None = None
-    monitoring_clinic_city: str | None = None
-    monitoring_clinic_state: str | None = None
-    monitoring_clinic_postal: str | None = None
-    monitoring_clinic_phone: str | None = None
-    monitoring_clinic_email: str | None = None
-    monitoring_clinic_fax: str | None = None
-
-    # =========================================================================
-    # OB PROVIDER
-    # =========================================================================
-    ob_provider_name: str | None = None
-    ob_clinic_name: str | None = None
-    ob_address_line1: str | None = None
-    ob_address_line2: str | None = None
-    ob_city: str | None = None
-    ob_state: str | None = None
-    ob_postal: str | None = None
-    ob_phone: str | None = None
-    ob_email: str | None = None
-    ob_fax: str | None = None
-
-    # =========================================================================
-    # DELIVERY HOSPITAL
-    # =========================================================================
-    delivery_hospital_name: str | None = None
-    delivery_hospital_address_line1: str | None = None
-    delivery_hospital_address_line2: str | None = None
-    delivery_hospital_city: str | None = None
-    delivery_hospital_state: str | None = None
-    delivery_hospital_postal: str | None = None
-    delivery_hospital_phone: str | None = None
-    delivery_hospital_email: str | None = None
-    delivery_hospital_fax: str | None = None
-
-    # =========================================================================
-    # PCP PROVIDER
-    # =========================================================================
-    pcp_provider_name: str | None = None
-    pcp_name: str | None = None
-    pcp_address_line1: str | None = None
-    pcp_address_line2: str | None = None
-    pcp_city: str | None = None
-    pcp_state: str | None = None
-    pcp_postal: str | None = None
-    pcp_phone: str | None = None
-    pcp_fax: str | None = None
-    pcp_email: str | None = None
-
-    # =========================================================================
-    # LAB CLINIC
-    # =========================================================================
-    lab_clinic_name: str | None = None
-    lab_clinic_address_line1: str | None = None
-    lab_clinic_address_line2: str | None = None
-    lab_clinic_city: str | None = None
-    lab_clinic_state: str | None = None
-    lab_clinic_postal: str | None = None
-    lab_clinic_phone: str | None = None
-    lab_clinic_fax: str | None = None
-    lab_clinic_email: str | None = None
 
     # =========================================================================
     # PREGNANCY TRACKING

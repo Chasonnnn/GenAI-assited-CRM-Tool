@@ -28,6 +28,7 @@ from app.db.models import (
     IntendedParent,
     IntendedParentStatusHistory,
     Match,
+    MedicalRecord,
     Membership,
     Organization,
     PipelineStage,
@@ -679,6 +680,69 @@ def _log_surrogate_activity(
         )
 
 
+def _seed_medical_records(
+    db,
+    *,
+    surrogate: Surrogate,
+    actor_user,
+    effective_date: date,
+    full_name: str,
+    dob: date,
+    addresses: dict[str, tuple],
+) -> None:
+    """Give each mock surrogate one current record per seeded medical section."""
+
+    def contact(section: str, name: str, email_prefix: str, **extra) -> MedicalRecord:
+        line1, line2, city, state, postal = addresses[section]
+        return MedicalRecord(
+            section=section,
+            name=name,
+            address_line1=line1,
+            address_line2=line2,
+            city=city,
+            state=state,
+            postal=postal,
+            phone=random_phone(),
+            email=email_from_name(name, prefix=email_prefix),
+            **extra,
+        )
+
+    clinic_name = random.choice(CLINIC_NAMES)
+    hospital_name = random.choice(HOSPITAL_NAMES)
+    records = [
+        MedicalRecord(
+            section="insurance",
+            name=random.choice(INSURANCE_COMPANIES),
+            plan_name=f"{random.choice(['PPO', 'HMO', 'EPO'])} {random.choice(['Gold', 'Silver', 'Platinum'])}",
+            phone=random_phone(),
+            policy_number=f"POL{random.randint(100000, 999999)}",
+            member_id=f"MBR{random.randint(10000000, 99999999)}",
+            group_number=f"GRP{random.randint(1000, 9999)}",
+            subscriber_name=full_name,
+            subscriber_dob=dob,
+        ),
+        contact("clinic", clinic_name, "intake"),
+        contact(
+            "monitoring_clinic",
+            f"{random.choice(['Womens', 'Family', 'Advanced', 'Premier'])} Fertility Center",
+            "monitoring",
+        ),
+        contact(
+            "ob",
+            f"{random.choice(LAST_NAMES)} Women's Health",
+            "ob",
+            provider_name=f"Dr. {random.choice(FIRST_NAMES_FEMALE)} {random.choice(LAST_NAMES)}",
+        ),
+        contact("delivery_hospital", hospital_name, "labor"),
+    ]
+    for record in records:
+        record.organization_id = surrogate.organization_id
+        record.surrogate_id = surrogate.id
+        record.effective_date = effective_date
+        record.created_by_user_id = actor_user.id
+    db.add_all(records)
+
+
 def create_surrogates(
     db,
     org_id: UUID,
@@ -801,52 +865,6 @@ def create_surrogates(
             has_surrogate_experience=random.random() < 0.3,  # 30% experienced
             num_deliveries=random.randint(1, 4),
             num_csections=random.randint(0, 2),
-            # Insurance
-            insurance_company=random.choice(INSURANCE_COMPANIES),
-            insurance_plan_name=f"{random.choice(['PPO', 'HMO', 'EPO'])} {random.choice(['Gold', 'Silver', 'Platinum'])}",
-            insurance_phone=random_phone(),
-            insurance_policy_number=f"POL{random.randint(100000, 999999)}",
-            insurance_member_id=f"MBR{random.randint(10000000, 99999999)}",
-            insurance_group_number=f"GRP{random.randint(1000, 9999)}",
-            insurance_subscriber_name=full_name,
-            insurance_subscriber_dob=dob,
-            # IVF Clinic
-            clinic_name=random.choice(CLINIC_NAMES),
-            clinic_address_line1=clinic_addr[0],
-            clinic_address_line2=clinic_addr[1],
-            clinic_city=clinic_addr[2],
-            clinic_state=clinic_addr[3],
-            clinic_postal=clinic_addr[4],
-            clinic_phone=random_phone(),
-            clinic_email=email_from_name(random.choice(CLINIC_NAMES)),
-            # Monitoring Clinic
-            monitoring_clinic_name=f"{random.choice(['Womens', 'Family', 'Advanced', 'Premier'])} Fertility Center",
-            monitoring_clinic_address_line1=monitoring_addr[0],
-            monitoring_clinic_address_line2=monitoring_addr[1],
-            monitoring_clinic_city=monitoring_addr[2],
-            monitoring_clinic_state=monitoring_addr[3],
-            monitoring_clinic_postal=monitoring_addr[4],
-            monitoring_clinic_phone=random_phone(),
-            monitoring_clinic_email=email_from_name("Monitoring Clinic"),
-            # OB Provider
-            ob_provider_name=f"Dr. {random.choice(FIRST_NAMES_FEMALE)} {random.choice(LAST_NAMES)}",
-            ob_clinic_name=f"{random.choice(LAST_NAMES)} Women's Health",
-            ob_address_line1=ob_addr[0],
-            ob_address_line2=ob_addr[1],
-            ob_city=ob_addr[2],
-            ob_state=ob_addr[3],
-            ob_postal=ob_addr[4],
-            ob_phone=random_phone(),
-            ob_email=email_from_name("ob"),
-            # Delivery Hospital
-            delivery_hospital_name=random.choice(HOSPITAL_NAMES),
-            delivery_hospital_address_line1=hospital_addr[0],
-            delivery_hospital_address_line2=hospital_addr[1],
-            delivery_hospital_city=hospital_addr[2],
-            delivery_hospital_state=hospital_addr[3],
-            delivery_hospital_postal=hospital_addr[4],
-            delivery_hospital_phone=random_phone(),
-            delivery_hospital_email=email_from_name(random.choice(HOSPITAL_NAMES), prefix="labor"),
             # Pregnancy tracking
             pregnancy_start_date=pregnancy_start_date,
             pregnancy_due_date=pregnancy_due_date,
@@ -864,6 +882,20 @@ def create_surrogates(
 
         db.add(surrogate)
         db.flush()
+        _seed_medical_records(
+            db,
+            surrogate=surrogate,
+            actor_user=owner_user,
+            effective_date=created_at.date(),
+            full_name=full_name,
+            dob=dob,
+            addresses={
+                "clinic": clinic_addr,
+                "monitoring_clinic": monitoring_addr,
+                "ob": ob_addr,
+                "delivery_hospital": hospital_addr,
+            },
+        )
         _log_surrogate_activity(
             db,
             surrogate=surrogate,

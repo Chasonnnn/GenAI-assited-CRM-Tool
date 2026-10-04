@@ -1687,8 +1687,7 @@ def _routing_review_response(db: Session, session: UserSession, submission_id: U
     submission = form_submission_service.get_submission(db, session.org_id, submission_id)
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
-    form_submission_access.check_submission(db, session, submission, write=True)
-    _require_donor_lead_access(db, session, submission.lead_kind, require_write=True)
+    form_submission_access.require_routing_review(db, session, submission)
     try:
         submission, outcome = operation(db, submission_id=submission_id, session=session)
     except form_routing_service.RoutingReviewConflict as exc:

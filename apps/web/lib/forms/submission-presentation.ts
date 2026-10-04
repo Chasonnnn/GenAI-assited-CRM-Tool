@@ -1,5 +1,7 @@
 import type { FormFieldMappingItem, FormSubmissionRead, FormSubmissionStatus } from "@/lib/api/forms"
+import { getFormOptionLabel } from "@/lib/forms/option-labels"
 
+/** Reads the first text answer among the keys, shown by its option label when the field has one. */
 export function readAnswerValue(
     submission: FormSubmissionRead,
     keys: string[],
@@ -10,8 +12,12 @@ export function readAnswerValue(
         .map((mapping) => mapping.field_key)
     for (const key of [...new Set([...mappedKeys, ...keys])]) {
         const rawValue = submission.answers?.[key]
-        if (typeof rawValue === "string" && rawValue.trim()) {
-            return rawValue.trim()
+        const value = typeof rawValue === "string" ? rawValue.trim() : ""
+        if (value) {
+            const field = submission.schema_snapshot?.pages
+                .flatMap((page) => page.fields)
+                .find((candidate) => candidate.key === key)
+            return getFormOptionLabel(field?.options, value) ?? value
         }
     }
     return "—"

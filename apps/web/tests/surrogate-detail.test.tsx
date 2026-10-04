@@ -157,78 +157,6 @@ const baseSurrogateData = {
     num_csections: null,
     eligibility_checklist: [],
     archived_at: null,
-    // Insurance info
-    insurance_company: null,
-    insurance_plan_name: null,
-    insurance_phone: null,
-    insurance_policy_number: null,
-    insurance_member_id: null,
-    insurance_group_number: null,
-    insurance_subscriber_name: null,
-    insurance_subscriber_dob: null,
-    insurance_fax: null,
-    // IVF clinic
-    clinic_name: null,
-    clinic_address_line1: null,
-    clinic_address_line2: null,
-    clinic_city: null,
-    clinic_state: null,
-    clinic_postal: null,
-    clinic_phone: null,
-    clinic_fax: null,
-    clinic_email: null,
-    // Monitoring clinic
-    monitoring_clinic_name: null,
-    monitoring_clinic_address_line1: null,
-    monitoring_clinic_address_line2: null,
-    monitoring_clinic_city: null,
-    monitoring_clinic_state: null,
-    monitoring_clinic_postal: null,
-    monitoring_clinic_phone: null,
-    monitoring_clinic_fax: null,
-    monitoring_clinic_email: null,
-    // OB provider
-    ob_provider_name: null,
-    ob_clinic_name: null,
-    ob_address_line1: null,
-    ob_address_line2: null,
-    ob_city: null,
-    ob_state: null,
-    ob_postal: null,
-    ob_phone: null,
-    ob_fax: null,
-    ob_email: null,
-    // PCP
-    pcp_provider_name: null,
-    pcp_name: null,
-    pcp_address_line1: null,
-    pcp_address_line2: null,
-    pcp_city: null,
-    pcp_state: null,
-    pcp_postal: null,
-    pcp_phone: null,
-    pcp_fax: null,
-    pcp_email: null,
-    // Lab clinic
-    lab_clinic_name: null,
-    lab_clinic_address_line1: null,
-    lab_clinic_address_line2: null,
-    lab_clinic_city: null,
-    lab_clinic_state: null,
-    lab_clinic_postal: null,
-    lab_clinic_phone: null,
-    lab_clinic_fax: null,
-    lab_clinic_email: null,
-    // Delivery hospital
-    delivery_hospital_name: null,
-    delivery_hospital_address_line1: null,
-    delivery_hospital_address_line2: null,
-    delivery_hospital_city: null,
-    delivery_hospital_state: null,
-    delivery_hospital_postal: null,
-    delivery_hospital_phone: null,
-    delivery_hospital_fax: null,
-    delivery_hospital_email: null,
     // Pregnancy tracking
     embryo_stage: null,
     pregnancy_start_date: null,
@@ -267,6 +195,16 @@ vi.mock('@/lib/hooks/use-surrogates', async (importOriginal) => ({
     useSendSurrogateEmail: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useCreateContactAttempt: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useContactAttempts: () => ({ data: null, isLoading: false }),
+}))
+
+let mockMedicalRecords: unknown[] = []
+
+vi.mock('@/lib/hooks/use-medical-records', () => ({
+    useMedicalRecords: () => ({ data: { today: '2026-10-03', records: mockMedicalRecords }, isLoading: false, isError: false }),
+    useCreateMedicalRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCorrectMedicalRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useArchiveMedicalRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useRestoreMedicalRecordSection: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-notes', () => ({
@@ -325,6 +263,7 @@ vi.mock('@/lib/hooks/use-matches', () => ({
 
 describe('SurrogateDetailPage', () => {
     beforeEach(() => {
+        mockMedicalRecords = []
         mockUseAuth.mockReturnValue({ user: { role: 'developer' } })
         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 1, permissions: [] } })
         mockPipelineStages = [...defaultPipelineStages]
@@ -488,20 +427,26 @@ describe('SurrogateDetailPage', () => {
         mockUseSurrogate.mockReturnValue({ data: {
             ...baseSurrogateData,
             stage_id: 's3', marital_status: 'married', partner_name: 'Partner Example',
-            insurance_company: 'Example Insurance', clinic_name: 'Example Clinic', clinic_address_line1: '10 Example Lane',
             pregnancy_start_date: '2026-01-01', embryo_stage: 'day_5', ssn_masked: '***-**-1234',
             is_age_eligible: true,
             eligibility_checklist: [{ key: 'is_age_eligible', label: 'Age Eligible', type: 'boolean', value: true, display_value: 'Yes' }],
         }, isLoading: false, error: null })
+        mockMedicalRecords = [{
+            id: 'rec-1', section: 'clinic', status: 'current', effective_date: '2026-01-01', end_date: null, source: 'manual',
+            provider_name: null, name: 'Example Clinic', address_line1: '10 Example Lane', address_line2: null, city: null,
+            state: null, postal: null, phone: null, fax: null, email: null, plan_name: null, policy_number: null,
+            member_id: null, group_number: null, subscriber_name: null, subscriber_dob: null, archived_on: null,
+            archived_by_name: null, revision: 1, created_by_name: null, created_at: '2026-01-01T12:00:00Z', corrections: [],
+        }]
         render(<SurrogateDetailLayoutClient><SurrogateOverviewTab /></SurrogateDetailLayoutClient>)
         expect(screen.getByText('Jane Applicant')).toBeInTheDocument()
-        expect(screen.getByText('Example Insurance')).toBeInTheDocument()
         expect(screen.getByText('Example Clinic')).toBeInTheDocument()
         expect(screen.getByText('10 Example Lane')).toBeInTheDocument()
         expect(screen.getByRole('button', { name: 'Age Eligible: Yes' })).toBeDisabled()
         for (const edit of screen.queryAllByRole('button', { name: /^Edit /i })) expect(edit).toBeDisabled()
         expect(screen.queryByRole('button', { name: 'Edit Personal Information' })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Edit Info' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'New IVF Clinic record' })).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: /copy email/i })).toBeEnabled()
         expect(mockUpdateSurrogate).not.toHaveBeenCalled()
     })
@@ -1512,102 +1457,6 @@ describe('SurrogateDetailPage', () => {
 
         expect(screen.getByText('Medical & Insurance')).toBeInTheDocument()
         expect(screen.queryByText('Pregnancy Tracker')).not.toBeInTheDocument()
-    })
-
-    it('saves PCP name edits to pcp_name after adding the section from Edit Info', async () => {
-        render(
-            <SurrogateDetailLayoutClient>
-                <SurrogateOverviewTab />
-            </SurrogateDetailLayoutClient>
-        )
-
-        mockUpdateSurrogate.mockClear()
-
-        fireEvent.click(screen.getByRole('button', { name: /edit info/i }))
-        fireEvent.click(screen.getByRole('menuitem', { name: /add section/i }))
-        fireEvent.click(screen.getByRole('menuitem', { name: /pcp provider/i }))
-        fireEvent.click(screen.getByRole('button', { name: 'Edit PCP Provider name' }))
-        fireEvent.change(screen.getByLabelText('PCP Provider name'), {
-            target: { value: 'Austin PCP Associates' },
-        })
-        fireEvent.keyDown(screen.getByLabelText('PCP Provider name'), { key: 'Enter' })
-
-        await waitFor(() => {
-            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
-                surrogateId: 'c1',
-                data: { pcp_name: 'Austin PCP Associates' },
-            })
-        })
-    })
-
-    it('shows persisted medical sections automatically when hidden address fields contain data', () => {
-        mockUseSurrogate.mockReturnValue({
-            data: {
-                ...baseSurrogateData,
-                pcp_state: 'TX',
-            },
-            isLoading: false,
-            error: null,
-        })
-
-        render(
-            <SurrogateDetailLayoutClient>
-                <SurrogateOverviewTab />
-            </SurrogateDetailLayoutClient>
-        )
-
-        expect(screen.getByText('PCP Provider')).toBeInTheDocument()
-    })
-
-    it('allows deleting a visible section from Edit Info with confirmation', async () => {
-        render(
-            <SurrogateDetailLayoutClient>
-                <SurrogateOverviewTab />
-            </SurrogateDetailLayoutClient>
-        )
-
-        mockUpdateSurrogate.mockClear()
-
-        fireEvent.click(screen.getByRole('button', { name: /edit info/i }))
-        fireEvent.click(screen.getByRole('menuitem', { name: /add section/i }))
-        fireEvent.click(screen.getByRole('menuitem', { name: /pcp provider/i }))
-        expect(screen.getByText('PCP Provider')).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole('button', { name: /edit info/i }))
-        fireEvent.click(screen.getByRole('menuitem', { name: /delete section/i }))
-        fireEvent.click(screen.getByRole('menuitem', { name: /delete pcp provider/i }))
-
-        expect(screen.getByText('Delete PCP Provider section?')).toBeInTheDocument()
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-        expect(mockUpdateSurrogate).not.toHaveBeenCalled()
-        expect(screen.getByText('PCP Provider')).toBeInTheDocument()
-
-        fireEvent.click(screen.getByRole('button', { name: /edit info/i }))
-        fireEvent.click(screen.getByRole('menuitem', { name: /delete section/i }))
-        fireEvent.click(screen.getByRole('menuitem', { name: /delete pcp provider/i }))
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Section' }))
-
-        await waitFor(() => {
-            expect(mockUpdateSurrogate).toHaveBeenCalledWith({
-                surrogateId: 'c1',
-                data: {
-                    pcp_provider_name: null,
-                    pcp_name: null,
-                    pcp_address_line1: null,
-                    pcp_address_line2: null,
-                    pcp_city: null,
-                    pcp_state: null,
-                    pcp_postal: null,
-                    pcp_phone: null,
-                    pcp_fax: null,
-                    pcp_email: null,
-                },
-            })
-        })
-
-        await waitFor(() => {
-            expect(screen.queryByText('PCP Provider')).not.toBeInTheDocument()
-        })
     })
 
     it('keeps journey hidden for on-hold surrogates paused before match', () => {

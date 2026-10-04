@@ -122,6 +122,11 @@ class AuditEventType(str, Enum):
     DONOR_ARCHIVED = "donor_archived"
     DONOR_RESTORED = "donor_restored"
 
+    MEDICAL_RECORD_CREATED = "medical_record_created"
+    MEDICAL_RECORD_CORRECTED = "medical_record_corrected"
+    MEDICAL_RECORD_ARCHIVED = "medical_record_archived"
+    MEDICAL_RECORD_RESTORED = "medical_record_restored"
+
     TASK_CREATED = "task_created"
     TASK_UPDATED = "task_updated"
     TASK_COMPLETED = "task_completed"

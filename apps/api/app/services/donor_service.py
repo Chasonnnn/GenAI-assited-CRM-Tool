@@ -890,6 +890,22 @@ def update_donor(
         raise
 
 
+def dispatch_donor_updated_workflow(db: Session, donor: Donor, changed_fields: list[str]) -> None:
+    """Run donor-updated workflows after a committed change made outside update_donor."""
+    from app.services import workflow_triggers
+
+    _dispatch_side_effect_isolated(
+        db=db,
+        donor=donor,
+        event_key="updated",
+        failure_kind="workflow",
+        trigger=lambda workflow_db, workflow_donor: workflow_triggers.trigger_donor_updated(
+            workflow_db, workflow_donor, changed_fields
+        ),
+        details={"changed_fields": changed_fields},
+    )
+
+
 def archive_donor(
     db: Session,
     donor: Donor,
