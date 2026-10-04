@@ -1107,6 +1107,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
         .filter(({ fieldGroups }) => fieldGroups.standardFields.length + fieldGroups.fileFields.length > 0)
     const messagingConsent = formConfig?.messaging_consent
     const smsSelection = { operational: smsOperational, promotional: smsPromotional }
+    const hasSmsConsentOptions = Boolean(messagingConsent?.operational || messagingConsent?.promotional)
     const smsPhoneField = resolveSmsConsentPhoneField(
         messagingConsent,
         visibleSections.flatMap((section) => section.fieldGroups.standardFields),
@@ -1533,7 +1534,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                                 >
                                                     {renderFieldInput(field)}
                                                 </div>
-                                                {field.key === smsPhoneField?.key ? (
+                                                {field.key === smsPhoneField?.key && hasSmsConsentOptions ? (
                                                     <div className="sm:col-span-2">{smsConsent}</div>
                                                 ) : null}
                                             </React.Fragment>

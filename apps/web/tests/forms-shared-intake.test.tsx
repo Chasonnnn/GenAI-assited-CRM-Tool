@@ -1222,6 +1222,19 @@ describe('Shared Intake Public Page', () => {
             expect(screen.getByLabelText('Mobile Phone')).toHaveValue('(555) 123-4567')
         })
 
+        it('leaves no empty grid cell after the phone field without SMS options', async () => {
+            getSharedPublicForm.mockResolvedValue({
+                ...smsIntakeForm,
+                messaging_consent: { phone_field_key: 'mobile_number', operational: null, promotional: null },
+            })
+            render(<PublicIntakeFormClient slug="event-abc" />)
+
+            const phone = await screen.findByLabelText('Mobile Phone')
+            const cells = Array.from(phone.closest('.grid')?.children ?? [])
+            const phoneIndex = cells.findIndex((cell) => cell.contains(phone))
+            expect(cells[phoneIndex + 1]).toContainElement(screen.getByLabelText(/email/i))
+        })
+
         it.each([
             {
                 name: 'a null phone field key',
