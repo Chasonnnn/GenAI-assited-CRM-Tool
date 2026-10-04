@@ -105,6 +105,16 @@ async def test_upload_replace_delete_logo(authed_client, db, test_org, logo_stor
         ("logo.png", _image(size=(63, 100)), "64x64"),
         ("logo.png", _image(size=(100, 63)), "64x64"),
     ],
+    # Explicit IDs: raw upload bytes would put megabyte-long test names in the CI log.
+    ids=[
+        "unsupported-extension",
+        "wrong-image-format",
+        "not-an-image",
+        "over-1mb",
+        "2mb",
+        "too-narrow",
+        "too-short",
+    ],
 )
 async def test_logo_rejects_invalid_upload_without_changing_current(
     authed_client, db, test_org, logo_storage, filename, content, error
