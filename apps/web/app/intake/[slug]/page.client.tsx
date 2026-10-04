@@ -1,25 +1,20 @@
 "use client"
 
 import * as React from "react"
-import { flushSync } from "react-dom"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-    ChevronLeftIcon,
-    ChevronRightIcon,
     UploadIcon,
     Loader2Icon,
     PencilIcon,
 } from "lucide-react"
 import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
-import { parseDateInput } from "@/lib/utils/date"
 import { ApiError } from "@/lib/api"
 import type { JsonObject } from "@/lib/types/json"
 import { PublicFormFieldRenderer, getPublicFieldErrorId } from "@/components/forms/PublicFormFieldRenderer"
@@ -49,15 +44,15 @@ import { useHostedIntakeAutosave } from "@/lib/hooks/use-hosted-intake-autosave"
 import { captureHostedIntakeAttribution, clearHostedIntakeAttribution } from "./hosted-intake-attribution"
 import { FileUploadZone } from "./components/file-upload-zone"
 import { PrivacyNotice } from "./components/privacy-notice"
-import { ProgressStepper, type Step } from "./components/progress-stepper"
 import { PublicFormErrorState } from "./components/public-form-error-state"
 import { PublicFormLoadingState } from "./components/public-form-loading-state"
 import {
-    publicFormCardClassName,
-    publicFormCardContentClassName,
-    publicFormCardHeaderClassName,
-    publicFormPageClassName,
-} from "./components/public-form-styles"
+    PublicFormSectionIndex,
+    useActivePublicFormSection,
+    type PublicFormSectionLink,
+    type PublicFormSectionStatus,
+} from "./components/public-form-section-index"
+import { publicFormPageClassName, publicFormSectionClassName } from "./components/public-form-styles"
 import { PublicFormSuccessState } from "./components/public-form-success-state"
 
 type TableRow = Record<string, string | number | null>
@@ -69,6 +64,15 @@ type FormPage = FormSchema["pages"][number]
 type FormField = FormPage["fields"][number]
 
 const PER_FILE_FIELD_MAX = 5
+
+// Short single-line answers share a row; everything else spans the section width.
+const HALF_WIDTH_FIELD_TYPES = new Set(["text", "email", "phone", "number", "date", "select", "height"])
+
+function getSectionId(pageIndex: number): string {
+    return `form-section-${pageIndex + 1}`
+}
+
+const REVIEW_SECTION_ID = "form-section-review"
 
 function getPageKey(page: FormSchema["pages"][number]): string {
     const title = page.title?.trim() || "untitled"
@@ -109,57 +113,11 @@ const isIntakePublicRead = (value: unknown): value is FormIntakePublicRead => {
     return Array.isArray(schema.pages)
 }
 
-const REVIEW_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" })
-
-// A stored YYYY-MM-DD answer read as a local date, so it never shifts a day.
-function formatDate(value: string | null): string {
-    if (!value) return ""
-    const date = parseDateInput(value)
-    return Number.isNaN(date.getTime()) ? value : REVIEW_DATE_FORMATTER.format(date)
-}
-
 function formatSavedTime(value: string | null): string {
     if (!value) return ""
     const date = new Date(value)
     if (Number.isNaN(date.getTime())) return ""
     return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-}
-
-function ReviewValue({
-    field,
-    value,
-}: {
-    field: FormField
-    value: AnswerValue
-}) {
-    if (value === null || value === undefined || value === "") {
-        return <span className="text-stone-400">No answer</span>
-    }
-    if (field.type === "date" && typeof value === "string") {
-        return <span className="font-medium">{formatDate(value)}</span>
-    }
-    if ((field.type === "repeatable_table" || field.type === "table") && Array.isArray(value)) {
-        return (
-            <span className="font-medium">
-                {value.length} row{value.length === 1 ? "" : "s"}
-            </span>
-        )
-    }
-    if (typeof value === "boolean") {
-        return value ? (
-            <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                Yes
-            </span>
-        ) : (
-            <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600">
-                No
-            </span>
-        )
-    }
-    if (Array.isArray(value)) {
-        return <span className="font-medium">{value.join(", ") || "—"}</span>
-    }
-    return <span className="font-medium">{String(value)}</span>
 }
 
 function formatSavedDateTime(value: string | null): string {
@@ -280,16 +238,6 @@ function filterDraftAnswersForSchema(schema: FormSchema, rawAnswers: unknown): A
         restored[key] = value as AnswerValue
     }
     return restored
-}
-
-function shortenStepLabel(label: string): string {
-    const words = label.replace(/&/g, " ").split(/\s+/).filter(Boolean)
-    const firstWord = words[0] ?? label
-    const secondWord = words[1] ?? ""
-    if (words.length <= 1) return label
-    if (words.length === 2 && label.length <= 16) return label.replace(/\s*&\s*/g, " ")
-    if (words.length === 2) return firstWord
-    return secondWord ? `${firstWord} ${secondWord}` : firstWord
 }
 
 type PublicApplicationFormProps = {
@@ -911,7 +859,6 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     const token = slug
     const isPreview = false
 
-    const [currentStep, setCurrentStep] = React.useState(1)
     const [fileUploads, setFileUploads] = React.useState<FileUploads>({})
     const [isSubmitting, setIsSubmitting] = React.useState(false)
     const submissionAttemptRef = React.useRef<SubmissionAttempt | null>(null)
@@ -1083,18 +1030,6 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             : logoUrl
     const privacyNotice = formConfig?.form_schema.privacy_notice
     const showLogo = Boolean(resolvedLogoUrl) && !logoError
-    const steps: Step[] = [
-        ...pages.map((page, index) => {
-            const label = page.title || `Step ${index + 1}`
-            return {
-                id: index + 1,
-                label,
-                shortLabel: shortenStepLabel(label),
-            }
-        }),
-        { id: pages.length + 1, label: "Review & Submit", shortLabel: "Review" },
-    ]
-    const boundedCurrentStep = Math.min(currentStep, steps.length)
 
     const totalFiles = Object.values(fileUploads).reduce((sum, group) => sum + group.length, 0)
     const maxTotalFiles = formConfig?.max_file_count ?? 10
@@ -1162,21 +1097,20 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
         return errors
     }
 
-    const visibleReviewPages = pages.map((page) => ({
-        page,
-        fieldGroups: getVisibleFieldGroups(page.fields, answers, isPublicFieldVisible),
-    }))
+    const visibleSections = pages
+        .map((page, pageIndex) => ({
+            page,
+            id: getSectionId(pageIndex),
+            title: page.title?.trim() || `Section ${pageIndex + 1}`,
+            fieldGroups: getVisibleFieldGroups(page.fields, answers, isPublicFieldVisible),
+        }))
+        .filter(({ fieldGroups }) => fieldGroups.standardFields.length + fieldGroups.fileFields.length > 0)
     const messagingConsent = formConfig?.messaging_consent
     const smsSelection = { operational: smsOperational, promotional: smsPromotional }
     const smsPhoneField = resolveSmsConsentPhoneField(
         messagingConsent,
-        visibleReviewPages.flatMap((reviewPage) => reviewPage.fieldGroups.standardFields),
+        visibleSections.flatMap((section) => section.fieldGroups.standardFields),
     )
-    const smsPhoneStep = smsPhoneField
-        ? visibleReviewPages.findIndex((reviewPage) =>
-            reviewPage.fieldGroups.standardFields.includes(smsPhoneField),
-        ) + 1
-        : null
     const smsConsentError = getSmsConsentError({
         options: messagingConsent,
         selection: smsSelection,
@@ -1191,56 +1125,40 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
         }
     }
 
-    const validateStep = (step: number): boolean => {
-        if (!formConfig) return false
-        if (step > pages.length) return true
-
-        const page = pages[step - 1]
-        if (!page) return false
-        // The SMS check runs first so a checked consent always reports its phone error inline.
-        if (step === smsPhoneStep && smsConsentError && smsPhoneField) {
-            setSmsConsentErrorVisible(true)
-            document.getElementById(smsPhoneField.key)?.focus()
-            return false
+    const getSectionFieldErrors = (section: (typeof visibleSections)[number]): Record<string, string> => {
+        const errors = getPageFieldErrors(section.page)
+        for (const field of section.fieldGroups.fileFields) {
+            if (field.required && (fileUploads[field.key]?.length ?? 0) === 0) {
+                errors[field.key] = `Upload ${field.label}.`
+            }
         }
-        const errors = getPageFieldErrors(page)
-        if (Object.keys(errors).length > 0) {
-            showFieldErrors(errors)
-            return false
-        }
-
-        return true
+        return errors
     }
 
-    const saveCurrentDraft = () => {
-        if (!token || !formConfig || !draftSessionId) return
-        if (!hasAnyDraftAnswer(answers)) return
-        return saveDraftSessionNow({
-            token,
-            draftSessionId,
-            answers,
-            dispatchIntakeState,
-        })
+    const getFormFieldErrors = (): Record<string, string> =>
+        Object.assign({}, ...visibleSections.map(getSectionFieldErrors))
+
+    const getSectionStatus = (section: (typeof visibleSections)[number]): PublicFormSectionStatus => {
+        const { standardFields, fileFields } = section.fieldGroups
+        const hasShownError =
+            [...standardFields, ...fileFields].some((field) => field.key in fieldErrors)
+            || (smsConsentErrorVisible && Boolean(smsConsentError) && standardFields.includes(smsPhoneField as FormField))
+        if (hasShownError) return "error"
+        const answered =
+            standardFields.some((field) => !isEmptyValue(answers[field.key] ?? null))
+            || fileFields.some((field) => (fileUploads[field.key]?.length ?? 0) > 0)
+        return answered && Object.keys(getSectionFieldErrors(section)).length === 0 ? "complete" : "pending"
     }
 
-    const handleNext = () => {
-        if (!validateStep(boundedCurrentStep)) return
-        if (!isPreview) void saveCurrentDraft()
-        if (boundedCurrentStep < steps.length) {
-            setFieldErrors({})
-            setCurrentStep(Math.min(boundedCurrentStep + 1, steps.length))
-            window.scrollTo({ top: 0, behavior: "smooth" })
-        }
-    }
-
-    const handleBack = () => {
-        if (boundedCurrentStep > 1) {
-            if (!isPreview) void saveCurrentDraft()
-            setFieldErrors({})
-            setCurrentStep(Math.max(boundedCurrentStep - 1, 1))
-            window.scrollTo({ top: 0, behavior: "smooth" })
-        }
-    }
+    const sectionLinks: PublicFormSectionLink[] = [
+        ...visibleSections.map((section) => ({
+            id: section.id,
+            title: section.title,
+            status: getSectionStatus(section),
+        })),
+        { id: REVIEW_SECTION_ID, title: "Review & submit", status: agreed ? "complete" : "pending" },
+    ]
+    const activeSectionId = useActivePublicFormSection(sectionLinks.map((link) => link.id))
 
     const handleSubmit = () => {
         if (!agreed) {
@@ -1248,34 +1166,19 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             return
         }
 
+        const errors = getFormFieldErrors()
+        if (smsConsentError) setSmsConsentErrorVisible(true)
+        if (Object.keys(errors).length > 0) {
+            showFieldErrors(errors)
+            return
+        }
         if (smsConsentError) {
-            setSmsConsentErrorVisible(true)
-            if (smsPhoneStep && smsPhoneField) {
-                toast.error(smsConsentError)
-                // Commit the phone step synchronously so its input exists to take focus; focus scrolls it into view.
-                flushSync(() => setCurrentStep(smsPhoneStep))
+            if (smsPhoneField) {
                 document.getElementById(smsPhoneField.key)?.focus()
             } else {
-                // Without a visible phone field the consent block renders on this review step.
                 smsConsentCheckboxRef.current?.focus()
             }
             return
-        }
-
-        for (let index = 0; index < visibleReviewPages.length; index += 1) {
-            const reviewPage = visibleReviewPages[index]
-            if (!reviewPage) continue
-            const errors = getPageFieldErrors(reviewPage.page)
-            for (const field of reviewPage.fieldGroups.fileFields) {
-                if (field.required && (fileUploads[field.key]?.length ?? 0) === 0) {
-                    errors[field.key] = `Upload ${field.label}.`
-                }
-            }
-            if (Object.keys(errors).length > 0) {
-                setCurrentStep(() => index + 1)
-                showFieldErrors(errors)
-                return
-            }
         }
 
         setIsSubmitting(true)
@@ -1325,18 +1228,6 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             )
             .finally(() => setIsSubmitting(false))
     }
-
-    const goToEditStep = (step: number) => {
-        setFieldErrors({})
-        setCurrentStep(step)
-        window.scrollTo({ top: 0, behavior: "smooth" })
-    }
-
-    const isReviewStep = boundedCurrentStep === steps.length
-    const currentPage = pages[boundedCurrentStep - 1]
-    const currentVisibleFields = currentPage
-        ? getVisibleFieldGroups(currentPage.fields, answers, isPublicFieldVisible)
-        : { standardFields: [], fileFields: [] }
 
     const renderFieldInput = (field: FormSchema["pages"][number]["fields"][number]) => {
         const value = answers[field.key]
@@ -1530,7 +1421,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
     }
 
     return (
-        <div className={cn(publicFormPageClassName, "pb-12")}>
+        <div className={cn(publicFormPageClassName, "flex flex-col")}>
             <PublicFormHeader
                 agencyName={agencyName}
                 eyebrow={publicEyebrow}
@@ -1552,13 +1443,13 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                 }
             >
                 {!isPreview && draftRestored && (
-                    <div className="flex items-center justify-center gap-2 text-xs text-stone-500">
+                    <div className="flex items-center gap-2 text-xs text-stone-500">
                         <PencilIcon className="size-3" />
                         Restored saved progress
                     </div>
                 )}
                 {!isPreview && activeResumePrompt && (
-                     <div className="mx-auto w-full max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900">
+                     <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900">
                         <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
                                 <div className="font-medium">Continue previous application?</div>
@@ -1596,231 +1487,153 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                         </div>
                     </div>
                 )}
-                <div className="space-y-4">
-                    <ProgressStepper currentStep={boundedCurrentStep} steps={steps} />
-                    {!isPreview && hasAnyFileFields && (
-                        <div
-                            data-slot="public-upload-note"
-                            className="flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-left text-sm text-sky-950"
-                        >
-                            <UploadIcon className="mt-0.5 size-4 text-sky-600" />
-                            <div>
-                                <div className="font-medium">Uploads aren&apos;t saved yet</div>
-                                <div className="text-xs text-sky-900/75">
-                                    File uploads are only sent when you submit the application.
-                                </div>
+                {!isPreview && hasAnyFileFields && (
+                    <div
+                        data-slot="public-upload-note"
+                        className="flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-left text-sm text-sky-950"
+                    >
+                        <UploadIcon className="mt-0.5 size-4 text-sky-600" />
+                        <div>
+                            <div className="font-medium">Uploads aren&apos;t saved yet</div>
+                            <div className="text-xs text-sky-900/75">
+                                File uploads are only sent when you submit the application.
                             </div>
-                        </div>
-                    )}
-                </div>
-            </PublicFormHeader>
-
-            {/* Form Content */}
-            <div ref={formContentRef} className="max-w-3xl mx-auto px-4">
-                {!formConfig ? (
-                    <Card className={publicFormCardClassName}>
-                        <CardContent className="px-6 py-8 text-center">
-                            <p className="text-stone-600">Form configuration is unavailable.</p>
-                        </CardContent>
-                    </Card>
-                ) : isReviewStep ? (
-                    <Card className={publicFormCardClassName}>
-                        <CardHeader className={publicFormCardHeaderClassName}>
-                            <CardTitle className="text-lg text-stone-950">Review Your Application</CardTitle>
-                        </CardHeader>
-                        <CardContent className={publicFormCardContentClassName}>
-                            <p className="text-stone-600 text-sm">
-                                Please review your information before submitting.
-                            </p>
-
-                            {pages.length === 0 ? (
-                                <div className="rounded-lg border border-stone-200 p-4 text-sm text-stone-500">
-                                    No form pages available for review.
-                                </div>
-                            ) : (
-                                visibleReviewPages.map(({ page, fieldGroups }, index) => (
-                                    <div key={getPageKey(page)} className="rounded-lg border border-stone-200 p-4">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <h3 className="font-semibold text-stone-900">
-                                                {page.title || `Page ${index + 1}`}
-                                            </h3>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => goToEditStep(index + 1)}
-                                                className="text-primary hover:text-primary/80"
-                                            >
-                                                <PencilIcon className="size-3 mr-1" />
-                                                Edit
-                                            </Button>
-                                        </div>
-                                        <div className="grid gap-2 text-sm">
-                                            {fieldGroups.standardFields.map((field) => (
-                                                <div key={field.key} className="flex justify-between">
-                                                    <span className="text-stone-500">{field.label}</span>
-                                                    <ReviewValue field={field} value={answers[field.key] ?? null} />
-                                                </div>
-                                            ))}
-                                            {fieldGroups.fileFields.map((field) => {
-                                                const count = fileUploads[field.key]?.length ?? 0
-                                                return (
-                                                    <div key={field.key} className="flex justify-between">
-                                                        <span className="text-stone-500">{field.label}</span>
-                                                        <span className="font-medium">
-                                                            {count ? `${count} file(s)` : "—"}
-                                                        </span>
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-
-                            <div className="flex items-start gap-3 rounded-lg bg-stone-50 p-4">
-                                <Checkbox
-                                    id="agree"
-                                    checked={agreed}
-                                    onCheckedChange={(checked) => setAgreed(checked === true)}
-                                    className="mt-1"
-                                />
-                                <label
-                                    htmlFor="agree"
-                                    className="text-sm text-stone-600 leading-relaxed"
-                                >
-                                    I confirm that the information provided is accurate and
-                                    complete. I understand that providing false information may
-                                    result in disqualification from the program.
-                                </label>
-                            </div>
-
-                            {smsPhoneField ? null : smsConsent}
-
-                            <PrivacyNotice text={privacyNotice ?? null} />
-                        </CardContent>
-                    </Card>
-                ) : currentPage ? (
-                    <Card className={publicFormCardClassName}>
-                        <CardContent className={publicFormCardContentClassName}>
-                            {currentVisibleFields.standardFields.length === 0 ? (
-                                <div className="rounded-lg border border-stone-200 p-4 text-sm text-stone-500">
-                                    No fields on this page.
-                                </div>
-                            ) : (
-                                currentVisibleFields.standardFields.map((field) => (
-                                    <React.Fragment key={field.key}>
-                                        {renderFieldInput(field)}
-                                        {boundedCurrentStep === smsPhoneStep && field.key === smsPhoneField?.key
-                                            ? smsConsent
-                                            : null}
-                                    </React.Fragment>
-                                ))
-                            )}
-
-                            {currentVisibleFields.fileFields.map((field) => {
-                                const error = fieldErrors[field.key] ?? null
-                                const errorId = getPublicFieldErrorId(field.key)
-                                return (
-                                    <div
-                                        key={field.key}
-                                        role="group"
-                                        aria-label={field.label}
-                                        className="space-y-2 rounded-lg border border-stone-200/80 bg-stone-50/60 p-4"
-                                        {...(error
-                                            ? { "aria-invalid": true, "aria-describedby": errorId, tabIndex: -1 }
-                                            : {})}
-                                    >
-                                        <Label className="text-sm font-medium">
-                                            {field.label} {field.required && <span className="text-red-500">*</span>}
-                                        </Label>
-                                        <FileUploadZone
-                                            files={fileUploads[field.key] || []}
-                                            onFilesChange={(nextFiles) => updateFileUploads(field.key, nextFiles)}
-                                            maxFiles={getMaxFilesForField(field.key)}
-                                            maxFileSizeBytes={formConfig.max_file_size_bytes}
-                                            allowedMimeTypes={
-                                                formConfig.field_allowed_mime_types?.[field.key] ??
-                                                formConfig.allowed_mime_types ??
-                                                null
-                                            }
-                                        />
-                                        {error ? <FieldError id={errorId}>{error}</FieldError> : null}
-                                        {field.help_text && (
-                                            <p className="text-xs text-stone-500">{field.help_text}</p>
-                                        )}
-                                    </div>
-                                )
-                            })}
-
-                            <PrivacyNotice text={privacyNotice ?? null} />
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <Card className={publicFormCardClassName}>
-                        <CardContent className="px-6 py-8 text-center">
-                            <p className="text-stone-600">This page is unavailable.</p>
-                        </CardContent>
-                    </Card>
-                )}
-            </div>
-            {/* Navigation Buttons */}
-            <div className="mt-8">
-                <div>
-                    <div className="max-w-3xl mx-auto px-4">
-                        <div className="flex items-center justify-end gap-3 rounded-lg border border-stone-200/80 bg-white/95 px-4 py-3 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur md:shadow-sm">
-                            <Button
-                                 variant="ghost"
-                                 onClick={handleBack}
-                                 disabled={boundedCurrentStep === 1}
-                                 className="h-11 px-5 text-stone-600"
-                             >
-                                <ChevronLeftIcon className="size-4 mr-2" />
-                                Back
-                            </Button>
-
-                             {boundedCurrentStep < steps.length ? (
-                                <Button
-                                    onClick={handleNext}
-                                    className="h-11 px-7"
-                                >
-                                    Continue
-                                    <ChevronRightIcon className="size-4 ml-2" />
-                                </Button>
-                            ) : (
-                                <Button
-                                    onClick={handleSubmit}
-                                    disabled={isSubmitting || !agreed}
-                                    className="h-11 px-7"
-                                >
-                                    {isSubmitting ? (
-                                        <>
-                                            <Loader2Icon className="size-4 mr-2 animate-spin" />
-                                            Submitting…
-                                        </>
-                                    ) : (
-                                        "Submit Application"
-                                    )}
-                                </Button>
-                            )}
                         </div>
                     </div>
+                )}
+            </PublicFormHeader>
+
+            <div className="mx-auto flex w-full max-w-6xl flex-1 items-start gap-10 px-4 pb-16 sm:px-6 lg:px-12">
+                {formConfig ? <PublicFormSectionIndex sections={sectionLinks} activeId={activeSectionId} /> : null}
+                <div ref={formContentRef} className="flex min-w-0 flex-1 flex-col gap-6">
+                    {!formConfig ? (
+                        <section className={publicFormSectionClassName}>
+                            <p className="text-center text-stone-600">Form configuration is unavailable.</p>
+                        </section>
+                    ) : (
+                        <>
+                            {visibleSections.map((section) => (
+                                <section
+                                    key={getPageKey(section.page)}
+                                    id={section.id}
+                                    aria-labelledby={`${section.id}-title`}
+                                    className={publicFormSectionClassName}
+                                >
+                                    <h2 id={`${section.id}-title`} className="text-xl font-semibold text-stone-950">
+                                        {section.title}
+                                    </h2>
+                                    <div className="grid gap-x-5 gap-y-6 sm:grid-cols-2">
+                                        {section.fieldGroups.standardFields.map((field) => (
+                                            <React.Fragment key={field.key}>
+                                                <div
+                                                    className={cn(
+                                                        "min-w-0",
+                                                        !HALF_WIDTH_FIELD_TYPES.has(field.type) && "sm:col-span-2",
+                                                    )}
+                                                >
+                                                    {renderFieldInput(field)}
+                                                </div>
+                                                {field.key === smsPhoneField?.key ? (
+                                                    <div className="sm:col-span-2">{smsConsent}</div>
+                                                ) : null}
+                                            </React.Fragment>
+                                        ))}
+                                        {section.fieldGroups.fileFields.map((field) => {
+                                            const error = fieldErrors[field.key] ?? null
+                                            const errorId = getPublicFieldErrorId(field.key)
+                                            return (
+                                                <div
+                                                    key={field.key}
+                                                    role="group"
+                                                    aria-label={field.label}
+                                                    className="space-y-2 sm:col-span-2"
+                                                    {...(error
+                                                        ? { "aria-invalid": true, "aria-describedby": errorId, tabIndex: -1 }
+                                                        : {})}
+                                                >
+                                                    <Label className="text-sm font-medium">
+                                                        {field.label} {field.required && <span className="text-red-500">*</span>}
+                                                    </Label>
+                                                    <FileUploadZone
+                                                        files={fileUploads[field.key] || []}
+                                                        onFilesChange={(nextFiles) => updateFileUploads(field.key, nextFiles)}
+                                                        maxFiles={getMaxFilesForField(field.key)}
+                                                        maxFileSizeBytes={formConfig.max_file_size_bytes}
+                                                        allowedMimeTypes={
+                                                            formConfig.field_allowed_mime_types?.[field.key] ??
+                                                            formConfig.allowed_mime_types ??
+                                                            null
+                                                        }
+                                                    />
+                                                    {error ? <FieldError id={errorId}>{error}</FieldError> : null}
+                                                    {field.help_text && (
+                                                        <p className="text-xs text-stone-500">{field.help_text}</p>
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </section>
+                            ))}
+
+                            <section
+                                id={REVIEW_SECTION_ID}
+                                aria-labelledby={`${REVIEW_SECTION_ID}-title`}
+                                className={publicFormSectionClassName}
+                            >
+                                <h2 id={`${REVIEW_SECTION_ID}-title`} className="text-xl font-semibold text-stone-950">
+                                    Review &amp; submit
+                                </h2>
+                                <div className="flex items-start gap-3">
+                                    <Checkbox
+                                        id="agree"
+                                        checked={agreed}
+                                        onCheckedChange={(checked) => setAgreed(checked === true)}
+                                        className="mt-1"
+                                    />
+                                    <label htmlFor="agree" className="text-sm leading-relaxed text-stone-700">
+                                        I confirm that the information provided is accurate and
+                                        complete. I understand that providing false information may
+                                        result in disqualification from the program.
+                                    </label>
+                                </div>
+
+                                {smsPhoneField ? null : smsConsent}
+
+                                <PrivacyNotice text={privacyNotice ?? null} />
+
+                                <div className="flex justify-end border-t border-stone-100 pt-5">
+                                    <Button
+                                        onClick={handleSubmit}
+                                        disabled={isSubmitting || !agreed}
+                                        className="h-11 w-full px-7 sm:w-auto"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2Icon className="mr-2 size-4 animate-spin" />
+                                                Submitting…
+                                            </>
+                                        ) : (
+                                            "Submit Application"
+                                        )}
+                                    </Button>
+                                </div>
+                            </section>
+                        </>
+                    )}
                 </div>
             </div>
 
-            {/* Footer */}
-            <footer className="max-w-3xl mx-auto px-4 mt-12 text-center">
+            <footer className="flex justify-center gap-4 border-t border-stone-200/80 px-4 py-5">
                 <Link
                     href="/privacy"
-                    className="text-sm text-stone-500 hover:text-primary underline underline-offset-2"
+                    className="text-sm text-stone-500 underline underline-offset-2 hover:text-primary"
                 >
                     Privacy Policy
                 </Link>
-                <span className="mx-2 text-stone-300" aria-hidden="true">
-                    |
-                </span>
                 <Link
                     href="/terms"
-                    className="text-sm text-stone-500 hover:text-primary underline underline-offset-2"
+                    className="text-sm text-stone-500 underline underline-offset-2 hover:text-primary"
                 >
                     Terms
                 </Link>
