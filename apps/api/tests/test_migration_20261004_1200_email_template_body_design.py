@@ -11,8 +11,8 @@ from sqlalchemy.exc import IntegrityError
 from alembic import command
 
 API_ROOT = Path(__file__).resolve().parents[1]
-PREVIOUS_REVISION = "20261003_1800_timezone_aware_form_timestamps"
-DESIGN_REVISION = "20261003_2030_email_template_body_design"
+PREVIOUS_REVISION = "20261004_1000_drop_flat_medical_columns"
+DESIGN_REVISION = "20261004_1200_email_template_body_design"
 
 ORG_ID = uuid.UUID("10000000-0000-0000-0000-000000000031")
 TEMPLATE_ID = uuid.UUID("30000000-0000-0000-0000-000000000031")

@@ -4,8 +4,8 @@
 ``body_design`` columns hold the editor document (ADR 0006). Existing rows keep
 NULL and open in the editor as one Custom HTML node, so no body is rewritten.
 
-Revision ID: 20261003_2030_email_template_body_design
-Revises: 20261003_1800_timezone_aware_form_timestamps
+Revision ID: 20261004_1200_email_template_body_design
+Revises: 20261004_1000_drop_flat_medical_columns
 """
 
 import sqlalchemy as sa
@@ -13,8 +13,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision = "20261003_2030_email_template_body_design"
-down_revision = "20261003_1800_timezone_aware_form_timestamps"
+revision = "20261004_1200_email_template_body_design"
+down_revision = "20261004_1000_drop_flat_medical_columns"
 branch_labels = None
 depends_on = None
 
