@@ -1,15 +1,18 @@
 "use client"
 
 import { useState, useSyncExternalStore, type ReactNode } from "react"
+import type { Route } from "next"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
     EditIcon,
     FileTextIcon,
     LinkIcon,
     Loader2Icon,
-    MoreVerticalIcon,
+    MoreHorizontalIcon,
     PlusIcon,
     QrCodeIcon,
+    SearchIcon,
     Trash2Icon,
 } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
@@ -31,7 +34,7 @@ import { FORM_BUILDER_DENIED } from "@/components/forms/builder/FormBuilderAcces
 import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { useCurrentMinuteTimestamp } from "@/components/ui/use-current-minute-timestamp"
 import {
     Dialog,
@@ -57,6 +60,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { ApiError } from "@/lib/api"
 import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import {
@@ -140,19 +144,6 @@ function FormRelativeTime({ dateString }: { dateString: string }) {
     return formatRelativeTime(dateString, nowTimestamp, timeZone)
 }
 
-const statusVariant = (status: string) => {
-    switch (status) {
-        case "published":
-            return "default"
-        case "draft":
-            return "secondary"
-        case "archived":
-            return "outline"
-        default:
-            return "secondary"
-    }
-}
-
 const statusLabel = (status: string) => {
     switch (status) {
         case "published":
@@ -233,6 +224,20 @@ function FormsPageHeader({ onCreateForm }: { onCreateForm?: (() => void) | undef
     )
 }
 
+type FormStatusFilter = "all" | "published" | "draft" | "archived"
+
+const FORM_STATUS_FILTERS: { value: FormStatusFilter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "published", label: "Published" },
+    { value: "draft", label: "Drafts" },
+    { value: "archived", label: "Archived" },
+]
+
+function matchesSearch(name: string, search: string) {
+    const query = search.trim().toLowerCase()
+    return !query || name.toLowerCase().includes(query)
+}
+
 function FormsPageTabs({
     activeTab,
     onActiveTabChange,
@@ -268,21 +273,77 @@ function FormsPageTabs({
     onUseTemplate: (templateId: string, templateName: string) => void
     onDeleteTemplate: (target: DeleteTarget) => void
 }) {
+    const [search, setSearch] = useState("")
+    const [statusFilter, setStatusFilter] = useState<FormStatusFilter>("all")
+    const visibleForms = forms?.filter(
+        (form) =>
+            (statusFilter === "all" || form.status === statusFilter) && matchesSearch(form.name, search),
+    )
+    const visibleTemplates = templates?.filter((template) => matchesSearch(template.name, search))
+
     return (
         <Tabs
             value={activeTab}
             onValueChange={(value) => onActiveTabChange(value as FormsTab)}
         >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <TabsList>
-                    <TabsTrigger value="forms">Forms</TabsTrigger>
-                    <TabsTrigger value="templates">Form Templates</TabsTrigger>
+                    <TabsTrigger value="forms" className="gap-1.5">
+                        Forms{" "}
+                        {forms ? <span className="text-muted-foreground tabular-nums">{forms.length}</span> : null}
+                    </TabsTrigger>
+                    <TabsTrigger value="templates" className="gap-1.5">
+                        Form Templates{" "}
+                        {templates ? (
+                            <span className="text-muted-foreground tabular-nums">{templates.length}</span>
+                        ) : null}
+                    </TabsTrigger>
                 </TabsList>
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                    {activeTab === "forms" ? (
+                        <ToggleGroup
+                            aria-label="Form status"
+                            variant="outline"
+                            size="sm"
+                            spacing={1}
+                            value={[statusFilter]}
+                            onValueChange={(value) => {
+                                const next = value[0] as FormStatusFilter | undefined
+                                if (next) setStatusFilter(next)
+                            }}
+                        >
+                            {FORM_STATUS_FILTERS.map((filter) => (
+                                <ToggleGroupItem
+                                    key={filter.value}
+                                    value={filter.value}
+                                    className="rounded-full px-3 aria-pressed:border-foreground aria-pressed:bg-foreground aria-pressed:text-background"
+                                >
+                                    {filter.label}
+                                </ToggleGroupItem>
+                            ))}
+                        </ToggleGroup>
+                    ) : null}
+                    <div className="relative w-full sm:w-56">
+                        <SearchIcon
+                            aria-hidden="true"
+                            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                        />
+                        <Input
+                            type="search"
+                            aria-label={activeTab === "forms" ? "Search forms" : "Search form templates"}
+                            placeholder="Search"
+                            value={search}
+                            onChange={(event) => setSearch(event.target.value)}
+                            className="pl-8"
+                        />
+                    </div>
+                </div>
             </div>
 
             <TabsContent value="forms" className="space-y-6">
                 <FormsGrid
-                    forms={forms}
+                    forms={visibleForms}
+                    hasForms={Boolean(forms?.length)}
                     isLoading={isFormsLoading}
                     onCreateForm={onCreateForm}
                     onOpenForm={onOpenForm}
@@ -294,7 +355,8 @@ function FormsPageTabs({
 
             <TabsContent value="templates" className="space-y-6">
                 <FormTemplatesGrid
-                    templates={templates}
+                    templates={visibleTemplates}
+                    hasTemplates={Boolean(templates?.length)}
                     isLoading={templatesLoading}
                     loadError={templatesLoadError}
                     applyingTemplateId={applyingTemplateId}
@@ -307,8 +369,17 @@ function FormsPageTabs({
     )
 }
 
+function NoMatchingItems({ label }: { label: string }) {
+    return (
+        <Card className="py-0">
+            <EmptyState icon={SearchIcon} title={label} headingLevel={2} />
+        </Card>
+    )
+}
+
 function FormsGrid({
     forms,
+    hasForms,
     isLoading,
     onCreateForm,
     onOpenForm,
@@ -317,6 +388,7 @@ function FormsGrid({
     onShareForm,
 }: {
     forms: FormSummary[] | undefined
+    hasForms: boolean
     isLoading: boolean
     onCreateForm: () => void
     onOpenForm: (formId: string) => void
@@ -332,7 +404,7 @@ function FormsGrid({
         )
     }
 
-    if (!forms?.length) {
+    if (!hasForms) {
         return (
             <Card className="py-0">
                 <EmptyState
@@ -350,8 +422,12 @@ function FormsGrid({
         )
     }
 
+    if (!forms?.length) {
+        return <NoMatchingItems label="No matching forms" />
+    }
+
     return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {forms.toSorted(compareForms).map((form) => (
                 <FormCard
                     key={form.id}
@@ -376,6 +452,12 @@ function compareForms(a: FormSummary, b: FormSummary) {
     return parseDateInput(b.updated_at).getTime() - parseDateInput(a.updated_at).getTime()
 }
 
+const statusBadgeClassName: Record<string, string> = {
+    published: "border-transparent bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+    draft: "border-transparent bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
+    archived: "border-transparent bg-muted text-muted-foreground",
+}
+
 function FormCard({
     form,
     onOpenForm,
@@ -389,90 +471,69 @@ function FormCard({
     onDeleteForm: (target: DeleteTarget) => void
     onShareForm: (form: FormSummary) => void
 }) {
+    const href = `/automation/forms/${form.id}` as Route
     return (
-        <Card
-            className="cursor-pointer transition-colors hover:bg-accent/50"
-            onClick={() => onOpenForm(form.id)}
-        >
-            <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
-                            <FileTextIcon className="size-5" />
-                        </div>
-                        <div>
-                            <CardTitle className="text-base">{form.name}</CardTitle>
-                            <Badge
-                                variant={statusVariant(form.status)}
-                                className={`mt-1 text-xs ${form.status === "published" ? "bg-green-500 hover:bg-green-500/80" : ""}`}
+        <Card className="relative gap-3 py-4 transition-colors hover:bg-accent/40">
+            <div className="flex items-start gap-2 px-4">
+                <Link
+                    href={href}
+                    className="min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring"
+                >
+                    {form.name}
+                </Link>
+                <DropdownMenu>
+                    <DropdownMenuTrigger
+                        render={
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="relative z-10 -mr-2 -mt-1 size-8"
+                                aria-label={`Open menu for ${form.name}`}
                             >
-                                {statusLabel(form.status)}
-                            </Badge>
-                            <Badge variant="outline" className="ml-1 mt-1 text-xs">
-                                {FORM_LEAD_KIND_LABELS[form.lead_kind ?? "surrogate"]}
-                            </Badge>
-                        </div>
-                    </div>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger
-                            render={
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="size-8"
-                                    aria-label={`Open menu for ${form.name}`}
-                                    onClick={(event) => event.stopPropagation()}
-                                >
-                                    <MoreVerticalIcon className="size-4" aria-hidden="true" />
-                                </Button>
-                            }
-                        />
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                                onClick={(event) => {
-                                    event.stopPropagation()
-                                    onOpenForm(form.id)
-                                }}
-                            >
-                                <EditIcon className="mr-2 size-4" />
-                                Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                disabled={form.status !== "published"}
-                                onClick={(event) => {
-                                    event.stopPropagation()
-                                    onShareForm(form)
-                                }}
-                            >
-                                <LinkIcon className="mr-2 size-4" />
-                                Share
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                disabled={isDeletingForm}
-                                onClick={(event) => {
-                                    event.stopPropagation()
-                                    onDeleteForm({ id: form.id, name: form.name })
-                                }}
-                            >
-                                <Trash2Icon className="mr-2 size-4" />
-                                Delete
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-                <p className="text-xs text-muted-foreground">
-                    <FormRelativeTime dateString={form.updated_at} />
-                </p>
-            </CardContent>
+                                <MoreHorizontalIcon className="size-4" aria-hidden="true" />
+                            </Button>
+                        }
+                    />
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onOpenForm(form.id)}>
+                            <EditIcon className="mr-2 size-4" />
+                            Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            disabled={form.status !== "published"}
+                            onClick={() => onShareForm(form)}
+                        >
+                            <LinkIcon className="mr-2 size-4" />
+                            Share
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            disabled={isDeletingForm}
+                            onClick={() => onDeleteForm({ id: form.id, name: form.name })}
+                        >
+                            <Trash2Icon className="mr-2 size-4" />
+                            Delete
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 px-4">
+                <Badge variant="outline" className={statusBadgeClassName[form.status]}>
+                    {statusLabel(form.status)}
+                </Badge>
+                <Badge variant="outline">{FORM_LEAD_KIND_LABELS[form.lead_kind ?? "surrogate"]}</Badge>
+                {form.is_default_surrogate_application ? <Badge variant="outline">Default</Badge> : null}
+            </div>
+            <p className="px-4 text-xs text-muted-foreground">
+                <FormRelativeTime dateString={form.updated_at} />
+            </p>
         </Card>
     )
 }
 
 function FormTemplatesGrid({
     templates,
+    hasTemplates,
     isLoading,
     loadError,
     applyingTemplateId,
@@ -481,6 +542,7 @@ function FormTemplatesGrid({
     onDeleteTemplate,
 }: {
     templates: FormTemplateLibraryItem[] | undefined
+    hasTemplates: boolean
     isLoading: boolean
     loadError: LoadErrorInfo | null
     applyingTemplateId: string | null
@@ -511,7 +573,7 @@ function FormTemplatesGrid({
         )
     }
 
-    if (!templates?.length) {
+    if (!hasTemplates) {
         return (
             <Card className="py-0">
                 <EmptyState icon={FileTextIcon} title="No form templates yet" headingLevel={2} />
@@ -519,8 +581,12 @@ function FormTemplatesGrid({
         )
     }
 
+    if (!templates?.length) {
+        return <NoMatchingItems label="No matching form templates" />
+    }
+
     return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {templates.map((template) => (
                 <FormTemplateCard
                     key={template.id}
@@ -549,72 +615,59 @@ function FormTemplateCard({
     onDeleteTemplate: (target: DeleteTarget) => void
 }) {
     return (
-        <Card className="flex flex-col">
-            <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-teal-500">
-                            <FileTextIcon className="size-5" />
-                        </div>
-                        <div className="min-w-0">
-                            <CardTitle className="text-base">{template.name}</CardTitle>
-                            {template.published_at && (
-                                <Badge variant="outline" className="mt-1 text-xs">
-                                    Published
-                                </Badge>
-                            )}
-                        </div>
-                    </div>
-                    <div className="flex shrink-0 items-center">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger
-                                render={
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="size-8"
-                                        aria-label={`Open menu for template ${template.name}`}
-                                    >
-                                        <MoreVerticalIcon className="size-4" aria-hidden="true" />
-                                    </Button>
-                                }
-                            />
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem
-                                    className="text-destructive focus:text-destructive"
-                                    disabled={isTemplateActionPending}
-                                    onClick={(event) => {
-                                        event.stopPropagation()
-                                        onDeleteTemplate({ id: template.id, name: template.name })
-                                    }}
-                                >
-                                    <Trash2Icon className="mr-2 size-4" />
-                                    Remove from library
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+        <Card className="gap-3 py-4">
+            <div className="flex items-start gap-2 px-4">
+                <h3 className="min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug">
+                    {template.name}
+                </h3>
+                <DropdownMenu>
+                    <DropdownMenuTrigger
+                        render={
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="-mr-2 -mt-1 size-8"
+                                aria-label={`Open menu for template ${template.name}`}
+                            >
+                                <MoreHorizontalIcon className="size-4" aria-hidden="true" />
+                            </Button>
+                        }
+                    />
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            disabled={isTemplateActionPending}
+                            onClick={() => onDeleteTemplate({ id: template.id, name: template.name })}
+                        >
+                            <Trash2Icon className="mr-2 size-4" />
+                            Remove from library
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+            {template.published_at ? (
+                <div className="px-4">
+                    <Badge variant="outline">Published</Badge>
                 </div>
-            </CardHeader>
-            <CardContent className="flex flex-1 flex-col pt-0">
-                <p className="text-sm text-muted-foreground">
-                    {template.description || "No description provided."}
+            ) : null}
+            {template.description ? (
+                <p className="line-clamp-2 px-4 text-sm text-muted-foreground">{template.description}</p>
+            ) : null}
+            <div className="mt-auto flex items-center justify-between gap-3 px-4">
+                <p className="text-xs text-muted-foreground">
+                    <FormRelativeTime dateString={template.updated_at} />
                 </p>
-                <div className="mt-auto flex items-center justify-between gap-3 pt-4">
-                    <p className="text-xs text-muted-foreground">
-                        <FormRelativeTime dateString={template.updated_at} />
-                    </p>
-                    <Button
-                        size="sm"
-                        onClick={() => onUseTemplate(template.id, template.name)}
-                        disabled={isTemplateActionPending || isApplying}
-                        aria-label={`Use template ${template.name}`}
-                    >
-                        {isApplying && <Loader2Icon className="mr-2 size-4 animate-spin" />}
-                        Use Template
-                    </Button>
-                </div>
-            </CardContent>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onUseTemplate(template.id, template.name)}
+                    disabled={isTemplateActionPending || isApplying}
+                    aria-label={`Use template ${template.name}`}
+                >
+                    {isApplying && <Loader2Icon className="mr-2 size-4 animate-spin" />}
+                    Use Template
+                </Button>
+            </div>
         </Card>
     )
 }
