@@ -1,7 +1,7 @@
-import { render, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-import { AuthProvider } from '@/lib/auth-context'
+import { AuthProvider, useAuth } from '@/lib/auth-context'
 
 const getSpy = vi.fn()
 
@@ -27,6 +27,12 @@ function setLocation(pathname: string, hostname: string) {
             hostname,
         },
     })
+}
+
+function AuthProbe({ onAuth }: { onAuth: (auth: ReturnType<typeof useAuth>) => void }) {
+    const auth = useAuth()
+    onAuth(auth)
+    return <div>{auth.isLoading ? 'loading' : auth.user?.user_id ?? 'signed out'}</div>
 }
 
 describe('AuthProvider', () => {
@@ -60,5 +66,49 @@ describe('AuthProvider', () => {
         )
 
         await waitFor(() => expect(getSpy).toHaveBeenCalled())
+    })
+
+    it('refreshes the user without returning to the loading state', async () => {
+        setLocation('/settings', 'app.surrogacyforce.com')
+        let auth: ReturnType<typeof useAuth> | undefined
+        render(
+            <AuthProvider>
+                <AuthProbe onAuth={(value) => { auth = value }} />
+            </AuthProvider>
+        )
+        expect(await screen.findByText('1')).toBeInTheDocument()
+
+        let resolveMe: (user: { user_id: string }) => void = () => {}
+        getSpy.mockReturnValueOnce(new Promise((resolve) => { resolveMe = resolve }))
+        let refreshing: Promise<void> = Promise.resolve()
+        act(() => { refreshing = auth!.refresh() })
+        expect(screen.getByText('1')).toBeInTheDocument()
+
+        await act(async () => {
+            resolveMe({ user_id: '2' })
+            await refreshing
+        })
+        expect(screen.getByText('2')).toBeInTheDocument()
+    })
+
+    it('keeps the user when a background refresh fails, and signs out on 401', async () => {
+        setLocation('/settings', 'app.surrogacyforce.com')
+        let auth: ReturnType<typeof useAuth> | undefined
+        render(
+            <AuthProvider>
+                <AuthProbe onAuth={(value) => { auth = value }} />
+            </AuthProvider>
+        )
+        expect(await screen.findByText('1')).toBeInTheDocument()
+
+        getSpy.mockRejectedValueOnce(Object.assign(new Error('Server error'), { status: 500 }))
+        await act(() => auth!.refresh())
+        expect(screen.getByText('1')).toBeInTheDocument()
+        expect(auth!.error?.message).toBe('Server error')
+
+        getSpy.mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }))
+        await act(() => auth!.refresh())
+        expect(screen.getByText('signed out')).toBeInTheDocument()
+        expect(auth!.error).toBeNull()
     })
 })

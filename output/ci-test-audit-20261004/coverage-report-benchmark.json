@@ -1,0 +1,52 @@
+{
+  "runs": [
+    {
+      "repeat": 1,
+      "variant": "baseline",
+      "seconds": 13.8534
+    },
+    {
+      "repeat": 1,
+      "variant": "candidate",
+      "seconds": 10.152
+    },
+    {
+      "repeat": 2,
+      "variant": "baseline",
+      "seconds": 14.1692
+    },
+    {
+      "repeat": 2,
+      "variant": "candidate",
+      "seconds": 10.696
+    },
+    {
+      "repeat": 3,
+      "variant": "baseline",
+      "seconds": 14.532
+    },
+    {
+      "repeat": 3,
+      "variant": "candidate",
+      "seconds": 9.7085
+    }
+  ],
+  "baseline_median_seconds": 14.1692,
+  "candidate_median_seconds": 10.152,
+  "identical_json_totals": true,
+  "configured_floor_failure_checks": [
+    {
+      "action": "xml",
+      "exit_code": 2,
+      "message": "Coverage failure: total of 77.83 is less than fail-under=100.00"
+    },
+    {
+      "action": "json",
+      "exit_code": 2,
+      "message": "Coverage failure: total of 77.83 is less than fail-under=100.00"
+    }
+  ],
+  "coverage_data": "backend-candidate.coverage",
+  "scope": "Repeated report generation from identical frozen measurements; no tests were rerun.",
+  "reduction_percent": 28.351635942749066
+}

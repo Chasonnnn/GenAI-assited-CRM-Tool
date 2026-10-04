@@ -1,0 +1,35 @@
+{
+  "baseline": {
+    "covered_lines": 64972,
+    "num_statements": 79567,
+    "percent_covered": 77.82748696321204,
+    "percent_covered_display": "77.83",
+    "missing_lines": 14595,
+    "excluded_lines": 150,
+    "percent_statements_covered": 81.65696834114645,
+    "percent_statements_covered_display": "81.66",
+    "num_branches": 25712,
+    "num_partial_branches": 5620,
+    "covered_branches": 16964,
+    "missing_branches": 8748,
+    "percent_branches_covered": 65.97697573117611,
+    "percent_branches_covered_display": "65.98"
+  },
+  "candidate": {
+    "covered_lines": 64974,
+    "num_statements": 79567,
+    "percent_covered": 77.8312863913981,
+    "percent_covered_display": "77.83",
+    "missing_lines": 14593,
+    "excluded_lines": 150,
+    "percent_statements_covered": 81.6594819460329,
+    "percent_statements_covered_display": "81.66",
+    "num_branches": 25712,
+    "num_partial_branches": 5618,
+    "covered_branches": 16966,
+    "missing_branches": 8746,
+    "percent_branches_covered": 65.98475420037337,
+    "percent_branches_covered_display": "65.98"
+  },
+  "per_file_losses": []
+}

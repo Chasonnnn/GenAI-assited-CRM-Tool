@@ -1,7 +1,6 @@
 """Settings endpoints for organization and user preferences."""
 
 import io
-import logging
 import mimetypes
 import os
 import re
@@ -10,10 +9,21 @@ from datetime import datetime
 from typing import Annotated
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from botocore.exceptions import BotoCoreError, ClientError
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
 from PIL import Image
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.deps import (
     get_current_session,
@@ -26,15 +36,13 @@ from app.schemas.auth import UserSession
 from app.services import (
     intelligent_suggestions_service,
     media_service,
+    org_logo_service,
     org_service,
     signature_template_service,
-    storage_client,
-    storage_url_service,
 )
 from app.utils.file_upload import content_length_exceeds_limit, get_upload_file_size
 
 router = APIRouter(prefix="/settings", tags=["settings"])
-logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -49,6 +57,7 @@ class OrgSettingsRead(BaseModel):
     name: str
     slug: str
     portal_base_url: str
+    logo_url: str | None
     address: str | None
     phone: str | None
     email: str | None
@@ -78,6 +87,7 @@ def get_org_settings(
         name=org.name,
         slug=org.slug,
         portal_base_url=org_service.get_org_portal_base_url(org),
+        logo_url=media_service.get_signed_media_url(org.logo_url),
         address=getattr(org, "address", None),
         phone=getattr(org, "phone", None),
         email=getattr(org, "contact_email", None),
@@ -141,6 +151,7 @@ def update_org_settings(
         name=org.name,
         slug=org.slug,
         portal_base_url=org_service.get_org_portal_base_url(org),
+        logo_url=media_service.get_signed_media_url(org.logo_url),
         address=getattr(org, "address", None),
         phone=getattr(org, "phone", None),
         email=getattr(org, "contact_email", None),
@@ -442,6 +453,7 @@ class OrgSignatureRead(BaseModel):
 
     signature_template: str | None
     signature_logo_url: str | None
+    logo_url: str | None
     signature_primary_color: str | None
     signature_company_name: str | None
     signature_address: str | None
@@ -549,6 +561,7 @@ def get_org_signature(
     return OrgSignatureRead(
         signature_template=org.signature_template,
         signature_logo_url=media_service.get_signed_media_url(org.signature_logo_url),
+        logo_url=media_service.get_signed_media_url(org.logo_url),
         signature_primary_color=org.signature_primary_color,
         signature_company_name=org.signature_company_name,
         signature_address=org.signature_address,
@@ -657,6 +670,7 @@ def update_org_signature(
     return OrgSignatureRead(
         signature_template=org.signature_template,
         signature_logo_url=media_service.get_signed_media_url(org.signature_logo_url),
+        logo_url=media_service.get_signed_media_url(org.logo_url),
         signature_primary_color=org.signature_primary_color,
         signature_company_name=org.signature_company_name,
         signature_address=org.signature_address,
@@ -712,12 +726,11 @@ def get_org_signature_preview(
 # =============================================================================
 
 # Logo constraints
-MAX_LOGO_SIZE_BYTES = 50 * 1024  # 50KB
-MAX_LOGO_UPLOAD_BYTES = 1 * 1024 * 1024  # 1MB
+MAX_LOGO_SIZE_BYTES = org_logo_service.MAX_LOGO_SIZE_BYTES
+MAX_LOGO_UPLOAD_BYTES = org_logo_service.MAX_LOGO_UPLOAD_BYTES
 MAX_LOGO_WIDTH = 200
 MAX_LOGO_HEIGHT = 80
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
-LOCAL_LOGO_URL_PREFIX = "/settings/organization/signature/logo/local/"
 
 
 class LogoUploadResponse(BaseModel):
@@ -726,91 +739,67 @@ class LogoUploadResponse(BaseModel):
     signature_logo_url: str
 
 
-def _get_logo_storage_backend() -> str:
-    """Get storage backend for logos."""
-    from app.core.config import settings
-
-    return getattr(settings, "STORAGE_BACKEND", "local")
+class OrganizationLogoUploadResponse(BaseModel):
+    logo_url: str
 
 
-def _get_local_logo_path() -> str:
-    """Get local logo storage directory."""
-    import tempfile
-
-    from app.core.config import settings
-
-    path = getattr(settings, "LOCAL_STORAGE_PATH", None)
-    if not path:
-        path = os.path.join(tempfile.gettempdir(), "crm-logos")
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
-def _build_local_logo_url(storage_key: str) -> str:
-    return f"{LOCAL_LOGO_URL_PREFIX}{storage_key}"
-
-
-def _extract_local_logo_storage_key(logo_url: str) -> str | None:
-    if logo_url.startswith(LOCAL_LOGO_URL_PREFIX):
-        return logo_url.replace(LOCAL_LOGO_URL_PREFIX, "", 1)
-    if logo_url.startswith("/static/"):
-        return logo_url.replace("/static/", "", 1)
-    return None
-
-
-def _upload_logo_to_storage(org_id: uuid_lib.UUID, file_bytes: bytes, extension: str) -> str:
-    """
-    Upload logo to storage and return public URL.
-    """
-    backend = _get_logo_storage_backend()
-    filename = f"logos/{org_id}/{uuid_lib.uuid4()}.{extension}"
-
-    if backend == "s3":
-        from app.core.config import settings
-
-        s3 = storage_client.get_s3_client()
-        bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
-        s3.put_object(
-            Bucket=bucket,
-            Key=filename,
-            Body=file_bytes,
-            ContentType=f"image/{extension}",
+@router.post(
+    "/organization/logo",
+    response_model=OrganizationLogoUploadResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+async def upload_organization_logo(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: Annotated[UploadFile, File()],
+    session: Annotated[UserSession, Depends(require_permission(POLICIES["org_settings"].default))],
+    db: Annotated[Session, Depends(get_db)],
+) -> OrganizationLogoUploadResponse:
+    if (
+        content_length_exceeds_limit(
+            request.headers.get("content-length"), max_size_bytes=MAX_LOGO_UPLOAD_BYTES
         )
-        return storage_url_service.build_public_url(bucket, filename)
-    else:
-        # Local storage - serve from API route
-        local_path = os.path.join(_get_local_logo_path(), filename)
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-        with open(local_path, "wb") as f:
-            f.write(file_bytes)
-        return _build_local_logo_url(filename)
-
-
-def _delete_logo_from_storage(logo_url: str) -> None:
-    """Delete logo from storage (called asynchronously after new upload)."""
-    if not logo_url:
-        return
-
-    backend = _get_logo_storage_backend()
-
+        or await get_upload_file_size(file) > MAX_LOGO_UPLOAD_BYTES
+    ):
+        raise HTTPException(status_code=400, detail="File too large (max 1MB)")
+    content = await file.read(MAX_LOGO_UPLOAD_BYTES + 1)
     try:
-        if backend == "s3":
-            from app.core.config import settings
+        new_url, old_url = await run_in_threadpool(
+            org_logo_service.upload_square_logo,
+            db,
+            session.org_id,
+            session.user_id,
+            content,
+            file.filename,
+            request,
+        )
+        if old_url:
+            background_tasks.add_task(org_logo_service.cleanup_logo, old_url)
+        signed_url = await run_in_threadpool(media_service.get_signed_media_url, new_url)
+        if not signed_url:
+            raise HTTPException(status_code=503, detail="Logo storage unavailable")
+        return OrganizationLogoUploadResponse(logo_url=signed_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (BotoCoreError, ClientError, OSError) as exc:
+        raise HTTPException(status_code=503, detail="Logo storage unavailable") from exc
 
-            bucket = getattr(settings, "S3_BUCKET", "crm-attachments")
-            key = storage_url_service.extract_storage_key(logo_url, bucket)
-            if not key:
-                return
-            s3 = storage_client.get_s3_client()
-            s3.delete_object(Bucket=bucket, Key=key)
-        else:
-            storage_key = _extract_local_logo_storage_key(logo_url)
-            if storage_key:
-                local_path = os.path.join(_get_local_logo_path(), storage_key)
-                if os.path.exists(local_path):
-                    os.remove(local_path)
-    except Exception as exc:
-        logger.debug("Failed to delete logo %s: %s", logo_url, exc, exc_info=exc)
+
+@router.delete(
+    "/organization/logo",
+    status_code=204,
+    dependencies=[Depends(require_csrf_header)],
+)
+def delete_organization_logo(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    session: Annotated[UserSession, Depends(require_permission(POLICIES["org_settings"].default))],
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    old_url = org_logo_service.delete_square_logo(db, session.org_id, session.user_id, request)
+    if old_url:
+        background_tasks.add_task(org_logo_service.cleanup_logo, old_url)
+    return Response(status_code=204)
 
 
 @router.get("/organization/signature/logo/local/{storage_key:path}")
@@ -818,7 +807,7 @@ def get_org_logo_local(
     storage_key: str,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
-    """Serve org signature logo from local storage (dev only)."""
+    """Serve a currently referenced organization logo from local storage (dev only)."""
     from fastapi.responses import FileResponse
 
     if "\\" in storage_key:
@@ -830,13 +819,13 @@ def get_org_logo_local(
     if normalized.startswith("..") or normalized.startswith("/"):
         raise HTTPException(status_code=404, detail="Logo not found")
 
-    expected_url = _build_local_logo_url(normalized)
+    expected_url = org_logo_service.build_local_logo_url(normalized)
     legacy_url = f"/static/{normalized}"
-    org = org_service.get_org_by_signature_logo_urls(db, [expected_url, legacy_url])
+    org = org_service.get_org_by_logo_urls(db, [expected_url, legacy_url])
     if not org:
         raise HTTPException(status_code=404, detail="Logo not found")
 
-    base_dir = _get_local_logo_path()
+    base_dir = org_logo_service.get_local_logo_path()
     file_path = os.path.abspath(os.path.join(base_dir, normalized))
     base_abs = os.path.abspath(base_dir)
     if os.path.commonpath([file_path, base_abs]) != base_abs:
@@ -941,13 +930,13 @@ async def upload_org_logo(
     old_logo_url = org.signature_logo_url
 
     # Upload new logo
-    new_logo_url = _upload_logo_to_storage(session.org_id, final_bytes, extension)
+    new_logo_url = org_logo_service.upload_logo_to_storage(session.org_id, final_bytes, extension)
 
     org.signature_logo_url = new_logo_url
 
     # Schedule async deletion of old logo
     if old_logo_url:
-        background_tasks.add_task(_delete_logo_from_storage, old_logo_url)
+        background_tasks.add_task(org_logo_service.cleanup_logo, old_logo_url)
 
     # Audit log
     from app.services import audit_service
@@ -994,7 +983,7 @@ def delete_org_logo(
     org.signature_logo_url = None
 
     # Schedule async deletion from storage
-    background_tasks.add_task(_delete_logo_from_storage, old_logo_url)
+    background_tasks.add_task(org_logo_service.cleanup_logo, old_logo_url)
 
     # Audit log
     from app.services import audit_service

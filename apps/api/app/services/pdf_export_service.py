@@ -2138,6 +2138,12 @@ def _generate_journey_html(
 ) -> str:
     surrogate_name = html.escape(journey.surrogate_name)
     generated_at = datetime.now(UTC).strftime("%B %Y")
+    logo_html = (
+        f'<img class="organization-logo" src="{html.escape(journey.organization_logo_url)}" '
+        f'alt="{html.escape(journey.organization_name)}" />'
+        if journey.organization_logo_url
+        else ""
+    )
 
     terminal_html = ""
     if journey.is_terminal and journey.terminal_message:
@@ -2323,11 +2329,18 @@ def _generate_journey_html(
                 display: block;
                 margin-top: 12px;
             }}
+            .organization-logo {{
+                max-width: 160px;
+                max-height: 64px;
+                object-fit: contain;
+                margin-bottom: 12px;
+            }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
+                {logo_html}
                 <h1 class="title">Surrogacy Journey</h1>
                 <div class="subtitle">{surrogate_name}</div>
                 <div class="meta">Generated {html.escape(generated_at)}</div>

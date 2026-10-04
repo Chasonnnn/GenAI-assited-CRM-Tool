@@ -402,6 +402,14 @@ describe("FormBuilderPage", () => {
         expect(screen.getByLabelText("Title")).toBeInTheDocument()
         expect(screen.getByLabelText("Subtitle")).toBeInTheDocument()
         expect(screen.getByTestId("form-builder-workspace")).toHaveClass("hidden")
+
+        const purposeSelect = screen.getByRole("combobox", { name: "Form Purpose" })
+        expect(purposeSelect).toHaveTextContent("Surrogate Application")
+        expect(purposeSelect).not.toHaveTextContent("surrogate_application")
+
+        const templateSelect = screen.getByRole("combobox", { name: "Default application email template" })
+        expect(templateSelect).toHaveTextContent("No default template")
+        expect(templateSelect).not.toHaveTextContent("none")
     })
 
     describe("Routing tab", () => {
@@ -588,20 +596,6 @@ describe("FormBuilderPage", () => {
             expect(screen.getByText("No submissions waiting for routing review.")).toBeInTheDocument()
             expect(screen.queryByText("Loading routing review…")).not.toBeInTheDocument()
         })
-    })
-
-    it("renders human-readable labels for automation settings dropdown triggers", () => {
-        render(<FormBuilderPage />)
-
-        fireEvent.click(screen.getByRole("tab", { name: /^settings$/i }))
-
-        const purposeSelect = screen.getByRole("combobox", { name: "Form Purpose" })
-        expect(purposeSelect).toHaveTextContent("Surrogate Application")
-        expect(purposeSelect).not.toHaveTextContent("surrogate_application")
-
-        const templateSelect = screen.getByRole("combobox", { name: "Default application email template" })
-        expect(templateSelect).toHaveTextContent("No default template")
-        expect(templateSelect).not.toHaveTextContent("none")
     })
 
     it("waits for the routed form response before hydrating the builder draft", async () => {
@@ -1120,7 +1114,10 @@ describe("FormBuilderPage", () => {
         render(<FormBuilderPage />)
 
         fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
+        expect(await screen.findByLabelText(/field title/i)).toHaveValue("Name")
         fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
+        expect(await screen.findByLabelText(/field title/i)).toHaveValue("Email")
+        expect(screen.getByRole("button", { name: "Delete Email field" })).toBeInTheDocument()
         fireEvent.click(await screen.findByRole("button", { name: /select email field/i }))
         const logicSection = screen.getByText("Display rule").closest("section")
         expect(logicSection).not.toBeNull()
@@ -1226,18 +1223,6 @@ describe("FormBuilderPage", () => {
 
         const updatedInput = screen.getByDisplayValue("Option 1 extended")
         expect(updatedInput).toHaveFocus()
-    })
-
-    it("shows the newly selected field in the settings drawer", async () => {
-        render(<FormBuilderPage />)
-
-        fireEvent.click(screen.getByRole("button", { name: "Add Name field" }))
-        expect(await screen.findByLabelText(/field title/i)).toHaveValue("Name")
-
-        fireEvent.click(screen.getByRole("button", { name: "Add Email field" }))
-
-        expect(await screen.findByLabelText(/field title/i)).toHaveValue("Email")
-        expect(screen.getByRole("button", { name: "Delete Email field" })).toBeInTheDocument()
     })
 
     it("keeps the field library in the left sidebar, filters categories, and adds fields with click-to-add", async () => {
@@ -1384,23 +1369,11 @@ describe("FormBuilderPage", () => {
         const header = () => within(screen.getByLabelText("Form name").parentElement as HTMLElement)
         const publishButton = () => screen.getByRole("button", { name: /^publish$/i })
 
-        it("keeps Publish disabled for a published form with nothing new to publish", () => {
+        it("enables Publish for an unsaved edit to a published form", () => {
             renderForm(buildPublishedForm())
 
             expect(header().getByText("Published")).toBeInTheDocument()
             expect(publishButton()).toBeDisabled()
-        })
-
-        it("enables Publish when the saved draft differs from the live form", () => {
-            renderForm(buildPublishedForm({ form_schema: { ...liveSchema, public_title: "Apply now" } }))
-
-            expect(header().getByText("Unpublished changes")).toBeInTheDocument()
-            expect(header().queryByText("Published")).not.toBeInTheDocument()
-            expect(publishButton()).toBeEnabled()
-        })
-
-        it("enables Publish for an unsaved edit to a published form", () => {
-            renderForm(buildPublishedForm())
 
             fireEvent.click(screen.getByRole("tab", { name: /^settings$/i }))
             fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Apply now" } })
@@ -1430,6 +1403,9 @@ describe("FormBuilderPage", () => {
         it("returns to Published after publishing saved changes", async () => {
             const form = buildPublishedForm({ form_schema: { ...liveSchema, public_title: "Apply now" } })
             renderForm(form)
+            expect(header().getByText("Unpublished changes")).toBeInTheDocument()
+            expect(header().queryByText("Published")).not.toBeInTheDocument()
+            expect(publishButton()).toBeEnabled()
             mockRefetchIntakeLinks.mockResolvedValue({ data: [] })
             mockPublishForm.mockImplementation(async (formId: string) => {
                 mockUseForm.mockReturnValue({

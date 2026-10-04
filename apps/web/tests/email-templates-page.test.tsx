@@ -610,16 +610,6 @@ describe("EmailTemplatesPage", () => {
         expect(screen.getByLabelText("Education")).toHaveValue("Bachelor's degree")
     })
 
-    it("labels organization template action menus with template context", async () => {
-        render(<EmailTemplatesPage />)
-
-        fireEvent.click(screen.getByRole("tab", { name: /^Organization/ }))
-
-        expect(
-            await screen.findByRole("button", { name: "Actions for Org Template" })
-        ).toBeInTheDocument()
-    })
-
     it("adds an accessible name to the signature photo upload button", async () => {
         const { container } = render(<EmailTemplatesPage />)
 

@@ -530,23 +530,19 @@ async def test_get_by_non_proposer_keeps_donor_match_proposed(authed_client, db,
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("current_status", ["under_review", "accepted"])
-async def test_get_by_non_proposer_on_reviewing_or_accepted_match_writes_no_transition(
-    authed_client, db, test_auth, current_status
+async def test_get_by_non_proposer_on_accepted_match_writes_no_transition(
+    authed_client, db, test_auth
 ):
     ip = await _create_intended_parent(authed_client)
     created = await _case(authed_client, ip, surrogate=await _create_surrogate(authed_client))
     async with _client_for(db, test_auth.org.id) as (_viewer, other):
-        if current_status == "under_review":
-            _set_reviewing(db, created["id"])
-        else:
-            await _accept(authed_client, created)
+        await _accept(authed_client, created)
         reviewed_by = _match_row(db, created["id"]).reviewed_by_user_id
         before = _snapshot(db, test_auth.org.id)
         with _locked_tables(db) as locks:
             response = await other.get(f"/matches/{created['id']}")
 
-    assert response.json()["status"] == current_status
+    assert response.json()["status"] == "accepted"
     assert _match_row(db, created["id"]).reviewed_by_user_id == reviewed_by
     assert locks == []
     assert _diff(before, _snapshot(db, test_auth.org.id)) == {
@@ -1027,6 +1023,7 @@ async def test_cancel_request_sets_cancellation_pending_and_notifies(
 
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "cancellation_pending"
+    assert _match_row(db, created["id"]).status == "cancellation_pending"
     request = (
         db.query(StatusChangeRequest)
         .filter(StatusChangeRequest.entity_id == uuid.UUID(created["id"]))

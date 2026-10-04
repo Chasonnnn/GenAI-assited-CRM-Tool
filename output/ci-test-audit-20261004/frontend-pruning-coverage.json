@@ -1,0 +1,67 @@
+{
+  "baseline": {
+    "lines": {
+      "total": 33515,
+      "covered": 23019,
+      "skipped": 0,
+      "pct": 68.68
+    },
+    "statements": {
+      "total": 37332,
+      "covered": 24874,
+      "skipped": 0,
+      "pct": 66.62
+    },
+    "functions": {
+      "total": 12077,
+      "covered": 7196,
+      "skipped": 0,
+      "pct": 59.58
+    },
+    "branches": {
+      "total": 35220,
+      "covered": 22374,
+      "skipped": 0,
+      "pct": 63.52
+    },
+    "branchesTrue": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "candidate": {
+    "lines": {
+      "total": 33515,
+      "covered": 23019,
+      "skipped": 0,
+      "pct": 68.68
+    },
+    "statements": {
+      "total": 37332,
+      "covered": 24874,
+      "skipped": 0,
+      "pct": 66.62
+    },
+    "functions": {
+      "total": 12077,
+      "covered": 7196,
+      "skipped": 0,
+      "pct": 59.58
+    },
+    "branches": {
+      "total": 35220,
+      "covered": 22374,
+      "skipped": 0,
+      "pct": 63.52
+    },
+    "branchesTrue": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "per_file_losses": []
+}

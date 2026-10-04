@@ -6,6 +6,7 @@ import {
     buildFunnelChartData,
     buildStatusChartData,
 } from "@/lib/reports-stage-colors"
+import { stageDisplayColor } from "@/lib/stage-colors"
 
 const pipelineStages: PipelineStage[] = [
     {
@@ -41,19 +42,19 @@ const pipelineStages: PipelineStage[] = [
 ] as PipelineStage[]
 
 describe("reports stage colors", () => {
-    it("uses pipeline stage colors for status chart data", () => {
+    it("uses displayed pipeline stage colors for status chart data", () => {
         const byStatus: StatusCount[] = [
             { status: "Outreach Verified", stage_id: "stage-2", count: 4, order: 2 },
             { status: "Application Packet Received", stage_id: "stage-3", count: 2, order: 3 },
         ]
 
         expect(buildStatusChartData(byStatus, pipelineStages)).toEqual([
-            { status: "Outreach Verified", count: 4, fill: "#0e7490" },
-            { status: "Application Packet Received", count: 2, fill: "#6d28d9" },
+            { status: "Outreach Verified", count: 4, fill: "#0E7490" },
+            { status: "Application Packet Received", count: 2, fill: "#6D28D9" },
         ])
     })
 
-    it("uses pipeline stage colors for funnel data keyed by slug", () => {
+    it("uses displayed pipeline stage colors for funnel data keyed by slug", () => {
         const funnel: FunnelStage[] = [
             {
                 stage: "new_unread",
@@ -75,14 +76,14 @@ describe("reports stage colors", () => {
                 label: "New Unread",
                 count: 10,
                 percentage: 100,
-                fill: "#3B82F6",
+                fill: stageDisplayColor("#3B82F6"),
             },
             {
                 stage: "application_packet_received",
                 label: "Application Packet Received",
                 count: 3,
                 percentage: 30,
-                fill: "#6d28d9",
+                fill: "#6D28D9",
             },
         ])
     })
