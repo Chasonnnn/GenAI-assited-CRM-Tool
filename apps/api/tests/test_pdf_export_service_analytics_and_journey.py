@@ -172,7 +172,10 @@ async def test_export_analytics_pdf_async_uses_renderer(db, test_org, monkeypatc
     assert "Test Org Analytics Report" in rendered_html["html"]
 
 
-def test_export_journey_pdf_and_generate_journey_html(db, test_org, monkeypatch):
+@pytest.mark.parametrize(
+    "logo_url", [None, "https://signed.example/logo.png?signature=test&expires=123"]
+)
+def test_export_journey_pdf_and_generate_journey_html(db, test_org, monkeypatch, logo_url):
     milestone = journey_service.JourneyMilestone(
         slug="application_intake",
         label="Application & Intake",
@@ -196,7 +199,7 @@ def test_export_journey_pdf_and_generate_journey_html(db, test_org, monkeypatch)
         terminal_date=datetime.now(UTC).isoformat(),
         phases=[phase],
         organization_name="Test Org",
-        organization_logo_url=None,
+        organization_logo_url=logo_url,
     )
     monkeypatch.setattr(pdf_export_service.settings, "FRONTEND_URL", "")
     monkeypatch.setattr(journey_service, "get_journey", lambda *_args, **_kwargs: response)
@@ -220,6 +223,14 @@ def test_export_journey_pdf_and_generate_journey_html(db, test_org, monkeypatch)
     assert "Surrogacy Journey" in rendered["html"]
     assert "Candidate A" in rendered["html"]
     assert "Application &amp; Intake" in rendered["html"]
+    if logo_url:
+        assert (
+            'src="https://signed.example/logo.png?signature=test&amp;expires=123"'
+            in rendered["html"]
+        )
+        assert 'alt="Test Org"' in rendered["html"]
+    else:
+        assert '<img class="organization-logo"' not in rendered["html"]
 
     journey_html = pdf_export_service._generate_journey_html(response, milestone_images={})
     assert "Surrogacy Journey" in journey_html

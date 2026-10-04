@@ -13,7 +13,7 @@ from app.core.security import create_export_token, create_session_token
 from app.db.enums import Role
 from app.db.models import Membership, Surrogate, User
 from app.main import app
-from app.services import pdf_export_service, pipeline_service, session_service
+from app.services import attachment_service, pdf_export_service, pipeline_service, session_service
 
 
 def _get_stage(db, org_id, slug: str):
@@ -378,7 +378,34 @@ async def test_journey_export_view_rejects_invalid_token(authed_client):
 
 
 @pytest.mark.asyncio
-async def test_journey_export_view_returns_payload(authed_client, test_auth):
+@pytest.mark.parametrize(
+    ("square_logo", "signature_logo", "expected_key"),
+    [
+        ("square.png", "signature.png", "square.png"),
+        (None, "signature.png", "signature.png"),
+        (None, None, None),
+    ],
+)
+async def test_journey_export_view_returns_payload(
+    authed_client, db, test_auth, monkeypatch, square_logo, signature_logo, expected_key
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "S3_BUCKET", "crm-attachments")
+    test_auth.org.logo_url = (
+        f"https://s3.amazonaws.com/crm-attachments/logos/{square_logo}" if square_logo else None
+    )
+    test_auth.org.signature_logo_url = (
+        f"https://s3.amazonaws.com/crm-attachments/logos/{signature_logo}"
+        if signature_logo
+        else None
+    )
+    db.commit()
+    monkeypatch.setattr(
+        attachment_service,
+        "generate_signed_url",
+        lambda key, expires_in_seconds=None: f"https://signed.example/{key}?signature=test",
+    )
     surrogate = await _create_surrogate(authed_client)
     token = create_export_token(test_auth.org.id, UUID(surrogate["id"]))
 
@@ -389,6 +416,9 @@ async def test_journey_export_view_returns_payload(authed_client, test_auth):
     payload = response.json()
     assert payload["surrogate_id"] == surrogate["id"]
     assert payload["phases"]
+    assert payload["organization_logo_url"] == (
+        f"https://signed.example/logos/{expected_key}?signature=test" if expected_key else None
+    )
 
 
 @pytest.mark.asyncio

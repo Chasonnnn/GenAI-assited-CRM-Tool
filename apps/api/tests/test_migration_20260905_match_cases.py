@@ -15,7 +15,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from alembic import command
-from app.db.models import Organization, User
+from app.db.models import User
 from app.services import pipeline_service
 from tests.test_match_events import _create_case, _create_intended_parent
 from tests.test_migration_20260829_donor_module import _insert_donor_fixture
@@ -36,8 +36,13 @@ def test_match_case_upgrade_preserves_legacy_rows_and_refuses_lossy_downgrade(db
             command.downgrade(config, PREVIOUS)
             with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
                 org_id, user_id, match_id = uuid4(), uuid4(), uuid4()
-                session.add(
-                    Organization(id=org_id, name="Migration QA", slug=f"migration-{org_id}")
+                # The ORM model has columns added after this revision; insert the row as reflected.
+                _insert(
+                    connection,
+                    "organizations",
+                    id=org_id,
+                    name="Migration QA",
+                    slug=f"migration-{org_id}",
                 )
                 session.add(
                     User(
@@ -135,7 +140,10 @@ def _insert(connection, table_name, **values):
 def _legacy_case(connection):
     with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
         org_id, user_id, match_id = uuid4(), uuid4(), uuid4()
-        session.add(Organization(id=org_id, name="Migration QA", slug=f"migration-{org_id}"))
+        # The ORM model has columns added after this revision; insert the row as reflected.
+        _insert(
+            connection, "organizations", id=org_id, name="Migration QA", slug=f"migration-{org_id}"
+        )
         session.add(User(id=user_id, email=f"{user_id}@example.com", display_name="Migration QA"))
         session.flush()
         pipeline = pipeline_service.get_or_create_default_pipeline(session, org_id)

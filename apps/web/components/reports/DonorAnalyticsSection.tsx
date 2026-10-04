@@ -13,6 +13,7 @@ import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { useDefaultPipeline } from "@/lib/hooks/use-pipelines"
 import type { DonorType } from "@/lib/api/analytics"
 import { getDonorPipelineEntityType } from "@/lib/types/donor"
+import { stageDisplayColor } from "@/lib/stage-colors"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -56,7 +57,7 @@ export function DonorAnalyticsSection({ dateParams }: DonorAnalyticsSectionProps
     if (!isDeveloper && (permissionsQuery.isLoading || !canViewDonors)) return null
 
     const pipeline = pipelineQuery.data
-    const colorByStage = new Map(pipeline?.stages.map((stage) => [stage.id, stage.color]) ?? [])
+    const colorByStage = new Map(pipeline?.stages.map((stage) => [stage.id, stageDisplayColor(stage.color)]) ?? [])
     const statusRows = statusQuery.data ?? []
     const trendRows = trendQuery.data ?? []
     const maxStatusCount = Math.max(1, ...statusRows.map((row) => row.count))

@@ -16,6 +16,8 @@ type SaveBarProps = {
   errorCount?: number | undefined
   /** Moves focus to the first error, for example `() => focusFirstInvalid(editorRef.current)`. */
   onErrorsClick?: (() => void) | undefined
+  /** Extra status after the change and error counts, such as the areas a save affects. */
+  details?: React.ReactNode
   saving?: boolean | undefined
   saveDisabled?: boolean | undefined
   onSave: () => void
@@ -41,6 +43,7 @@ function SaveBar({
   changeCount,
   errorCount = 0,
   onErrorsClick,
+  details,
   saving = false,
   saveDisabled = false,
   onSave,
@@ -96,6 +99,7 @@ function SaveBar({
                 </span>
               )
             ) : null}
+            {details}
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Button type="button" variant="outline" onClick={onDiscard} disabled={saving}>

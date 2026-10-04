@@ -19,7 +19,7 @@ def enqueue_storage_deletions(
     storage_keys: list[str],
 ) -> None:
     """Persist cleanup jobs in the caller's current database transaction."""
-    allowed_prefixes = (f"{org_id}/", f"messaging/{org_id}/")
+    allowed_prefixes = (f"{org_id}/", f"messaging/{org_id}/", f"logos/{org_id}/")
     unique_keys = list(dict.fromkeys(storage_keys))
     if any(not key.startswith(allowed_prefixes) for key in unique_keys):
         raise ValueError("Storage key is outside the cleanup organization")

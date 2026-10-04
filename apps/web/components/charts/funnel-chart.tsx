@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2Icon } from "lucide-react"
+import { stageDisplayColor } from "@/lib/stage-colors"
 
 interface FunnelStage {
     stage: string
@@ -82,7 +83,7 @@ export function FunnelChart({
                 <div className="space-y-3">
                     {data.map((stage, index) => {
                         const widthPercent = maxCount > 0 ? (stage.count / maxCount) * 100 : 0
-                        const stageColor = stage.fill || funnelFallbackColor
+                        const stageColor = stage.fill ? stageDisplayColor(stage.fill) : funnelFallbackColor
 
                         return (
                             <div key={stage.stage} className="relative">

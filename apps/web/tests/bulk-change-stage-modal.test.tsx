@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 
 import { BulkChangeStageModal, type BulkStageSurrogate } from "@/components/surrogates/BulkChangeStageModal"
 import type { PipelineStage } from "@/lib/api/pipelines"
+import { stageDisplayColor } from "@/lib/stage-colors"
 
 vi.mock("@/components/ui/select", () => {
     const SelectContext = React.createContext<{
@@ -199,10 +200,10 @@ describe("BulkChangeStageModal", () => {
         ])
         expect(screen.queryByText(/immediate/i)).not.toBeInTheDocument()
         expect(screen.queryByText(/per-surrogate review/i)).not.toBeInTheDocument()
-        // Shared StageSelect rendering: a colour dot per option.
+        // Shared StageSelect rendering: a colour dot per option, in the displayed stage color.
         expect(
             screen.getByRole("option", { name: "Contacted" }).querySelector('[data-slot="stage-dot"]'),
-        ).toHaveStyle({ backgroundColor: "#0ea5e9" })
+        ).toHaveStyle({ backgroundColor: stageDisplayColor("#0ea5e9") })
     })
 
     it("caps the stage list height so it opens below the trigger inside the dialog", () => {
