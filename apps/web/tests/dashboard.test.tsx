@@ -203,7 +203,7 @@ describe('DashboardPage', () => {
         render(<DashboardPage />)
 
         expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeInTheDocument()
-        expect(screen.queryByText(/Welcome back/)).not.toBeInTheDocument()
+        expect(screen.getByText(/^(Good (morning|afternoon|evening)|Welcome back), Test$/)).toBeInTheDocument()
 
         // Check stats cards
         expect(screen.getByText('Active Surrogates')).toBeInTheDocument()
