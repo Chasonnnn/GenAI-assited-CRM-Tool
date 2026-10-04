@@ -160,10 +160,10 @@ class Form(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(),
+        TIMESTAMP(timezone=True),
         server_default=text("now()"),
         onupdate=text("now()"),
         nullable=False,
@@ -194,7 +194,7 @@ class FormLogo(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
     organization: Mapped[Organization] = relationship()
@@ -223,7 +223,7 @@ class FormFieldMapping(Base):
     surrogate_field: Mapped[str] = mapped_column(String(100), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
 
@@ -357,7 +357,7 @@ class FormSubmission(Base):
     )
     match_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     routing_review_step: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    matched_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    matched_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     status: Mapped[str] = mapped_column(
         String(20),
@@ -369,17 +369,17 @@ class FormSubmission(Base):
     mapping_snapshot: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
 
     submitted_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
-    reviewed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    applied_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
     form: Mapped[Form] = relationship()
@@ -418,13 +418,13 @@ class FormSubmissionDraft(Base):
     answers_json: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
-    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(),
+        TIMESTAMP(timezone=True),
         server_default=text("now()"),
         onupdate=text("now()"),
         nullable=False,
@@ -466,12 +466,12 @@ class FormSubmissionFile(Base):
         String(20), server_default=text("'pending'"), nullable=False
     )
     quarantined: Mapped[bool] = mapped_column(Boolean, server_default=text("FALSE"), nullable=False)
-    deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     deleted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(), server_default=text("now()"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
     submission: Mapped[FormSubmission] = relationship()

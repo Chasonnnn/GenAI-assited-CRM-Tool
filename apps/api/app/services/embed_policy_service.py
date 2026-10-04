@@ -148,10 +148,7 @@ def validate_embed_session(
     if not session:
         raise PermissionError("Embed session is invalid")
     now = datetime.now(UTC)
-    expires_at = session.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
-    if expires_at <= now:
+    if session.expires_at <= now:
         raise PermissionError("Embed session expired")
     if session.consumed_at is not None:
         raise PermissionError("Embed session already used")

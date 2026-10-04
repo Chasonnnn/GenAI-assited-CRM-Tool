@@ -306,6 +306,9 @@ def create_intake_link(
     embed_theme_json: dict[str, Any] | None = None,
     commit: bool = True,
 ) -> FormIntakeLink:
+    # Legacy API timestamps without an offset have always represented UTC.
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
     locked_form = form_service.get_form_for_update(db, org_id, form.id)
     if not locked_form:
         raise ValueError("Form not found")
@@ -794,12 +797,8 @@ def _is_link_publicly_available(link: FormIntakeLink) -> bool:
     if not link.is_active:
         return False
     now = datetime.now(UTC)
-    if link.expires_at:
-        expires_at = link.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=UTC)
-        if expires_at < now:
-            return False
+    if link.expires_at and link.expires_at < now:
+        return False
     if link.max_submissions is not None and link.submissions_count >= link.max_submissions:
         return False
     return True
@@ -852,6 +851,8 @@ def update_intake_link(
     fields_set: set[str] | None = None,
     user_id: uuid.UUID | None = None,
 ) -> FormIntakeLink:
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
     fields_set = fields_set or set()
     publication_fields = {
         "embed_enabled",
