@@ -154,12 +154,26 @@ def _normalized_optional(value: str | None) -> str | None:
     return normalized or None
 
 
+def _stored_secret_matches(encrypted: str | None, plaintext: str | None) -> bool:
+    """True when the stored ciphertext already holds this plaintext, or both are empty."""
+    if encrypted is None or plaintext is None:
+        return encrypted is None and plaintext is None
+    try:
+        return decrypt_credential(encrypted) == plaintext
+    except ValueError:
+        return False
+
+
 def update_settings(
     db: Session,
     organization_id: uuid.UUID,
     update: TwilioSettingsUpdate,
 ) -> TwilioSettings:
-    """Atomically update one organization without ever persisting plaintext credentials."""
+    """Atomically update one organization without ever persisting plaintext credentials.
+
+    A request that changes nothing keeps the current version: readiness evidence is
+    fenced to the version, so an empty save must not invalidate the last check.
+    """
     get_or_create_settings(db, organization_id)
     current = (
         db.query(TwilioSettings)
@@ -201,6 +215,7 @@ def update_settings(
         )
 
     fields = update.model_fields_set
+    changed = False
     encrypted_fields = {
         "account_sid": "account_sid_encrypted",
         "api_key_sid": "api_key_sid_encrypted",
@@ -210,12 +225,11 @@ def update_settings(
     for input_name, stored_name in encrypted_fields.items():
         if input_name not in fields:
             continue
-        plaintext = getattr(update, input_name)
-        setattr(
-            current,
-            stored_name,
-            encrypt_credential(plaintext.strip()) if plaintext and plaintext.strip() else None,
-        )
+        plaintext = _normalized_optional(getattr(update, input_name))
+        if _stored_secret_matches(getattr(current, stored_name), plaintext):
+            continue
+        setattr(current, stored_name, encrypt_credential(plaintext) if plaintext else None)
+        changed = True
 
     scalar_fields = (
         "enabled",
@@ -249,27 +263,39 @@ def update_settings(
         value = getattr(update, field_name)
         if field_name in string_fields:
             value = _normalized_optional(value)
+        if getattr(current, field_name) == value:
+            continue
         setattr(current, field_name, value)
+        changed = True
 
     if "routes" in fields and update.routes is not None:
         route_by_purpose = {route.purpose: route for route in current.routes}
         for purpose, route_update in update.routes.items():
             route = route_by_purpose[purpose]
             route_fields = route_update.model_fields_set
+            route_changed = False
             if "messaging_service_sid" in route_fields:
-                sid = route_update.messaging_service_sid
-                route.messaging_service_sid_encrypted = (
-                    encrypt_credential(sid.strip()) if sid else None
-                )
+                sid = _normalized_optional(route_update.messaging_service_sid)
+                if not _stored_secret_matches(route.messaging_service_sid_encrypted, sid):
+                    route.messaging_service_sid_encrypted = encrypt_credential(sid) if sid else None
+                    route_changed = True
             if "sender_phone_e164" in route_fields:
-                phone = route_update.sender_phone_e164
-                route.sender_phone_encrypted = encrypt_credential(phone) if phone else None
-                route.sender_phone_hash = hash_phone(phone) if phone else None
-                route.sender_phone_last4 = phone[-4:] if phone else None
-            for field_name in ("enabled",):
-                if field_name in route_fields:
-                    setattr(route, field_name, getattr(route_update, field_name))
-            route.updated_at = datetime.now(UTC)
+                phone = route_update.sender_phone_e164 or None
+                if not _stored_secret_matches(route.sender_phone_encrypted, phone):
+                    route.sender_phone_encrypted = encrypt_credential(phone) if phone else None
+                    route.sender_phone_hash = hash_phone(phone) if phone else None
+                    route.sender_phone_last4 = phone[-4:] if phone else None
+                    route_changed = True
+            if "enabled" in route_fields and route.enabled != route_update.enabled:
+                route.enabled = route_update.enabled
+                route_changed = True
+            if route_changed:
+                route.updated_at = datetime.now(UTC)
+                changed = True
+
+    if not changed:
+        db.commit()
+        return current
 
     current.current_version += 1
     current.updated_at = datetime.now(UTC)

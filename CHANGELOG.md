@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.78](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.77...surrogacy-crm-platform-v0.91.78) (2026-10-03)
+
+
+### Features
+
+* run Twilio readiness checks from the messaging delivery page ([#767](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/767)) ([12ee165](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/12ee165f960b3e71c834d38fc037150f22056974))
+
+
+### Bug Fixes
+
+* batch stage resolution when seeding workflows ([34d6d83](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/34d6d832c8078a1f558bdad22aa978e76a0d2981))
+* batch tenant-scoped permission policy lookups ([c64216a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/c64216a6f2371ea7d55efc2fff17fb933fd88b76))
+* deliver Meta events with scoped credentials and sanitized failures ([6e0c7ac](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6e0c7acb6e02a3d6af534785121a22b574feba7a))
+* keep client error logging PII-safe ([0299547](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/0299547974fcc21abcb8a78ba1b57952404f6ca6))
+* match search wildcard characters literally ([ed02f1f](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ed02f1ffc18ac28809f514af7f570405f9705422))
+* resolve reviewed release queue and CI blockers ([55aa0e9](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/55aa0e9a38fa8e95f9f732264b146236e62f8e7c))
+* show all appointment record links ([161f35b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/161f35b8409db7cebd0f81ee2b2c8ac595645451))
+* update pypdf to the patched 6.19.0 release ([a5fe39d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a5fe39d0f5d4ab9411b784dd297301f71e87cb6f))
+* validate calendar destinations and deduplicate sync requests ([128bb04](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/128bb04b605f8e90cef4b546add7bc423cff4cb7))
+
 ## [0.91.77](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.76...surrogacy-crm-platform-v0.91.77) (2026-09-28)
 
 

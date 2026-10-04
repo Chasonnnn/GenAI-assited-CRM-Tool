@@ -221,7 +221,14 @@ def get_capi_token_for_account(db: Session, account: MetaAdAccount) -> TokenResu
     """
     # Try OAuth connection first - CAPI uses same token
     if account.oauth_connection_id:
-        conn = db.get(MetaOAuthConnection, account.oauth_connection_id)
+        conn = (
+            db.query(MetaOAuthConnection)
+            .filter(
+                MetaOAuthConnection.id == account.oauth_connection_id,
+                MetaOAuthConnection.organization_id == account.organization_id,
+            )
+            .first()
+        )
         if conn and conn.is_active:
             try:
                 token = decrypt_token(conn.access_token_encrypted)
@@ -231,8 +238,8 @@ def get_capi_token_for_account(db: Session, account: MetaAdAccount) -> TokenResu
                     connection_id=conn.id,
                     needs_reauth=needs_reauth,
                 )
-            except Exception as e:
-                logger.warning(f"Failed to decrypt OAuth token for CAPI: {e}")
+            except Exception:
+                logger.warning("Failed to decrypt OAuth token for CAPI")
             return TokenResult(
                 token=None,
                 connection_id=conn.id if conn else None,

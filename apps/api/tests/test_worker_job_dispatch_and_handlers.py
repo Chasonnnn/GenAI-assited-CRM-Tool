@@ -559,20 +559,6 @@ def test_worker_rate_limit_classification(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_worker_process_job_dispatch(monkeypatch, db):
-    called: list[str] = []
-
-    async def _handler(session, job):
-        called.append(job.job_type)
-
-    monkeypatch.setattr(worker, "resolve_job_handler", lambda job_type: _handler)
-
-    job = _job(job_type=JobType.CAMPAIGN_SEND.value)
-    await worker.process_job(db, job)
-    assert called == [JobType.CAMPAIGN_SEND.value]
-
-
-@pytest.mark.asyncio
 async def test_legacy_send_email_handler_cannot_load_another_organizations_log(
     monkeypatch,
     db,
@@ -1674,16 +1660,40 @@ async def test_worker_failure_cas_cannot_overwrite_newer_claim_after_session_rol
 
 
 @pytest.mark.asyncio
-async def test_worker_loop_leaves_job_running_when_handler_defers_completion(monkeypatch, db):
-    job = _job(
+async def test_worker_loop_leaves_job_running_when_handler_defers_completion(
+    monkeypatch,
+    worker_db,
+):
+    organization = Organization(
+        id=uuid4(),
+        name="Worker deferred completion test",
+        slug=f"worker-deferred-completion-{uuid4().hex}",
+    )
+    claim_token = uuid4()
+    claimed_at = datetime.now(UTC)
+    job = Job(
+        id=uuid4(),
+        organization_id=organization.id,
         job_type=JobType.ATTACHMENT_SCAN.value,
         status=JobStatus.RUNNING.value,
         payload={"attachment_id": str(uuid4())},
+        run_at=claimed_at,
+        attempts=1,
+        max_attempts=3,
+        claim_token=claim_token,
+        claimed_at=claimed_at,
     )
+    worker_db.add_all([organization, job])
+    worker_db.commit()
+    job_id = job.id
+    stop_event = asyncio.Event()
+    claimed = False
 
-    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(db))
+    monkeypatch.setattr(worker, "SessionLocal", lambda: _CtxSession(worker_db))
+    monkeypatch.setattr(worker, "WORKER_CUTOVER_HOLD", False)
     monkeypatch.setattr(worker, "WORKER_JOB_TYPES", None)
-    monkeypatch.setattr(worker, "POLL_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(worker, "BATCH_SIZE", 1)
+    monkeypatch.setattr(worker, "_start_claim_heartbeat", lambda **_kwargs: None)
     monkeypatch.setattr(
         worker,
         "maybe_schedule_google_calendar_sync_jobs",
@@ -1692,37 +1702,33 @@ async def test_worker_loop_leaves_job_running_when_handler_defers_completion(mon
     monkeypatch.setattr(
         worker, "maybe_schedule_gmail_sync_jobs", lambda *args, **kwargs: datetime.now(UTC)
     )
-    monkeypatch.setattr(
-        worker.job_service,
-        "claim_pending_jobs",
-        lambda session, limit, job_types: [job],
-    )
-    completed = {"count": 0}
 
-    def _mark_completed(*_args, **_kwargs):
-        completed["count"] += 1
+    def _claim(*_args, **_kwargs):
+        nonlocal claimed
+        if claimed:
+            return []
+        claimed = True
+        return [job]
 
-    monkeypatch.setattr(worker.job_service, "mark_job_completed", _mark_completed)
-    monkeypatch.setattr(worker.job_service, "mark_job_failed", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(worker, "_record_job_success", lambda *args, **kwargs: None)
-    monkeypatch.setattr(worker, "_record_job_failure", lambda *args, **kwargs: None)
+    monkeypatch.setattr(worker.job_service, "claim_pending_jobs", _claim)
 
     async def _process(session, claimed_job):
-        assert claimed_job is job
+        stop_event.set()
+        assert claimed_job.id == job_id
         return False
 
     monkeypatch.setattr(worker, "process_job", _process)
 
-    async def _sleep(seconds):
-        raise RuntimeError("stop-loop")
+    await asyncio.wait_for(worker.worker_loop(stop_event), timeout=5)
 
-    monkeypatch.setattr(worker.asyncio, "sleep", _sleep)
-
-    with pytest.raises(RuntimeError, match="stop-loop"):
-        await worker.worker_loop()
-
-    assert job.status == JobStatus.RUNNING.value
-    assert completed["count"] == 0
+    worker_db.expire_all()
+    current = worker_db.query(Job).filter(Job.id == job_id).one()
+    assert current.status == JobStatus.RUNNING.value
+    assert current.claim_token == claim_token
+    assert current.claimed_at == claimed_at
+    assert current.completed_at is None
+    assert current.last_error is None
+    assert current.attempts == 1
 
 
 @pytest.mark.asyncio

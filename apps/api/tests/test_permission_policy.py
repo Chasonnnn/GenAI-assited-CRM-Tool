@@ -537,3 +537,121 @@ def test_role_deny_resolution_must_change_role_authority(db, test_org, ready_rev
     )
     with pytest.raises(ValueError, match="Role already denies"):
         policy_service.preview(db, test_org.id, changes)
+
+
+def test_configuration_batches_role_reads_and_preserves_other_tenants(db, test_org, test_user):
+    from sqlalchemy import event
+
+    other_org = Organization(name="Other batch tenant", slug="other-batch-tenant")
+    db.add(other_org)
+    db.flush()
+    db.add(OrganizationPermissionPolicy(organization_id=test_org.id, version=2))
+    other_row = RolePermission(
+        organization_id=other_org.id,
+        role="intake_specialist",
+        permission="view_reports",
+        is_granted=False,
+    )
+    existing = RolePermission(
+        organization_id=test_org.id,
+        role="intake_specialist",
+        permission="view_reports",
+        is_granted=False,
+    )
+    db.add_all([other_row, existing])
+    db.flush()
+    reads = []
+
+    def record_read(_conn, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT") and "FROM role_permissions" in statement:
+            reads.append(statement)
+
+    connection = db.connection()
+    event.listen(connection, "before_cursor_execute", record_read)
+    try:
+        policy_service.update_configuration(
+            db,
+            test_org.id,
+            test_user.id,
+            PermissionPolicyChanges(
+                role_permissions={
+                    "intake_specialist": {"view_reports": True},
+                    "case_manager": {"view_reports": True},
+                }
+            ),
+        )
+    finally:
+        event.remove(connection, "before_cursor_execute", record_read)
+    assert len(reads) <= 2  # One bulk update lookup and one configuration response read.
+    db.refresh(existing)
+    db.refresh(other_row)
+    assert existing.is_granted is True
+    assert other_row.is_granted is False
+    assert (
+        db.query(RolePermission)
+        .filter_by(
+            organization_id=test_org.id,
+            role="case_manager",
+            permission="view_reports",
+            is_granted=True,
+        )
+        .count()
+        == 1
+    )
+
+
+def test_activation_batches_legacy_grants_without_overwriting_existing_overrides(
+    db, test_org, test_user, ready_review
+):
+    from sqlalchemy import event
+
+    from app.core.permission_resolution import MATCH_ACTION_PERMISSIONS
+
+    members = [add_member(db, test_org.id)[0] for _ in range(3)]
+    for member in members:
+        db.add(
+            UserPermissionOverride(
+                organization_id=test_org.id,
+                user_id=member.id,
+                permission="propose_matches",
+                override_type="grant",
+            )
+        )
+    retained = UserPermissionOverride(
+        organization_id=test_org.id,
+        user_id=members[0].id,
+        permission="edit_matches",
+        override_type="grant",
+    )
+    db.add(retained)
+    db.flush()
+    changes = PermissionPolicyChanges()
+    reviewed = policy_service.preview(db, test_org.id, changes)
+    reads = []
+
+    def record_read(_conn, _cursor, statement, _parameters, _context, _many):
+        if (
+            statement.lstrip().upper().startswith("SELECT")
+            and "FROM user_permission_overrides" in statement
+        ):
+            reads.append(statement)
+
+    connection = db.connection()
+    event.listen(connection, "before_cursor_execute", record_read)
+    try:
+        policy_service.activate(db, test_org.id, test_user.id, changes, reviewed.digest)
+    finally:
+        event.remove(connection, "before_cursor_execute", record_read)
+    assert len(reads) <= 4  # Preview, legacy grants, existing match grants, configuration.
+    for member in members:
+        grants = (
+            db.query(UserPermissionOverride)
+            .filter_by(
+                organization_id=test_org.id,
+                user_id=member.id,
+            )
+            .all()
+        )
+        assert {row.permission for row in grants} >= set(MATCH_ACTION_PERMISSIONS)
+        assert len({row.permission for row in grants}) == len(grants)
+    assert db.get(UserPermissionOverride, retained.id).override_type == "grant"
