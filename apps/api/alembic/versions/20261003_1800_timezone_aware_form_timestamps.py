@@ -1,13 +1,13 @@
 """Interpret existing form, intake, and pipeline stage timestamps as UTC.
 
-Revision ID: 20261003_1700_timezone_aware_form_timestamps
-Revises: 20261003_1600_notification_daily_digest
+Revision ID: 20261003_1800_timezone_aware_form_timestamps
+Revises: 20261003_1700_medical_records
 """
 
 from alembic import op
 
-revision = "20261003_1700_timezone_aware_form_timestamps"
-down_revision = "20261003_1600_notification_daily_digest"
+revision = "20261003_1800_timezone_aware_form_timestamps"
+down_revision = "20261003_1700_medical_records"
 branch_labels = None
 depends_on = None
 

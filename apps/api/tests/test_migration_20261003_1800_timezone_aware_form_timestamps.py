@@ -10,8 +10,8 @@ from sqlalchemy import text
 
 from alembic import command
 
-PREVIOUS = "20261003_1600_notification_daily_digest"
-REVISION = "20261003_1700_timezone_aware_form_timestamps"
+PREVIOUS = "20261003_1700_medical_records"
+REVISION = "20261003_1800_timezone_aware_form_timestamps"
 
 
 def _insert(connection, table, **values):
