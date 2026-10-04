@@ -5,7 +5,7 @@ verified on the imported records (ADR 0006). Downgrade re-adds the columns
 empty and nullable; the 20261003_1700 application version does not read them.
 
 Revision ID: 20261004_1000_drop_flat_medical_columns
-Revises: 20261003_1700_medical_records
+Revises: 20261003_1800_timezone_aware_form_timestamps
 """
 
 import sqlalchemy as sa
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20261004_1000_drop_flat_medical_columns"
-down_revision = "20261003_1700_medical_records"
+down_revision = "20261003_1800_timezone_aware_form_timestamps"
 branch_labels = None
 depends_on = None
 
