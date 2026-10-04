@@ -9,6 +9,7 @@ Handles:
 """
 
 import hashlib
+import logging
 import re
 import secrets
 from datetime import UTC, date, datetime, time, timedelta
@@ -34,6 +35,7 @@ from app.db.models import (
     AvailabilityRule,
     BookingLink,
     Donor,
+    EmailTemplate,
     IntendedParent,
     Organization,
     Surrogate,
@@ -43,6 +45,7 @@ from app.db.models import (
 )
 from app.schemas.appointment import (
     AppointmentCapabilities,
+    AppointmentClientMessages,
     AppointmentGoogleSyncRead,
     AppointmentListItem,
     AppointmentRead,
@@ -51,6 +54,8 @@ from app.schemas.appointment import (
 from app.services import appointment_integrations
 from app.utils.normalization import escape_like_string
 from app.utils.pagination import paginate_query_by_offset
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Types
@@ -220,6 +225,54 @@ def _normalize_meeting_modes(
 # =============================================================================
 
 
+def client_message_settings(appt_type: AppointmentType | None) -> AppointmentClientMessages:
+    """Client email settings for a type; untyped appointments use the defaults."""
+    if appt_type is None:
+        return AppointmentClientMessages()
+    return AppointmentClientMessages.model_validate(appt_type.client_messages or {})
+
+
+def _validated_client_messages(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    client_messages: AppointmentClientMessages | dict,
+) -> dict:
+    """Allow only active org templates or the type owner's personal templates."""
+    from app.services import system_email_template_service
+
+    messages = AppointmentClientMessages.model_validate(client_messages)
+    template_ids = {
+        message.template_id
+        for name in AppointmentClientMessages.model_fields
+        if (message := getattr(messages, name)).template_id is not None
+    }
+    if template_ids:
+        platform_keys = set(system_email_template_service.DEFAULT_SYSTEM_TEMPLATES.keys())
+        found = {
+            row[0]
+            for row in db.query(EmailTemplate.id).filter(
+                EmailTemplate.id.in_(template_ids),
+                EmailTemplate.organization_id == org_id,
+                EmailTemplate.is_active.is_(True),
+                or_(
+                    EmailTemplate.system_key.is_(None),
+                    EmailTemplate.system_key.notin_(platform_keys),
+                ),
+                or_(
+                    EmailTemplate.scope == "org",
+                    and_(
+                        EmailTemplate.scope == "personal",
+                        EmailTemplate.owner_user_id == user_id,
+                    ),
+                ),
+            )
+        }
+        if template_ids - found:
+            raise ValueError("Email template not found")
+    return messages.model_dump(mode="json")
+
+
 def create_appointment_type(
     db: Session,
     org_id: UUID,
@@ -235,8 +288,12 @@ def create_appointment_type(
     dial_in_number: str | None = None,
     auto_approve: bool = False,
     reminder_hours_before: int = 24,
+    client_messages: AppointmentClientMessages | dict | None = None,
 ) -> AppointmentType:
     """Create a new appointment type for a user."""
+    stored_messages = _validated_client_messages(
+        db, org_id, user_id, client_messages or AppointmentClientMessages()
+    )
     slug = generate_slug(name)
     # Ensure unique slug for user
     base_slug = slug
@@ -266,6 +323,7 @@ def create_appointment_type(
         dial_in_number=dial_in_number,
         auto_approve=auto_approve,
         reminder_hours_before=reminder_hours_before,
+        client_messages=stored_messages,
         is_active=True,
     )
     db.add(appt_type)
@@ -288,9 +346,14 @@ def update_appointment_type(
     dial_in_number: str | None = None,
     auto_approve: bool | None = None,
     reminder_hours_before: int | None = None,
+    client_messages: AppointmentClientMessages | dict | None = None,
     is_active: bool | None = None,
 ) -> AppointmentType:
     """Update an appointment type."""
+    if client_messages is not None:
+        appt_type.client_messages = _validated_client_messages(
+            db, appt_type.organization_id, appt_type.user_id, client_messages
+        )
     if name is not None:
         appt_type.name = name
         new_slug = generate_slug(name)
@@ -551,6 +614,10 @@ def scheduling_read(
             and appointment.meeting_mode != MeetingMode.ZOOM.value
             and not (state == "unlinked" and appointment.google_event_id)
             and state not in {"failed", "conflict"},
+            can_complete=can_edit
+            and not public
+            and appointment.status == AppointmentStatus.CONFIRMED.value
+            and appointment.scheduled_start <= datetime.now(UTC),
             can_retry_google_sync=can_edit
             and not public
             and not legacy_google_link
@@ -2471,6 +2538,58 @@ def _validate_new_record_context(db, org_id, links):
         from app.services.match_work_service import validate_context
 
         validate_context(db, org_id, links["match_id"], links.get("attempt_id"), write=True)
+
+
+def resolve_booking_record_links(db: Session, org_id: UUID, token: str | None) -> dict:
+    """Return the record link a public booking token carries, or {} when it cannot apply.
+
+    Scope comes from the token and must match the booking link's organization. A stale,
+    foreign or tampered token books the appointment unlinked instead of failing the client.
+    """
+    if not token:
+        return {}
+    import jwt
+
+    from app.core.security import decode_booking_record_token
+
+    try:
+        payload = decode_booking_record_token(token)
+        token_org_id = UUID(str(payload.get("org_id")))
+        record_id = UUID(str(payload.get("record_id")))
+    except jwt.InvalidTokenError, ValueError, TypeError:
+        logger.info("Ignored invalid booking record token")
+        return {}
+    if token_org_id != org_id:
+        logger.warning("Ignored booking record token for another organization")
+        return {}
+    record_type = payload.get("record_type")
+    if record_type == "surrogate":
+        exists = (
+            db.query(Surrogate.id)
+            .filter(
+                Surrogate.id == record_id,
+                Surrogate.organization_id == org_id,
+                Surrogate.is_archived.is_(False),
+            )
+            .first()
+        )
+        return {"surrogate_id": record_id} if exists else {}
+    if record_type == "donor":
+        from app.services import match_lifecycle
+
+        if not match_lifecycle.expansion_enabled():
+            return {}
+        exists = (
+            db.query(Donor.id)
+            .filter(
+                Donor.id == record_id,
+                Donor.organization_id == org_id,
+                Donor.is_archived.is_(False),
+            )
+            .first()
+        )
+        return {"donor_id": record_id} if exists else {}
+    return {}
 
 
 def _audit_record_appointment(

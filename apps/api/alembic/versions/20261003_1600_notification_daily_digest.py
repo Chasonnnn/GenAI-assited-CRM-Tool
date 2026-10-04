@@ -3,7 +3,7 @@
 Existing rows get FALSE so nobody receives a digest after deploy until they turn it on.
 
 Revision ID: 20261003_1600_notification_daily_digest
-Revises: 20261003_1200_repair_seeded_system_workflows
+Revises: 20261003_1400_migrate_form_routing
 """
 
 import sqlalchemy as sa
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20261003_1600_notification_daily_digest"
-down_revision = "20261003_1200_repair_seeded_system_workflows"
+down_revision = "20261003_1400_migrate_form_routing"
 branch_labels = None
 depends_on = None
 

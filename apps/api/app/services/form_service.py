@@ -285,6 +285,9 @@ def create_form(
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
     )
+    from app.services import form_routing_service
+
+    form_routing_service.reset_kind_defaults(form, user_id)
     db.add(form)
     db.commit()
     db.refresh(form)
@@ -320,6 +323,9 @@ def update_form(
         form.purpose = purpose
     if lead_kind is not None and lead_kind != form.lead_kind:
         form.lead_kind = lead_kind
+        from app.services import form_routing_service
+
+        form_routing_service.reset_kind_defaults(form, user_id)
     if schema is not None:
         form.schema_json = apply_public_surrogate_field_defaults(
             schema,
@@ -840,10 +846,7 @@ def delete_form(db: Session, form: Form) -> None:
         db.query(IntakeLead.id, IntakeLead.promoted_donor_id)
         .filter(
             IntakeLead.organization_id == org_id,
-            (
-                (IntakeLead.form_id == form.id)
-                | (IntakeLead.form_submission_id.in_(submission_ids))
-            ),
+            ((IntakeLead.form_id == form.id) | (IntakeLead.form_submission_id.in_(submission_ids))),
         )
         .all()
     )
@@ -862,12 +865,8 @@ def delete_form(db: Session, form: Form) -> None:
         for entity_type, entity_id in active_holds:
             held = entity_type is None
             held = held or (entity_type == "form" and entity_id == form.id)
-            held = held or (
-                entity_type == "form_submission" and entity_id in submission_ids
-            )
-            held = held or (
-                entity_type == "form_submission_file" and entity_id in file_ids
-            )
+            held = held or (entity_type == "form_submission" and entity_id in submission_ids)
+            held = held or (entity_type == "form_submission_file" and entity_id in file_ids)
             held = held or (entity_type == "intake_lead" and entity_id in intake_lead_ids)
             held = held or (entity_type == "donor" and entity_id in donor_ids)
             if held:

@@ -16,6 +16,7 @@ from app.db.enums import (
     AuditEventType,
     Role,
     SurrogateActivityType,
+    WorkflowTriggerType,
 )
 from app.db.models import Appointment, AppointmentType, AuditLog, Surrogate, User
 from app.schemas.interview_appointment import SurrogateInterviewAppointmentAction
@@ -624,6 +625,16 @@ def manage(
             logger.warning("Interview changed but client notification failed")
     if after_commit:
         after_commit()
+    if v2:
+        # A stage change fires its own interview trigger through after_commit.
+        workflow_trigger = {
+            "reschedule": WorkflowTriggerType.APPOINTMENT_RESCHEDULED,
+            "cancel": WorkflowTriggerType.APPOINTMENT_CANCELLED,
+        }.get(data.action)
+        if data.action == "schedule" and current_key == "interview_scheduled":
+            workflow_trigger = getattr(appointment, "_workflow_trigger", None)
+        if workflow_trigger is not None:
+            scheduling_v2_service.fire_appointment_workflows(db, appointment, workflow_trigger)
     if not v2 and data.action == "reschedule":
         appointment_type = db.get(AppointmentType, appointment.appointment_type_id)
         if appointment_type and appointment_type.reminder_hours_before > 0:

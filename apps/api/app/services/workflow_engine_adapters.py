@@ -95,6 +95,7 @@ class WorkflowDomainAdapter(Protocol):
         subject_type: str | None = None,
         subject_id: UUID | None = None,
         execution_permissions: frozenset[str] | None = None,
+        appointment_record_type: str | None = None,
     ) -> dict: ...
 
 
@@ -111,10 +112,6 @@ class DefaultWorkflowDomainAdapter:
         WorkflowActionType.ADD_NOTE.value,
     }
     INTAKE_LEAD_ONLY_ACTIONS = {WorkflowActionType.PROMOTE_INTAKE_LEAD.value}
-    FORM_SUBMISSION_ONLY_ACTIONS = {
-        WorkflowActionType.AUTO_MATCH_SUBMISSION.value,
-        WorkflowActionType.CREATE_INTAKE_LEAD.value,
-    }
     DONOR_COMPATIBLE_ACTIONS = {
         WorkflowActionType.SEND_EMAIL.value,
         WorkflowActionType.CREATE_TASK.value,
@@ -127,6 +124,34 @@ class DefaultWorkflowDomainAdapter:
     INTAKE_DONOR_RECORD_ACTIONS = SURROGATE_ONLY_ACTIONS | {
         WorkflowActionType.SEND_NOTIFICATION.value,
     }
+    # Actions an appointment workflow runs against the surrogate or donor the appointment
+    # is linked to. Notifications stay on the appointment so unlinked bookings reach staff.
+    APPOINTMENT_RECORD_ACTIONS = {
+        WorkflowActionType.SEND_EMAIL.value,
+        WorkflowActionType.SEND_MESSAGE.value,
+        WorkflowActionType.CREATE_TASK.value,
+        WorkflowActionType.UPDATE_FIELD.value,
+        WorkflowActionType.ADD_NOTE.value,
+    }
+
+    def _appointment_record(
+        self, db: Session, appointment: Appointment, record_type: str
+    ) -> Surrogate | Donor | None:
+        """Return the appointment's linked record of the workflow's record type."""
+        if record_type in {"egg_donor", "sperm_donor"}:
+            return self.resolve_donor_subject(
+                db, appointment.organization_id, record_type, appointment.donor_id
+            )
+        if appointment.surrogate_id is None:
+            return None
+        return (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.id == appointment.surrogate_id,
+                Surrogate.organization_id == appointment.organization_id,
+            )
+            .first()
+        )
 
     def _notification_occurrence_key(
         self,
@@ -377,6 +402,7 @@ class DefaultWorkflowDomainAdapter:
             organization_id=execution.organization_id,
             surrogate_id=surrogate.id if surrogate and not donor else None,
             donor_id=donor.id if donor else None,
+            form_submission_id=entity.id if isinstance(entity, FormSubmission) else None,
             task_type=TaskType.WORKFLOW_APPROVAL.value,
             title=f"Approve: {preview}",
             description=f"Workflow '{workflow.name}' requires your approval to proceed.",
@@ -444,6 +470,7 @@ class DefaultWorkflowDomainAdapter:
         subject_type: str | None = None,
         subject_id: UUID | None = None,
         execution_permissions: frozenset[str] | None = None,
+        appointment_record_type: str | None = None,
     ) -> dict:
         """Execute a single action."""
         action_type = action.get("action_type")
@@ -483,6 +510,34 @@ class DefaultWorkflowDomainAdapter:
                     {"success": False, "error": "Donor subject not found", "skipped": True}
                 )
 
+        if (
+            entity_type == "appointment"
+            and isinstance(entity, Appointment)
+            and action_type in self.APPOINTMENT_RECORD_ACTIONS
+        ):
+            record_type = appointment_record_type or "surrogate"
+            action_entity = self._appointment_record(db, entity, record_type)
+            if action_entity is None:
+                label = record_type.replace("_", " ")
+                return _with_action_type(
+                    {
+                        "success": False,
+                        "error": f"Appointment is not linked to {'an' if label[0] == 'e' else 'a'} {label}",
+                        "skipped": True,
+                    }
+                )
+            if (
+                isinstance(action_entity, Donor)
+                and action_type not in self.DONOR_COMPATIBLE_ACTIONS
+            ):
+                return _with_action_type(
+                    {
+                        "success": False,
+                        "error": f"Action '{action_type}' does not support donor subjects",
+                        "skipped": True,
+                    }
+                )
+
         # Staff emails and notifications about an unlinked submission or lead run on that
         # record itself; record actions need the surrogate or donor it became.
         staff_alert_on_intake = entity_type in {"form_submission", "intake_lead"} and (
@@ -497,6 +552,28 @@ class DefaultWorkflowDomainAdapter:
             if action_type in self.INTAKE_DONOR_RECORD_ACTIONS
             else None
         )
+        if (
+            entity_type == "form_submission"
+            and isinstance(entity, FormSubmission)
+            and not staff_alert_on_intake
+            and (
+                (intake_donor_link is not None and intake_donor_link[1] is None)
+                or (
+                    entity.lead_kind not in {"egg_donor", "sperm_donor"}
+                    and action_type
+                    in self.SURROGATE_ONLY_ACTIONS | {WorkflowActionType.SEND_MESSAGE.value}
+                    and entity.surrogate_id is None
+                )
+            )
+        ):
+            return _with_action_type(
+                {
+                    "success": True,
+                    "skipped": True,
+                    "description": "Skipped record action: submission has no linked record",
+                }
+            )
+
         if intake_donor_link is not None:
             donor_subject_type, linked_donor_id = intake_donor_link
             entity_label = entity_type.replace("_", " ")
@@ -531,7 +608,9 @@ class DefaultWorkflowDomainAdapter:
 
         # Validate entity type for Surrogate-only actions; map tasks, submissions and
         # promoted intake leads to their surrogate when possible.
-        if action_type in self.SURROGATE_ONLY_ACTIONS and not isinstance(action_entity, Donor):
+        if action_type in self.SURROGATE_ONLY_ACTIONS and not isinstance(
+            action_entity, (Donor, Surrogate)
+        ):
             if entity_type in {"task", "form_submission", "intake_lead"}:
                 surrogate_id = getattr(
                     entity,
@@ -609,7 +688,9 @@ class DefaultWorkflowDomainAdapter:
                     return _with_action_type(
                         {"success": False, "error": "Message recipient not found", "skipped": True}
                     )
-            elif entity_type not in {"surrogate", "intake_lead"}:
+            elif entity_type not in {"surrogate", "intake_lead"} and not isinstance(
+                action_entity, Surrogate
+            ):
                 return _with_action_type(
                     {
                         "success": False,
@@ -627,15 +708,6 @@ class DefaultWorkflowDomainAdapter:
                 }
             )
 
-        if action_type in self.FORM_SUBMISSION_ONLY_ACTIONS and entity_type != "form_submission":
-            return _with_action_type(
-                {
-                    "success": False,
-                    "error": f"Action '{action_type}' only supports form_submission entities",
-                    "skipped": True,
-                }
-            )
-
         try:
             if action_type == WorkflowActionType.SEND_EMAIL.value:
                 result = workflow_communication_actions.send_email(
@@ -647,6 +719,7 @@ class DefaultWorkflowDomainAdapter:
                     workflow_owner_id=workflow_owner_id,
                     workflow_creator_user_id=workflow_creator_user_id,
                     workflow_execution_id=workflow_execution_id,
+                    appointment=entity if isinstance(entity, Appointment) else None,
                 )
                 return _with_action_type(result)
 
@@ -739,16 +812,6 @@ class DefaultWorkflowDomainAdapter:
                         if key not in {"is_priority", "assign_to_user"}
                     }
                 result = workflow_intake_actions.promote_intake_lead(db, promote_action, entity)
-                return _with_action_type(result)
-
-            if action_type == WorkflowActionType.AUTO_MATCH_SUBMISSION.value:
-                result = workflow_intake_actions.auto_match_submission(db, entity)
-                return _with_action_type(result)
-
-            if action_type == WorkflowActionType.CREATE_INTAKE_LEAD.value:
-                result = workflow_intake_actions.create_intake_lead(
-                    db, action, entity, workflow_execution_id=workflow_execution_id
-                )
                 return _with_action_type(result)
 
             return _with_action_type(

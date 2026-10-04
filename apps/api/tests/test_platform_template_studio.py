@@ -785,9 +785,7 @@ async def test_seeded_surrogate_prescreening_template_visible_in_ops_forms(
 
 
 @pytest.mark.asyncio
-async def test_seeded_intake_auto_match_workflow_visible_in_ops_templates(
-    authed_client, db, test_user
-):
+async def test_retired_intake_templates_are_unpublished_empty_drafts(authed_client, db, test_user):
     test_user.is_platform_admin = True
     db.commit()
 
@@ -808,12 +806,8 @@ async def test_seeded_intake_auto_match_workflow_visible_in_ops_templates(
         assert seeded["draft"]["trigger_type"] == "form_submitted"
         assert seeded["draft"].get("trigger_config", {}).get("form_name") == form_name
 
-        actions = seeded["draft"].get("actions", [])
-        assert len(actions) == 2
-        assert actions[0]["action_type"] == "auto_match_submission"
-        assert actions[0]["requires_approval"] is True
-        assert actions[1]["action_type"] == "create_intake_lead"
-        assert actions[1]["requires_approval"] is True
+        assert seeded["draft"].get("actions", []) == []
+        assert seeded["is_published_globally"] is False
 
 
 @pytest.mark.asyncio

@@ -21,10 +21,10 @@ from app.core.rate_limit import limiter
 from app.db.enums import AppointmentStatus
 from app.schemas.appointment import (
     AppointmentCancel,
-    AppointmentCreate,
     AppointmentReschedule,
     AppointmentTypeRead,
     AvailableSlotsResponse,
+    PublicBookingCreate,
     PublicBookingPageRead,
     StaffInfoRead,
     TimeSlotRead,
@@ -280,7 +280,7 @@ def get_available_slots(
 @limiter.limit(PUBLIC_FORM_LIMIT)
 def create_booking(
     public_slug: str,
-    data: AppointmentCreate,
+    data: PublicBookingCreate,
     request: Request,
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ) -> object:
@@ -320,6 +320,9 @@ def create_booking(
             expected_revision=data.expected_revision,
             request_id=data.request_id,
             actor_scope=scheduling_v2_service.public_actor_scope(link.public_slug),
+            record_links=appointment_service.resolve_booking_record_links(
+                db, link.organization_id, data.record_token
+            ),
         )
 
         if not settings.SCHEDULING_V2_ENABLED:

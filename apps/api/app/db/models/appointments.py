@@ -86,6 +86,10 @@ class AppointmentType(Base):
 
     # Notifications
     reminder_hours_before: Mapped[int] = mapped_column(Integer, default=24, nullable=False)
+    # {message: {"enabled": bool, "template_id": str | None}}; see AppointmentClientMessages.
+    client_messages: Mapped[dict] = mapped_column(
+        JSONB, server_default=text("'{}'::jsonb"), nullable=False
+    )
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)

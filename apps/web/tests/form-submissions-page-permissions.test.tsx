@@ -5,10 +5,10 @@ import FormSubmissionsPage from "@/app/(app)/automation/form-submissions/page"
 
 const mocks = vi.hoisted(() => ({
     access: vi.fn(), forms: vi.fn(), submissions: vi.fn(), candidates: vi.fn(),
-    resolve: vi.fn(), retry: vi.fn(), promote: vi.fn(), refetch: vi.fn(),
+    resolve: vi.fn(), retry: vi.fn(), promote: vi.fn(), refetch: vi.fn(), createLead: vi.fn(), replace: vi.fn(),
     searchParams: new URLSearchParams(),
 }))
-vi.mock("next/navigation", () => ({ useSearchParams: () => mocks.searchParams }))
+vi.mock("next/navigation", () => ({ useSearchParams: () => mocks.searchParams, useRouter: () => ({ replace: mocks.replace }) }))
 vi.mock("@/components/app-link", () => ({
     default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => <a href={href} {...props}>{children}</a>,
 }))
@@ -26,6 +26,9 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useRejectFormSubmission: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useRescanSubmissionFile: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSubmissionDonorCandidates: () => ({ data: [], isLoading: false, isError: false }),
+    useRunSubmissionRoutingMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCreateSubmissionRoutingLead: () => ({ mutateAsync: mocks.createLead, isPending: false }),
+    useDismissSubmissionRoutingReview: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 vi.mock("@/lib/hooks/use-donors", () => ({ useDonors: () => ({ data: undefined, isLoading: false, isError: false }) }))
 vi.mock("@/components/ui/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -120,12 +123,50 @@ describe("standalone form submission access", () => {
         expect(mocks.refetch).toHaveBeenCalled()
     })
 
+    it("queues routing review rows and requires the exact Create action for a lead", async () => {
+        mocks.submissions.mockReturnValue({
+            data: [{ ...submission(), match_status: "routing_review", routing_review_step: "create_lead" }],
+            isLoading: false,
+        })
+        mocks.createLead.mockResolvedValue({ submission: submission(), outcome: "lead_created", candidate_count: 0 })
+        mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions", "review_form_submissions", "edit_surrogates"] } })
+        const view = render(<FormSubmissionsPage />)
+        const createLead = () => screen.getByRole("button", { name: "Create lead for Synthetic Applicant" })
+        expect(screen.getByText("No match")).toBeInTheDocument()
+        expect(createLead()).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Dismiss routing review for Synthetic Applicant" })).toBeEnabled()
+
+        mocks.access.mockReturnValue({ data: { policy_version: 2, permissions: ["view_form_submissions", "review_form_submissions", "create_surrogates"] } })
+        view.rerender(<FormSubmissionsPage />)
+        fireEvent.click(createLead())
+        await waitFor(() => expect(mocks.createLead).toHaveBeenCalledWith({ submissionId: "submission-1", formId: "form-1" }))
+    })
+
     it("opens the form named in the link", () => {
         mocks.searchParams = new URLSearchParams("form=form-2")
         mocks.forms.mockReturnValue({ data: [{ id: "form-1", name: "Applicant intake" }, { id: "form-2", name: "Donor follow-up" }], isLoading: false, isError: false })
         render(<FormSubmissionsPage />)
         expect(screen.getByRole("combobox", { name: "Form" })).toHaveTextContent("Donor follow-up")
         expect(mocks.submissions).toHaveBeenLastCalledWith("form-2", { limit: 100 })
+    })
+
+    it("follows a later ?form= change and writes the chosen form to the URL", async () => {
+        mocks.searchParams = new URLSearchParams("form=form-1")
+        mocks.forms.mockReturnValue({ data: [{ id: "form-1", name: "Applicant intake" }, { id: "form-2", name: "Donor follow-up" }], isLoading: false, isError: false })
+        const view = render(<FormSubmissionsPage />)
+        expect(mocks.submissions).toHaveBeenLastCalledWith("form-1", { limit: 100 })
+
+        // A notification link for another form changes only the URL; the page stays mounted.
+        mocks.searchParams = new URLSearchParams("form=form-2")
+        view.rerender(<FormSubmissionsPage />)
+        expect(screen.getByRole("combobox", { name: "Form" })).toHaveTextContent("Donor follow-up")
+        expect(mocks.submissions).toHaveBeenLastCalledWith("form-2", { limit: 100 })
+
+        fireEvent.click(screen.getByRole("combobox", { name: "Form" }))
+        const option = await screen.findByRole("option", { name: "Applicant intake" })
+        fireEvent.mouseMove(option)
+        fireEvent.click(option)
+        expect(mocks.replace).toHaveBeenCalledWith("/automation/form-submissions?form=form-1", { scroll: false })
     })
 
     it("falls back to the first form when the linked form is not reviewable", () => {

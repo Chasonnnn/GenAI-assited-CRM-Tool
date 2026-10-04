@@ -4,6 +4,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 import WorkflowEditorPageClient from '../app/(app)/automation/workflows/[id]/page.client'
 import { ApiError } from '@/lib/api'
 import { getApplicantTypeLabel } from '@/components/automation/workflow-editor/shared'
+import { getWorkflowEditorPreset } from '@/lib/workflows/workflow-editor-state'
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
@@ -860,6 +861,181 @@ describe('WorkflowEditorPage', () => {
         )
     })
 
+    it('saves an appointment workflow for donor-linked bookings of chosen types', () => {
+        mockUseEffectivePermissions.mockReturnValue({
+            data: { permissions: ['manage_automation', 'view_donors', 'edit_donors'] },
+        })
+        mockUseWorkflowOptions.mockImplementation((_scope: string, subjectType: string) => ({
+            data: {
+                ...DEFAULT_OPTIONS,
+                trigger_types: [
+                    { value: 'appointment_scheduled', label: 'Appointment Scheduled', description: '' },
+                ],
+                action_types: [
+                    { value: 'send_message', label: 'Send SMS/MMS', description: '' },
+                    { value: 'send_notification', label: 'Send Notification', description: '' },
+                ],
+                action_types_by_trigger: { appointment_scheduled: ['send_message', 'send_notification'] },
+                trigger_entity_types: { appointment_scheduled: 'appointment' },
+                appointment_type_names: subjectType === 'egg_donor' ? [] : ['Consultation', 'Medical Screening'],
+            },
+            isLoading: false,
+        }))
+
+        renderNewWorkflow('org')
+        fireEvent.change(nameInput(), { target: { value: 'Donor consult booked' } })
+        fireEvent.change(triggerSelect(), { target: { value: 'appointment_scheduled' } })
+
+        expect(radioLabels('Linked record')).toEqual(['Surrogate', 'Egg Donor', 'Sperm Donor'])
+        expect(screen.getByRole('radio', { name: 'Surrogate' })).toBeChecked()
+        expect(screen.getByTestId('workflow-build-panel')).toHaveTextContent('Send SMS/MMS')
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Egg Donor' }))
+        expect(mockUseWorkflowOptions).toHaveBeenCalledWith('org', 'egg_donor')
+        expect(screen.getByTestId('workflow-build-panel')).not.toHaveTextContent('Send SMS/MMS')
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Runs on linked egg donors')
+
+        const typeSelect = screen.getByRole('combobox', { name: 'Appointment types' })
+        fireEvent.change(typeSelect, { target: { value: 'Consultation' } })
+        expect(optionLabels(typeSelect)).toEqual(['Medical Screening'])
+        expect(screen.getByRole('button', { name: 'Remove Consultation' })).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send Notification' }))
+        fireEvent.change(screen.getByRole('textbox', { name: 'Notification title' }), {
+            target: { value: 'Consult booked' },
+        })
+        const recipientSelect = getFirstElement(
+            screen.getAllByTestId('select').filter((select) => select.querySelector('option[value="host"]')),
+            'Expected a notification recipient select',
+        )
+        expect(optionLabels(recipientSelect)).toContain('Appointment Host')
+        fireEvent.change(recipientSelect, { target: { value: 'host' } })
+        fireEvent.click(launchButton())
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'appointment',
+                trigger_type: 'appointment_scheduled',
+                trigger_config: { record_type: 'egg_donor', appointment_type_names: ['Consultation'] },
+                actions: [expect.objectContaining({ action_type: 'send_notification', recipients: 'host' })],
+            }),
+            expect.any(Object),
+        )
+    })
+
+    it('starts on the appointment trigger and type named in the link', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...DEFAULT_OPTIONS,
+                trigger_types: [
+                    { value: 'appointment_scheduled', label: 'Appointment Scheduled', description: '' },
+                ],
+                action_types_by_trigger: { appointment_scheduled: ['add_note'] },
+                trigger_entity_types: { appointment_scheduled: 'appointment' },
+                appointment_type_names: ['Initial Consultation'],
+            },
+            isLoading: false,
+        })
+        const preset = getWorkflowEditorPreset({
+            trigger: 'appointment_scheduled',
+            appointment_type: ' Initial Consultation ',
+        })
+        expect(getWorkflowEditorPreset({ trigger: 'surrogate_created', appointment_type: 'X' })).toBeNull()
+
+        render(<WorkflowEditorPageClient workflowId={null} initialScope="personal" initialPreset={preset} />)
+
+        expect(triggerSelect()).toHaveValue('appointment_scheduled')
+        expect(screen.getByRole('button', { name: 'Remove Initial Consultation' })).toBeInTheDocument()
+        expect(radioLabels('Linked record')).toEqual(['Surrogate'])
+    })
+
+    it('saves a timing workflow for hours after an appointment ends', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...DEFAULT_OPTIONS,
+                trigger_types: [
+                    ...DEFAULT_OPTIONS.trigger_types,
+                    { value: 'appointment_time', label: 'Before or After Appointment', description: '' },
+                ],
+                action_types_by_trigger: { appointment_time: ['add_note'] },
+                trigger_entity_types: { appointment_time: 'appointment' },
+                appointment_type_names: ['Initial Consultation'],
+            },
+            isLoading: false,
+        })
+
+        renderNewWorkflow()
+        fireEvent.change(nameInput(), { target: { value: 'Consult follow-up' } })
+        fireEvent.click(screen.getByRole('radio', { name: 'Date or scheduled' }))
+        expect(optionLabels(triggerSelect())).toContain('Before or After Appointment')
+        fireEvent.change(triggerSelect(), { target: { value: 'appointment_time' } })
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('24 hours before start')
+
+        fireEvent.change(screen.getByRole('combobox', { name: 'When' }), { target: { value: 'after_end' } })
+        fireEvent.change(screen.getByRole('spinbutton', { name: 'Hours' }), { target: { value: '2' } })
+        fireEvent.change(screen.getByRole('combobox', { name: 'Appointment types' }), {
+            target: { value: 'Initial Consultation' },
+        })
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('2 hours after end')
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Types: Initial Consultation')
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Runs on linked surrogates')
+
+        addNoteAction('Send the consult summary')
+        fireEvent.click(launchButton())
+
+        expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                subject_type: 'appointment',
+                trigger_type: 'appointment_time',
+                trigger_config: { when: 'after_end', hours: 2, appointment_type_names: ['Initial Consultation'] },
+            }),
+            expect.any(Object),
+        )
+    })
+
+    it('blocks a timing workflow with hours out of range', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...DEFAULT_OPTIONS,
+                trigger_types: [{ value: 'appointment_time', label: 'Before or After Appointment', description: '' }],
+                action_types_by_trigger: { appointment_time: ['add_note'] },
+            },
+            isLoading: false,
+        })
+
+        renderNewWorkflow()
+        fireEvent.change(nameInput(), { target: { value: 'Too late' } })
+        fireEvent.click(screen.getByRole('radio', { name: 'Date or scheduled' }))
+        fireEvent.change(triggerSelect(), { target: { value: 'appointment_time' } })
+        fireEvent.change(screen.getByRole('spinbutton', { name: 'Hours' }), { target: { value: '200' } })
+        addNoteAction('Follow up')
+
+        expect(launchButton()).toHaveAttribute('aria-disabled', 'true')
+        expect(screen.getAllByTestId('tooltip').map((tip) => tip.textContent)).toContain(
+            'Hours must be a whole number from 1 to 168.',
+        )
+        fireEvent.click(launchButton())
+        expect(mockCreateWorkflow.mutate).not.toHaveBeenCalled()
+    })
+
+    it('offers the appointment host only to appointment workflows', () => {
+        mockUseWorkflowOptions.mockReturnValue({
+            data: {
+                ...DEFAULT_OPTIONS,
+                action_types: [{ value: 'send_notification', label: 'Send Notification', description: '' }],
+                action_types_by_trigger: { surrogate_created: ['send_notification'] },
+            },
+            isLoading: false,
+        })
+
+        renderNewWorkflow()
+        fireEvent.change(triggerSelect(), { target: { value: 'surrogate_created' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Send Notification' }))
+
+        expect(screen.queryByRole('option', { name: 'Appointment Host' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('radiogroup', { name: 'Linked record' })).not.toBeInTheDocument()
+    })
+
     it('saves a form-submitted workflow with the form submission subject', () => {
         mockUseWorkflowOptions.mockReturnValue({
             data: {
@@ -868,9 +1044,9 @@ describe('WorkflowEditorPage', () => {
                     { value: 'form_submitted', label: 'Application Submitted', description: '' },
                 ],
                 action_types: [
-                    { value: 'create_intake_lead', label: 'Create Intake Lead', description: '' },
+                    { value: 'add_note', label: 'Add Note', description: '' },
                 ],
-                action_types_by_trigger: { form_submitted: ['create_intake_lead'] },
+                action_types_by_trigger: { form_submitted: ['add_note'] },
                 trigger_entity_types: { form_submitted: 'form_submission' },
                 forms: [{ id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' }],
             },
@@ -884,7 +1060,7 @@ describe('WorkflowEditorPage', () => {
         expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Form: Surrogate Application')
         expect(radioLabels('Record type')).toEqual(['Form Submission'])
         expect(screen.getByRole('radio', { name: 'Form Submission' })).toBeDisabled()
-        fireEvent.click(screen.getByRole('button', { name: 'Create Intake Lead' }))
+        addNoteAction('Review application')
         fireEvent.click(launchButton())
 
         expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
@@ -892,9 +1068,104 @@ describe('WorkflowEditorPage', () => {
                 subject_type: 'form_submission',
                 trigger_type: 'form_submitted',
                 trigger_config: { form_id: 'form-surrogate' },
+                actions: [expect.objectContaining({ action_type: 'add_note', content: 'Review application' })],
             }),
             expect.any(Object),
         )
+    })
+
+    describe('form routing handoff', () => {
+        const formOptions = {
+            data: {
+                ...DEFAULT_OPTIONS,
+                trigger_types: [
+                    ...DEFAULT_OPTIONS.trigger_types,
+                    { value: 'form_submitted', label: 'Application Submitted', description: '' },
+                    { value: 'form_submission_approved', label: 'Application Approved', description: '' },
+                ],
+                action_types_by_trigger: {
+                    ...DEFAULT_OPTIONS.action_types_by_trigger,
+                    form_submitted: ['add_note'],
+                    form_submission_approved: ['add_note'],
+                },
+                trigger_entity_types: {
+                    ...DEFAULT_OPTIONS.trigger_entity_types,
+                    form_submitted: 'form_submission',
+                    form_submission_approved: 'form_submission',
+                },
+                forms: [
+                    { id: 'form-surrogate', name: 'Surrogate Application', lead_kind: 'surrogate' },
+                    { id: 'form-egg-donor', name: 'Egg Donor Application', lead_kind: 'egg_donor' },
+                ],
+            },
+            isLoading: false,
+        }
+
+        beforeEach(() => {
+            mockUseEffectivePermissions.mockReturnValue({ data: { permissions: ['manage_automation'] } })
+            mockUseWorkflowOptions.mockReturnValue(formOptions)
+        })
+
+        it('prefills the trigger and form for a new workflow and links to the form routing tab', () => {
+            render(
+                <WorkflowEditorPageClient
+                    workflowId={null}
+                    initialScope="org"
+                    initialPreset={getWorkflowEditorPreset({ trigger: 'form_submission_approved', form_id: 'form-egg-donor' })}
+                />,
+            )
+
+            expect(triggerSelect()).toHaveValue('form_submission_approved')
+            expect(formSelect('form-egg-donor')).toHaveValue('form-egg-donor')
+            const routingLink = screen.getByRole('link', { name: 'Matching and lead creation: Routing tab' })
+            expect(routingLink).toHaveAttribute('href', '/automation/forms/form-egg-donor?tab=routing')
+            // The arrow stays on the line of its last words.
+            const arrow = routingLink.querySelector('[aria-hidden="true"]')
+            expect(arrow?.textContent).toBe('\u00a0→')
+            expect(arrow?.parentElement).toHaveClass('whitespace-nowrap')
+            expect(arrow?.parentElement?.textContent).toBe('Routing tab\u00a0→')
+
+            fireEvent.change(nameInput(), { target: { value: 'Approved donors' } })
+            addNoteAction('Approved')
+            fireEvent.click(launchButton())
+
+            expect(mockCreateWorkflow.mutate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    scope: 'org',
+                    trigger_type: 'form_submission_approved',
+                    trigger_config: { form_id: 'form-egg-donor' },
+                }),
+                expect.any(Object),
+            )
+        })
+
+        it('hides the routing link until a form is selected', () => {
+            render(
+                <WorkflowEditorPageClient
+                    workflowId={null}
+                    initialScope="org"
+                    initialPreset={getWorkflowEditorPreset({ trigger: 'form_submitted' })}
+                />,
+            )
+
+            expect(triggerSelect()).toHaveValue('form_submitted')
+            expect(screen.queryByRole('link', { name: /Routing tab/ })).not.toBeInTheDocument()
+
+            fireEvent.change(formSelect('form-surrogate'), { target: { value: 'form-surrogate' } })
+            expect(screen.getByRole('link', { name: /Routing tab/ })).toHaveAttribute(
+                'href',
+                '/automation/forms/form-surrogate?tab=routing',
+            )
+        })
+
+        it('ignores an unknown trigger and a form id without a form trigger', () => {
+            expect(getWorkflowEditorPreset({ trigger: 'not_a_trigger', form_id: 'form-surrogate' })).toBeNull()
+            expect(getWorkflowEditorPreset({ trigger: 'surrogate_created', form_id: 'form-surrogate' })).toBeNull()
+            expect(getWorkflowEditorPreset({ trigger: 'form_submitted', form_id: ' form-surrogate ' })).toEqual({
+                triggerType: 'form_submitted',
+                triggerConfig: { form_id: 'form-surrogate' },
+            })
+        })
     })
 
     describe('Application Submitted stage updates', () => {

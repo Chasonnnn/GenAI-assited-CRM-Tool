@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+    getTaskFormSubmissionRecord,
     getTaskRelatedRecordSelection,
     getTaskRelatedRecords,
     toTaskRelatedRecordPayload,
@@ -37,6 +38,34 @@ describe("task related-record presentation", () => {
                 label: "Donor unavailable",
             },
         ])
+    })
+
+    it("links a form submission to Form Submissions on its form", () => {
+        expect(getTaskRelatedRecords({
+            form_submission_id: "submission-1",
+            form_id: "form-1",
+            form_name: "Surrogate Application",
+        })).toEqual([
+            {
+                kind: "form_submission",
+                id: "submission-1",
+                href: "/automation/form-submissions?form=form-1",
+                label: "Surrogate Application",
+            },
+        ])
+        expect(getTaskFormSubmissionRecord({ form_submission_id: "submission-1", form_id: "form-1" })).toEqual({
+            kind: "form_submission",
+            id: "submission-1",
+            href: "/automation/form-submissions?form=form-1",
+            label: "Open submission",
+        })
+        expect(getTaskFormSubmissionRecord({ form_submission_id: "submission-1", form_id: null })).toEqual({
+            kind: "form_submission",
+            id: "submission-1",
+            href: null,
+            label: "Submission unavailable",
+        })
+        expect(getTaskFormSubmissionRecord({ form_submission_id: null, form_id: "form-1" })).toBeNull()
     })
 
     it("uses one selection contract for create, edit, and clear", () => {

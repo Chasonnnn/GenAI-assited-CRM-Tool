@@ -12,7 +12,6 @@ import pytest
 
 from app.db.enums import JobType
 from app.db.models import (
-    AutomationWorkflow,
     ConsentRecord,
     EmbedSession,
     Form,
@@ -1075,7 +1074,7 @@ async def test_embed_session_submit_stores_submission_attribution_consent_and_tr
     )
     assert submit_res.status_code == 200
     payload = submit_res.json()
-    assert db.get(FormSubmission, uuid.UUID(payload["id"])).match_status == "workflow_pending"
+    assert db.get(FormSubmission, uuid.UUID(payload["id"])).match_status == "routing_review"
 
     duplicate_res = await authed_client.post(
         f"/forms/public/embed/{slug}/submit",
@@ -1115,7 +1114,8 @@ async def test_embed_session_submit_stores_submission_attribution_consent_and_tr
     assert submission.form_schema_hash
     assert submission.consent_text_hash
     assert submission.tracking_policy_hash
-    assert submission.match_status == "workflow_pending"
+    assert submission.match_status == "routing_review"
+    assert submission.routing_review_step == "match"
     assert submission.full_name_normalized == "embed lead"
     assert submission.email_hash
     assert submission.phone_hash
@@ -1219,22 +1219,16 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
     )
     assert mappings_res.status_code == 200
 
-    workflow = AutomationWorkflow(
-        id=uuid.uuid4(),
-        organization_id=test_org.id,
-        name=f"Create embed lead {uuid.uuid4().hex[:6]}",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
-        condition_logic="AND",
-        actions=[{"action_type": "create_intake_lead"}],
-        is_enabled=True,
-        scope="org",
-        owner_user_id=None,
-        created_by_user_id=test_user.id,
+    routing = await authed_client.put(
+        f"/forms/{form_id}/routing",
+        json={
+            "exact_match": "auto",
+            "no_match": "auto",
+            "lead_source": None,
+            "auto_create_donor": False,
+        },
     )
-    db.add(workflow)
-    db.commit()
+    assert routing.status_code == 200, routing.text
 
     link_res = await authed_client.patch(
         f"/forms/intake-links/{link_id}",
@@ -1336,11 +1330,10 @@ async def test_embed_submit_enabled_workflow_creates_one_lead(
         db.query(WorkflowExecution)
         .filter(
             WorkflowExecution.organization_id == test_org.id,
-            WorkflowExecution.workflow_id == workflow.id,
             WorkflowExecution.entity_id == submission_id,
         )
         .count()
-        == 1
+        == 0
     )
 
 
@@ -1616,8 +1609,7 @@ async def test_internal_only_embed_submit_queues_crm_dataset_lead_without_sensit
     assert submit_res.status_code == 200
     submission_id = uuid.UUID(submit_res.json()["id"])
     assert (
-        db.get(FormSubmission, uuid.UUID(submit_res.json()["id"])).match_status
-        == "workflow_pending"
+        db.get(FormSubmission, uuid.UUID(submit_res.json()["id"])).match_status == "routing_review"
     )
 
     assert (

@@ -113,26 +113,6 @@ def _create_member(db, org_id, *, role: str = Role.DEVELOPER.value, is_active: b
 
 
 def test_workflow_action_normalization_and_trigger_config_validation():
-    normalized = workflow_service._normalize_actions_for_trigger(
-        WorkflowTriggerType.FORM_SUBMITTED,
-        [
-            {"action_type": "auto_match_submission"},
-            {"action_type": "create_intake_lead"},
-        ],
-    )
-    assert len(normalized) == 2
-
-    with pytest.raises(
-        ValueError, match="auto_match_submission must be placed before create_intake_lead"
-    ):
-        workflow_service._normalize_actions_for_trigger(
-            WorkflowTriggerType.FORM_SUBMITTED,
-            [
-                {"action_type": "create_intake_lead"},
-                {"action_type": "auto_match_submission"},
-            ],
-        )
-
     workflow_service._validate_trigger_config(
         WorkflowTriggerType.STATUS_CHANGED, {"from_stage_id": None, "to_stage_id": None}
     )
@@ -263,24 +243,6 @@ def test_workflow_action_config_validation_branches(db, test_org, test_user):
             org_id=test_org.id,
             action={"action_type": "promote_intake_lead", "requires_approval": True},
             workflow_scope="org",
-            owner_user_id=test_user.id,
-        )
-
-    with pytest.raises(ValueError, match="only supported for org workflows"):
-        workflow_service._validate_action_config(
-            db,
-            org_id=test_org.id,
-            action={"action_type": "auto_match_submission"},
-            workflow_scope="personal",
-            owner_user_id=test_user.id,
-        )
-
-    with pytest.raises(ValueError, match="only supported for org workflows"):
-        workflow_service._validate_action_config(
-            db,
-            org_id=test_org.id,
-            action={"action_type": "create_intake_lead"},
-            workflow_scope="personal",
             owner_user_id=test_user.id,
         )
 
@@ -575,7 +537,7 @@ def test_workflow_engine_continue_execution_denied_and_expired_paths(db, test_or
     ("remaining_actions", "expected_sources"),
     [
         ([], ["approved"]),
-        ([{"action_type": "create_intake_lead", "source": "remaining"}], ["approved", "remaining"]),
+        ([{"action_type": "send_notification", "source": "remaining"}], ["approved", "remaining"]),
     ],
     ids=["final-action", "remaining-action"],
 )
@@ -589,7 +551,7 @@ def test_legacy_paused_form_submission_continues_without_action_snapshot(
     adapter = _DummyAdapter()
     engine = WorkflowEngineCore(adapter=adapter)
     approved_action = {
-        "action_type": "auto_match_submission",
+        "action_type": "send_notification",
         "requires_approval": True,
         "source": "approved",
     }
@@ -633,7 +595,7 @@ def test_legacy_paused_form_submission_continues_without_action_snapshot(
         id=uuid4(),
         status=TaskStatus.COMPLETED.value,
         workflow_action_payload=approved_action,
-        workflow_action_type="auto_match_submission",
+        workflow_action_type="send_notification",
         workflow_triggered_by_user_id=test_user.id,
     )
 
@@ -652,7 +614,7 @@ def test_paused_form_submission_rejects_malformed_action_snapshot(
     adapter = _DummyAdapter()
     engine = WorkflowEngineCore(adapter=adapter)
     approved_action = {
-        "action_type": "auto_match_submission",
+        "action_type": "send_notification",
         "requires_approval": True,
     }
     workflow = _create_workflow(
@@ -690,7 +652,7 @@ def test_paused_form_submission_rejects_malformed_action_snapshot(
         id=uuid4(),
         status=TaskStatus.COMPLETED.value,
         workflow_action_payload=approved_action,
-        workflow_action_type="auto_match_submission",
+        workflow_action_type="send_notification",
         workflow_triggered_by_user_id=test_user.id,
     )
 

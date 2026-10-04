@@ -5,6 +5,7 @@ import uuid
 import pytest
 
 from app.core.config import settings
+from app.core.security import decode_booking_record_token
 from app.db.models import BookingLink, Organization
 from app.schemas.donor import DonorCreate
 from app.services import (
@@ -95,7 +96,21 @@ async def test_donor_template_links_use_donor_form_and_owner_booking_link(
             .one()
         )
         assert variables["form_link"] == _expected_form_link(org, slug), path
-        assert variables["appointment_link"].endswith(f"/book/{booking_link.public_slug}"), path
+        booking_url, record_token = variables["appointment_link"].split("?record=")
+        assert booking_url.endswith(f"/book/{booking_link.public_slug}"), path
+        token = decode_booking_record_token(record_token)
+        assert (token["record_type"], token["record_id"]) == ("donor", str(donor.id)), path
+
+
+def test_donor_booking_link_omits_record_while_match_expansion_is_off(
+    db, test_org, test_user, monkeypatch
+):
+    monkeypatch.setattr(settings, "MATCH_CASE_EXPANSION_ENABLED", False)
+    donor = _donor(db, test_org.id, test_user.id, donor_type="egg", owner_id=test_user.id)
+
+    for path, variables in _variable_paths(db, donor).items():
+        assert "/book/" in variables["appointment_link"], path
+        assert "?record=" not in variables["appointment_link"], path
 
 
 @pytest.mark.asyncio

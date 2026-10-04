@@ -97,8 +97,8 @@ const mockTemplateWithEmail = {
 
 const mockFormScopedTemplate = {
     id: 'tmpl-form',
-    name: 'Pre-Screening: Auto-Match then Create Lead (Approval)',
-    description: 'Approval-gated intake routing for the Surrogate Pre-Screening Questionnaire',
+    name: 'Pre-Screening: Notify Intake Team (Approval)',
+    description: 'Approval-gated intake notification for the Surrogate Pre-Screening Questionnaire',
     category: 'onboarding',
     trigger_type: 'form_submitted',
     is_global: true,
@@ -109,8 +109,7 @@ const mockFormScopedTemplate = {
     conditions: [],
     condition_logic: 'AND',
     actions: [
-        { action_type: 'auto_match_submission', requires_approval: true },
-        { action_type: 'create_intake_lead', requires_approval: true },
+        { action_type: 'send_notification', title: 'New pre-screening submission', requires_approval: true },
     ],
 }
 
@@ -331,7 +330,7 @@ describe('WorkflowTemplatesPanel', () => {
 
         fireEvent.click(
             screen.getByRole('button', {
-                name: /use template pre-screening: auto-match then create lead/i,
+                name: /use template pre-screening: notify intake team/i,
             })
         )
 
@@ -346,7 +345,7 @@ describe('WorkflowTemplatesPanel', () => {
 
         fireEvent.click(
             screen.getByRole('button', {
-                name: /use template pre-screening: auto-match then create lead/i,
+                name: /use template pre-screening: notify intake team/i,
             })
         )
 
@@ -409,7 +408,7 @@ describe('WorkflowTemplatesPanel', () => {
 
         fireEvent.click(
             screen.getByRole('button', {
-                name: /use template pre-screening: auto-match then create lead/i,
+                name: /use template pre-screening: notify intake team/i,
             })
         )
 
@@ -435,7 +434,7 @@ describe('WorkflowTemplatesPanel', () => {
 
         fireEvent.click(
             screen.getByRole('button', {
-                name: /use template pre-screening: auto-match then create lead/i,
+                name: /use template pre-screening: notify intake team/i,
             })
         )
 

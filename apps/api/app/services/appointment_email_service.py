@@ -29,7 +29,8 @@ from app.db.models import (
     Organization,
     User,
 )
-from app.services import email_service, org_service
+from app.schemas.appointment import AppointmentClientMessage
+from app.services import appointment_service, email_service, org_service
 from app.services.appointment_service import log_appointment_email
 
 # =============================================================================
@@ -419,6 +420,23 @@ def get_or_create_template(
 # =============================================================================
 
 
+def _client_message(
+    db: Session, appointment: Appointment, email_type: AppointmentEmailType
+) -> AppointmentClientMessage:
+    appointment_type = None
+    if appointment.appointment_type_id is not None:
+        appointment_type = (
+            db.query(AppointmentType)
+            .filter(
+                AppointmentType.id == appointment.appointment_type_id,
+                AppointmentType.organization_id == appointment.organization_id,
+            )
+            .one_or_none()
+        )
+    settings = appointment_service.client_message_settings(appointment_type)
+    return getattr(settings, email_type.value)
+
+
 def _utc_occurrence_marker(value: datetime | None) -> str:
     if value is None:
         return "unspecified"
@@ -511,15 +529,24 @@ def send_appointment_email(
     if not org or not staff:
         return None
 
-    # Get or create template
-    # Use a system user ID for template creation (first admin of org)
-    template_id = get_or_create_template(
-        db,
-        org.id,
-        staff.id,
-        email_type,
-        commit=commit,
-    )
+    message = _client_message(db, appointment, email_type)
+    if not message.enabled:
+        return None
+
+    # The type's chosen template; a deactivated one falls back to the org default.
+    template_id = None
+    if message.template_id is not None:
+        chosen = email_service.get_template(db, message.template_id, org.id)
+        if chosen is not None and chosen.is_active:
+            template_id = chosen.id
+    if template_id is None:
+        template_id = get_or_create_template(
+            db,
+            org.id,
+            staff.id,
+            email_type,
+            commit=commit,
+        )
     if not template_id:
         return None
 
@@ -838,6 +865,13 @@ def is_appointment_email_delivery_eligible(
         appointment,
         delivery,
     ):
+        return False
+
+    try:
+        email_type = AppointmentEmailType(appointment_log.email_type)
+    except ValueError:
+        return False
+    if not _client_message(db, appointment, email_type).enabled:
         return False
 
     if appointment_log.email_type == AppointmentEmailType.REQUEST_RECEIVED.value:

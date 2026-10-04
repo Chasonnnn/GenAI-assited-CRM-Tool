@@ -8,7 +8,7 @@ from alembic import command
 from tests.test_migration_20260928_1300_workflow_fixed_trigger_subjects import _alembic_config
 
 REVISION = "20261003_1600_notification_daily_digest"
-PREVIOUS = "20261003_1200_repair_seeded_system_workflows"
+PREVIOUS = "20261003_1400_migrate_form_routing"
 
 
 def _settings_columns(connection):

@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 import pytest
 
 from app.core.config import settings
-from app.db.models import AutomationWorkflow, Donor, FormSubmission, IntakeLead
+from app.db.models import Donor, Form, FormSubmission, IntakeLead
 from app.services import alert_service, workflow_triggers
 from tests.test_hosted_donor_forms import _create_donor_form, _submit_donor_form
 
@@ -21,19 +21,22 @@ def _local_unscanned_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", False, raising=False)
 
 
-def _disable_generated_routing(db, form_id: str) -> None:
-    db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}"
-    ).update({AutomationWorkflow.is_enabled: False})
+def _use_manual_routing(db, form_id: str) -> None:
+    form = db.get(Form, uuid.UUID(form_id))
+    form.routing_exact_match = "review"
+    form.routing_no_match = "off"
     db.commit()
 
 
 async def _manual_submission(client, db, *, kind="egg_donor", email="review@example.com"):
     form_id, slug = await _create_donor_form(client, lead_kind=kind)
-    _disable_generated_routing(db, form_id)
+    _use_manual_routing(db, form_id)
     response = await _submit_donor_form(client, slug=slug, email=email)
     assert response.status_code == 200, response.text
-    return form_id, slug, db.get(FormSubmission, uuid.UUID(response.json()["id"]))
+    submission_id = response.json()["id"]
+    dismissed = await client.post(f"/forms/submissions/{submission_id}/routing/dismiss")
+    assert dismissed.status_code == 200, dismissed.text
+    return form_id, slug, db.get(FormSubmission, uuid.UUID(submission_id))
 
 
 async def _create_lead_and_promote(client, submission_id, *, source="hosted_form"):

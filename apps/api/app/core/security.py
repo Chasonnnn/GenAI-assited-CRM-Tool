@@ -156,6 +156,43 @@ def decode_export_token(token: str) -> dict:
 
 
 # =============================================================================
+# Booking Record Token (links a public booking to the record that was emailed)
+# =============================================================================
+
+BOOKING_RECORD_TOKEN_PURPOSE = "booking_record"
+BOOKING_RECORD_TOKEN_TTL_DAYS = 60
+
+
+def create_booking_record_token(org_id: UUID, record_type: str, record_id: UUID) -> str:
+    """Sign a booking-link reference to one surrogate or donor."""
+    now = datetime.now(UTC)
+    payload = {
+        "org_id": str(org_id),
+        "record_type": record_type,
+        "record_id": str(record_id),
+        "purpose": BOOKING_RECORD_TOKEN_PURPOSE,
+        "iat": now,
+        "exp": now + timedelta(days=BOOKING_RECORD_TOKEN_TTL_DAYS),
+    }
+    return jwt.encode(payload, settings.JWT_SECRET.get_secret_value(), algorithm="HS256")
+
+
+def decode_booking_record_token(token: str) -> dict:
+    """Verify a booking record token; raises jwt.InvalidTokenError."""
+    last_error: jwt.InvalidTokenError | None = None
+    for secret in settings.jwt_secrets:
+        try:
+            payload = jwt.decode(token, secret, algorithms=["HS256"])
+        except jwt.InvalidTokenError as e:
+            last_error = e
+            continue
+        if payload.get("purpose") != BOOKING_RECORD_TOKEN_PURPOSE:
+            raise jwt.InvalidTokenError("Wrong token purpose")
+        return payload
+    raise last_error or jwt.InvalidTokenError("No signing secret")
+
+
+# =============================================================================
 # OAuth State/Nonce with User-Agent Binding
 # =============================================================================
 

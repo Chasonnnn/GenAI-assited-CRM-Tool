@@ -72,8 +72,12 @@ def create_template(
         conditions=[],
         condition_logic="AND",
         actions=[
-            {"action_type": "auto_match_submission", "requires_approval": True},
-            {"action_type": "create_intake_lead", "requires_approval": True},
+            {
+                "action_type": "send_notification",
+                "title": "Review application",
+                "requires_approval": True,
+            },
+            {"action_type": "send_notification", "title": "Follow up", "requires_approval": True},
         ]
         if trigger_type in {"form_submitted", "intake_lead_created"}
         else [{"action_type": "add_note", "content": "Hello"}],

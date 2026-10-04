@@ -13,6 +13,7 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { QueryErrorState } from "@/components/error-state"
+import { AutomationFormRoutingPanel } from "@/components/forms/builder/AutomationFormRoutingPanel"
 import { AutomationFormSettingsPanel } from "@/components/forms/builder/AutomationFormSettingsPanel"
 import { AutomationFormSubmissionsPanel } from "@/components/forms/builder/AutomationFormSubmissionsPanel"
 import { DeletePageDialog } from "@/components/forms/builder/DeletePageDialog"
@@ -87,6 +88,7 @@ export function AutomationFormBuilderScreen({
                     { value: "edit", label: "Edit" },
                     { value: "preview", label: "Preview" },
                     { value: "settings", label: "Settings" },
+                    { value: "routing", label: "Routing" },
                     {
                         value: "submissions",
                         label: "Submissions",
@@ -125,6 +127,21 @@ export function AutomationFormBuilderScreen({
             >
                 <AutomationFormSettingsPanel {...controller.settingsPanelProps} />
             </div>
+
+            {controller.state.routingTabOpened ? (
+                <div
+                    className={
+                        controller.state.workspaceTab === "routing"
+                            ? "flex-1 overflow-y-auto bg-muted/20 p-4 sm:p-6 xl:p-8"
+                            : "hidden"
+                    }
+                >
+                    <AutomationFormRoutingPanel
+                        key={controller.routingPanelProps.formId ?? "new"}
+                        {...controller.routingPanelProps}
+                    />
+                </div>
+            ) : null}
 
             <div className={controller.state.workspaceTab === "submissions" ? "flex-1 overflow-y-auto p-6" : "hidden"}>
                 <AutomationFormSubmissionsPanel {...controller.submissionsPanelProps} />

@@ -1,44 +1,28 @@
-"""Generated intake routing gets a system execution grant under permission v2."""
+"""Module routing uses form permissions and tenant scope under permission v2."""
 
-from __future__ import annotations
-
-import json
-import uuid
+from uuid import uuid4
 
 import pytest
 
-from app.core.config import settings
-from app.db.enums import AuditEventType, Role, WorkflowExecutionStatus
+from app.core.csrf import CSRF_HEADER
+from app.db.enums import Role
 from app.db.models import (
-    AuditLog,
     AutomationWorkflow,
-    Form,
-    FormSubmission,
     IntakeLead,
-    Membership,
     Organization,
     RolePermission,
-    User,
-    WorkflowExecution,
 )
 from app.db.models.permission_policy import OrganizationPermissionPolicy
-from app.schemas.workflow import WorkflowUpdate
-from app.services import form_intake_service, workflow_service
-from app.services import workflow_execution_authority as authority
-from tests.test_forms_public_shared_intake import _create_published_form_and_shared_link
-from tests.test_hosted_donor_forms import _create_donor_form, _submit_donor_form
+from app.services import form_routing_service
+from tests.test_email_templates_personal_scope import authed_client_for_user, create_user_with_role
+from tests.test_form_routing import KINDS, routing_submission, tasks
 
-SYSTEM_AUTHORIZER = "system:shared_intake_routing"
-
-
-@pytest.fixture(autouse=True)
-def _local_unscanned_storage(monkeypatch, tmp_path):
-    from app.core.rate_limit import limiter
-
-    limiter.reset()
-    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local", raising=False)
-    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(tmp_path), raising=False)
-    monkeypatch.setattr(settings, "ATTACHMENT_SCAN_ENABLED", False, raising=False)
+REVIEW_SETTINGS = {
+    "exact_match": "review",
+    "no_match": "review",
+    "lead_source": None,
+    "auto_create_donor": False,
+}
 
 
 @pytest.fixture
@@ -47,400 +31,284 @@ def v2(db, test_org):
     db.commit()
 
 
-def _routing(db, org_id, form_id) -> AutomationWorkflow:
-    return (
-        db.query(AutomationWorkflow)
-        .filter(
-            AutomationWorkflow.organization_id == org_id,
-            AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}",
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("auto_field", ["exact_match", "no_match"])
+async def test_auto_settings_require_create_permission(
+    db, test_org, test_user, v2, kind, auto_field
+):
+    actor = create_user_with_role(db, test_org.id, Role.INTAKE_SPECIALIST)
+    permission = "create_surrogates" if kind == "surrogate" else "create_donors"
+    db.add_all(
+        [
+            RolePermission(
+                organization_id=test_org.id,
+                role="intake_specialist",
+                permission="manage_forms",
+                is_granted=True,
+            ),
+            RolePermission(
+                organization_id=test_org.id,
+                role="intake_specialist",
+                permission=permission,
+                is_granted=False,
+            ),
+        ]
+    )
+    form, _ = routing_submission(db, test_org.id, test_user.id, kind=kind)
+    async with authed_client_for_user(db, test_org.id, actor, Role.INTAKE_SPECIALIST) as client:
+        response = await client.put(
+            f"/forms/{form.id}/routing", json={**REVIEW_SETTINGS, auto_field: "auto"}
         )
-        .one()
-    )
-
-
-def _executions(db, workflow) -> list[WorkflowExecution]:
-    return (
-        db.query(WorkflowExecution)
-        .filter(
-            WorkflowExecution.organization_id == workflow.organization_id,
-            WorkflowExecution.workflow_id == workflow.id,
-        )
-        .all()
-    )
-
-
-def _system_grants(db, workflow) -> list[AuditLog]:
-    return [
-        log
-        for log in db.query(AuditLog)
-        .filter(
-            AuditLog.organization_id == workflow.organization_id,
-            AuditLog.event_type == AuditEventType.WORKFLOW_CONFIG_CHANGED.value,
-            AuditLog.target_id == workflow.id,
-        )
-        .all()
-        if (log.details or {}).get("operation") == "system_authorize"
-    ]
-
-
-def _assert_system_grant(db, workflow):
-    grant = workflow.execution_authority
-    assert grant is not None
-    assert grant["authorized_by"] == SYSTEM_AUTHORIZER
-    assert grant["authorized_by_user_id"] is None
-    assert grant["configuration_digest"] == authority.configuration_digest(workflow)
-    expected = set()
-    for action in workflow.actions:
-        expected |= authority.action_permissions(db, workflow, action)
-    assert set(grant["permissions"]) == expected
-    authority.execution_snapshot(db, workflow)
-    (log,) = _system_grants(db, workflow)
-    assert log.details == {"operation": "system_authorize", "scope": "org"}
-
-
-def _form(db, org_id, user_id, lead_kind) -> Form:
-    form = Form(
-        id=uuid.uuid4(),
-        organization_id=org_id,
-        name=f"Routing {lead_kind} {uuid.uuid4().hex[:6]}",
-        status="published",
-        purpose="other",
-        lead_kind=lead_kind,
-        schema_json={"pages": []},
-        published_schema_json={"pages": []},
-        created_by_user_id=user_id,
-    )
-    db.add(form)
-    db.flush()
-    return form
-
-
-def _member(db, org_id, role=Role.INTAKE_SPECIALIST) -> User:
-    user = User(
-        id=uuid.uuid4(),
-        email=f"routing-{uuid.uuid4().hex[:8]}@example.com",
-        display_name="Routing Staff",
-        is_active=True,
-    )
-    db.add(user)
-    db.flush()
-    db.add(
-        Membership(
-            id=uuid.uuid4(),
-            organization_id=org_id,
-            user_id=user.id,
-            role=role.value,
-            is_active=True,
-        )
-    )
-    db.flush()
-    return user
+        assert response.status_code == 403, response.text
+        assert response.json()["detail"] == f"Missing permission: {permission}"
+        response = await client.put(f"/forms/{form.id}/routing", json=REVIEW_SETTINGS)
+        assert response.status_code == 200, response.text
+    db.refresh(form)
+    assert form.routing_exact_match == form.routing_no_match == "review"
+    assert form.routing_updated_by_user_id == actor.id
 
 
 @pytest.mark.asyncio
-async def test_v2_publish_grants_surrogate_routing_and_submissions_route(
-    authed_client, db, test_org, v2
+@pytest.mark.parametrize("kind", KINDS)
+@pytest.mark.parametrize("operation", ["create-lead", "run-match"])
+async def test_review_creation_requires_create_permission(
+    db, test_org, test_user, v2, kind, operation
 ):
-    form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
-    workflow = _routing(db, test_org.id, form_id)
-    assert workflow.trigger_config == {"form_id": form_id, "lead_kind": "surrogate"}
-    _assert_system_grant(db, workflow)
-
-    response = await authed_client.post(
-        f"/forms/public/intake/{slug}/submit",
-        data={
-            "answers": json.dumps(
-                {
-                    "full_name": "Routed Candidate",
-                    "date_of_birth": "1993-04-12",
-                    "phone": "+1 (555) 100-2000",
-                    "email": "routed@example.com",
-                }
-            )
-        },
-    )
-    assert response.status_code == 200, response.text
-
-    (execution,) = _executions(db, workflow)
-    assert execution.status == WorkflowExecutionStatus.PAUSED.value, execution.error_message
-    assert execution.authority_snapshot["authorized_by"] == SYSTEM_AUTHORIZER
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("kind", ["egg_donor", "sperm_donor"])
-async def test_v2_publish_grants_donor_routing_and_submissions_route(
-    authed_client, db, test_org, v2, kind
-):
-    form_id, slug = await _create_donor_form(authed_client, lead_kind=kind)
-    workflow = _routing(db, test_org.id, form_id)
-    assert workflow.trigger_config == {"form_id": form_id, "lead_kind": kind}
-    _assert_system_grant(db, workflow)
-    assert "create_donors" in workflow.execution_authority["permissions"]
-
-    response = await _submit_donor_form(authed_client, slug=slug, email="granted@example.com")
-    assert response.status_code == 200, response.text
-
-    (execution,) = _executions(db, workflow)
-    assert execution.status == WorkflowExecutionStatus.SUCCESS.value, execution.error_message
-    submission = db.get(FormSubmission, uuid.UUID(response.json()["id"]))
-    lead = db.get(IntakeLead, submission.intake_lead_id)
-    assert lead is not None
-    assert (lead.source_metadata or {}).get("auto_create_donor") is True
-
-
-@pytest.mark.asyncio
-async def test_shared_donor_form_routing_keeps_both_subtypes(authed_client, db, test_org, v2):
-    form_id, _slug = await _create_donor_form(authed_client, shared_donor=True)
-    workflow = _routing(db, test_org.id, form_id)
-    assert workflow.trigger_config == {"form_id": form_id}
-    _assert_system_grant(db, workflow)
-
-
-@pytest.mark.parametrize(
-    ("lead_kind", "permission"),
-    [("surrogate", "create_surrogates"), ("egg_donor", "create_donors")],
-)
-def test_publisher_without_create_permission_gets_no_grant(
-    db, test_org, test_user, v2, lead_kind, permission
-):
-    publisher = _member(db, test_org.id)
+    actor = create_user_with_role(db, test_org.id, Role.INTAKE_SPECIALIST)
+    permission = "create_surrogates" if kind == "surrogate" else "create_donors"
     db.add(
         RolePermission(
             organization_id=test_org.id,
-            role=Role.INTAKE_SPECIALIST.value,
+            role="intake_specialist",
             permission=permission,
             is_granted=False,
         )
     )
-    form = _form(db, test_org.id, test_user.id, lead_kind)
-
-    workflow = form_intake_service.ensure_default_intake_routing_workflow(
-        db, org_id=test_org.id, form=form, user_id=publisher.id
-    )
-
-    assert workflow is not None
-    assert workflow.is_enabled is True
-    assert workflow.execution_authority is None
-    assert _system_grants(db, workflow) == []
-
-
-@pytest.mark.parametrize("lead_kind", ["surrogate", "egg_donor"])
-def test_publisher_with_create_permission_gets_the_grant(db, test_org, test_user, v2, lead_kind):
-    publisher = _member(db, test_org.id)
-    form = _form(db, test_org.id, test_user.id, lead_kind)
-
-    workflow = form_intake_service.ensure_default_intake_routing_workflow(
-        db, org_id=test_org.id, form=form, user_id=publisher.id
-    )
-
-    _assert_system_grant(db, workflow)
-
-
-def test_publisher_from_another_org_gets_no_grant(db, test_org, test_user, v2):
-    other_org = Organization(id=uuid.uuid4(), name="Other", slug=f"other-{uuid.uuid4().hex[:8]}")
-    db.add(other_org)
-    db.flush()
-    outsider = _member(db, other_org.id, Role.ADMIN)
-    form = _form(db, test_org.id, test_user.id, "egg_donor")
-
-    workflow = form_intake_service.ensure_default_intake_routing_workflow(
-        db, org_id=test_org.id, form=form, user_id=outsider.id
-    )
-
-    assert workflow.execution_authority is None
-
-
-@pytest.mark.asyncio
-async def test_publish_does_not_touch_another_org_routing_workflow(
-    authed_client, db, test_org, test_user, v2
-):
-    other_org = Organization(id=uuid.uuid4(), name="Other", slug=f"other-{uuid.uuid4().hex[:8]}")
-    db.add(other_org)
-    db.flush()
-    db.add(OrganizationPermissionPolicy(organization_id=other_org.id, version=2))
-    form_id, _slug = await _create_donor_form(authed_client)
-    foreign = AutomationWorkflow(
-        organization_id=other_org.id,
-        name="Foreign routing",
-        scope="org",
-        subject_type="form_submission",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[],
-        condition_logic="AND",
-        actions=form_intake_service._default_intake_routing_actions(
-            db.get(Form, uuid.UUID(form_id))
-        ),
-        is_enabled=False,
-        is_system_workflow=True,
-        system_key=f"shared_intake_routing:{form_id}",
-    )
-    db.add(foreign)
-    db.commit()
-
-    republished = await authed_client.post(f"/forms/{form_id}/publish")
-    assert republished.status_code == 200, republished.text
-
-    db.refresh(foreign)
-    assert foreign.execution_authority is None
-    assert foreign.trigger_config == {"form_id": form_id}
-    assert foreign.is_enabled is False
-    _assert_system_grant(db, _routing(db, test_org.id, form_id))
-
-
-@pytest.mark.asyncio
-async def test_edit_voids_the_system_grant_and_republish_does_not_restore_it(
-    authed_client, db, test_org, v2
-):
-    form_id, slug = await _create_donor_form(authed_client)
-    workflow = _routing(db, test_org.id, form_id)
-    grant = dict(workflow.execution_authority)
-    workflow.conditions = [{"field": "source_mode", "operator": "equals", "value": "shared"}]
-    db.commit()
-
-    with pytest.raises(authority.WorkflowAuthorityError):
-        authority.execution_snapshot(db, workflow)
-    republished = await authed_client.post(f"/forms/{form_id}/publish")
-    assert republished.status_code == 200, republished.text
-
-    db.refresh(workflow)
-    assert workflow.execution_authority == grant
-    assert workflow.conditions == [
-        {"field": "source_mode", "operator": "equals", "value": "shared"}
-    ]
-    response = await _submit_donor_form(authed_client, slug=slug, email="voided@example.com")
-    assert response.status_code == 200, response.text
-    (execution,) = _executions(db, workflow)
-    assert execution.status == WorkflowExecutionStatus.SKIPPED.value
-
-
-@pytest.mark.asyncio
-async def test_republish_keeps_an_admin_grant_and_a_paused_workflow(
-    authed_client, db, test_org, test_user, v2
-):
-    form_id, _slug = await _create_donor_form(authed_client)
-    workflow = _routing(db, test_org.id, form_id)
-    workflow = workflow_service.update_workflow(
+    form, submission = routing_submission(
         db,
-        workflow,
+        test_org.id,
         test_user.id,
-        WorkflowUpdate(
-            conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}]
-        ),
+        kind=kind,
+        exact="auto" if operation == "create-lead" else "review",
     )
-    admin_grant = dict(workflow.execution_authority)
-    assert admin_grant["authorized_by_user_id"] == str(test_user.id)
-    workflow.is_enabled = False
-    db.commit()
-
-    republished = await authed_client.post(f"/forms/{form_id}/publish")
-    assert republished.status_code == 200, republished.text
-
-    db.refresh(workflow)
-    assert workflow.is_enabled is False
-    assert workflow.execution_authority == admin_grant
-    authority.execution_snapshot(db, workflow)
+    form_routing_service.route_submission(db, org_id=test_org.id, submission_id=submission.id)
+    if operation == "run-match":
+        form.routing_no_match = "auto"
+        db.commit()
+    original_step = submission.routing_review_step
+    task_id = tasks(db, submission)[0].id
+    async with authed_client_for_user(db, test_org.id, actor, Role.INTAKE_SPECIALIST) as client:
+        response = await client.post(f"/forms/submissions/{submission.id}/routing/{operation}")
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == f"Missing permission: {permission}"
+    db.refresh(submission)
+    assert submission.routing_review_step == original_step
+    assert submission.intake_lead_id is None
+    assert [(t.id, t.status) for t in tasks(db, submission)] == [(task_id, "pending")]
+    assert db.query(IntakeLead).filter_by(form_id=form.id).count() == 0
 
 
 @pytest.mark.asyncio
-async def test_republish_does_not_enable_a_paused_generated_workflow(
-    authed_client, db, test_org, v2
-):
-    form_id, _slug = await _create_donor_form(authed_client)
-    workflow = _routing(db, test_org.id, form_id)
-    workflow.is_enabled = False
-    db.commit()
-
-    republished = await authed_client.post(f"/forms/{form_id}/publish")
-    assert republished.status_code == 200, republished.text
-
-    db.refresh(workflow)
-    assert workflow.is_enabled is False
-    authority.execution_snapshot(db, workflow)
-    assert len(_system_grants(db, workflow)) == 1
+async def test_surrogate_cannot_enable_donor_creation(authed_client, db, test_org, test_user):
+    form, _ = routing_submission(db, test_org.id, test_user.id)
+    response = await authed_client.put(
+        f"/forms/{form.id}/routing", json={**REVIEW_SETTINGS, "auto_create_donor": True}
+    )
+    assert response.status_code == 422, response.text
+    db.refresh(form)
+    assert form.routing_auto_create_donor is False
 
 
 @pytest.mark.asyncio
-async def test_noop_builder_save_keeps_the_generated_digest(authed_client, db, test_org, v2):
-    form_id, _slug = await _create_donor_form(authed_client)
-    workflow = _routing(db, test_org.id, form_id)
-    digest = authority.configuration_digest(workflow)
-
-    response = await authed_client.patch(
-        f"/workflows/{workflow.id}",
-        json={
-            "trigger_config": {"form_id": form_id},
-            "conditions": [],
-            "condition_logic": "AND",
-            "actions": workflow.actions,
-        },
-    )
-    assert response.status_code == 200, response.text
-
-    db.refresh(workflow)
-    assert authority.configuration_digest(workflow) == digest
-
-
-@pytest.mark.asyncio
-async def test_v1_publish_issues_no_grant(authed_client, db, test_org):
-    form_id, _slug = await _create_donor_form(authed_client)
-    workflow = _routing(db, test_org.id, form_id)
-
-    assert workflow.execution_authority is None
-    assert workflow.is_enabled is True
-    assert _system_grants(db, workflow) == []
-
-
-@pytest.mark.parametrize(
-    ("first_kind", "second_kind"),
-    [("surrogate", "egg_donor"), ("egg_donor", "sperm_donor"), ("egg_donor", "surrogate")],
-)
-def test_republish_after_an_applicant_type_change_refreshes_generated_routing(
-    db, test_org, test_user, first_kind, second_kind
-):
-    form = _form(db, test_org.id, test_user.id, first_kind)
-    workflow = form_intake_service.ensure_default_intake_routing_workflow(
-        db, org_id=test_org.id, form=form, user_id=test_user.id
-    )
-    assert workflow.trigger_config == {"form_id": str(form.id), "lead_kind": first_kind}
-
-    form.lead_kind = second_kind
+@pytest.mark.parametrize("operation", ["read", "update", "workflows"])
+async def test_form_routing_cross_org_is_not_found(authed_client, db, test_user, operation):
+    org = Organization(name="Other", slug=uuid4().hex)
+    db.add(org)
     db.flush()
-    workflow = form_intake_service.ensure_default_intake_routing_workflow(
-        db, org_id=test_org.id, form=form, user_id=test_user.id
-    )
+    form, _ = routing_submission(db, org.id, test_user.id)
+    if operation == "update":
+        response = await authed_client.put(f"/forms/{form.id}/routing", json=REVIEW_SETTINGS)
+    else:
+        response = await authed_client.get(
+            f"/forms/{form.id}/{'workflows' if operation == 'workflows' else 'routing'}"
+        )
+    assert response.status_code == 404, response.text
 
-    assert workflow.trigger_config == {"form_id": str(form.id), "lead_kind": second_kind}
-    assert workflow.actions == form_intake_service._default_intake_routing_actions(form)
+
+@pytest.mark.asyncio
+async def test_routing_update_requires_csrf(authed_client, db, test_org, test_user):
+    form, _ = routing_submission(db, test_org.id, test_user.id)
+    token = authed_client.headers.pop(CSRF_HEADER)
+    try:
+        response = await authed_client.put(f"/forms/{form.id}/routing", json=REVIEW_SETTINGS)
+    finally:
+        authed_client.headers[CSRF_HEADER] = token
+    assert response.status_code == 403, response.text
 
 
-def test_republish_keeps_an_admin_grant_on_a_legacy_generated_config(db, test_org, test_user, v2):
-    form = _form(db, test_org.id, test_user.id, "surrogate")
-    workflow = form_intake_service.ensure_default_intake_routing_workflow(
-        db, org_id=test_org.id, form=form, user_id=test_user.id
-    )
-    # Routing generated before this release stored only the form id; an admin re-enabled it.
-    workflow.trigger_config = {"form_id": str(form.id)}
-    workflow.execution_authority = None
-    workflow.is_enabled = False
-    db.flush()
-    workflow = workflow_service.toggle_workflow(db, workflow, test_user.id)
-    admin_grant = dict(workflow.execution_authority)
-    publisher = _member(db, test_org.id)
+@pytest.mark.asyncio
+async def test_donor_settings_require_donor_edit(db, test_org, test_user):
+    from tests.test_hosted_donor_form_lifecycle_permissions import _admin_with_revokes, _client_for
+
+    actor = _admin_with_revokes(db, test_org.id, "edit_donors")
+    form, _ = routing_submission(db, test_org.id, test_user.id, kind="egg_donor")
+    async with _client_for(db, test_org.id, actor) as client:
+        response = await client.put(f"/forms/{form.id}/routing", json=REVIEW_SETTINGS)
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "Missing permission: edit_donors"
+
+
+@pytest.mark.asyncio
+async def test_workflows_filters_form_trigger_org_and_visibility(db, test_org, test_user, v2):
+    actor = create_user_with_role(db, test_org.id, Role.INTAKE_SPECIALIST)
     db.add(
         RolePermission(
             organization_id=test_org.id,
-            role=Role.INTAKE_SPECIALIST.value,
-            permission="create_surrogates",
-            is_granted=False,
+            role="intake_specialist",
+            permission="manage_forms",
+            is_granted=True,
         )
     )
+    form, _ = routing_submission(db, test_org.id, test_user.id)
+    foreign = Organization(name="Other", slug=uuid4().hex)
+    db.add(foreign)
     db.flush()
+    expected = []
+    for index, (trigger, form_id, org_id, scope, owner_id) in enumerate(
+        [
+            ("form_submitted", form.id, test_org.id, "org", None),
+            ("form_submission_approved", form.id, test_org.id, "org", None),
+            ("form_submission_rejected", form.id, test_org.id, "personal", actor.id),
+            ("form_submitted", uuid4(), test_org.id, "org", None),
+            ("form_submitted", form.id, foreign.id, "org", None),
+            ("form_submitted", form.id, test_org.id, "personal", test_user.id),
+            ("surrogate_created", form.id, test_org.id, "org", None),
+            ("form_submitted", None, test_org.id, "org", None),
+        ]
+    ):
+        workflow = AutomationWorkflow(
+            organization_id=org_id,
+            name=f"Workflow {index}",
+            trigger_type=trigger,
+            subject_type="form_submission" if trigger.startswith("form_") else "surrogate",
+            trigger_config={"form_id": str(form_id)} if form_id else {},
+            conditions=[],
+            condition_logic="AND",
+            actions=[],
+            is_enabled=index != 1,
+            scope=scope,
+            owner_user_id=owner_id,
+        )
+        db.add(workflow)
+        db.flush()
+        if index < 3:
+            expected.append(
+                {
+                    "id": str(workflow.id),
+                    "name": workflow.name,
+                    "trigger_type": trigger,
+                    "is_enabled": index != 1,
+                    "scope": scope,
+                }
+            )
+    db.commit()
+    async with authed_client_for_user(db, test_org.id, actor, Role.INTAKE_SPECIALIST) as client:
+        response = await client.get(f"/forms/{form.id}/workflows")
+    assert response.status_code == 200, response.text
+    assert response.json() == expected
 
-    workflow = form_intake_service.ensure_default_intake_routing_workflow(
-        db, org_id=test_org.id, form=form, user_id=publisher.id
+
+@pytest.mark.asyncio
+async def test_form_workflows_hide_donor_workflows_without_donor_view(db, test_org, test_user, v2):
+    actor = create_user_with_role(db, test_org.id, Role.INTAKE_SPECIALIST)
+    db.add_all(
+        [
+            RolePermission(
+                organization_id=test_org.id,
+                role="intake_specialist",
+                permission="manage_forms",
+                is_granted=True,
+            ),
+            RolePermission(
+                organization_id=test_org.id,
+                role="intake_specialist",
+                permission="view_donors",
+                is_granted=False,
+            ),
+        ]
     )
+    form, _ = routing_submission(db, test_org.id, test_user.id, kind="egg_donor")
+    db.add(
+        AutomationWorkflow(
+            organization_id=test_org.id,
+            name="Donor application",
+            trigger_type="form_submitted",
+            subject_type="form_submission",
+            trigger_config={"form_id": str(form.id)},
+            conditions=[],
+            condition_logic="AND",
+            actions=[],
+            is_enabled=True,
+            scope="org",
+        )
+    )
+    db.commit()
+    async with authed_client_for_user(db, test_org.id, actor, Role.INTAKE_SPECIALIST) as client:
+        response = await client.get(f"/forms/{form.id}/workflows")
+    assert response.status_code == 200, response.text
+    assert response.json() == []
 
-    assert workflow.trigger_config == {"form_id": str(form.id)}
-    assert workflow.execution_authority == admin_grant
-    authority.execution_snapshot(db, workflow)
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["egg_donor", "sperm_donor"])
+@pytest.mark.parametrize("operation", ["create", "change_kind", "template"])
+async def test_donor_defaults_cannot_bypass_create_permission(
+    db, test_org, test_user, v2, kind, operation
+):
+    from app.db.models import Form
+    from tests.test_hosted_donor_form_lifecycle_permissions import _published_donor_template
+
+    actor = create_user_with_role(db, test_org.id, Role.INTAKE_SPECIALIST)
+    db.add_all(
+        [
+            RolePermission(
+                organization_id=test_org.id,
+                role="intake_specialist",
+                permission="manage_forms",
+                is_granted=True,
+            ),
+            RolePermission(
+                organization_id=test_org.id,
+                role="intake_specialist",
+                permission="create_donors",
+                is_granted=False,
+            ),
+        ]
+    )
+    form = Form(
+        organization_id=test_org.id,
+        name="Draft",
+        lead_kind="surrogate",
+        created_by_user_id=test_user.id,
+    )
+    db.add(form)
+    template = _published_donor_template(db)
+    template.published_settings_json = {**template.published_settings_json, "lead_kind": kind}
+    db.commit()
+    async with authed_client_for_user(db, test_org.id, actor, Role.INTAKE_SPECIALIST) as client:
+        if operation == "create":
+            response = await client.post(
+                "/forms", json={"name": "New donor form", "lead_kind": kind}
+            )
+        elif operation == "template":
+            response = await client.post(
+                f"/forms/templates/{template.id}/use", json={"name": "Template donor form"}
+            )
+        else:
+            response = await client.patch(f"/forms/{form.id}", json={"lead_kind": kind})
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"] == "Missing permission: create_donors"
+    db.refresh(form)
+    assert form.lead_kind == "surrogate"
+    assert db.query(Form).filter_by(organization_id=test_org.id).count() == 1

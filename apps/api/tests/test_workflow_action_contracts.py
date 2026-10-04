@@ -156,3 +156,33 @@ def test_assignment_action_preserves_event_and_domain_boundary(monkeypatch, kind
         assert event["subject_id"] == record.id
         assert update_donor.call_args.kwargs == {"emit_workflow_events": False}
         db.commit.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["surrogate", "egg_donor", "sperm_donor"])
+@pytest.mark.parametrize("action_type", ["add_note", "update_field"])
+def test_unlinked_submission_record_action_is_a_successful_skip(kind, action_type):
+    from app.db.models import FormSubmission
+
+    submission = FormSubmission(
+        id=uuid4(),
+        organization_id=uuid4(),
+        form_id=uuid4(),
+        lead_kind=kind,
+        answers_json={"email": "private@example.com"},
+    )
+    db = Mock()
+    result = DefaultWorkflowDomainAdapter().execute_action(
+        db,
+        {"action_type": action_type, "content": "Private note"},
+        submission,
+        "form_submission",
+        event_id=uuid4(),
+        depth=0,
+    )
+    assert result == {
+        "action_type": action_type,
+        "success": True,
+        "skipped": True,
+        "description": "Skipped record action: submission has no linked record",
+    }
+    assert not db.mock_calls

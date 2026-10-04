@@ -39,6 +39,10 @@ class WorkflowTriggerType(str, Enum):
     APPOINTMENT_COMPLETED = "appointment_completed"
     APPOINTMENT_CANCELLED = "appointment_cancelled"
     APPOINTMENT_NO_SHOW = "appointment_no_show"
+    APPOINTMENT_REQUESTED = "appointment_requested"
+    APPOINTMENT_RESCHEDULED = "appointment_rescheduled"
+    APPOINTMENT_EXPIRED = "appointment_expired"
+    APPOINTMENT_TIME = "appointment_time"
 
 
 class RecurrenceMode(str, Enum):
@@ -60,8 +64,6 @@ class WorkflowActionType(str, Enum):
     SEND_ZAPIER_CONVERSION_EVENT = "send_zapier_conversion_event"
     UPDATE_FIELD = "update_field"
     ADD_NOTE = "add_note"
-    AUTO_MATCH_SUBMISSION = "auto_match_submission"
-    CREATE_INTAKE_LEAD = "create_intake_lead"
     PROMOTE_INTAKE_LEAD = "promote_intake_lead"
 
 

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.async_utils import run_async
 from app.core.config import settings
-from app.db.enums import JobStatus, JobType
+from app.db.enums import JobStatus, JobType, WorkflowTriggerType
 from app.db.models import Appointment, Job, Membership, User, UserIntegration
 from app.db.session import SessionLocal
 from app.services import calendar_service, google_scheduling_adapter, job_service
@@ -585,8 +585,12 @@ def resolve_conflict(
     expected_etag: str,
     actor_user_id: UUID,
     commit: bool = True,
-) -> None:
-    """Resolve a freshly observed conflict without writing Google in the request."""
+) -> WorkflowTriggerType | None:
+    """Resolve a freshly observed conflict without writing Google in the request.
+
+    Returns the appointment workflow trigger the accepted Google change implies. With
+    commit=False the caller fires it after its own commit.
+    """
     if not _v2_enabled() or resolution not in {"crm", "google"}:
         raise GoogleLinkError("Google conflict resolution is unavailable")
     if appointment.google_sync_state != "conflict" or appointment.revision != expected_revision:
@@ -689,9 +693,11 @@ def resolve_conflict(
         )
     else:
         remote_snapshot = _remote_snapshot(remote, timezone_fallback=current.client_timezone)
+    external_trigger = None
     if resolution == "google":
-        from app.services import appointment_command_service
+        from app.services import appointment_command_service, scheduling_v2_service
 
+        before = (current.status, current.scheduled_start)
         try:
             appointment_command_service.apply_external_change(
                 db,
@@ -712,6 +718,7 @@ def resolve_conflict(
         current.google_sync_state = "completed"
         current.google_sync_error = None
         current.google_conflict = None
+        external_trigger = scheduling_v2_service.external_change_trigger(*before, current)
     else:
         if remote is None or remote["status"] == "cancelled":
             db.rollback()
@@ -734,6 +741,11 @@ def resolve_conflict(
             )
     if commit:
         db.commit()
+        if external_trigger is not None:
+            from app.services import scheduling_v2_service
+
+            scheduling_v2_service.fire_appointment_workflows(db, current, external_trigger)
+    return external_trigger
 
 
 def _parse_time(value: object) -> datetime:

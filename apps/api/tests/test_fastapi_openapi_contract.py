@@ -42,6 +42,15 @@ def test_match_read_action_contract() -> None:
     ]
 
 
+def test_task_reads_declare_nullable_form_context() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    for name in ("TaskRead", "TaskListItem"):
+        fields = schemas[name]["properties"]
+        for key in ("form_submission_id", "form_id"):
+            assert fields[key]["anyOf"] == [{"type": "string", "format": "uuid"}, {"type": "null"}]
+        assert fields["form_name"]["anyOf"] == [{"type": "string"}, {"type": "null"}]
+
+
 def test_twilio_readiness_declares_toll_free_verification_status() -> None:
     properties = app.openapi()["components"]["schemas"]["TwilioRouteReadiness"]["properties"]
     assert properties["sender_type"]["anyOf"][0]["enum"] == ["10dlc", "toll_free", "unknown"]

@@ -170,6 +170,27 @@ class FormRead(FormSummary):
     default_application_email_template_id: UUID | None
 
 
+class FormRoutingUpdate(BaseModel):
+    exact_match: Literal["auto", "review"]
+    no_match: Literal["auto", "review", "off"]
+    lead_source: Literal["website", "form_embed"] | None
+    auto_create_donor: bool
+
+
+class FormRoutingRead(FormRoutingUpdate):
+    form_id: UUID
+    lead_kind: FormLeadKind
+    updated_at: datetime
+
+
+class FormWorkflowSummary(BaseModel):
+    id: UUID
+    name: str
+    trigger_type: Literal["form_submitted", "form_submission_approved", "form_submission_rejected"]
+    is_enabled: bool
+    scope: Literal["org", "personal"]
+
+
 class FormPublishResponse(BaseModel):
     id: UUID
     status: str
@@ -228,6 +249,7 @@ class FormSubmissionRead(BaseModel):
     intake_link_id: UUID | None
     intake_lead_id: UUID | None
     match_status: str
+    routing_review_step: Literal["match", "create_lead"] | None = None
     match_reason: str | None
     matched_at: datetime | None
     files: list[FormSubmissionFileRead]
@@ -290,7 +312,9 @@ class FormDraftStatusRead(BaseModel):
 
 
 FormLinkMode = Literal["shared"]
-SharedSubmissionOutcome = Literal["workflow_pending", "linked", "ambiguous_review", "lead_created"]
+SharedSubmissionOutcome = Literal[
+    "workflow_pending", "routing_review", "linked", "ambiguous_review", "lead_created"
+]
 PublicSubmissionOutcome = Literal["received"]
 
 

@@ -2,8 +2,8 @@
 
 /**
  * Appointment detail dialog shared by the Appointments list, the unified calendar and record
- * appointment cards: status, time, format, client, linked records, and the approve, cancel and
- * reschedule flows.
+ * appointment cards: status, time, format, client, linked records, and the approve, cancel,
+ * reschedule and outcome flows.
  */
 
 import { useReducer } from "react"
@@ -35,6 +35,7 @@ import {
     useAppointment,
     useApproveAppointment,
     useCancelAppointment,
+    useCompleteAppointment,
     useRescheduleAppointment,
     useRescheduleSlots,
 } from "@/lib/hooks/use-appointments"
@@ -229,6 +230,7 @@ function LoadedAppointmentDetailDialog({
     const approveMutation = useApproveAppointment()
     const rescheduleMutation = useRescheduleAppointment()
     const cancelMutation = useCancelAppointment()
+    const completeMutation = useCompleteAppointment()
     const [dialogState, dispatchDialogState] = useReducer(
         appointmentDetailDialogReducer,
         appointmentDetailDialogInitialState,
@@ -302,6 +304,19 @@ function LoadedAppointmentDetailDialog({
         cancelMutation.mutate(payload, { onSuccess: () => onOpenChange(false) })
     }
 
+    const handleComplete = (status: "completed" | "no_show") => {
+        if (!appointment.scheduling) return
+        completeMutation.mutate(
+            {
+                appointmentId,
+                status,
+                expectedRevision: appointment.scheduling.revision,
+                requestId: createSchedulingRequestId(),
+            },
+            { onSuccess: () => onOpenChange(false) },
+        )
+    }
+
     const isReschedulable = RESCHEDULABLE_STATUSES.has(appointment.status)
     const actionMode = dialogState.showRescheduleForm ? "reschedule" : dialogState.showCancelForm ? "cancel" : null
     const hasDetailActions = appointment.status === "pending" || appointment.status === "confirmed"
@@ -363,11 +378,12 @@ function LoadedAppointmentDetailDialog({
                     state={{
                         isReschedulable,
                         forms: { cancel: dialogState.showCancelForm, reschedule: dialogState.showRescheduleForm, selectedSlotStart: dialogState.overrideAvailability ? localDateTimeToIso(dialogState.overrideStart) : dialogState.selectedSlotStart, overrideReady: !dialogState.overrideAvailability || Boolean(dialogState.overrideReason.trim()) },
-                        capabilities: { reschedule: schedulingCanReschedule(appointment.scheduling), cancel: schedulingCanCancel(appointment.scheduling) },
-                        pending: { approve: approveMutation.isPending, cancel: cancelMutation.isPending, reschedule: rescheduleMutation.isPending },
+                        capabilities: { reschedule: schedulingCanReschedule(appointment.scheduling), cancel: schedulingCanCancel(appointment.scheduling), complete: Boolean(appointment.scheduling?.capabilities.can_complete) },
+                        pending: { approve: approveMutation.isPending, cancel: cancelMutation.isPending, reschedule: rescheduleMutation.isPending, complete: completeMutation.isPending ? completeMutation.variables?.status ?? null : null },
                     }}
                     handlers={{
                         approve: handleApprove,
+                        complete: handleComplete,
                         cancel: handleCancel,
                         reschedule: handleReschedule,
                         closeCancel: () => dispatchDialogState({ type: "close-cancel-form" }),
@@ -580,8 +596,8 @@ function AppointmentRescheduleForm({
 
 function AppointmentDetailActions({ appointment, state, handlers }: {
     appointment: Appointment
-    state: { isReschedulable: boolean; forms: { cancel: boolean; reschedule: boolean; selectedSlotStart: string | null; overrideReady: boolean }; capabilities: { reschedule: boolean; cancel: boolean }; pending: { approve: boolean; cancel: boolean; reschedule: boolean } }
-    handlers: { approve: () => void; cancel: () => void; reschedule: () => void; closeCancel: () => void; closeReschedule: () => void; openCancel: () => void; openReschedule: () => void }
+    state: { isReschedulable: boolean; forms: { cancel: boolean; reschedule: boolean; selectedSlotStart: string | null; overrideReady: boolean }; capabilities: { reschedule: boolean; cancel: boolean; complete: boolean }; pending: { approve: boolean; cancel: boolean; reschedule: boolean; complete: "completed" | "no_show" | null } }
+    handlers: { approve: () => void; complete: (status: "completed" | "no_show") => void; cancel: () => void; reschedule: () => void; closeCancel: () => void; closeReschedule: () => void; openCancel: () => void; openReschedule: () => void }
 }) {
     if (state.forms.reschedule) {
         return (
@@ -643,6 +659,26 @@ function AppointmentDetailActions({ appointment, state, handlers }: {
                 >
                     Reschedule appointment
                 </Button>
+            )}
+            {state.capabilities.complete && (
+                <>
+                    <Button
+                        variant="outline"
+                        onClick={() => handlers.complete("no_show")}
+                        disabled={state.pending.complete !== null}
+                    >
+                        {state.pending.complete === "no_show" && <Loader2Icon className="size-4 mr-2 animate-spin" />}
+                        No-show
+                    </Button>
+                    <Button
+                        variant="success"
+                        onClick={() => handlers.complete("completed")}
+                        disabled={state.pending.complete !== null}
+                    >
+                        {state.pending.complete === "completed" && <Loader2Icon className="size-4 mr-2 animate-spin" />}
+                        Completed
+                    </Button>
+                </>
             )}
             {appointment.status === "pending" && (
                 <Button
