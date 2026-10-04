@@ -10,7 +10,11 @@ Every email template editor (org and personal templates, the platform library, p
 
 Existing templates are not rewritten. A template with no `body_design` opens as one Custom HTML node that holds the stored `body`. When the document is still exactly that one node, saving writes the original HTML unchanged. "Convert to blocks" parses the HTML into editor nodes as a new draft, shows the original and converted renders side by side, and changes production only when the user publishes.
 
-Preview calls a server endpoint that runs draft content through the real composition path (variable rendering, signature, unsubscribe footer), optionally with a real record's variables, and shows the result in a sandboxed iframe.
+Preview calls a server endpoint that runs draft content through the real composition path (variable rendering, signature, unsubscribe footer), optionally with a real record's variables, and shows the result in a sandboxed iframe. Record previews cover surrogates only and require surrogate view access. Preview never creates unsubscribe tokens. Platform library and system previews use the selected test agency, or sample organization values when none is selected.
+
+The AI builder asks the model for plain semantic HTML and converts it to blocks before saving the personal draft. When conversion fails, the draft keeps the generated HTML and opens as one Custom HTML node. The user still reviews the draft in the studio before publishing.
+
+Images are inserted by https URL or as a variable source such as `{{org_logo_url}}`. The editor has no upload endpoint.
 
 ## Considered Options
 
