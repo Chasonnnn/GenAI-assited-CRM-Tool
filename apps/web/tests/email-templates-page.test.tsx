@@ -14,7 +14,6 @@ import { ApiError } from "@/lib/api"
 
 const mockUseAuth = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
-const mockRichTextEditorProps = vi.fn()
 const mockUseEmailTemplates = vi.fn()
 const mockCreateEmailTemplate = vi.fn()
 const mockCopyTemplateFromLibrary = vi.fn()
@@ -306,17 +305,9 @@ vi.mock("@/lib/hooks/use-signature", () => ({
     useOrgSignaturePreview: () => ({ data: { html: "<div>Org Signature</div>" }, isLoading: false }),
 }))
 
-vi.mock("@/components/rich-text-editor", () => ({
-    RichTextEditor: function MockRichTextEditor(props: Record<string, unknown>) {
-        mockRichTextEditorProps(props)
-        return <div data-testid="rich-text-editor" />
-    },
-}))
-
 describe("EmailTemplatesPage", () => {
     beforeEach(() => {
         document.documentElement.classList.remove("dark")
-        mockRichTextEditorProps.mockClear()
         mockUseEmailTemplates.mockClear()
         mockCreateEmailTemplate.mockReset()
         mockCopyTemplateFromLibrary.mockReset()
