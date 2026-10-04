@@ -115,6 +115,7 @@ def test_cli_organization_discovery_preserves_search_and_pagination(cli_api, db)
                 "name": "Email draft",
                 "subject": "Hello",
                 "body": "<p>Review</p>",
+                "body_design": None,
                 "from_email": None,
                 "category": "intake",
             },
