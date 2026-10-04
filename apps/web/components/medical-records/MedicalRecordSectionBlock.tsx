@@ -160,23 +160,11 @@ export function MedicalRecordSectionBlock({
                 tone === "scheduled" && "bg-sky-50/70 dark:bg-sky-950/25",
             )}
         >
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
                 <h4 className="mr-auto flex items-center gap-2 text-sm font-medium">
                     {config.icon}
                     {config.title}
                 </h4>
-                {selected && mode.kind !== "new" && (
-                    <RecordSelector
-                        config={config}
-                        records={records}
-                        selected={selected}
-                        onSelect={(record) => {
-                            setSelectedId(record.id)
-                            setShowLog(false)
-                            if (mode.kind === "prompt") setMode({ kind: "view" })
-                        }}
-                    />
-                )}
                 {archived && canEdit && mode.kind === "view" && onRestore && (
                     <Button
                         type="button"
@@ -205,6 +193,21 @@ export function MedicalRecordSectionBlock({
                     </Button>
                 )}
             </div>
+
+            {selected && mode.kind !== "new" && (
+                <div>
+                    <RecordSelector
+                        config={config}
+                        records={records}
+                        selected={selected}
+                        onSelect={(record) => {
+                            setSelectedId(record.id)
+                            setShowLog(false)
+                            if (mode.kind === "prompt") setMode({ kind: "view" })
+                        }}
+                    />
+                </div>
+            )}
 
             {mode.kind === "new" ? (
                 <NewRecordForm
@@ -343,6 +346,8 @@ function FieldValue({
             onSave={(value) => onFieldSave(record, field.key, value)}
             label={label}
             placeholder={field.placeholder}
+            className="min-w-0 wrap-anywhere"
+            displayClassName="min-w-0 max-w-full text-left"
             {...(field.type ? { type: field.type } : {})}
             {...(field.key === "state"
                 ? { validate: (value: string) => (value && value.length !== 2 ? "Use 2-letter code" : null) }
@@ -607,8 +612,11 @@ function NewRecordForm({
             setError(saveError instanceof Error ? saveError.message : "Couldn't save the record. Try again.")
             return
         }
+        const current = records.find((record) => record.status === "current")
         if (effectiveDate > today) {
             toast.success(`${config.title}: scheduled for ${formatRecordDate(effectiveDate)}`)
+        } else if (current?.effective_date && effectiveDate < current.effective_date) {
+            toast.success(`${config.title}: saved as a past record`)
         } else if (isFirst) {
             toast.success(`${config.title} added`)
         } else {
