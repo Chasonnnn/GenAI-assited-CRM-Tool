@@ -1,12 +1,14 @@
 "use client"
 
-import type { ReactNode } from "react"
+import type { MouseEvent, PointerEvent as ReactPointerEvent, RefObject } from "react"
 import { CircleCheckIcon, PlusIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import type { WorkflowEditorController, WorkflowEditorSelection } from "@/lib/workflows/use-workflow-editor"
+import type { WorkflowTestRunController } from "@/lib/workflows/use-workflow-test-run"
 import {
     WORKFLOW_SUBJECT_PLURAL_LABELS,
+    getActionValidationError,
     describeAppointmentTiming,
     getAppointmentTypeNames,
     getConditionFieldLabel,
@@ -22,7 +24,9 @@ import {
     type EditableAction,
 } from "@/components/automation/workflow-editor/shared"
 import { cn } from "@/lib/utils"
-import { NodeIcon, getActionMeta, getTriggerIcon, type ActionTone } from "./node-meta"
+import { getActionMeta, getTriggerIcon } from "./node-meta"
+import type { StepDrag } from "./use-step-drag"
+import { CriterionLine, NODE_WIDTH_CLASS, WorkflowNode } from "./workflow-node"
 
 type CanvasOptions = WorkflowEditorController["options"]
 type CanvasState = WorkflowEditorController["state"]
@@ -67,9 +71,10 @@ function getTriggerCriteria(state: CanvasState, options: CanvasOptions): string[
     return lines
 }
 
-function getConditionSummary(state: CanvasState, options: CanvasOptions): string[] {
-    return state.conditions.flatMap((condition) => {
-        if (!condition.field) return []
+/** One line per filter, in filter order; blank filters give null so results stay aligned. */
+function getConditionSummary(state: CanvasState, options: CanvasOptions): (string | null)[] {
+    return state.conditions.map((condition) => {
+        if (!condition.field) return null
         const operator =
             options.conditionOperators.find((option) => option.value === condition.operator)?.label ?? condition.operator
         const choices = options.getConditionOptions(condition.field)
@@ -78,7 +83,7 @@ function getConditionSummary(state: CanvasState, options: CanvasOptions): string
             .filter(Boolean)
             .map((item) => choices?.find((option) => option.value === item)?.label ?? item)
             .join(", ")
-        return [[getConditionFieldLabel(condition.field), operator.toLowerCase(), value].filter(Boolean).join(" ")]
+        return [getConditionFieldLabel(condition.field), operator.toLowerCase(), value].filter(Boolean).join(" ")
     })
 }
 
@@ -126,85 +131,77 @@ function getActionSummary(action: EditableAction, options: CanvasOptions, state:
     }
 }
 
-/** Small tag fixed to a node's top-left corner, as in the reference ("When this happens"). */
-function NodeTag({ children }: { children: ReactNode }) {
-    return (
-        <span className="absolute -top-2.5 left-2.5 z-10 rounded border border-border bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">
-            {children}
-        </span>
-    )
-}
-
-function Connector({ tall = false }: { tall?: boolean }) {
-    return <span aria-hidden="true" className={cn("block w-px bg-border", tall ? "h-12" : "h-8")} />
-}
-
-function NodeCard({
-    selected,
-    onSelect,
-    label,
-    tag,
-    children,
-    trailing,
+/** Line between steps with an insert button, or the drop slot while a step is dragged over it. */
+function Connector({
+    slot,
+    drag,
+    lit,
+    onInsert,
+    insertLabel,
 }: {
-    selected: boolean
-    onSelect: () => void
-    label: string
-    tag?: string
-    children: ReactNode
-    trailing?: ReactNode
+    slot: number
+    drag: StepDrag | null
+    lit: boolean
+    onInsert: (slot: number) => void
+    insertLabel: string
 }) {
-    return (
-        <div className="group/node relative w-72 max-w-full">
-            {tag ? <NodeTag>{tag}</NodeTag> : null}
-            <Button
-                unstyled
-                type="button"
-                aria-label={label}
-                aria-pressed={selected}
-                onClick={onSelect}
-                className={cn(
-                    "w-full rounded-lg border border-border bg-card text-left shadow-[0_1px_2px_rgb(0_0_0/0.04)] outline-none transition-[box-shadow,border-color] hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                    selected && "border-primary/60 ring-2 ring-primary/15",
-                )}
-            >
-                {children}
-            </Button>
-            {trailing}
-        </div>
-    )
-}
-
-function NodeTitle({
-    icon,
-    tone,
-    title,
-    subtitle,
-}: {
-    icon: React.ElementType
-    tone: ActionTone
-    title: string
-    subtitle?: string | null
-}) {
-    return (
-        <div className="flex items-start gap-2 px-3 pt-3 pb-2.5">
-            <NodeIcon icon={icon} tone={tone} size="sm" className="mt-px" />
-            <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium">{title}</p>
-                {subtitle ? <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p> : null}
+    if (drag && drag.slot === slot) {
+        return (
+            <div className="flex flex-col items-center" aria-hidden="true">
+                <span className="block h-4 w-px bg-primary/40" />
+                <div
+                    className={cn(
+                        "flex h-12 items-center justify-center rounded-xl border border-dashed border-primary/50 bg-primary/5 text-xs font-medium text-primary animate-in fade-in-0 zoom-in-95 motion-reduce:animate-none",
+                        NODE_WIDTH_CLASS,
+                    )}
+                >
+                    {drag.label}
+                </div>
+                <span className="block h-4 w-px bg-primary/40" />
             </div>
+        )
+    }
+    const line = cn("block w-px flex-1", lit ? "bg-emerald-500/60" : "bg-border")
+    return (
+        <div className="group/connector flex h-14 flex-col items-center">
+            <span aria-hidden="true" className={line} />
+            <Button
+                size="icon-sm"
+                variant="outline"
+                aria-label={insertLabel}
+                className="size-5 shrink-0 rounded-full bg-card text-muted-foreground opacity-0 transition-opacity group-hover/connector:opacity-100 hover:text-foreground focus-visible:opacity-100 [&_svg]:size-3"
+                onClick={() => onInsert(slot)}
+            >
+                <PlusIcon aria-hidden="true" />
+            </Button>
+            <span aria-hidden="true" className={line} />
         </div>
     )
 }
 
 export function WorkflowCanvas({
     controller,
+    testRun,
+    drag,
+    canvasRef,
+    insetLeft,
+    insetRight,
     onSelect,
     onRequestAddAction,
+    onInsertAt,
+    onStepPointerDown,
 }: {
     controller: WorkflowEditorController
+    testRun: WorkflowTestRunController
+    drag: StepDrag | null
+    canvasRef: RefObject<HTMLDivElement | null>
+    /** Space kept clear for floating panels, so steps center in the visible area. */
+    insetLeft: string
+    insetRight: string
     onSelect: (selection: WorkflowEditorSelection) => void
     onRequestAddAction: () => void
+    onInsertAt: (slot: number) => void
+    onStepPointerDown: (index: number, label: string, event: ReactPointerEvent) => void
 }) {
     const { state, options, selection, handlers } = controller
     const { triggerType, subjectType, conditions, conditionLogic, actions } = state
@@ -212,103 +209,143 @@ export function WorkflowCanvas({
     const triggerLabel = triggerType
         ? options.triggerTypeOptions.find((option) => option.value === triggerType)?.label ?? getTriggerLabel(triggerType)
         : "Choose a trigger"
-    const criteria = [...getTriggerCriteria(state, options), ...getConditionSummary(state, options)]
+    const triggerCriteria = getTriggerCriteria(state, options)
+    const conditionLines = getConditionSummary(state, options)
+    const hasCriteria = triggerCriteria.length > 0 || conditionLines.some(Boolean)
     const matchLabel =
         conditions.length > 1 ? (conditionLogic === "AND" ? "Records matching all filters" : "Records matching any filter") : null
+    const result = testRun.run && !testRun.isStale ? testRun.run.result : null
+    const stepStates = result ? testRun.stepStates : null
+    const actionLabel = (actionType: string) =>
+        actionType
+            ? options.actionTypeOptions.find((option) => option.value === actionType)?.label ?? actionType
+            : "Choose an action"
+
+    const deselectOnBackground = (event: MouseEvent) => {
+        if (event.target === event.currentTarget) onSelect({ kind: "none" })
+    }
 
     return (
         <div
+            ref={canvasRef}
             data-testid="workflow-canvas"
-            className="relative min-h-0 flex-1 overflow-auto rounded-lg bg-background [background-image:radial-gradient(var(--border)_1px,transparent_1px)] [background-size:16px_16px]"
+            onClick={deselectOnBackground}
+            className="absolute inset-0 overflow-auto bg-muted/30 [background-image:radial-gradient(var(--border)_1px,transparent_1px)] [background-size:18px_18px] dark:bg-background"
         >
-            <div className="flex min-h-full w-full flex-col items-center px-4 pt-12 pb-16">
-                <NodeCard
-                    tag="When this happens"
+            <div
+                onClick={deselectOnBackground}
+                style={{ paddingLeft: insetLeft, paddingRight: insetRight }}
+                className="flex min-h-full min-w-max flex-col items-center pt-14 pb-24 transition-[padding] duration-200 motion-reduce:transition-none"
+            >
+                <WorkflowNode
+                    icon={TriggerIcon}
+                    tone="violet"
+                    typeLabel="Trigger"
+                    tag="When"
+                    ariaLabel="Trigger step"
                     selected={selection.kind === "trigger"}
                     onSelect={() => onSelect({ kind: "trigger" })}
-                    label="Trigger step"
-                >
-                    <NodeTitle
-                        icon={TriggerIcon}
-                        tone="violet"
-                        title={triggerLabel}
-                        subtitle={
-                            state.isAppointmentTrigger
-                                ? `Runs on linked ${WORKFLOW_SUBJECT_PLURAL_LABELS[state.actionSubjectType].toLowerCase()}`
-                                : `Runs for ${WORKFLOW_SUBJECT_PLURAL_LABELS[subjectType].toLowerCase()}`
-                        }
-                    />
-                    <div className="border-t border-border px-3 py-2.5">
-                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                            Enrollment criteria
-                        </p>
-                        {criteria.length > 0 ? (
-                            <ul className="mt-1 space-y-0.5 text-[11px]">
-                                {matchLabel ? <li className="text-muted-foreground">{matchLabel}:</li> : null}
-                                {/* Index keys: two filters can summarize to the same line. */}
-                                {criteria.map((line, index) => (
-                                    <li key={index} className="truncate">
-                                        {line}
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="mt-1 text-[11px]">Every matching record</p>
-                        )}
-                    </div>
-                </NodeCard>
+                    hasInput={false}
+                    title={triggerLabel}
+                    subtitle={
+                        state.isAppointmentTrigger
+                            ? `Runs on linked ${WORKFLOW_SUBJECT_PLURAL_LABELS[state.actionSubjectType].toLowerCase()}`
+                            : `Runs for ${WORKFLOW_SUBJECT_PLURAL_LABELS[subjectType].toLowerCase()}`
+                    }
+                    footer={
+                        <span className="mt-1.5 block border-t border-border pt-2 text-[11px]">
+                            <span className="block text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                                Enrollment criteria
+                            </span>
+                            {hasCriteria ? (
+                                <ul className="mt-1 space-y-0.5">
+                                    {matchLabel ? <li className="text-muted-foreground">{matchLabel}:</li> : null}
+                                    {/* Index keys: two criteria can summarize to the same line. */}
+                                    {triggerCriteria.map((line, index) => (
+                                        <CriterionLine key={`trigger-${index}`} text={line} />
+                                    ))}
+                                    {conditionLines.map((line, index) => {
+                                        if (!line) return null
+                                        const evaluated = result?.conditions_evaluated[index]
+                                        return (
+                                            <CriterionLine
+                                                key={`condition-${index}`}
+                                                text={line}
+                                                {...(evaluated
+                                                    ? { result: { passed: evaluated.result, actual: evaluated.actual } }
+                                                    : {})}
+                                            />
+                                        )
+                                    })}
+                                </ul>
+                            ) : (
+                                <span className="mt-1 block">Every matching record</span>
+                            )}
+                        </span>
+                    }
+                />
 
                 {actions.map((action, index) => {
                     const meta = getActionMeta(action.action_type)
-                    const actionLabel = action.action_type
-                        ? options.actionTypeOptions.find((option) => option.value === action.action_type)?.label ??
-                        action.action_type
-                        : "Choose an action"
-                    const summary = getActionSummary(action, options, state)
+                    const label = actionLabel(action.action_type)
                     const selected = selection.kind === "action" && selection.clientId === action.clientId
+                    const stepState = stepStates?.[index] ?? null
                     return (
-                        <div key={action.clientId} className="flex w-full flex-col items-center">
-                            <Connector tall />
-                            <NodeCard
-                                tag={index === 0 ? "Do this" : "Then"}
+                        <div key={action.clientId} className="flex flex-col items-center">
+                            <Connector
+                                slot={index}
+                                drag={drag}
+                                lit={Boolean(result?.conditions_matched) && stepState === "would_run"}
+                                onInsert={onInsertAt}
+                                insertLabel={`Insert step ${index + 1}`}
+                            />
+                            <WorkflowNode
+                                stepIndex={index}
+                                icon={meta.icon}
+                                tone={meta.tone}
+                                typeLabel={label}
+                                ariaLabel={`Action ${index + 1}: ${label}`}
                                 selected={selected}
+                                dragging={drag?.source.kind === "step" && drag.source.index === index}
                                 onSelect={() => onSelect({ kind: "action", clientId: action.clientId })}
-                                label={`Action ${index + 1}: ${actionLabel}`}
+                                onDragStart={(event) => onStepPointerDown(index, label, event)}
+                                stepState={stepState}
+                                stepOrder={index}
+                                title={getActionSummary(action, options, state) ?? (action.action_type ? `Step ${index + 1}` : "Not set up")}
+                                issue={action.action_type ? getActionValidationError(action) : null}
+                                requiresApproval={Boolean(action.requires_approval)}
                                 trailing={
                                     <Button
                                         size="icon-sm"
                                         variant="ghost"
                                         aria-label={`Remove action ${index + 1}`}
-                                        className="absolute top-1.5 right-1.5 size-6 opacity-0 transition-opacity group-hover/node:opacity-100 focus-visible:opacity-100"
+                                        className="absolute top-1.5 right-1.5 size-6 bg-card/80 opacity-0 transition-opacity group-hover/node:opacity-100 focus-visible:opacity-100"
                                         onClick={() => handlers.removeAction(index)}
                                     >
                                         <XIcon aria-hidden="true" className="size-3.5" />
                                     </Button>
                                 }
-                            >
-                                <NodeTitle icon={meta.icon} tone={meta.tone} title={actionLabel} subtitle={summary} />
-                                {action.requires_approval ? (
-                                    <div className="border-t border-border px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
-                                        Requires approval
-                                    </div>
-                                ) : null}
-                            </NodeCard>
+                            />
                         </div>
                     )
                 })}
 
-                <Connector />
+                {drag && drag.slot === actions.length ? (
+                    <Connector slot={actions.length} drag={drag} lit={false} onInsert={onInsertAt} insertLabel="Add action" />
+                ) : (
+                    <span aria-hidden="true" className="block h-8 w-px bg-border" />
+                )}
                 <Button
                     size="icon-sm"
                     variant="outline"
                     aria-label="Add action"
-                    className="size-6 rounded-full bg-card text-muted-foreground hover:text-foreground"
+                    className="size-6 rounded-full bg-card text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.06)] hover:text-foreground"
                     onClick={onRequestAddAction}
                 >
                     <PlusIcon aria-hidden="true" className="size-3.5" />
                 </Button>
-                <Connector />
-                <div className="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-[11px] text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
+                <span aria-hidden="true" className="block h-6 w-px bg-border" />
+                <div className="flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.04)]">
                     <CircleCheckIcon aria-hidden="true" className="size-3" />
                     Exit
                 </div>

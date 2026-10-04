@@ -65,6 +65,7 @@ import {
 const EMPTY_STATUS_OPTIONS: StatusOption[] = []
 
 export type WorkflowEditorSelection =
+    | { kind: "none" }
     | { kind: "trigger" }
     | { kind: "action"; clientId: string }
 
@@ -111,7 +112,10 @@ export function useWorkflowEditor({
     )
     const state = history.present
     const dispatch = (action: WorkflowBuilderAction) => dispatchHistory({ type: "edit", action, at: Date.now() })
-    const [selection, setSelection] = useState<WorkflowEditorSelection>({ kind: "trigger" })
+    // A new workflow opens on its trigger; a saved one opens on the whole canvas.
+    const [selection, setSelection] = useState<WorkflowEditorSelection>(() =>
+        workflowId === null ? { kind: "trigger" } : { kind: "none" },
+    )
     const {
         hydratedWorkflowId,
         validationError,
@@ -267,9 +271,9 @@ export function useWorkflowEditor({
         selection.kind === "action"
             ? actions.findIndex((action) => action.clientId === selection.clientId)
             : -1
-    // Removed actions fall back to the trigger panel.
+    // A removed or undone action closes the inspector.
     const effectiveSelection: WorkflowEditorSelection =
-        selection.kind === "action" && selectedActionIndex < 0 ? { kind: "trigger" } : selection
+        selection.kind === "action" && selectedActionIndex < 0 ? { kind: "none" } : selection
 
     const getConditionOptions = (field: string): SelectOption[] | null => {
         if (field === "stage_id") return stageIdOptions
@@ -354,7 +358,7 @@ export function useWorkflowEditor({
     }
     const removeAction = (index: number) => {
         dispatch({ type: "removeAction", index })
-        setSelection({ kind: "trigger" })
+        setSelection({ kind: "none" })
     }
     const moveAction = (index: number, direction: -1 | 1) => dispatch({ type: "moveAction", index, direction })
     const reorderAction = (from: number, to: number) => dispatch({ type: "reorderAction", from, to })
@@ -364,14 +368,8 @@ export function useWorkflowEditor({
         dispatch({ type: "updateAction", index, updates })
     const updateActionType = (index: number, actionType: string) => updateAction(index, buildNewAction(actionType))
 
-    const saveWorkflow = ({ isEnabled }: { isEnabled: boolean }) => {
-        const error = getWorkflowValidationError()
-        if (error) {
-            dispatch({ type: "setValidationError", value: error })
-            return
-        }
-        dispatch({ type: "setValidationError", value: null })
-
+    /** The definition as the API stores it; shared by save and the draft test run. */
+    const buildWorkflowPayload = ({ isEnabled }: { isEnabled: boolean }): WorkflowCreate => {
         const normalizedActions = normalizeEditableActionsForSave(actions).map((action) => {
             if (
                 isDonorSubject(subjectType) &&
@@ -383,7 +381,7 @@ export function useWorkflowEditor({
             return isDonorIntakeTrigger ? stripDonorPromotionOptions(action) : action
         })
 
-        const data: WorkflowCreate = {
+        return {
             name: workflowName,
             subject_type: savedSubjectType,
             trigger_type: triggerType,
@@ -395,6 +393,16 @@ export function useWorkflowEditor({
             scope: workflowScope,
             ...(workflowDescription ? { description: workflowDescription } : {}),
         }
+    }
+
+    const saveWorkflow = ({ isEnabled }: { isEnabled: boolean }) => {
+        const error = getWorkflowValidationError()
+        if (error) {
+            dispatch({ type: "setValidationError", value: error })
+            return
+        }
+        dispatch({ type: "setValidationError", value: null })
+        const data = buildWorkflowPayload({ isEnabled })
 
         if (workflowId) {
             const { subject_type: _subjectType, scope: _scope, is_enabled: _isEnabled, ...updateData } = data
@@ -537,6 +545,7 @@ export function useWorkflowEditor({
             undo,
             redo,
         },
+        buildWorkflowPayload,
         history: {
             canUndo: history.past.length > 0,
             canRedo: history.future.length > 0,

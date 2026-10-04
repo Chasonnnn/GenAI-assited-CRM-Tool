@@ -24,7 +24,7 @@ import {
     getEmailRecipientUserId,
     type EditableAction,
 } from "@/components/automation/workflow-editor/shared"
-import { EditorColumn, FieldRow, PanelCard, PanelHeading, PanelSection } from "./inspector-section"
+import { EditorColumn, FieldRow, PanelCard, PanelSection } from "./inspector-section"
 import { getActionMeta } from "./node-meta"
 
 const NOTIFICATION_RECIPIENT_LABELS: Record<string, string> = {
@@ -32,6 +32,45 @@ const NOTIFICATION_RECIPIENT_LABELS: Record<string, string> = {
     creator: "Creator",
     all_admins: "All Admins",
     host: "Appointment Host",
+}
+
+/** Move and remove controls for the selected step, shown in the inspector header. */
+export function ActionStepControls({ controller, index }: { controller: WorkflowEditorController; index: number }) {
+    const { moveAction, removeAction } = controller.handlers
+    const count = controller.state.actions.length
+    return (
+        <div className="flex items-center">
+            <Button
+                size="icon-sm"
+                variant="ghost"
+                className="size-7"
+                aria-label="Move action up"
+                disabled={index === 0}
+                onClick={() => moveAction(index, -1)}
+            >
+                <ChevronUpIcon aria-hidden="true" />
+            </Button>
+            <Button
+                size="icon-sm"
+                variant="ghost"
+                className="size-7"
+                aria-label="Move action down"
+                disabled={index >= count - 1}
+                onClick={() => moveAction(index, 1)}
+            >
+                <ChevronDownIcon aria-hidden="true" />
+            </Button>
+            <Button
+                size="icon-sm"
+                variant="destructive-ghost"
+                className="size-7"
+                aria-label="Remove action"
+                onClick={() => removeAction(index)}
+            >
+                <Trash2Icon aria-hidden="true" />
+            </Button>
+        </div>
+    )
 }
 
 export function WorkflowActionPanel({
@@ -44,51 +83,14 @@ export function WorkflowActionPanel({
     index: number
 }) {
     const { state, options, handlers } = controller
-    const { actions, actionSubjectType } = state
+    const { actionSubjectType } = state
     const { actionTypeOptions, filteredActionTypes } = options
-    const { updateActionType, removeAction, moveAction } = handlers
+    const { updateActionType } = handlers
     const meta = getActionMeta(action.action_type)
-    const actionLabel = actionTypeOptions.find((option) => option.value === action.action_type)?.label ?? "Action"
     const approvalLocked = isDonorSubject(actionSubjectType) && action.action_type === "send_message"
 
     return (
         <EditorColumn aria-label="Action settings">
-            <PanelHeading
-                title={actionLabel}
-                actions={
-                    <div className="flex items-center">
-                        <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            className="size-7"
-                            aria-label="Move action up"
-                            disabled={index === 0}
-                            onClick={() => moveAction(index, -1)}
-                        >
-                            <ChevronUpIcon aria-hidden="true" />
-                        </Button>
-                        <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            className="size-7"
-                            aria-label="Move action down"
-                            disabled={index >= actions.length - 1}
-                            onClick={() => moveAction(index, 1)}
-                        >
-                            <ChevronDownIcon aria-hidden="true" />
-                        </Button>
-                        <Button
-                            size="icon-sm"
-                            variant="destructive-ghost"
-                            className="size-7"
-                            aria-label="Remove action"
-                            onClick={() => removeAction(index)}
-                        >
-                            <Trash2Icon aria-hidden="true" />
-                        </Button>
-                    </div>
-                }
-            />
             <PanelSection title={`Step ${index + 1}`}>
                 <PanelCard icon={meta.icon} title="Action">
                     <Select

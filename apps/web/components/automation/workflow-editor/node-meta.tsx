@@ -99,6 +99,55 @@ const TONE_CLASSES: Record<ActionTone, string> = {
     slate: "bg-muted text-muted-foreground",
 }
 
+/**
+ * Canvas node colors per tone: a tinted shell around a card body, with the tone on the label,
+ * the connection dots, and the drop slot.
+ */
+export const NODE_TONE_CLASSES: Record<ActionTone, { shell: string; label: string; dot: string; slot: string }> = {
+    sky: {
+        shell: "border-sky-500/25 bg-sky-500/[0.07] dark:border-sky-400/25 dark:bg-sky-400/[0.08]",
+        label: "text-sky-700 dark:text-sky-300",
+        dot: "bg-sky-500 dark:bg-sky-400",
+        slot: "border-sky-500/50 bg-sky-500/[0.06]",
+    },
+    violet: {
+        shell: "border-violet-500/25 bg-violet-500/[0.07] dark:border-violet-400/25 dark:bg-violet-400/[0.08]",
+        label: "text-violet-700 dark:text-violet-300",
+        dot: "bg-violet-500 dark:bg-violet-400",
+        slot: "border-violet-500/50 bg-violet-500/[0.06]",
+    },
+    emerald: {
+        shell: "border-emerald-500/25 bg-emerald-500/[0.07] dark:border-emerald-400/25 dark:bg-emerald-400/[0.08]",
+        label: "text-emerald-700 dark:text-emerald-300",
+        dot: "bg-emerald-500 dark:bg-emerald-400",
+        slot: "border-emerald-500/50 bg-emerald-500/[0.06]",
+    },
+    amber: {
+        shell: "border-amber-500/30 bg-amber-500/[0.08] dark:border-amber-400/25 dark:bg-amber-400/[0.08]",
+        label: "text-amber-700 dark:text-amber-300",
+        dot: "bg-amber-500 dark:bg-amber-400",
+        slot: "border-amber-500/50 bg-amber-500/[0.06]",
+    },
+    rose: {
+        shell: "border-rose-500/25 bg-rose-500/[0.07] dark:border-rose-400/25 dark:bg-rose-400/[0.08]",
+        label: "text-rose-700 dark:text-rose-300",
+        dot: "bg-rose-500 dark:bg-rose-400",
+        slot: "border-rose-500/50 bg-rose-500/[0.06]",
+    },
+    teal: {
+        shell: "border-teal-500/25 bg-teal-500/[0.07] dark:border-teal-400/25 dark:bg-teal-400/[0.08]",
+        label: "text-teal-700 dark:text-teal-300",
+        dot: "bg-teal-500 dark:bg-teal-400",
+        slot: "border-teal-500/50 bg-teal-500/[0.06]",
+    },
+    slate: {
+        shell: "border-border bg-muted/60",
+        label: "text-muted-foreground",
+        dot: "bg-muted-foreground/60",
+        slot: "border-muted-foreground/40 bg-muted/60",
+    },
+}
+
 /** Small tinted icon chip shared by the palette and the canvas nodes. */
 export function NodeIcon({
     icon: Icon,

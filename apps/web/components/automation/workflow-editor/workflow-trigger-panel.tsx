@@ -40,7 +40,7 @@ import {
     getApplicantTypeLabel,
     isDonorLeadKind,
 } from "@/components/automation/workflow-editor/shared"
-import { DotOptionGroup, EditorColumn, FieldRow, PanelCard, PanelHeading, PanelSection } from "./inspector-section"
+import { DotOptionGroup, EditorColumn, FieldRow, PanelCard, PanelSection } from "./inspector-section"
 
 type TriggerMode = "event" | "time"
 
@@ -74,8 +74,6 @@ export function WorkflowTriggerPanel({ controller }: { controller: WorkflowEdito
 
     return (
         <EditorColumn aria-label="Triggers">
-            <PanelHeading title="Triggers" />
-
             <PanelSection title="Run this workflow">
                 <PanelCard icon={WorkflowIcon} title="Workflow run">
                     <DotOptionGroup
