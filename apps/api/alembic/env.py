@@ -9,6 +9,7 @@ from app.core.config import settings
 
 # Import the Base and models for autogenerate support
 from app.db.base import Base
+from app.schemas.medical_record import LEGACY_MEDICAL_FIELDS
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -24,6 +25,19 @@ if config.config_file_name is not None:
 
 # Set target_metadata to Base.metadata for autogenerate support
 target_metadata = Base.metadata
+
+# Flat medical columns replaced by medical_records (ADR 0006). They stay in the
+# database for rollback until the follow-up drop migration, which removes this filter.
+RETIRED_COLUMNS = frozenset(
+    (table, column) for table in ("surrogates", "donors") for column in LEGACY_MEDICAL_FIELDS
+)
+
+
+def include_object(obj, name, type_, reflected, compare_to) -> bool:
+    if type_ == "column" and reflected and compare_to is None:
+        return (obj.table.name, name) not in RETIRED_COLUMNS
+    return True
+
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -120,7 +134,9 @@ def _run_migrations_with_connection(connection) -> None:
     else:
         _ensure_alembic_version_table(connection)
 
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection, target_metadata=target_metadata, include_object=include_object
+    )
 
     with context.begin_transaction():
         context.run_migrations()

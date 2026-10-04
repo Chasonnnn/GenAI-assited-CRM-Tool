@@ -6,6 +6,12 @@ import { formatRace } from "@/lib/formatters"
 import { getSurrogateSourceLabel } from "@/lib/surrogate-source-labels"
 import type { SurrogateCaseDetailsExportView } from "@/lib/api/surrogates"
 import type { TaskListItem } from "@/lib/api/tasks"
+import type { MedicalRecord } from "@/lib/types/medical-record"
+import {
+    MEDICAL_RECORD_SECTIONS,
+    formatRecordDate,
+    sectionConfig,
+} from "@/components/medical-records/medical-record-sections"
 
 interface CaseDetailsPrintViewProps {
     data: SurrogateCaseDetailsExportView
@@ -90,8 +96,38 @@ function Row({ label, value }: { label: string; value: string }) {
     )
 }
 
+function MedicalRecordPrintSection({ record }: { record: MedicalRecord }) {
+    const config = sectionConfig(record.section)
+    const rows: ReactNode[] = []
+    for (const field of config.fields) {
+        if (field.key === "address_line2" || field.cityStateZip) continue
+        if (field.key === "address_line1") {
+            rows.push(
+                <Row
+                    key="address"
+                    label="Address"
+                    value={formatAddress([
+                        record.address_line1,
+                        record.address_line2,
+                        record.city,
+                        record.state,
+                        record.postal,
+                    ])}
+                />,
+            )
+            continue
+        }
+        const value = field.type === "date" ? formatRecordDate(record[field.key]) : record[field.key]
+        rows.push(<Row key={field.key} label={field.label} value={display(value)} />)
+    }
+    return <Section title={config.title}>{rows}</Section>
+}
+
 export function CaseDetailsPrintView({ data }: CaseDetailsPrintViewProps) {
     const surrogate = data.surrogate
+    const medicalRecords = MEDICAL_RECORD_SECTIONS.flatMap((config) =>
+        data.medical_records.filter((record) => record.section === config.key),
+    )
     const bmi = computeBmi(surrogate.height_ft, surrogate.weight_lb ?? null)
     const { overdue, upcoming } = taskGroups(data.tasks)
 
@@ -125,96 +161,9 @@ export function CaseDetailsPrintView({ data }: CaseDetailsPrintViewProps) {
                             <Row label="BMI" value={bmi !== null ? String(bmi) : EMPTY_VALUE_TEXT} />
                         </Section>
 
-                        <Section title="Insurance Information">
-                            <Row label="Company" value={display(surrogate.insurance_company)} />
-                            <Row label="Plan" value={display(surrogate.insurance_plan_name)} />
-                            <Row label="Policy #" value={display(surrogate.insurance_policy_number)} />
-                            <Row label="Member ID" value={display(surrogate.insurance_member_id)} />
-                            <Row label="Group #" value={display(surrogate.insurance_group_number)} />
-                            <Row label="Phone" value={display(surrogate.insurance_phone)} />
-                            <Row label="Subscriber Name" value={display(surrogate.insurance_subscriber_name)} />
-                            <Row
-                                label="Subscriber DOB"
-                                value={formatDateOrDash(surrogate.insurance_subscriber_dob)}
-                            />
-                        </Section>
-
-                        <Section title="Medical Information">
-                            <Row label="IVF Clinic" value={display(surrogate.clinic_name)} />
-                            <Row
-                                label="IVF Address"
-                                value={formatAddress([
-                                    surrogate.clinic_address_line1,
-                                    surrogate.clinic_address_line2,
-                                    surrogate.clinic_city,
-                                    surrogate.clinic_state,
-                                    surrogate.clinic_postal,
-                                ])}
-                            />
-                            <Row label="IVF Phone" value={display(surrogate.clinic_phone)} />
-                            <Row label="IVF Email" value={display(surrogate.clinic_email)} />
-
-                            <Row
-                                label="Monitoring Clinic"
-                                value={display(surrogate.monitoring_clinic_name)}
-                            />
-                            <Row
-                                label="Monitoring Address"
-                                value={formatAddress([
-                                    surrogate.monitoring_clinic_address_line1,
-                                    surrogate.monitoring_clinic_address_line2,
-                                    surrogate.monitoring_clinic_city,
-                                    surrogate.monitoring_clinic_state,
-                                    surrogate.monitoring_clinic_postal,
-                                ])}
-                            />
-                            <Row
-                                label="Monitoring Phone"
-                                value={display(surrogate.monitoring_clinic_phone)}
-                            />
-                            <Row
-                                label="Monitoring Email"
-                                value={display(surrogate.monitoring_clinic_email)}
-                            />
-
-                            <Row label="OB Provider" value={display(surrogate.ob_provider_name)} />
-                            <Row label="OB Clinic" value={display(surrogate.ob_clinic_name)} />
-                            <Row
-                                label="OB Address"
-                                value={formatAddress([
-                                    surrogate.ob_address_line1,
-                                    surrogate.ob_address_line2,
-                                    surrogate.ob_city,
-                                    surrogate.ob_state,
-                                    surrogate.ob_postal,
-                                ])}
-                            />
-                            <Row label="OB Phone" value={display(surrogate.ob_phone)} />
-                            <Row label="OB Email" value={display(surrogate.ob_email)} />
-
-                            <Row
-                                label="Delivery Hospital"
-                                value={display(surrogate.delivery_hospital_name)}
-                            />
-                            <Row
-                                label="Delivery Address"
-                                value={formatAddress([
-                                    surrogate.delivery_hospital_address_line1,
-                                    surrogate.delivery_hospital_address_line2,
-                                    surrogate.delivery_hospital_city,
-                                    surrogate.delivery_hospital_state,
-                                    surrogate.delivery_hospital_postal,
-                                ])}
-                            />
-                            <Row
-                                label="Delivery Phone"
-                                value={display(surrogate.delivery_hospital_phone)}
-                            />
-                            <Row
-                                label="Delivery Email"
-                                value={display(surrogate.delivery_hospital_email)}
-                            />
-                        </Section>
+                        {medicalRecords.map((record) => (
+                            <MedicalRecordPrintSection key={record.id} record={record} />
+                        ))}
                     </div>
 
                     <div className="space-y-4">

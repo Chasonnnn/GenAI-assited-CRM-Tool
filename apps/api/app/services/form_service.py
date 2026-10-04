@@ -33,8 +33,8 @@ from app.services.attachment_service import (
 from app.services.form_submission_service import (
     DEFAULT_MAX_FILE_COUNT,
     DEFAULT_MAX_FILE_SIZE_BYTES,
+    FORM_SURROGATE_FIELD_TYPES,
     REQUIRED_SHARED_INTAKE_SURROGATE_FIELDS,
-    SURROGATE_FIELD_TYPES,
     flatten_fields,
     parse_schema,
 )
@@ -780,7 +780,7 @@ def set_field_mappings(
         allowed_fields = (
             DONOR_MAPPING_FIELD_TYPES
             if form.lead_kind != FormLeadKind.SURROGATE.value
-            else SURROGATE_FIELD_TYPES
+            else FORM_SURROGATE_FIELD_TYPES
         )
         if surrogate_field not in allowed_fields:
             target_name = "donor" if form.lead_kind != FormLeadKind.SURROGATE.value else "surrogate"

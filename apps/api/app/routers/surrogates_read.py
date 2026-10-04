@@ -14,6 +14,7 @@ from app.core.security import decode_export_token
 from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import AuditEventType, Role, SurrogateSource
 from app.schemas.auth import UserSession
+from app.schemas.medical_record import MedicalRecordRead
 from app.schemas.surrogate import (
     SurrogateActivityRead,
     SurrogateActivityResponse,
@@ -26,6 +27,7 @@ from app.schemas.task import TaskListItem
 from app.services import (
     analytics_shared,
     intelligent_suggestions_service,
+    medical_record_service,
     org_service,
     permission_policy_service,
     permission_service,
@@ -42,6 +44,7 @@ export_router = APIRouter()
 
 class SurrogateCaseDetailsExportView(BaseModel):
     surrogate: SurrogateRead
+    medical_records: list[MedicalRecordRead]
     activities: list[SurrogateActivityRead]
     tasks: list[TaskListItem]
     show_pregnancy: bool
@@ -617,8 +620,12 @@ def get_surrogate_export_view(
     task_context = task_service.get_task_context(db, org_uuid, tasks)
     task_items = [task_service.to_task_list_item(task, task_context) for task in tasks]
 
+    medical_records = medical_record_service.list_records(
+        db, medical_record_service.RecordOwner.for_surrogate(surrogate)
+    ).records
     return SurrogateCaseDetailsExportView(
         surrogate=surrogate_read,
+        medical_records=[record for record in medical_records if record.status == "current"],
         activities=activities,
         tasks=task_items,
         show_pregnancy=show_pregnancy,

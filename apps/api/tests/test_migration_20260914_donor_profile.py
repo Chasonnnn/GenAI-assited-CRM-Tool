@@ -33,7 +33,6 @@ def test_profile_migration_upgrade_and_downgrade(db):
         "college",
         "nicotine",
         "infectious_disease",
-        "insurance_policy_number",
         "date_of_birth",
     ):
         assert isinstance(Donor.__table__.c[field].type, EncryptedString | EncryptedDate)
