@@ -100,6 +100,8 @@ WORKFLOW_MAINTENANCE_FALLBACK_ENABLED = _env_flag_enabled(
 WORKFLOW_MAINTENANCE_FALLBACK_INTERVAL_SECONDS = int(
     os.getenv("WORKFLOW_MAINTENANCE_FALLBACK_INTERVAL_SECONDS", "3600")
 )
+NOTIFICATION_DIGEST_ENABLED = _env_flag_enabled(os.getenv("NOTIFICATION_DIGEST_ENABLED"))
+NOTIFICATION_DIGEST_INTERVAL_SECONDS = int(os.getenv("NOTIFICATION_DIGEST_INTERVAL_SECONDS", "900"))
 WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED = _env_flag_enabled(
     os.getenv("WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED"),
     default=False,
@@ -487,6 +489,28 @@ def maybe_schedule_workflow_maintenance_jobs(
         jobs_created,
         duplicates_skipped,
     )
+    return now
+
+
+def maybe_schedule_notification_digest_jobs(
+    db,
+    *,
+    now: datetime,
+    last_run_at: datetime | None,
+) -> datetime | None:
+    """Queue each organization's daily digest job once its morning send window opens."""
+    if not NOTIFICATION_DIGEST_ENABLED:
+        return last_run_at
+
+    interval_seconds = max(1, NOTIFICATION_DIGEST_INTERVAL_SECONDS)
+    if last_run_at and now < (last_run_at + timedelta(seconds=interval_seconds)):
+        return last_run_at
+
+    from app.services import notification_digest_service
+
+    scheduled = notification_digest_service.schedule_due_digest_jobs(db, now)
+    if scheduled:
+        logger.info("Notification digest jobs scheduled (organizations=%s)", scheduled)
     return now
 
 
@@ -954,6 +978,7 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
     last_workflow_sweep_schedule: datetime | None = None
     last_workflow_maintenance_schedule: datetime | None = None
     last_workflow_approval_expiry_schedule: datetime | None = None
+    last_notification_digest_schedule: datetime | None = None
     email_delivery_worker_id = (
         f"{os.getenv('HOSTNAME', 'worker')}:{os.getpid()}:{secrets.token_hex(4)}"
     )
@@ -1116,6 +1141,15 @@ async def worker_loop(stop_event: asyncio.Event | None = None) -> None:
                     )
                 except Exception:
                     logger.exception("Workflow approval expiry fallback scheduling failed")
+
+                try:
+                    last_notification_digest_schedule = maybe_schedule_notification_digest_jobs(
+                        db,
+                        now=now,
+                        last_run_at=last_notification_digest_schedule,
+                    )
+                except Exception:
+                    logger.exception("Notification digest scheduling failed")
 
                 if now - last_session_cleanup >= timedelta(
                     seconds=SESSION_CLEANUP_INTERVAL_SECONDS

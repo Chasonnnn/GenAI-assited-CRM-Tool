@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, render } from "@testing-library/react"
+import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 
 import { useNotificationSocket } from "@/lib/hooks/use-notification-socket"
 import { getWebSocketUrl } from "@/lib/websocket-url"
 
+// A stable user keeps the connect effect from re-running on every render.
+const authState = vi.hoisted(() => ({ user: { id: "user-1" } }))
+
 vi.mock("@/lib/auth-context", () => ({
-    useAuth: () => ({ user: { id: "user-1" } }),
+    useAuth: () => authState,
 }))
 
 vi.mock("@/lib/websocket-url", () => ({
@@ -44,7 +48,9 @@ class MockWebSocket {
     }
 }
 
-function NotificationSocketHarness() {
+function NotificationSocketHarness({ onClient }: { onClient?: (client: QueryClient) => void }) {
+    const client = useQueryClient()
+    onClient?.(client)
     useNotificationSocket()
     return null
 }
@@ -70,6 +76,30 @@ describe("useNotificationSocket", () => {
 
         expect(getWebSocketUrl).toHaveBeenCalledWith("/ws/notifications")
         expect(ws.url).toBe("ws://127.0.0.1:8000/ws/notifications")
+    })
+
+    it("writes pushed counts to the notification count query", () => {
+        let client: QueryClient | undefined
+        render(<NotificationSocketHarness onClient={(value) => { client = value }} />)
+        const ws = MockWebSocket.instances[0]
+        if (!ws || !client) {
+            throw new Error("Harness did not mount")
+        }
+
+        act(() => {
+            ws.onopen?.()
+            ws.onmessage?.({
+                data: JSON.stringify({
+                    type: "count_update",
+                    data: { action_count: 2, updates_unread: 5 },
+                }),
+            })
+        })
+
+        expect(client.getQueryData(["notifications", "count"])).toEqual({
+            action_count: 2,
+            updates_unread: 5,
+        })
     })
 
     it("does not reconnect after an auth-required close", () => {

@@ -139,7 +139,7 @@ function ToastViewport() {
                 ) : null}
               </ToastPrimitive.Content>
               <ToastPrimitive.Close
-                aria-label="Dismiss notification"
+                aria-label="Dismiss"
                 className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 <XIcon className="size-4" aria-hidden="true" />

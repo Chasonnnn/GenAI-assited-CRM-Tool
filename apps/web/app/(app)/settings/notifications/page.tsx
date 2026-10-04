@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
-import { Bell, BellOff, AlertTriangle, CheckCircle2, Loader2, FolderOpen, RefreshCw, ArrowRightLeft, ListChecks, CheckSquare, Calendar, Mail, Workflow } from "lucide-react"
+import { Bell, BellOff, AlertTriangle, CheckCircle2, Loader2, FolderOpen, RefreshCw, ArrowRightLeft, ListChecks, CheckSquare, Calendar, Mail, Newspaper, Workflow } from "lucide-react"
 import { toast } from "@/components/ui/toast"
 import { useState } from "react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
@@ -119,7 +119,7 @@ function BrowserNotificationsCard() {
     )
 }
 
-type EmailNotificationSettingKey = "email_workflow_notifications"
+type EmailNotificationSettingKey = "email_workflow_notifications" | "email_daily_digest"
 type InAppNotificationSettingKey = Exclude<keyof NotificationSettings, EmailNotificationSettingKey>
 
 const EMAIL_NOTIFICATION_TYPES: Array<{
@@ -131,6 +131,11 @@ const EMAIL_NOTIFICATION_TYPES: Array<{
         key: "email_workflow_notifications",
         icon: Workflow,
         title: "Workflow Notifications",
+    },
+    {
+        key: "email_daily_digest",
+        icon: Newspaper,
+        title: "Daily Digest",
     },
 ]
 

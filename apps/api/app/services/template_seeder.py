@@ -680,10 +680,11 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
             condition_copy = condition.copy()
             stage_slugs = condition_copy.pop("stage_slugs", None)
             if stage_slugs:
-                if any(slug not in stage_map for slug in stage_slugs):
+                stages = [stage_map.get(slug) for slug in stage_slugs]
+                if any(stage is None for stage in stages):
                     missing_condition_stage = True
                     break
-                condition_copy["value"] = [str(stage_map[slug].id) for slug in stage_slugs]
+                condition_copy["value"] = [str(stage.id) for stage in stages]
             conditions.append(condition_copy)
         if missing_condition_stage:
             continue

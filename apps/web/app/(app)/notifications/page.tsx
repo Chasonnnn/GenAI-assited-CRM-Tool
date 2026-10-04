@@ -147,7 +147,7 @@ export default function NotificationsPage() {
     }
 
     const handleMarkAllRead = () => {
-        markAllRead.mutate()
+        markAllRead.mutate(undefined)
     }
 
     const getDaysOverdue = (dueDate: string) =>

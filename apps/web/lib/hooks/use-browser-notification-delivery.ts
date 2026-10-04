@@ -11,6 +11,7 @@ type BrowserNotificationSource = {
     entity_type?: string | null
     entity_id?: string | null
     type?: string | null
+    tier?: string | null
 }
 
 type ShowBrowserNotification = (
@@ -38,6 +39,8 @@ export function useBrowserNotificationDelivery({
 
     useEffect(() => {
         if (!latest?.id) return
+        // Desktop alerts are for work waiting on the user; updates stay in the panel.
+        if (latest.tier !== "action") return
         if (latest.id === lastDeliveredIdRef.current) return
         if (permission !== "granted") return
         if (typeof document === "undefined" || !document.hidden) return

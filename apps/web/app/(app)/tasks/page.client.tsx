@@ -115,6 +115,9 @@ function useTasksPageController() {
     const urlFilter = searchParams.get("filter")
     const urlFocus = searchParams.get("focus")
     const urlOwnerId = searchParams.get("owner_id")
+    // Notification links open one task (?task=) or point at one approval (?approval=).
+    const urlTaskId = searchParams.get("task")
+    const urlApprovalId = searchParams.get("approval")
     const canViewOtherOwners = ["admin", "developer"].includes(currentUser?.role || "")
     const ownerOverride = canViewOtherOwners && urlOwnerId ? urlOwnerId : null
     const focusTarget = isFocusTarget(urlFocus) ? urlFocus : null
@@ -321,6 +324,12 @@ function useTasksPageController() {
     const handleCloseEditModal = () => {
         setEditingTask(null)
         clearAIContext()
+        if (urlTaskId) {
+            const nextParams = new URLSearchParams(searchParams.toString())
+            nextParams.delete("task")
+            const nextQuery = nextParams.toString()
+            replace((nextQuery ? `/tasks?${nextQuery}` : "/tasks") as Route, { scroll: false })
+        }
     }
 
     const handleTaskToggle = async (taskId: string, isCompleted: boolean) => {
@@ -437,6 +446,7 @@ function useTasksPageController() {
 
     useTaskFocusNavigation({
         focusTarget,
+        highlightedApprovalId: urlApprovalId,
         activeView,
         isLoading,
         loadingApprovals,
@@ -456,7 +466,8 @@ function useTasksPageController() {
         currentUserId,
         deleteTaskPending: deleteTask.isPending,
         due,
-        editingTaskId: editingTask?.id ?? null,
+        editingTaskId: editingTask?.id ?? urlTaskId,
+        highlightedApprovalId: urlApprovalId,
         filter,
         getAssigneeLabel,
         hasError,
@@ -654,6 +665,7 @@ function TasksPageContent({ controller }: { controller: TasksPageController }) {
                 onResolvedStatusRequests={controller.refetchStatusRequests}
                 onResolvedImportApprovals={controller.refetchImportApprovals}
                 currentUserId={controller.currentUserId}
+                highlightedId={controller.highlightedApprovalId}
             />
 
             {controller.isLoading && (
