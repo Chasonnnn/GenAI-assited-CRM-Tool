@@ -19,6 +19,7 @@ from app.schemas.workflow import (
     UserWorkflowPreferenceRead,
     UserWorkflowPreferenceUpdate,
     WorkflowCreate,
+    WorkflowDraftTestRequest,
     WorkflowListItem,
     WorkflowOptions,
     WorkflowRead,
@@ -28,16 +29,9 @@ from app.schemas.workflow import (
     WorkflowUpdate,
 )
 from app.services import (
-    appointment_service,
-    attachment_service,
-    donor_service,
-    form_intake_service,
-    form_submission_service,
-    match_queries,
-    note_service,
-    surrogate_service,
     task_service,
     workflow_access,
+    workflow_dry_run_service,
     workflow_service,
 )
 from app.services.workflow_engine import engine
@@ -647,120 +641,85 @@ def test_workflow(
     if not _can_view_workflow(db, session, workflow):
         raise HTTPException(status_code=403, detail="Cannot view this workflow")
 
-    donor_subject = workflow.subject_type in workflow_service.DONOR_SUBJECT_TYPES
-    expected_entity_type = (
-        workflow.subject_type
-        if donor_subject
-        else workflow_service.TRIGGER_ENTITY_TYPES.get(workflow.trigger_type, "surrogate")
+    entity_type = _require_test_entity_type(
+        request.entity_type, workflow.subject_type, workflow.trigger_type
     )
-    entity_type = request.entity_type or expected_entity_type
-    if entity_type != expected_entity_type:
+    entity = workflow_dry_run_service.resolve_test_entity(
+        db, session, entity_type=entity_type, entity_id=request.entity_id
+    )
+    return workflow_dry_run_service.evaluate(
+        db,
+        entity,
+        conditions=workflow.conditions,
+        condition_logic=workflow.condition_logic,
+        actions=workflow.actions,
+    )
+
+
+@router.post(
+    "/test-draft",
+    response_model=WorkflowTestResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def test_workflow_draft(
+    request: WorkflowDraftTestRequest,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
+):
+    """Dry run an unsaved definition from the editor against one record."""
+    data = request.workflow
+    effective_subject_type = workflow_service.resolve_effective_workflow_subject_type(
+        db,
+        session.org_id,
+        subject_type=data.subject_type,
+        trigger_type=data.trigger_type,
+        trigger_config=data.trigger_config,
+    )
+    _require_subject_edit_access(db, session, effective_subject_type)
+    if _uses_messaging(data.actions):
+        _require_messaging_admin(session, db)
+    if request.workflow_id is not None:
+        workflow = workflow_service.get_workflow(db, request.workflow_id, session.org_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        if not _can_edit_workflow(db, session, workflow):
+            raise HTTPException(status_code=403, detail="Cannot edit this workflow")
+    elif not workflow_access.can_create(db, session, data.scope):
+        raise HTTPException(status_code=403, detail="Cannot create workflows in this scope")
+
+    try:
+        definition = workflow_service.prepare_workflow_definition(
+            db, session.org_id, session.user_id, data
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    entity_type = _require_test_entity_type(
+        request.entity_type, definition.subject_type, data.trigger_type.value
+    )
+    entity = workflow_dry_run_service.resolve_test_entity(
+        db, session, entity_type=entity_type, entity_id=request.entity_id
+    )
+    return workflow_dry_run_service.evaluate(
+        db,
+        entity,
+        conditions=definition.conditions,
+        condition_logic=data.condition_logic,
+        actions=definition.actions,
+    )
+
+
+def _require_test_entity_type(
+    requested: str | None, subject_type: str | None, trigger_type: str
+) -> str:
+    expected = workflow_dry_run_service.expected_entity_type(subject_type, trigger_type)
+    entity_type = requested or expected
+    if entity_type != expected:
         raise HTTPException(
             status_code=422,
-            detail=f"Entity type must be '{expected_entity_type}' for trigger '{workflow.trigger_type}'",
+            detail=f"Entity type must be '{expected}' for trigger '{trigger_type}'",
         )
-
-    # Get entity scoped to org
-    if donor_subject:
-        entity = donor_service.get_donor(db, session.org_id, request.entity_id)
-        if entity and entity.pipeline_entity_type != workflow.subject_type:
-            entity = None
-    elif entity_type == "surrogate":
-        entity = surrogate_service.get_surrogate(db, session.org_id, request.entity_id)
-    else:
-        if entity_type == "task":
-            entity = task_service.get_task(db, request.entity_id, session.org_id)
-        elif entity_type == "match":
-            entity = match_queries.get_match(db, request.entity_id, session.org_id)
-        elif entity_type == "appointment":
-            entity = appointment_service.get_appointment(db, request.entity_id, session.org_id)
-        elif entity_type == "note":
-            entity = note_service.get_note(db, request.entity_id, session.org_id)
-        elif entity_type == "document":
-            entity = attachment_service.get_attachment(db, session.org_id, request.entity_id)
-        elif entity_type == "form_submission":
-            entity = form_submission_service.get_submission(
-                db,
-                org_id=session.org_id,
-                submission_id=request.entity_id,
-            )
-        elif entity_type == "intake_lead":
-            entity = form_intake_service.get_intake_lead(
-                db, org_id=session.org_id, lead_id=request.entity_id
-            )
-        else:
-            raise HTTPException(status_code=422, detail="Unsupported entity type for test")
-
-    if not entity:
-        raise HTTPException(status_code=404, detail=f"{entity_type.capitalize()} not found")
-
-    _require_entity_subject_access(db, session, entity_type, entity)
-
-    # Evaluate conditions
-    conditions_evaluated = []
-    for condition in workflow.conditions:
-        field = condition.get("field")
-        operator = condition.get("operator")
-        value = condition.get("value")
-        entity_value = engine.condition_value(db, entity, field)
-
-        result = engine._evaluate_condition(operator, entity_value, value)
-        conditions_evaluated.append(
-            {
-                "field": field,
-                "operator": operator,
-                "expected": value,
-                "actual": str(entity_value),
-                "result": result,
-            }
-        )
-
-    logic = workflow.condition_logic
-    if logic == "AND":
-        conditions_matched = (
-            all(c["result"] for c in conditions_evaluated) if conditions_evaluated else True
-        )
-    else:
-        conditions_matched = (
-            any(c["result"] for c in conditions_evaluated) if conditions_evaluated else True
-        )
-
-    # Preview actions
-    actions_preview = []
-    for action in workflow.actions:
-        action_type = action.get("action_type")
-        description = f"{action_type}: "
-
-        if action_type == "send_email":
-            description += f"Send template {action.get('template_id')}"
-        elif action_type == "send_message":
-            description += f"Queue {action.get('purpose')} message"
-        elif action_type == "create_task":
-            description += f"Create task '{action.get('title')}'"
-        elif action_type == "assign_surrogate":
-            description += f"Assign to {action.get('owner_type')}:{action.get('owner_id')}"
-        elif action_type == "assign_donor":
-            description += f"Assign to {action.get('owner_type')}:{action.get('owner_id')}"
-        elif action_type == "send_notification":
-            description += f"Notify: {action.get('title')}"
-        elif action_type == "update_field":
-            description += f"Set {action.get('field')} = {action.get('value')}"
-        elif action_type == "add_note":
-            description += f"Add note: {action.get('content', '')[:50]}..."
-
-        actions_preview.append(
-            {
-                "action_type": action_type,
-                "description": description,
-            }
-        )
-
-    return WorkflowTestResponse(
-        would_trigger=True,  # We're testing directly
-        conditions_matched=conditions_matched,
-        conditions_evaluated=conditions_evaluated,
-        actions_preview=actions_preview,
-    )
+    return entity_type
 
 
 # =============================================================================

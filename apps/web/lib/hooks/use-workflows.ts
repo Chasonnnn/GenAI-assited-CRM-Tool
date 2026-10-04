@@ -13,6 +13,7 @@ import {
     duplicateWorkflow,
     publishWorkflow,
     testWorkflow,
+    testWorkflowDraft,
     getWorkflowStats,
     getWorkflowOptions,
     listExecutions,
@@ -200,6 +201,10 @@ export function useTestWorkflow() {
             entityType?: string
         }) => testWorkflow(id, entityId, entityType),
     })
+}
+
+export function useTestWorkflowDraft() {
+    return useMutation({ mutationFn: testWorkflowDraft })
 }
 
 export function useUpdateUserPreference() {
