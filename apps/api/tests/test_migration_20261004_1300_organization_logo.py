@@ -7,8 +7,8 @@ from sqlalchemy import inspect, text
 from alembic import command
 from tests.test_migration_20260928_1300_workflow_fixed_trigger_subjects import _alembic_config
 
-REVISION = "20261004_1100_organization_logo"
-PREVIOUS = "20261004_1000_drop_flat_medical_columns"
+REVISION = "20261004_1300_organization_logo"
+PREVIOUS = "20261004_1200_email_template_body_design"
 
 
 def test_organization_logo_upgrade_and_downgrade(db_engine):

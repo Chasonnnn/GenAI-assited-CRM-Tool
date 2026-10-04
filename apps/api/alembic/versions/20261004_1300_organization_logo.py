@@ -1,15 +1,15 @@
 """Add the square organization logo, independent of email signature branding.
 
-Revision ID: 20261004_1100_organization_logo
-Revises: 20261004_1000_drop_flat_medical_columns
+Revision ID: 20261004_1300_organization_logo
+Revises: 20261004_1200_email_template_body_design
 """
 
 import sqlalchemy as sa
 
 from alembic import op
 
-revision = "20261004_1100_organization_logo"
-down_revision = "20261004_1000_drop_flat_medical_columns"
+revision = "20261004_1300_organization_logo"
+down_revision = "20261004_1200_email_template_body_design"
 branch_labels = None
 depends_on = None
 
