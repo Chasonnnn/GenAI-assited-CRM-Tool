@@ -831,7 +831,7 @@ function OrganizationEmailTemplateEditor({
                         Changes stay isolated from production until you publish.
                     </p>
                 </div>
-                <TabsList aria-label="Studio view">
+                <TabsList aria-label="Studio view" className="order-last w-full md:order-none md:w-fit">
                     <TabsTrigger value="edit">Edit</TabsTrigger>
                     <TabsTrigger value="preview">Preview</TabsTrigger>
                     <TabsTrigger value="html">HTML</TabsTrigger>

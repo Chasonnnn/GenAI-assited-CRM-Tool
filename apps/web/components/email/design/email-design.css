@@ -19,6 +19,16 @@
     color: #000000;
 }
 
+/* The theme container is 600px wide; on narrow screens it fits the sheet like a mobile client. */
+.email-design-sheet .tiptap .node-container {
+    max-width: 100%;
+}
+
+/* Blocks outside the theme container (the trailing line) keep the container's inset. */
+.email-design-sheet .tiptap > :not(.node-container) {
+    padding-inline: 0.5rem;
+}
+
 .email-design-sheet .tiptap p.is-empty::before {
     color: #8a8a8a;
     content: attr(data-placeholder);

@@ -356,7 +356,7 @@ export const EmailDesignEditor = forwardRef<EmailDesignEditorHandle, EmailDesign
                             {fields}
                             <div
                                 className={cn(
-                                    "email-design-sheet rounded-sm border bg-white px-6 py-4 text-black shadow-xs",
+                                    "email-design-sheet overflow-x-auto rounded-sm border bg-white py-4 text-black shadow-xs",
                                     invalid ? "border-destructive" : "border-border",
                                 )}
                             >
