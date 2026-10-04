@@ -1,0 +1,188 @@
+{
+  "baseline_versions": {
+    "vitest": "5.0.1",
+    "coverage_v8": "5.0.1",
+    "jsdom": "29.1.1"
+  },
+  "candidate_versions": {
+    "vitest": "5.0.3",
+    "coverage_v8": "5.0.3",
+    "jsdom": "30.1.1"
+  },
+  "node": "24.18.0",
+  "pnpm": "12.9.1",
+  "workers": 4,
+  "coverage_provider": "v8",
+  "file_shuffle_seed": 20261003,
+  "cache_states": "Only filesystem transform cache was fresh or reused; OS and dependency caches remained warm.",
+  "test_files": [
+    "tests/integrations-page.test.tsx",
+    "tests/form-builder-page.test.tsx",
+    "tests/workflow-editor-page.test.tsx",
+    "tests/surrogate-detail.test.tsx",
+    "tests/donor-detail.test.tsx",
+    "tests/intended-parent-detail.test.tsx",
+    "tests/campaign-detail-page.test.tsx",
+    "tests/tasks-page.test.tsx",
+    "tests/match-detail.test.tsx",
+    "tests/api-base.test.ts",
+    "tests/formatters.test.ts",
+    "tests/select-value-labels.test.tsx",
+    "tests/rich-text-editor.test.tsx",
+    "tests/rich-text-editor-content-sync.test.tsx",
+    "tests/file-upload-zone-accessibility.test.tsx",
+    "tests/forms-shared-intake.test.tsx",
+    "tests/email-templates-page.test.tsx",
+    "tests/appointments-google-meet.test.tsx",
+    "tests/pipelines-settings-page.test.tsx",
+    "tests/assistant-rich-text.test.tsx"
+  ],
+  "runs": [
+    {
+      "variant": "baseline",
+      "repeat": 1,
+      "cache": "cold",
+      "wall_seconds": 26.9166,
+      "cpu_seconds": 95.9573,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "baseline",
+      "repeat": 1,
+      "cache": "warm",
+      "wall_seconds": 24.4711,
+      "cpu_seconds": 86.9419,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "candidate",
+      "repeat": 1,
+      "cache": "cold",
+      "wall_seconds": 22.4659,
+      "cpu_seconds": 87.2891,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "candidate",
+      "repeat": 1,
+      "cache": "warm",
+      "wall_seconds": 24.2696,
+      "cpu_seconds": 94.4739,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "baseline",
+      "repeat": 2,
+      "cache": "cold",
+      "wall_seconds": 25.561,
+      "cpu_seconds": 89.6318,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "baseline",
+      "repeat": 2,
+      "cache": "warm",
+      "wall_seconds": 30.2452,
+      "cpu_seconds": 103.5299,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "candidate",
+      "repeat": 2,
+      "cache": "cold",
+      "wall_seconds": 22.7774,
+      "cpu_seconds": 89.9769,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "candidate",
+      "repeat": 2,
+      "cache": "warm",
+      "wall_seconds": 26.1416,
+      "cpu_seconds": 96.4179,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "baseline",
+      "repeat": 3,
+      "cache": "cold",
+      "wall_seconds": 34.6108,
+      "cpu_seconds": 119.3468,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "baseline",
+      "repeat": 3,
+      "cache": "warm",
+      "wall_seconds": 33.5979,
+      "cpu_seconds": 115.4982,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "candidate",
+      "repeat": 3,
+      "cache": "cold",
+      "wall_seconds": 30.9911,
+      "cpu_seconds": 115.0584,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    },
+    {
+      "variant": "candidate",
+      "repeat": 3,
+      "cache": "warm",
+      "wall_seconds": 36.006,
+      "cpu_seconds": 121.0518,
+      "tests": 588,
+      "files": 20,
+      "source_hash": "41fe6cc8bf0b2493b9040c96a35238684ab8742e52dbe1fff1973d4b2f84460c"
+    }
+  ],
+  "summary": {
+    "baseline-cold": {
+      "median_seconds": 26.9166,
+      "min_seconds": 25.561,
+      "max_seconds": 34.6108
+    },
+    "baseline-warm": {
+      "median_seconds": 30.2452,
+      "min_seconds": 24.4711,
+      "max_seconds": 33.5979
+    },
+    "candidate-cold": {
+      "median_seconds": 22.7774,
+      "min_seconds": 22.4659,
+      "max_seconds": 30.9911
+    },
+    "candidate-warm": {
+      "median_seconds": 26.1416,
+      "min_seconds": 24.2696,
+      "max_seconds": 36.006
+    },
+    "upgrade-cold-percent-faster": 15.377870904943414,
+    "upgrade-warm-percent-faster": 13.567772737492234,
+    "candidate-warm-percent-faster-than-baseline-cold": 2.879264097248535
+  },
+  "limits": "Local representative sample; no hosted candidate CI run. Cache persistence was not adopted because warm cache timings showed no clear benefit."
+}

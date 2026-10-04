@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import tomllib
+from itertools import product
 from pathlib import Path
 
 import pytest
@@ -209,7 +210,7 @@ def test_ci_builds_every_production_image_with_deployment_inputs() -> None:
     assert "name: Production Artifacts" in workflow
 
 
-def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations() -> None:
+def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) -> None:
     workflow = CI_WORKFLOW.read_text()
     pyproject = (ROOT / "apps/api/pyproject.toml").read_text()
 
@@ -217,19 +218,56 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations() -> None:
     assert "--ignore-glob 'tests/test_migration_*.py'" in workflow
     assert "-n 4 --dist loadscope" in workflow
     assert "tests/test_migration_*.py" in workflow
-    assert "group: [parallel-1, parallel-2, serial]" in workflow
-    assert "files[shard::2]" in workflow
+    jobs = yaml.safe_load(workflow)["jobs"]
+    groups = jobs["backend-test-groups"]["strategy"]["matrix"]["group"]
+    assert groups == ["parallel-1", "parallel-2", "parallel-3", "parallel-4", "serial"]
     assert '"${test_files[@]}"' in workflow
     assert "COVERAGE_FILE: .coverage.${{ matrix.group }}" in workflow
     assert "needs: backend-test-groups" in workflow
     assert 'test "$GROUP_RESULT" = success' in workflow
     assert "uv run coverage combine" in workflow
-    assert "uv run coverage report" in workflow
+    assert "uv run coverage xml" in workflow
+    assert "uv run coverage json" in workflow
     coverage = tomllib.loads(pyproject)["tool"]["coverage"]["report"]
     assert coverage["fail_under"] > 0
 
+    # Execute the workflow's partitioner: each safe file must run exactly once.
+    command = next(
+        step["run"]
+        for step in jobs["backend-test-groups"]["steps"]
+        if step.get("name") == "Run parallel-safe tests"
+    )
+    script = re.search(r"python - <<'PYTHON'[^\n]*\n(.*?)\nPYTHON", command, re.DOTALL)
+    assert script is not None
+    safe_files = {f"tests/test_{name}.py" for name in ("a", "b", "c", "d", "e")}
+    safe_files.add("tests/nested/test_f.py")
+    for path in safe_files | {
+        "tests/test_migration_schema.py",
+        "tests/test_email_delivery_outbox.py",
+        "tests/test_ops_cli_integration.py",
+        "tests/conftest.py",
+    }:
+        file = tmp_path / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.touch()
+    selected = []
+    for group in groups[:-1]:
+        result = subprocess.run(
+            [sys.executable, "-c", script.group(1)],
+            cwd=tmp_path,
+            env={**os.environ, "TEST_GROUP": group},
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        shard = result.stdout.splitlines()
+        assert shard
+        selected.extend(shard)
+    assert set(selected) == safe_files
+    assert len(selected) == len(safe_files)
 
-def test_ci_runs_committed_outbox_tests_outside_shared_database_workers() -> None:
+
+def test_ci_isolates_global_database_assertions_from_parallel_workers() -> None:
     workflow = CI_WORKFLOW.read_text()
     parallel = workflow.split("- name: Run parallel-safe tests", 1)[1].split("- name:", 1)[0]
     serial = workflow.split("- name: Run shared-database tests serially", 1)[1].split("- name:", 1)[
@@ -238,6 +276,8 @@ def test_ci_runs_committed_outbox_tests_outside_shared_database_workers() -> Non
 
     assert "--ignore tests/test_email_delivery_outbox.py" in parallel
     assert "tests/test_email_delivery_outbox.py" in serial
+    assert "--ignore tests/test_ops_cli_integration.py" in parallel
+    assert "tests/test_ops_cli_integration.py" in serial
     assert "-n 4" not in serial
     assert "if: startsWith(matrix.group, 'parallel-')" in parallel
     assert "if: matrix.group == 'serial'" in serial
@@ -248,14 +288,30 @@ def test_ci_runs_committed_outbox_tests_outside_shared_database_workers() -> Non
 def test_ci_shards_frontend_tests_and_preserves_aggregate_gate() -> None:
     workflow = CI_WORKFLOW.read_text()
 
-    assert "shard: [1, 2]" in workflow
-    assert "pnpm test --shard=${{ matrix.shard }}/2" in workflow
-    assert "needs: [frontend-build, frontend-test-shards]" in workflow
-    assert "name: Frontend Tests" in workflow
+    jobs = yaml.safe_load(workflow)["jobs"]
+    assert jobs["frontend-test-shards"]["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert "pnpm test --shard=${{ matrix.shard }}/4" in workflow
+    assert jobs["frontend-coverage"]["needs"] == "frontend-test-shards"
+    gate = jobs["frontend-tests"]
+    assert gate["needs"] == ["frontend-build", "frontend-coverage"]
+    assert gate["name"] == "Frontend Tests"
+    assert gate["if"] == "always()"
     assert "--coverage --reporter=default --reporter=blob" in workflow
     assert "path: apps/web/.vitest/blob/*.json" in workflow
     assert "path: apps/web/.vitest/blob\n" in workflow
     assert "pnpm test --merge-reports --coverage" in workflow
+    verify = gate["steps"][0]
+    assert verify["env"] == {
+        "BUILD_RESULT": "${{ needs.frontend-build.result }}",
+        "COVERAGE_RESULT": "${{ needs.frontend-coverage.result }}",
+    }
+    for build, coverage in product(("success", "failure", "skipped", "cancelled"), repeat=2):
+        result = subprocess.run(
+            ["bash", "-e", "-c", verify["run"]],
+            env={**os.environ, "BUILD_RESULT": build, "COVERAGE_RESULT": coverage},
+            capture_output=True,
+        )
+        assert (result.returncode == 0) == (build == coverage == "success")
 
 
 def test_ci_uses_the_repository_pnpm_release() -> None:

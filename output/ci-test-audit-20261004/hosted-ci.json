@@ -1,0 +1,338 @@
+{
+  "metric": "Workflow creation to last job completion, including runner queue time. All jobs succeeded. Human review and merge availability are excluded.",
+  "baseline_runs": [
+    {
+      "run_id": 37174608098,
+      "head_sha": "5ad28d2fdc27f7c311203f99bc06b49bfb8bfe07",
+      "url": "https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37174608098",
+      "created_at": "2026-10-04T03:37:34Z",
+      "last_job_completed_at": "2026-10-04T03:43:44+00:00",
+      "seconds": 370.0,
+      "jobs": [
+        {
+          "name": "Backend FastAPI Gates",
+          "seconds": 51.0
+        },
+        {
+          "name": "Security Scans",
+          "seconds": 165.0
+        },
+        {
+          "name": "Backend Tests (parallel-1)",
+          "seconds": 205.0
+        },
+        {
+          "name": "Frontend Test Shard 1/2",
+          "seconds": 325.0
+        },
+        {
+          "name": "Lint",
+          "seconds": 173.0
+        },
+        {
+          "name": "Backend Tests (serial)",
+          "seconds": 123.0
+        },
+        {
+          "name": "Terraform Format",
+          "seconds": 7.0
+        },
+        {
+          "name": "Frontend Build",
+          "seconds": 240.0
+        },
+        {
+          "name": "Frontend Test Shard 2/2",
+          "seconds": 273.0
+        },
+        {
+          "name": "Production Artifact / web",
+          "seconds": 208.0
+        },
+        {
+          "name": "Production Artifact / api",
+          "seconds": 80.0
+        },
+        {
+          "name": "Backend Tests (parallel-2)",
+          "seconds": 277.0
+        },
+        {
+          "name": "Production Artifact / worker",
+          "seconds": 47.0
+        },
+        {
+          "name": "Ticketing Launch Gate",
+          "seconds": 77.0
+        },
+        {
+          "name": "Production Artifacts",
+          "seconds": 2.0
+        },
+        {
+          "name": "Backend Tests",
+          "seconds": 58.0
+        },
+        {
+          "name": "Frontend Tests",
+          "seconds": 37.0
+        }
+      ]
+    },
+    {
+      "run_id": 37174910646,
+      "head_sha": "f6e26a430d092ea009e03aae377e7a4ff7381620",
+      "url": "https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37174910646",
+      "created_at": "2026-10-04T03:44:14Z",
+      "last_job_completed_at": "2026-10-04T03:51:17+00:00",
+      "seconds": 423.0,
+      "jobs": [
+        {
+          "name": "Frontend Build",
+          "seconds": 145.0
+        },
+        {
+          "name": "Frontend Test Shard 1/2",
+          "seconds": 223.0
+        },
+        {
+          "name": "Ticketing Launch Gate",
+          "seconds": 69.0
+        },
+        {
+          "name": "Security Scans",
+          "seconds": 159.0
+        },
+        {
+          "name": "Lint",
+          "seconds": 108.0
+        },
+        {
+          "name": "Backend FastAPI Gates",
+          "seconds": 49.0
+        },
+        {
+          "name": "Production Artifact / worker",
+          "seconds": 46.0
+        },
+        {
+          "name": "Production Artifact / api",
+          "seconds": 90.0
+        },
+        {
+          "name": "Backend Tests (parallel-1)",
+          "seconds": 260.0
+        },
+        {
+          "name": "Terraform Format",
+          "seconds": 6.0
+        },
+        {
+          "name": "Production Artifact / web",
+          "seconds": 217.0
+        },
+        {
+          "name": "Frontend Test Shard 2/2",
+          "seconds": 269.0
+        },
+        {
+          "name": "Backend Tests (parallel-2)",
+          "seconds": 349.0
+        },
+        {
+          "name": "Backend Tests (serial)",
+          "seconds": 155.0
+        },
+        {
+          "name": "Production Artifacts",
+          "seconds": 3.0
+        },
+        {
+          "name": "Frontend Tests",
+          "seconds": 28.0
+        },
+        {
+          "name": "Backend Tests",
+          "seconds": 67.0
+        }
+      ]
+    },
+    {
+      "run_id": 37175788926,
+      "head_sha": "0687db35aaab7c2e5b41365d666486f7940a8238",
+      "url": "https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37175788926",
+      "created_at": "2026-10-04T04:01:52Z",
+      "last_job_completed_at": "2026-10-04T04:09:49+00:00",
+      "seconds": 477.0,
+      "jobs": [
+        {
+          "name": "Lint",
+          "seconds": 92.0
+        },
+        {
+          "name": "Frontend Test Shard 2/2",
+          "seconds": 209.0
+        },
+        {
+          "name": "Production Artifact / api",
+          "seconds": 97.0
+        },
+        {
+          "name": "Frontend Build",
+          "seconds": 173.0
+        },
+        {
+          "name": "Backend Tests (parallel-1)",
+          "seconds": 257.0
+        },
+        {
+          "name": "Backend Tests (serial)",
+          "seconds": 144.0
+        },
+        {
+          "name": "Terraform Format",
+          "seconds": 5.0
+        },
+        {
+          "name": "Backend FastAPI Gates",
+          "seconds": 45.0
+        },
+        {
+          "name": "Backend Tests (parallel-2)",
+          "seconds": 326.0
+        },
+        {
+          "name": "Frontend Test Shard 1/2",
+          "seconds": 228.0
+        },
+        {
+          "name": "Production Artifact / worker",
+          "seconds": 47.0
+        },
+        {
+          "name": "Security Scans",
+          "seconds": 155.0
+        },
+        {
+          "name": "Production Artifact / web",
+          "seconds": 208.0
+        },
+        {
+          "name": "Ticketing Launch Gate",
+          "seconds": 67.0
+        },
+        {
+          "name": "Production Artifacts",
+          "seconds": 2.0
+        },
+        {
+          "name": "Frontend Tests",
+          "seconds": 35.0
+        },
+        {
+          "name": "Backend Tests",
+          "seconds": 82.0
+        }
+      ]
+    }
+  ],
+  "baseline_median_seconds": 423.0,
+  "first_candidate": {
+    "run_id": 37178294086,
+    "head_sha": "0d2943db2d624d99fbf1b5d74da67376c2598a60",
+    "url": "https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37178294086",
+    "created_at": "2026-10-04T04:53:23Z",
+    "last_job_completed_at": "2026-10-04T04:59:08+00:00",
+    "seconds": 345.0,
+    "jobs": [
+      {
+        "name": "Backend FastAPI Gates",
+        "seconds": 48.0
+      },
+      {
+        "name": "Frontend Build",
+        "seconds": 197.0
+      },
+      {
+        "name": "Lint",
+        "seconds": 109.0
+      },
+      {
+        "name": "Terraform Format",
+        "seconds": 6.0
+      },
+      {
+        "name": "Ticketing Launch Gate",
+        "seconds": 73.0
+      },
+      {
+        "name": "Security Scans",
+        "seconds": 171.0
+      },
+      {
+        "name": "Frontend Test Shard 2/4",
+        "seconds": 148.0
+      },
+      {
+        "name": "Production Artifact / web",
+        "seconds": 219.0
+      },
+      {
+        "name": "Backend Tests (parallel-1)",
+        "seconds": 212.0
+      },
+      {
+        "name": "Backend Tests (serial)",
+        "seconds": 132.0
+      },
+      {
+        "name": "Production Artifact / worker",
+        "seconds": 45.0
+      },
+      {
+        "name": "Frontend Test Shard 3/4",
+        "seconds": 157.0
+      },
+      {
+        "name": "Backend Tests (parallel-2)",
+        "seconds": 193.0
+      },
+      {
+        "name": "Frontend Test Shard 1/4",
+        "seconds": 114.0
+      },
+      {
+        "name": "Production Artifact / api",
+        "seconds": 93.0
+      },
+      {
+        "name": "Frontend Test Shard 4/4",
+        "seconds": 153.0
+      },
+      {
+        "name": "Backend Tests (parallel-3)",
+        "seconds": 272.0
+      },
+      {
+        "name": "Frontend Coverage",
+        "seconds": 27.0
+      },
+      {
+        "name": "Frontend Tests",
+        "seconds": 2.0
+      },
+      {
+        "name": "Production Artifacts",
+        "seconds": 3.0
+      },
+      {
+        "name": "Backend Tests",
+        "seconds": 67.0
+      }
+    ]
+  },
+  "first_candidate_improvement_percent": 18.439716312056742,
+  "target_percent": 20,
+  "target_met_in_first_run": false,
+  "limitation": "Three observational baselines and one candidate on hosted runners; timings vary. The subsequent removal of duplicate text coverage reporting still needs a hosted run."
+}

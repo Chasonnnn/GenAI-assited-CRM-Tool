@@ -402,8 +402,8 @@ signals trigger cleanup. Do not point that local port at a shared database tunne
 
 For an already-migrated disposable database, use
 `mise exec -- uv run -m pytest -v <tests>` with an explicitly configured `DATABASE_URL`.
-Do not run the entire suite with xdist against one database: migration and outbox
-tests require serial execution. CI documents the parallel-safe split.
+Do not run the entire suite with xdist against one database: migration, outbox,
+and OPS CLI global-count tests require serial execution. CI documents the parallel-safe split.
 
 CI runs pytest with coverage (`--cov=app --cov-branch`) and enforces a separate `alembic check`
 migration-drift gate.

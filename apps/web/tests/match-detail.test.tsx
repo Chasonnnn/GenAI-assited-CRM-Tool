@@ -385,18 +385,11 @@ describe('MatchDetailPage', () => {
         confirmSpy.mockRestore()
     })
 
-    it('defaults the add task dialog to match target', () => {
-        render(<MatchDetailPage />)
-        fireEvent.click(screen.getByRole('tab', { name: /^tasks$/i }))
-        fireEvent.click(screen.getByRole('button', { name: /add task/i }))
-
-        expect(screen.getByRole('radio', { name: /match \(both sides\)/i })).toBeChecked()
-    })
-
     it('creates a match-scoped task from the overview tasks tab', async () => {
         render(<MatchDetailPage />)
         fireEvent.click(screen.getByRole('tab', { name: /^tasks$/i }))
         fireEvent.click(screen.getByRole('button', { name: /add task/i }))
+        expect(screen.getByRole('radio', { name: /match \(both sides\)/i })).toBeChecked()
         fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Coordinate next steps' } })
         fireEvent.click(screen.getByRole('button', { name: /create task/i }))
 
@@ -468,15 +461,6 @@ describe('MatchDetailPage', () => {
         render(<MatchDetailPage />)
         expect(screen.getByText('You do not have permission to view these notes.')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Add Note' })).not.toBeInTheDocument()
-    })
-
-    it('creates case tasks on the whole match', async () => {
-        render(<MatchDetailPage />)
-        fireEvent.click(screen.getByRole('tab', { name: /^tasks$/i }))
-        fireEvent.click(screen.getByRole('button', { name: /add task/i }))
-        fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Transfer follow-up' } })
-        fireEvent.click(screen.getByRole('button', { name: /create task/i }))
-        await waitFor(() => expect(mockCreateTaskMutateAsync).toHaveBeenCalledWith({ title: 'Transfer follow-up', task_type: 'other', match_id: 'match1', work_source: 'match' }))
     })
 
     it('keeps a refused concurrent acceptance visible in the confirm dialog', async () => {
