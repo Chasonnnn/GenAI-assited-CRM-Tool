@@ -10,8 +10,8 @@ export function PublicFormErrorState({ message }: { message: string }) {
             <Card className={cn(publicFormCardClassName, "w-full max-w-md")}>
                 <CardContent className="px-6 py-8 text-center">
                     <AlertTriangleIcon className="size-16 text-amber-500 mx-auto mb-4" />
-                    <h1 className="text-xl font-semibold text-stone-900 mb-2">Form Not Available</h1>
-                    <p className="text-stone-600">{message}</p>
+                    <h1 className="text-xl font-semibold text-neutral-900 mb-2">Form Not Available</h1>
+                    <p className="text-neutral-600">{message}</p>
                 </CardContent>
             </Card>
         </div>

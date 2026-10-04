@@ -173,7 +173,7 @@ function FormIdentitySection({ settings }: { settings: AutomationFormSettingsPan
                         <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
                 </Select>
-                <p className="text-xs text-stone-500">
+                <p className="text-xs text-neutral-500">
                     Use lead capture for embeddable contact forms and surrogate application for full intake.
                 </p>
             </div>
@@ -210,7 +210,7 @@ function LogoSettingsSection({ settings }: { settings: AutomationFormSettingsPan
         <div className="space-y-2">
             <div className="flex items-center justify-between">
                 <Label htmlFor="settings-logo-url">Logo URL</Label>
-                <div className="flex items-center gap-2 text-xs text-stone-500">
+                <div className="flex items-center gap-2 text-xs text-neutral-500">
                     <Switch
                         checked={useOrgLogo}
                         onCheckedChange={onUseOrgLogoChange}
@@ -227,7 +227,7 @@ function LogoSettingsSection({ settings }: { settings: AutomationFormSettingsPan
                 disabled={useOrgLogo}
             />
             {!orgLogoAvailable && (
-                <p className="text-xs text-stone-500">
+                <p className="text-xs text-neutral-500">
                     Add an organization logo in Settings to enable this option.
                 </p>
             )}
@@ -264,7 +264,7 @@ function LogoSettingsSection({ settings }: { settings: AutomationFormSettingsPan
                 )}
             </div>
             {logoUrl && (
-                <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
                     <NextImage
                         src={resolvedLogoUrl}
                         alt="Form logo preview"
@@ -299,7 +299,7 @@ function SharedDeliverySection({
     } = settings
 
     return (
-        <div className="space-y-4 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
+        <div className="space-y-4 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold">Shared Delivery</h4>
                 <div className="flex items-center gap-2">
@@ -331,12 +331,12 @@ function SharedDeliverySection({
                         ))}
                     </SelectContent>
                 </Select>
-                <p className="text-xs text-stone-500">
+                <p className="text-xs text-neutral-500">
                     Shared intake email sends use this template by default.
                 </p>
             </div>
             {formLeadKind === "surrogate" ? (
-                <div className="space-y-2 rounded-md border border-stone-200 p-3 dark:border-stone-800">
+                <div className="space-y-2 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
                     <div className="space-y-1">
                         <div className="flex items-center gap-2">
                             <p className="text-sm font-medium">Default shared-send form</p>
@@ -346,7 +346,7 @@ function SharedDeliverySection({
                                 </Badge>
                             )}
                         </div>
-                        <p className="text-xs text-stone-500">
+                        <p className="text-xs text-neutral-500">
                             Exactly one published surrogate application form can be the default for shared intake sends.
                         </p>
                     </div>
@@ -395,11 +395,11 @@ function PublicHeaderSection({ settings }: { settings: AutomationFormSettingsPan
     } = settings
 
     return (
-        <div className="space-y-4 rounded-lg border border-stone-200 bg-stone-50/70 p-4 dark:border-stone-800 dark:bg-stone-950/40">
+        <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50/70 p-4 dark:border-neutral-800 dark:bg-neutral-950/40">
             <div className="flex items-center justify-between gap-3">
                 <div>
                     <h4 className="text-sm font-semibold">Public Form Title & Subtitle</h4>
-                    <p className="text-xs text-stone-500">
+                    <p className="text-xs text-neutral-500">
                         Edit the header shown on the shared link, QR page, and website embed.
                     </p>
                 </div>
@@ -450,7 +450,7 @@ function ShareQrSection({ settings }: { settings: AutomationFormSettingsPanelPro
     } = settings
 
     return (
-        <div className="space-y-3 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
+        <div className="space-y-3 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm font-semibold">
                     <QrCodeIcon className="size-4" />
@@ -458,7 +458,7 @@ function ShareQrSection({ settings }: { settings: AutomationFormSettingsPanelPro
                 </div>
                 <Badge variant="outline">Auto-generated</Badge>
             </div>
-            <p className="text-xs text-stone-500">
+            <p className="text-xs text-neutral-500">
                 Publishing creates a primary shared application link automatically. Share it directly or download QR for events.
             </p>
 
@@ -467,10 +467,10 @@ function ShareQrSection({ settings }: { settings: AutomationFormSettingsPanelPro
                     Publish this form to generate the share link and QR code.
                 </p>
             ) : !selectedQrLink?.intake_url ? (
-                <p className="text-xs text-stone-500">Preparing shared link…</p>
+                <p className="text-xs text-neutral-500">Preparing shared link…</p>
             ) : (
-                <div className="space-y-2 rounded-md border border-stone-200 p-3 dark:border-stone-800">
-                    <div className="break-all text-xs text-stone-600">{selectedQrLink.intake_url}</div>
+                <div className="space-y-2 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+                    <div className="break-all text-xs text-neutral-600">{selectedQrLink.intake_url}</div>
                     <div className="flex flex-wrap gap-2">
                         <Button type="button" size="sm" variant="outline" onClick={onOpenSharePrompt}>
                             <LinkIcon className="mr-2 size-3" />
@@ -494,7 +494,7 @@ function ShareQrSection({ settings }: { settings: AutomationFormSettingsPanelPro
                             Download PNG
                         </Button>
                     </div>
-                    <div className="inline-flex rounded-md border border-stone-200 bg-white p-2">
+                    <div className="inline-flex rounded-md border border-neutral-200 bg-white p-2">
                         <div id="shared-intake-qr">
                             <QRCodeSVG value={selectedQrLink.intake_url} size={120} includeMargin />
                         </div>
@@ -553,7 +553,7 @@ function UploadRulesSection({ settings }: { settings: AutomationFormSettingsPane
                     onChange={(e) => onAllowedMimeTypesTextChange(e.target.value)}
                     placeholder="image/*,application/pdf"
                 />
-                <p className="text-xs text-stone-500">
+                <p className="text-xs text-neutral-500">
                     Leave blank to use the platform safe file allowlist. Per-field uploads are still capped at 5 files.
                 </p>
             </div>

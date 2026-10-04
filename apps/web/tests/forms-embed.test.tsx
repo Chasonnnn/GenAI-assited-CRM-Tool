@@ -738,7 +738,7 @@ describe("EmbedFormPageClient", () => {
             expect(isBefore(smsCheckbox, screen.getByText(/By submitting, you agree/i))).toBe(true)
             expect(smsCheckbox).not.toBeChecked()
 
-            expect(screen.getByText(/application and appointment texts/i)).toHaveClass("text-sm", "text-stone-700")
+            expect(screen.getByText(/application and appointment texts/i)).toHaveClass("text-sm", "text-neutral-700")
             const termsLink = screen.getByRole("link", { name: "Terms of Service" })
             expect(termsLink).toHaveAttribute("href", "https://www.ewisurrogacy.com/sms-terms")
             expect(termsLink).toHaveAttribute("target", "_blank")

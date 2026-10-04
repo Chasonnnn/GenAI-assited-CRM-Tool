@@ -842,14 +842,14 @@ function ShareFormDialog({
                 </AlertDialogHeader>
 
                 {isPreparingShare ? (
-                    <div className="flex items-center gap-2 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600">
+                    <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-600">
                         <Loader2Icon className="size-4 animate-spin" />
                         Preparing link and QR code
                     </div>
                 ) : shareLink?.intake_url ? (
-                    <div className="space-y-3 rounded-md border border-stone-200 bg-stone-50 p-3">
-                        <div className="break-all text-xs text-stone-600">{shareLink.intake_url}</div>
-                        <div className="inline-flex rounded-md border border-stone-200 bg-white p-2">
+                    <div className="space-y-3 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+                        <div className="break-all text-xs text-neutral-600">{shareLink.intake_url}</div>
+                        <div className="inline-flex rounded-md border border-neutral-200 bg-white p-2">
                             <div id="forms-share-qr">
                                 <QRCodeSVG value={shareLink.intake_url} size={120} includeMargin />
                             </div>

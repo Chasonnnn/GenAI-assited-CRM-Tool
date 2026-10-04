@@ -96,7 +96,7 @@ export function submissionStatusBadgeClass(status: FormSubmissionStatus) {
     if (status === "rejected") {
         return "border-red-200 bg-red-50 text-red-700"
     }
-    return "border-stone-200 bg-stone-100 text-stone-700"
+    return "border-neutral-200 bg-neutral-100 text-neutral-700"
 }
 
 export function submissionReviewBadgeClass(submission: FormSubmissionRead) {

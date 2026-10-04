@@ -13,8 +13,8 @@ export function PublicFormSuccessState() {
                     <div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-full bg-emerald-50">
                         <CheckCircle2Icon className="size-10 text-emerald-600" />
                     </div>
-                    <h1 className="text-2xl font-semibold text-stone-900 mb-3">Application Submitted!</h1>
-                    <p className="text-stone-600 leading-relaxed">
+                    <h1 className="text-2xl font-semibold text-neutral-900 mb-3">Application Submitted!</h1>
+                    <p className="text-neutral-600 leading-relaxed">
                         Your application has been received and added to intake review. A coordinator will reach out soon.
                     </p>
                 </CardContent>

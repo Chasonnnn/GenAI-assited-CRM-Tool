@@ -173,7 +173,7 @@ function UnsupportedCanvasField({ field }: { field: BuilderFormField }) {
     const publicField = buildCanvasField(field)
 
     return (
-        <div className="space-y-2 rounded-xl border border-stone-200 bg-stone-50 p-3.5">
+        <div className="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-3.5">
             <Label className="text-sm font-medium">
                 {publicField.label}
                 {publicField.required ? <span className="text-red-500"> *</span> : null}
@@ -186,7 +186,7 @@ function UnsupportedCanvasField({ field }: { field: BuilderFormField }) {
                 columns={field.columns}
                 rows={field.rows}
             />
-            {publicField.help_text ? <p className="text-xs text-stone-500">{publicField.help_text}</p> : null}
+            {publicField.help_text ? <p className="text-xs text-neutral-500">{publicField.help_text}</p> : null}
         </div>
     )
 }
@@ -223,7 +223,7 @@ function CanvasFieldSurface({
     const fieldLabel = field.label.trim() || "Untitled"
     const usesFallbackRenderer = ["address", "file", "repeatable_table"].includes(field.type)
     const floatingActionButtonClass =
-        "pointer-events-auto rounded-full border border-stone-200/80 bg-white/95 text-stone-700 shadow-sm backdrop-blur hover:border-primary/40 hover:bg-white hover:text-stone-950"
+        "pointer-events-auto rounded-full border border-neutral-200/80 bg-white/95 text-neutral-700 shadow-sm backdrop-blur hover:border-primary/40 hover:bg-white hover:text-neutral-950"
 
     return (
         <div className="space-y-2">
@@ -553,19 +553,19 @@ function EditCanvas({
                     className={cn("mx-auto w-full", desktopCanvasWidthClass)}
                 >
                     <div data-testid="form-builder-page-shell" className={cn("space-y-6", canvasFrameClass)}>
-                        <div className="space-y-1 border-b border-stone-200/80 pb-4">
+                        <div className="space-y-1 border-b border-neutral-200/80 pb-4">
                             {displayEyebrow ? (
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-neutral-400">
                                     {displayEyebrow}
                                 </p>
                             ) : null}
                             {displayTitle ? (
-                                <h1 className="text-2xl font-semibold tracking-tight text-stone-900 md:text-[28px]">
+                                <h1 className="text-2xl font-semibold tracking-tight text-neutral-900 md:text-[28px]">
                                     {displayTitle}
                                 </h1>
                             ) : null}
                             {displaySubtitle ? (
-                                <p className="max-w-2xl text-sm text-stone-500">{displaySubtitle}</p>
+                                <p className="max-w-2xl text-sm text-neutral-500">{displaySubtitle}</p>
                             ) : null}
                         </div>
 

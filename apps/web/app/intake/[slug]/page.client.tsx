@@ -1274,7 +1274,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                     key={field.key}
                     role="group"
                     aria-label={field.label}
-                    className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4"
+                    className="space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4"
                     {...(error ? { "aria-invalid": true, "aria-describedby": errorId, tabIndex: -1 } : {})}
                 >
                     <div className="flex items-center justify-between">
@@ -1292,18 +1292,18 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                         </Button>
                     </div>
                     {columns.length === 0 ? (
-                        <p className="text-sm text-stone-500">No columns configured.</p>
+                        <p className="text-sm text-neutral-500">No columns configured.</p>
                     ) : (
                         <div className="space-y-3">
                             {rows.length === 0 && minRows === 0 ? (
-                                <p className="text-sm text-stone-500">
+                                <p className="text-sm text-neutral-500">
                                     No rows yet. Add a row to get started.
                                 </p>
                             ) : (
                                 rows.map((row, rowIndex) => (
                                     <div
                                         key={`${field.key}-row-${rowIndex}`}
-                                        className="rounded-xl border border-stone-200 bg-white p-3"
+                                        className="rounded-xl border border-neutral-200 bg-white p-3"
                                     >
                                         <div className="grid gap-3 md:grid-cols-2">
                                             {columns.map((column) => {
@@ -1329,7 +1329,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                                                 <SelectTrigger
                                                                     id={fieldInputId}
                                                                     aria-labelledby={fieldInputLabelId}
-                                                                    className="h-10 rounded-lg border-stone-200 bg-white"
+                                                                    className="h-10 rounded-lg border-neutral-200 bg-white"
                                                                 >
                                                                     <SelectValue placeholder="Select…">
                                                                         {(selectedValue: string | null) =>
@@ -1357,7 +1357,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                                                 onChange={(e) =>
                                                                     updateRow(rowIndex, column.key, e.target.value)
                                                                 }
-                                                                className="h-10 rounded-lg border-stone-200 bg-white shadow-none"
+                                                                className="h-10 rounded-lg border-neutral-200 bg-white shadow-none"
                                                             />
                                                         )}
                                                     </div>
@@ -1381,7 +1381,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                         </div>
                     )}
                     {error ? <FieldError id={errorId}>{error}</FieldError> : null}
-                    {field.help_text && <p className="text-xs text-stone-500">{field.help_text}</p>}
+                    {field.help_text && <p className="text-xs text-neutral-500">{field.help_text}</p>}
                 </div>
             )
         }
@@ -1447,7 +1447,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                 }
             >
                 {!isPreview && draftRestored && (
-                    <div className="flex items-center gap-2 text-xs text-stone-500">
+                    <div className="flex items-center gap-2 text-xs text-neutral-500">
                         <PencilIcon className="size-3" />
                         Restored saved progress
                     </div>
@@ -1512,7 +1512,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                 <div ref={formContentRef} className="flex min-w-0 flex-1 flex-col gap-6">
                     {!formConfig ? (
                         <section className={publicFormSectionClassName}>
-                            <p className="text-center text-stone-600">Form configuration is unavailable.</p>
+                            <p className="text-center text-neutral-600">Form configuration is unavailable.</p>
                         </section>
                     ) : (
                         <>
@@ -1523,7 +1523,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                     aria-labelledby={`${section.id}-title`}
                                     className={publicFormSectionClassName}
                                 >
-                                    <h2 id={`${section.id}-title`} className="text-xl font-semibold text-stone-950">
+                                    <h2 id={`${section.id}-title`} className="text-xl font-semibold text-neutral-950">
                                         {section.title}
                                     </h2>
                                     <div className="grid gap-x-5 gap-y-6 sm:grid-cols-2">
@@ -1571,7 +1571,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                                     />
                                                     {error ? <FieldError id={errorId}>{error}</FieldError> : null}
                                                     {field.help_text && (
-                                                        <p className="text-xs text-stone-500">{field.help_text}</p>
+                                                        <p className="text-xs text-neutral-500">{field.help_text}</p>
                                                     )}
                                                 </div>
                                             )
@@ -1585,7 +1585,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                 aria-labelledby={`${REVIEW_SECTION_ID}-title`}
                                 className={publicFormSectionClassName}
                             >
-                                <h2 id={`${REVIEW_SECTION_ID}-title`} className="text-xl font-semibold text-stone-950">
+                                <h2 id={`${REVIEW_SECTION_ID}-title`} className="text-xl font-semibold text-neutral-950">
                                     Review &amp; submit
                                 </h2>
                                 <div className="flex items-start gap-3">
@@ -1595,7 +1595,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                         onCheckedChange={(checked) => setAgreed(checked === true)}
                                         className="mt-1"
                                     />
-                                    <label htmlFor="agree" className="text-sm leading-relaxed text-stone-700">
+                                    <label htmlFor="agree" className="text-sm leading-relaxed text-neutral-700">
                                         I confirm that the information provided is accurate and
                                         complete. I understand that providing false information may
                                         result in disqualification from the program.
@@ -1606,7 +1606,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
 
                                 <PrivacyNotice text={privacyNotice ?? null} />
 
-                                <div className="flex justify-end border-t border-stone-100 pt-5">
+                                <div className="flex justify-end border-t border-neutral-100 pt-5">
                                     <Button
                                         onClick={handleSubmit}
                                         disabled={isSubmitting || !agreed}
@@ -1628,16 +1628,16 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                 </div>
             </div>
 
-            <footer className="flex justify-center gap-4 border-t border-stone-200/80 px-4 py-5">
+            <footer className="flex justify-center gap-4 border-t border-neutral-200/80 px-4 py-5">
                 <Link
                     href="/privacy"
-                    className="text-sm text-stone-500 underline underline-offset-2 hover:text-primary"
+                    className="text-sm text-neutral-500 underline underline-offset-2 hover:text-primary"
                 >
                     Privacy Policy
                 </Link>
                 <Link
                     href="/terms"
-                    className="text-sm text-stone-500 underline underline-offset-2 hover:text-primary"
+                    className="text-sm text-neutral-500 underline underline-offset-2 hover:text-primary"
                 >
                     Terms
                 </Link>

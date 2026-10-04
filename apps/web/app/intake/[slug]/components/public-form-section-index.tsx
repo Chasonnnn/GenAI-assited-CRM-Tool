@@ -26,7 +26,7 @@ function SectionStatusDot({ status, active }: { status: PublicFormSectionStatus;
                 "flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white",
                 status === "complete" && "bg-emerald-700",
                 status === "error" && "bg-red-600",
-                status === "pending" && (active ? "border-2 border-primary bg-white" : "border-[1.5px] border-stone-400 bg-white"),
+                status === "pending" && (active ? "border-2 border-primary bg-white" : "border-[1.5px] border-neutral-400 bg-white"),
             )}
         >
             {status === "complete" ? <CheckIcon className="size-3" strokeWidth={3} /> : null}
@@ -52,9 +52,9 @@ export function PublicFormSectionIndex({
                         href={`#${section.id}`}
                         aria-current={active ? "location" : undefined}
                         className={cn(
-                            "flex min-h-10 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm leading-5 text-stone-600 transition-colors",
-                            "hover:bg-white/70 hover:text-stone-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-                            active && "bg-white font-semibold text-stone-950 shadow-xs",
+                            "flex min-h-10 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm leading-5 text-neutral-600 transition-colors",
+                            "hover:bg-white/70 hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                            active && "bg-white font-semibold text-neutral-950 shadow-xs",
                         )}
                     >
                         <SectionStatusDot status={section.status} active={active} />

@@ -194,10 +194,10 @@ function DonorOption({
     onLink: () => void
 }) {
     return (
-        <li className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-stone-200 p-2">
+        <li className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 p-2">
             <div className="min-w-0">
                 <p className="font-medium">{donorNumber} · {fullName}</p>
-                {reason ? <p className="text-xs text-stone-500">{reason}</p> : null}
+                {reason ? <p className="text-xs text-neutral-500">{reason}</p> : null}
             </div>
             <Button
                 type="button"
@@ -235,10 +235,10 @@ function DonorLinkReview({ submission }: { submission: FormSubmissionRead }) {
     const searchId = `donor-search-${submission.id}`
 
     return (
-        <div className="space-y-3 rounded-md border border-stone-200 p-3">
+        <div className="space-y-3 rounded-md border border-neutral-200 p-3">
             <h4 className="text-sm font-semibold">Link to Donor</h4>
             {candidates.isLoading ? (
-                <p className="text-stone-500">Loading matching donors…</p>
+                <p className="text-neutral-500">Loading matching donors…</p>
             ) : candidates.isError ? (
                 <div role="alert" className="flex flex-wrap items-center gap-2">
                     <p>Unable to load matching donors.</p>
@@ -247,7 +247,7 @@ function DonorLinkReview({ submission }: { submission: FormSubmissionRead }) {
                     </Button>
                 </div>
             ) : candidateItems.length === 0 ? (
-                <p className="text-stone-500">No matching donors.</p>
+                <p className="text-neutral-500">No matching donors.</p>
             ) : (
                 <ul className="space-y-2" aria-label="Matching donors">
                     {candidateItems.map((candidate) => (
@@ -272,7 +272,7 @@ function DonorLinkReview({ submission }: { submission: FormSubmissionRead }) {
                 />
             </div>
             {query.length < 2 ? null : searchResults.isLoading ? (
-                <p className="text-stone-500">Searching donors…</p>
+                <p className="text-neutral-500">Searching donors…</p>
             ) : searchResults.isError ? (
                 <div role="alert" className="flex flex-wrap items-center gap-2">
                     <p>Unable to search donors.</p>
@@ -281,7 +281,7 @@ function DonorLinkReview({ submission }: { submission: FormSubmissionRead }) {
                     </Button>
                 </div>
             ) : searchItems.length === 0 ? (
-                <p className="text-stone-500">No donors found.</p>
+                <p className="text-neutral-500">No donors found.</p>
             ) : (
                 <ul className="space-y-2" aria-label="Donor search results">
                     {searchItems.map((donor) => (
@@ -406,7 +406,7 @@ function SubmissionMetricCard({
     return (
         <Card>
             <CardContent className="space-y-1 p-4">
-                <p className="text-xs uppercase tracking-wide text-stone-500">{label}</p>
+                <p className="text-xs uppercase tracking-wide text-neutral-500">{label}</p>
                 <p className="text-2xl font-semibold">{value}</p>
             </CardContent>
         </Card>
@@ -614,7 +614,7 @@ function RoutingReviewQueueCard({
                     ) : null}
                 </div>
                 {routingReviewQueueStatus === "loading" ? (
-                    <p className="text-sm text-stone-500" role="status">Loading routing review…</p>
+                    <p className="text-sm text-neutral-500" role="status">Loading routing review…</p>
                 ) : routingReviewQueueStatus === "error" ? (
                     <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
                         <p>Unable to load routing review.</p>
@@ -629,7 +629,7 @@ function RoutingReviewQueueCard({
                         </Button>
                     </div>
                 ) : routingReviewSubmissions.length === 0 ? (
-                    <p className="text-sm text-stone-500">No submissions waiting for routing review.</p>
+                    <p className="text-sm text-neutral-500">No submissions waiting for routing review.</p>
                 ) : (
                     // Explicit roles keep table semantics where browsers drop them for cells restyled as a grid below sm.
                     <Table role="table" className="max-sm:block">
@@ -681,7 +681,7 @@ function AmbiguousSubmissionCard({
     const identity = readSubmissionIdentity(submission, readAnswerValue)
 
     return (
-        <div className="space-y-2 rounded-lg border border-stone-200 p-3 text-sm">
+        <div className="space-y-2 rounded-lg border border-neutral-200 p-3 text-sm">
             <Badge variant="outline">{FORM_LEAD_KIND_LABELS[submission.lead_kind]}</Badge>
             <SubmissionIdentityGrid identity={identity} submission={submission} />
             <MatchReason submission={submission} />
@@ -753,7 +753,7 @@ function AmbiguousMatchQueueCard({
                     <Badge variant="outline">{ambiguousSubmissions.length}</Badge>
                 </div>
                 {ambiguousSubmissions.length === 0 ? (
-                    <p className="text-sm text-stone-500">No ambiguous submissions.</p>
+                    <p className="text-sm text-neutral-500">No ambiguous submissions.</p>
                 ) : (
                     <div className="space-y-3">
                         {ambiguousSubmissions.map((submission) => (
@@ -791,7 +791,7 @@ function LeadPromotionSubmissionCard({
     const identity = readSubmissionIdentity(submission, readAnswerValue)
 
     return (
-        <div className="space-y-2 rounded-lg border border-stone-200 p-3 text-sm">
+        <div className="space-y-2 rounded-lg border border-neutral-200 p-3 text-sm">
             <Badge variant="outline">{FORM_LEAD_KIND_LABELS[submission.lead_kind]}</Badge>
             <SubmissionIdentityGrid identity={identity} submission={submission} />
             <div className="flex flex-wrap gap-2">
@@ -833,7 +833,7 @@ function LeadPromotionQueueCard({
                     <Badge variant="outline">{leadQueueSubmissions.length}</Badge>
                 </div>
                 {leadQueueSubmissions.length === 0 ? (
-                    <p className="text-sm text-stone-500">No pending lead submissions.</p>
+                    <p className="text-sm text-neutral-500">No pending lead submissions.</p>
                 ) : (
                     <div className="space-y-3">
                         {leadQueueSubmissions.map((submission) => (
@@ -897,7 +897,7 @@ function SubmissionReviewQueues({
     if (!formId) {
         return (
             <Card>
-                <CardContent className="p-6 text-sm text-stone-600">
+                <CardContent className="p-6 text-sm text-neutral-600">
                     Create and publish the form before reviewing submissions.
                 </CardContent>
             </Card>
@@ -1211,7 +1211,7 @@ function SubmissionHistoryEntry({
         submission.match_status !== "ambiguous_review"
 
     return (
-        <div className="space-y-3 rounded-lg border border-stone-200 p-3 text-sm">
+        <div className="space-y-3 rounded-lg border border-neutral-200 p-3 text-sm">
             <SubmissionHistoryBadges
                 submission={submission}
                 submissionOutcomeLabel={submissionOutcomeLabel}
@@ -1286,9 +1286,9 @@ function SubmissionHistoryCard({
                 </div>
 
                 {isSubmissionHistoryLoading ? (
-                    <p className="text-sm text-stone-500">Loading submission history…</p>
+                    <p className="text-sm text-neutral-500">Loading submission history…</p>
                 ) : visibleSubmissionHistory.length === 0 ? (
-                    <p className="text-sm text-stone-500">No submissions in this view.</p>
+                    <p className="text-sm text-neutral-500">No submissions in this view.</p>
                 ) : (
                     <div className="space-y-3">
                         {visibleSubmissionHistory.map((submission) => (
@@ -1383,21 +1383,21 @@ function SubmissionCandidateReviewCard({
                 </div>
 
                 {isMatchCandidatesLoading ? (
-                    <p className="text-sm text-stone-500">Loading candidates…</p>
+                    <p className="text-sm text-neutral-500">Loading candidates…</p>
                 ) : selectedMatchCandidates.length === 0 ? (
-                    <p className="text-sm text-stone-500">No candidates found.</p>
+                    <p className="text-sm text-neutral-500">No candidates found.</p>
                 ) : (
                     <div className="space-y-2">
                         {selectedMatchCandidates.map((candidate) => (
                             <div
                                 key={candidate.id}
-                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-stone-200 p-3 text-sm"
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-200 p-3 text-sm"
                             >
                                 <div className="space-y-1">
-                                    <p className="font-mono text-xs text-stone-600">
+                                    <p className="font-mono text-xs text-neutral-600">
                                         surrogate_id: {candidate.surrogate_id}
                                     </p>
-                                    <p className="text-xs text-stone-500">{matchReasonLabel(candidate.reason)}</p>
+                                    <p className="text-xs text-neutral-500">{matchReasonLabel(candidate.reason)}</p>
                                 </div>
                                 <Button
                                     type="button"

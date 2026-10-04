@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils"
 
 const SMS_CONSENT_ERROR_ID = "sms-consent-error"
 const smsConsentLinkClassName =
-    "font-medium text-stone-900 underline underline-offset-2 hover:text-primary"
+    "font-medium text-neutral-900 underline underline-offset-2 hover:text-primary"
 
 interface PublicSmsConsentProps {
     options: MessagingConsentOptionsRead | null | undefined
@@ -50,7 +50,7 @@ export function PublicSmsConsent({
                         className={cn(
                             "flex items-start gap-3 border bg-white",
                             density === "compact" ? "rounded-md p-3" : "rounded-lg p-4",
-                            isInvalid ? "border-red-300" : "border-stone-200",
+                            isInvalid ? "border-red-300" : "border-neutral-200",
                         )}
                     >
                         <Checkbox
@@ -63,10 +63,10 @@ export function PublicSmsConsent({
                             className="mt-1"
                         />
                         <div className="min-w-0 space-y-1">
-                            <label htmlFor={checkboxId} className="block text-sm leading-6 text-stone-700">
+                            <label htmlFor={checkboxId} className="block text-sm leading-6 text-neutral-700">
                                 {option.disclosure}
                             </label>
-                            <p className="text-sm leading-6 text-stone-700">
+                            <p className="text-sm leading-6 text-neutral-700">
                                 <a
                                     href={option.sms_terms_url}
                                     target="_blank"
@@ -75,7 +75,7 @@ export function PublicSmsConsent({
                                 >
                                     Terms of Service
                                 </a>
-                                <span aria-hidden="true" className="mx-2 text-stone-400">
+                                <span aria-hidden="true" className="mx-2 text-neutral-400">
                                     |
                                 </span>
                                 <a

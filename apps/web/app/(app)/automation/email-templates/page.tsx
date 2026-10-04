@@ -2065,7 +2065,7 @@ function useEmailTemplatesPageView() {
                         <div className="p-4">
                             <SafeHtmlContent
                                 html={previewHtml}
-                                className="prose prose-sm prose-stone max-w-none text-stone-900 [&_p]:whitespace-pre-wrap"
+                                className="prose prose-sm prose-neutral max-w-none text-neutral-900 [&_p]:whitespace-pre-wrap"
                             />
                         </div>
                     </div>

@@ -78,17 +78,17 @@ export function FileUploadZone({
                     "flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-6 transition-all",
                     "hover:border-blue-300 hover:bg-sky-50",
                     "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:ring-offset-2",
-                    isDragging ? "border-blue-400 bg-sky-50" : "border-stone-300 bg-white",
+                    isDragging ? "border-blue-400 bg-sky-50" : "border-neutral-300 bg-white",
                 )}
             >
-                <UploadIcon className="size-10 text-stone-400" />
+                <UploadIcon className="size-10 text-neutral-400" />
                 <div className="text-center">
-                    <p className="text-sm font-medium text-stone-700">Drag and drop files here</p>
-                    <p className="text-sm text-stone-500">
+                    <p className="text-sm font-medium text-neutral-700">Drag and drop files here</p>
+                    <p className="text-sm text-neutral-500">
                         or <span className="text-primary underline underline-offset-2">click to browse</span>
                     </p>
                 </div>
-                <p className="text-xs text-stone-400">
+                <p className="text-xs text-neutral-400">
                     Up to {maxFiles} files for this field, {(maxSizeBytes / (1024 * 1024)).toFixed(0)}MB each
                 </p>
             </Button>
@@ -108,13 +108,13 @@ export function FileUploadZone({
                     {files.map((file, index) => (
                         <div
                             key={getUploadFileKey(file)}
-                            className="flex items-center justify-between rounded-lg border border-stone-200 bg-stone-50 p-3"
+                            className="flex items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 p-3"
                         >
                             <div className="flex items-center gap-3">
-                                <FileTextIcon className="size-5 text-stone-400" />
+                                <FileTextIcon className="size-5 text-neutral-400" />
                                 <div>
-                                    <p className="text-sm font-medium text-stone-700">{file.name}</p>
-                                    <p className="text-xs text-stone-500">{(file.size / 1024).toFixed(1)} KB</p>
+                                    <p className="text-sm font-medium text-neutral-700">{file.name}</p>
+                                    <p className="text-xs text-neutral-500">{(file.size / 1024).toFixed(1)} KB</p>
                                 </div>
                             </div>
                             <Button

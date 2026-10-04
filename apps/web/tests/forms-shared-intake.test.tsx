@@ -256,7 +256,7 @@ describe('Shared Intake Public Page', () => {
         const shell = field.closest('.public-form-light')
 
         expect(shell).toBeInTheDocument()
-        expect(shell).toHaveClass('text-stone-900')
+        expect(shell).toHaveClass('text-neutral-900')
     })
 
     it('renders the configured public logo in the hosted intake header', async () => {
@@ -938,7 +938,7 @@ describe('Shared Intake Public Page', () => {
             expect(isBefore(smsCheckbox, screen.getByText(/you consent to intake screening/i))).toBe(true)
             expect(smsCheckbox).not.toBeChecked()
 
-            expect(screen.getByText(/application and appointment texts/i)).toHaveClass('text-sm', 'text-stone-700')
+            expect(screen.getByText(/application and appointment texts/i)).toHaveClass('text-sm', 'text-neutral-700')
             const termsLink = screen.getByRole('link', { name: 'Terms of Service' })
             expect(termsLink).toHaveAttribute('href', 'https://example.com/sms-terms')
             expect(termsLink).toHaveAttribute('target', '_blank')

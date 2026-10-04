@@ -577,7 +577,7 @@ export function useTemplateFormBuilderPage() {
         workspaceProps: {
             leadKind: templateLeadKind,
             desktopCanvasWidthClass: "max-w-[min(100%,76rem)]",
-            canvasFrameClass: "rounded-[24px] border border-stone-200 bg-white p-4 sm:p-5",
+            canvasFrameClass: "rounded-[24px] border border-neutral-200 bg-white p-4 sm:p-5",
             mappingOptions: surrogateFieldMappings,
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,

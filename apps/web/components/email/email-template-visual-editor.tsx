@@ -244,7 +244,7 @@ export function EmailTemplateVisualEditor({
                         event.preventDefault()
                     }
                 }}
-                className="prose prose-sm max-w-none overflow-y-auto bg-white px-4 py-3 text-stone-900 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_img]:max-w-full [&_p]:whitespace-pre-wrap"
+                className="prose prose-sm max-w-none overflow-y-auto bg-white px-4 py-3 text-neutral-900 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [&_img]:max-w-full [&_p]:whitespace-pre-wrap"
                 style={{ minHeight, maxHeight }}
             >
                 <TrustedSanitizedHtmlFragment html={initialVisualBody} />

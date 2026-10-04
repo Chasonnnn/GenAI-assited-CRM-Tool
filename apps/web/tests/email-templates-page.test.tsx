@@ -698,7 +698,7 @@ describe("EmailTemplatesPage", () => {
 
         const bodyText = await screen.findByText("Hi there")
         const proseContainer = bodyText.closest(".prose")
-        expect(proseContainer).toHaveClass("prose-stone")
+        expect(proseContainer).toHaveClass("prose-neutral")
 
         expect(screen.getByText("Org Signature")).toBeInTheDocument()
         expect(screen.getByText("Unsubscribe")).toBeInTheDocument()
