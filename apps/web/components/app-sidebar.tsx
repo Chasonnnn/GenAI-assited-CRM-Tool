@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useReducer } from "react"
+import { useReducer, useRef } from "react"
 import type { Route } from "next"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
@@ -678,6 +678,23 @@ export function AppSidebar({ children }: AppSidebarProps) {
     // syncPathname closes the overlay after navigation, but a link that keeps the pathname
     // (the current page, or General from /settings?tab=...) never changes it. React clicks
     // bubble through portals, so this also covers the user menu links.
+    const sidebarTriggerRef = useRef<HTMLButtonElement>(null)
+
+    // Focus stays on the header trigger after opening, so Escape is handled for the whole shell.
+    // Open menus, dialogs, and listboxes handle their own Escape first.
+    const closeMobileOnEscape = (event: React.KeyboardEvent<HTMLElement>) => {
+        if (event.key !== "Escape" || !isMobile || !mobileOpen || event.defaultPrevented) return
+        if (
+            event.target instanceof Element &&
+            event.target.closest('[role="menu"], [role="dialog"], [role="alertdialog"], [role="listbox"]')
+        ) {
+            return
+        }
+        dispatch({ type: "setMobileOpen", mobileOpen: false })
+        // The sidebar turns inert when it closes; move focus out of it.
+        sidebarTriggerRef.current?.focus()
+    }
+
     const closeMobileOnLinkClick = (event: React.MouseEvent<HTMLElement>) => {
         if (!isMobile || !mobileOpen) return
         if (event.target instanceof Element && event.target.closest("a[href]")) {
@@ -796,7 +813,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
     )
 
     return (
-        <div className="flex min-h-svh w-full bg-sidebar">
+        <div className="flex min-h-svh w-full bg-sidebar" onKeyDown={closeMobileOnEscape}>
             {isMobile && mobileOpen && (
                 <Button unstyled
                     type="button"
@@ -824,6 +841,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
             <div className="flex min-w-0 flex-1 flex-col bg-background">
                 <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b px-4 print:hidden">
                     <Button
+                        ref={sidebarTriggerRef}
                         variant="ghost"
                         size="icon"
                         onClick={toggleSidebar}
