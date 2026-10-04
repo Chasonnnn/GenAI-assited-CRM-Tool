@@ -198,6 +198,73 @@ describe('Shared Intake Public Page', () => {
         expect(screen.queryByText('1995-09-15')).not.toBeInTheDocument()
     })
 
+    it('shows choice answers by their option labels on the review step', async () => {
+        window.localStorage.setItem('intake-draft-session:event-abc', 'saved-session-1')
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Application',
+                        fields: [
+                            {
+                                key: 'last_delivery',
+                                label: 'Last delivery',
+                                type: 'select',
+                                required: false,
+                                options: [
+                                    { label: '0-3 months ago', value: 'months_0_3' },
+                                    { label: '4-12 months ago', value: 'months_4_12' },
+                                ],
+                            },
+                            {
+                                key: 'delivery_type',
+                                label: 'Delivery type',
+                                type: 'radio',
+                                required: false,
+                                options: [
+                                    { label: 'Vaginal', value: 'vaginal' },
+                                    { label: 'C-section', value: 'c_section' },
+                                ],
+                            },
+                            {
+                                key: 'contact_times',
+                                label: 'Contact times',
+                                type: 'multiselect',
+                                required: false,
+                                options: [
+                                    { label: 'Weekday mornings', value: 'weekday_am' },
+                                    { label: 'Weekday evenings', value: 'weekday_pm' },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            },
+        })
+        getSharedPublicFormDraft.mockResolvedValue({
+            answers: {
+                last_delivery: 'months_0_3',
+                delivery_type: 'c_section',
+                contact_times: ['weekday_am', 'retired_option'],
+            },
+            started_at: null,
+            updated_at: '2026-07-08T12:00:00.000Z',
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        fireEvent.click(await screen.findByRole('button', { name: /continue/i }))
+
+        expect(await screen.findByText('0-3 months ago')).toBeInTheDocument()
+        expect(screen.getByText('C-section')).toBeInTheDocument()
+        // An answer whose option was removed keeps its stored value.
+        expect(screen.getByText('Weekday mornings, retired_option')).toBeInTheDocument()
+        expect(screen.queryByText('months_0_3')).not.toBeInTheDocument()
+        expect(screen.queryByText('c_section')).not.toBeInTheDocument()
+    })
+
     it('replaces a stale saved draft session before autosaving new answers', async () => {
         window.localStorage.setItem('intake-draft-session:event-abc', 'stale-session-1')
         getSharedPublicForm.mockResolvedValue({

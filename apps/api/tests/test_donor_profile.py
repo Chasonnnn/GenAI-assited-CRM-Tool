@@ -107,9 +107,6 @@ async def test_donor_profile_roundtrip_masks_ssn_and_encrypts_sensitive_columns(
             "partner_ssn": "999-88-7777",
             "partner_name": "Sample Partner",
             "address_line1": "100 Sample Avenue",
-            "clinic_name": "Example IVF",
-            "clinic_email": "clinic@example.com",
-            "insurance_policy_number": "sample-policy",
             "nicotine": "No",
             "cannabis": "No",
             "infectious_disease": "Prefer to discuss with the team",
@@ -125,11 +122,11 @@ async def test_donor_profile_roundtrip_masks_ssn_and_encrypts_sensitive_columns(
         assert profile["partner_ssn_masked"] == "***-**-7777"
         assert "ssn" not in profile and "partner_ssn" not in profile
         assert profile["height_ft"] == "5.50"
-        for field in ("college", "clinic_email", "infectious_disease", "insurance_policy_number"):
+        for field in ("college", "infectious_disease"):
             assert profile[field] == values[field]
         raw = db.execute(
             text(
-                "SELECT ssn, date_of_birth, college, infectious_disease, insurance_policy_number FROM donors WHERE id = :id"
+                "SELECT ssn, date_of_birth, college, infectious_disease FROM donors WHERE id = :id"
             ),
             {"id": donor_id},
         ).one()
@@ -140,7 +137,6 @@ async def test_donor_profile_roundtrip_masks_ssn_and_encrypts_sensitive_columns(
                 values["date_of_birth"],
                 values["college"],
                 values["infectious_disease"],
-                values["insurance_policy_number"],
             ),
             strict=True,
         ):
@@ -464,7 +460,7 @@ async def test_profile_validation_and_archive_guard(db, test_org):
             {"height_ft": 11},
             {"weight_lb": -1},
             {"ssn": "123"},
-            {"clinic_email": "bad-email"},
+            {"clinic_name": "Flat medical fields moved to medical records"},
             {"marital_status": "invalid"},
             {"organization_id": str(uuid.uuid4())},
         ):

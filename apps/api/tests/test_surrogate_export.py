@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
 
 import pytest
@@ -14,7 +14,16 @@ from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email
 from app.core.security import create_export_token, create_session_token
 from app.db.enums import FormStatus, FormSubmissionStatus, Role
-from app.db.models import Form, FormSubmission, Membership, Organization, Surrogate, Task, User
+from app.db.models import (
+    Form,
+    FormSubmission,
+    MedicalRecord,
+    Membership,
+    Organization,
+    Surrogate,
+    Task,
+    User,
+)
 from app.main import app
 from app.routers.surrogates_shared import _surrogate_to_read
 from app.services import (
@@ -331,8 +340,20 @@ async def test_surrogate_export_view_always_includes_medical_data_before_ready_t
         default_stage,
         suffix=uuid.uuid4().hex[:8],
     )
-    surrogate.clinic_name = "Austin Fertility Center"
-    surrogate.monitoring_clinic_name = "Austin Monitoring"
+    for section, name, effective_date in (
+        ("clinic", "Former Fertility Center", date(2024, 1, 1)),
+        ("clinic", "Austin Fertility Center", date(2025, 1, 1)),
+        ("monitoring_clinic", "Austin Monitoring", date(2025, 1, 1)),
+    ):
+        db.add(
+            MedicalRecord(
+                organization_id=test_org.id,
+                surrogate_id=surrogate.id,
+                section=section,
+                name=name,
+                effective_date=effective_date,
+            )
+        )
     db.flush()
 
     export_token = create_export_token(
@@ -346,8 +367,11 @@ async def test_surrogate_export_view_always_includes_medical_data_before_ready_t
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["surrogate"]["clinic_name"] == "Austin Fertility Center"
-    assert payload["surrogate"]["monitoring_clinic_name"] == "Austin Monitoring"
+    current = {record["section"]: record["name"] for record in payload["medical_records"]}
+    assert current == {
+        "clinic": "Austin Fertility Center",
+        "monitoring_clinic": "Austin Monitoring",
+    }
     assert "show_medical" not in payload
     assert payload["show_pregnancy"] is False
 

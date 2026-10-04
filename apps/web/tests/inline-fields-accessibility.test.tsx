@@ -3,7 +3,6 @@ import { fireEvent, render, screen } from "@testing-library/react"
 
 import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
-import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
 import { RecordEditingContext } from "@/components/records/RecordEditingContext"
 import { InlineSelectField, InlineHeightField, InlineRaceField, InlineWeightField, SsnField } from "@/components/records/RecordProfileFields"
 
@@ -29,20 +28,6 @@ describe("Inline field accessibility", () => {
         expect(screen.getByRole("button", {name: "Reveal SSN"})).toBeDisabled()
         expect(onSave).not.toHaveBeenCalled()
         expect(onReveal).not.toHaveBeenCalled()
-    })
-
-    it("disables every insurance field when the shared card is read-only", () => {
-        const onUpdate = vi.fn()
-        render(<CombinedMedicalInsuranceCard readOnly onUpdate={onUpdate} surrogateData={{
-            insurance_company: "Example insurer", insurance_plan_name: "Gold plan",
-            insurance_policy_number: "test-policy", insurance_subscriber_dob: "1990-05-14",
-        }} />)
-        expect(screen.getByText("Gold plan")).toBeInTheDocument()
-        expect(screen.getByText("test-policy")).toBeInTheDocument()
-        for (const button of screen.queryAllByRole("button", { name: /^Edit / })) {
-            expect(button).toBeDisabled()
-        }
-        expect(onUpdate).not.toHaveBeenCalled()
     })
 
     it('removes an open inline editor when it becomes read-only', () => {

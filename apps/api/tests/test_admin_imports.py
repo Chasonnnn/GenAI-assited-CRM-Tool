@@ -10,6 +10,7 @@ from datetime import UTC, date, datetime, time
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
@@ -159,6 +160,36 @@ def _large_png_bytes() -> bytes:
         format="PNG",
     )
     return buffer.getvalue()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("timestamp", ["2026-10-03T23:49:00", "2026-10-03T19:49:00-04:00"])
+async def test_import_form_timestamps_preserve_utc_instant(authed_client, db, test_org, timestamp):
+    form_id = uuid.uuid4()
+    archive = _build_config_zip(
+        {
+            "forms.json": [
+                {
+                    "id": str(form_id),
+                    "name": "Imported form",
+                    "purpose": "other",
+                    "created_at": timestamp,
+                    "updated_at": timestamp,
+                }
+            ]
+        }
+    )
+    db.execute(text("SET LOCAL TIME ZONE 'America/New_York'"))
+
+    response = await authed_client.post(
+        "/admin/imports/config", files={"config_zip": ("config.zip", archive, "application/zip")}
+    )
+
+    assert response.status_code == 200, response.text
+    db.expire_all()
+    form = db.query(Form).filter_by(id=form_id, organization_id=test_org.id).one()
+    assert form.created_at == datetime(2026, 10, 3, 23, 49, tzinfo=UTC)
+    assert form.updated_at == form.created_at
 
 
 class TestAdminImports:
