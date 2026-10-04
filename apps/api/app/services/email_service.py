@@ -554,21 +554,6 @@ def get_template_by_name(db: Session, name: str, org_id: UUID) -> EmailTemplate 
     )
 
 
-def list_templates(
-    db: Session,
-    org_id: UUID,
-    active_only: bool = True,
-) -> list[EmailTemplate]:
-    """List email templates for an organization (legacy - returns all org+system templates)."""
-    query = db.query(EmailTemplate).filter(
-        EmailTemplate.organization_id == org_id,
-        EmailTemplate.scope == "org",  # Only org templates for backward compatibility
-    )
-    if active_only:
-        query = query.filter(EmailTemplate.is_active.is_(True))
-    return query.order_by(EmailTemplate.name).all()
-
-
 def list_templates_for_user(
     db: Session,
     org_id: UUID,
