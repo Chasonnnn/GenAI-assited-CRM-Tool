@@ -1,5 +1,6 @@
 import type { FunnelStage, StatusCount } from "@/lib/api/analytics"
 import type { PipelineStage } from "@/lib/api/pipelines"
+import { stageDisplayColor } from "@/lib/stage-colors"
 
 const chartColors = [
     "#3b82f6",
@@ -38,10 +39,11 @@ function buildStageColorIndex(stages: PipelineStage[] | undefined): StageColorIn
 
     for (const stage of stages ?? []) {
         if (!stage.is_active || !stage.color) continue
-        index.byId.set(stage.id, stage.color)
-        index.bySlug.set(stage.slug, stage.color)
-        index.byKey.set(stage.stage_key, stage.color)
-        index.byLabel.set(stage.label, stage.color)
+        const color = stageDisplayColor(stage.color)
+        index.byId.set(stage.id, color)
+        index.bySlug.set(stage.slug, color)
+        index.byKey.set(stage.stage_key, color)
+        index.byLabel.set(stage.label, color)
     }
 
     return index

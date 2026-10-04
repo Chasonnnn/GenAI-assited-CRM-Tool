@@ -18,6 +18,7 @@ import {
     getStageOptionLabel,
     type StageOption,
 } from "@/lib/stage-options"
+import { stageDisplayColor } from "@/lib/stage-colors"
 import { cn } from "@/lib/utils"
 
 function StageDot({
@@ -36,7 +37,7 @@ function StageDot({
                 !color && !className && "bg-muted-foreground",
                 className,
             )}
-            style={color ? { backgroundColor: color } : undefined}
+            style={color ? { backgroundColor: stageDisplayColor(color) } : undefined}
         />
     )
 }
