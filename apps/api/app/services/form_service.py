@@ -7,6 +7,7 @@ import uuid
 from typing import Any
 
 from fastapi import UploadFile
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -236,6 +237,16 @@ def list_forms(db: Session, org_id: uuid.UUID) -> list[Form]:
     return (
         db.query(Form).filter(Form.organization_id == org_id).order_by(Form.updated_at.desc()).all()
     )
+
+
+def count_submissions_by_form(db: Session, org_id: uuid.UUID) -> dict[uuid.UUID, int]:
+    rows = (
+        db.query(FormSubmission.form_id, func.count(FormSubmission.id))
+        .filter(FormSubmission.organization_id == org_id)
+        .group_by(FormSubmission.form_id)
+        .all()
+    )
+    return {form_id: count for form_id, count in rows}
 
 
 def get_form(db: Session, org_id: uuid.UUID, form_id: uuid.UUID) -> Form | None:

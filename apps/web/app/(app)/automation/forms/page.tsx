@@ -67,6 +67,7 @@ import {
     listFormIntakeLinks,
     type FormIntakeLinkRead,
     type FormLeadKind,
+    type FormListItem,
     type FormSummary,
     type FormTemplateLibraryItem,
 } from "@/lib/api/forms"
@@ -258,7 +259,7 @@ function FormsPageTabs({
 }: {
     activeTab: FormsTab
     onActiveTabChange: (value: FormsTab) => void
-    forms: FormSummary[] | undefined
+    forms: FormListItem[] | undefined
     isFormsLoading: boolean
     onCreateForm: () => void
     onOpenForm: (formId: string) => void
@@ -387,7 +388,7 @@ function FormsGrid({
     onDeleteForm,
     onShareForm,
 }: {
-    forms: FormSummary[] | undefined
+    forms: FormListItem[] | undefined
     hasForms: boolean
     isLoading: boolean
     onCreateForm: () => void
@@ -442,7 +443,7 @@ function FormsGrid({
     )
 }
 
-function compareForms(a: FormSummary, b: FormSummary) {
+function compareForms(a: FormListItem, b: FormListItem) {
     const order = { published: 0, draft: 1, archived: 2 } as const
     const isOrderKey = (value: string): value is keyof typeof order =>
         Object.prototype.hasOwnProperty.call(order, value)
@@ -465,7 +466,7 @@ function FormCard({
     onDeleteForm,
     onShareForm,
 }: {
-    form: FormSummary
+    form: FormListItem
     onOpenForm: (formId: string) => void
     isDeletingForm: boolean
     onDeleteForm: (target: DeleteTarget) => void
@@ -524,11 +525,19 @@ function FormCard({
                 <Badge variant="outline">{FORM_LEAD_KIND_LABELS[form.lead_kind ?? "surrogate"]}</Badge>
                 {form.is_default_surrogate_application ? <Badge variant="outline">Default</Badge> : null}
             </div>
-            <p className="px-4 text-xs text-muted-foreground">
-                <FormRelativeTime dateString={form.updated_at} />
-            </p>
+            <div className="flex flex-wrap gap-x-3.5 gap-y-1 px-4 text-xs text-muted-foreground">
+                <span>{formatSubmissionCount(form.submission_count)}</span>
+                <span>
+                    <FormRelativeTime dateString={form.updated_at} />
+                </span>
+            </div>
         </Card>
     )
+}
+
+function formatSubmissionCount(count: number) {
+    if (count === 0) return "No submissions"
+    return `${count.toLocaleString("en-US")} ${count === 1 ? "submission" : "submissions"}`
 }
 
 function FormTemplatesGrid({

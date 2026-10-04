@@ -14,6 +14,7 @@ let mockForms: Array<{
     created_at: string
     updated_at: string
     lead_kind?: "surrogate" | "egg_donor" | "sperm_donor"
+    submission_count: number
 }> = []
 let mockTemplates: Array<{
     id: string
@@ -98,6 +99,7 @@ describe("FormsListPage delete", () => {
                 name: "Test Form",
                 status: "draft",
                 created_at: new Date().toISOString(),
+                submission_count: 0,
                 updated_at: new Date().toISOString(),
             },
         ]
@@ -154,6 +156,7 @@ describe("FormsListPage delete", () => {
                 name: "Test Form",
                 status: "draft",
                 created_at: "2026-03-20T23:29:29Z",
+                submission_count: 0,
                 updated_at: "2026-03-21T07:29:29Z",
             },
         ]
@@ -177,6 +180,7 @@ describe("FormsListPage delete", () => {
                 status: "draft",
                 lead_kind: "egg_donor",
                 created_at: new Date().toISOString(),
+                submission_count: 1208,
                 updated_at: new Date().toISOString(),
             },
         ]
@@ -294,6 +298,7 @@ describe("FormsListPage delete", () => {
                 status: "published",
                 lead_kind: "egg_donor",
                 created_at: new Date().toISOString(),
+                submission_count: 1208,
                 updated_at: new Date().toISOString(),
             },
         ]
@@ -305,15 +310,16 @@ describe("FormsListPage delete", () => {
         const card = within(link.closest('[data-slot="card"]') as HTMLElement)
         expect(card.getByText("Published")).toBeInTheDocument()
         expect(card.getByText("Egg Donor")).toBeInTheDocument()
+        expect(card.getByText("1,208 submissions")).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: "Forms 1" })).toBeInTheDocument()
     })
 
     it("filters forms by status and search without hiding the first-run state", () => {
         const now = new Date().toISOString()
         mockForms = [
-            { id: "form-1", name: "Surrogate Application", status: "published", created_at: now, updated_at: now },
-            { id: "form-2", name: "Donor Pre-Screen", status: "draft", created_at: now, updated_at: now },
-            { id: "form-3", name: "Old Survey", status: "archived", created_at: now, updated_at: now },
+            { id: "form-1", name: "Surrogate Application", status: "published", created_at: now, updated_at: now, submission_count: 0 },
+            { id: "form-2", name: "Donor Pre-Screen", status: "draft", created_at: now, updated_at: now, submission_count: 0 },
+            { id: "form-3", name: "Old Survey", status: "archived", created_at: now, updated_at: now, submission_count: 0 },
         ]
 
         render(<FormsListPage />)
