@@ -1161,6 +1161,34 @@
       "422"
     ]
   },
+  "/donors/{donor_id}/medical-records": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/medical-records/sections/{section}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/medical-records/{record_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/donors/{donor_id}/medical-records/{record_id}/archive": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/donors/{donor_id}/meta-lead": {
     "GET": [
       "200",
@@ -4113,6 +4141,34 @@
   },
   "/surrogates/{surrogate_id}/interviews/export": {
     "GET": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/medical-records": {
+    "GET": [
+      "200",
+      "422"
+    ],
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/medical-records/sections/{section}/restore": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/medical-records/{record_id}": {
+    "PATCH": [
+      "200",
+      "422"
+    ]
+  },
+  "/surrogates/{surrogate_id}/medical-records/{record_id}/archive": {
+    "POST": [
       "200",
       "422"
     ]

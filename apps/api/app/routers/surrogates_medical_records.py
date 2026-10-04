@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_session, get_db, require_csrf_header
 from app.core.policies import POLICIES
 from app.core.surrogate_access import can_modify_surrogate, check_surrogate_access
-from app.db.models import Surrogate
 from app.routers.medical_records_shared import raise_medical_record_error
 from app.schemas.auth import UserSession
 from app.schemas.medical_record import (
@@ -31,7 +30,7 @@ from app.services.medical_record_service import RecordOwner
 router = APIRouter()
 
 
-def _readable_surrogate(db: Session, session: UserSession, surrogate_id: UUID) -> Surrogate:
+def _readable_surrogate(db: Session, session: UserSession, surrogate_id: UUID):
     surrogate = surrogate_service.get_surrogate(db, session.org_id, surrogate_id)
     if not surrogate:
         raise HTTPException(status_code=404, detail="Surrogate not found")
@@ -39,7 +38,7 @@ def _readable_surrogate(db: Session, session: UserSession, surrogate_id: UUID) -
     return surrogate
 
 
-def _editable_surrogate(db: Session, session: UserSession, surrogate_id: UUID) -> Surrogate:
+def _editable_surrogate(db: Session, session: UserSession, surrogate_id: UUID):
     surrogate = _readable_surrogate(db, session, surrogate_id)
     edit_permission = POLICIES["surrogates"].actions["edit"].value
     if not permission_service.check_permission(

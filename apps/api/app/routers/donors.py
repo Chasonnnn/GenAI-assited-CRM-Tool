@@ -17,7 +17,6 @@ from app.core.permissions import PermissionKey
 from app.core.policies import POLICIES
 from app.core.record_creation import require_record_creation
 from app.db.enums import AuditEventType, EntityType, Role, SurrogateSource
-from app.db.models import Donor
 from app.routers.medical_records_shared import raise_medical_record_error
 from app.schemas.activity import EntityActivityRead, EntityActivityResponse
 from app.schemas.auth import UserSession
@@ -300,9 +299,7 @@ def get_donor_profile(
     return profile
 
 
-def _editable_donor_owner(
-    db: Session, session: UserSession, donor_id: UUID
-) -> tuple[Donor, medical_record_service.RecordOwner]:
+def _editable_donor_owner(db: Session, session: UserSession, donor_id: UUID):
     donor = _get_or_404(db, session, donor_id)
     if not permission_service.check_permission(
         db, session.org_id, session.user_id, session.role.value, "edit_donors"
@@ -316,7 +313,7 @@ def _editable_donor_owner(
 
 
 def _medical_records_after_write(
-    db: Session, donor: Donor, owner: medical_record_service.RecordOwner, section: str
+    db: Session, donor, owner: medical_record_service.RecordOwner, section: str
 ) -> MedicalRecordListResponse:
     db.commit()
     donor_service.dispatch_donor_updated_workflow(db, donor, [f"medical_records.{section}"])
