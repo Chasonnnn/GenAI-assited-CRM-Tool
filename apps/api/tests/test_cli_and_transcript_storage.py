@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import json
-import os
 import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from botocore.exceptions import ClientError
 from sqlalchemy import event as sqlalchemy_event
 
 from app.db.enums import Role
@@ -288,9 +285,7 @@ def test_cli_backfill_permissions(monkeypatch, db, _cli_db):
     assert beta.id in created
 
 
-def test_cli_backfill_permissions_dry_run_bulk_loads_existing_permissions(
-    db, _cli_db, _echo_log
-):
+def test_cli_backfill_permissions_dry_run_bulk_loads_existing_permissions(db, _cli_db, _echo_log):
     from app.core.permissions import ROLE_DEFAULTS
     from app.db.models import RolePermission
 
@@ -485,141 +480,6 @@ def test_cli_replay_failed_jobs_paths(monkeypatch, _cli_db, _echo_log):
         dry_run=False,
     )
     assert any("Replayed 1 failed job(s)" in line for line in _echo_log)
-
-
-def test_transcript_storage_inline_and_offloaded(monkeypatch):
-    from app.services import transcript_storage_service as svc
-
-    uploaded: dict[str, bytes] = {}
-    monkeypatch.setattr(
-        svc, "_upload_file", lambda key, content: uploaded.__setitem__(key, content)
-    )
-
-    interview_id = uuid4()
-
-    html_inline = "<p>small</p>"
-    inline = svc.store_transcript(interview_id, 1, html_inline, "small")
-    assert inline == (html_inline, "small", None)
-
-    large_html = "x" * (svc.OFFLOAD_THRESHOLD_BYTES + 100)
-    html_db, text_db, storage_key = svc.store_transcript(interview_id, 2, large_html, "large")
-    assert html_db is None
-    assert text_db == "large"
-    assert storage_key == f"transcripts/{interview_id}/v2.json"
-    assert storage_key in uploaded
-
-
-def test_transcript_storage_load_and_delete_paths(monkeypatch):
-    from app.services import transcript_storage_service as svc
-
-    payload = {"html": "<p>loaded</p>", "text": "fallback"}
-    monkeypatch.setattr(svc, "_download_file", lambda _key: json.dumps(payload).encode("utf-8"))
-    assert svc.load_transcript(None, None, "transcripts/1/v1.json") == ("<p>loaded</p>", "fallback")
-
-    monkeypatch.setattr(
-        svc, "_download_file", lambda _key: (_ for _ in ()).throw(RuntimeError("boom"))
-    )
-    assert svc.load_transcript(None, "text-only", "transcripts/1/v1.json") == (None, "text-only")
-
-    monkeypatch.setattr(svc, "_delete_file", lambda _key: None)
-    assert svc.delete_transcript("transcripts/1/v1.json") is True
-    monkeypatch.setattr(
-        svc, "_delete_file", lambda _key: (_ for _ in ()).throw(RuntimeError("fail"))
-    )
-    assert svc.delete_transcript("transcripts/1/v1.json") is False
-    assert svc.delete_transcript("") is False
-
-
-def test_transcript_storage_local_backend_roundtrip(monkeypatch, tmp_path):
-    from app.services import transcript_storage_service as svc
-
-    monkeypatch.setattr(svc, "_get_storage_backend", lambda: "local")
-    monkeypatch.setattr(svc, "_get_local_storage_path", lambda: str(tmp_path))
-
-    key = "transcripts/abc/v1.json"
-    content = b'{"ok":true}'
-    svc._upload_file(key, content)
-    assert svc._download_file(key) == content
-
-    svc._delete_file(key)
-    with pytest.raises(FileNotFoundError):
-        svc._download_file(key)
-
-
-def test_transcript_storage_s3_backend_paths(monkeypatch):
-    from app.services import transcript_storage_service as svc
-
-    calls: list[tuple[str, dict]] = []
-
-    class _S3:
-        def put_object(self, **kwargs):
-            calls.append(("put", kwargs))
-
-        def get_object(self, **kwargs):
-            calls.append(("get", kwargs))
-            return {"Body": SimpleNamespace(read=lambda: b'{"html":"h","text":"t"}')}
-
-        def delete_object(self, **kwargs):
-            calls.append(("delete", kwargs))
-            return None
-
-        def list_objects_v2(self, **kwargs):
-            calls.append(("list", kwargs))
-            return {
-                "Contents": [
-                    {"Key": "transcripts/x/v1.json"},
-                    {"Key": "transcripts/x/v2.json"},
-                    {"Key": "transcripts/x/not-a-version"},
-                ]
-            }
-
-    monkeypatch.setattr(svc, "_get_storage_backend", lambda: "s3")
-    monkeypatch.setattr(svc, "_get_s3_client", lambda: _S3())
-    monkeypatch.setattr(svc, "_get_bucket", lambda: "bucket")
-
-    svc._upload_file("transcripts/x/v1.json", b"abc")
-    assert svc._download_file("transcripts/x/v1.json")
-    svc._delete_file("transcripts/x/v1.json")
-    deleted = svc.cleanup_old_versions(
-        uuid.UUID("00000000-0000-0000-0000-0000000000aa"), keep_versions=[2]
-    )
-    assert deleted == 1
-    assert any(call[0] == "put" for call in calls)
-    assert any(call[0] == "delete" for call in calls)
-
-
-def test_transcript_storage_s3_download_no_such_key(monkeypatch):
-    from app.services import transcript_storage_service as svc
-
-    class _S3:
-        def get_object(self, **kwargs):
-            raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
-
-    monkeypatch.setattr(svc, "_get_storage_backend", lambda: "s3")
-    monkeypatch.setattr(svc, "_get_s3_client", lambda: _S3())
-    monkeypatch.setattr(svc, "_get_bucket", lambda: "bucket")
-
-    with pytest.raises(FileNotFoundError):
-        svc._download_file("transcripts/missing/v1.json")
-
-
-def test_transcript_storage_local_cleanup_versions(monkeypatch, tmp_path):
-    from app.services import transcript_storage_service as svc
-
-    interview_id = uuid4()
-    root = tmp_path / "transcripts" / str(interview_id)
-    os.makedirs(root, exist_ok=True)
-    (root / "v1.json").write_text("{}")
-    (root / "v2.json").write_text("{}")
-    (root / "junk.txt").write_text("{}")
-
-    monkeypatch.setattr(svc, "_get_storage_backend", lambda: "local")
-    monkeypatch.setattr(svc, "_get_local_storage_path", lambda: str(tmp_path))
-
-    deleted = svc.cleanup_old_versions(interview_id, keep_versions=[2])
-    assert deleted == 1
-    assert (root / "v2.json").exists()
-    assert not (root / "v1.json").exists()
 
 
 def test_cli_repair_matched_without_match_keeps_intended_parent_of_completed_match(

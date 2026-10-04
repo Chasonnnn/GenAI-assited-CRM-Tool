@@ -30,9 +30,6 @@ if TYPE_CHECKING:
 # Constants
 # =============================================================================
 
-# Size threshold for S3 offloading (100KB JSON)
-OFFLOAD_THRESHOLD_BYTES = 100 * 1024
-
 # Maximum transcript size (2MB)
 MAX_TRANSCRIPT_SIZE_BYTES = 2 * 1024 * 1024
 
@@ -136,8 +133,7 @@ def create_interview(
     if transcript_size > MAX_TRANSCRIPT_SIZE_BYTES:
         raise ValueError("Transcript exceeds 2MB limit")
 
-    # Determine if offloading needed (will be handled by storage service)
-    # For now, store inline - offloading will be handled separately
+    # Transcripts and their versions are stored inline.
     storage_key = None
     has_transcript = bool(transcript_json or storage_key)
 

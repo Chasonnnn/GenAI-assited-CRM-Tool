@@ -85,13 +85,4 @@ export const attachmentsApi = {
             formData,
         )
     },
-
-    uploadDonorProfilePhoto: async (donorId: string, file: File): Promise<Attachment> => {
-        const formData = new FormData()
-        formData.append("file", file)
-        return api.upload<Attachment>(
-            `/attachments/donors/${donorId}/profile-photo`,
-            formData,
-        )
-    },
 }

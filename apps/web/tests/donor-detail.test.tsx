@@ -23,10 +23,8 @@ const mockUseTasks = vi.fn()
 const mockCreateTask = vi.fn()
 const mockUseDonorAttachments = vi.fn()
 const mockUploadDonorAttachment = vi.fn()
-const mockUploadDonorProfilePhoto = vi.fn()
 const mockDownloadAttachment = vi.fn()
 const mockDeleteDonorAttachment = vi.fn()
-const mockUseAttachmentPreviewUrl = vi.fn()
 const mockUseAuth = vi.fn()
 const mockUseDonorSubmissions = vi.fn()
 const mockDetailSearchParams = new URLSearchParams()
@@ -181,10 +179,8 @@ vi.mock("@/lib/hooks/use-tasks", () => ({
 vi.mock("@/lib/hooks/use-attachments", () => ({
     useDonorAttachments: () => mockUseDonorAttachments(),
     useUploadDonorAttachment: () => ({ mutateAsync: mockUploadDonorAttachment, isPending: false }),
-    useUploadDonorProfilePhoto: () => ({ mutateAsync: mockUploadDonorProfilePhoto, isPending: false }),
     useDownloadAttachment: () => ({ mutate: mockDownloadAttachment, isPending: false }),
     useDeleteDonorAttachment: () => ({ mutateAsync: mockDeleteDonorAttachment, isPending: false }),
-    useAttachmentPreviewUrl: () => mockUseAttachmentPreviewUrl(),
 }))
 
 describe("DonorDetailPage", () => {
@@ -290,11 +286,8 @@ describe("DonorDetailPage", () => {
             refetch: vi.fn(),
         })
         mockUploadDonorAttachment.mockReset().mockResolvedValue({})
-        mockUploadDonorProfilePhoto.mockReset().mockResolvedValue({})
         mockDownloadAttachment.mockReset()
         mockDeleteDonorAttachment.mockReset().mockResolvedValue(undefined)
-        mockUseAttachmentPreviewUrl.mockReset()
-        mockUseAttachmentPreviewUrl.mockReturnValue({ data: undefined, isLoading: false })
         mockUseDonorAttachments.mockReset()
         mockUseDonorAttachments.mockReturnValue({
             data: [{
@@ -583,10 +576,6 @@ describe("DonorDetailPage", () => {
                 profile_photo_attachment_id: photoId,
             },
         })
-        mockUseAttachmentPreviewUrl.mockReturnValue({
-            data: { download_url: "https://files.example/profile.jpg", filename: "profile.jpg" },
-            isLoading: false,
-        })
         render(<DonorDetailPage />)
 
         const header = within(screen.getByRole("banner"))
@@ -594,8 +583,6 @@ describe("DonorDetailPage", () => {
         expect(header.queryByRole("button", { name: /donor profile photo/i })).not.toBeInTheDocument()
         expect(header.queryByLabelText(/Choose .*donor profile photo/i)).not.toBeInTheDocument()
         expect(header.getByRole("button", { name: "Change Stage" })).toBeInTheDocument()
-        expect(mockUseAttachmentPreviewUrl).not.toHaveBeenCalled()
-        expect(mockUploadDonorProfilePhoto).not.toHaveBeenCalled()
     })
 
     it("renders donor document loading, error/retry, and empty states", () => {
