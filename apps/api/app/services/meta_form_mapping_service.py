@@ -31,7 +31,7 @@ from app.services import (
     queue_service,
     task_service,
 )
-from app.utils.normalization import normalize_email
+from app.utils.normalization import escape_like_string, normalize_email
 from app.utils.pagination import paginate_query_by_offset
 
 META_SYSTEM_COLUMNS: list[tuple[str, str]] = [
@@ -774,7 +774,7 @@ def ensure_mapping_review_task(
             Task.organization_id == form.organization_id,
             Task.is_completed.is_(False),
             Task.title == title,
-            Task.description.ilike(f"%{marker}%"),
+            Task.description.ilike(f"%{escape_like_string(marker)}%", escape="\\"),
         )
         .first()
     )
