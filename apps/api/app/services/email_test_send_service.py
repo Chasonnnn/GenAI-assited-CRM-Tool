@@ -129,6 +129,7 @@ class _SendResult:
     email_log_id: UUID | None
     message_id: str | None
     error: str | None
+    error_code: str | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -138,6 +139,7 @@ class _SendResult:
             "email_log_id": self.email_log_id,
             "message_id": self.message_id,
             "error": self.error,
+            "error_code": self.error_code,
         }
 
 
@@ -295,20 +297,36 @@ async def send_test_via_org_provider(
         ).as_dict()
 
     if provider == "resend":
+        from app.services.email_delivery_service import EmailDeliveryConflict
+
         resolved_from = (template_from_email or "").strip() or config["from_email"]
-        return await send_resend_logged(
-            db=db,
-            org_id=org_id,
-            to_email=to_email,
-            subject=subject,
-            html=html,
-            from_email=resolved_from,
-            from_name=config.get("from_name"),
-            reply_to=config.get("reply_to"),
-            template_id=template_id,
-            idempotency_key=idempotency_key,
-            ignore_opt_out=ignore_opt_out,
-        )
+        try:
+            return await send_resend_logged(
+                db=db,
+                org_id=org_id,
+                to_email=to_email,
+                subject=subject,
+                html=html,
+                from_email=resolved_from,
+                from_name=config.get("from_name"),
+                reply_to=config.get("reply_to"),
+                template_id=template_id,
+                idempotency_key=idempotency_key,
+                ignore_opt_out=ignore_opt_out,
+            )
+        except EmailDeliveryConflict:
+            return _SendResult(
+                success=False,
+                queued=False,
+                provider_used="resend",
+                email_log_id=None,
+                message_id=None,
+                error=(
+                    "Test email details changed since the previous attempt. "
+                    "Close and reopen this dialog to start a new test."
+                ),
+                error_code="idempotency_conflict",
+            ).as_dict()
 
     if provider == "org_gmail":
         return await send_gmail_logged(
