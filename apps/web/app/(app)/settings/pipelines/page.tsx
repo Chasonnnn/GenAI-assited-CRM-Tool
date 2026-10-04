@@ -18,12 +18,13 @@ import {
 import { StageDrawer } from "@/components/pipelines/stage-drawer"
 import {
     getMobileStageRowId,
+    MOBILE_REORDER_BUTTON_ID,
     MobileReorderList,
     MobileStageList,
     MobileStagePage,
     MobileStagesBar,
 } from "@/components/pipelines/stage-mobile"
-import { StagesToolbar, StageTable } from "@/components/pipelines/stage-table"
+import { getStageOpenButtonId, StagesToolbar, StageTable } from "@/components/pipelines/stage-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { SaveBar } from "@/components/ui/save-bar"
@@ -48,6 +49,7 @@ import {
 } from "@/lib/hooks/use-pipelines"
 import { buildRecommendedDraftRemaps } from "@/lib/pipeline-reset-remaps"
 import {
+    ADD_STAGE_BUTTON_ID,
     applyLocalFeatureConfigRemap,
     buildApiDraft,
     buildDraft,
@@ -476,6 +478,9 @@ function PipelinesSettingsContent() {
     const [lastMovedStageId, setLastMovedStageId] = useState<string | null>(null)
     const [autoFocusStageId, setAutoFocusStageId] = useState<string | null>(null)
     const contentRef = useRef<HTMLDivElement>(null)
+    // Set while a confirmed removal moves focus itself. The dialog's return target unmounts with
+    // the stage, and Base UI would otherwise fall back to an older focused element.
+    const removalMovesFocusRef = useRef(false)
     const serverErrorCount = validationErrors.length + blockingIssues.length
 
     const scopedSelection = selection?.entityType === entityType ? selection : null
@@ -510,12 +515,45 @@ function PipelinesSettingsContent() {
         })
     }
 
+    /** Focuses a stage's phone row or table settings button, or Add Custom Stage without one. */
+    const focusStageRow = (stageId: string | undefined) => {
+        const row = stageId
+            ? document.getElementById(isMobile ? getMobileStageRowId(stageId) : getStageOpenButtonId(stageId))
+            : null
+        const target = row ?? document.getElementById(ADD_STAGE_BUTTON_ID)
+        target?.focus()
+    }
+
     const closeStage = () => {
         setDrawerOpen(false)
         if (!isMobile) return
         const stageId = selectedStage?.id
         showMobileView(null)
-        if (stageId) document.getElementById(getMobileStageRowId(stageId))?.focus()
+        focusStageRow(stageId)
+    }
+
+    const handleReorderDone = () => {
+        setLastMovedStageId(null)
+        // flushSync also commits the update queued above.
+        showMobileView(null)
+        document.getElementById(MOBILE_REORDER_BUTTON_ID)?.focus()
+    }
+
+    const handleConfirmDeleteStage = () => {
+        const removedIndex = currentStages.findIndex((stage) => stage.stage_key === deleteStageState?.stageKey)
+        const remainingStages = currentStages.filter((_, index) => index !== removedIndex)
+        // The row that takes the removed stage's position, or the previous row when it was last.
+        const nextStage = remainingStages[removedIndex] ?? remainingStages[removedIndex - 1]
+        removalMovesFocusRef.current = true
+        try {
+            editor.handleConfirmDeleteStage()
+            // flushSync also commits the removal queued above.
+            if (isMobile) showMobileView(null)
+            else flushSync(() => setDrawerOpen(false))
+        } finally {
+            removalMovesFocusRef.current = false
+        }
+        focusStageRow(nextStage?.id)
     }
 
     const handleEntityTypeChange = (next: PipelineEntityType) => {
@@ -679,10 +717,7 @@ function PipelinesSettingsContent() {
                             stages={currentStages}
                             lastMovedStageId={lastMovedStageId}
                             onMove={handleMobileMove}
-                            onDone={() => {
-                                setReorderMode(false)
-                                setLastMovedStageId(null)
-                            }}
+                            onDone={handleReorderDone}
                         />
                     ) : (
                         <>
@@ -784,7 +819,8 @@ function PipelinesSettingsContent() {
                 state={deleteStageState}
                 onOpenChange={editor.handleDeleteStageDialogOpenChange}
                 onStateChange={editor.setDeleteStageState}
-                onConfirm={editor.handleConfirmDeleteStage}
+                onConfirm={handleConfirmDeleteStage}
+                finalFocus={() => !removalMovesFocusRef.current}
             />
 
             <VersionHistorySheet

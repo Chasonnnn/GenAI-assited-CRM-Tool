@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ComponentProps } from "react"
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, InfoIcon, Loader2Icon, RotateCcwIcon, TriangleAlertIcon } from "lucide-react"
 
 import { QueryErrorState } from "@/components/error-state"
@@ -362,6 +362,7 @@ export function DeleteStageDialog({
     onOpenChange,
     onStateChange,
     onConfirm,
+    finalFocus,
 }: {
     entityType: PipelineEntityType
     stage: EditableStage | undefined
@@ -372,6 +373,7 @@ export function DeleteStageDialog({
     onOpenChange: (open: boolean) => void
     onStateChange: (state: DeleteStageState) => void
     onConfirm: () => void
+    finalFocus?: ComponentProps<typeof DialogContent>["finalFocus"]
 }) {
     if (!stage || !state) return null
     const dependency = getDependencyByStageKey(dependencyGraph, stage.stage_key)
@@ -388,7 +390,7 @@ export function DeleteStageDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="lg">
+            <DialogContent size="lg" finalFocus={finalFocus}>
                 <DialogHeader>
                     <DialogTitle>Remove {stage.label}?</DialogTitle>
                     <DialogDescription>

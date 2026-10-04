@@ -31,6 +31,7 @@ import type {
     PipelineStageDependency,
 } from "@/lib/api/pipelines"
 import {
+    ADD_STAGE_BUTTON_ID,
     getBehaviorPreset,
     getBehaviorPresetLabel,
     getDependencyByStageKey,
@@ -39,6 +40,8 @@ import {
     type StageFieldErrors,
 } from "@/lib/pipelines/stage-editor"
 import { cn } from "@/lib/utils"
+
+export const MOBILE_REORDER_BUTTON_ID = "mobile-reorder-stages"
 
 /** DOM id of a phone list row, so Back can return focus to the stage the user opened. */
 export function getMobileStageRowId(stageId: string): string {
@@ -76,11 +79,17 @@ export function MobileStagesBar({
                     {lockedCount > 0 ? ` · ${lockedCount} locked` : ""}
                 </span>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={onReorder}>
+            <Button id={MOBILE_REORDER_BUTTON_ID} type="button" variant="outline" size="sm" onClick={onReorder}>
                 <ArrowUpDownIcon aria-hidden="true" />
                 Reorder
             </Button>
-            <Button type="button" size="icon-sm" onClick={onAddStage} aria-label="Add Custom Stage">
+            <Button
+                id={ADD_STAGE_BUTTON_ID}
+                type="button"
+                size="icon-sm"
+                onClick={onAddStage}
+                aria-label="Add Custom Stage"
+            >
                 <PlusIcon aria-hidden="true" />
             </Button>
             <DropdownMenu>
@@ -278,7 +287,13 @@ export function MobileReorderList({
     return (
         <section aria-labelledby="mobile-reorder-title" className="flex flex-1 flex-col">
             <div className="bg-card sticky top-0 z-10 flex h-14 items-center gap-2 border-b pr-2 pl-4">
-                <h2 id="mobile-reorder-title" className="min-w-0 flex-1 truncate text-base font-semibold">
+                {/* The view replaces the focused Reorder button, so focus moves here. */}
+                <h2
+                    id="mobile-reorder-title"
+                    ref={focusOnMount}
+                    tabIndex={-1}
+                    className="min-w-0 flex-1 truncate text-base font-semibold outline-none"
+                >
                     Reorder stages
                 </h2>
                 <Button type="button" size="sm" onClick={onDone}>

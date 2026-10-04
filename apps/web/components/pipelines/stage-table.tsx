@@ -27,6 +27,7 @@ import type {
     StageType,
 } from "@/lib/api/pipelines"
 import {
+    ADD_STAGE_BUTTON_ID,
     buildPresetSemantics,
     createMilestoneLabelGetter,
     getBehaviorPreset,
@@ -51,6 +52,12 @@ import { cn } from "@/lib/utils"
 /** Inline table input: reads as text until hovered or focused. */
 const INLINE_INPUT_CLASS =
     "-ml-1.5 h-7 border-transparent bg-transparent px-1.5 shadow-none hover:border-input focus-visible:bg-background aria-invalid:border-destructive dark:bg-transparent md:text-[13px]"
+
+/** DOM id of a row's settings button, so a removal can move focus to the row that takes its place. */
+export function getStageOpenButtonId(stageId: string): string {
+    return `stage-open-${stageId}`
+}
+
 // Clicks on these keep the row from opening the drawer.
 const ROW_INTERACTIVE_SELECTOR = "input, button, a, label, [role='combobox'], [role='checkbox'], [data-drag-handle]"
 
@@ -91,7 +98,7 @@ export function StagesToolbar({
                     )}
                     Reset to Default
                 </Button>
-                <Button type="button" onClick={onAddStage}>
+                <Button id={ADD_STAGE_BUTTON_ID} type="button" onClick={onAddStage}>
                     <PlusIcon aria-hidden="true" />
                     Add Custom Stage
                 </Button>
@@ -353,6 +360,7 @@ function StageRow({
                         </div>
                     )}
                     <Button
+                        id={getStageOpenButtonId(stage.id)}
                         type="button"
                         variant="ghost"
                         size="icon-sm"

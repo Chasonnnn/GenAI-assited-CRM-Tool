@@ -97,6 +97,8 @@ export const getStageCategoryLabel = createSelectLabelGetter(STAGE_CATEGORY_LABE
 export const STAGE_LABEL_MAX_LENGTH = 100
 export const STAGE_SLUG_MAX_LENGTH = 50
 export const IMPACT_PREVIEW_ID = "pipeline-impact-preview"
+/** Add Custom Stage on the phone list or the desktop toolbar; only one of them is mounted. */
+export const ADD_STAGE_BUTTON_ID = "pipeline-add-stage"
 export const DEFAULT_CUSTOM_STAGE_COLOR = "#6b7280"
 export const RESERVED_CAPABILITY_KEYS = new Set<StageCapabilityKey>([
     "eligible_for_matching",

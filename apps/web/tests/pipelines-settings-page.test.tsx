@@ -1636,6 +1636,8 @@ describe("PipelinesSettingsPage", () => {
         fireEvent.mouseMove(remapOption)
         fireEvent.click(remapOption)
         fireEvent.click(screen.getByRole("button", { name: /confirm removal/i }))
+        await act(async () => {})
+        expect(screen.getByRole("button", { name: "Open On-Hold settings" })).toHaveFocus()
 
         fireEvent.click(screen.getByRole("button", { name: /save changes/i }))
 
@@ -1967,6 +1969,113 @@ describe("PipelinesSettingsPage", () => {
         expect(screen.getByText(validationError)).toBeInTheDocument()
         expect(document.getElementById(IMPACT_PREVIEW_ID)).toHaveFocus()
         vi.useRealTimers()
+    })
+
+    it("moves focus to the reorder heading when phone reorder opens", () => {
+        mockIsMobile.mockReturnValue(true)
+        render(<PipelinesSettingsPage />)
+
+        const reorderButton = screen.getByRole("button", { name: "Reorder" })
+        reorderButton.focus()
+        fireEvent.click(reorderButton)
+
+        expect(screen.getByRole("heading", { level: 2, name: "Reorder stages" })).toHaveFocus()
+    })
+
+    it("returns focus to Reorder when phone reorder is done", () => {
+        mockIsMobile.mockReturnValue(true)
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(screen.getByRole("button", { name: "Reorder" }))
+        fireEvent.click(screen.getByRole("button", { name: "Move Contacted down" }))
+        const doneButton = screen.getByRole("button", { name: "Done" })
+        doneButton.focus()
+        fireEvent.click(doneButton)
+
+        expect(screen.getByRole("button", { name: "Reorder" })).toHaveFocus()
+    })
+
+    it("focuses the row that takes a removed middle stage's place on a phone", async () => {
+        mockIsMobile.mockReturnValue(true)
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(within(screen.getByRole("list", { name: "Stages" })).getByRole("button", { name: /contacted/i }))
+        fireEvent.click(screen.getByRole("button", { name: "Stage actions" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Remove" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm Removal" }))
+        // Base UI restores dialog focus in a microtask; let it run before asserting.
+        await act(async () => {})
+
+        const list = screen.getByRole("list", { name: "Stages" })
+        expect(within(list).queryByRole("button", { name: /contacted/i })).not.toBeInTheDocument()
+        expect(within(list).getByRole("button", { name: /on-hold/i })).toHaveFocus()
+    })
+
+    it("focuses the previous row after removing the last stage on a phone", async () => {
+        mockIsMobile.mockReturnValue(true)
+        currentSurrogatePipeline = {
+            ...pipelineFixture,
+            stages: [
+                ...pipelineFixture.stages,
+                {
+                    ...pipelineFixture.stages[1],
+                    id: "s5",
+                    stage_key: "follow_up",
+                    slug: "follow_up",
+                    label: "Follow Up",
+                    order: 5,
+                },
+            ],
+        }
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(within(screen.getByRole("list", { name: "Stages" })).getByRole("button", { name: /follow up/i }))
+        fireEvent.click(screen.getByRole("button", { name: "Stage actions" }))
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Remove" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm Removal" }))
+        await act(async () => {})
+
+        const list = screen.getByRole("list", { name: "Stages" })
+        expect(within(list).queryByRole("button", { name: /follow up/i })).not.toBeInTheDocument()
+        expect(within(list).getByRole("button", { name: /lost/i })).toHaveFocus()
+    })
+
+    it("keeps focus on the phone stage page when removal is canceled", async () => {
+        mockIsMobile.mockReturnValue(true)
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(within(screen.getByRole("list", { name: "Stages" })).getByRole("button", { name: /contacted/i }))
+        const actionsButton = screen.getByRole("button", { name: "Stage actions" })
+        actionsButton.focus()
+        fireEvent.click(actionsButton)
+        fireEvent.click(await screen.findByRole("menuitem", { name: "Remove" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Cancel" }))
+        await act(async () => {})
+
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Stage actions" })).toHaveFocus()
+    })
+
+    it("focuses the next row's settings button after removing a stage from the drawer", async () => {
+        render(<PipelinesSettingsPage />)
+
+        // A closed popup leaves its trigger as Base UI's fallback return target.
+        const versionHistoryButton = screen.getByRole("button", { name: "Version history" })
+        versionHistoryButton.focus()
+        fireEvent.click(versionHistoryButton)
+        fireEvent.keyDown(await screen.findByRole("dialog", { name: "Version history" }), { key: "Escape" })
+        await waitFor(() => {
+            expect(screen.queryByRole("dialog", { name: "Version history" })).not.toBeInTheDocument()
+        })
+
+        fireEvent.click(screen.getByRole("button", { name: "Open Contacted settings" }))
+        const drawer = await screen.findByRole("dialog")
+        fireEvent.click(within(drawer).getByRole("button", { name: "Remove" }))
+        fireEvent.click(await screen.findByRole("button", { name: "Confirm Removal" }))
+        await act(async () => {})
+
+        expect(screen.queryByRole("button", { name: "Open Contacted settings" })).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Open On-Hold settings" })).toHaveFocus()
     })
 
     it("reorders unlocked stages on phones with up and down buttons", async () => {
