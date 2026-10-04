@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        group: [parallel-1, parallel-2, parallel-3, serial]
+        group: [parallel-1, parallel-2, parallel-3, parallel-4, serial]
     
     services:
       postgres:
@@ -109,7 +109,7 @@ jobs:
         working-directory: apps/api
         run: uv run -m alembic check
 
-      # Migrations change the schema; outbox tests commit rows visible to global claimers.
+      # Migrations, outbox claimers, and OPS CLI global row counts need an isolated database.
       # Each group gets its own PostgreSQL service; serial tests never share worker data.
       - name: Run parallel-safe tests
         if: startsWith(matrix.group, 'parallel-')
@@ -126,15 +126,17 @@ jobs:
               str(path) for path in Path("tests").rglob("test_*.py")
               if not path.name.startswith("test_migration_")
               and path.name != "test_email_delivery_outbox.py"
+              and path.name != "test_ops_cli_integration.py"
           )
           shard = int(os.environ["TEST_GROUP"].rsplit("-", 1)[1]) - 1
-          print("\n".join(files[shard::3]))
+          print("\n".join(files[shard::4]))
           PYTHON
           mapfile -t test_files < /tmp/backend-test-files
           test "${#test_files[@]}" -gt 0
           PYTHONPATH=. uv run -m pytest "${test_files[@]}" -v --tb=short \
             --ignore-glob 'tests/test_migration_*.py' \
             --ignore tests/test_email_delivery_outbox.py \
+            --ignore tests/test_ops_cli_integration.py \
             -n 4 --dist loadscope \
             --cov=app --cov-branch --cov-report= --cov-fail-under=0 --durations=30
 
@@ -142,7 +144,7 @@ jobs:
         if: matrix.group == 'serial'
         working-directory: apps/api
         run: |
-          PYTHONPATH=. uv run -m pytest tests/test_email_delivery_outbox.py tests/test_migration_*.py -v --tb=short \
+          PYTHONPATH=. uv run -m pytest tests/test_email_delivery_outbox.py tests/test_ops_cli_integration.py tests/test_migration_*.py -v --tb=short \
             --cov=app --cov-branch --cov-report= --cov-fail-under=0 --durations=30
 
       - name: Upload backend coverage data

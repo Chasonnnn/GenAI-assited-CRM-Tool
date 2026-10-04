@@ -220,7 +220,7 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
     assert "tests/test_migration_*.py" in workflow
     jobs = yaml.safe_load(workflow)["jobs"]
     groups = jobs["backend-test-groups"]["strategy"]["matrix"]["group"]
-    assert groups == ["parallel-1", "parallel-2", "parallel-3", "serial"]
+    assert groups == ["parallel-1", "parallel-2", "parallel-3", "parallel-4", "serial"]
     assert '"${test_files[@]}"' in workflow
     assert "COVERAGE_FILE: .coverage.${{ matrix.group }}" in workflow
     assert "needs: backend-test-groups" in workflow
@@ -244,6 +244,7 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
     for path in safe_files | {
         "tests/test_migration_schema.py",
         "tests/test_email_delivery_outbox.py",
+        "tests/test_ops_cli_integration.py",
         "tests/conftest.py",
     }:
         file = tmp_path / path
@@ -266,7 +267,7 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
     assert len(selected) == len(safe_files)
 
 
-def test_ci_runs_committed_outbox_tests_outside_shared_database_workers() -> None:
+def test_ci_isolates_global_database_assertions_from_parallel_workers() -> None:
     workflow = CI_WORKFLOW.read_text()
     parallel = workflow.split("- name: Run parallel-safe tests", 1)[1].split("- name:", 1)[0]
     serial = workflow.split("- name: Run shared-database tests serially", 1)[1].split("- name:", 1)[
@@ -275,6 +276,8 @@ def test_ci_runs_committed_outbox_tests_outside_shared_database_workers() -> Non
 
     assert "--ignore tests/test_email_delivery_outbox.py" in parallel
     assert "tests/test_email_delivery_outbox.py" in serial
+    assert "--ignore tests/test_ops_cli_integration.py" in parallel
+    assert "tests/test_ops_cli_integration.py" in serial
     assert "-n 4" not in serial
     assert "if: startsWith(matrix.group, 'parallel-')" in parallel
     assert "if: matrix.group == 'serial'" in serial
