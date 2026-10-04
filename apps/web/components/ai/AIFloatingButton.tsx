@@ -12,6 +12,8 @@ const HIDDEN_PATHS = [
     "/settings",
     "/auth",
     "/onboarding",
+    // Full-canvas workflow editor; its floating inspector sits in this corner.
+    "/automation/workflows/",
 ]
 
 export function AIFloatingButton() {
