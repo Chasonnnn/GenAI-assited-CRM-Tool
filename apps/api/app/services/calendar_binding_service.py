@@ -378,7 +378,12 @@ def busy_intervals(
                 if event.scheduled_start and event.scheduled_end
                 else _all_day_interval(event, timezone=timezone)
             )
-            if interval is not None and interval[0] < end and interval[1] > start:
+            if (
+                interval is not None
+                and interval[0] < interval[1]
+                and interval[0] < end
+                and interval[1] > start
+            ):
                 intervals.append(interval)
     return intervals
 

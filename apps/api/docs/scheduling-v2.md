@@ -30,6 +30,13 @@ Binding discovery and replacement verify the connected user's Google calendar ac
 
 Incremental binding synchronization reads Google outside a database transaction. It persists a projection and cursor only for a complete result from the exact bound calendar. An expired cursor rebuilds projections; a failed or incomplete read records a sanitized binding error and does not infer appointment deletion.
 
+Calendar reads expand recurring events into individual instances. Stored cursors
+carry an instance-format prefix; older unexpanded cursors trigger a projection
+rebuild because Google requires consistent list parameters across incremental
+requests. Google events with equal start and end times remain visible projections
+but contribute no busy interval. Negative intervals still reject the snapshot.
+See the [Google events list contract](https://developers.google.com/workspace/calendar/api/v3/reference/events/list).
+
 After the provider read, inbound synchronization locks in this order: active owner, binding, linked appointment. Staff commands and conflict resolution take the same owner-before-appointment order. A verified organizer event is compared with the last synchronized state, current CRM state, and provider ETag:
 
 - Equal or one-sided changes converge.

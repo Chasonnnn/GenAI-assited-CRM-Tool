@@ -21,6 +21,9 @@ from app.services import calendar_service
 _BASE = "https://www.googleapis.com/calendar/v3"
 _TIMEOUT = 30.0
 _MAX_PAGES = 100
+# Google requires stable list parameters across incremental reads. Old cursors
+# used unexpanded series; rebuild those projections before reading instances.
+_INSTANCE_CURSOR_PREFIX = "instances-v1:"
 
 
 class GoogleProviderError(RuntimeError):
@@ -165,7 +168,7 @@ def parse_event(data: dict, *, response_etag: str | None = None) -> GoogleEvent:
     start = _time(start_data.get("dateTime"))
     end = _time(end_data.get("dateTime"))
     is_all_day = bool(start_data.get("date") or end_data.get("date"))
-    if status != "cancelled" and not is_all_day and (start is None or end is None or end <= start):
+    if status != "cancelled" and not is_all_day and (start is None or end is None or end < start):
         raise GoogleProviderError("Google event interval is incomplete")
     organizer = data.get("organizer") or {}
     private = (data.get("extendedProperties") or {}).get("private") or {}
@@ -285,13 +288,17 @@ async def verify_writable_calendar(token: str, calendar_id: str) -> bool:
 async def read_incremental_events(
     db: Session, user_id: UUID, calendar_id: str, sync_token: str | None
 ) -> GoogleIncrementalResult:
+    if sync_token:
+        if not sync_token.startswith(_INSTANCE_CURSOR_PREFIX):
+            raise GoogleSyncTokenExpired("Google event projection format changed")
+        sync_token = sync_token.removeprefix(_INSTANCE_CURSOR_PREFIX)
     token = await _token(db, user_id)
     events: list[GoogleEvent] = []
     page_token: str | None = None
     seen_pages: set[str] = set()
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         for _ in range(_MAX_PAGES):
-            params = {"maxResults": "2500", "showDeleted": "true"}
+            params = {"maxResults": "2500", "showDeleted": "true", "singleEvents": "true"}
             if sync_token:
                 params["syncToken"] = sync_token
             if page_token:
@@ -316,7 +323,7 @@ async def read_incremental_events(
                     raise GoogleProviderError("Google event cursor missing")
                 return GoogleIncrementalResult(
                     events=events,
-                    next_sync_token=next_sync,
+                    next_sync_token=_INSTANCE_CURSOR_PREFIX + next_sync,
                     calendar_id=calendar_id,
                     complete=True,
                 )
