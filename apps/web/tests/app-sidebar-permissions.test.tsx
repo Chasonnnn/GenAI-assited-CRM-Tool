@@ -585,11 +585,21 @@ describe("AppSidebar permission visibility", () => {
     it("shows granted authoring modules without requiring an Admin role", () => {
         mockNavigationState.pathname = "/automation"
         mockUseAuth.mockReturnValue({ user: { user_id: "author", role: "case_manager", display_name: "Author", ai_enabled: false } })
-        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_automation", "view_campaigns", "view_email_templates", "manage_forms"] } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["manage_automation", "view_campaigns", "view_email_templates", "manage_forms"] } })
         render(<AppSidebar><div>content</div></AppSidebar>)
         for (const name of ["Workflows", "Campaigns", "Form Builder", "Email Templates"]) expect(screen.getByRole("link", { name })).toBeInTheDocument()
+        expect(screen.queryByRole("link", { name: "Executions" })).not.toBeInTheDocument()
         expect(screen.queryByRole("link", { name: "Form Submissions" })).not.toBeInTheDocument()
         expect(screen.queryByRole("link", { name: "Donors (beta)" })).not.toBeInTheDocument()
+    })
+
+    it("shows org executions only when version 2 grants both workflow permissions", () => {
+        mockNavigationState.pathname = "/automation"
+        mockUseAuth.mockReturnValue({ user: { user_id: "author", role: "case_manager", display_name: "Author", ai_enabled: false } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["manage_automation", "manage_org_workflows"] } })
+        render(<AppSidebar><div>content</div></AppSidebar>)
+        expect(screen.getByRole("link", { name: "Workflows" })).toHaveAttribute("href", "/automation")
+        expect(screen.getByRole("link", { name: "Executions" })).toHaveAttribute("href", "/automation/executions")
     })
 
 })

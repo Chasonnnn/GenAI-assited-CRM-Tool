@@ -1023,3 +1023,67 @@ async def test_appointment_list_and_detail_follow_revoked_collaboration(
     assert response.json()["total"] == 0
     assert response.json()["items"] == []
     assert (await authed_client.get(f"/appointments/{appointment.id}")).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_migration_review_routes_return_the_full_declared_snapshot(db, context):
+    from app.db.models import IntakePoolAccessGrant
+    from tests.test_email_templates_personal_scope import authed_client_for_user
+
+    record = _record(db, context.manager, "surrogate", key="approved")
+    grantee, _ = _member(db, context.org.id, "intake_specialist")
+    pooled = _record(db, context.intake, "surrogate", suffix=2)
+    grant = IntakePoolAccessGrant(
+        organization_id=context.org.id,
+        source_user_id=context.intake.user_id,
+        grantee_user_id=grantee.user_id,
+    )
+    db.add(grant)
+    scopes.add_scope_addition(
+        db,
+        context.admin,
+        context.intake.user_id,
+        RecordScopeAdditionCreate(module="donors", assignment="all"),
+    )
+    admin = db.get(User, context.admin.user_id)
+    async with authed_client_for_user(db, context.org.id, admin, Role.ADMIN) as client:
+        updated = await client.put(
+            "/record-scopes/roles/case_manager/surrogates",
+            json={"assignment": "assigned", "phase": "post_approval"},
+        )
+        assert updated.status_code == 200, updated.text
+        review = await client.get("/record-scopes/migration-review")
+        assert review.status_code == 200, review.text
+        body = review.json()
+        assert body == scopes.get_policy_scope_snapshot(db, context.org.id)
+        assert body["role_scopes"] and body["individual_scopes"]
+        candidate = next(
+            row for row in body["unresolved_handoffs"] if row["record_id"] == str(record.id)
+        )
+        pool = body["legacy_pool_grants"][0]
+        assert pool["current_record_ids"] == [str(pooled.id)]
+
+        handoff = await client.post(
+            f"/record-scopes/migration-review/records/surrogate/{record.id}",
+            json={
+                "decision": "no_verified_owner",
+                "expected_fingerprint": candidate["fingerprint"],
+            },
+        )
+        assert handoff.status_code == 200, handoff.text
+        assert handoff.json() == {
+            "record_id": str(record.id),
+            "decision": "no_verified_owner",
+            "resolved": True,
+        }
+        resolved = await client.post(
+            f"/record-scopes/migration-review/pool-grants/{grant.id}",
+            json={"decision": "remove", "expected_fingerprint": pool["fingerprint"]},
+        )
+        assert resolved.status_code == 200, resolved.text
+        assert resolved.json() == {"resolved": True}
+
+        after = (await client.get("/record-scopes/migration-review")).json()
+        assert after == scopes.get_policy_scope_snapshot(db, context.org.id)
+        assert [row["record_id"] for row in after["resolutions"]] == [str(record.id)]
+        assert after["legacy_pool_grants"] == []

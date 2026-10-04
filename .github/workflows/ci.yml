@@ -341,7 +341,7 @@ jobs:
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@11.18.0 --activate
+          corepack prepare pnpm@12.9.1 --activate
       
       - name: Install dependencies
         working-directory: apps/web
@@ -384,7 +384,7 @@ jobs:
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@11.18.0 --activate
+          corepack prepare pnpm@12.9.1 --activate
 
       - name: Install dependencies
         working-directory: apps/web
@@ -432,7 +432,7 @@ jobs:
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@11.18.0 --activate
+          corepack prepare pnpm@12.9.1 --activate
 
       - name: Install dependencies
         working-directory: apps/web
@@ -490,7 +490,7 @@ jobs:
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@11.18.0 --activate
+          corepack prepare pnpm@12.9.1 --activate
       
       - name: Run ESLint
         working-directory: apps/web
@@ -594,7 +594,7 @@ jobs:
         working-directory: apps/web
         run: |
           corepack enable
-          corepack prepare pnpm@11.18.0 --activate
+          corepack prepare pnpm@12.9.1 --activate
 
       - name: Install frontend dependencies
         working-directory: apps/web

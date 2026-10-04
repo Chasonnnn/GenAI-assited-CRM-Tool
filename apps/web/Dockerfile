@@ -11,7 +11,7 @@ WORKDIR /app
 ARG CACHE_BUST=0
 RUN echo "cache_bust=${CACHE_BUST}" > /dev/null
 
-RUN corepack enable && corepack prepare pnpm@11.18.0 --activate
+RUN corepack enable && corepack prepare pnpm@12.9.1 --activate
 
 # Copy package files first for better cache utilization
 COPY apps/web/package.json apps/web/pnpm-lock.yaml ./apps/web/
@@ -23,6 +23,8 @@ WORKDIR /app/apps/web
 ENV NPM_CONFIG_OPTIONAL=true
 ENV npm_config_optional=true
 ENV PNPM_CONFIG_OPTIONAL=true
+# pnpm is pinned through packageManager; upgrades go through mise, CI and this file together.
+ENV PNPM_CONFIG_UPDATE_NOTIFIER=false
 
 RUN rm -rf node_modules
 RUN pnpm install --frozen-lockfile
