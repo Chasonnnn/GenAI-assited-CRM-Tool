@@ -943,9 +943,7 @@ async def upload_org_logo(
     # Upload new logo
     new_logo_url = _upload_logo_to_storage(session.org_id, final_bytes, extension)
 
-    # Update database
     org.signature_logo_url = new_logo_url
-    db.commit()
 
     # Schedule async deletion of old logo
     if old_logo_url:
@@ -993,9 +991,7 @@ def delete_org_logo(
 
     old_logo_url = org.signature_logo_url
 
-    # Clear from database first
     org.signature_logo_url = None
-    db.commit()
 
     # Schedule async deletion from storage
     background_tasks.add_task(_delete_logo_from_storage, old_logo_url)
