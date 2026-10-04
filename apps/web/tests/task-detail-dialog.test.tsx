@@ -1,8 +1,20 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { TaskDetailDialog } from "@/components/tasks/TaskDetailDialog"
 import SurrogateTasksPage from "@/app/(app)/surrogates/[id]/tasks/page"
 import type { TaskRead } from "@/lib/api/tasks"
+
+// A US zone, set before modules build their Intl formatters, so a date-only due date read as
+// UTC midnight would show the previous day.
+const originalTimeZone = vi.hoisted(() => {
+    const original = process.env.TZ
+    process.env.TZ = "America/New_York"
+    return original
+})
+afterAll(() => {
+    if (originalTimeZone === undefined) delete process.env.TZ
+    else process.env.TZ = originalTimeZone
+})
 
 const mocks = vi.hoisted(() => ({ task: vi.fn(), save: vi.fn(), close: vi.fn(), remove: vi.fn(), auth: vi.fn(), permissions: vi.fn(), toggle: vi.fn() }))
 vi.mock("@/lib/hooks/use-tasks", () => ({
@@ -82,6 +94,23 @@ describe("TaskDetailDialog", () => {
         render(<TaskDetailDialog {...props} />)
         expect(screen.queryByLabelText("Description")).not.toBeInTheDocument()
         expect(screen.getByRole("link", { name: "Open submission" })).toHaveAttribute("href", "/automation/form-submissions?form=form-1")
+    })
+
+    it("shows the due time of a review task whose time carries seconds", async () => {
+        const reviewTask = { ...fullTask, due_date: "2026-10-09", due_time: "16:00:12.345678", form_submission_id: "submission-1", form_id: "form-1" }
+        mocks.task.mockReturnValue({ data: reviewTask, isLoading: false, isError: false })
+        render(<TaskDetailDialog {...props} />)
+        expect(screen.getByLabelText("Due Time")).toHaveValue("16:00")
+        fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Review application" } })
+        fireEvent.click(screen.getByRole("button", { name: "Save changes" }))
+        await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(fullTask.id, expect.objectContaining({ due_date: "2026-10-09", due_time: "16:00:00" })))
+    })
+
+    it("shows the due time in the read-only view", () => {
+        mocks.auth.mockReturnValue({ user: { user_id: "not-owner-or-creator", role: "case_manager" } })
+        mocks.task.mockReturnValue({ data: { ...fullTask, due_date: "2026-10-09", due_time: "16:00:12.345678" }, isLoading: false, isError: false })
+        render(<TaskDetailDialog {...props} />)
+        expect(screen.getByText(/Oct 9, 2026 · 4:00 PM/)).toBeInTheDocument()
     })
 
     it("uses creator metadata from full details and shows read-only data for others", () => {

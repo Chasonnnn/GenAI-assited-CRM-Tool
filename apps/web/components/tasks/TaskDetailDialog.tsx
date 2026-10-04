@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context"
 import { formatDate } from "@/lib/formatters"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import { useTask } from "@/lib/hooks/use-tasks"
+import { formatDueTime } from "@/lib/utils/task-due"
 
 export function TaskDetailDialog({ taskId, onClose, onSave, onDelete, isDeleting }: {
     taskId: string
@@ -56,7 +57,10 @@ export function TaskDetailDialog({ taskId, onClose, onSave, onDelete, isDeleting
                 ) : (
                     <>
                         <p className="whitespace-pre-wrap text-sm">{task.description || "No description"}</p>
-                        <p className="text-sm text-muted-foreground">{formatDate(task.due_date, undefined, "No due date")}</p>
+                        <p className="text-sm text-muted-foreground">
+                            {formatDate(task.due_date, undefined, "No due date")}
+                            {task.due_date && task.due_time ? ` · ${formatDueTime(task.due_time)}` : ""}
+                        </p>
                         <TaskFormSubmissionField task={task} />
                     </>
                 )}
