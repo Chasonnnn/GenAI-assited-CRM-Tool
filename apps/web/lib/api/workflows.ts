@@ -186,7 +186,16 @@ export interface WorkflowTestResponse {
     actions_preview: {
         action_type: string
         description: string
+        requires_approval: boolean
     }[]
+}
+
+export interface WorkflowDraftTestRequest {
+    workflow: WorkflowCreate
+    entity_id: string
+    entity_type?: string
+    /** The saved workflow being edited, so access follows edit rights. */
+    workflow_id?: string
 }
 
 export interface UserWorkflowPreference {
@@ -253,6 +262,10 @@ export async function testWorkflow(
         entity_id: entityId,
         ...(entityType ? { entity_type: entityType } : {}),
     })
+}
+
+export async function testWorkflowDraft(request: WorkflowDraftTestRequest): Promise<WorkflowTestResponse> {
+    return api.post<WorkflowTestResponse>("/workflows/test-draft", request)
 }
 
 export async function getWorkflowStats(): Promise<WorkflowStats> {

@@ -57,14 +57,8 @@ import { QueryErrorState } from "@/components/error-state"
 import { toast } from "@/components/ui/toast"
 import { useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
-import { globalSearch } from "@/lib/api/search"
 import WorkflowTemplatesPanel from "@/components/automation/workflow-templates-panel"
 import Link from "@/components/app-link"
-import { getAppointments } from "@/lib/api/appointments"
-import { listMatches, type ListMatchesParams } from "@/lib/api/matches"
-import { getTasks, type TaskListParams } from "@/lib/api/tasks"
-import { getSurrogates, type SurrogateListParams } from "@/lib/api/surrogates"
-import { listDonors } from "@/lib/api/donors"
 import { getWorkflowExecutionStatusLabel } from "@/lib/constants/workflow-execution-status"
 import { parseDateInput } from "@/lib/utils/date"
 import { TRIGGER_ICONS } from "@/components/automation/workflow-editor/node-meta"
@@ -73,6 +67,7 @@ import {
     getTriggerLabel,
     isDonorSubject,
 } from "@/lib/workflows/workflow-editor-state"
+import { ENTITY_LABELS, fetchTestEntities, getTestEntityType } from "@/lib/workflows/test-entities"
 import { AutomationPageHeader } from "./components/automation-page-header"
 import { WorkflowStatsCards } from "./components/workflow-stats-cards"
 
@@ -118,19 +113,6 @@ function WorkflowExecutionRecordLink({ execution }: { execution: WorkflowExecuti
     )
 }
 
-const ENTITY_LABELS: Record<string, string> = {
-    surrogate: "Surrogate ID",
-    form_submission: "Form Submission ID",
-    intake_lead: "Intake Lead ID",
-    task: "Task ID",
-    match: "Match ID",
-    appointment: "Appointment ID",
-    note: "Note ID",
-    document: "Document ID",
-    egg_donor: "Egg Donor ID",
-    sperm_donor: "Sperm Donor ID",
-}
-
 const ENTITY_PLURALS: Record<string, string> = {
     surrogate: "surrogates",
     form_submission: "form submissions",
@@ -157,125 +139,6 @@ function formatRelativeTime(dateString: string | null): string {
     if (diffHours < 24) return `${diffHours}h ago`
     if (diffDays === 1) return "Yesterday"
     return `${diffDays}d ago`
-}
-
-type TestEntitySuggestion = { id: string; label: string; meta?: string }
-
-const buildTestEntitySuggestion = (
-    id: string,
-    label: string,
-    meta?: string | null
-): TestEntitySuggestion => (meta == null ? { id, label } : { id, label, meta })
-
-async function fetchTestEntities(
-    entityType: string,
-    query: string
-): Promise<TestEntitySuggestion[]> {
-    if (entityType === "egg_donor" || entityType === "sperm_donor") {
-        const response = await listDonors({
-            donor_type: entityType === "egg_donor" ? "egg" : "sperm",
-            per_page: 5,
-            page: 1,
-            ...(query.trim() ? { q: query.trim() } : {}),
-        })
-        return response.items.map((item) =>
-            buildTestEntitySuggestion(
-                item.id,
-                `${item.donor_number} — ${item.full_name}`,
-                item.status_label,
-            ),
-        )
-    }
-    if (entityType === "surrogate") {
-        const params: SurrogateListParams = {
-            per_page: 5,
-            sort_by: "created_at",
-            sort_order: "desc",
-        }
-        if (query.trim()) params.q = query.trim()
-        const response = await getSurrogates(params)
-        return response.items.map((item) =>
-            buildTestEntitySuggestion(
-                item.id,
-                `${item.surrogate_number} • ${item.full_name}`,
-                item.status_label ?? null
-            )
-        )
-    }
-    if (entityType === "task") {
-        const params: TaskListParams = {
-            per_page: 5,
-            exclude_approvals: true,
-        }
-        if (query.trim()) params.q = query.trim()
-        const response = await getTasks(params)
-        return response.items.map((item) =>
-            buildTestEntitySuggestion(
-                item.id,
-                item.title,
-                item.surrogate_number ?? null
-            )
-        )
-    }
-    if (entityType === "match") {
-        const params: ListMatchesParams = {
-            per_page: 5,
-        }
-        if (query.trim()) params.q = query.trim()
-        const response = await listMatches(params)
-        return response.items.map((item) =>
-            buildTestEntitySuggestion(
-                item.id,
-                item.match_number,
-                item.surrogate_name ?? item.ip_name ?? null
-            )
-        )
-    }
-    if (entityType === "appointment") {
-        const now = new Date()
-        const end = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30)
-        const response = await getAppointments({
-            per_page: 5,
-            date_start: now.toISOString(),
-            date_end: end.toISOString(),
-        })
-        return response.items.map((item) =>
-            buildTestEntitySuggestion(
-                item.id,
-                item.appointment_type_name ?? "Appointment",
-                item.surrogate_number ?? item.intended_parent_name ?? null
-            )
-        )
-    }
-    if (entityType === "note") {
-        if (!query.trim()) return []
-        const response = await globalSearch({ q: query, types: "note", limit: 5 })
-        return response.results.map((result) =>
-            buildTestEntitySuggestion(
-                result.entity_id,
-                result.title,
-                result.surrogate_name ?? null
-            )
-        )
-    }
-    if (entityType === "document") {
-        if (!query.trim()) return []
-        const response = await globalSearch({ q: query, types: "attachment", limit: 5 })
-        return response.results.map((result) =>
-            buildTestEntitySuggestion(
-                result.entity_id,
-                result.title,
-                result.surrogate_name ?? null
-            )
-        )
-    }
-    if (entityType === "intake_lead") {
-        return []
-    }
-    if (entityType === "form_submission") {
-        return []
-    }
-    return []
 }
 
 type AutomationTab = "workflows" | "email-templates" | "campaigns"
@@ -442,11 +305,7 @@ function useAutomationPageView({
     const testSubjectType = selectedTestWorkflow?.subject_type ?? "surrogate"
     const { data: testOptions } = useWorkflowOptions(activeWorkflowScope, testSubjectType)
     const testTriggerEntityTypes = testOptions?.trigger_entity_types ?? {}
-    const testEntityType = isDonorSubject(testSubjectType)
-        ? testSubjectType
-        : testTriggerType
-            ? testTriggerEntityTypes[testTriggerType] ?? "surrogate"
-            : "surrogate"
+    const testEntityType = getTestEntityType(testSubjectType, testTriggerType ?? "", testTriggerEntityTypes)
     const isTestDonorEntity = testEntityType === "egg_donor" || testEntityType === "sperm_donor"
     const testEntityInputLabel = isTestDonorEntity
         ? WORKFLOW_SUBJECT_LABELS[testEntityType]
