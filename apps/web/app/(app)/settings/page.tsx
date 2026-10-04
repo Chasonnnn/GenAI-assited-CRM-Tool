@@ -60,6 +60,7 @@ import { toast } from "@/components/ui/toast"
 import { getOrgSignaturePreview } from "@/lib/api/signature"
 import { SafeHtmlContent } from "@/components/safe-html-content"
 import { IntelligentSuggestionsSection } from "./intelligent-suggestions-section"
+import { SidebarLogoField } from "./sidebar-logo-field"
 
 const ROLE_LABELS: Record<string, string> = {
   intake_specialist: "Intake Specialist",
@@ -270,13 +271,13 @@ function OrganizationLogoField({
 }) {
   return (
     <div className="space-y-3">
-      <Label>Organization Logo</Label>
+      <Label>Signature logo</Label>
       <div className="flex items-center gap-4">
         {logoUrl ? (
           <div className="group relative">
             <NextImage
               src={logoUrl}
-              alt="Organization Logo"
+              alt="Signature logo"
               width={200}
               height={80}
               unoptimized
@@ -288,12 +289,12 @@ function OrganizationLogoField({
                   type="button"
                   disabled={deletePending}
                   className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 dark:bg-destructive/60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                  aria-label="Remove organization logo"
+                  aria-label="Remove signature logo"
                 >
                   <TrashIcon className="size-3" aria-hidden="true" />
                 </Button>
               }
-              title="Remove the organization logo?"
+              title="Remove the signature logo?"
               description="Email signatures show no logo until a new one is uploaded."
               confirmLabel="Remove logo"
               errorFallback="Couldn't remove the logo. Try again."
@@ -313,7 +314,7 @@ function OrganizationLogoField({
             ref={fileInputRef}
             onChange={onUpload}
             accept="image/png,image/jpeg"
-            aria-label="Organization logo upload"
+            aria-label="Signature logo upload"
             className="hidden"
           />
           <Button
@@ -1328,6 +1329,11 @@ function EmailSignatureSettings() {
         templates={templates}
         selectedTemplate={brandingForm.template}
         onSelect={(templateId) => updateBrandingForm("template", templateId)}
+      />
+
+      <SidebarLogoField
+        orgName={user?.org_display_name || user?.org_name || ""}
+        logoUrl={(orgSettings ? orgSettings.logo_url : user?.org_logo_url) ?? null}
       />
 
       <OrganizationLogoField

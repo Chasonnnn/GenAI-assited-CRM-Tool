@@ -18,6 +18,7 @@ export interface User {
     org_slug: string;
     org_timezone: string;
     org_portal_base_url: string;
+    org_logo_url?: string | null;
     role: string;
     ai_enabled: boolean;
     mfa_enabled: boolean;

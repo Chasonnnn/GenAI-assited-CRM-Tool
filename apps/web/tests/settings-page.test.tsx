@@ -27,10 +27,12 @@ let mockUser: Record<string, string> = {
     email: 'dana@example.com',
 }
 
+const mockRefetchUser = vi.fn()
+
 vi.mock('@/lib/auth-context', () => ({
     useAuth: () => ({
         user: mockUser,
-        refetch: vi.fn(),
+        refetch: mockRefetchUser,
     }),
 }))
 
@@ -62,6 +64,8 @@ const mockGetIntelligentSuggestionRules = vi.fn()
 const mockCreateIntelligentSuggestionRule = vi.fn()
 const mockUpdateIntelligentSuggestionRule = vi.fn()
 const mockDeleteIntelligentSuggestionRule = vi.fn()
+const mockUploadOrganizationLogo = vi.fn()
+const mockDeleteOrganizationLogo = vi.fn()
 
 vi.mock('@/lib/api/settings', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@/lib/api/settings')>()
@@ -78,6 +82,8 @@ vi.mock('@/lib/api/settings', async (importOriginal) => {
         updateIntelligentSuggestionRule: (ruleId: string, payload: unknown) =>
             mockUpdateIntelligentSuggestionRule(ruleId, payload),
         deleteIntelligentSuggestionRule: (ruleId: string) => mockDeleteIntelligentSuggestionRule(ruleId),
+        uploadOrganizationLogo: (file: File) => mockUploadOrganizationLogo(file),
+        deleteOrganizationLogo: () => mockDeleteOrganizationLogo(),
     }
 })
 
@@ -275,6 +281,11 @@ describe('SettingsPage', () => {
         mockUpdateIntelligentSuggestionRule.mockResolvedValue({})
         mockDeleteIntelligentSuggestionRule.mockResolvedValue({})
         mockUpdateIntelligentSuggestionSettings.mockResolvedValue({})
+        mockRefetchUser.mockReset()
+        mockUploadOrganizationLogo.mockReset()
+        mockUploadOrganizationLogo.mockResolvedValue({ logo_url: 'https://cdn.example.test/new-logo.png' })
+        mockDeleteOrganizationLogo.mockReset()
+        mockDeleteOrganizationLogo.mockResolvedValue(undefined)
     })
 
     it('renders general tab by default', async () => {
@@ -298,6 +309,94 @@ describe('SettingsPage', () => {
         expect(await screen.findByText('Organization Branding')).toBeInTheDocument()
         expect(screen.queryByText('Organization Info')).not.toBeInTheDocument()
         expect(screen.queryByText('Signature Branding')).not.toBeInTheDocument()
+    })
+
+    it('shows the sidebar logo initials and upload control when no logo is set', async () => {
+        mockUser = { ...mockUser, org_display_name: 'Aster & Vale Family' }
+        await renderSettingsPage({ tab: 'email-signature' })
+
+        const field = await screen.findByRole('group', { name: 'Sidebar logo' })
+        expect(within(field).getByText('AV')).toBeInTheDocument()
+        expect(within(field).getByRole('button', { name: 'Upload logo' })).toBeEnabled()
+        expect(within(field).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+        expect(screen.getByLabelText('Sidebar logo file')).toHaveAttribute('accept', 'image/png,image/jpeg,image/webp')
+        expect(screen.getByText('Signature logo')).toBeInTheDocument()
+    })
+
+    it('rejects unsupported sidebar logo files before uploading', async () => {
+        await renderSettingsPage({ tab: 'email-signature' })
+        await screen.findByRole('group', { name: 'Sidebar logo' })
+
+        fireEvent.change(screen.getByLabelText('Sidebar logo file'), {
+            target: { files: [new File(['gif'], 'logo.gif', { type: 'image/gif' })] },
+        })
+        expect(await screen.findByRole('alert')).toHaveTextContent('Logo must be a PNG, JPG or WebP image.')
+
+        fireEvent.change(screen.getByLabelText('Sidebar logo file'), {
+            target: { files: [new File([new Uint8Array(1024 * 1024 + 1)], 'logo.png', { type: 'image/png' })] },
+        })
+        expect(await screen.findByRole('alert')).toHaveTextContent('Logo must be 1 MB or smaller.')
+        expect(mockUploadOrganizationLogo).not.toHaveBeenCalled()
+    })
+
+    it('uploads a sidebar logo and refreshes the signed-in user and org settings', async () => {
+        await renderSettingsPage({ tab: 'email-signature' })
+        await screen.findByRole('group', { name: 'Sidebar logo' })
+        const orgSettingsReads = mockGetOrgSettings.mock.calls.length
+
+        const file = new File(['webp'], 'logo.webp', { type: 'image/webp' })
+        fireEvent.change(screen.getByLabelText('Sidebar logo file'), { target: { files: [file] } })
+
+        await waitFor(() => {
+            expect(mockUploadOrganizationLogo).toHaveBeenCalledWith(file)
+        })
+        await waitFor(() => {
+            expect(mockRefetchUser).toHaveBeenCalledTimes(1)
+        })
+        await waitFor(() => {
+            expect(mockGetOrgSettings.mock.calls.length).toBeGreaterThan(orgSettingsReads)
+        })
+        expect(mockToastSuccess).toHaveBeenCalledWith('Sidebar logo updated')
+    })
+
+    it('shows the upload error inline and keeps the current logo', async () => {
+        mockUploadOrganizationLogo.mockRejectedValue(new ApiError(400, 'Bad Request', 'Logo must be square'))
+        await renderSettingsPage({ tab: 'email-signature' })
+        await screen.findByRole('group', { name: 'Sidebar logo' })
+
+        fireEvent.change(screen.getByLabelText('Sidebar logo file'), {
+            target: { files: [new File(['png'], 'logo.png', { type: 'image/png' })] },
+        })
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('Logo must be square')
+        expect(mockRefetchUser).not.toHaveBeenCalled()
+    })
+
+    it('replaces or removes an uploaded sidebar logo after confirmation', async () => {
+        mockGetOrgSettings.mockResolvedValue({
+            name: 'Test Organization',
+            address: null,
+            phone: null,
+            email: null,
+            portal_base_url: 'https://test-org.surrogacyforce.com',
+            logo_url: 'https://cdn.example.test/logo.png',
+        })
+        await renderSettingsPage({ tab: 'email-signature' })
+
+        const field = await screen.findByRole('group', { name: 'Sidebar logo' })
+        expect(within(field).getByRole('button', { name: 'Replace logo' })).toBeEnabled()
+        fireEvent.click(within(field).getByRole('button', { name: 'Remove' }))
+
+        const dialog = await screen.findByRole('alertdialog', { name: 'Remove the sidebar logo?' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Remove logo' }))
+
+        await waitFor(() => {
+            expect(mockDeleteOrganizationLogo).toHaveBeenCalledTimes(1)
+        })
+        await waitFor(() => {
+            expect(mockRefetchUser).toHaveBeenCalledTimes(1)
+        })
+        expect(mockToastSuccess).toHaveBeenCalledWith('Sidebar logo removed')
     })
 
     it('preserves an in-progress social link edit when equivalent signature data rerenders', async () => {
