@@ -1,0 +1,56 @@
+{
+  "observed_at": "2026-10-04T13:15:10.817323+00:00",
+  "release": "0.91.80",
+  "services": [
+    {
+      "flags": {
+        "DB_AUTO_MIGRATE": "false",
+        "DB_MIGRATION_CHECK": "true",
+        "MATCH_CASE_EXPANSION_ENABLED": "true"
+      },
+      "image": "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/api@sha256:7e2ac430729f47e21fe3d2bff41955a5d6c3043491b1f78f2ee99f98c50078e9",
+      "revision": "crm-api-00260-24b",
+      "service": "crm-api",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "crm-api-00260-24b"
+        }
+      ]
+    },
+    {
+      "flags": {
+        "DB_AUTO_MIGRATE": "false",
+        "DB_MIGRATION_CHECK": "true",
+        "MATCH_CASE_EXPANSION_ENABLED": "true",
+        "WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED": "true",
+        "WORKFLOW_MAINTENANCE_FALLBACK_ENABLED": "true",
+        "WORKFLOW_SWEEP_FALLBACK_ENABLED": "true"
+      },
+      "image": "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/worker@sha256:9fadd2565b6d60152e8f4b867aeaf12e3c45bcac702542697443f3d9732ff917",
+      "revision": "crm-worker-00305-66r",
+      "service": "crm-worker",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "crm-worker-00305-66r"
+        }
+      ]
+    },
+    {
+      "flags": {},
+      "image": "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/web:latest",
+      "revision": "crm-web-00236-bmf",
+      "service": "crm-web",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "crm-web-00236-bmf"
+        }
+      ]
+    }
+  ]
+}

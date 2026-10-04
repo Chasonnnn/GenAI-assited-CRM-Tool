@@ -229,9 +229,9 @@ class Settings(BaseSettings):
     # Gmail push notifications (users.watch via Cloud Pub/Sub)
     GMAIL_PUSH_TOPIC: str = ""  # projects/{project}/topics/{topic}
     GMAIL_PUSH_LABEL_IDS: str = ""  # Optional comma-separated Gmail label IDs (e.g. INBOX,SENT)
-    GMAIL_PUSH_WEBHOOK_TOKEN: SecretStr = SecretStr(
-        ""
-    )  # Optional token query param for /webhooks/google-gmail
+    GMAIL_PUSH_AUDIENCE: str = ""  # Exact OIDC audience configured on the push subscription
+    GMAIL_PUSH_SERVICE_ACCOUNT_EMAIL: str = ""  # Only this verified Google principal may push
+    GMAIL_PUSH_SUBSCRIPTION: str = ""  # projects/{project}/subscriptions/{subscription}
     # Google Calendar OAuth (per-user, used for Meet + calendar sync)
     GOOGLE_CALENDAR_REDIRECT_URI: str = ""
     # Explicit calendar bindings and durable appointment synchronization.
