@@ -4472,6 +4472,12 @@
       "200"
     ]
   },
+  "/workflows/test-draft": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/workflows/{workflow_id}": {
     "DELETE": [
       "200",
