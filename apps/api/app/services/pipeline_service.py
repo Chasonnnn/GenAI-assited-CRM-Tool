@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.pipeline_stage_colors import resolve_stage_color
@@ -628,18 +629,22 @@ def get_or_create_default_pipeline(
     Creates initial version snapshot.
     """
     normalized_entity_type = _normalize_pipeline_entity_type(entity_type)
-    pipeline = (
-        db.query(Pipeline)
-        .filter(
-            Pipeline.organization_id == org_id,
-            Pipeline.entity_type == normalized_entity_type,
-            Pipeline.is_default.is_(True),
-        )
-        .first()
-    )
 
+    def find_default() -> Pipeline | None:
+        return (
+            db.query(Pipeline)
+            .filter(
+                Pipeline.organization_id == org_id,
+                Pipeline.entity_type == normalized_entity_type,
+                Pipeline.is_default.is_(True),
+            )
+            .first()
+        )
+
+    pipeline = find_default()
+    created = False
     if not pipeline:
-        pipeline = Pipeline(
+        candidate = Pipeline(
             organization_id=org_id,
             entity_type=normalized_entity_type,
             name="Default",
@@ -647,9 +652,22 @@ def get_or_create_default_pipeline(
             current_version=1,
             feature_config=default_pipeline_feature_config(normalized_entity_type),
         )
-        db.add(pipeline)
-        db.flush()
+        try:
+            # Concurrent first reads (e.g. parallel report requests) race to create the default.
+            # The loser waits on the unique index, then reads the winner's committed pipeline.
+            with db.begin_nested():
+                db.add(candidate)
+                db.flush()
+            pipeline, created = candidate, True
+        except IntegrityError as exc:
+            constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+            if constraint != "uq_pipelines_default_per_entity":
+                raise
+            pipeline = find_default()
+            if pipeline is None:
+                raise
 
+    if created:
         # Create default stage rows
         stage_defs = get_default_stage_defs(normalized_entity_type)
         db.add_all(
