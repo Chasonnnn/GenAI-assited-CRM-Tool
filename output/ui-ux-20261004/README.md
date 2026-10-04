@@ -2,7 +2,9 @@
 
 [Current versus proposed mockups](comparisons.html)
 
-Six focused comparisons use screenshots captured during the same local QA at `65bca746e`. The proposed panels retain Noto Sans, the existing neutral surfaces and magenta/violet actions. Application source is unchanged. These are recommendations, not implemented fixes.
+[Implementation of approved proposals 1–3](implementation.md)
+
+Six focused comparisons use screenshots captured during the same local QA at `65bca746e`. The proposed panels retain Noto Sans, the existing neutral surfaces and magenta/violet actions. The original mockups were recommendations. The user subsequently approved proposals 1–3 only; those are now implemented. Proposals 4–6 and the additional opportunities below remain unchanged.
 
 ## Prioritized comparisons
 
