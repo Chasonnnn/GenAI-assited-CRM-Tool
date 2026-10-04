@@ -48,6 +48,8 @@ jobs:
   backend-test-groups:
     name: Backend Tests (${{ matrix.group }})
     runs-on: ubuntu-26.04
+    # About twice the slowest recent run; a hung pytest worker otherwise holds the runner for 6 hours.
+    timeout-minutes: 10
     strategy:
       fail-fast: true
       matrix:
@@ -154,6 +156,7 @@ jobs:
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     if: always()
     needs: backend-test-groups
 
