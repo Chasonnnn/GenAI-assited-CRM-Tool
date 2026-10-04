@@ -98,7 +98,8 @@ workflow_maintenance_fallback_enabled = false
 workflow_approval_expiry_fallback_enabled = false
 ```
 
-Scheduling and match switches configure both API and worker. Enable scheduling
+Scheduling and match switches configure both API and worker. Terraform waits
+for the worker update before updating the API. Enable scheduling
 after selecting writable calendar bindings and synchronizing their busy data;
 historical ambiguous appointment links require separate review. Enable match
 expansion after its migrations and compatible API/worker images are deployed.
