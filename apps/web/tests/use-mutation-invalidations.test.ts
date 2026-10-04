@@ -29,7 +29,6 @@ import {
     useDeleteDonorAttachment,
     useDownloadAttachment,
     useUploadDonorAttachment,
-    useUploadDonorProfilePhoto,
 } from '@/lib/hooks/use-attachments'
 import { useCancelCampaign, useSendCampaign } from '@/lib/hooks/use-campaigns'
 import { complianceKeys, useExecutePurge } from '@/lib/hooks/use-compliance'
@@ -203,7 +202,6 @@ describe('mutation invalidation contracts', () => {
 
     it.each([
         [useUploadDonorAttachment, { donorId: 'donor-1', file: new File(['x'], 'file.pdf') }],
-        [useUploadDonorProfilePhoto, { donorId: 'donor-1', file: new File(['x'], 'photo.jpg') }],
         [useDeleteDonorAttachment, { donorId: 'donor-1', attachmentId: 'attachment-1' }],
     ])('refreshes donor detail and attachment queries after donor attachment changes', (useHook, variables) => {
         useHook()

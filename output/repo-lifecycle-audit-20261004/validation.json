@@ -1,0 +1,108 @@
+{
+  "source_base": "dbbc70a35",
+  "runtime": {
+    "python": "3.14.6",
+    "node": "24.18.0",
+    "uv": "0.12.0",
+    "pnpm": "12.9.1"
+  },
+  "backend": [
+    {
+      "name": "cleanup_owners",
+      "passed": 62,
+      "duration_seconds": 7.73,
+      "files": [
+        "test_cli_and_transcript_storage.py",
+        "test_interviews.py",
+        "test_interviews_router_rbac_streaming_exports.py",
+        "test_pdf_export_service_interviews_and_profiles.py",
+        "test_email_templates_personal_scope.py",
+        "test_surrogate_stage_role_permissions.py",
+        "test_surrogate_permission_access.py",
+        "test_stage_generation.py"
+      ]
+    },
+    {
+      "name": "dormant_features",
+      "passed": 253,
+      "duration_seconds": 17.97,
+      "files": [
+        "test_scheduling_v2_api.py",
+        "test_scheduling_v2_domain.py",
+        "test_scheduling_command_boundary.py",
+        "test_scheduling_google_provider_service.py",
+        "test_scheduling_binding_watch.py",
+        "test_scheduling_inbound_concurrency.py",
+        "test_scheduling_inventory.py",
+        "test_match_rollout.py",
+        "test_match_cases.py",
+        "test_match_work.py",
+        "test_match_retention_preservation.py",
+        "test_permission_policy.py",
+        "test_record_scopes_v2.py",
+        "test_worker_google_sync_fallback.py",
+        "test_workflow_approvals.py",
+        "test_telemetry.py"
+      ]
+    },
+    {
+      "name": "activation_migrations",
+      "passed": 18,
+      "duration_seconds": 15.0,
+      "files": [
+        "test_migration_20260922_scheduling_v2_schema.py",
+        "test_migration_20260905_match_cases.py"
+      ]
+    }
+  ],
+  "backend_command": "PATH=/private/tmp/crm-legacy-tools:$PATH apps/api/run_tests.sh <listed files prefixed with tests/>",
+  "backend_environment": "Three unique local databases created, migrated, and dropped by run_tests.sh on existing crm_db PostgreSQL. Temporary createdb/dropdb wrappers invoked container clients. No inherited application DATABASE_URL used.",
+  "frontend": {
+    "focused_files": 14,
+    "focused_passed": 232,
+    "full_files": 385,
+    "full_passed": 3037,
+    "command": "mise exec -- pnpm --store-dir /Users/chason/Library/pnpm/store --package-import-method=copy run check",
+    "application_types": "passed",
+    "test_types": "passed",
+    "eslint": "passed"
+  },
+  "ruff_check": "passed",
+  "ruff_format_check": "passed",
+  "diff_check": "passed",
+  "react_doctor": {
+    "version": "0.9.14",
+    "scope": "changed against HEAD",
+    "scanned_files": 10,
+    "diagnostics": 0,
+    "remote_scoring": false,
+    "supply_chain_scan": false
+  },
+  "independent_reviews": {
+    "backend": "No blocking findings; static",
+    "frontend": "No blocking findings; static"
+  },
+  "limits": [
+    "No full backend suite, browser session, production build, or real-provider canary run in this audit.",
+    "Local enabled-path tests do not resolve production binding, permission-policy or queued-work decisions."
+  ],
+  "delivery": {
+    "production_changed": false,
+    "pushed": false,
+    "pr_opened": false,
+    "cleanup_commits": [
+      "b19c53ca",
+      "c684e789"
+    ]
+  },
+  "cleanup": {
+    "servers_started": 0,
+    "existing_crm_db": "left running; pre-existing",
+    "database_cleanup_verified": true,
+    "disposable_databases": [
+      "crm_test_1791091848_69182",
+      "crm_test_1791091924_70126",
+      "crm_test_1791092056_72910"
+    ]
+  }
+}

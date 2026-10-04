@@ -1,12 +1,10 @@
 # Next.js 16.3 adoption
 
-Next.js and `@next/bundle-analyzer` are pinned to 16.3.7. React remains on 19.2.7. TypeScript uses the supported split toolchain described below.
+Next.js and `@next/bundle-analyzer` are pinned to 16.3.8. React remains on 19.2.7. TypeScript uses the supported split toolchain described below.
 
 ## Package maturation gate
 
-The repository's 24-hour `minimumReleaseAge` policy accepts the frozen 16.3.0 lockfile as of 2026-08-06. A clean CI-equivalent Linux image build completed with the policy intact. Do not add a package-age exclusion or bypass the policy in CI.
-
-The 2026-10-01 dependency audit validated 16.3.7 with the full frontend check, Webpack build and Linux amd64 standalone image. Next 16.3.8 clears the same policy at 2026-10-01 12:07:21 EDT and remains a security follow-up; see the [dependency audit](../../../output/dependency-modernization-20260930/audit.md).
+The repository's 24-hour `minimumReleaseAge` policy accepts the frozen 16.3.8 lockfile. The temporary release-age exclusions have been removed. The [2026-10-01 follow-up](../../../output/dependency-modernization-20261001/follow-up.md) records the 16.3.8 frontend checks and production-build verification.
 
 ## Production defaults
 
@@ -101,6 +99,6 @@ For continuous native application checking after route generation:
 mise exec -- pnpm exec tsc --noEmit --watch
 ```
 
-The application project excludes test files. The separate `tests/tsconfig.json` is not a CI gate. On 2026-09-30, adopting the official `@testing-library/jest-dom/vitest` entrypoint removed 5,129 missing matcher diagnostics; 358 existing test-source diagnostics across 75 files remain. Resolve those errors before adding the test project to required checks; see [the TypeScript audit](../../../output/dependency-modernization-20260930/typescript.md).
+The application project excludes test files. The separate `tests/tsconfig.json` is checked by `pnpm run typecheck:tests`, included in both `pnpm run check` and CI. The remaining diagnostics from the September 30 audit were resolved before this gate was added. The October 4 local frontend check passed application types, test types, lint, and 3,037 tests.
 
 Retain the compatibility alias until `typescript-eslint` and source-scanning tests support TypeScript 7's API. Carrying both compiler packages preserves typed linting and Next build validation while the application check uses the native compiler. The split follows [Microsoft's side-by-side guidance](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/); Next's checker selection follows [its TypeScript CLI contract](https://nextjs.org/docs/app/api-reference/config/next-config-js/useTypeScriptCli).

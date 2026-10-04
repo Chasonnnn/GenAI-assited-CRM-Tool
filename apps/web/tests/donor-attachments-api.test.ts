@@ -35,16 +35,4 @@ describe("donor attachments API", () => {
         )
         expect((mockUpload.mock.calls[0]?.[1] as FormData).get("file")).toBe(file)
     })
-
-    it("uploads a donor profile photo through its dedicated image route", async () => {
-        const file = new File(["image"], "profile.jpg", { type: "image/jpeg" })
-
-        await attachmentsApi.uploadDonorProfilePhoto("donor-1", file)
-
-        expect(mockUpload).toHaveBeenCalledWith(
-            "/attachments/donors/donor-1/profile-photo",
-            expect.any(FormData),
-        )
-        expect((mockUpload.mock.calls[0]?.[1] as FormData).get("file")).toBe(file)
-    })
 })
