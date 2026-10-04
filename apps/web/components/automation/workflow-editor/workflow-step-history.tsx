@@ -7,6 +7,7 @@ import { RelativeTime } from "@/components/ui/time-display"
 import type { WorkflowExecution } from "@/lib/api/workflows"
 import { getWorkflowExecutionStatusLabel } from "@/lib/constants/workflow-execution-status"
 import { useWorkflowExecutions } from "@/lib/hooks/use-workflows"
+import { humanizeSelectKey } from "@/lib/select-labels"
 import { cn } from "@/lib/utils"
 
 const HISTORY_LIMIT = 50
@@ -56,7 +57,10 @@ function recordLabel(execution: WorkflowExecution): string {
     const number = execution.entity_number?.trim()
     const name = execution.entity_name?.trim()
     if (number && name) return `${number} · ${name}`
-    return number || name || "Record unavailable"
+    const known = number || name
+    if (known) return known
+    // History names surrogates and donors only; other records show their type and short id.
+    return `${humanizeSelectKey(execution.entity_type) ?? "Record"} #${execution.entity_id.slice(0, 8)}`
 }
 
 /** Recent runs for the trigger, or for one step when a step index is given. */

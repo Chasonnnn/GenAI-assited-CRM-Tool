@@ -1815,8 +1815,19 @@ describe('WorkflowEditorPage', () => {
                             ],
                             executed_at: '2026-10-01T12:00:00Z',
                         },
+                        {
+                            id: 'run-2',
+                            entity_type: 'form_submission',
+                            entity_id: '1a2b3c4d-0000-0000-0000-000000000000',
+                            entity_number: null,
+                            entity_name: null,
+                            matched_conditions: false,
+                            status: 'skipped',
+                            actions_executed: [],
+                            executed_at: '2026-10-01T11:00:00Z',
+                        },
                     ],
-                    total: 1,
+                    total: 2,
                 },
                 isLoading: false,
             } as never)
@@ -1828,6 +1839,7 @@ describe('WorkflowEditorPage', () => {
             expect(runs).toHaveTextContent('S10001 · Test Record')
             expect(runs).toHaveTextContent('Failed')
             expect(runs).toHaveTextContent('Note body empty')
+            expect(runs).toHaveTextContent('Form submission #1a2b3c4d')
             mockUseWorkflowExecutions.mockReset()
             mockUseWorkflowExecutions.mockReturnValue({ data: { items: [], total: 0 }, isLoading: false })
         })
