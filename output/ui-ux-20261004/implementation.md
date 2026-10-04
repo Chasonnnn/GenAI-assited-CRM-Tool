@@ -64,6 +64,6 @@ Task API PID 3153, frontend PID 1220, launcher PID 1212 and their wrappers exite
 
 ## Remaining issue decision
 
-ROLE-01 needs a policy choice: Case Managers can create a record they cannot then view. Recommended later fix: preserve the current access policy, return to the list after creation and show a clear success message. Allowing access to records they create would broaden visibility; removing creation would restrict the workflow. That decision remains pending and no ROLE-01 behavior changed here.
+ROLE-01 was outside this UI change. The user subsequently approved creator access in both permission versions: Case Managers see Approved-and-later surrogates plus surrogates they created, including after reassignment. The [creator-access follow-up](../permissions-creator-20261004/README.md) records that implementation and verification.
 
 The other confirmed issues have scoped fixes that do not require a new product-policy decision. They remain in the [original QA findings](../live-qa-20261004/README.md).

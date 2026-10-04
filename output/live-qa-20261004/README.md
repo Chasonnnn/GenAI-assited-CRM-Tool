@@ -6,7 +6,7 @@ Live browser checks used a disposable migrated PostgreSQL database, synthetic pe
 
 [UI/UX review and six current-versus-proposed mockups](../ui-ux-20261004/README.md)
 
-Follow-up: [approved UI proposals 1–3 implemented and verified](../ui-ux-20261004/implementation.md), including F2 mapped submission identities and SCHED-01 availability feedback. The audit below preserves the original findings; the other 15 product findings and backend test-isolation failure remain unresolved.
+Follow-up: [approved UI proposals 1–3 implemented and verified](../ui-ux-20261004/implementation.md), including F2 mapped submission identities and SCHED-01 availability feedback. [Case Manager creator access](../permissions-creator-20261004/README.md) resolves ROLE-01 under V1 and V2. The audit below preserves the original findings; the other 14 product findings and backend test-isolation failure remain unresolved.
 
 ## Findings
 
