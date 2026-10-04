@@ -135,6 +135,18 @@ variable "workflow_sweep_fallback_enabled" {
   default     = true
 }
 
+variable "scheduling_v2_enabled" {
+  description = "Enable Scheduling V2 on API and worker after explicit calendar bindings and busy projections are ready."
+  type        = bool
+  default     = false
+}
+
+variable "match_case_expansion_enabled" {
+  description = "Enable donor and repeat-case matching on compatible API and worker revisions after the expansion migrations."
+  type        = bool
+  default     = false
+}
+
 variable "messaging_delivery_dispatch_enabled" {
   description = "Enable Twilio delivery materialization and worker dispatch after readiness is verified."
   type        = bool
