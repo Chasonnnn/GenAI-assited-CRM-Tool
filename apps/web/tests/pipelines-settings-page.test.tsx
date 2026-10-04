@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import PipelinesSettingsPage from "../app/(app)/settings/pipelines/page"
 import { DEFAULT_STAGE_SEMANTICS_BY_KEY, STAGE_DEFS } from "@/lib/constants/stages.generated"
 import type { Pipeline, PipelineFeatureConfig, PipelineStage } from "@/lib/api/pipelines"
+import { IMPACT_PREVIEW_ID } from "@/lib/pipelines/stage-editor"
 import { stageDisplayColor } from "@/lib/stage-colors"
 
 const mockUseAuth = vi.fn()
@@ -1905,6 +1906,67 @@ describe("PipelinesSettingsPage", () => {
         expect(screen.getByRole("region", { name: "Unsaved changes" })).toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Back to stages" }))
         expect(within(screen.getByRole("list", { name: "Stages" })).getByRole("button", { name: /reached/i })).toBeInTheDocument()
+    })
+
+    it("moves focus into the phone stage page and back to the stage row", () => {
+        mockIsMobile.mockReturnValue(true)
+        render(<PipelinesSettingsPage />)
+
+        const contactedRow = within(screen.getByRole("list", { name: "Stages" })).getByRole("button", { name: /contacted/i })
+        contactedRow.focus()
+        fireEvent.click(contactedRow)
+        expect(screen.getByRole("heading", { level: 2, name: "Contacted" })).toHaveFocus()
+
+        fireEvent.click(screen.getByRole("button", { name: "Back to stages" }))
+        expect(within(screen.getByRole("list", { name: "Stages" })).getByRole("button", { name: /contacted/i })).toHaveFocus()
+
+        fireEvent.click(screen.getByRole("button", { name: "Add Custom Stage" }))
+        expect(screen.getByDisplayValue("New Stage")).toHaveFocus()
+
+        fireEvent.click(screen.getByRole("button", { name: "Back to stages" }))
+        expect(within(screen.getByRole("list", { name: "Stages" })).getByRole("button", { name: /new stage/i })).toHaveFocus()
+    })
+
+    it("opens the phone stage with a field error and focuses the field from the save bar", () => {
+        mockIsMobile.mockReturnValue(true)
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(within(screen.getByRole("list", { name: "Stages" })).getByRole("button", { name: /contacted/i }))
+        fireEvent.change(screen.getByLabelText("Label"), { target: { value: " " } })
+        fireEvent.click(screen.getByRole("button", { name: "Back to stages" }))
+
+        const saveBar = screen.getByRole("region", { name: "Unsaved changes" })
+        fireEvent.click(within(saveBar).getByRole("button", { name: "1 error" }))
+
+        const labelInput = screen.getByLabelText("Label")
+        expect(labelInput).toHaveAttribute("aria-invalid", "true")
+        expect(labelInput).toHaveFocus()
+    })
+
+    it("returns to the phone stage list and focuses server validation errors from the save bar", () => {
+        vi.useFakeTimers()
+        mockIsMobile.mockReturnValue(true)
+        const validationError = "Custom stages must stay after the first protected stage."
+        mockUsePipelineChangePreview.mockImplementation((_id: string | null, draft: unknown) => ({
+            data: draft ? { ...previewFixture, validation_errors: [validationError] } : null,
+            isLoading: false,
+        }))
+        render(<PipelinesSettingsPage />)
+
+        fireEvent.click(within(screen.getByRole("list", { name: "Stages" })).getByRole("button", { name: /contacted/i }))
+        fireEvent.click(screen.getByRole("button", { name: "Move Contacted up" }))
+        act(() => {
+            vi.advanceTimersByTime(1200)
+        })
+
+        const saveBar = screen.getByRole("region", { name: "Unsaved changes" })
+        expect(within(saveBar).getByRole("button", { name: "Save changes" })).toBeDisabled()
+        fireEvent.click(within(saveBar).getByRole("button", { name: "1 error" }))
+
+        expect(screen.getByRole("list", { name: "Stages" })).toBeInTheDocument()
+        expect(screen.getByText(validationError)).toBeInTheDocument()
+        expect(document.getElementById(IMPACT_PREVIEW_ID)).toHaveFocus()
+        vi.useRealTimers()
     })
 
     it("reorders unlocked stages on phones with up and down buttons", async () => {

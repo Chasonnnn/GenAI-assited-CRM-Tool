@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import { HistoryIcon, Loader2Icon, WorkflowIcon } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
@@ -16,6 +17,7 @@ import {
 } from "@/components/pipelines/pipeline-panels"
 import { StageDrawer } from "@/components/pipelines/stage-drawer"
 import {
+    getMobileStageRowId,
     MobileReorderList,
     MobileStageList,
     MobileStagePage,
@@ -496,9 +498,24 @@ function PipelinesSettingsContent() {
         setDrawerOpen(true)
     }
 
+    /**
+     * Phone only: commits the stage page (or the list when `stage` is null) synchronously, so the
+     * caller can move focus into it.
+     */
+    const showMobileView = (stage: EditableStage | null) => {
+        flushSync(() => {
+            setReorderMode(false)
+            setAutoFocusStageId(null)
+            setSelection(stage ? { entityType, id: stage.id, stageKey: stage.stage_key } : null)
+        })
+    }
+
     const closeStage = () => {
         setDrawerOpen(false)
-        if (isMobile) setSelection(null)
+        if (!isMobile) return
+        const stageId = selectedStage?.id
+        showMobileView(null)
+        if (stageId) document.getElementById(getMobileStageRowId(stageId))?.focus()
     }
 
     const handleEntityTypeChange = (next: PipelineEntityType) => {
@@ -530,12 +547,12 @@ function PipelinesSettingsContent() {
 
     const handleErrorsClick = () => {
         if (focusFirstInvalid(contentRef.current)) return
-        // The phone list has no inputs: open the first stage with a field error instead.
-        const firstInvalidStage = currentStages.find((stage) => stageErrors[stage.id])
-        if (isMobile && firstInvalidStage) {
-            setReorderMode(false)
-            setSelection({ entityType, id: firstInvalidStage.id, stageKey: firstInvalidStage.stage_key })
-            return
+        if (isMobile) {
+            // The phone list has no inputs, and only the list mounts the impact preview: open the
+            // first stage with a field error, or return to the list for server validation errors.
+            const firstInvalidStage = currentStages.find((stage) => stageErrors[stage.id])
+            showMobileView(firstInvalidStage ?? null)
+            if (firstInvalidStage && focusFirstInvalid(contentRef.current)) return
         }
         const impactPreview = document.getElementById(IMPACT_PREVIEW_ID)
         impactPreview?.scrollIntoView?.({ block: "center" })

@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest"
 
 import type { PipelineStage } from "@/lib/api/pipelines"
 import { DEFAULT_STAGE_SEMANTICS_BY_KEY, STAGE_DEFS } from "@/lib/constants/stages.generated"
-import { getPresetOptions, moveStageInList, normalizeEditableStage } from "@/lib/pipelines/stage-editor"
+import {
+    getBehaviorPreset,
+    getBehaviorPresetLabel,
+    getPipelineSelectLabel,
+    getPresetOptions,
+    moveStageInList,
+    normalizeEditableStage,
+    normalizeSelectValue,
+} from "@/lib/pipelines/stage-editor"
 
 function defaultStage(stageKey: string, overrides: Partial<PipelineStage> = {}) {
     const definition = STAGE_DEFS.find((stage) => stage.stageKey === stageKey)
@@ -46,9 +54,18 @@ describe("getPresetOptions", () => {
     it("names the current preset of every unlocked default stage", () => {
         for (const definition of STAGE_DEFS) {
             const stage = defaultStage(definition.stageKey)
-            const values = getPresetOptions(stage, "surrogate").map((option) => option.value)
+            const current = getBehaviorPreset(stage, "surrogate")
+            const options = getPresetOptions(stage, "surrogate")
+            const values = options.map((option) => option.value)
             expect(new Set(values).size, definition.stageKey).toBe(values.length)
             expect(values, definition.stageKey).toContain("custom")
+            expect(values, definition.stageKey).toContain(current)
+
+            // The Behavior preset trigger renders this label for the current value.
+            const label = getPipelineSelectLabel(options, normalizeSelectValue(current), "Behavior preset")
+            expect(label, definition.stageKey).toMatch(/\S/)
+            expect(label, definition.stageKey).not.toBe("Unknown option")
+            expect(label, definition.stageKey).toBe(getBehaviorPresetLabel(current, "surrogate"))
         }
     })
 })

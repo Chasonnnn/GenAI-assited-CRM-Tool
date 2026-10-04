@@ -40,6 +40,15 @@ import {
 } from "@/lib/pipelines/stage-editor"
 import { cn } from "@/lib/utils"
 
+/** DOM id of a phone list row, so Back can return focus to the stage the user opened. */
+export function getMobileStageRowId(stageId: string): string {
+    return `mobile-stage-row-${stageId}`
+}
+
+function focusOnMount(node: HTMLElement | null) {
+    node?.focus({ preventScroll: true })
+}
+
 /** Phone stage list header: name, counts, Reorder, Add Custom Stage and Reset to Default. */
 export function MobileStagesBar({
     pipelineName,
@@ -121,6 +130,7 @@ export function MobileStageList({
                         <Button
                             unstyled
                             type="button"
+                            id={getMobileStageRowId(stage.id)}
                             onClick={() => onOpenStage(stage.id)}
                             className="hover:bg-muted/50 focus-visible:bg-muted/50 flex h-[52px] w-full items-center gap-2.5 px-4 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
                         >
@@ -199,7 +209,13 @@ export function MobileStagePage({
                     <ArrowLeftIcon aria-hidden="true" />
                 </Button>
                 <StageSwatch color={stage.color} />
-                <h2 id={`mobile-stage-title-${stage.id}`} className="min-w-0 flex-1 truncate text-base font-semibold">
+                {/* The page replaces the focused list row, so focus moves here unless the label of a new stage takes it. */}
+                <h2
+                    id={`mobile-stage-title-${stage.id}`}
+                    ref={autoFocusLabel ? undefined : focusOnMount}
+                    tabIndex={-1}
+                    className="min-w-0 flex-1 truncate text-base font-semibold outline-none"
+                >
                     {stage.label || `Stage ${index + 1}`}
                 </h2>
                 {stage.is_locked ? null : (
