@@ -1,0 +1,45 @@
+{
+  "errors": [],
+  "execution": "crm-migrate-qtlsw",
+  "observed_at": "2026-10-04T14:01:50.517075Z",
+  "prepared": [
+    {
+      "calendar": 1,
+      "projection_rows": 0,
+      "ready": true,
+      "synced_at": "2026-10-04T14:01:46.196180+00:00"
+    },
+    {
+      "calendar": 2,
+      "projection_rows": 0,
+      "ready": true,
+      "synced_at": "2026-10-04T14:01:47.202796+00:00"
+    },
+    {
+      "calendar": 3,
+      "projection_rows": 730,
+      "ready": true,
+      "synced_at": "2026-10-04T14:01:48.479871+00:00"
+    },
+    {
+      "calendar": 4,
+      "projection_rows": 0,
+      "ready": true,
+      "synced_at": "2026-10-04T14:01:49.399516+00:00"
+    },
+    {
+      "calendar": 5,
+      "projection_rows": 0,
+      "ready": true,
+      "synced_at": "2026-10-04T14:01:49.936395+00:00"
+    },
+    {
+      "calendar": 6,
+      "projection_rows": 0,
+      "ready": true,
+      "synced_at": "2026-10-04T14:01:50.499165+00:00"
+    }
+  ],
+  "release": "0.91.81",
+  "scope": "projection-only preparation; no provider writes or appointment reconciliation"
+}
