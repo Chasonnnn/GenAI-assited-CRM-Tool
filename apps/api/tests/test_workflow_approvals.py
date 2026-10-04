@@ -192,8 +192,6 @@ class TestWorkflowActionPreview:
     @pytest.mark.parametrize(
         ("action_type", "expected"),
         [
-            ("auto_match_submission", "Match the form submission to an existing record"),
-            ("create_intake_lead", "Create an intake lead from the form submission"),
             ("promote_intake_lead", "Promote the intake lead to a case"),
             ("some_future_action", "Some future action"),
         ],

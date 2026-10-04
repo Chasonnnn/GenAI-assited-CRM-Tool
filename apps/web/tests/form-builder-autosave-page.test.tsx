@@ -132,6 +132,12 @@ function editTitle(value: string) {
     fireEvent.change(screen.getByLabelText("Title"), { target: { value } })
 }
 
+function requiredAt<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
+
 describe("FormBuilderPage autosave", () => {
     let server: Map<string, FormRead>
     let updates: PendingUpdate[]
@@ -226,13 +232,13 @@ describe("FormBuilderPage autosave", () => {
         await advance(3000)
         expect(updates).toHaveLength(1)
 
-        updates[0].finish()
+        requiredAt(updates, 0).finish()
         await advance(10)
         await advance(1200)
         await advance(10)
         expect(updates.map((update) => update.title)).toEqual(["Apply now", "Apply this week"])
 
-        updates[1].finish()
+        requiredAt(updates, 1).finish()
         await advance(10)
         await advance(5000)
 
@@ -260,7 +266,7 @@ describe("FormBuilderPage autosave", () => {
         await advance(10)
         expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
 
-        creates[0].finish()
+        requiredAt(creates, 0).finish()
         await advance(10)
         await advance(5000)
 
@@ -281,7 +287,7 @@ describe("FormBuilderPage autosave", () => {
         expect(creates).toHaveLength(1)
 
         view.unmount()
-        creates[0].finish()
+        requiredAt(creates, 0).finish()
         await advance(10)
 
         expect(routerReplace).not.toHaveBeenCalled()
@@ -326,7 +332,7 @@ describe("FormBuilderPage autosave", () => {
         await advance(10)
         expect(updates).toHaveLength(1)
 
-        updates[0].finish()
+        requiredAt(updates, 0).finish()
         await advance(10)
         expect(confirm).toBeEnabled()
         fireEvent.click(confirm)
@@ -348,7 +354,7 @@ describe("FormBuilderPage autosave", () => {
         await advance(10)
         expect(updates).toHaveLength(1)
 
-        updates[0].fail()
+        requiredAt(updates, 0).fail()
         await advance(10)
         await advance(12000)
         expect(updates).toHaveLength(1)
@@ -359,7 +365,7 @@ describe("FormBuilderPage autosave", () => {
         await advance(10)
         expect(updates.map((update) => update.title)).toEqual(["Apply now", "Apply now!"])
 
-        updates[1].fail()
+        requiredAt(updates, 1).fail()
         await advance(10)
         await advance(12000)
         expect(updates).toHaveLength(2)
@@ -379,7 +385,7 @@ describe("FormBuilderPage autosave", () => {
         editTitle("Apply now")
         await advance(1200)
         await advance(10)
-        updates[0].fail()
+        requiredAt(updates, 0).fail()
         await advance(10)
 
         editTitle("Apply now!")
@@ -402,7 +408,7 @@ describe("FormBuilderPage autosave", () => {
 
         view.rerender(renderBuilder("hidden"))
         await advance(10)
-        creates[0].finish()
+        requiredAt(creates, 0).finish()
         await advance(10)
         expect(routerReplace).not.toHaveBeenCalled()
 
@@ -431,7 +437,7 @@ describe("FormBuilderPage autosave", () => {
 
         view.rerender(renderBuilder("hidden"))
         await advance(10)
-        updates[0].finish()
+        requiredAt(updates, 0).finish()
         await advance(10)
         expect(toastSuccess).not.toHaveBeenCalled()
 
@@ -500,7 +506,7 @@ describe("FormBuilderPage autosave", () => {
         view.rerender(<FormBuilderPage />)
         await advance(10)
 
-        updates[0].finish()
+        requiredAt(updates, 0).finish()
         await advance(10)
         await advance(5000)
 
@@ -521,7 +527,7 @@ describe("FormBuilderPage autosave", () => {
         expect(header().getByText("Draft")).toBeInTheDocument()
         editTitle("Join our program")
 
-        updates[0].finish()
+        requiredAt(updates, 0).finish()
         await advance(10)
         expect(header().getByText("Draft")).toBeInTheDocument()
         expect(screen.getByLabelText("Title")).toHaveValue("Join our program")

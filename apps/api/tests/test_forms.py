@@ -10,6 +10,7 @@ from app.core.encryption import hash_email, hash_phone
 from app.db.models import (
     AutomationWorkflow,
     EmailTemplate,
+    Form,
     FormIntakeLink,
     FormSubmission,
     ResendSettings,
@@ -111,22 +112,11 @@ async def _create_published_form_and_shared_link(*, authed_client, name: str, sc
     return form_id, link["id"], link["slug"]
 
 
-def _create_auto_match_workflow(*, db, test_org, test_user, form_id: str):
-    workflow = AutomationWorkflow(
-        id=uuid.uuid4(),
-        organization_id=test_org.id,
-        name=f"Auto match {uuid.uuid4().hex[:6]}",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
-        condition_logic="AND",
-        actions=[{"action_type": "auto_match_submission"}],
-        is_enabled=True,
-        scope="org",
-        owner_user_id=None,
-        created_by_user_id=test_user.id,
-    )
-    db.add(workflow)
+def _enable_auto_match(*, db, test_org, test_user, form_id: str):
+    form = db.query(Form).filter_by(id=uuid.UUID(form_id), organization_id=test_org.id).one()
+    form.routing_exact_match = "auto"
+    form.routing_no_match = "off"
+    form.routing_updated_by_user_id = test_user.id
     db.commit()
 
 
@@ -188,6 +178,8 @@ async def test_form_submission_approval_updates_surrogate(
     assert submission_res.status_code == 200
     submission_id = submission_res.json()["id"]
 
+    dismissed = await authed_client.post(f"/forms/submissions/{submission_id}/routing/dismiss")
+    assert dismissed.status_code == 200, dismissed.text
     resolve_res = await authed_client.post(
         f"/forms/submissions/{submission_id}/match/resolve",
         json={
@@ -503,9 +495,7 @@ async def test_publish_lead_capture_form_with_sensitive_fields_uses_internal_def
 
 
 @pytest.mark.asyncio
-async def test_publish_form_auto_provisions_default_intake_routing_workflow(
-    authed_client, db, test_org, test_user
-):
+async def test_publish_form_uses_module_routing_defaults(authed_client, db, test_org, test_user):
     schema = _shared_identity_schema()
 
     create_res = await authed_client.post(
@@ -522,18 +512,23 @@ async def test_publish_form_auto_provisions_default_intake_routing_workflow(
         db.query(AutomationWorkflow)
         .filter(
             AutomationWorkflow.organization_id == test_org.id,
-            AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}",
+            AutomationWorkflow.subject_type == "form_submission",
+            AutomationWorkflow.is_system_workflow.is_(True),
         )
         .first()
     )
-    assert workflow is not None
-    assert workflow.is_enabled is True
-    assert workflow.trigger_type == "form_submitted"
-    assert workflow.trigger_config.get("form_id") == form_id
-
-    action_types = [action.get("action_type") for action in (workflow.actions or [])]
-    assert action_types == ["auto_match_submission", "create_intake_lead"]
-    assert all(action.get("requires_approval") is True for action in (workflow.actions or []))
+    assert workflow is None
+    routing = await authed_client.get(f"/forms/{form_id}/routing")
+    assert routing.status_code == 200, routing.text
+    assert (
+        routing.json().items()
+        >= {
+            "exact_match": "review",
+            "no_match": "review",
+            "lead_source": None,
+            "auto_create_donor": False,
+        }.items()
+    )
 
 
 @pytest.mark.asyncio
@@ -557,7 +552,13 @@ async def test_publish_form_skips_default_routing_workflow_when_enabled_form_wor
         trigger_config={"form_id": form_id},
         conditions=[],
         condition_logic="AND",
-        actions=[{"action_type": "auto_match_submission"}],
+        actions=[
+            {
+                "action_type": "send_notification",
+                "title": "Application received",
+                "recipients": "owner",
+            }
+        ],
         is_enabled=True,
         scope="org",
         owner_user_id=None,
@@ -573,7 +574,8 @@ async def test_publish_form_skips_default_routing_workflow_when_enabled_form_wor
         db.query(AutomationWorkflow)
         .filter(
             AutomationWorkflow.organization_id == test_org.id,
-            AutomationWorkflow.system_key == f"shared_intake_routing:{form_id}",
+            AutomationWorkflow.subject_type == "form_submission",
+            AutomationWorkflow.is_system_workflow.is_(True),
         )
         .first()
     )
@@ -645,7 +647,7 @@ async def test_auto_match_keeps_new_submission_ambiguous_when_surrogate_already_
         name="Single Submit Form",
         schema=schema,
     )
-    _create_auto_match_workflow(db=db, test_org=test_org, test_user=test_user, form_id=form_id)
+    _enable_auto_match(db=db, test_org=test_org, test_user=test_user, form_id=form_id)
 
     submission_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -830,6 +832,8 @@ async def test_update_submission_answers_syncs_surrogate_fields(
     assert submission_res.status_code == 200
     submission_id = submission_res.json()["id"]
 
+    dismissed = await authed_client.post(f"/forms/submissions/{submission_id}/routing/dismiss")
+    assert dismissed.status_code == 200, dismissed.text
     resolve_res = await authed_client.post(
         f"/forms/submissions/{submission_id}/match/resolve",
         json={
@@ -1009,6 +1013,8 @@ async def test_form_mapping_allows_extended_surrogate_fields(
     assert submission_res.status_code == 200
     submission_id = submission_res.json()["id"]
 
+    dismissed = await authed_client.post(f"/forms/submissions/{submission_id}/routing/dismiss")
+    assert dismissed.status_code == 200, dismissed.text
     resolve_res = await authed_client.post(
         f"/forms/submissions/{submission_id}/match/resolve",
         json={
@@ -1146,7 +1152,8 @@ async def test_shared_submit_accepts_custom_identity_fields_when_mapped(authed_c
 
     submissions_res = await authed_client.get(f"/forms/{form_id}/submissions")
     assert submissions_res.status_code == 200
-    assert submissions_res.json()[0]["match_status"] == "workflow_pending"
+    assert submissions_res.json()[0]["match_status"] == "routing_review"
+    assert submissions_res.json()[0]["routing_review_step"] == "match"
     assert {
         (item["field_key"], item["surrogate_field"])
         for item in submissions_res.json()[0]["mapping_snapshot"]

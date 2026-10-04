@@ -351,15 +351,15 @@ describe('DashboardPage', () => {
 
         const statsCalls = mockUseSurrogateStats.mock.calls.map((call) => call[0] as Record<string, unknown>)
         expect(statsCalls.length).toBeGreaterThan(0)
-        expect(statsCalls[0].owner_id).toBe('user-1')
+        expect(statsCalls[0]).toMatchObject({ owner_id: 'user-1' })
 
         const attentionCalls = mockUseAttention.mock.calls.map((call) => call[0] as Record<string, unknown>)
         expect(attentionCalls.length).toBeGreaterThan(0)
-        expect(attentionCalls[0].assignee_id).toBe('user-1')
+        expect(attentionCalls[0]).toMatchObject({ assignee_id: 'user-1' })
 
         const upcomingCalls = mockUseUpcoming.mock.calls.map((call) => call[0] as Record<string, unknown>)
         expect(upcomingCalls.length).toBeGreaterThan(0)
-        expect(upcomingCalls[0].assignee_id).toBe('user-1')
+        expect(upcomingCalls[0]).toMatchObject({ assignee_id: 'user-1' })
     })
 
     it('uses browser-navigation assignee filters before issuing new dashboard requests', async () => {

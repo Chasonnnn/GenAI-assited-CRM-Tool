@@ -150,6 +150,8 @@ def test_workflow_and_campaign_donor_template_context_matches(db, owned_donor):
     # Unsubscribe tokens are independently minted opaque identities.
     assert actual.pop("unsubscribe_url").startswith("https://")
     assert expected.pop("unsubscribe_url").startswith("https://")
+    # Workflow emails add a staff link to the record.
+    assert actual.pop("record_link").endswith(f"/donors/{owned_donor.id}")
     assert actual == expected
     assert actual["first_name"] == "Synthetic"
     assert actual["donor_type"] == "Egg Donor"

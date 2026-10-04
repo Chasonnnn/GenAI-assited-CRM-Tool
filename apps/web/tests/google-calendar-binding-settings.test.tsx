@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { assert, beforeEach, describe, expect, it, vi } from "vitest"
 import { GoogleCalendarBindingSettings } from "@/components/appointments/GoogleCalendarBindingSettings"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ApiError } from "@/lib/api"
@@ -126,6 +126,7 @@ describe("GoogleCalendarBindingSettings", () => {
         fireEvent.pointerDown(team)
         fireEvent.click(team)
         fireEvent.click(screen.getByRole("button", { name: "Save changes" }))
+        assert.isDefined(save.mock.calls[0])
         const [items] = save.mock.calls[0]
         expect(items).toEqual(expect.arrayContaining([expect.objectContaining({ calendar_id: "primary", check_busy: true, show_events: true, write_bookings: false }), expect.objectContaining({ calendar_id: "team", write_bookings: true })]))
         expect(mockToast.success).toHaveBeenCalledWith("Calendar settings saved")

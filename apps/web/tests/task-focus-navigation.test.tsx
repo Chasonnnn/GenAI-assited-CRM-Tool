@@ -38,7 +38,7 @@ describe("useTaskFocusNavigation", () => {
                     loadingImportApprovals: false,
                 }),
             {
-                initialProps: { focusTarget: "tasks" as const | null },
+                initialProps: { focusTarget: "tasks" as "tasks" | null },
             },
         )
 

@@ -56,6 +56,9 @@ class TaskRead(BaseModel):
     surrogate_id: UUID | None
     intended_parent_id: UUID | None
     donor_id: UUID | None
+    form_submission_id: UUID | None = None
+    form_id: UUID | None = None
+    form_name: str | None = None
     surrogate_number: str | None = None
     donor_number: str | None = None
     donor_type: Literal["egg", "sperm"] | None = None
@@ -111,6 +114,9 @@ class TaskListItem(BaseModel):
     surrogate_id: UUID | None
     intended_parent_id: UUID | None
     donor_id: UUID | None
+    form_submission_id: UUID | None = None
+    form_id: UUID | None = None
+    form_name: str | None = None
     surrogate_number: str | None = None
     donor_number: str | None = None
     donor_type: Literal["egg", "sperm"] | None = None

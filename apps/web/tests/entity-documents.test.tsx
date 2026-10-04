@@ -51,7 +51,7 @@ describe("shared record documents", () => {
         expect(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancel" })).toBeInTheDocument()
     })
 
-    it.each(["infected", "error"])("blocks downloads for %s files even without quarantine", (scan_status) => {
+    it.each(["infected", "error"] as const)("blocks downloads for %s files even without quarantine", (scan_status) => {
         render(<EntityDocuments {...props()} attachments={[{ ...attachment, scan_status }]} />)
         expect(screen.getByRole("button", { name: "Download record.pdf" })).toBeDisabled()
     })

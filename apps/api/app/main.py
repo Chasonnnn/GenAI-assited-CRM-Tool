@@ -43,7 +43,7 @@ from app.core.structured_logging import (
     log_structured_event,
     static_error_code,
 )
-from app.core.telemetry import configure_telemetry
+from app.core.telemetry import HealthTelemetryMiddleware, TelemetryManager
 from app.db.enums import AlertSeverity, AlertType, AuditEventType
 from app.db.session import MetricsSessionLocal, SessionLocal, engine, metrics_engine
 from app.routers import (
@@ -226,7 +226,7 @@ if settings.SENTRY_DSN.get_secret_value() and settings.ENV != "dev":
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def _application_lifespan(app: FastAPI):
     global _metrics_executor, _metrics_capacity
     from app.core.websocket import (
         manager,
@@ -256,6 +256,16 @@ async def lifespan(app: FastAPI):
         metrics_engine.dispose()
 
 
+telemetry = TelemetryManager(settings, engine, websocket_routes=("/ws/notifications",))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with telemetry.lifespan(app):
+        async with _application_lifespan(app):
+            yield
+
+
 app = FastAPI(
     title="Surrogacy Force API",
     description="Multi-tenant Surrogacy Force case management API",
@@ -263,12 +273,11 @@ app = FastAPI(
     docs_url="/docs" if settings.is_dev else None,
     redoc_url="/redoc" if settings.is_dev else None,
     lifespan=lifespan,
+    telemetry=telemetry.native_config,
 )
 
 if settings.TRUST_PROXY_HEADERS:
     app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=settings.trusted_proxy_hosts)
-
-configure_telemetry(app, engine)
 
 
 # Report server errors to GCP Error Reporting when enabled.
@@ -362,25 +371,26 @@ def _record_metrics(request: Request, status_code: int, duration_ms: int) -> boo
 def _write_metrics(
     *, route: str, method: str, status_code: int, duration_ms: int, org_id: UUID | None
 ) -> None:
-    db = None
-    try:
-        db = MetricsSessionLocal()
-        metrics_service.record_request(
-            db=db,
-            route=route,
-            method=method,
-            status_code=status_code,
-            duration_ms=duration_ms,
-            org_id=org_id,
-        )
-    except Exception:
-        logging.warning("Request metrics write failed")
-    finally:
-        if db is not None:
-            try:
-                db.close()
-            except Exception:
-                logging.warning("Request metrics session cleanup failed")
+    with telemetry.suppress_health(route):
+        db = None
+        try:
+            db = MetricsSessionLocal()
+            metrics_service.record_request(
+                db=db,
+                route=route,
+                method=method,
+                status_code=status_code,
+                duration_ms=duration_ms,
+                org_id=org_id,
+            )
+        except Exception:
+            logging.warning("Request metrics write failed")
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    logging.warning("Request metrics session cleanup failed")
 
 
 def _is_mutation_method(method: str) -> bool:
@@ -692,6 +702,10 @@ async def clear_org_scope_middleware(request: Request, call_next):
         db = getattr(request.state, "request_db", None)
         if db is not None:
             clear_org_scope(db)
+
+
+if telemetry.enabled:
+    app.add_middleware(HealthTelemetryMiddleware)
 
 
 # ============================================================================

@@ -105,7 +105,7 @@ describe("PlatformSystemEmailTemplateNewPage", () => {
                 })
             )
         )
-        expect(mockCreate.mock.calls[0][0]).not.toHaveProperty("body_design")
+        expect(mockCreate.mock.calls[0]?.[0]).not.toHaveProperty("body_design")
         expect(mockPush).toHaveBeenCalledWith("/ops/templates/system/custom_announcement")
     })
 

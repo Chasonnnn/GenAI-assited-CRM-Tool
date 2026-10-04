@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.enums import JobType, OwnerType
 from app.db.models import (
+    Appointment,
     Donor,
     EmailTemplate,
     FormSubmission,
@@ -16,84 +17,47 @@ from app.db.models import (
     MessagingContact,
     Organization,
     PipelineStage,
+    Queue,
     Surrogate,
     User,
 )
+from app.schemas.workflow import is_subject_email_recipient
 from app.services import job_service, notification_service
+
+DONOR_LEAD_KINDS = frozenset({"egg_donor", "sperm_donor"})
 
 
 def send_email(
     db: Session,
     action: dict,
-    entity: Surrogate | Donor,
+    entity: Surrogate | Donor | FormSubmission | IntakeLead,
     event_id: UUID,
     workflow_scope: str = "org",
     workflow_owner_id: UUID | None = None,
     workflow_creator_user_id: UUID | None = None,
     workflow_execution_id: UUID | None = None,
+    appointment: Appointment | None = None,
 ) -> dict:
-    """Queue an email using template."""
+    """Queue an email using template.
+
+    An appointment workflow passes its triggering appointment so appointment variables
+    describe that appointment, not the record's next upcoming one.
+    """
     template_id = action.get("template_id")
     recipients = action.get("recipients", "subject")
 
     recipient_emails: list[str] = []
-    if isinstance(recipients, str) and recipients in {
-        "surrogate",
-        "donor",
-        "subject",
-    }:
-        if entity.email:
+    if is_subject_email_recipient(recipients):
+        # An unlinked submission or lead has no record contact to email yet.
+        if not isinstance(entity, (FormSubmission, IntakeLead)) and entity.email:
             recipient_emails = [entity.email]
-    elif isinstance(entity, Donor):
-        recipient_emails = _resolve_donor_internal_email_recipients(
+    else:
+        recipient_emails = _resolve_staff_email_recipients(
             db,
             entity,
-            recipients,
+            action,
             workflow_creator_user_id=workflow_creator_user_id,
         )
-    elif recipients == "owner":
-        if entity.owner_type == OwnerType.USER.value and entity.owner_id:
-            owner = db.query(User).filter(User.id == entity.owner_id).first()
-            if owner and owner.email:
-                recipient_emails = [owner.email]
-    elif recipients == "creator":
-        creator_id = getattr(entity, "created_by_user_id", None)
-        if creator_id:
-            creator = db.query(User).filter(User.id == creator_id).first()
-            if creator and creator.email:
-                recipient_emails = [creator.email]
-    elif recipients == "all_admins":
-        from app.db.enums import Role
-        from app.db.models import Membership
-
-        rows = (
-            db.query(User.email)
-            .join(Membership, Membership.user_id == User.id)
-            .filter(
-                Membership.organization_id == entity.organization_id,
-                Membership.role.in_([Role.ADMIN.value, Role.DEVELOPER.value]),
-                Membership.is_active.is_(True),
-                User.is_active.is_(True),
-            )
-            .all()
-        )
-        recipient_emails = [row[0] for row in rows if row and row[0]]
-    elif isinstance(recipients, list):
-        from app.db.models import Membership
-
-        recipient_ids = [UUID(r) if isinstance(r, str) else r for r in recipients]
-        rows = (
-            db.query(User.email)
-            .join(Membership, Membership.user_id == User.id)
-            .filter(
-                Membership.organization_id == entity.organization_id,
-                Membership.user_id.in_(recipient_ids),
-                Membership.is_active.is_(True),
-                User.is_active.is_(True),
-            )
-            .all()
-        )
-        recipient_emails = [row[0] for row in rows if row and row[0]]
 
     if not recipient_emails:
         return {"success": False, "error": "No recipient emails resolved"}
@@ -167,6 +131,10 @@ def send_email(
 
     # Resolve variables
     variables = resolve_email_variables(db, entity)
+    if appointment is not None:
+        from app.services import email_service
+
+        variables.update(email_service.build_appointment_template_variables(db, appointment))
 
     job_ids: list[str] = []
     for email in sorted(set(recipient_emails)):
@@ -180,9 +148,7 @@ def send_email(
                 "recipient_email": email,
                 "variables": variables,
                 "surrogate_id": str(entity.id) if isinstance(entity, Surrogate) else None,
-                "subject_type": entity.pipeline_entity_type
-                if isinstance(entity, Donor)
-                else "surrogate",
+                "subject_type": _email_subject_type(entity),
                 "subject_id": str(entity.id),
                 "event_id": str(event_id),
                 "workflow_execution_id": (
@@ -204,64 +170,117 @@ def send_email(
     }
 
 
-def _resolve_donor_internal_email_recipients(
+def _email_subject_type(entity: Surrogate | Donor | FormSubmission | IntakeLead) -> str:
+    if isinstance(entity, Donor):
+        return entity.pipeline_entity_type
+    if isinstance(entity, FormSubmission):
+        return "form_submission"
+    if isinstance(entity, IntakeLead):
+        return "intake_lead"
+    return "surrogate"
+
+
+def _is_donor_context(entity: Surrogate | Donor | FormSubmission | IntakeLead) -> bool:
+    if isinstance(entity, Donor):
+        return True
+    if isinstance(entity, FormSubmission):
+        return entity.lead_kind in DONOR_LEAD_KINDS
+    if isinstance(entity, IntakeLead):
+        return entity.lead_type in DONOR_LEAD_KINDS
+    return False
+
+
+def _resolve_staff_email_recipients(
     db: Session,
-    donor: Donor,
-    recipients: Any,
+    entity: Surrogate | Donor | FormSubmission | IntakeLead,
+    action: dict,
     *,
     workflow_creator_user_id: UUID | None,
 ) -> list[str]:
-    """Resolve internal donor recipients through current org access."""
+    """Resolve staff recipients through current org membership.
+
+    Donor-context emails reach only members who can view donors. Custom addresses are
+    configured explicitly on the workflow and are sent as given.
+    """
     from app.db.enums import Role
-    from app.db.models import Membership
+    from app.db.models import Membership, QueueMember
     from app.services import task_service
 
-    recipient_ids: list[UUID] | None = None
-    if recipients == "owner":
-        recipient_ids = (
-            [donor.owner_id] if donor.owner_type == OwnerType.USER.value and donor.owner_id else []
-        )
-    elif recipients == "creator":
-        creator_id = getattr(donor, "created_by_user_id", None)
-        recipient_ids = [creator_id or workflow_creator_user_id]
-        recipient_ids = [recipient_id for recipient_id in recipient_ids if recipient_id]
-    elif isinstance(recipients, list):
-        try:
-            recipient_ids = [
-                UUID(recipient_id) if isinstance(recipient_id, str) else recipient_id
-                for recipient_id in recipients
-            ]
-        except TypeError, ValueError:
-            return []
-    elif recipients != "all_admins":
-        return []
-
+    org_id = entity.organization_id
+    recipients = action.get("recipients")
     query = (
         db.query(User.email, Membership.user_id, Membership.role)
         .join(Membership, Membership.user_id == User.id)
         .filter(
-            Membership.organization_id == donor.organization_id,
+            Membership.organization_id == org_id,
             Membership.is_active.is_(True),
             User.is_active.is_(True),
         )
     )
-    if recipients == "all_admins":
+
+    if recipients == "custom":
+        emails = action.get("recipient_emails") or []
+        return [email for email in emails if isinstance(email, str) and email]
+
+    queue_id: UUID | None = None
+    recipient_ids: list[UUID] | None = None
+    if recipients == "owner":
+        owner_type = getattr(entity, "owner_type", None)
+        owner_id = getattr(entity, "owner_id", None)
+        if owner_type == OwnerType.QUEUE.value and owner_id:
+            queue_id = owner_id
+        elif owner_type == OwnerType.USER.value and owner_id:
+            recipient_ids = [owner_id]
+        else:
+            return []
+    elif recipients == "creator":
+        creator_id = getattr(entity, "created_by_user_id", None)
+        # Surrogates keep their historical creator-only rule.
+        if creator_id is None and not isinstance(entity, Surrogate):
+            creator_id = workflow_creator_user_id
+        recipient_ids = [creator_id] if creator_id else []
+    elif recipients == "queue":
+        try:
+            queue_id = UUID(str(action.get("recipient_queue_id")))
+        except ValueError:
+            return []
+    elif recipients == "role":
+        role = action.get("recipient_role")
+        if role not in {item.value for item in Role}:
+            return []
+        query = query.filter(Membership.role == role)
+    elif recipients == "all_admins":
         query = query.filter(Membership.role.in_([Role.ADMIN.value, Role.DEVELOPER.value]))
+    elif isinstance(recipients, list):
+        try:
+            recipient_ids = [UUID(str(recipient_id)) for recipient_id in recipients]
+        except ValueError:
+            return []
     else:
+        return []
+
+    if queue_id is not None:
+        member_ids = (
+            db.query(QueueMember.user_id)
+            .join(Queue, Queue.id == QueueMember.queue_id)
+            .filter(
+                Queue.id == queue_id,
+                Queue.organization_id == org_id,
+                Queue.is_active.is_(True),
+            )
+        )
+        query = query.filter(Membership.user_id.in_(member_ids.scalar_subquery()))
+    if recipient_ids is not None:
         if not recipient_ids:
             return []
         query = query.filter(Membership.user_id.in_(set(recipient_ids)))
 
+    donor_context = _is_donor_context(entity)
     return [
         email
         for email, user_id, role in query.all()
         if email
-        and task_service.user_can_view_donors(
-            db,
-            donor.organization_id,
-            user_id,
-            role=role,
-        )
+        and (not donor_context or task_service.user_can_view_donors(db, org_id, user_id, role=role))
     ]
 
 
@@ -363,6 +382,8 @@ def send_notification(
     db: Session,
     action: dict,
     entity: Any,
+    *,
+    dedupe_key: str | None = None,
 ) -> dict:
     """Send in-app notification."""
     from app.db.enums import NotificationType, Role
@@ -374,9 +395,36 @@ def send_notification(
 
     target = entity
     target_entity_type = "donor" if isinstance(entity, Donor) else "surrogate"
+    host_id = None
     if isinstance(entity, FormSubmission):
         target_entity_type = "form_submission"
-    if not hasattr(entity, "owner_type"):
+    if isinstance(entity, Appointment):
+        # Owner recipients follow the linked record; unlinked bookings notify on the appointment.
+        host_id = entity.user_id
+        target, target_entity_type = entity, "appointment"
+        if entity.surrogate_id:
+            surrogate = (
+                db.query(Surrogate)
+                .filter(
+                    Surrogate.id == entity.surrogate_id,
+                    Surrogate.organization_id == entity.organization_id,
+                )
+                .first()
+            )
+            if surrogate:
+                target, target_entity_type = surrogate, "surrogate"
+        elif entity.donor_id:
+            donor = (
+                db.query(Donor)
+                .filter(
+                    Donor.id == entity.donor_id,
+                    Donor.organization_id == entity.organization_id,
+                )
+                .first()
+            )
+            if donor:
+                target, target_entity_type = donor, "donor"
+    elif not hasattr(entity, "owner_type"):
         surrogate_id = getattr(entity, "surrogate_id", None)
         if surrogate_id:
             target = (
@@ -406,6 +454,8 @@ def send_notification(
     elif recipients == "creator":
         creator_id = getattr(target, "created_by_user_id", None)
         user_ids = [creator_id] if creator_id else []
+    elif recipients == "host":
+        user_ids = [host_id] if host_id else []
     elif recipients == "all_admins":
         memberships = (
             db.query(Membership)
@@ -432,6 +482,8 @@ def send_notification(
             body=body if body else None,
             entity_type=target_entity_type,
             entity_id=getattr(target, "id", None),
+            dedupe_key=dedupe_key,
+            dedupe_window_hours=None,
         )
         if notification:
             created_count += 1
@@ -551,11 +603,83 @@ def send_zapier_conversion_event(
     }
 
 
-def resolve_email_variables(db: Session, subject: Surrogate | Donor) -> dict:
+def resolve_email_variables(
+    db: Session, subject: Surrogate | Donor | FormSubmission | IntakeLead
+) -> dict:
     """Resolve allowlisted email variables from the workflow subject."""
     from app.services import email_service
 
     if isinstance(subject, Donor):
-        return email_service.build_donor_template_variables(db, subject)
+        variables = email_service.build_donor_template_variables(db, subject)
+    elif isinstance(subject, Surrogate):
+        variables = email_service.build_surrogate_template_variables(db, subject)
+    else:
+        variables = _intake_email_variables(db, subject)
+    variables["record_link"] = _record_link(db, subject)
+    return variables
 
-    return email_service.build_surrogate_template_variables(db, subject)
+
+def _record_path(subject: Surrogate | Donor | FormSubmission | IntakeLead) -> str:
+    if isinstance(subject, Surrogate):
+        return f"/surrogates/{subject.id}"
+    if isinstance(subject, Donor):
+        return f"/donors/{subject.id}"
+    if subject.form_id:
+        return f"/automation/form-submissions?form={subject.form_id}"
+    return "/automation/form-submissions"
+
+
+def _record_link(db: Session, subject: Surrogate | Donor | FormSubmission | IntakeLead) -> str:
+    from app.services import org_service
+
+    org = db.query(Organization).filter(Organization.id == subject.organization_id).first()
+    base_url = org_service.get_org_portal_base_url(org) if org else ""
+    return f"{base_url}{_record_path(subject)}" if base_url else ""
+
+
+def _intake_email_variables(db: Session, subject: FormSubmission | IntakeLead) -> dict:
+    """Variables for a submission or intake lead that is not yet a surrogate or donor."""
+    from app.db.models import Form
+    from app.services import form_intake_service
+
+    org = db.query(Organization).filter(Organization.id == subject.organization_id).first()
+    form = (
+        db.query(Form)
+        .filter(Form.id == subject.form_id, Form.organization_id == subject.organization_id)
+        .first()
+        if subject.form_id
+        else None
+    )
+    contact: dict = {}
+    if isinstance(subject, IntakeLead):
+        contact = {"full_name": subject.full_name, "email": subject.email, "phone": subject.phone}
+        submitted_at = subject.created_at
+    else:
+        submitted_at = subject.submitted_at
+        lead = (
+            db.query(IntakeLead)
+            .filter(
+                IntakeLead.id == subject.intake_lead_id,
+                IntakeLead.organization_id == subject.organization_id,
+            )
+            .first()
+            if subject.intake_lead_id
+            else None
+        )
+        if lead is not None:
+            contact = {"full_name": lead.full_name, "email": lead.email, "phone": lead.phone}
+        else:
+            try:
+                contact = form_intake_service.extract_submission_identity(
+                    subject, form_purpose=form.purpose if form else None
+                )
+            except ValueError:
+                contact = {}
+    return {
+        "full_name": contact.get("full_name") or "",
+        "email": contact.get("email") or "",
+        "phone": contact.get("phone") or "",
+        "org_name": org.name if org else "",
+        "form_name": form.name if form else "",
+        "submitted_at": submitted_at.strftime("%Y-%m-%d %H:%M UTC") if submitted_at else "",
+    }

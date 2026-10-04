@@ -21,6 +21,7 @@ from app.db.enums import (
     JobStatus,
     JobType,
     SurrogateActivityType,
+    WorkflowTriggerType,
 )
 from app.db.models import (
     Donor,
@@ -827,6 +828,31 @@ def request_submission_file_rescan(
     return record
 
 
+def _fire_review_workflows(
+    db: Session, submission: FormSubmission, trigger_type: WorkflowTriggerType
+) -> None:
+    """Run Application Approved/Rejected workflows after the review committed."""
+    from app.services import workflow_side_effects, workflow_triggers
+
+    submission_id = submission.id
+    org_id = submission.organization_id
+    workflow_side_effects.run_post_commit_trigger(
+        db,
+        org_id=org_id,
+        load=lambda session: (
+            session.query(FormSubmission)
+            .filter(FormSubmission.id == submission_id, FormSubmission.organization_id == org_id)
+            .one_or_none()
+        ),
+        trigger=lambda session, entity: workflow_triggers.trigger_form_submission_reviewed(
+            session, entity, trigger_type
+        ),
+        integration_key=trigger_type.value,
+        title="Application review workflow trigger failed",
+        details={"submission_id": str(submission_id), "trigger_type": trigger_type.value},
+    )
+
+
 def _approve_donor_submission(
     db: Session,
     submission: FormSubmission,
@@ -881,6 +907,7 @@ def _approve_donor_submission(
         db.rollback()
         raise
     db.refresh(submission)
+    _fire_review_workflows(db, submission, WorkflowTriggerType.FORM_SUBMISSION_APPROVED)
     return submission
 
 
@@ -941,6 +968,7 @@ def approve_submission(
 
     db.commit()
     db.refresh(submission)
+    _fire_review_workflows(db, submission, WorkflowTriggerType.FORM_SUBMISSION_APPROVED)
     return submission
 
 
@@ -983,36 +1011,41 @@ def reject_submission(
     reviewer_id: uuid.UUID,
     review_notes: str | None,
 ) -> FormSubmission:
+    from app.services import audit_service, form_routing_service
+
+    submission = form_routing_service.lock_submission(db, submission.organization_id, submission.id)
     if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
         raise ValueError("Submission is not pending review")
 
-    submission.status = FormSubmissionStatus.REJECTED.value
-    submission.reviewed_at = datetime.now(UTC)
-    submission.reviewed_by_user_id = reviewer_id
-    submission.review_notes = review_notes
-    _close_rejected_submission_lead(db, submission)
-
-    from app.services import audit_service
-
-    audit_service.log_event(
-        db=db,
-        org_id=submission.organization_id,
-        event_type=AuditEventType.FORM_SUBMISSION_REJECTED,
-        actor_user_id=reviewer_id,
-        target_type="form_submission",
-        target_id=submission.id,
-        details={
-            "form_id": str(submission.form_id),
-            **(
-                {"donor_id": str(submission.donor_id) if submission.donor_id else None}
-                if submission.lead_kind in DONOR_LEAD_KINDS
-                else {"surrogate_id": str(submission.surrogate_id)}
-            ),
-        },
-    )
-
-    db.commit()
+    try:
+        form_routing_service.finish_review(db, submission, reviewer_id)
+        submission.status = FormSubmissionStatus.REJECTED.value
+        submission.reviewed_at = datetime.now(UTC)
+        submission.reviewed_by_user_id = reviewer_id
+        submission.review_notes = review_notes
+        _close_rejected_submission_lead(db, submission)
+        audit_service.log_event(
+            db=db,
+            org_id=submission.organization_id,
+            event_type=AuditEventType.FORM_SUBMISSION_REJECTED,
+            actor_user_id=reviewer_id,
+            target_type="form_submission",
+            target_id=submission.id,
+            details={
+                "form_id": str(submission.form_id),
+                **(
+                    {"donor_id": str(submission.donor_id) if submission.donor_id else None}
+                    if submission.lead_kind in DONOR_LEAD_KINDS
+                    else {"surrogate_id": str(submission.surrogate_id)}
+                ),
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(submission)
+    _fire_review_workflows(db, submission, WorkflowTriggerType.FORM_SUBMISSION_REJECTED)
     return submission
 
 

@@ -17,6 +17,7 @@ class JobType(str, Enum):
     REMINDER = "reminder"
     WEBHOOK_RETRY = "webhook_retry"
     NOTIFICATION = "notification"
+    NOTIFICATION_DIGEST = "notification_digest"  # Daily digest email per org
     META_LEAD_FETCH = "meta_lead_fetch"
     META_LEAD_REPROCESS_FORM = "meta_lead_reprocess_form"
     META_CAPI_EVENT = "meta_capi_event"

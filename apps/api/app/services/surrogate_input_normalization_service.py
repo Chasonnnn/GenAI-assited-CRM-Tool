@@ -85,6 +85,11 @@ def coerce_surrogate_field_value(surrogate_field: str, value: Any) -> Any:
     if isinstance(value, str) and not value.strip():
         return None
 
+    if surrogate_field == "height_ft" and isinstance(value, Decimal):
+        # Height transformer results are already decimal feet. Parsing them again
+        # as feet/inches shorthand would turn 5.08 (5'1") into 5'8".
+        return value
+
     if surrogate_field == "journey_timing_preference":
         normalized = normalize_journey_timing_preference(value)
         if normalized is None:

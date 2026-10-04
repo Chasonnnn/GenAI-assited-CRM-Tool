@@ -7,61 +7,8 @@ from pydantic import ValidationError
 
 from app.db.enums import WorkflowTriggerType
 from app.services.workflow_definition_rules import (
-    normalize_actions_for_trigger,
     validate_trigger_config,
 )
-
-
-def test_normalization_copies_actions_without_rewriting_or_deep_copying():
-    actions = [
-        {"action_type": "update_status", "stage_id": "stage", "metadata": {"source": "test"}},
-        {"action_type": "create_intake_lead"},
-        {"action_type": "auto_match_submission"},
-    ]
-    original = deepcopy(actions)
-
-    normalized = normalize_actions_for_trigger(WorkflowTriggerType.SURROGATE_CREATED, actions)
-
-    assert actions == original
-    assert normalized == original
-    assert normalized is not actions
-    assert all(copy is not source for copy, source in zip(normalized, actions, strict=True))
-    assert normalized[0]["metadata"] is actions[0]["metadata"]
-
-
-@pytest.mark.parametrize(
-    "action_types",
-    [
-        [],
-        ["create_intake_lead"],
-        ["auto_match_submission"],
-        ["auto_match_submission", "add_note", "create_intake_lead"],
-        # Existing definitions compare the first occurrence of each action only.
-        ["auto_match_submission", "create_intake_lead", "auto_match_submission"],
-    ],
-)
-def test_form_submission_preserves_allowed_action_order(action_types):
-    actions = [{"action_type": action_type} for action_type in action_types]
-
-    assert normalize_actions_for_trigger(WorkflowTriggerType.FORM_SUBMITTED, actions) == actions
-
-
-def test_form_submission_rejects_create_before_match_without_mutating_input():
-    actions = [
-        {"action_type": "create_intake_lead"},
-        {"action_type": "add_note", "content": "Keep this order"},
-        {"action_type": "auto_match_submission"},
-    ]
-    original = deepcopy(actions)
-
-    with pytest.raises(ValueError) as error:
-        normalize_actions_for_trigger(WorkflowTriggerType.FORM_SUBMITTED, actions)
-
-    assert str(error.value) == (
-        "For form_submitted workflows, auto_match_submission must be placed before "
-        "create_intake_lead"
-    )
-    assert actions == original
 
 
 @pytest.mark.parametrize(
@@ -74,10 +21,6 @@ def test_form_submission_rejects_create_before_match_without_mutating_input():
         (WorkflowTriggerType.INACTIVITY, {"days": "90"}),
         (WorkflowTriggerType.SURROGATE_UPDATED, {"fields": ["status_label"]}),
         (WorkflowTriggerType.DONOR_UPDATED, {"fields": ["donor_type"]}),
-        (
-            WorkflowTriggerType.FORM_STARTED,
-            {"form_id": "00000000-0000-0000-0000-000000000001"},
-        ),
         (WorkflowTriggerType.FORM_SUBMITTED, {"lead_kind": "egg_donor"}),
         (WorkflowTriggerType.INTAKE_LEAD_CREATED, {"lead_type": "sperm_donor"}),
     ],
@@ -134,7 +77,6 @@ def test_trigger_validation_does_not_normalize_or_add_defaults(trigger_type, con
             "fields",
             "Field 'unknown_field' is not allowed",
         ),
-        (WorkflowTriggerType.FORM_STARTED, {}, "form_id", "Field required"),
         (
             WorkflowTriggerType.FORM_SUBMITTED,
             {"lead_kind": "unknown"},
@@ -178,3 +120,11 @@ def test_trigger_without_config_schema_leaves_arbitrary_config_unchanged():
 
     assert validate_trigger_config(WorkflowTriggerType.TASK_OVERDUE, config) is None
     assert config == original
+
+
+def test_retired_form_started_trigger_is_rejected():
+    with pytest.raises(ValueError, match="form_started is no longer available"):
+        validate_trigger_config(
+            WorkflowTriggerType.FORM_STARTED,
+            {"form_id": "00000000-0000-0000-0000-000000000001"},
+        )

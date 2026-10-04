@@ -5,7 +5,9 @@
  * approve/decline actions for pending requests.
  */
 
-import { useState, type ReactNode } from "react"
+import { Suspense, useState, type ReactNode } from "react"
+import type { Route } from "next"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -248,6 +250,30 @@ function AppointmentsTabContent({
     )
 }
 
+/** Opens the appointment named by ?appointment= (notification links); closing drops the param. */
+function LinkedAppointmentDialog() {
+    const searchParams = useSearchParams()
+    const pathname = usePathname()
+    const { replace } = useRouter()
+    const appointmentId = searchParams.get("appointment")
+
+    const handleOpenChange = (open: boolean) => {
+        if (open) return
+        const nextParams = new URLSearchParams(searchParams.toString())
+        nextParams.delete("appointment")
+        const nextQuery = nextParams.toString()
+        replace((nextQuery ? `${pathname}?${nextQuery}` : pathname) as Route, { scroll: false })
+    }
+
+    return (
+        <AppointmentDetailDialog
+            appointmentId={appointmentId}
+            open={appointmentId !== null}
+            onOpenChange={handleOpenChange}
+        />
+    )
+}
+
 // =============================================================================
 // Main Export
 // =============================================================================
@@ -485,6 +511,9 @@ export function AppointmentsList() {
                     </Tabs>
                 )}
             </div>
+            <Suspense fallback={null}>
+                <LinkedAppointmentDialog />
+            </Suspense>
         </>
     )
 }

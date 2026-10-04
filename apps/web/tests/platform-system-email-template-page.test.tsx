@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { assert, describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
 import * as React from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
@@ -470,8 +470,10 @@ describe("PlatformSystemEmailTemplatePage", () => {
         await confirmCampaignSend(dialog)
         await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(2))
 
+        assert.isDefined(mocks.sendCampaign.mock.calls[0])
         const firstOccurrenceId =
             mocks.sendCampaign.mock.calls[0][0].payload.campaign_occurrence_id
+        assert.isDefined(mocks.sendCampaign.mock.calls[1])
         const retriedOccurrenceId =
             mocks.sendCampaign.mock.calls[1][0].payload.campaign_occurrence_id
         expect(retriedOccurrenceId).toBe(firstOccurrenceId)
@@ -509,8 +511,10 @@ describe("PlatformSystemEmailTemplatePage", () => {
         await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(2))
         await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
 
+        assert.isDefined(mocks.sendCampaign.mock.calls[0])
         const firstOccurrenceId =
             mocks.sendCampaign.mock.calls[0][0].payload.campaign_occurrence_id
+        assert.isDefined(mocks.sendCampaign.mock.calls[1])
         const retriedOccurrenceId =
             mocks.sendCampaign.mock.calls[1][0].payload.campaign_occurrence_id
         expect(retriedOccurrenceId).toBe(firstOccurrenceId)
@@ -520,6 +524,7 @@ describe("PlatformSystemEmailTemplatePage", () => {
         await confirmCampaignSend(dialog)
         await waitFor(() => expect(mocks.sendCampaign).toHaveBeenCalledTimes(3))
 
+        assert.isDefined(mocks.sendCampaign.mock.calls[2])
         const nextOccurrenceId =
             mocks.sendCampaign.mock.calls[2][0].payload.campaign_occurrence_id
         expect(nextOccurrenceId).not.toBe(firstOccurrenceId)
@@ -559,8 +564,10 @@ describe("PlatformSystemEmailTemplatePage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Send test" }))
         await waitFor(() => expect(mocks.sendTest).toHaveBeenCalledTimes(2))
 
+        assert.isDefined(mocks.sendTest.mock.calls[0])
         const firstOccurrenceId =
             mocks.sendTest.mock.calls[0][0].payload.idempotency_key
+        assert.isDefined(mocks.sendTest.mock.calls[1])
         const retriedOccurrenceId =
             mocks.sendTest.mock.calls[1][0].payload.idempotency_key
         expect(retriedOccurrenceId).toBe(firstOccurrenceId)

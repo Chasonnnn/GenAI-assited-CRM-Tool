@@ -12,8 +12,11 @@ from app.core.email_body_design import validate_body_design
 from app.db.models import EmailTemplate, Organization, PlatformSystemEmailTemplate
 
 ORG_INVITE_SYSTEM_KEY = "org_invite"
+STAFF_NOTIFICATION_SYSTEM_KEY = "staff_notification"
 # Variables the platform renders as HTML; every other value is escaped.
-SAFE_HTML_VARIABLES = frozenset({"expires_block", "platform_logo_block"})
+SAFE_HTML_VARIABLES = frozenset(
+    {"expires_block", "platform_logo_block", "body_block", "link_block"}
+)
 
 _ORG_INVITE_BODY_V1 = """
 <div style="background-color: #f5f5f7; padding: 32px 16px; margin: 0;">
@@ -205,6 +208,47 @@ _ORG_INVITE_BODY = """
 </div>
 """.strip()
 
+_STAFF_NOTIFICATION_BODY = """
+<div style="background-color: #f5f5f7; padding: 32px 16px; margin: 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f7;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0"
+               style="width: 100%; max-width: 600px; background-color: #ffffff;
+                      border: 1px solid #e5e7eb; border-radius: 20px;
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;">
+          <tr>
+            <td style="padding: 28px 40px 0 40px;">
+              <div style="font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase;
+                          font-weight: 600; color: #6b7280;">
+                {{org_name}}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 40px 0 40px;">
+              <h1 style="margin: 0; font-size: 22px; line-height: 1.35; color: #111827; font-weight: 600;">
+                {{title}}
+              </h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 40px 0 40px;">
+              {{body_block}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 40px 32px 40px;">
+              {{link_block}}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</div>
+""".strip()
+
 DEFAULT_SYSTEM_TEMPLATES: dict[str, dict[str, str]] = {
     ORG_INVITE_SYSTEM_KEY: {
         "category": "system",
@@ -212,6 +256,13 @@ DEFAULT_SYSTEM_TEMPLATES: dict[str, dict[str, str]] = {
         "subject": "Invitation to join {{org_name}} as {{role_title}}",
         # NOTE: This HTML must remain compatible with email_service.sanitize_template_html.
         "body": _ORG_INVITE_BODY,
+    },
+    STAFF_NOTIFICATION_SYSTEM_KEY: {
+        "category": "system",
+        "name": "Staff Notification",
+        "subject": "{{title}}",
+        # NOTE: This HTML must remain compatible with email_service.sanitize_template_html.
+        "body": _STAFF_NOTIFICATION_BODY,
     },
     "platform_update": {
         "category": "system",
@@ -440,4 +491,12 @@ def build_sample_variables(db: Session, *, org: Organization | None) -> dict[str
         "expires_block": "<p>This is a test email. Expiration text would appear here.</p>",
         "platform_logo_url": platform_logo_url,
         "platform_logo_block": build_platform_logo_block(platform_logo_url),
+        "title": "New task assigned",
+        "body_block": "<p>This is a test email. Notification details would appear here.</p>",
+        "link_block": (
+            f'<a href="{base_url.rstrip("/")}/tasks" target="_blank" '
+            'style="display: inline-block; padding: 10px 18px; border-radius: 10px; '
+            "background-color: #111827; color: #ffffff; text-decoration: none; "
+            'font-size: 14px; font-weight: 600;">Open in Surrogacy Force</a>'
+        ),
     }

@@ -222,6 +222,32 @@ export function useApproveAppointment() {
     });
 }
 
+export function useCompleteAppointment() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            appointmentId,
+            status,
+            expectedRevision,
+            requestId,
+        }: {
+            appointmentId: string;
+            status: 'completed' | 'no_show';
+            expectedRevision: number;
+            requestId: string;
+        }) => appointmentsApi.completeAppointment(appointmentId, status, { expectedRevision, requestId }),
+        onSuccess: (updatedAppt) => updateScheduledAppointmentCache(queryClient, updatedAppt),
+        onError: (error) => {
+            toast.error(
+                error instanceof Error && error.message
+                    ? error.message
+                    : 'Failed to record the appointment outcome.'
+            );
+        },
+    });
+}
+
 export function useRescheduleAppointment() {
     const queryClient = useQueryClient();
 

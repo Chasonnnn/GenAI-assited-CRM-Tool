@@ -1,7 +1,7 @@
 """Workflow triggers - hooks into core services to trigger workflows."""
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -22,6 +22,10 @@ from app.db.models import (
 )
 from app.schemas.workflow import is_supported_simple_cron
 from app.services import workflow_execution_authority
+from app.services.workflow_definition_rules import (
+    APPOINTMENT_TRIGGER_TYPES,
+    appointment_timing_key,
+)
 from app.services.workflow_engine import engine
 
 logger = logging.getLogger(__name__)
@@ -237,6 +241,25 @@ def trigger_surrogate_created(db: Session, surrogate: Surrogate) -> None:
     )
 
 
+def trigger_surrogate_updated(db: Session, surrogate: Surrogate, changed_fields: list[str]) -> None:
+    """Trigger workflows when a user edits surrogate fields; event data carries names only."""
+    if not changed_fields:
+        return
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.SURROGATE_UPDATED,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        event_data={
+            "surrogate_id": str(surrogate.id),
+            "changed_fields": changed_fields,
+        },
+        org_id=surrogate.organization_id,
+        source=WorkflowEventSource.USER,
+        entity_owner_id=_get_entity_owner_id(surrogate),
+    )
+
+
 def trigger_status_changed(
     db: Session,
     surrogate: Surrogate,
@@ -352,6 +375,39 @@ def trigger_form_submitted(
         entity_owner_id=entity_owner_id,
         recover_incomplete=True,
         include_existing=True,
+    )
+
+
+def trigger_form_submission_reviewed(
+    db: Session, submission: FormSubmission, trigger_type: WorkflowTriggerType
+) -> list[WorkflowExecution]:
+    """Trigger workflows when staff approve or reject a submitted application."""
+    if trigger_type not in {
+        WorkflowTriggerType.FORM_SUBMISSION_APPROVED,
+        WorkflowTriggerType.FORM_SUBMISSION_REJECTED,
+    }:
+        raise ValueError(f"Not a submission review trigger: {trigger_type.value}")
+    entity_owner_id = _get_owner_id_for_surrogate_id(
+        db, submission.organization_id, submission.surrogate_id
+    )
+    return engine.trigger(
+        db=db,
+        trigger_type=trigger_type,
+        entity_type="form_submission",
+        entity_id=submission.id,
+        event_data={
+            "surrogate_id": str(submission.surrogate_id) if submission.surrogate_id else None,
+            "form_id": str(submission.form_id),
+            "submission_id": str(submission.id),
+            "lead_kind": submission.lead_kind,
+            "status": submission.status,
+            "reviewed_by_user_id": str(submission.reviewed_by_user_id)
+            if submission.reviewed_by_user_id
+            else None,
+        },
+        org_id=submission.organization_id,
+        source=WorkflowEventSource.USER,
+        entity_owner_id=entity_owner_id,
     )
 
 
@@ -998,12 +1054,29 @@ def trigger_note_added(db: Session, note: EntityNote) -> None:
 
 def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None:
     """Trigger workflows when an appointment is scheduled/approved."""
+    trigger_appointment_event(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
+
+
+def trigger_appointment_event(
+    db: Session,
+    appointment: Appointment,
+    trigger_type: WorkflowTriggerType,
+    *,
+    extra_event_data: dict | None = None,
+    source: WorkflowEventSource = WorkflowEventSource.USER,
+) -> None:
+    """Trigger workflows for one appointment lifecycle event."""
+    if trigger_type not in APPOINTMENT_TRIGGER_TYPES:
+        raise ValueError(f"Not an appointment trigger: {trigger_type.value}")
     entity_owner_id = _get_owner_id_for_surrogate_id(
         db, appointment.organization_id, appointment.surrogate_id
     )
+    if entity_owner_id is None and appointment.donor_id:
+        donor = _get_donor_by_id(db, appointment.organization_id, appointment.donor_id)
+        entity_owner_id = _get_entity_owner_id(donor) if donor else None
     engine.trigger(
         db=db,
-        trigger_type=WorkflowTriggerType.APPOINTMENT_SCHEDULED,
+        trigger_type=trigger_type,
         entity_type="appointment",
         entity_id=appointment.id,
         event_data={
@@ -1012,6 +1085,7 @@ def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None
             "intended_parent_id": str(appointment.intended_parent_id)
             if appointment.intended_parent_id
             else None,
+            "donor_id": str(appointment.donor_id) if appointment.donor_id else None,
             "user_id": str(appointment.user_id),
             "scheduled_start": appointment.scheduled_start.isoformat()
             if appointment.scheduled_start
@@ -1023,11 +1097,72 @@ def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None
             if appointment.appointment_type
             else None,
             "status": appointment.status,
+            **(extra_event_data or {}),
         },
         org_id=appointment.organization_id,
-        source=WorkflowEventSource.USER,
+        source=source,
         entity_owner_id=entity_owner_id,
     )
+
+
+# The sweep runs hourly; looking back three hours lets a delayed run still fire, and the
+# engine dedupes each workflow per appointment time.
+APPOINTMENT_TIME_LOOKBACK = timedelta(hours=3)
+
+
+def trigger_appointment_time_sweep(
+    db: Session, org_id: UUID, *, now: datetime | None = None
+) -> None:
+    """Run appointment_time workflows whose hours before start or after end have passed."""
+    from app.db.enums import AppointmentStatus
+    from app.db.models import AutomationWorkflow
+
+    now = now or datetime.now(UTC)
+    window_start = now - APPOINTMENT_TIME_LOOKBACK
+    configs = (
+        db.query(AutomationWorkflow.trigger_config)
+        .filter(
+            AutomationWorkflow.organization_id == org_id,
+            AutomationWorkflow.trigger_type == WorkflowTriggerType.APPOINTMENT_TIME.value,
+            AutomationWorkflow.is_enabled.is_(True),
+        )
+        .all()
+    )
+    timings = sorted({appointment_timing_key(config) for (config,) in configs})
+
+    due: dict[UUID, set[str]] = {}
+    appointments: dict[UUID, Appointment] = {}
+    for timing in timings:
+        when, hours = timing.split(":")
+        offset = timedelta(hours=int(hours))
+        query = db.query(Appointment).filter(Appointment.organization_id == org_id)
+        if when == "after_end":
+            query = query.filter(
+                Appointment.status.in_(
+                    [AppointmentStatus.CONFIRMED.value, AppointmentStatus.COMPLETED.value]
+                ),
+                Appointment.scheduled_end > window_start - offset,
+                Appointment.scheduled_end <= now - offset,
+            )
+        else:
+            query = query.filter(
+                Appointment.status == AppointmentStatus.CONFIRMED.value,
+                Appointment.scheduled_start > window_start + offset,
+                Appointment.scheduled_start <= now + offset,
+                Appointment.scheduled_start > now,
+            )
+        for appointment in query.order_by(Appointment.id):
+            appointments[appointment.id] = appointment
+            due.setdefault(appointment.id, set()).add(timing)
+
+    for appointment_id, appointment in appointments.items():
+        trigger_appointment_event(
+            db,
+            appointment,
+            WorkflowTriggerType.APPOINTMENT_TIME,
+            extra_event_data={"due_timings": sorted(due[appointment_id])},
+            source=WorkflowEventSource.SYSTEM,
+        )
 
 
 def _should_run_cron(cron: str, now, tz: str) -> bool:

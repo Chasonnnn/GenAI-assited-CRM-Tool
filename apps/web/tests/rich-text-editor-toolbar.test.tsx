@@ -1,21 +1,30 @@
-import type { Editor } from "@tiptap/react"
-import { render, screen, within } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { Editor } from "@tiptap/react"
+import StarterKit from "@tiptap/starter-kit"
+import TextAlign from "@tiptap/extension-text-align"
+import { act, render, screen, within } from "@testing-library/react"
+import { afterEach, describe, expect, it } from "vitest"
 
 import { RichTextEditorToolbar } from "@/components/rich-text-editor-toolbar"
 
-function createEditor(): Editor {
-    return {
-        isActive: () => false,
-        can: () => ({ undo: () => false, redo: () => false }),
-        getAttributes: () => ({}),
-    } as unknown as Editor
+const editors: Editor[] = []
+
+afterEach(() => {
+    for (const editor of editors.splice(0)) editor.destroy()
+})
+
+function createEditor() {
+    const editor = new Editor({
+        extensions: [StarterKit, TextAlign.configure({ types: ["paragraph"] })],
+        content: "<p><strong>Bold text</strong> plain text</p>",
+    })
+    editors.push(editor)
+    return editor
 }
 
-function renderToolbar() {
+function renderToolbar(editor = createEditor()) {
     return render(
         <RichTextEditorToolbar
-            editor={createEditor()}
+            editor={editor}
             enableImages
             enableEmojiPicker={false}
             emojiOpen={false}
@@ -29,6 +38,30 @@ function renderToolbar() {
 }
 
 describe("RichTextEditorToolbar", () => {
+    it("updates formatting, alignment, and history controls when the editor changes", () => {
+        const editor = createEditor()
+        renderToolbar(editor)
+
+        act(() => { editor.commands.setTextSelection(2) })
+        expect(screen.getByRole("button", { name: "Bold" })).toHaveAttribute("aria-pressed", "true")
+
+        act(() => { editor.commands.setTextSelection(13) })
+        expect(screen.getByRole("button", { name: "Bold" })).toHaveAttribute("aria-pressed", "false")
+
+        // React Email retypes the textAlign command, so align the way the toolbar does.
+        act(() => { editor.commands.updateAttributes("paragraph", { textAlign: "center" }) })
+        expect(screen.getByRole("button", { name: "Align Center" })).toHaveAttribute("aria-pressed", "true")
+        expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled()
+
+        act(() => { editor.commands.undo() })
+        expect(screen.getByRole("button", { name: "Align Center" })).toHaveAttribute("aria-pressed", "false")
+        expect(screen.getByRole("button", { name: "Redo" })).toBeEnabled()
+
+        act(() => { editor.commands.redo() })
+        expect(screen.getByRole("button", { name: "Align Center" })).toHaveAttribute("aria-pressed", "true")
+        expect(screen.getByRole("button", { name: "Redo" })).toBeDisabled()
+    })
+
     it("sizes every control as the same 32px square", () => {
         renderToolbar()
 

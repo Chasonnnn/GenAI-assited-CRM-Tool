@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { assert, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ComponentProps } from "react"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 
@@ -6,6 +6,9 @@ const {
     getSubmissionFileDownloadUrlMock,
     listSubmissionDonorCandidatesMock,
     resolveSubmissionMatchMock,
+    runSubmissionRoutingMatchMock,
+    createSubmissionRoutingLeadMock,
+    dismissSubmissionRoutingReviewMock,
     approveSubmissionMock,
     rejectSubmissionMock,
     rescanSubmissionFileMock,
@@ -15,6 +18,9 @@ const {
     getSubmissionFileDownloadUrlMock: vi.fn(),
     listSubmissionDonorCandidatesMock: vi.fn(),
     resolveSubmissionMatchMock: vi.fn(),
+    runSubmissionRoutingMatchMock: vi.fn(),
+    createSubmissionRoutingLeadMock: vi.fn(),
+    dismissSubmissionRoutingReviewMock: vi.fn(),
     approveSubmissionMock: vi.fn(),
     rejectSubmissionMock: vi.fn(),
     rescanSubmissionFileMock: vi.fn(),
@@ -29,6 +35,9 @@ vi.mock("@/lib/api/forms", async () => {
         getSubmissionFileDownloadUrl: getSubmissionFileDownloadUrlMock,
         listSubmissionDonorCandidates: listSubmissionDonorCandidatesMock,
         resolveSubmissionMatch: resolveSubmissionMatchMock,
+        runSubmissionRoutingMatch: runSubmissionRoutingMatchMock,
+        createSubmissionRoutingLead: createSubmissionRoutingLeadMock,
+        dismissSubmissionRoutingReview: dismissSubmissionRoutingReviewMock,
         approveSubmission: approveSubmissionMock,
         rejectSubmission: rejectSubmissionMock,
         rescanSubmissionFile: rescanSubmissionFileMock,
@@ -44,6 +53,7 @@ vi.mock("@/components/ui/toast", () => ({ toast: toastMock }))
 
 import { AutomationFormSubmissionsPanel } from "@/components/forms/builder/AutomationFormSubmissionsPanel"
 import type { FormSubmissionRead, MatchCandidateRead } from "@/lib/api/forms"
+import { expectStackedTableSemantics } from "./fixtures/stacked-table"
 
 function makeSubmission(overrides: Partial<FormSubmissionRead>): FormSubmissionRead {
     return {
@@ -109,7 +119,6 @@ describe("AutomationFormSubmissionsPanel", () => {
             reason: "phone_dob_name_ambiguous",
             created_at: "2026-07-05T15:01:00Z",
         }
-        const onOpenApprovalQueue = vi.fn()
         const onSubmissionHistoryFilterChange = vi.fn()
         const onSelectQueueSubmission = vi.fn()
         const onLinkByManualSurrogateId = vi.fn()
@@ -123,6 +132,10 @@ describe("AutomationFormSubmissionsPanel", () => {
                 formId="form-1"
                 pendingSubmissionHistory={[ambiguousSubmission]}
                 processedSubmissionHistory={[historySubmission]}
+                routingReviewSubmissions={[]}
+                routingReviewQueueStatus="ready"
+                isRoutingReviewRetrying={false}
+                onRetryRoutingReview={vi.fn()}
                 ambiguousSubmissions={[ambiguousSubmission]}
                 leadQueueSubmissions={[leadSubmission]}
                 visibleSubmissionHistory={[historySubmission]}
@@ -146,7 +159,6 @@ describe("AutomationFormSubmissionsPanel", () => {
                 submissionOutcomeBadgeClass={() => "outcome-class"}
                 submissionReviewLabel={(submission) => submission.status}
                 submissionReviewBadgeClass={() => "review-class"}
-                onOpenApprovalQueue={onOpenApprovalQueue}
                 onSubmissionHistoryFilterChange={onSubmissionHistoryFilterChange}
                 onSelectQueueSubmission={onSelectQueueSubmission}
                 onManualSurrogateIdChange={vi.fn()}
@@ -166,8 +178,7 @@ describe("AutomationFormSubmissionsPanel", () => {
         expect(screen.getByLabelText("Reviewer notes")).toHaveValue("Looks correct")
         expect(screen.getByLabelText("Manual surrogate ID link")).toHaveValue("manual-sur-1")
 
-        fireEvent.click(screen.getByRole("button", { name: "Open Approval Queue" }))
-        expect(onOpenApprovalQueue).toHaveBeenCalledTimes(1)
+        expect(screen.queryByRole("button", { name: "Open Approval Queue" })).not.toBeInTheDocument()
 
         fireEvent.click(screen.getByRole("button", { name: "Hide Candidates" }))
         expect(onSelectQueueSubmission).toHaveBeenCalledWith(null)
@@ -181,7 +192,9 @@ describe("AutomationFormSubmissionsPanel", () => {
         fireEvent.click(screen.getByRole("button", { name: "Processed" }))
         expect(onSubmissionHistoryFilterChange).toHaveBeenCalledWith("processed")
 
-        fireEvent.click(screen.getAllByRole("button", { name: "Review Candidates" })[0])
+        const reviewCandidatesButton = screen.getAllByRole("button", { name: "Review Candidates" })[0]
+        assert.isDefined(reviewCandidatesButton)
+        fireEvent.click(reviewCandidatesButton)
         expect(onSelectQueueSubmission).toHaveBeenCalledWith("sub-history")
 
         fireEvent.click(screen.getByRole("button", { name: "Re-run Auto-Match" }))
@@ -238,6 +251,10 @@ describe("AutomationFormSubmissionsPanel", () => {
                 formId="form-1"
                 pendingSubmissionHistory={[donorSubmission]}
                 processedSubmissionHistory={[]}
+                routingReviewSubmissions={[]}
+                routingReviewQueueStatus="ready"
+                isRoutingReviewRetrying={false}
+                onRetryRoutingReview={vi.fn()}
                 ambiguousSubmissions={[donorSubmission]}
                 leadQueueSubmissions={[]}
                 visibleSubmissionHistory={[donorSubmission]}
@@ -261,7 +278,6 @@ describe("AutomationFormSubmissionsPanel", () => {
                 submissionOutcomeBadgeClass={() => "outcome-class"}
                 submissionReviewLabel={() => "Pending Review"}
                 submissionReviewBadgeClass={() => "review-class"}
-                onOpenApprovalQueue={vi.fn()}
                 onSubmissionHistoryFilterChange={vi.fn()}
                 onSelectQueueSubmission={vi.fn()}
                 onManualSurrogateIdChange={vi.fn()}
@@ -336,6 +352,10 @@ describe("AutomationFormSubmissionsPanel", () => {
                 formId="form-1"
                 pendingSubmissionHistory={[]}
                 processedSubmissionHistory={[donorSubmission]}
+                routingReviewSubmissions={[]}
+                routingReviewQueueStatus="ready"
+                isRoutingReviewRetrying={false}
+                onRetryRoutingReview={vi.fn()}
                 ambiguousSubmissions={[]}
                 leadQueueSubmissions={[]}
                 visibleSubmissionHistory={[donorSubmission]}
@@ -359,7 +379,6 @@ describe("AutomationFormSubmissionsPanel", () => {
                 submissionOutcomeBadgeClass={() => "outcome-class"}
                 submissionReviewLabel={() => "Pending Review"}
                 submissionReviewBadgeClass={() => "review-class"}
-                onOpenApprovalQueue={vi.fn()}
                 onSubmissionHistoryFilterChange={vi.fn()}
                 onSelectQueueSubmission={vi.fn()}
                 onManualSurrogateIdChange={vi.fn()}
@@ -405,6 +424,10 @@ describe("AutomationFormSubmissionsPanel", () => {
                 formId="form-1"
                 pendingSubmissionHistory={[]}
                 processedSubmissionHistory={[donorSubmission]}
+                routingReviewSubmissions={[]}
+                routingReviewQueueStatus="ready"
+                isRoutingReviewRetrying={false}
+                onRetryRoutingReview={vi.fn()}
                 ambiguousSubmissions={[]}
                 leadQueueSubmissions={[]}
                 visibleSubmissionHistory={[donorSubmission]}
@@ -424,7 +447,6 @@ describe("AutomationFormSubmissionsPanel", () => {
                 submissionOutcomeBadgeClass={() => "outcome-class"}
                 submissionReviewLabel={() => "Pending Review"}
                 submissionReviewBadgeClass={() => "review-class"}
-                onOpenApprovalQueue={vi.fn()}
                 onSubmissionHistoryFilterChange={vi.fn()}
                 onSelectQueueSubmission={vi.fn()}
                 onManualSurrogateIdChange={vi.fn()}
@@ -446,11 +468,19 @@ describe("AutomationFormSubmissionsPanel", () => {
 type PanelProps = ComponentProps<typeof AutomationFormSubmissionsPanel>
 
 function renderPanel(props: Partial<PanelProps>) {
-    return render(
+    return render(panelElement(props))
+}
+
+function panelElement(props: Partial<PanelProps>) {
+    return (
         <AutomationFormSubmissionsPanel
             formId="form-1"
             pendingSubmissionHistory={[]}
             processedSubmissionHistory={[]}
+            routingReviewSubmissions={[]}
+            routingReviewQueueStatus="ready"
+            isRoutingReviewRetrying={false}
+            onRetryRoutingReview={vi.fn()}
             ambiguousSubmissions={[]}
             leadQueueSubmissions={[]}
             visibleSubmissionHistory={[]}
@@ -474,7 +504,6 @@ function renderPanel(props: Partial<PanelProps>) {
             submissionOutcomeBadgeClass={() => "outcome-class"}
             submissionReviewLabel={() => "Pending Review"}
             submissionReviewBadgeClass={() => "review-class"}
-            onOpenApprovalQueue={vi.fn()}
             onSubmissionHistoryFilterChange={vi.fn()}
             onSelectQueueSubmission={vi.fn()}
             onManualSurrogateIdChange={vi.fn()}
@@ -485,7 +514,7 @@ function renderPanel(props: Partial<PanelProps>) {
             onRetrySubmissionMatch={vi.fn()}
             onPromoteLeadFromSubmission={vi.fn()}
             {...props}
-        />,
+        />
     )
 }
 
@@ -756,5 +785,156 @@ describe("AutomationFormSubmissionsPanel donor review", () => {
         expect(screen.queryByRole("button", { name: "Rescan photo.jpg" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Link to Donor" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument()
+    })
+})
+
+describe("AutomationFormSubmissionsPanel routing review", () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+    })
+
+    const matchStep = makeSubmission({
+        id: "sub-routing-match",
+        match_status: "routing_review",
+        routing_review_step: "match",
+        answers: { full_name: "Maria Delgado" },
+    })
+    const leadStep = makeSubmission({
+        id: "sub-routing-lead",
+        match_status: "routing_review",
+        routing_review_step: "create_lead",
+        answers: { full_name: "Ashley Brooks" },
+    })
+
+    function routingRows() {
+        const table = screen.getByRole("table")
+        return within(table).getAllByRole("row").slice(1)
+    }
+
+    it("lists each review step with its waiting-on label and actions", () => {
+        renderPanel({ routingReviewSubmissions: [matchStep, leadStep] })
+
+        expect(screen.getByText("Routing Review", { selector: "h3" })).toBeInTheDocument()
+        expect(screen.getByText("Routing Review", { selector: "p" }).nextElementSibling).toHaveTextContent("2")
+        const [matchRow, leadRow] = routingRows()
+        assert.isDefined(matchRow)
+        assert.isDefined(leadRow)
+        expect(within(matchRow).getByText("Maria Delgado")).toBeInTheDocument()
+        expect(within(matchRow).getByText("Match check")).toBeInTheDocument()
+        expect(within(matchRow).getByRole("button", { name: "Run match for Maria Delgado" })).toBeInTheDocument()
+        expect(within(matchRow).queryByRole("button", { name: /Create lead/ })).not.toBeInTheDocument()
+        expect(within(matchRow).getByRole("button", { name: "Dismiss routing review for Maria Delgado" })).toBeInTheDocument()
+
+        expect(within(leadRow).getByText("No match")).toBeInTheDocument()
+        expect(within(leadRow).getByRole("button", { name: "Create lead for Ashley Brooks" })).toBeInTheDocument()
+        expect(within(leadRow).queryByRole("button", { name: /Run match/ })).not.toBeInTheDocument()
+    })
+
+    it("keeps the routing review column headers exposed when rows stack below sm", () => {
+        renderPanel({ routingReviewSubmissions: [matchStep, leadStep] })
+
+        expectStackedTableSemantics(screen.getByRole("table"), ["Applicant", "Submitted", "Waiting on", "Actions"])
+        expect(within(screen.getByRole("table")).getAllByRole("cell")).toHaveLength(8)
+    })
+
+    it("runs the match check and reports the outcome", async () => {
+        runSubmissionRoutingMatchMock.mockResolvedValue({
+            submission: { ...matchStep, match_status: "linked", routing_review_step: null, surrogate_id: "sur-1" },
+            outcome: "linked",
+            candidate_count: 0,
+        })
+        renderPanel({ routingReviewSubmissions: [matchStep] })
+
+        fireEvent.click(screen.getByRole("button", { name: "Run match for Maria Delgado" }))
+
+        await waitFor(() => expect(runSubmissionRoutingMatchMock).toHaveBeenCalledWith("sub-routing-match"))
+        await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Submission linked"))
+    })
+
+    it("creates the lead and dismisses through their own endpoints", async () => {
+        createSubmissionRoutingLeadMock.mockResolvedValue({
+            submission: { ...leadStep, match_status: "lead_created", routing_review_step: null, intake_lead_id: "lead-1" },
+            outcome: "lead_created",
+            candidate_count: 0,
+        })
+        dismissSubmissionRoutingReviewMock.mockResolvedValue({
+            submission: { ...matchStep, match_status: "ambiguous_review", routing_review_step: null },
+            outcome: "ambiguous_review",
+            candidate_count: 0,
+        })
+        renderPanel({ routingReviewSubmissions: [matchStep, leadStep] })
+
+        fireEvent.click(screen.getByRole("button", { name: "Create lead for Ashley Brooks" }))
+        await waitFor(() => expect(createSubmissionRoutingLeadMock).toHaveBeenCalledWith("sub-routing-lead"))
+        await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Intake lead created"))
+
+        fireEvent.click(screen.getByRole("button", { name: "Dismiss routing review for Maria Delgado" }))
+        await waitFor(() => expect(dismissSubmissionRoutingReviewMock).toHaveBeenCalledWith("sub-routing-match"))
+        await waitFor(() => expect(toastMock.success).toHaveBeenCalledWith("Routing review dismissed"))
+        expect(runSubmissionRoutingMatchMock).not.toHaveBeenCalled()
+    })
+
+    it("shows the API error when a review action fails", async () => {
+        runSubmissionRoutingMatchMock.mockRejectedValue(new Error("Submission is no longer waiting on this step"))
+        renderPanel({ routingReviewSubmissions: [matchStep] })
+
+        fireEvent.click(screen.getByRole("button", { name: "Run match for Maria Delgado" }))
+
+        await waitFor(() =>
+            expect(toastMock.error).toHaveBeenCalledWith("Submission is no longer waiting on this step"),
+        )
+    })
+
+    it("disables actions the reviewer cannot take", () => {
+        renderPanel({
+            routingReviewSubmissions: [matchStep, leadStep],
+            canReviewRouting: (_submission, action) => action === "review",
+        })
+
+        expect(screen.getByRole("button", { name: "Run match for Maria Delgado" })).toBeEnabled()
+        expect(screen.getByRole("button", { name: "Create lead for Ashley Brooks" })).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Dismiss routing review for Ashley Brooks" })).toBeEnabled()
+    })
+
+    it("shows an empty queue and hides it from viewers who cannot review", () => {
+        const { unmount } = renderPanel({ routingReviewSubmissions: [] })
+        expect(screen.getByText("No submissions waiting for routing review.")).toBeInTheDocument()
+        expect(screen.queryByText("Workflow approvals for submission routing and lead creation")).not.toBeInTheDocument()
+        unmount()
+
+        renderPanel({ routingReviewSubmissions: [matchStep], canReview: false })
+        expect(screen.queryByRole("button", { name: "Run match for Maria Delgado" })).not.toBeInTheDocument()
+        expect(screen.getByText("Routing Review", { selector: "p" }).nextElementSibling).toHaveTextContent("1")
+    })
+
+    it("shows loading instead of an empty queue while the queue loads", () => {
+        renderPanel({ routingReviewSubmissions: [], routingReviewQueueStatus: "loading" })
+
+        expect(screen.getByRole("status")).toHaveTextContent("Loading routing review…")
+        expect(screen.queryByText("No submissions waiting for routing review.")).not.toBeInTheDocument()
+        expect(screen.getByText("Routing Review", { selector: "p" }).nextElementSibling).toHaveTextContent("—")
+    })
+
+    it("shows a retryable error instead of an empty queue when the queue fails to load", () => {
+        const onRetryRoutingReview = vi.fn()
+        const { rerender } = renderPanel({
+            routingReviewSubmissions: [],
+            routingReviewQueueStatus: "error",
+            onRetryRoutingReview,
+        })
+
+        expect(screen.getByRole("alert")).toHaveTextContent("Unable to load routing review.")
+        expect(screen.queryByText("No submissions waiting for routing review.")).not.toBeInTheDocument()
+        expect(screen.getByText("Routing Review", { selector: "p" }).nextElementSibling).toHaveTextContent("—")
+        fireEvent.click(within(screen.getByRole("alert")).getByRole("button", { name: "Retry" }))
+        expect(onRetryRoutingReview).toHaveBeenCalledTimes(1)
+
+        rerender(panelElement({
+            routingReviewSubmissions: [],
+            routingReviewQueueStatus: "error",
+            isRoutingReviewRetrying: true,
+            onRetryRoutingReview,
+        }))
+        expect(within(screen.getByRole("alert")).getByRole("button", { name: "Retry" })).toBeDisabled()
     })
 })

@@ -10,6 +10,7 @@ import { PublicBookingPage } from "@/components/appointments/PublicBookingPage"
 
 interface PageProps {
     params: Promise<{ slug?: string | string[] }>
+    searchParams: Promise<{ record?: string | string[] }>
 }
 
 export const metadata: Metadata = {
@@ -21,8 +22,10 @@ export const metadata: Metadata = {
     },
 }
 
-export default async function BookingPage({ params }: PageProps) {
+export default async function BookingPage({ params, searchParams }: PageProps) {
     const resolvedParams = await params
+    const rawRecord = (await searchParams).record
+    const recordToken = Array.isArray(rawRecord) ? rawRecord[0] : rawRecord
     const rawSlug = resolvedParams.slug
     const slug = Array.isArray(rawSlug) ? rawSlug[0] : rawSlug
 
@@ -31,5 +34,5 @@ export default async function BookingPage({ params }: PageProps) {
         return null
     }
 
-    return <PublicBookingPage publicSlug={slug} />
+    return <PublicBookingPage publicSlug={slug} recordToken={recordToken} />
 }

@@ -38,6 +38,9 @@ const mockEditor = {
 
 vi.mock("@tiptap/react", () => ({
     useEditor: () => mockEditor,
+    useEditorState: ({ selector }: {
+        selector: (snapshot: { editor: typeof mockEditor }) => unknown
+    }) => selector({ editor: mockEditor }),
     EditorContent: () => <div data-testid="editor-content" />,
 }))
 

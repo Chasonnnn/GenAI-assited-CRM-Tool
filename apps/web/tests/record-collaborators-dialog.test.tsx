@@ -23,10 +23,10 @@ describe("record collaborators", () => {
         fireEvent.click(await screen.findByRole("option", { name: "Taylor Morgan" }))
         expect(screen.getByRole("combobox", { name: "Team member" })).toHaveTextContent("Taylor Morgan")
         vi.mocked(api.getCollaborators).mockResolvedValue([existing])
-        fireEvent.click(screen.getByRole("button", { name: "Add", exact: true }))
+        fireEvent.click(screen.getByRole("button", { name: "Add" }))
         await waitFor(() => expect(api.addCollaborator).toHaveBeenCalledWith("donor", "donor-1", "staff-1"))
         expect(await screen.findByRole("button", { name: "Remove Taylor Morgan" })).toBeVisible()
-        expect(screen.getByRole("button", { name: "Add", exact: true })).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Add" })).toBeDisabled()
     })
 
     it("removes existing grants even when the recipient is absent from active options", async () => {

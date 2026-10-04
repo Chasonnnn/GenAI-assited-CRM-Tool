@@ -68,8 +68,6 @@ def build_action_preview(
 
 
 _STATIC_PREVIEWS = {
-    WorkflowActionType.AUTO_MATCH_SUBMISSION.value: "Match the form submission to an existing record",
-    WorkflowActionType.CREATE_INTAKE_LEAD.value: "Create an intake lead from the form submission",
     "promote_intake_lead": "Promote the intake lead to a case",
 }
 
@@ -134,6 +132,13 @@ def _preview_send_email(db: Session, action: dict, entity: Any) -> str:
         recipient_desc = "case creator"
     elif recipients == "all_admins":
         recipient_desc = "all admins"
+    elif recipients == "queue":
+        recipient_desc = "queue members"
+    elif recipients == "role":
+        role = str(action.get("recipient_role") or "")
+        recipient_desc = f"{role.replace('_', ' ')} members" if role else "role members"
+    elif recipients == "custom":
+        recipient_desc = f"{len(action.get('recipient_emails') or [])} address(es)"
     elif isinstance(recipients, list):
         recipient_desc = f"{len(recipients)} user(s)"
 

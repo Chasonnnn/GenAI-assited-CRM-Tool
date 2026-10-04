@@ -85,6 +85,15 @@ def _public_create_payload(appointment_type, start, *, request_id="public-create
     }
 
 
+def _started(db, appointment):
+    """Move a confirmed test appointment so it began five minutes ago."""
+    shift = appointment.scheduled_start - (datetime.now(UTC) - timedelta(minutes=5))
+    appointment.scheduled_start -= shift
+    appointment.scheduled_end -= shift
+    db.commit()
+    return appointment
+
+
 async def _public_pending(client, db, booking_surface):
     appointment_type, booking_link, start = booking_surface
     response = await client.post(
@@ -113,6 +122,16 @@ async def test_public_create_staff_approve_and_complete_http_contract(
     )
     assert approved.status_code == 200, approved.text
     assert approved.json()["scheduling"]["revision"] == 2
+    assert approved.json()["scheduling"]["capabilities"]["can_complete"] is False
+    early = await authed_client.post(
+        f"/appointments/{appointment.id}/complete",
+        json={"expected_revision": 2, "request_id": "staff-early", "status": "completed"},
+    )
+    assert early.status_code == 400
+    db.refresh(appointment)
+    _started(db, appointment)
+    started = await authed_client.get(f"/appointments/{appointment.id}")
+    assert started.json()["scheduling"]["capabilities"]["can_complete"] is True
 
     completed = await authed_client.post(
         f"/appointments/{appointment.id}/complete",
@@ -505,6 +524,80 @@ async def test_legacy_google_import_marks_synthetic_appointments_external(
 
 
 @pytest.mark.asyncio
+async def test_public_booking_record_token_links_the_emailed_surrogate(
+    client, db, test_org, test_user, booking_surface
+):
+    from app.core.security import create_booking_record_token
+
+    appointment_type, booking_link, start = booking_surface
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(full_name="Linked booker", email=f"linked-{uuid4().hex}@example.com"),
+    )
+    payload = _public_create_payload(appointment_type, start, request_id="record-link")
+    payload["record_token"] = create_booking_record_token(test_org.id, "surrogate", surrogate.id)
+
+    response = await client.post(f"/book/{booking_link.public_slug}/book", json=payload)
+
+    assert response.status_code == 200, response.text
+    appointment = db.query(Appointment).filter_by(organization_id=test_org.id).one()
+    assert appointment.surrogate_id == surrogate.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("token_kind", ["other_org", "tampered", "wrong_purpose"])
+async def test_public_booking_ignores_record_tokens_it_cannot_trust(
+    client, db, test_org, test_user, booking_surface, token_kind
+):
+    import jwt
+
+    from app.core.security import create_booking_record_token, create_export_token
+
+    appointment_type, booking_link, start = booking_surface
+    surrogate = surrogate_service.create_surrogate(
+        db,
+        test_org.id,
+        test_user.id,
+        SurrogateCreate(full_name="Unlinked booker", email=f"unlinked-{uuid4().hex}@example.com"),
+    )
+    if token_kind == "other_org":
+        token = create_booking_record_token(uuid4(), "surrogate", surrogate.id)
+    elif token_kind == "tampered":
+        token = jwt.encode(
+            {
+                "org_id": str(test_org.id),
+                "record_type": "surrogate",
+                "record_id": str(surrogate.id),
+                "purpose": "booking_record",
+            },
+            "not-the-signing-secret-but-long-enough-for-hs256",
+            algorithm="HS256",
+        )
+    else:
+        token = create_export_token(test_org.id, surrogate.id)
+    payload = _public_create_payload(appointment_type, start, request_id=f"bad-{token_kind}")
+    payload["record_token"] = token
+
+    response = await client.post(f"/book/{booking_link.public_slug}/book", json=payload)
+
+    assert response.status_code == 200, response.text
+    appointment = db.query(Appointment).filter_by(organization_id=test_org.id).one()
+    assert appointment.surrogate_id is None
+
+
+@pytest.mark.asyncio
+async def test_staff_create_rejects_record_token(authed_client, booking_surface):
+    appointment_type, _booking_link, start = booking_surface
+    payload = _public_create_payload(appointment_type, start, request_id="staff-token")
+    payload["record_token"] = "anything"
+
+    response = await authed_client.post("/appointments", json=payload)
+
+    assert response.status_code == 422
+
+
 @pytest.mark.parametrize("existing_status", ["pending", "running", "completed"])
 async def test_binding_manual_sync_reuses_scheduled_work_in_same_window(
     authed_client, db, test_org, test_user, monkeypatch, existing_status

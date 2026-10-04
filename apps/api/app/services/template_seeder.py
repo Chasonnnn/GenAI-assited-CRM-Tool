@@ -324,36 +324,19 @@ SYSTEM_WORKFLOWS = [
         "requires_review": True,
         "recurrence_mode": "one_time",
     },
-    {
-        "system_key": "appointment_reminder",
-        "name": "Appointment Reminder",
-        "description": "Sends a reminder email 24 hours before an appointment",
-        "icon": "calendar",
-        "trigger_type": "scheduled",
-        "trigger_config": {"hours_before": 24, "entity_type": "appointment"},
-        "conditions": [],
-        "condition_logic": "AND",
-        "actions": [
-            {"action_type": "send_email", "template_key": "appointment_reminder_24h"},
-            {"action_type": "send_notification", "title": "Appointment Reminder Sent"},
-        ],
-        "is_enabled": False,
-        "requires_review": True,
-        "recurrence_mode": "one_time",
-    },
+    # No appointment reminder workflow: scheduling sends its own reminder email, and
+    # workflows have no trigger relative to an appointment's start time.
     {
         "system_key": "match_notification",
         "name": "Match Notification",
-        "description": "Notifies case manager and sends intro email when a match is proposed",
+        "description": "Notifies the surrogate's owner when a match is proposed",
         "icon": "heart",
         "trigger_type": "match_proposed",
         "trigger_config": {},
         "conditions": [],
         "condition_logic": "AND",
-        "actions": [
-            {"action_type": "send_notification", "title": "New Match Proposed"},
-            {"action_type": "send_email", "template_key": "match_proposal_intro"},
-        ],
+        # Match workflows cannot send email; the intro template stays for manual sends.
+        "actions": [{"action_type": "send_notification", "title": "New Match Proposed"}],
         "is_enabled": False,
         "requires_review": True,
         "recurrence_mode": "one_time",
@@ -378,13 +361,19 @@ SYSTEM_WORKFLOWS = [
     {
         "system_key": "weekly_nurture",
         "name": "Weekly Nurture Campaign",
-        "description": "Sends weekly promotional content to inactive leads",
+        "description": "Reminds owners every Monday to follow up with cold leads",
         "icon": "repeat",
         "trigger_type": "scheduled",
-        "trigger_config": {"interval": "weekly", "day_of_week": 1},  # Monday
-        "conditions": [{"field": "status", "operator": "not_in", "value": ["matched", "closed"]}],
+        "trigger_config": {"cron": "0 9 * * 1", "timezone": "America/Los_Angeles"},
+        "conditions": [{"field": "stage_id", "operator": "in", "stage_slugs": ["cold_leads"]}],
         "condition_logic": "AND",
-        "actions": [{"action_type": "send_notification", "title": "Weekly nurture email sent"}],
+        "actions": [
+            {
+                "action_type": "send_notification",
+                "title": "Follow up with a cold lead",
+                "recipients": "owner",
+            }
+        ],
         "is_enabled": False,
         "requires_review": True,
         "recurrence_mode": "recurring",
@@ -484,7 +473,6 @@ SYSTEM_WORKFLOWS = [
                 "body": "A new appointment was scheduled.",
                 "recipients": "owner",
             },
-            {"action_type": "send_email", "template_key": "appointment_confirmed"},
         ],
         "is_enabled": False,
         "requires_review": True,
@@ -654,6 +642,8 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
                 slugs_to_resolve.append(trigger_config["to_stage_slug"])
             if "from_stage_slug" in trigger_config:
                 slugs_to_resolve.append(trigger_config["from_stage_slug"])
+        for condition in workflow_data.get("conditions", []):
+            slugs_to_resolve.extend(condition.get("stage_slugs") or [])
 
     resolved_stages = pipeline_service.resolve_stages_bulk(
         db, org_id, pipeline.id, slugs_to_resolve
@@ -670,14 +660,34 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
         if workflow_data.get("trigger_type") == "status_changed":
             to_slug = trigger_config.pop("to_stage_slug", None)
             from_slug = trigger_config.pop("from_stage_slug", None)
-            if to_slug and to_slug in stage_map:
-                to_stage = stage_map[to_slug]
+            to_stage = stage_map.get(to_slug) if to_slug else None
+            from_stage = stage_map.get(from_slug) if from_slug else None
+            # Without its stage the trigger would match every stage change. Skip it;
+            # a later idempotent seed creates it once the stage exists.
+            if (to_slug and to_stage is None) or (from_slug and from_stage is None):
+                continue
+            if to_stage:
                 trigger_config["to_stage_id"] = str(to_stage.id)
                 trigger_config["to_stage_key"] = to_stage.stage_key
-            if from_slug and from_slug in stage_map:
-                from_stage = stage_map[from_slug]
+            if from_stage:
                 trigger_config["from_stage_id"] = str(from_stage.id)
                 trigger_config["from_stage_key"] = from_stage.stage_key
+
+        # Stage conditions name stages by slug; store the org's stage ids.
+        conditions = []
+        missing_condition_stage = False
+        for condition in workflow_data.get("conditions", []):
+            condition_copy = condition.copy()
+            stage_slugs = condition_copy.pop("stage_slugs", None)
+            if stage_slugs:
+                stages = [stage_map.get(slug) for slug in stage_slugs]
+                if any(stage is None for stage in stages):
+                    missing_condition_stage = True
+                    break
+                condition_copy["value"] = [str(stage.id) for stage in stages]
+            conditions.append(condition_copy)
+        if missing_condition_stage:
+            continue
 
         # Resolve template_key to template_id in actions
         actions = []
@@ -697,7 +707,7 @@ def seed_system_workflows(db: Session, org_id: UUID, user_id: UUID | None = None
             icon=workflow_data.get("icon", "workflow"),
             trigger_type=workflow_data["trigger_type"],
             trigger_config=trigger_config,
-            conditions=workflow_data.get("conditions", []),
+            conditions=conditions,
             condition_logic=workflow_data.get("condition_logic", "AND"),
             actions=actions,
             is_enabled=workflow_data.get("is_enabled", False),

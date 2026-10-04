@@ -53,6 +53,15 @@
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
   --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-bell-ring: bell-ring 0.9s ease-in-out;
+
+  @keyframes bell-ring {
+    0%, 100% { transform: rotate(0); }
+    15% { transform: rotate(14deg); }
+    30% { transform: rotate(-12deg); }
+    45% { transform: rotate(8deg); }
+    60% { transform: rotate(-5deg); }
+  }
 }
 
 :root {

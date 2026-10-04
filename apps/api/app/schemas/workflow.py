@@ -1,14 +1,16 @@
 """Pydantic schemas for Automation Workflows."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.db.enums import (
     OwnerType,
+    Role,
+    WorkflowActionType,
     WorkflowConditionOperator,
     WorkflowTriggerType,
 )
@@ -17,72 +19,116 @@ from app.db.enums import (
 # Field Registry (Whitelist for conditions and updates)
 # =============================================================================
 
-ALLOWED_CONDITION_FIELDS = {
-    # Basic fields
-    "status_label",
-    "stage_id",
-    "source",
-    "is_priority",
-    "state",
-    "created_at",
-    # Owner fields
-    "owner_type",
-    "owner_id",
-    "form_id",
-    "status",
-    "source_mode",
-    "lead_kind",
-    "match_status",
-    # Contact fields
-    "email",
-    "phone",
-    "full_name",
-    # Demographics
-    "age",
-    "bmi",
-    "date_of_birth",
-    "race",
-    # Eligibility flags
-    "has_child",
-    "is_citizen_or_pr",
-    "is_non_smoker",
-    "has_surrogate_experience",
-    "is_age_eligible",
-    "journey_timing_preference",
-    # Physical measurements
-    "height_ft",
-    "weight_lb",
-    "num_deliveries",
-    "num_csections",
-    # Meta tracking
-    "meta_lead_id",
-    "meta_ad_external_id",
-    "meta_form_id",
-    # Donor fields
-    "education",
-    "donor_type",
-    "donor_number",
+# Condition fields by the record a workflow's conditions read. Task, note, and document
+# triggers read their linked surrogate or donor, so they use the subject's fields.
+SURROGATE_CONDITION_FIELDS = frozenset(
+    {
+        "status_label",
+        "stage_id",
+        "source",
+        "is_priority",
+        "state",
+        "created_at",
+        "owner_type",
+        "owner_id",
+        "email",
+        "phone",
+        "full_name",
+        "date_of_birth",
+        "race",
+        "marital_status",
+        "has_child",
+        "is_citizen_or_pr",
+        "is_non_smoker",
+        "has_surrogate_experience",
+        "is_age_eligible",
+        "journey_timing_preference",
+        "height_ft",
+        "weight_lb",
+        "num_deliveries",
+        "num_csections",
+        "contact_status",
+        "last_contacted_at",
+        "assigned_at",
+        "is_archived",
+        "embryo_stage",
+        "pregnancy_due_date",
+        "actual_delivery_date",
+        "meta_lead_id",
+        "meta_ad_external_id",
+        "meta_form_id",
+    }
+)
+
+DONOR_ALLOWED_CONDITION_FIELDS = frozenset(
+    {
+        "status_label",
+        "stage_id",
+        "source",
+        "state",
+        "created_at",
+        "owner_type",
+        "owner_id",
+        "email",
+        "phone",
+        "full_name",
+        "education",
+        "donor_type",
+        "donor_number",
+        "date_of_birth",
+        "race",
+        "marital_status",
+        "height_ft",
+        "weight_lb",
+        "college",
+        "nicotine",
+        "cannabis",
+        "infectious_disease",
+        "previous_donation",
+        "is_archived",
+    }
+)
+
+FORM_SUBMISSION_CONDITION_FIELDS = frozenset(
+    {"form_id", "status", "source_mode", "lead_kind", "match_status", "stage_id", "submitted_at"}
+)
+
+INTAKE_LEAD_CONDITION_FIELDS = frozenset(
+    {
+        "form_id",
+        "status",
+        "lead_kind",
+        "source",
+        "full_name",
+        "email",
+        "phone",
+        "stage_id",
+        "created_at",
+    }
+)
+
+MATCH_CONDITION_FIELDS = frozenset({"status", "match_kind", "outcome", "created_at"})
+
+APPOINTMENT_CONDITION_FIELDS = frozenset(
+    {"status", "appointment_type_id", "meeting_mode", "scheduled_start", "created_at"}
+)
+
+CONDITION_FIELDS_BY_ENTITY: dict[str, frozenset[str]] = {
+    "surrogate": SURROGATE_CONDITION_FIELDS,
+    "form_submission": FORM_SUBMISSION_CONDITION_FIELDS,
+    "intake_lead": INTAKE_LEAD_CONDITION_FIELDS,
+    "match": MATCH_CONDITION_FIELDS,
+    "appointment": APPOINTMENT_CONDITION_FIELDS,
 }
 
-DONOR_ALLOWED_CONDITION_FIELDS = {
-    "status_label",
-    "stage_id",
-    "source",
-    "state",
-    "created_at",
-    "owner_type",
-    "owner_id",
-    "email",
-    "phone",
-    "full_name",
-    "education",
-    "donor_type",
-    "donor_number",
-}
+ALLOWED_CONDITION_FIELDS = frozenset().union(
+    DONOR_ALLOWED_CONDITION_FIELDS, *CONDITION_FIELDS_BY_ENTITY.values()
+)
 
 SURROGATE_ALLOWED_UPDATE_FIELDS = {
     "stage_id",
     "is_priority",
+    "contact_status",
     "owner_type",
     "owner_id",
 }
@@ -110,6 +156,9 @@ ALLOWED_EMAIL_VARIABLES = {
     "donor_number",
     "donor_type",
     "education",
+    "form_name",
+    "submitted_at",
+    "record_link",
 }
 
 WorkflowSubjectType = Literal[
@@ -245,17 +294,33 @@ class SurrogateAssignedTriggerConfig(BaseModel):
     to_user_id: UUID | None = None  # Optional: only trigger for specific user
 
 
-class FormStartedTriggerConfig(BaseModel):
-    """Config for form_started trigger."""
-
-    form_id: UUID
-
-
 class FormSubmittedTriggerConfig(BaseModel):
     """Config for form_submitted trigger."""
 
     form_id: UUID | None = None
     lead_kind: Literal["surrogate", "egg_donor", "sperm_donor"] | None = None
+
+
+class AppointmentTriggerConfig(BaseModel):
+    """Config for appointment triggers.
+
+    record_type picks the linked record that record actions run on. Appointment types are
+    per host, so the type filter matches type names case-insensitively across hosts.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    record_type: Literal["surrogate", "egg_donor", "sperm_donor"] = "surrogate"
+    appointment_type_names: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(
+        default_factory=list, max_length=50
+    )
+
+
+class AppointmentTimeTriggerConfig(AppointmentTriggerConfig):
+    """Config for appointment_time: runs once per appointment time, hours from start or end."""
+
+    when: Literal["before_start", "after_end"] = "before_start"
+    hours: int = Field(24, ge=1, le=168)
 
 
 class IntakeLeadCreatedTriggerConfig(BaseModel):
@@ -276,8 +341,40 @@ class SendEmailActionConfig(BaseModel):
     action_type: Literal["send_email"] = "send_email"
     template_id: UUID
     recipients: (
-        Literal["surrogate", "donor", "subject", "owner", "creator", "all_admins"] | list[UUID]
+        Literal[
+            "surrogate",
+            "donor",
+            "subject",
+            "owner",
+            "creator",
+            "all_admins",
+            "queue",
+            "role",
+            "custom",
+        ]
+        | list[UUID]
     ) = "surrogate"
+    recipient_queue_id: UUID | None = None
+    recipient_role: Role | None = None
+    recipient_emails: list[EmailStr] | None = Field(default=None, min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def _require_recipient_target(self) -> SendEmailActionConfig:
+        if self.recipients == "queue" and self.recipient_queue_id is None:
+            raise ValueError("Queue recipients require a queue")
+        if self.recipients == "role" and self.recipient_role is None:
+            raise ValueError("Role recipients require a role")
+        if self.recipients == "custom" and not self.recipient_emails:
+            raise ValueError("Custom recipients require at least one email address")
+        return self
+
+
+# Recipients that are records' contacts rather than staff.
+SUBJECT_EMAIL_RECIPIENTS = frozenset({"surrogate", "donor", "subject"})
+
+
+def is_subject_email_recipient(recipients: object) -> bool:
+    return isinstance(recipients, str) and recipients in SUBJECT_EMAIL_RECIPIENTS
 
 
 class SendMessageActionConfig(BaseModel):
@@ -320,7 +417,8 @@ class SendNotificationActionConfig(BaseModel):
     action_type: Literal["send_notification"] = "send_notification"
     title: str = Field(max_length=100)
     body: str | None = None
-    recipients: Literal["owner", "creator", "all_admins"] | list[UUID] = "owner"
+    # "host" is the appointment's staff host; only appointment triggers offer it.
+    recipients: Literal["owner", "creator", "all_admins", "host"] | list[UUID] = "owner"
 
 
 class SendZapierConversionEventActionConfig(BaseModel):
@@ -362,20 +460,6 @@ class PromoteIntakeLeadActionConfig(BaseModel):
     assign_to_user: bool | None = None
 
 
-class AutoMatchSubmissionActionConfig(BaseModel):
-    """Config for auto_match_submission action."""
-
-    action_type: Literal["auto_match_submission"] = "auto_match_submission"
-
-
-class CreateIntakeLeadActionConfig(BaseModel):
-    """Config for create_intake_lead action."""
-
-    action_type: Literal["create_intake_lead"] = "create_intake_lead"
-    source: str | None = None
-    auto_promote: bool = False
-
-
 # Union of all action configs
 ActionConfig = (
     SendEmailActionConfig
@@ -388,14 +472,24 @@ ActionConfig = (
     | UpdateFieldActionConfig
     | AddNoteActionConfig
     | PromoteIntakeLeadActionConfig
-    | AutoMatchSubmissionActionConfig
-    | CreateIntakeLeadActionConfig
 )
 
 
 # =============================================================================
 # Workflow CRUD Schemas
 # =============================================================================
+
+
+def validate_workflow_action_types(actions):
+    """Reject retired/unknown actions at every workflow input boundary."""
+    for action in actions or []:
+        action_type = action.get("action_type") if isinstance(action, dict) else None
+        # The existing status shorthand is canonicalized by workflow_service.
+        if not isinstance(action_type, str) or (
+            action_type != "update_status" and action_type not in WorkflowActionType
+        ):
+            raise ValueError(f"Unknown workflow action type: {action_type}")
+    return actions
 
 
 class WorkflowCreate(BaseModel):
@@ -417,6 +511,8 @@ class WorkflowCreate(BaseModel):
     rate_limit_per_hour: int | None = Field(default=None, ge=1, le=1000)
     rate_limit_per_entity_per_day: int | None = Field(default=None, ge=1, le=100)
 
+    _validate_action_types = field_validator("actions")(validate_workflow_action_types)
+
 
 class WorkflowUpdate(BaseModel):
     """Schema for updating a workflow."""
@@ -433,6 +529,8 @@ class WorkflowUpdate(BaseModel):
     # Rate limits (None = unlimited)
     rate_limit_per_hour: int | None = Field(default=None, ge=1, le=1000)
     rate_limit_per_entity_per_day: int | None = Field(default=None, ge=1, le=100)
+
+    _validate_action_types = field_validator("actions")(validate_workflow_action_types)
 
 
 class WorkflowRead(BaseModel):
@@ -573,6 +671,7 @@ class WorkflowOptions(BaseModel):
     trigger_entity_types: dict[str, str] | None = None
     condition_operators: list[dict]
     condition_fields: list[str]
+    condition_fields_by_trigger: dict[str, list[str]]
     update_fields: list[str]
     email_variables: list[str]
     email_templates: list[dict]  # {id, name}
@@ -581,6 +680,7 @@ class WorkflowOptions(BaseModel):
     queues: list[dict]  # {id, name}
     statuses: list[dict]  # {id, value, label, is_active}
     forms: list[dict] = []  # {id, name, lead_kind, lead_kinds}
+    appointment_type_names: list[str] = []
 
 
 # =============================================================================

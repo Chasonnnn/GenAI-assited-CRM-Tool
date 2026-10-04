@@ -313,6 +313,10 @@ class TestAdminImports:
                     "status": "draft",
                     "purpose": "other",
                     "lead_kind": "sperm_donor",
+                    "routing_exact_match": "review",
+                    "routing_no_match": "off",
+                    "routing_lead_source": "form_embed",
+                    "routing_auto_create_donor": False,
                     "schema_json": {"title": "Draft"},
                     "published_schema_json": {"title": "Published"},
                     "max_file_size_bytes": 1048576,
@@ -413,7 +417,7 @@ class TestAdminImports:
                     "trigger_config": {"from": ["new_unread"]},
                     "conditions": [],
                     "condition_logic": "AND",
-                    "actions": [{"type": "add_note", "content": "Hi"}],
+                    "actions": [{"action_type": "add_note", "content": "Hi"}],
                     "is_global": False,
                     "organization_id": str(test_org.id),
                     "usage_count": 0,
@@ -513,6 +517,12 @@ class TestAdminImports:
         assert form.updated_by_user_id == test_user.id
         assert form.purpose == "other"
         assert form.lead_kind == "sperm_donor"
+        assert (
+            form.routing_exact_match,
+            form.routing_no_match,
+            form.routing_lead_source,
+            form.routing_auto_create_donor,
+        ) == ("review", "off", "form_embed", False)
 
         pipeline = db.query(Pipeline).filter(Pipeline.id == donor_pipeline_id).one()
         assert pipeline.entity_type == "sperm_donor"
@@ -1807,3 +1817,128 @@ async def test_import_config_normalizes_legacy_match_rejected(
         stored = db.get(model, identifier)
         assert stored.trigger_type == "match_declined"
         assert stored.subject_type == "match"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mixed", [False, True])
+async def test_import_prebranch_archive_strips_routing_and_reports_warnings(
+    authed_client, db, test_org, mixed
+):
+    workflow_id, template_id = uuid.uuid4(), uuid.uuid4()
+    retained = (
+        [{"action_type": "send_notification", "title": "Application received"}] if mixed else []
+    )
+    definition = {
+        "name": "Legacy route",
+        "subject_type": "form_submission",
+        "trigger_type": "form_submitted",
+        "actions": [
+            {"action_type": "auto_match_submission"},
+            {"action_type": "create_intake_lead"},
+            *retained,
+        ],
+        "is_enabled": True,
+    }
+    archive = _build_config_zip(
+        {
+            "organization.json": {
+                "id": str(test_org.id),
+                "name": test_org.name,
+                "slug": test_org.slug,
+            },
+            "workflows.json": [{**definition, "id": str(workflow_id)}],
+            "workflow_templates.json": [
+                {
+                    **definition,
+                    "id": str(template_id),
+                    "draft_config": {"actions": definition["actions"]},
+                }
+            ],
+        }
+    )
+    response = await authed_client.post(
+        "/admin/imports/config", files={"config_zip": ("config.zip", archive, "application/zip")}
+    )
+    assert response.status_code == 200, response.text
+    warnings = response.json()["config"]["warnings"]
+    assert len(warnings) == 2
+    assert any(str(workflow_id) in warning for warning in warnings)
+    assert any(str(template_id) in warning for warning in warnings)
+    assert all("Removed retired routing actions" in warning for warning in warnings)
+    assert db.get(AutomationWorkflow, workflow_id).actions == retained
+    assert db.get(AutomationWorkflow, workflow_id).is_enabled is mixed
+    assert db.get(WorkflowTemplate, template_id).actions == retained
+
+
+@pytest.mark.asyncio
+async def test_import_unknown_action_keeps_400_error_convention(authed_client, db, test_org):
+    workflow_id = uuid.uuid4()
+    archive = _build_config_zip(
+        {
+            "workflows.json": [
+                {
+                    "id": str(workflow_id),
+                    "name": "Invalid",
+                    "trigger_type": "form_submitted",
+                    "actions": [{"action_type": "unsupported_action"}],
+                }
+            ]
+        }
+    )
+    response = await authed_client.post(
+        "/admin/imports/config", files={"config_zip": ("config.zip", archive, "application/zip")}
+    )
+    assert response.status_code == 400, response.text
+    assert "Unknown workflow action type: unsupported_action" in response.json()["detail"]
+    assert db.get(AutomationWorkflow, workflow_id) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["surrogate", "egg_donor", "sperm_donor"])
+async def test_import_legacy_form_without_routing_stays_paused(
+    authed_client, db, test_org, test_user, kind
+):
+    form_id, workflow_id = uuid.uuid4(), uuid.uuid4()
+    archive = _build_config_zip(
+        {
+            "forms.json": [
+                {
+                    "id": str(form_id),
+                    "name": "Legacy application",
+                    "status": "published",
+                    "lead_kind": kind,
+                    "purpose": "other",
+                    "schema_json": {"pages": []},
+                    "created_by_user_id": str(test_user.id),
+                }
+            ],
+            "workflows.json": [
+                {
+                    "id": str(workflow_id),
+                    "name": "Old routing",
+                    "trigger_type": "form_submitted",
+                    "subject_type": "form_submission",
+                    "trigger_config": {"form_id": str(form_id)},
+                    "actions": [
+                        {"action_type": "auto_match_submission"},
+                        {"action_type": "create_intake_lead"},
+                    ],
+                }
+            ],
+        }
+    )
+    response = await authed_client.post(
+        "/admin/imports/config", files={"config_zip": ("config.zip", archive, "application/zip")}
+    )
+    assert response.status_code == 200, response.text
+    form = db.get(Form, form_id)
+    donor = kind != "surrogate"
+    assert (
+        form.routing_exact_match,
+        form.routing_no_match,
+        form.routing_lead_source,
+        form.routing_auto_create_donor,
+    ) == ("review", "off", "website" if donor else None, donor)
+    assert f"Paused routing for legacy form {form_id}." in response.json()["config"]["warnings"]
+    assert db.get(AutomationWorkflow, workflow_id).actions == []
+    assert not db.get(AutomationWorkflow, workflow_id).is_enabled

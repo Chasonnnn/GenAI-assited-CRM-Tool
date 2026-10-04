@@ -46,7 +46,7 @@ const history: EntityStageHistory = {
 
 function activity(
     activityType: string,
-    details: Record<string, unknown> | null,
+    details: EntityActivity["details"],
 ): EntityActivity {
     return {
         id: `activity-${activityType}`,

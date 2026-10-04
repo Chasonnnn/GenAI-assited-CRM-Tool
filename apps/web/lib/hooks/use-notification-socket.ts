@@ -2,19 +2,21 @@
  * WebSocket hook for real-time notifications.
  * 
  * Usage:
- * const { isConnected, lastNotification, unreadCount } = useNotificationSocket()
+ * const { isConnected, lastNotification } = useNotificationSocket()
  * 
  * The hook automatically:
  * - Connects when user is authenticated
  * - Reconnects on disconnect with exponential backoff
  * - Sends periodic pings to keep connection alive
- * - Invalidates notification queries on new messages
+ * - Invalidates notification queries on new messages and writes pushed counts to the count query
  */
 
 import { useEffect, useReducer, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/lib/auth-context'
 import { getWebSocketUrl } from '@/lib/websocket-url'
+import type { NotificationCounts, NotificationTier } from '@/lib/api/notifications'
+import { notificationKeys } from '@/lib/hooks/use-notifications'
 
 export interface NotificationSocketMessage {
     type: 'notification' | 'count_update'
@@ -23,7 +25,9 @@ export interface NotificationSocketMessage {
         title?: string
         body?: string
         type?: string
-        count?: number
+        tier?: NotificationTier
+        action_count?: number
+        updates_unread?: number
         // Entity data for deep-linking
         entity_type?: string
         entity_id?: string
@@ -39,19 +43,16 @@ interface UseNotificationSocketOptions {
 type NotificationSocketState = {
     isConnected: boolean
     lastNotification: NotificationSocketMessage['data'] | null
-    unreadCount: number | null
 }
 
 type NotificationSocketAction =
     | { type: 'connected' }
     | { type: 'disconnected' }
     | { type: 'notification'; data: NotificationSocketMessage['data'] }
-    | { type: 'count_update'; count: number | null }
 
 const initialNotificationSocketState: NotificationSocketState = {
     isConnected: false,
     lastNotification: null,
-    unreadCount: null,
 }
 
 function notificationSocketReducer(
@@ -62,11 +63,9 @@ function notificationSocketReducer(
         case 'connected':
             return { ...state, isConnected: true }
         case 'disconnected':
-            return { ...state, isConnected: false, unreadCount: null }
+            return { ...state, isConnected: false }
         case 'notification':
             return { ...state, lastNotification: action.data }
-        case 'count_update':
-            return { ...state, unreadCount: action.count }
     }
 }
 
@@ -148,7 +147,13 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
                             // Invalidate notifications query to trigger refetch
                             void queryClient.invalidateQueries({ queryKey: ['notifications'] })
                         } else if (message.type === 'count_update') {
-                            dispatch({ type: 'count_update', count: message.data.count ?? null })
+                            const { action_count, updates_unread } = message.data
+                            if (typeof action_count === 'number' && typeof updates_unread === 'number') {
+                                queryClient.setQueryData<NotificationCounts>(notificationKeys.count(), {
+                                    action_count,
+                                    updates_unread,
+                                })
+                            }
                         }
                     } catch (e) {
                         // Handle pong or invalid JSON
@@ -248,7 +253,6 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     return {
         isConnected: state.isConnected,
         lastNotification: state.lastNotification,
-        unreadCount: state.unreadCount,
         reconnect,
     }
 }

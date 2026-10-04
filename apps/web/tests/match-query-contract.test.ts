@@ -8,7 +8,7 @@ describe("match detail query contract", () => {
         const options = matchDetailQueryOptions("match-1", queryFn)
 
         expect(options.queryKey).toEqual(matchKeys.detail("match-1"))
-        await expect(options.queryFn?.({} as never)).resolves.toEqual({ id: "match-1" })
+        await expect(options.queryFn()).resolves.toEqual({ id: "match-1" })
         expect(queryFn).toHaveBeenCalledOnce()
     })
 })

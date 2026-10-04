@@ -4,7 +4,8 @@ Notifications Router - /me/notifications endpoints.
 Provides notification listing, read status, and settings.
 """
 
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header
+from app.db.enums import NotificationTier, notification_tier
 from app.schemas.auth import UserSession
 from app.services import notification_service
 
@@ -23,19 +25,50 @@ router = APIRouter(prefix="/me", tags=["notifications"])
 # =============================================================================
 
 
+class _NotificationRow(Protocol):
+    """Fields NotificationRead reads; routers do not import ORM models."""
+
+    id: UUID
+    type: str
+    title: str
+    body: str | None
+    entity_type: str | None
+    entity_id: UUID | None
+    read_at: datetime | None
+    created_at: datetime
+
+
 class NotificationRead(BaseModel):
     """Notification response."""
 
     id: str
     type: str
+    tier: Literal["action", "update"]
     title: str
     body: str | None
     entity_type: str | None
     entity_id: str | None
     read_at: str | None
     created_at: str
+    # Pending status change request an open status_change_requested item asks about.
+    request_id: str | None = None
 
-    model_config = {"from_attributes": True}
+    @classmethod
+    def from_model(
+        cls, notification: _NotificationRow, request_id: UUID | None = None
+    ) -> NotificationRead:
+        return cls(
+            id=str(notification.id),
+            type=notification.type,
+            tier=notification_tier(notification.type).value,
+            title=notification.title,
+            body=notification.body,
+            entity_type=notification.entity_type,
+            entity_id=str(notification.entity_id) if notification.entity_id else None,
+            read_at=notification.read_at.isoformat() if notification.read_at else None,
+            created_at=notification.created_at.isoformat(),
+            request_id=str(request_id) if request_id else None,
+        )
 
 
 class NotificationListResponse(BaseModel):
@@ -46,10 +79,15 @@ class NotificationListResponse(BaseModel):
     next_cursor: str | None = None
 
 
-class UnreadCountResponse(BaseModel):
-    """Unread count only (for polling)."""
+class NotificationCountsResponse(BaseModel):
+    """Bell badge counts (for polling)."""
 
-    count: int
+    action_count: int
+    updates_unread: int
+
+
+class MarkAllReadResponse(BaseModel):
+    marked_read: int
 
 
 class NotificationSettingsRead(BaseModel):
@@ -67,6 +105,8 @@ class NotificationSettingsRead(BaseModel):
     status_change_decisions: bool
     approval_timeouts: bool
     security_alerts: bool
+    email_workflow_notifications: bool
+    email_daily_digest: bool
 
 
 class NotificationSettingsUpdate(BaseModel):
@@ -84,6 +124,8 @@ class NotificationSettingsUpdate(BaseModel):
     status_change_decisions: bool | None = None
     approval_timeouts: bool | None = None
     security_alerts: bool | None = None
+    email_workflow_notifications: bool | None = None
+    email_daily_digest: bool | None = None
 
 
 # =============================================================================
@@ -96,6 +138,9 @@ def list_notifications(
     unread_only: Annotated[bool, "fastapi_param"] = Query(False),
     notification_types: Annotated[str | None, "fastapi_param"] = Query(
         None, description="Comma-separated notification types"
+    ),
+    tier: Annotated[NotificationTier | None, "fastapi_param"] = Query(
+        None, description="action: open action items only; update: updates only"
     ),
     limit: Annotated[int, "fastapi_param"] = Query(20, ge=1, le=100),
     offset: Annotated[int, "fastapi_param"] = Query(0, ge=0),
@@ -118,6 +163,7 @@ def list_notifications(
             org_id=session.org_id,
             unread_only=unread_only,
             notification_types=types_list,
+            tier=tier,
             limit=limit,
             offset=offset,
             cursor=cursor,
@@ -131,40 +177,31 @@ def list_notifications(
         org_id=session.org_id,
     )
 
-    items = []
-    for n in notifications:
-        items.append(
-            NotificationRead(
-                id=str(n.id),
-                type=n.type,
-                title=n.title,
-                body=n.body,
-                entity_type=n.entity_type,
-                entity_id=str(n.entity_id) if n.entity_id else None,
-                read_at=n.read_at.isoformat() if n.read_at else None,
-                created_at=n.created_at.isoformat(),
-            )
-        )
-
+    request_ids = notification_service.pending_status_change_request_ids(
+        db, session.org_id, notifications
+    )
     return NotificationListResponse(
-        items=items,
+        items=[NotificationRead.from_model(n, request_ids.get(n.id)) for n in notifications],
         unread_count=unread_count,
         next_cursor=next_cursor,
     )
 
 
-@router.get("/notifications/count", response_model=UnreadCountResponse)
-def get_unread_count(
+@router.get("/notifications/count", response_model=NotificationCountsResponse)
+def get_notification_counts(
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
-    """Get unread notification count (for polling)."""
-    count = notification_service.get_unread_count(
+    """Get open action items and unread updates (for polling)."""
+    counts = notification_service.get_notification_counts(
         db=db,
         user_id=session.user_id,
         org_id=session.org_id,
     )
-    return UnreadCountResponse(count=count)
+    return NotificationCountsResponse(
+        action_count=counts.action,
+        updates_unread=counts.updates_unread,
+    )
 
 
 @router.patch(
@@ -188,33 +225,27 @@ def mark_notification_read(
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
 
-    return NotificationRead(
-        id=str(notification.id),
-        type=notification.type,
-        title=notification.title,
-        body=notification.body,
-        entity_type=notification.entity_type,
-        entity_id=str(notification.entity_id) if notification.entity_id else None,
-        read_at=notification.read_at.isoformat() if notification.read_at else None,
-        created_at=notification.created_at.isoformat(),
-    )
+    return NotificationRead.from_model(notification)
 
 
 @router.post(
     "/notifications/read-all",
+    response_model=MarkAllReadResponse,
     dependencies=[Depends(require_csrf_header)],
 )
 def mark_all_read(
+    tier: Annotated[NotificationTier | None, "fastapi_param"] = Query(None),
     session: Annotated[UserSession, "fastapi_param"] = Depends(get_current_session),
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-) -> object:
-    """Mark all notifications as read."""
+):
+    """Mark all notifications as read, optionally one tier only."""
     count = notification_service.mark_all_read(
         db=db,
         user_id=session.user_id,
         org_id=session.org_id,
+        tier=tier,
     )
-    return {"marked_read": count}
+    return MarkAllReadResponse(marked_read=count)
 
 
 @router.get("/settings/notifications", response_model=NotificationSettingsRead)

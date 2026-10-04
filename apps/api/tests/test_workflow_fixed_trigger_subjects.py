@@ -14,6 +14,8 @@ from app.services import workflow_service
 
 FIXED_TRIGGER_SUBJECTS = [
     (WorkflowTriggerType.FORM_SUBMITTED, "form_submission"),
+    (WorkflowTriggerType.FORM_SUBMISSION_APPROVED, "form_submission"),
+    (WorkflowTriggerType.FORM_SUBMISSION_REJECTED, "form_submission"),
     (WorkflowTriggerType.INTAKE_LEAD_CREATED, "intake_lead"),
     (WorkflowTriggerType.MATCH_PROPOSED, "match"),
     (WorkflowTriggerType.MATCH_ACCEPTED, "match"),
@@ -21,6 +23,8 @@ FIXED_TRIGGER_SUBJECTS = [
     (WorkflowTriggerType.MATCH_CANCELLED, "match"),
     (WorkflowTriggerType.APPOINTMENT_SCHEDULED, "appointment"),
     (WorkflowTriggerType.APPOINTMENT_COMPLETED, "appointment"),
+    (WorkflowTriggerType.APPOINTMENT_CANCELLED, "appointment"),
+    (WorkflowTriggerType.APPOINTMENT_NO_SHOW, "appointment"),
 ]
 
 
@@ -192,6 +196,16 @@ async def test_builder_payload_workflow_runs_on_real_form_submission(authed_clie
 
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
 
+    routing = await authed_client.put(
+        f"/forms/{form_id}/routing",
+        json={
+            "exact_match": "auto",
+            "no_match": "auto",
+            "lead_source": None,
+            "auto_create_donor": False,
+        },
+    )
+    assert routing.status_code == 200, routing.text
     create_response = await authed_client.post(
         "/workflows",
         json={
@@ -201,7 +215,7 @@ async def test_builder_payload_workflow_runs_on_real_form_submission(authed_clie
             "trigger_config": {"form_id": form_id},
             "conditions": [],
             "condition_logic": "AND",
-            "actions": [{"action_type": "create_intake_lead"}],
+            "actions": [_notification_action()],
             "is_enabled": True,
             "scope": "org",
         },

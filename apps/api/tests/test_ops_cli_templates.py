@@ -15,7 +15,12 @@ def test_workflow_ui_ids_are_not_tenant_bindings():
         "trigger_type": "surrogate_created",
         "actions": [{"action_type": "add_note", "content": "Review", "clientId": str(uuid4())}],
         "conditions": [
-            {"field": "age", "operator": "greater_than", "value": 23, "clientId": str(uuid4())}
+            {
+                "field": "num_deliveries",
+                "operator": "greater_than",
+                "value": 1,
+                "clientId": str(uuid4()),
+            }
         ],
     }
     checked = writes.validate_template("workflow", draft)

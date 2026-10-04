@@ -3,7 +3,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.schemas.workflow import validate_workflow_action_types
 
 
 class TemplateBase(BaseModel):
@@ -24,6 +26,8 @@ class TemplateCreate(TemplateBase):
     conditions: list[dict] = Field(default_factory=list)
     condition_logic: str = "AND"
     actions: list[dict] = Field(min_length=1)
+
+    _validate_action_types = field_validator("actions")(validate_workflow_action_types)
 
 
 class TemplateFromWorkflow(BaseModel):

@@ -23,6 +23,8 @@ const mockPublishForm = vi.fn()
 const mockPromoteIntakeLead = vi.fn()
 const mockResolveSubmissionMatch = vi.fn()
 const mockRefetchIntakeLinks = vi.fn()
+const mockFormRouting = vi.fn()
+const mockUpdateFormRouting = vi.fn()
 const { toastError, toastSuccess, useFormMappingOptionsMock } = vi.hoisted(() => ({
     toastError: vi.fn(),
     toastSuccess: vi.fn(),
@@ -35,6 +37,10 @@ const permissionState = vi.hoisted(() => ({
     isLoading: false,
     isError: false,
     permissions: ["manage_forms"] as string[],
+}))
+const effectiveAccessState = vi.hoisted(() => ({
+    policyVersion: 1,
+    permissions: ["manage_forms", "edit_surrogates", "edit_donors"] as string[],
 }))
 
 vi.mock("next/navigation", () => ({
@@ -64,7 +70,9 @@ vi.mock("@/components/ui/toast", () => ({
 }))
 
 vi.mock("@/lib/hooks/use-permissions", () => ({
-    useEffectivePermissions: () => ({ data: { policy_version: 1, permissions: ["edit_surrogates", "edit_donors"] } }),
+    useEffectivePermissions: () => ({
+        data: { policy_version: effectiveAccessState.policyVersion, permissions: effectiveAccessState.permissions },
+    }),
 }))
 
 vi.mock("@/lib/auth-context", () => ({
@@ -116,7 +124,19 @@ vi.mock("@/lib/hooks/use-forms", () => ({
     useUpdateFormIntakeLink: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useUpdateForm: () => ({ mutateAsync: mockUpdateForm, isPending: false }),
     useUploadFormLogo: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useFormRouting: (formId: string | null) => mockFormRouting(formId),
+    useUpdateFormRouting: () => ({ mutateAsync: mockUpdateFormRouting, isPending: false }),
+    useFormWorkflows: () => ({ data: [], isLoading: false, isError: false }),
+    useRunSubmissionRoutingMatch: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCreateSubmissionRoutingLead: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useDismissSubmissionRoutingReview: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
+
+function requiredAt<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
 
 describe("FormBuilderPage", () => {
     beforeEach(() => {
@@ -124,6 +144,25 @@ describe("FormBuilderPage", () => {
         permissionState.isLoading = false
         permissionState.isError = false
         permissionState.permissions = ["manage_forms"]
+        effectiveAccessState.policyVersion = 1
+        effectiveAccessState.permissions = ["manage_forms", "edit_surrogates", "edit_donors"]
+        mockFormRouting.mockReset()
+        mockFormRouting.mockImplementation((formId: string | null) => ({
+            data: formId
+                ? {
+                      form_id: formId,
+                      lead_kind: "surrogate",
+                      exact_match: "review",
+                      no_match: "review",
+                      lead_source: null,
+                      auto_create_donor: false,
+                      updated_at: "2026-10-02T00:00:00Z",
+                  }
+                : undefined,
+            isLoading: false,
+            isError: false,
+        }))
+        mockUpdateFormRouting.mockReset()
         mockPush.mockReset()
         mockReplace.mockReset()
         mockUseForm.mockReset()
@@ -338,7 +377,17 @@ describe("FormBuilderPage", () => {
         expect(screen.getByRole("tab", { name: /^edit$/i })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: /^preview$/i })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: /^settings$/i })).toBeInTheDocument()
+        expect(screen.getByRole("tab", { name: /^routing$/i })).toBeInTheDocument()
         expect(screen.getByRole("tab", { name: /^submissions$/i })).toBeInTheDocument()
+        const workspaceTabs = screen.getByRole("tab", { name: /^edit$/i }).closest('[role="tablist"]')
+        expect(workspaceTabs).not.toBeNull()
+        expect(within(workspaceTabs as HTMLElement).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+            "Edit",
+            "Preview",
+            "Settings",
+            "Routing",
+            "Submissions",
+        ])
         expect(screen.queryByRole("tab", { name: /^builder$/i })).not.toBeInTheDocument()
         expect(
             screen.queryByRole("tablist", { name: /canvas mode/i }),
@@ -353,6 +402,192 @@ describe("FormBuilderPage", () => {
         expect(screen.getByLabelText("Title")).toBeInTheDocument()
         expect(screen.getByLabelText("Subtitle")).toBeInTheDocument()
         expect(screen.getByTestId("form-builder-workspace")).toHaveClass("hidden")
+    })
+
+    describe("Routing tab", () => {
+        const buildForm = (overrides: Partial<FormRead> = {}): FormRead => ({
+            id: "form-1",
+            name: "Surrogate Application",
+            status: "published",
+            purpose: "surrogate_application",
+            lead_kind: "surrogate",
+            created_at: "2026-07-16T00:00:00Z",
+            updated_at: "2026-07-16T00:00:00Z",
+            description: null,
+            form_schema: { pages: [{ title: "Application", fields: [] }] },
+            published_schema: null,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            max_file_count: 10,
+            allowed_mime_types: null,
+            default_application_email_template_id: null,
+            ...overrides,
+        })
+
+        it("loads routing on first open and keeps an unsaved draft across tab switches", async () => {
+            navigationState.formId = "form-1"
+            mockUseForm.mockReturnValue({ data: buildForm(), isLoading: false })
+            render(<FormBuilderPage />)
+            await screen.findByLabelText("Form name")
+
+            expect(mockFormRouting).not.toHaveBeenCalled()
+            fireEvent.click(screen.getByRole("tab", { name: /^routing$/i }))
+            expect(mockFormRouting).toHaveBeenCalledWith("form-1")
+            expect(screen.getByRole("heading", { name: "Routing" })).toBeInTheDocument()
+            expect(screen.queryByText("Read-only")).not.toBeInTheDocument()
+
+            const exactMatch = screen.getByRole("radiogroup", { name: "One exact match" })
+            fireEvent.click(within(exactMatch).getByRole("radio", { name: "Link automatically" }))
+            fireEvent.click(screen.getByRole("tab", { name: /^edit$/i }))
+            fireEvent.click(screen.getByRole("tab", { name: /^routing$/i }))
+
+            expect(
+                within(screen.getByRole("radiogroup", { name: "One exact match" })).getByRole("radio", {
+                    name: "Link automatically",
+                }),
+            ).toHaveAttribute("aria-checked", "true")
+            expect(screen.getByRole("button", { name: "Save routing" })).toBeEnabled()
+        })
+
+        it("opens on the Routing tab from the tab query parameter", async () => {
+            navigationState.formId = "form-1"
+            mockUseForm.mockReturnValue({ data: buildForm(), isLoading: false })
+            render(<FormBuilderPage initialTab="routing" />)
+
+            expect(await screen.findByRole("heading", { name: "Routing" })).toBeInTheDocument()
+            expect(screen.getByRole("tab", { name: /^routing$/i })).toHaveAttribute("aria-selected", "true")
+            expect(screen.getByTestId("form-builder-workspace")).toHaveClass("hidden")
+        })
+
+        it("is read-only on a donor form for a user without donor edit access", async () => {
+            effectiveAccessState.permissions = ["manage_forms", "edit_surrogates"]
+            navigationState.formId = "form-1"
+            mockUseForm.mockReturnValue({ data: buildForm({ lead_kind: "egg_donor" }), isLoading: false })
+            mockFormRouting.mockReturnValue({
+                data: {
+                    form_id: "form-1",
+                    lead_kind: "egg_donor",
+                    exact_match: "auto",
+                    no_match: "auto",
+                    lead_source: "website",
+                    auto_create_donor: true,
+                    updated_at: "2026-10-02T00:00:00Z",
+                },
+                isLoading: false,
+                isError: false,
+            })
+            render(<FormBuilderPage initialTab="routing" />)
+
+            expect(await screen.findByText("Read-only")).toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "Save routing" })).not.toBeInTheDocument()
+            expect(screen.getByRole("switch", { name: "Create donor when photo scan passes" })).toHaveAttribute(
+                "data-disabled",
+            )
+        })
+
+        const routingReviewSubmission: FormSubmissionRead = {
+            id: "submission-routing",
+            form_id: "form-1",
+            lead_kind: "surrogate",
+            status: "pending_review",
+            submitted_at: "2026-10-02T16:12:00Z",
+            answers: { full_name: "Maria Delgado" },
+            source_mode: "shared",
+            match_status: "routing_review",
+            routing_review_step: "match",
+            files: [],
+        }
+
+        // Serves `result` for the routing review queue and empty results for every other list.
+        const mockRoutingReviewQueue = (result: Record<string, unknown>) => {
+            mockFormSubmissions.mockImplementation(
+                (_formId: string | null, params: ListFormSubmissionsParams = {}) =>
+                    params.match_status === "routing_review"
+                        ? { refetch: vi.fn(), isLoading: false, ...result }
+                        : { data: [], refetch: vi.fn(), isLoading: false },
+            )
+        }
+
+        const openSubmissionsTab = async () => {
+            await screen.findByLabelText("Form name")
+            fireEvent.click(screen.getByRole("tab", { name: /^submissions$/i }))
+        }
+
+        it("queues routing review submissions in place of the workflow approval card", async () => {
+            navigationState.formId = "form-1"
+            mockUseForm.mockReturnValue({ data: buildForm(), isLoading: false })
+            mockRoutingReviewQueue({ data: [routingReviewSubmission] })
+            render(<FormBuilderPage />)
+            await screen.findByLabelText("Form name")
+
+            expect(mockFormSubmissions).toHaveBeenCalledWith("form-1", {
+                source_mode: "shared",
+                match_status: "routing_review",
+                limit: 50,
+            })
+            fireEvent.click(screen.getByRole("tab", { name: /^submissions$/i }))
+            expect(screen.getByRole("button", { name: "Run match for Maria Delgado" })).toBeInTheDocument()
+            expect(screen.getByText("Match check")).toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "Open Approval Queue" })).not.toBeInTheDocument()
+        })
+
+        it("withholds routing review actions under policy v2 without the review permission", async () => {
+            navigationState.formId = "form-1"
+            mockUseForm.mockReturnValue({ data: buildForm(), isLoading: false })
+            mockRoutingReviewQueue({ data: [routingReviewSubmission] })
+            effectiveAccessState.policyVersion = 2
+            effectiveAccessState.permissions = ["manage_forms", "view_form_submissions", "edit_surrogates", "create_surrogates"]
+            const view = render(<FormBuilderPage />)
+            await openSubmissionsTab()
+
+            expect(screen.queryByRole("button", { name: "Run match for Maria Delgado" })).not.toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "Dismiss routing review for Maria Delgado" })).not.toBeInTheDocument()
+            view.unmount()
+
+            effectiveAccessState.permissions = [...effectiveAccessState.permissions, "review_form_submissions"]
+            render(<FormBuilderPage />)
+            await openSubmissionsTab()
+
+            expect(screen.getByRole("button", { name: "Run match for Maria Delgado" })).toBeEnabled()
+            expect(screen.getByRole("button", { name: "Dismiss routing review for Maria Delgado" })).toBeEnabled()
+        })
+
+        it("shows the routing review queue loading, then a retryable error, then the recovered rows", async () => {
+            navigationState.formId = "form-1"
+            mockUseForm.mockReturnValue({ data: buildForm(), isLoading: false })
+            mockRoutingReviewQueue({ data: undefined, isLoading: true })
+            const view = render(<FormBuilderPage />)
+            await openSubmissionsTab()
+
+            expect(screen.getByText("Loading routing review…")).toBeInTheDocument()
+            expect(screen.queryByText("No submissions waiting for routing review.")).not.toBeInTheDocument()
+
+            const refetch = vi.fn()
+            mockRoutingReviewQueue({ data: undefined, isError: true, refetch })
+            view.rerender(<FormBuilderPage />)
+
+            const alert = screen.getByRole("alert")
+            expect(alert).toHaveTextContent("Unable to load routing review.")
+            expect(screen.queryByText("No submissions waiting for routing review.")).not.toBeInTheDocument()
+            fireEvent.click(within(alert).getByRole("button", { name: "Retry" }))
+            expect(refetch).toHaveBeenCalledTimes(1)
+
+            mockRoutingReviewQueue({ data: [routingReviewSubmission] })
+            view.rerender(<FormBuilderPage />)
+
+            expect(screen.queryByText("Unable to load routing review.")).not.toBeInTheDocument()
+            expect(screen.getByRole("button", { name: "Run match for Maria Delgado" })).toBeInTheDocument()
+        })
+
+        it("shows the empty routing review queue only after a successful empty load", async () => {
+            navigationState.formId = "form-1"
+            mockUseForm.mockReturnValue({ data: buildForm(), isLoading: false })
+            mockRoutingReviewQueue({ data: [] })
+            render(<FormBuilderPage />)
+            await openSubmissionsTab()
+
+            expect(screen.getByText("No submissions waiting for routing review.")).toBeInTheDocument()
+            expect(screen.queryByText("Loading routing review…")).not.toBeInTheDocument()
+        })
     })
 
     it("renders human-readable labels for automation settings dropdown triggers", () => {
@@ -831,7 +1066,7 @@ describe("FormBuilderPage", () => {
                 home_state: "NY",
                 education_background: "MS in Biochemistry",
             },
-            schema_snapshot: donorForm.form_schema,
+            schema_snapshot: donorForm.form_schema ?? null,
             mapping_snapshot: [
                 { field_key: "applicant_name", surrogate_field: "full_name" },
                 { field_key: "email_address", surrogate_field: "email" },
@@ -890,7 +1125,7 @@ describe("FormBuilderPage", () => {
         const logicSection = screen.getByText("Display rule").closest("section")
         expect(logicSection).not.toBeNull()
 
-        const displayRuleSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[0]
+        const displayRuleSelect = requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 0)
         expect(displayRuleSelect).toHaveTextContent("Always show")
         expect(displayRuleSelect).not.toHaveTextContent("none")
 
@@ -899,16 +1134,16 @@ describe("FormBuilderPage", () => {
         fireEvent.mouseMove(nameFieldOption)
         fireEvent.click(nameFieldOption)
 
-        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[0]).toHaveTextContent("Name")
+        expect(requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 0)).toHaveTextContent("Name")
 
-        const operatorSelect = within(logicSection as HTMLElement).getAllByRole("combobox")[1]
+        const operatorSelect = requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 1)
         fireEvent.mouseDown(operatorSelect)
         const notEqualsOption = await screen.findByRole("option", { name: "Does not equal" })
         fireEvent.mouseMove(notEqualsOption)
         fireEvent.click(notEqualsOption)
 
-        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[1]).toHaveTextContent("Does not equal")
-        expect(within(logicSection as HTMLElement).getAllByRole("combobox")[1]).not.toHaveTextContent("not_equals")
+        expect(requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 1)).toHaveTextContent("Does not equal")
+        expect(requiredAt(within(logicSection as HTMLElement).getAllByRole("combobox"), 1)).not.toHaveTextContent("not_equals")
 
         const mappingSection = screen.getByText("Mapping").closest("section")
         expect(mappingSection).not.toBeNull()
@@ -1115,12 +1350,12 @@ describe("FormBuilderPage", () => {
             public_title: "Apply today",
             pages: liveSchema.pages.map((page) => ({
                 fields: page.fields.map((field) => ({
-                    required: field.required,
+                    ...(field.required === undefined ? {} : { required: field.required }),
                     type: field.type,
                     label: field.label,
                     key: field.key,
                 })),
-                title: page.title,
+                ...(page.title === undefined ? {} : { title: page.title }),
             })),
         }
         const buildPublishedForm = (overrides: Partial<FormRead> = {}): FormRead => ({

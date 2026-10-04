@@ -211,10 +211,10 @@ describe("OrganizationEmailTemplateStudio", () => {
         mocks.state.permissions = ["manage_email_templates", "manage_org_templates"]
         mocks.state.draft = draftFromPublished
         const view = render(<OrganizationEmailTemplateStudio templateId="template-1" />)
-        expect(screen.getByRole("button", { name: "Send test", exact: true })).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Send test" })).toBeDisabled()
         mocks.state.permissions.push("send_email")
         view.rerender(<OrganizationEmailTemplateStudio templateId="template-1" />)
-        expect(screen.getByRole("button", { name: "Send test", exact: true })).toBeEnabled()
+        expect(screen.getByRole("button", { name: "Send test" })).toBeEnabled()
     })
 
     beforeEach(() => {
@@ -549,7 +549,7 @@ describe("OrganizationEmailTemplateStudio", () => {
     })
 
     it("saves the compiled body and its design together", async () => {
-        const design = { type: "doc", content: [{ type: "paragraph" }] }
+        const design = { type: "doc" as const, content: [{ type: "paragraph" }] }
         mocks.state.draft = draftFromPublished
         emailDesignEditorMock.nextDesign = design
         mocks.updateDraft.mockResolvedValue({
@@ -749,8 +749,10 @@ describe("OrganizationEmailTemplateStudio", () => {
         fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
 
         await waitFor(() => expect(mocks.sendTestDraft).toHaveBeenCalledTimes(2))
-        const firstCall = mocks.sendTestDraft.mock.calls[0][0]
-        const secondCall = mocks.sendTestDraft.mock.calls[1][0]
+        const [firstRequest, secondRequest] = mocks.sendTestDraft.mock.calls
+        if (!firstRequest || !secondRequest) throw new Error("Expected both test sends")
+        const firstCall = firstRequest[0]
+        const secondCall = secondRequest[0]
         expect(firstCall).toEqual({
             id: "draft-1",
             payload: {

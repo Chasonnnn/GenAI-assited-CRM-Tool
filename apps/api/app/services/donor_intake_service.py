@@ -15,7 +15,7 @@ from app.db.enums import (
     JobStatus,
     JobType,
 )
-from app.db.models import Attachment, Donor, FormSubmission, FormSubmissionFile, IntakeLead
+from app.db.models import Attachment, Donor, Form, FormSubmission, FormSubmissionFile, IntakeLead
 from app.utils.normalization import normalize_phone, normalize_search_text, normalize_state
 
 logger = logging.getLogger(__name__)
@@ -257,12 +257,17 @@ def apply_linked_photo_after_scan(db: Session, submission: FormSubmission) -> No
 
 def hold_for_photo_review(db: Session, submission: FormSubmission) -> None:
     """An unusable photo keeps the submission out of promotion and lets the applicant retry."""
+    from app.core.constants import SYSTEM_USER_ID
+    from app.services import form_routing_service
+
+    submission = form_routing_service.lock_submission(db, submission.organization_id, submission.id)
     if (
         submission.lead_kind not in {"egg_donor", "sperm_donor"}
         or submission.donor_id
         or submission.status != FormSubmissionStatus.PENDING_REVIEW.value
     ):
         return
+    form_routing_service.finish_review(db, submission, SYSTEM_USER_ID)
     submission.match_status = "ambiguous_review"
     submission.match_reason = PHOTO_REVIEW_REASON
     submission.matched_at = None
@@ -504,9 +509,17 @@ def promote_queued_lead(db: Session, *, org_id: UUID, lead_id: UUID) -> None:
         or submission.status == FormSubmissionStatus.REJECTED.value
     ):
         return
-    from app.services import workflow_execution_authority
-
-    workflow_execution_authority.authorize_donor_intake_promotion(db, lead)
+    form = (
+        db.query(Form)
+        .filter(
+            Form.organization_id == org_id,
+            Form.id == submission.form_id,
+            Form.id == lead.form_id,
+        )
+        .first()
+    )
+    if form is None or not form.routing_auto_create_donor:
+        raise ValueError("Form routing no longer permits donor creation")
     match_submission(db, submission)
     if submission.donor_id:
         lead.status = IntakeLeadStatus.PROMOTED.value

@@ -115,7 +115,6 @@ class RecordingAdapter(DefaultWorkflowDomainAdapter):
     "action",
     [
         {"action_type": "promote_intake_lead"},
-        {"action_type": "create_intake_lead", "auto_promote": True},
     ],
 )
 def test_intake_creation_authority_is_independent_of_edit(setup, db, kind, module, action):
@@ -199,15 +198,17 @@ def test_personal_execution_rechecks_owner_membership(setup, db):
 
 
 @pytest.mark.parametrize(
-    "scope,change,error",
+    "scope,change",
     [
-        ("personal", "owner_inactive", "no longer has action permission"),
-        ("org", "missing_permission", "lacks authorization"),
-        ("org", "foreign_snapshot", "authority is invalid"),
-        ("org", "owner_inactive", None),
+        ("personal", "owner_inactive"),
+        ("org", "missing_permission"),
+        ("org", "foreign_snapshot"),
+        ("org", "owner_inactive"),
     ],
 )
-def test_incomplete_form_recovery_rechecks_execution_authority(setup, db, scope, change, error):
+def test_incomplete_staff_notification_never_replays_with_changed_authority(
+    setup, db, scope, change
+):
     org, owner, _ = setup
     form = Form(organization_id=org.id, name="Recovery form")
     db.add(form)
@@ -215,7 +216,7 @@ def test_incomplete_form_recovery_rechecks_execution_authority(setup, db, scope,
     submission = FormSubmission(organization_id=org.id, form_id=form.id, answers_json={})
     db.add(submission)
     db.flush()
-    action = {"action_type": "auto_match_submission"}
+    action = {"action_type": "send_notification", "title": "Review application"}
     item = workflow(db, org, owner, scope=scope, actions=[action, action])
     item.subject_type = "form_submission"
     item.trigger_type = "form_submitted"
@@ -233,7 +234,7 @@ def test_incomplete_form_recovery_rechecks_execution_authority(setup, db, scope,
 
     adapter = RecordingAdapter()
     engine = WorkflowEngineCore(adapter)
-    completed_result = {"success": True, "action_type": "auto_match_submission"}
+    completed_result = {"success": True, "action_type": "send_notification"}
     execution = WorkflowExecution(
         organization_id=org.id,
         workflow_id=item.id,
@@ -265,17 +266,9 @@ def test_incomplete_form_recovery_rechecks_execution_authority(setup, db, scope,
 
     assert recovered.id == execution.id
     assert recovered.actions_executed[0] == completed_result
-    if error:
-        assert adapter.calls == []
-        assert recovered.status == "partial"
-        assert recovered.actions_executed[1]["skipped"] is True
-        assert error in recovered.actions_executed[1]["error"]
-    else:
-        assert recovered.status == "success"
-        assert len(adapter.calls) == 1
-        assert adapter.calls[0]["workflow_action_index"] == 1
-        assert adapter.calls[0]["workflow_execution_id"] == execution.id
-        assert adapter.calls[0]["execution_permissions"] == frozenset(snapshot["permissions"])
+    assert adapter.calls == []
+    assert recovered.status == "failed"
+    assert recovered.error_message == "Workflow action requires manual recovery review"
 
 
 def test_personal_execution_accepts_collaborator_then_stops_after_removal(setup, db):

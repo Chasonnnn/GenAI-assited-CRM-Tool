@@ -107,8 +107,9 @@ class WorkflowSaveRequest(BaseModel):
 AVAILABLE_TRIGGERS = {
     "surrogate_created": "When a new surrogate is created",
     "status_changed": "When a surrogate status changes (use conditions for specific statuses)",
-    "form_started": "When an applicant starts a form draft (trigger_config.form_id required)",
     "form_submitted": "When an applicant submits a form (trigger_config.form_id required)",
+    "form_submission_approved": "When a submitted application is approved (trigger_config.form_id optional)",
+    "form_submission_rejected": "When a submitted application is rejected (trigger_config.form_id optional)",
     "intake_lead_created": "When shared intake creates a new provisional lead (trigger_config.form_id required)",
     "inactivity": "When a surrogate has no activity for a period (trigger_config.days required)",
     "scheduled": "On a schedule (trigger_config.cron required)",
@@ -120,6 +121,15 @@ AVAILABLE_TRIGGERS = {
     "note_added": "When a note is added",
     "appointment_scheduled": "When an appointment is scheduled",
     "appointment_completed": "When an appointment is completed",
+    "appointment_cancelled": "When an appointment is cancelled",
+    "appointment_no_show": "When an appointment is marked as a no-show",
+    "appointment_requested": "When a booking request is waiting for approval",
+    "appointment_rescheduled": "When an appointment moves to a new time",
+    "appointment_expired": "When a booking request expires without approval",
+    "appointment_time": (
+        "Hours before a confirmed appointment starts or after it ends "
+        "(trigger_config.when 'before_start' or 'after_end', trigger_config.hours 1-168)"
+    ),
 }
 
 AVAILABLE_ACTIONS = {
@@ -160,16 +170,6 @@ AVAILABLE_ACTIONS = {
         "description": "Promote intake lead into a surrogate case",
         "required_fields": [],
         "optional_fields": ["source", "is_priority", "assign_to_user"],
-    },
-    "auto_match_submission": {
-        "description": "Deterministically match a form submission to an existing surrogate",
-        "required_fields": [],
-        "optional_fields": [],
-    },
-    "create_intake_lead": {
-        "description": "Create an intake lead from an unmatched form submission",
-        "required_fields": [],
-        "optional_fields": ["source"],
     },
 }
 

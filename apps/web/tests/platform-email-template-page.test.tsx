@@ -107,6 +107,12 @@ vi.mock("@/lib/hooks/use-platform-templates", () => ({
     useSendTestPlatformEmailTemplate: () => ({ mutateAsync: mocks.sendTest }),
 }))
 
+function requiredAt<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
+
 describe("PlatformEmailTemplatePage", () => {
     beforeEach(() => {
         mockParamsId = "tpl_1"
@@ -244,7 +250,7 @@ describe("PlatformEmailTemplatePage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Send test" }))
 
         await waitFor(() => expect(mocks.sendTest).toHaveBeenCalledTimes(1))
-        expect(mocks.sendTest.mock.calls[0][0].payload).toMatchObject({
+        expect(requiredAt(mocks.sendTest.mock.calls, 0)[0].payload).toMatchObject({
             org_id: "org-1",
             to_email: "qa@example.com",
         })
@@ -255,8 +261,8 @@ describe("PlatformEmailTemplatePage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Send test" }))
         await waitFor(() => expect(mocks.sendTest).toHaveBeenCalledTimes(2))
 
-        const firstKey = mocks.sendTest.mock.calls[0][0].payload.idempotency_key
-        const retriedKey = mocks.sendTest.mock.calls[1][0].payload.idempotency_key
+        const firstKey = requiredAt(mocks.sendTest.mock.calls, 0)[0].payload.idempotency_key
+        const retriedKey = requiredAt(mocks.sendTest.mock.calls, 1)[0].payload.idempotency_key
         expect(firstKey).toMatch(
             /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
         )
@@ -359,7 +365,7 @@ describe("PlatformEmailTemplatePage", () => {
         fireEvent.change(screen.getByLabelText("Test email"), { target: { value: "qa@example.com" } })
         fireEvent.click(screen.getByRole("button", { name: "Send test" }))
         await waitFor(() => expect(mocks.sendTest).toHaveBeenCalledTimes(1))
-        expect(mocks.sendTest.mock.calls[0][0].payload).toMatchObject({ org_id: "org-2" })
+        expect(requiredAt(mocks.sendTest.mock.calls, 0)[0].payload).toMatchObject({ org_id: "org-2" })
     })
 
     it("shows no overflow menu for a new template", () => {

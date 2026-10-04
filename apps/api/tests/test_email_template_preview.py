@@ -183,7 +183,7 @@ async def test_system_preview_renders_html_blocks_for_an_org(
         "/platform/email/system-templates/preview",
         json={
             "subject": "Join {{org_name}}",
-            "body": "<div>{{expires_block}}</div><p>{{role_title}}</p>",
+            "body": "<div>{{expires_block}}</div><p>{{role_title}}</p><div>{{body_block}}{{link_block}}</div>",
             "org_id": str(test_org.id),
         },
     )
@@ -193,6 +193,8 @@ async def test_system_preview_renders_html_blocks_for_an_org(
     assert data["subject"] == f"Join {test_org.name}"
     assert "<div><p>This is a test email." in data["html"]
     assert "<p>Admin</p>" in data["html"]
+    assert "<div><p>This is a test email. Notification details" in data["html"]
+    assert "Open in Surrogacy Force</a>" in data["html"]
 
     missing = await authed_client.post(
         "/platform/email/system-templates/preview",

@@ -141,6 +141,7 @@ async def test_workflow_options_filters_email_templates_by_scope(db, test_org):
             item["value"] for item in org_payload["action_types"]
         }
         assert org_payload["action_types_by_trigger"]["intake_lead_created"] == [
+            "send_email",
             "send_notification",
             "promote_intake_lead",
         ]
@@ -149,10 +150,15 @@ async def test_workflow_options_filters_email_templates_by_scope(db, test_org):
             in org_payload["action_types_by_trigger"]["status_changed"]
         )
         assert org_payload["trigger_entity_types"]["form_submitted"] == "form_submission"
-        assert org_payload["action_types_by_trigger"]["form_submitted"][:2] == [
-            "auto_match_submission",
-            "create_intake_lead",
-        ]
+        for trigger in ("form_submitted", "form_submission_approved", "form_submission_rejected"):
+            assert org_payload["action_types_by_trigger"][trigger] == [
+                "send_email",
+                "create_task",
+                "assign_surrogate",
+                "send_notification",
+                "update_field",
+                "add_note",
+            ]
 
         res = await client.get("/workflows/options?workflow_scope=personal")
         assert res.status_code == 200

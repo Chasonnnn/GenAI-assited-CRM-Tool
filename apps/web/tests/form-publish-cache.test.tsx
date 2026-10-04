@@ -3,14 +3,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { PropsWithChildren } from "react"
 import { describe, expect, it, vi } from "vitest"
 
-import type { FormRead, FormSchema } from "@/lib/api/forms"
+import type { FormRead, FormRoutingRead, FormSchema } from "@/lib/api/forms"
 import type { PlatformFormTemplate } from "@/lib/api/platform"
 import {
     formKeys,
     useForm,
+    useFormRouting,
     usePublishForm,
     useSetDefaultSurrogateApplicationForm,
     useUpdateForm,
+    useUpdateFormRouting,
 } from "@/lib/hooks/use-forms"
 import {
     usePlatformFormTemplate,
@@ -20,28 +22,34 @@ import {
 
 const {
     getForm,
+    getFormRouting,
     getPlatformFormTemplate,
     publishForm,
     publishPlatformFormTemplate,
     setDefaultSurrogateApplicationForm,
     updateForm,
+    updateFormRouting,
     updatePlatformFormTemplate,
 } = vi.hoisted(() => ({
     getForm: vi.fn(),
+    getFormRouting: vi.fn(),
     getPlatformFormTemplate: vi.fn(),
     publishForm: vi.fn(),
     publishPlatformFormTemplate: vi.fn(),
     setDefaultSurrogateApplicationForm: vi.fn(),
     updateForm: vi.fn(),
+    updateFormRouting: vi.fn(),
     updatePlatformFormTemplate: vi.fn(),
 }))
 
 vi.mock("@/lib/api/forms", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/api/forms")>()),
     getForm,
+    getFormRouting,
     publishForm,
     setDefaultSurrogateApplicationForm,
     updateForm,
+    updateFormRouting,
 }))
 
 vi.mock("@/lib/api/platform", async (importOriginal) => ({
@@ -173,6 +181,44 @@ describe("form publish cache", () => {
         const form = client.getQueryData<FormRead>(formKeys.detail("form-1"))
         expect(form?.form_schema).toEqual(draftSchema)
         expect(form?.published_schema).toEqual(liveSchema)
+        client.clear()
+    })
+
+    it("keeps saved routing when an older routing request resolves after the save", async () => {
+        const client = buildClient()
+        const staleRouting: FormRoutingRead = {
+            form_id: "form-1",
+            lead_kind: "surrogate",
+            exact_match: "review",
+            no_match: "review",
+            lead_source: null,
+            auto_create_donor: false,
+            updated_at: "2026-10-01T00:00:00Z",
+        }
+        const savedRouting: FormRoutingRead = {
+            ...staleRouting,
+            exact_match: "auto",
+            no_match: "off",
+            updated_at: "2026-10-02T00:00:00Z",
+        }
+        const releaseStaleGet = deferStaleResponse(getFormRouting, staleRouting)
+        updateFormRouting.mockResolvedValue(savedRouting)
+        const { result } = renderHook(
+            () => ({ routing: useFormRouting("form-1"), update: useUpdateFormRouting() }),
+            { wrapper: buildWrapper(client) },
+        )
+        await waitFor(() => expect(getFormRouting).toHaveBeenCalledTimes(1))
+
+        await act(async () => {
+            await result.current.update.mutateAsync({
+                formId: "form-1",
+                payload: { exact_match: "auto", no_match: "off", lead_source: null, auto_create_donor: false },
+            })
+        })
+        await releaseStaleGet()
+
+        expect(client.getQueryData(formKeys.routing("form-1"))).toEqual(savedRouting)
+        expect(result.current.routing.data).toEqual(savedRouting)
         client.clear()
     })
 

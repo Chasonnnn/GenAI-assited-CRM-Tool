@@ -127,6 +127,19 @@ async def _create_published_form_and_shared_link(authed_client, *, phone_type: s
     return form_id, link_payload["id"], link_payload["slug"]
 
 
+async def _configure_routing(client, form_id, *, exact_match="auto", no_match="auto"):
+    response = await client.put(
+        f"/forms/{form_id}/routing",
+        json={
+            "exact_match": exact_match,
+            "no_match": no_match,
+            "lead_source": None,
+            "auto_create_donor": False,
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
 @pytest.mark.asyncio
 async def test_shared_submit_rejects_invalid_phone_before_identity_extraction(authed_client):
     _form_id, _link_id, slug = await _create_published_form_and_shared_link(
@@ -448,8 +461,7 @@ async def test_shared_public_intake_route_reads_drafts_submits_and_lists_review_
     assert submit_res.status_code == 200
     submission_payload = submit_res.json()
     assert (
-        db.get(FormSubmission, uuid.UUID(submission_payload["id"])).match_status
-        == "workflow_pending"
+        db.get(FormSubmission, uuid.UUID(submission_payload["id"])).match_status == "routing_review"
     )
 
     submission = (
@@ -459,7 +471,7 @@ async def test_shared_public_intake_route_reads_drafts_submits_and_lists_review_
     )
     assert submission is not None
     assert submission.source_mode == "shared"
-    assert submission.match_status == "workflow_pending"
+    assert submission.match_status == "routing_review"
     assert submission.intake_link_id == uuid.UUID(link_id)
     assert submission.answers_json["email"] == answers["email"]
 
@@ -469,7 +481,7 @@ async def test_shared_public_intake_route_reads_drafts_submits_and_lists_review_
 
     list_res = await authed_client.get(
         f"/forms/{form_id}/submissions",
-        params={"source_mode": "shared", "match_status": "workflow_pending"},
+        params={"source_mode": "shared", "match_status": "routing_review"},
     )
     assert list_res.status_code == 200
     listed = list_res.json()
@@ -809,7 +821,7 @@ async def test_shared_submit_clears_matching_drafts_across_links(authed_client, 
 
 
 @pytest.mark.asyncio
-async def test_shared_submit_no_match_defaults_to_workflow_pending_without_workflow_actions(
+async def test_shared_submit_no_match_defaults_to_module_review_without_workflows(
     authed_client,
     db,
     test_org,
@@ -830,12 +842,12 @@ async def test_shared_submit_no_match_defaults_to_workflow_pending_without_workf
     )
     assert submit_res.status_code == 200
     body = submit_res.json()
-    assert db.get(FormSubmission, uuid.UUID(body["id"])).match_status == "workflow_pending"
+    assert db.get(FormSubmission, uuid.UUID(body["id"])).match_status == "routing_review"
 
     submission = db.query(FormSubmission).filter(FormSubmission.id == body["id"]).first()
     assert submission is not None
     assert submission.source_mode == "shared"
-    assert submission.match_status == FormSubmissionMatchStatus.WORKFLOW_PENDING.value
+    assert submission.match_status == FormSubmissionMatchStatus.ROUTING_REVIEW.value
     assert submission.intake_lead_id is None
 
     lead = (
@@ -980,30 +992,14 @@ async def test_shared_submit_idempotency_insert_race_returns_bound_original(
 
 
 @pytest.mark.asyncio
-async def test_shared_submit_workflow_lead_preserves_link_source_metadata(
+async def test_shared_submit_module_lead_preserves_link_source_metadata(
     authed_client,
     db,
     test_org,
     test_user,
 ):
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
-
-    workflow = AutomationWorkflow(
-        id=uuid.uuid4(),
-        organization_id=test_org.id,
-        name=f"Create shared lead {uuid.uuid4().hex[:6]}",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
-        condition_logic="AND",
-        actions=[{"action_type": "create_intake_lead"}],
-        is_enabled=True,
-        scope="org",
-        owner_user_id=None,
-        created_by_user_id=test_user.id,
-    )
-    db.add(workflow)
-    db.commit()
+    await _configure_routing(authed_client, form_id, no_match="auto")
 
     submit_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit?utm_source=qa&utm_campaign=route-test",
@@ -1048,6 +1044,7 @@ async def test_shared_submit_exact_match_links_surrogate(
     default_stage,
 ):
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    await _configure_routing(authed_client, form_id, no_match="off")
 
     surrogate = _create_surrogate(
         db,
@@ -1059,23 +1056,6 @@ async def test_shared_submit_exact_match_links_surrogate(
         phone="+1 (555) 222-3333",
         date_of_birth="1991-07-10",
     )
-
-    workflow = AutomationWorkflow(
-        id=uuid.uuid4(),
-        organization_id=test_org.id,
-        name=f"Auto match shared submit {uuid.uuid4().hex[:6]}",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
-        condition_logic="AND",
-        actions=[{"action_type": "auto_match_submission"}],
-        is_enabled=True,
-        scope="org",
-        owner_user_id=None,
-        created_by_user_id=test_user.id,
-    )
-    db.add(workflow)
-    db.commit()
 
     submit_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -1100,35 +1080,12 @@ async def test_shared_submit_exact_match_links_surrogate(
 
 
 @pytest.mark.asyncio
-async def test_shared_submit_auto_match_requires_approval_without_surrogate_context(
-    authed_client,
-    db,
-    test_org,
-    test_user,
+async def test_shared_submit_match_review_without_surrogate_context(
+    authed_client, db, test_org, test_user
 ):
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
-
-    workflow = AutomationWorkflow(
-        id=uuid.uuid4(),
-        organization_id=test_org.id,
-        name=f"Approval gated auto-match {uuid.uuid4().hex[:6]}",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
-        condition_logic="AND",
-        actions=[
-            {"action_type": "auto_match_submission", "requires_approval": True},
-            {"action_type": "create_intake_lead"},
-        ],
-        is_enabled=True,
-        scope="org",
-        owner_user_id=None,
-        created_by_user_id=test_user.id,
-    )
-    db.add(workflow)
-    db.commit()
-
-    submit_res = await authed_client.post(
+    await _configure_routing(authed_client, form_id, exact_match="review")
+    response = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
         data={
             "answers": json.dumps(
@@ -1141,57 +1098,37 @@ async def test_shared_submit_auto_match_requires_approval_without_surrogate_cont
             )
         },
     )
-    assert submit_res.status_code == 200
-    submission_id = submit_res.json()["id"]
-
-    execution = (
-        db.query(WorkflowExecution)
-        .filter(
-            WorkflowExecution.organization_id == test_org.id,
-            WorkflowExecution.workflow_id == workflow.id,
-            WorkflowExecution.entity_id == uuid.UUID(submission_id),
-        )
-        .order_by(WorkflowExecution.executed_at.desc())
-        .first()
-    )
-    assert execution is not None
-    assert execution.status == "paused"
-    workflow_job = (
-        db.query(Job)
+    assert response.status_code == 200, response.text
+    submission_id = uuid.UUID(response.json()["id"])
+    submission = db.get(FormSubmission, submission_id)
+    assert submission.match_status == "routing_review"
+    assert submission.routing_review_step == "match"
+    task = (
+        db.query(Task)
         .filter_by(
-            organization_id=test_org.id,
-            job_type=JobType.FORM_SUBMISSION_WORKFLOW.value,
+            organization_id=test_org.id, form_submission_id=submission_id, task_type="review"
         )
         .one()
     )
-    assert workflow_job.status == JobStatus.COMPLETED.value
-
-    task = (
-        db.query(Task)
-        .filter(
-            Task.organization_id == test_org.id,
-            Task.workflow_execution_id == execution.id,
-            Task.task_type == "workflow_approval",
-        )
-        .first()
-    )
-    assert task is not None
     assert task.owner_id == test_user.id
     assert task.surrogate_id is None
-
-    workflow.actions = [{"action_type": "auto_match_submission", "requires_approval": True}]
-    db.commit()
-    resolve_res = await authed_client.post(
-        f"/tasks/{task.id}/resolve",
-        json={"decision": "approve"},
+    assert (
+        db.query(WorkflowExecution)
+        .filter_by(organization_id=test_org.id, entity_id=submission_id)
+        .count()
+        == 0
     )
-    assert resolve_res.status_code == 200
+    job = (
+        db.query(Job)
+        .filter_by(organization_id=test_org.id, job_type=JobType.FORM_SUBMISSION_WORKFLOW.value)
+        .one()
+    )
+    assert job.status == JobStatus.COMPLETED.value
+    response = await authed_client.post(f"/forms/submissions/{submission_id}/routing/run-match")
+    assert response.status_code == 200, response.text
     db.refresh(task)
     assert task.status == "completed"
-    from app.services.workflow_engine import engine
-
-    engine.continue_execution(db, execution.id, task, "approve")
-    assert db.query(IntakeLead).filter_by(form_submission_id=uuid.UUID(submission_id)).count() == 1
+    assert db.query(IntakeLead).filter_by(form_submission_id=submission_id).count() == 1
 
 
 @pytest.mark.asyncio
@@ -1203,6 +1140,7 @@ async def test_shared_submit_ambiguous_then_manual_resolve(
     default_stage,
 ):
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    await _configure_routing(authed_client, form_id, no_match="off")
 
     surrogate_a = _create_surrogate(
         db,
@@ -1224,23 +1162,6 @@ async def test_shared_submit_ambiguous_then_manual_resolve(
         phone="+1 (555) 444-5555",
         date_of_birth="1990-01-01",
     )
-
-    workflow = AutomationWorkflow(
-        id=uuid.uuid4(),
-        organization_id=test_org.id,
-        name=f"Ambiguous matcher {uuid.uuid4().hex[:6]}",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
-        condition_logic="AND",
-        actions=[{"action_type": "auto_match_submission"}],
-        is_enabled=True,
-        scope="org",
-        owner_user_id=None,
-        created_by_user_id=test_user.id,
-    )
-    db.add(workflow)
-    db.commit()
 
     submit_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -1307,6 +1228,7 @@ async def test_manual_resolve_to_surrogate_with_existing_form_submission_conflic
     from app.services import form_intake_service
 
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    await _configure_routing(authed_client, form_id, no_match="off")
     surrogate = _create_surrogate(
         db,
         org_id=test_org.id,
@@ -1379,6 +1301,7 @@ async def test_shared_submission_retry_allows_unlink_and_relink(
     default_stage,
 ):
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    await _configure_routing(authed_client, form_id, no_match="off")
 
     surrogate_a = _create_surrogate(
         db,
@@ -1400,23 +1323,6 @@ async def test_shared_submission_retry_allows_unlink_and_relink(
         phone="+1 (555) 777-3000",
         date_of_birth="1992-03-04",
     )
-
-    workflow = AutomationWorkflow(
-        id=uuid.uuid4(),
-        organization_id=test_org.id,
-        name=f"Retry matcher {uuid.uuid4().hex[:6]}",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
-        condition_logic="AND",
-        actions=[{"action_type": "auto_match_submission"}],
-        is_enabled=True,
-        scope="org",
-        owner_user_id=None,
-        created_by_user_id=test_user.id,
-    )
-    db.add(workflow)
-    db.commit()
 
     submit_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -1476,23 +1382,7 @@ async def test_shared_submission_retry_reuses_existing_lead_without_duplicates(
     default_stage,
 ):
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
-
-    workflow = AutomationWorkflow(
-        id=uuid.uuid4(),
-        organization_id=test_org.id,
-        name=f"Retry lead workflow {uuid.uuid4().hex[:6]}",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
-        condition_logic="AND",
-        actions=[{"action_type": "create_intake_lead"}],
-        is_enabled=True,
-        scope="org",
-        owner_user_id=None,
-        created_by_user_id=test_user.id,
-    )
-    db.add(workflow)
-    db.commit()
+    await _configure_routing(authed_client, form_id, no_match="auto")
 
     submit_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -1566,23 +1456,7 @@ async def test_promote_intake_lead_links_pending_submission(
     default_stage,
 ):
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
-
-    workflow = AutomationWorkflow(
-        id=uuid.uuid4(),
-        organization_id=test_org.id,
-        name=f"Create intake lead from form submit {uuid.uuid4().hex[:6]}",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
-        condition_logic="AND",
-        actions=[{"action_type": "create_intake_lead"}],
-        is_enabled=True,
-        scope="org",
-        owner_user_id=None,
-        created_by_user_id=test_user.id,
-    )
-    db.add(workflow)
-    db.commit()
+    await _configure_routing(authed_client, form_id, no_match="auto")
 
     submit_res = await authed_client.post(
         f"/forms/public/intake/{slug}/submit",
@@ -1627,25 +1501,8 @@ async def test_shared_submit_no_match_workflow_can_auto_promote_to_surrogate(
     default_stage,
 ):
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    await _configure_routing(authed_client, form_id, no_match="auto")
 
-    create_lead_workflow = AutomationWorkflow(
-        id=uuid.uuid4(),
-        organization_id=test_org.id,
-        name=f"Create lead from submit {uuid.uuid4().hex[:6]}",
-        trigger_type="form_submitted",
-        trigger_config={"form_id": form_id},
-        conditions=[{"field": "source_mode", "operator": "equals", "value": "shared"}],
-        condition_logic="AND",
-        actions=[
-            {
-                "action_type": "create_intake_lead",
-            }
-        ],
-        is_enabled=True,
-        scope="org",
-        owner_user_id=None,
-        created_by_user_id=test_user.id,
-    )
     promote_workflow = AutomationWorkflow(
         id=uuid.uuid4(),
         organization_id=test_org.id,
@@ -1666,7 +1523,7 @@ async def test_shared_submit_no_match_workflow_can_auto_promote_to_surrogate(
         owner_user_id=None,
         created_by_user_id=test_user.id,
     )
-    db.add_all([create_lead_workflow, promote_workflow])
+    db.add(promote_workflow)
     db.commit()
 
     submit_res = await authed_client.post(
@@ -1744,6 +1601,7 @@ async def test_shared_workflow_job_recovers_transient_trigger_failure_without_du
     from app.services import form_intake_service, job_service
 
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    await _configure_routing(authed_client, form_id)
     workflow = AutomationWorkflow(
         id=uuid.uuid4(),
         organization_id=test_org.id,
@@ -1752,7 +1610,7 @@ async def test_shared_workflow_job_recovers_transient_trigger_failure_without_du
         trigger_config={"form_id": form_id},
         conditions=[],
         condition_logic="AND",
-        actions=[{"action_type": "create_intake_lead"}],
+        actions=[{"action_type": "send_notification", "title": "Application received"}],
         is_enabled=True,
         scope="org",
         owner_user_id=None,
@@ -1828,7 +1686,7 @@ async def test_shared_workflow_job_recovers_transient_trigger_failure_without_du
 
 
 @pytest.mark.asyncio
-async def test_shared_workflow_retries_only_failed_action_indexes(
+async def test_shared_workflow_retry_does_not_resend_staff_notifications(
     authed_client,
     db,
     test_org,
@@ -1840,6 +1698,7 @@ async def test_shared_workflow_retries_only_failed_action_indexes(
     from app.services.workflow_engine import engine
 
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    await _configure_routing(authed_client, form_id)
     workflow = AutomationWorkflow(
         id=uuid.uuid4(),
         organization_id=test_org.id,
@@ -1849,8 +1708,8 @@ async def test_shared_workflow_retries_only_failed_action_indexes(
         conditions=[],
         condition_logic="AND",
         actions=[
-            {"action_type": "create_intake_lead"},
-            {"action_type": "create_intake_lead"},
+            {"action_type": "send_notification", "title": "Application received"},
+            {"action_type": "send_notification", "title": "Application received"},
         ],
         is_enabled=True,
         scope="org",
@@ -1872,7 +1731,8 @@ async def test_shared_workflow_retries_only_failed_action_indexes(
             fail_second_action = False
             return {
                 "success": False,
-                "action_type": "create_intake_lead",
+                "action_type": "send_notification",
+                "title": "Application received",
                 "error": "transient action failure",
             }
         return original_execute_action(**kwargs)
@@ -1908,16 +1768,12 @@ async def test_shared_workflow_retries_only_failed_action_indexes(
     )
     claimed_job = job_service.claim_job_for_dispatch(db, job.id)
     assert claimed_job is not None and claimed_job.claim_token is not None
-    await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
-    job_service.complete_claimed_job(
-        db,
-        job_id=claimed_job.id,
-        claim_token=claimed_job.claim_token,
-    )
+    with pytest.raises(RuntimeError, match="Form submission workflow processing failed"):
+        await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
 
     db.refresh(execution)
-    assert execution.status == WorkflowExecutionStatus.SUCCESS.value
-    assert called_indexes == [0, 1, 1]
+    assert execution.status == WorkflowExecutionStatus.FAILED.value
+    assert called_indexes == [0, 1]
     assert db.query(IntakeLead).filter_by(form_submission_id=submission_id).count() == 1
 
 
@@ -1934,6 +1790,7 @@ async def test_shared_workflow_retry_does_not_rerun_successful_sibling(
     from app.services.workflow_engine import engine
 
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    await _configure_routing(authed_client, form_id)
     successful_workflow = AutomationWorkflow(
         id=uuid.uuid4(),
         organization_id=test_org.id,
@@ -1942,7 +1799,13 @@ async def test_shared_workflow_retry_does_not_rerun_successful_sibling(
         trigger_config={"form_id": form_id},
         conditions=[],
         condition_logic="AND",
-        actions=[{"action_type": "create_intake_lead", "source": "successful-sibling"}],
+        actions=[
+            {
+                "action_type": "send_notification",
+                "title": "Application received",
+                "source": "successful-sibling",
+            }
+        ],
         is_enabled=True,
         scope="org",
         owner_user_id=None,
@@ -1956,7 +1819,13 @@ async def test_shared_workflow_retry_does_not_rerun_successful_sibling(
         trigger_config={"form_id": form_id},
         conditions=[],
         condition_logic="AND",
-        actions=[{"action_type": "create_intake_lead", "source": "failing-sibling"}],
+        actions=[
+            {
+                "action_type": "send_notification",
+                "title": "Application received",
+                "source": "failing-sibling",
+            }
+        ],
         is_enabled=True,
         scope="org",
         owner_user_id=None,
@@ -1977,7 +1846,8 @@ async def test_shared_workflow_retry_does_not_rerun_successful_sibling(
             fail_once = False
             return {
                 "success": False,
-                "action_type": "create_intake_lead",
+                "action_type": "send_notification",
+                "title": "Application received",
                 "error": "transient sibling failure",
             }
         return original_execute_action(**kwargs)
@@ -2009,15 +1879,11 @@ async def test_shared_workflow_retry_does_not_rerun_successful_sibling(
     )
     claimed_job = job_service.claim_job_for_dispatch(db, job.id)
     assert claimed_job is not None and claimed_job.claim_token is not None
-    await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
-    job_service.complete_claimed_job(
-        db,
-        job_id=claimed_job.id,
-        claim_token=claimed_job.claim_token,
-    )
+    with pytest.raises(RuntimeError, match="Form submission workflow processing failed"):
+        await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
 
     assert calls.count("successful-sibling") == 1
-    assert calls.count("failing-sibling") == 2
+    assert calls.count("failing-sibling") == 1
     sibling_executions = db.query(WorkflowExecution).filter(
         WorkflowExecution.entity_id == submission_id,
         WorkflowExecution.workflow_id.in_([successful_workflow.id, failing_workflow.id]),
@@ -2027,13 +1893,13 @@ async def test_shared_workflow_retry_does_not_rerun_successful_sibling(
         sibling_executions.filter(
             WorkflowExecution.status == WorkflowExecutionStatus.SUCCESS.value
         ).count()
-        == 2
+        == 1
     )
     assert db.query(IntakeLead).filter_by(form_submission_id=submission_id).count() == 1
 
 
 @pytest.mark.asyncio
-async def test_shared_workflow_recovers_crash_from_frozen_action_snapshot(
+async def test_shared_workflow_crash_preserves_snapshot_for_manual_review(
     authed_client,
     db,
     test_org,
@@ -2045,6 +1911,7 @@ async def test_shared_workflow_recovers_crash_from_frozen_action_snapshot(
     from app.services.workflow_engine import engine
 
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    await _configure_routing(authed_client, form_id)
     workflow = AutomationWorkflow(
         id=uuid.uuid4(),
         organization_id=test_org.id,
@@ -2054,8 +1921,16 @@ async def test_shared_workflow_recovers_crash_from_frozen_action_snapshot(
         conditions=[],
         condition_logic="AND",
         actions=[
-            {"action_type": "create_intake_lead", "source": "original"},
-            {"action_type": "create_intake_lead", "source": "original"},
+            {
+                "action_type": "send_notification",
+                "title": "Application received",
+                "source": "original",
+            },
+            {
+                "action_type": "send_notification",
+                "title": "Application received",
+                "source": "original",
+            },
         ],
         is_enabled=True,
         scope="org",
@@ -2096,7 +1971,9 @@ async def test_shared_workflow_recovers_crash_from_frozen_action_snapshot(
     assert execution.status == WorkflowExecutionStatus.RUNNING.value
     assert execution.actions_executed == []
 
-    workflow.actions = [{"action_type": "create_intake_lead", "source": "edited"}]
+    workflow.actions = [
+        {"action_type": "send_notification", "title": "Application received", "source": "edited"}
+    ]
     db.commit()
     job = (
         db.query(Job)
@@ -2108,18 +1985,16 @@ async def test_shared_workflow_recovers_crash_from_frozen_action_snapshot(
     )
     claimed_job = job_service.claim_job_for_dispatch(db, job.id)
     assert claimed_job is not None and claimed_job.claim_token is not None
-    await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
-    job_service.complete_claimed_job(
-        db,
-        job_id=claimed_job.id,
-        claim_token=claimed_job.claim_token,
-    )
+    with pytest.raises(RuntimeError, match="Form submission workflow processing failed"):
+        await form_submission_jobs.process_form_submission_workflow(db, claimed_job)
 
     db.refresh(execution)
-    assert execution.status == WorkflowExecutionStatus.SUCCESS.value
-    assert len(execution.actions_executed) == 2
+    assert execution.status == WorkflowExecutionStatus.FAILED.value
+    assert execution.actions_executed == []
+    assert execution.error_message == "Workflow action requires manual recovery review"
+    assert execution.trigger_event["_form_submission_workflow_actions"][0]["source"] == "original"
     lead = db.query(IntakeLead).filter_by(form_submission_id=submission_id).one()
-    assert lead.source_metadata["source"] == "original"
+    assert lead.source_metadata["source"] == "shared_intake"
 
 
 @pytest.mark.asyncio
@@ -2136,6 +2011,7 @@ async def test_shared_workflow_marks_undiscoverable_crash_for_manual_review(
     from app.services.workflow_engine import engine
 
     form_id, _link_id, slug = await _create_published_form_and_shared_link(authed_client)
+    await _configure_routing(authed_client, form_id)
     workflow = AutomationWorkflow(
         id=uuid.uuid4(),
         organization_id=test_org.id,
@@ -2144,7 +2020,7 @@ async def test_shared_workflow_marks_undiscoverable_crash_for_manual_review(
         trigger_config={"form_id": form_id},
         conditions=[],
         condition_logic="AND",
-        actions=[{"action_type": "create_intake_lead"}],
+        actions=[{"action_type": "send_notification", "title": "Application received"}],
         is_enabled=True,
         scope="org",
         owner_user_id=None,

@@ -5,7 +5,7 @@
 NULL and open in the editor as one Custom HTML node, so no body is rewritten.
 
 Revision ID: 20261003_2030_email_template_body_design
-Revises: 20260928_1340_zapier_event_effective_at
+Revises: 20261003_1600_notification_daily_digest
 """
 
 import sqlalchemy as sa
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision = "20261003_2030_email_template_body_design"
-down_revision = "20260928_1340_zapier_event_effective_at"
+down_revision = "20261003_1600_notification_daily_digest"
 branch_labels = None
 depends_on = None
 

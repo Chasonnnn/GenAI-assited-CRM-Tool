@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 from app.db.enums import FormStatus
 from app.db.models import AutomationWorkflow, Form, WorkflowTemplate, WorkflowTemplateTarget
 
-FORM_TRIGGER_TYPES = {"form_started", "form_submitted", "intake_lead_created"}
+FORM_TRIGGER_TYPES = {
+    "form_submitted",
+    "form_submission_approved",
+    "form_submission_rejected",
+    "intake_lead_created",
+}
 
 # Triggers that only run against donor records and therefore require an
 # explicit donor subject (egg_donor or sperm_donor) on the template.

@@ -123,7 +123,7 @@ describe("Resend readiness hooks", () => {
         expect(
             queryClient.getQueryCache().find({
                 queryKey: emailOperationsKeys.liveReadiness(),
-            })?.options.refetchIntervalInBackground,
+            })?.observers[0]?.options.refetchIntervalInBackground,
         ).toBe(false)
 
         await act(async () => {
@@ -177,7 +177,7 @@ describe("Resend readiness hooks", () => {
         expect(
             queryClient.getQueryCache().find({
                 queryKey: platformEmailKeys.readiness(),
-            })?.options.refetchIntervalInBackground,
+            })?.observers[0]?.options.refetchIntervalInBackground,
         ).toBe(false)
 
         await act(async () => {

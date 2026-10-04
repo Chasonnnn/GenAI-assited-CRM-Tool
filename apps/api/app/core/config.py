@@ -289,8 +289,10 @@ class Settings(BaseSettings):
     OTEL_ENABLED: bool = False
     OTEL_SERVICE_NAME: str = "crm-api"
     OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
-    OTEL_EXPORTER_OTLP_HEADERS: str = ""
-    OTEL_SAMPLE_RATE: float = 0.1
+    OTEL_EXPORTER_OTLP_HEADERS: SecretStr = SecretStr("")
+    OTEL_SAMPLE_RATE: float = Field(default=0.1, ge=0, le=1)
+    OTEL_EXPORT_TIMEOUT_SECONDS: float = Field(default=3, gt=0, le=30)
+    OTEL_SHUTDOWN_TIMEOUT_SECONDS: float = Field(default=5, gt=0, le=30)
 
     # SLO defaults (core workflows)
     SLO_SUCCESS_RATE: float = 0.99
