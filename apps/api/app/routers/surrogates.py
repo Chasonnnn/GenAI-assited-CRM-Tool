@@ -9,6 +9,7 @@ from app.routers import (
     surrogates_email,
     surrogates_interview_appointment,
     surrogates_mass_edit,
+    surrogates_medical_records,
     surrogates_read,
     surrogates_status,
     surrogates_write,
@@ -43,3 +44,4 @@ router.include_router(surrogates_interview_appointment.router)
 router.include_router(surrogates_mass_edit.router)
 router.include_router(surrogates_email.router)
 router.include_router(surrogates_contact_attempts.router)
+router.include_router(surrogates_medical_records.router)

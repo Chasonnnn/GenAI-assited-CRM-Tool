@@ -30,7 +30,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineDateField } from "@/components/inline-date-field"
 import { EmptyValue } from "@/components/ui/empty-value"
-import { CombinedMedicalInsuranceCard } from "@/components/surrogates/CombinedMedicalInsuranceCard"
+import { MedicalRecordsCard } from "@/components/medical-records/MedicalRecordsCard"
 import { ActivityTimeline } from "@/components/surrogates/ActivityTimeline"
 import { PregnancyTrackerCard } from "@/components/surrogates/PregnancyTrackerCard"
 import { SurrogateOverviewCard } from "@/components/surrogates/SurrogateOverviewCard"
@@ -847,16 +847,7 @@ export function SurrogateOverviewTab() {
                             </AlertDialog>
                         </>
 
-                    <CombinedMedicalInsuranceCard
-                        readOnly={readOnly}
-                        surrogateData={surrogateData}
-                        onUpdate={async (data) => {
-                            await updateSurrogateMutation.mutateAsync({
-                                surrogateId: id,
-                                data,
-                            })
-                        }}
-                    />
+                    <MedicalRecordsCard owner={{ kind: "surrogate", id }} readOnly={readOnly} />
                 </div>
 
                 <div className="space-y-4">

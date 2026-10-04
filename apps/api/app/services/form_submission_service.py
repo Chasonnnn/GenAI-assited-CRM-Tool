@@ -35,7 +35,7 @@ from app.db.models import (
 )
 from app.schemas.forms import FormField, FormFieldColumn, FormFieldCondition, FormSchema
 from app.schemas.surrogate import SurrogateUpdate
-from app.services import job_service
+from app.services import job_service, medical_record_service
 from app.services.attachment_service import (
     calculate_checksum,
     generate_signed_url,
@@ -46,7 +46,7 @@ from app.services.attachment_service import (
 )
 from app.services.import_transformers import transform_height_flexible
 from app.services.surrogate_input_normalization_service import (
-    SURROGATE_FIELD_TYPES,
+    FORM_SURROGATE_FIELD_TYPES,
     coerce_surrogate_field_value,
 )
 from app.utils.normalization import normalize_phone
@@ -176,10 +176,10 @@ def list_surrogate_mapping_options() -> list[dict[str, Any]]:
     ordered_fields: list[str] = []
     seen: set[str] = set()
     for field in preferred_order:
-        if field in SURROGATE_FIELD_TYPES and field not in seen:
+        if field in FORM_SURROGATE_FIELD_TYPES and field not in seen:
             ordered_fields.append(field)
             seen.add(field)
-    for field in sorted(SURROGATE_FIELD_TYPES.keys()):
+    for field in sorted(FORM_SURROGATE_FIELD_TYPES.keys()):
         if field not in seen:
             ordered_fields.append(field)
             seen.add(field)
@@ -929,7 +929,9 @@ def approve_submission(
         raise ValueError("Surrogate not found")
 
     mappings = _get_submission_mappings(db, submission)
-    updates = _build_surrogate_updates(submission, mappings)
+    updates, medical_values = medical_record_service.split_legacy_values(
+        _build_surrogate_updates(submission, mappings)
+    )
 
     if updates:
         from app.services import surrogate_service
@@ -943,6 +945,7 @@ def approve_submission(
             org_id=submission.organization_id,
             commit=False,
         )
+    _apply_medical_values(db, submission, surrogate, reviewer_id, medical_values)
 
     now = datetime.now(UTC)
     submission.status = FormSubmissionStatus.APPROVED.value
@@ -1095,7 +1098,7 @@ def update_submission_answers(
 
         if field_key in mapping_by_key:
             surrogate_field = mapping_by_key[field_key]
-            if surrogate_field in SURROGATE_FIELD_TYPES:
+            if surrogate_field in FORM_SURROGATE_FIELD_TYPES:
                 try:
                     coerced = (
                         coerce_surrogate_field_value(surrogate_field, value) if value else None
@@ -1109,9 +1112,12 @@ def update_submission_answers(
 
     flag_modified(submission, "answers_json")
 
-    if surrogate_updates and submission.surrogate_id:
+    surrogate_updates, medical_values = medical_record_service.split_legacy_values(
+        surrogate_updates
+    )
+    if (surrogate_updates or medical_values) and submission.surrogate_id:
         surrogate = db.query(Surrogate).filter(Surrogate.id == submission.surrogate_id).first()
-        if surrogate:
+        if surrogate and surrogate_updates:
             from app.services import surrogate_service
 
             surrogate_update = SurrogateUpdate(**surrogate_updates)
@@ -1123,6 +1129,8 @@ def update_submission_answers(
                 org_id=submission.organization_id,
                 commit=False,
             )
+        if surrogate:
+            _apply_medical_values(db, submission, surrogate, user_id, medical_values)
 
     from app.services import activity_service
 
@@ -1743,7 +1751,7 @@ def _build_surrogate_updates(
         surrogate_field = mapping.get("surrogate_field")
         if not field_key or not surrogate_field:
             continue
-        if surrogate_field not in SURROGATE_FIELD_TYPES:
+        if surrogate_field not in FORM_SURROGATE_FIELD_TYPES:
             continue
         value = submission.answers_json.get(field_key)
         if value in (None, ""):
@@ -1759,6 +1767,27 @@ def _build_surrogate_updates(
                 submission.id,
             )
     return updates
+
+
+def _apply_medical_values(
+    db: Session,
+    submission: FormSubmission,
+    surrogate: Surrogate,
+    user_id: uuid.UUID | None,
+    medical_values: dict[str, dict[str, Any]],
+) -> None:
+    """Apply mapped medical answers to the surrogate's current medical records."""
+    if not medical_values:
+        return
+    medical_record_service.apply_form_values(
+        db,
+        medical_record_service.RecordOwner.for_surrogate(surrogate),
+        user_id,
+        medical_values,
+        medical_record_service.org_local_date(
+            db, submission.organization_id, submission.submitted_at
+        ),
+    )
 
 
 def _snapshot_mappings(db: Session, form_id: uuid.UUID) -> list[dict[str, str]]:

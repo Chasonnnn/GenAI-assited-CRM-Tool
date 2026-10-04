@@ -96,6 +96,7 @@ from app.db.models.intelligent_suggestions import (
 from app.db.models.intended_parents import IntendedParent, IntendedParentStatusHistory
 from app.db.models.jobs import ExportJob, Job
 from app.db.models.matches import Match, MatchAttempt, MatchEvent
+from app.db.models.medical_records import MedicalRecord, MedicalRecordCorrection
 from app.db.models.messaging import (
     MessagingConsentEvidence,
     MessagingConsentState,
@@ -282,6 +283,8 @@ __all__ = [
     "Match",
     "MatchAttempt",
     "MatchEvent",
+    "MedicalRecord",
+    "MedicalRecordCorrection",
     "Membership",
     "MetaAd",
     "MetaAdAccount",
