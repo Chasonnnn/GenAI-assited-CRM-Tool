@@ -237,6 +237,25 @@ def trigger_surrogate_created(db: Session, surrogate: Surrogate) -> None:
     )
 
 
+def trigger_surrogate_updated(db: Session, surrogate: Surrogate, changed_fields: list[str]) -> None:
+    """Trigger workflows when a user edits surrogate fields; event data carries names only."""
+    if not changed_fields:
+        return
+    engine.trigger(
+        db=db,
+        trigger_type=WorkflowTriggerType.SURROGATE_UPDATED,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        event_data={
+            "surrogate_id": str(surrogate.id),
+            "changed_fields": changed_fields,
+        },
+        org_id=surrogate.organization_id,
+        source=WorkflowEventSource.USER,
+        entity_owner_id=_get_entity_owner_id(surrogate),
+    )
+
+
 def trigger_status_changed(
     db: Session,
     surrogate: Surrogate,
@@ -352,6 +371,39 @@ def trigger_form_submitted(
         entity_owner_id=entity_owner_id,
         recover_incomplete=True,
         include_existing=True,
+    )
+
+
+def trigger_form_submission_reviewed(
+    db: Session, submission: FormSubmission, trigger_type: WorkflowTriggerType
+) -> list[WorkflowExecution]:
+    """Trigger workflows when staff approve or reject a submitted application."""
+    if trigger_type not in {
+        WorkflowTriggerType.FORM_SUBMISSION_APPROVED,
+        WorkflowTriggerType.FORM_SUBMISSION_REJECTED,
+    }:
+        raise ValueError(f"Not a submission review trigger: {trigger_type.value}")
+    entity_owner_id = _get_owner_id_for_surrogate_id(
+        db, submission.organization_id, submission.surrogate_id
+    )
+    return engine.trigger(
+        db=db,
+        trigger_type=trigger_type,
+        entity_type="form_submission",
+        entity_id=submission.id,
+        event_data={
+            "surrogate_id": str(submission.surrogate_id) if submission.surrogate_id else None,
+            "form_id": str(submission.form_id),
+            "submission_id": str(submission.id),
+            "lead_kind": submission.lead_kind,
+            "status": submission.status,
+            "reviewed_by_user_id": str(submission.reviewed_by_user_id)
+            if submission.reviewed_by_user_id
+            else None,
+        },
+        org_id=submission.organization_id,
+        source=WorkflowEventSource.USER,
+        entity_owner_id=entity_owner_id,
     )
 
 
@@ -996,14 +1048,33 @@ def trigger_note_added(db: Session, note: EntityNote) -> None:
 # =============================================================================
 
 
+APPOINTMENT_TRIGGER_TYPES = frozenset(
+    {
+        WorkflowTriggerType.APPOINTMENT_SCHEDULED,
+        WorkflowTriggerType.APPOINTMENT_COMPLETED,
+        WorkflowTriggerType.APPOINTMENT_CANCELLED,
+        WorkflowTriggerType.APPOINTMENT_NO_SHOW,
+    }
+)
+
+
 def trigger_appointment_scheduled(db: Session, appointment: Appointment) -> None:
     """Trigger workflows when an appointment is scheduled/approved."""
+    trigger_appointment_event(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
+
+
+def trigger_appointment_event(
+    db: Session, appointment: Appointment, trigger_type: WorkflowTriggerType
+) -> None:
+    """Trigger workflows for one appointment lifecycle event."""
+    if trigger_type not in APPOINTMENT_TRIGGER_TYPES:
+        raise ValueError(f"Not an appointment trigger: {trigger_type.value}")
     entity_owner_id = _get_owner_id_for_surrogate_id(
         db, appointment.organization_id, appointment.surrogate_id
     )
     engine.trigger(
         db=db,
-        trigger_type=WorkflowTriggerType.APPOINTMENT_SCHEDULED,
+        trigger_type=trigger_type,
         entity_type="appointment",
         entity_id=appointment.id,
         event_data={

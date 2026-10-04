@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { assert, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ComponentProps } from "react"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 
@@ -181,7 +181,9 @@ describe("AutomationFormSubmissionsPanel", () => {
         fireEvent.click(screen.getByRole("button", { name: "Processed" }))
         expect(onSubmissionHistoryFilterChange).toHaveBeenCalledWith("processed")
 
-        fireEvent.click(screen.getAllByRole("button", { name: "Review Candidates" })[0])
+        const reviewCandidatesButton = screen.getAllByRole("button", { name: "Review Candidates" })[0]
+        assert.isDefined(reviewCandidatesButton)
+        fireEvent.click(reviewCandidatesButton)
         expect(onSelectQueueSubmission).toHaveBeenCalledWith("sub-history")
 
         fireEvent.click(screen.getByRole("button", { name: "Re-run Auto-Match" }))

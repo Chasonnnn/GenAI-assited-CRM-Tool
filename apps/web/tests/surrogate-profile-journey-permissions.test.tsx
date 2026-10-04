@@ -99,7 +99,9 @@ describe("Surrogate Journey permission controls", () => {
     it("uses delegated edit permission and closes the selector after revocation", () => {
         state.permissions.push("edit_surrogates")
         const view = render(<SurrogateJourneyPage />)
-        fireEvent.click(screen.getAllByRole("button", { name: "Set Image" })[0])
+        const setImageButton = screen.getAllByRole("button", { name: "Set Image" })[0]
+        if (!setImageButton) throw new Error("Expected Set Image action")
+        fireEvent.click(setImageButton)
         expect(screen.getByRole("dialog", { name: "Choose milestone image" })).toBeInTheDocument()
         state.permissions = ["view_surrogates"]
         view.rerender(<SurrogateJourneyPage />)

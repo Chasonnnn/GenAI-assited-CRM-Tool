@@ -40,6 +40,12 @@ vi.mock("@/lib/api/forms", () => ({
     getSubmissionFileDownloadUrl: vi.fn(),
 }))
 
+function requiredAt<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
+
 describe("SurrogateApplicationTab", () => {
     beforeEach(() => {
         mockSendFormIntakeLink.mockReset()
@@ -91,12 +97,12 @@ describe("SurrogateApplicationTab", () => {
         const props = { surrogateId: "surrogate-1", formId: "form-1" }
         const { rerender } = render(<SurrogateApplicationTab {...props} access={{ scoped: true, canEdit: false, canSend: false }} />)
         expect(screen.getByText("Applicant QA")).toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Export", exact: true })).toBeEnabled()
-        expect(screen.queryByRole("button", { name: "Edit", exact: true })).not.toBeInTheDocument()
+        expect(screen.getByRole("button", { name: "Export" })).toBeEnabled()
+        expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: /Approve & Update/ })).not.toBeInTheDocument()
-        expect(screen.queryByRole("button", { name: "Reject", exact: true })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument()
         rerender(<SurrogateApplicationTab {...props} access={{ scoped: true, canEdit: true, canSend: false }} />)
-        fireEvent.click(screen.getByRole("button", { name: "Edit", exact: true }))
+        fireEvent.click(screen.getByRole("button", { name: "Edit" }))
         expect(screen.getByRole("button", { name: /Save Changes/ })).toBeInTheDocument()
         rerender(<SurrogateApplicationTab {...props} access={{ scoped: true, canEdit: false, canSend: false }} />)
         expect(screen.queryByRole("button", { name: /Save Changes/ })).not.toBeInTheDocument()
@@ -105,7 +111,7 @@ describe("SurrogateApplicationTab", () => {
 
     it("does not query builder links or offer sending to a scoped read-only viewer", () => {
         render(<SurrogateApplicationTab surrogateId="surrogate-1" formId="form-1" access={{ scoped: true, canEdit: false, canSend: false }} />)
-        expect(screen.getByRole("button", { name: "Send Form Link", exact: true })).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Send Form Link" })).toBeDisabled()
         expect(mockUseFormIntakeLinks).toHaveBeenLastCalledWith(null, true)
         expect(mockUseScopedLinks).toHaveBeenLastCalledWith(null, "form-1")
         expect(mockUseEmailTemplates).toHaveBeenLastCalledWith({ activeOnly: true, usageContext: "manual" }, false)
@@ -129,6 +135,7 @@ describe("SurrogateApplicationTab", () => {
                         id: "form-1",
                         name: "Application Form",
                         status: "published",
+                        lead_kind: "surrogate",
                         created_at: FIXED_TIMESTAMP,
                         updated_at: FIXED_TIMESTAMP,
                     },
@@ -217,6 +224,7 @@ describe("SurrogateApplicationTab", () => {
                         id: "form-1",
                         name: "Application Form",
                         status: "published",
+                        lead_kind: "surrogate",
                         created_at: FIXED_TIMESTAMP,
                         updated_at: FIXED_TIMESTAMP,
                     },
@@ -233,8 +241,8 @@ describe("SurrogateApplicationTab", () => {
         fireEvent.click(sendButton)
         await waitFor(() => expect(mockSendFormIntakeLink).toHaveBeenCalledTimes(2))
 
-        const firstOccurrenceId = mockSendFormIntakeLink.mock.calls[0]?.[0]?.idempotencyKey
-        const secondOccurrenceId = mockSendFormIntakeLink.mock.calls[1]?.[0]?.idempotencyKey
+        const firstOccurrenceId = requiredAt(mockSendFormIntakeLink.mock.calls, 0)?.[0]?.idempotencyKey
+        const secondOccurrenceId = requiredAt(mockSendFormIntakeLink.mock.calls, 1)?.[0]?.idempotencyKey
         expect(firstOccurrenceId).toEqual(expect.any(String))
         expect(secondOccurrenceId).toBe(firstOccurrenceId)
     })
@@ -288,6 +296,7 @@ describe("SurrogateApplicationTab", () => {
                         id: "form-1",
                         name: "Application Form",
                         status: "published",
+                        lead_kind: "surrogate",
                         created_at: FIXED_TIMESTAMP,
                         updated_at: FIXED_TIMESTAMP,
                     },
@@ -320,9 +329,9 @@ describe("SurrogateApplicationTab", () => {
         fireEvent.click(sendButton)
         await waitFor(() => expect(mockSendFormIntakeLink).toHaveBeenCalledTimes(3))
 
-        const firstCall = mockSendFormIntakeLink.mock.calls[0][0]
-        const templateChangedCall = mockSendFormIntakeLink.mock.calls[1][0]
-        const linkChangedCall = mockSendFormIntakeLink.mock.calls[2][0]
+        const firstCall = requiredAt(mockSendFormIntakeLink.mock.calls, 0)[0]
+        const templateChangedCall = requiredAt(mockSendFormIntakeLink.mock.calls, 1)[0]
+        const linkChangedCall = requiredAt(mockSendFormIntakeLink.mock.calls, 2)[0]
         expect(templateChangedCall.idempotencyKey).not.toBe(firstCall.idempotencyKey)
         expect(templateChangedCall.templateId).toBe("template-2")
         expect(linkChangedCall.idempotencyKey).not.toBe(templateChangedCall.idempotencyKey)
@@ -340,6 +349,7 @@ describe("SurrogateApplicationTab", () => {
                         id: "form-1",
                         name: "Application Form",
                         status: "published",
+                        lead_kind: "surrogate",
                         created_at: FIXED_TIMESTAMP,
                         updated_at: FIXED_TIMESTAMP,
                     },

@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import String, and_, cast, exists, func, or_
 from sqlalchemy.orm import Session
 
-from app.db.enums import OwnerType, WorkflowExecutionStatus, WorkflowTriggerType
+from app.db.enums import ContactStatus, OwnerType, WorkflowExecutionStatus, WorkflowTriggerType
 from app.db.models import (
     AutomationWorkflow,
     Donor,
@@ -30,11 +30,12 @@ from app.db.models import (
 )
 from app.schemas.donor import normalize_donor_source
 from app.schemas.workflow import (
-    ALLOWED_CONDITION_FIELDS,
     ALLOWED_EMAIL_VARIABLES,
+    CONDITION_FIELDS_BY_ENTITY,
     DONOR_ALLOWED_CONDITION_FIELDS,
     DONOR_ALLOWED_UPDATE_FIELDS,
     SURROGATE_ALLOWED_UPDATE_FIELDS,
+    SURROGATE_CONDITION_FIELDS,
     AddNoteActionConfig,
     AssignDonorActionConfig,
     AssignSurrogateActionConfig,
@@ -54,6 +55,7 @@ from app.schemas.workflow import (
     WorkflowRead,
     WorkflowStats,
     WorkflowUpdate,
+    is_subject_email_recipient,
 )
 from app.services import user_service, workflow_execution_authority
 from app.services.workflow_definition_rules import (
@@ -79,8 +81,9 @@ TRIGGER_ENTITY_TYPES = {
     "donor_stage_changed": "donor",
     "donor_assigned": "donor",
     "donor_updated": "donor",
-    "form_started": "surrogate",
     "form_submitted": "form_submission",
+    "form_submission_approved": "form_submission",
+    "form_submission_rejected": "form_submission",
     "intake_lead_created": "intake_lead",
     "task_due": "task",
     "task_overdue": "task",
@@ -92,6 +95,8 @@ TRIGGER_ENTITY_TYPES = {
     "match_cancelled": "match",
     "appointment_scheduled": "appointment",
     "appointment_completed": "appointment",
+    "appointment_cancelled": "appointment",
+    "appointment_no_show": "appointment",
     "note_added": "note",
     "document_uploaded": "document",
 }
@@ -118,8 +123,16 @@ DONOR_TRIGGER_TYPES = {
     WorkflowTriggerType.NOTE_ADDED,
     WorkflowTriggerType.DOCUMENT_UPLOADED,
 }
+# Triggers whose entity is a form submission; they share form and lead-kind scoping.
+FORM_SUBMISSION_TRIGGER_TYPES = frozenset(
+    {
+        WorkflowTriggerType.FORM_SUBMITTED,
+        WorkflowTriggerType.FORM_SUBMISSION_APPROVED,
+        WorkflowTriggerType.FORM_SUBMISSION_REJECTED,
+    }
+)
 INTAKE_CONTEXT_KEYS = {
-    WorkflowTriggerType.FORM_SUBMITTED.value: "lead_kind",
+    **{trigger.value: "lead_kind" for trigger in FORM_SUBMISSION_TRIGGER_TYPES},
     WorkflowTriggerType.INTAKE_LEAD_CREATED.value: "lead_type",
 }
 
@@ -349,7 +362,9 @@ def _workflow_is_donor_related():
     return or_(
         AutomationWorkflow.subject_type.in_(DONOR_SUBJECT_TYPES),
         and_(
-            AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
+            AutomationWorkflow.trigger_type.in_(
+                [trigger.value for trigger in FORM_SUBMISSION_TRIGGER_TYPES]
+            ),
             or_(
                 AutomationWorkflow.trigger_config["lead_kind"].astext.in_(DONOR_SUBJECT_TYPES),
                 donor_form,
@@ -448,6 +463,8 @@ def _exact_donor_execution_identity_match():
 
 LEGACY_TRIGGER_SUBJECT_TYPES = {
     WorkflowTriggerType.FORM_SUBMITTED.value: "form_submission",
+    WorkflowTriggerType.FORM_SUBMISSION_APPROVED.value: "form_submission",
+    WorkflowTriggerType.FORM_SUBMISSION_REJECTED.value: "form_submission",
     WorkflowTriggerType.INTAKE_LEAD_CREATED.value: "intake_lead",
     WorkflowTriggerType.MATCH_PROPOSED.value: "match",
     WorkflowTriggerType.MATCH_ACCEPTED.value: "match",
@@ -455,6 +472,8 @@ LEGACY_TRIGGER_SUBJECT_TYPES = {
     WorkflowTriggerType.MATCH_CANCELLED.value: "match",
     WorkflowTriggerType.APPOINTMENT_SCHEDULED.value: "appointment",
     WorkflowTriggerType.APPOINTMENT_COMPLETED.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_CANCELLED.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_NO_SHOW.value: "appointment",
 }
 FIXED_TRIGGER_SUBJECT_TYPES = frozenset(LEGACY_TRIGGER_SUBJECT_TYPES.values())
 
@@ -496,16 +515,29 @@ def _validate_subject_trigger(
         raise ValueError(f"Subject {subject_type} does not support trigger {trigger_type.value}")
 
 
-def _validate_subject_conditions(subject_type: str, conditions: list[dict]) -> None:
-    if subject_type not in DONOR_SUBJECT_TYPES:
-        return
+def condition_fields_for_trigger(trigger_type: str, subject_type: str) -> frozenset[str]:
+    """Return the condition fields readable on the record a trigger's conditions evaluate."""
+    if subject_type in DONOR_SUBJECT_TYPES:
+        return DONOR_ALLOWED_CONDITION_FIELDS
+    entity_type = TRIGGER_ENTITY_TYPES.get(trigger_type, "surrogate")
+    return CONDITION_FIELDS_BY_ENTITY.get(entity_type, SURROGATE_CONDITION_FIELDS)
+
+
+def _validate_trigger_conditions(
+    trigger_type: WorkflowTriggerType, subject_type: str, conditions: list[dict]
+) -> None:
+    allowed = condition_fields_for_trigger(trigger_type.value, subject_type)
     invalid = sorted(
-        condition.get("field")
-        for condition in conditions
-        if condition.get("field") not in DONOR_ALLOWED_CONDITION_FIELDS
+        {
+            str(condition.get("field"))
+            for condition in conditions
+            if condition.get("field") not in allowed
+        }
     )
     if invalid:
-        raise ValueError(f"Condition fields do not support {subject_type}: {', '.join(invalid)}")
+        raise ValueError(
+            f"Condition fields do not apply to {trigger_type.value}: {', '.join(invalid)}"
+        )
 
 
 def _validate_action_subject_compatibility(
@@ -663,7 +695,7 @@ def _canonicalize_trigger_config(
 ) -> dict[str, object]:
     config = deepcopy(trigger_config or {})
     intake_context_key = {
-        WorkflowTriggerType.FORM_SUBMITTED: "lead_kind",
+        **{trigger: "lead_kind" for trigger in FORM_SUBMISSION_TRIGGER_TYPES},
         WorkflowTriggerType.INTAKE_LEAD_CREATED: "lead_type",
     }.get(trigger_type)
     if intake_context_key is not None and config.get("form_id"):
@@ -967,7 +999,7 @@ def create_workflow(
     conditions = _canonicalize_conditions(
         db, org_id, data.conditions, entity_type=stage_entity_type
     )
-    _validate_subject_conditions(subject_type, conditions)
+    _validate_trigger_conditions(data.trigger_type, subject_type, conditions)
 
     # Validate trigger config
     _validate_trigger_config(data.trigger_type, trigger_config)
@@ -1104,7 +1136,10 @@ def update_workflow(
             entity_type=stage_entity_type,
         )
     )
-    _validate_subject_conditions(subject_type, normalized_conditions)
+    # Stored conditions are revalidated only when they or the trigger change, so a
+    # rename does not fail on fields that an older field list allowed.
+    if data.conditions is not None or data.trigger_type is not None:
+        _validate_trigger_conditions(effective_trigger_type, subject_type, normalized_conditions)
 
     if data.trigger_type is not None or data.trigger_config is not None:
         _validate_trigger_config(trigger_type, trigger_config)
@@ -1685,14 +1720,19 @@ def get_workflow_options(
             "description": "When specific fields change",
         },
         {
-            "value": "form_started",
-            "label": "Form Started",
-            "description": "When an applicant starts a form draft",
-        },
-        {
             "value": "form_submitted",
             "label": "Application Submitted",
             "description": "When an applicant submits a form",
+        },
+        {
+            "value": "form_submission_approved",
+            "label": "Application Approved",
+            "description": "When a submitted application is approved",
+        },
+        {
+            "value": "form_submission_rejected",
+            "label": "Application Rejected",
+            "description": "When a submitted application is rejected",
         },
         {
             "value": "intake_lead_created",
@@ -1747,7 +1787,17 @@ def get_workflow_options(
         {
             "value": "appointment_completed",
             "label": "Appointment Completed",
-            "description": "When an appointment is completed",
+            "description": "When an appointment is marked completed",
+        },
+        {
+            "value": "appointment_cancelled",
+            "label": "Appointment Cancelled",
+            "description": "When an appointment is cancelled",
+        },
+        {
+            "value": "appointment_no_show",
+            "label": "Appointment No-Show",
+            "description": "When an appointment is marked as a no-show",
         },
         {
             "value": "note_added",
@@ -1914,10 +1964,14 @@ def get_workflow_options(
             action_types_by_trigger[trigger] = status_changed_action_values
         elif entity_type in ("surrogate", "task"):
             action_types_by_trigger[trigger] = surrogate_action_values
-        elif entity_type == "form_submission":
+        elif trigger == WorkflowTriggerType.FORM_SUBMITTED.value:
             action_types_by_trigger[trigger] = form_submission_action_values
+        elif entity_type == "form_submission":
+            # Reviewed submissions are already routed; act on the linked record only.
+            action_types_by_trigger[trigger] = surrogate_action_values
         elif entity_type == "intake_lead":
             action_types_by_trigger[trigger] = [
+                "send_email",
                 "send_notification",
                 "promote_intake_lead",
                 *(["send_message"] if messaging_available else []),
@@ -2082,9 +2136,13 @@ def get_workflow_options(
         action_types_by_trigger=action_types_by_trigger,
         trigger_entity_types=trigger_entity_types,
         condition_operators=condition_operators,
-        condition_fields=list(
-            DONOR_ALLOWED_CONDITION_FIELDS if is_donor_subject else ALLOWED_CONDITION_FIELDS
+        condition_fields=sorted(
+            DONOR_ALLOWED_CONDITION_FIELDS if is_donor_subject else SURROGATE_CONDITION_FIELDS
         ),
+        condition_fields_by_trigger={
+            item["value"]: sorted(condition_fields_for_trigger(item["value"], subject_type))
+            for item in trigger_types
+        },
         update_fields=list(
             DONOR_ALLOWED_UPDATE_FIELDS if is_donor_subject else SURROGATE_ALLOWED_UPDATE_FIELDS
         ),
@@ -2532,6 +2590,25 @@ def _validate_action_config(
             if missing_ids:
                 missing_str = ", ".join(str(uid) for uid in sorted(missing_ids, key=str))
                 raise ValueError(f"Missing recipients in organization: {missing_str}")
+        if config.recipients == "queue":
+            queue = (
+                db.query(Queue.id)
+                .filter(
+                    Queue.id == config.recipient_queue_id,
+                    Queue.organization_id == org_id,
+                    Queue.is_active.is_(True),
+                )
+                .first()
+            )
+            if queue is None:
+                raise ValueError("Recipient queue not found in organization")
+        if (
+            trigger_type is not None
+            and TRIGGER_ENTITY_TYPES.get(trigger_type.value) == "intake_lead"
+            and is_subject_email_recipient(config.recipients)
+        ):
+            # A new lead is not a surrogate or donor yet, so only staff can be emailed.
+            raise ValueError("Intake lead emails must go to staff recipients")
         # Enforce scope rules for workflow email templates
         if workflow_scope == "org":
             if template.scope != "org":
@@ -2648,6 +2725,10 @@ def _validate_action_config(
         )
         if config.field not in allowed_fields:
             raise ValueError(f"Field '{config.field}' is not allowed for {record_type}")
+        if config.field == "contact_status" and config.value not in {
+            status.value for status in ContactStatus
+        }:
+            raise ValueError("Contact status must be reached or unreached")
         if config.field == "stage_id":
             stage_entity_type = _stage_pipeline_entity_type(record_type)
             resolved = _resolve_stage_ref(

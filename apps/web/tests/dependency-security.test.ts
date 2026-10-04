@@ -7,6 +7,12 @@ type PackageJson = {
     devDependencies?: Record<string, string>
 }
 
+function capture(match: RegExpMatchArray, index: number): string {
+    const value = match[index]
+    if (value === undefined) throw new Error(`Missing regex capture ${index}`)
+    return value
+}
+
 function readPnpmOverrides(): Record<string, string> {
     const workspaceConfig = readFileSync(join(process.cwd(), "pnpm-workspace.yaml"), "utf8")
     const overridesStart = workspaceConfig.indexOf("overrides:\n")
@@ -18,7 +24,8 @@ function readPnpmOverrides(): Record<string, string> {
     for (const line of overridesBlock.split("\n")) {
         const match = line.match(/^\s{2}("?[^":]+"?):\s*"?([^"\n]+)"?\s*$/)
         if (!match) continue
-        const [, rawName, rawVersion] = match
+        const rawName = capture(match, 1)
+        const rawVersion = capture(match, 2)
         overrides[rawName.replace(/^"|"$/g, "")] = rawVersion
     }
 
@@ -51,7 +58,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const versions = Array.from(
             lockfile.matchAll(new RegExp(`^  '?${name}@(\\d+\\.\\d+\\.\\d+)'?:`, "gm")),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
         expect(versions.length).toBeGreaterThan(0)
         for (const version of versions) {
@@ -67,7 +74,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}browserslist@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
@@ -112,7 +119,7 @@ describe("Dependency security guards", () => {
         const dompurifyVersion = packageJson.dependencies?.dompurify?.replace(/^[^\d]*/, "")
 
         expect(dompurifyVersion).toBeDefined()
-        expect(compareVersions(dompurifyVersion!, "3.4.13")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(dompurifyVersion!, "3.4.16")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins markdown-it to a non-vulnerable version", () => {
@@ -123,7 +130,7 @@ describe("Dependency security guards", () => {
         const markdownItVersion = packageJson.dependencies?.["markdown-it"]?.replace(/^[^\d]*/, "")
 
         expect(markdownItVersion).toBeDefined()
-        expect(compareVersions(markdownItVersion!, "14.2.0")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(markdownItVersion!, "14.3.1")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins js-yaml to a non-vulnerable version in pnpm overrides", () => {
@@ -212,7 +219,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}flatted@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
@@ -226,7 +233,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}nanoid@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
@@ -240,7 +247,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}brace-expansion@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
@@ -254,7 +261,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}undici@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
@@ -268,7 +275,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}postcss@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
@@ -282,7 +289,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}ws@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
@@ -296,7 +303,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}picomatch@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
@@ -310,7 +317,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}vite@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
@@ -324,7 +331,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}vitest@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
@@ -338,13 +345,13 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}dompurify@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "3.4.13")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "3.4.16")).toBeGreaterThanOrEqual(0)
         }
     })
 
@@ -352,13 +359,13 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}markdown-it@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "14.2.0")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "14.3.1")).toBeGreaterThanOrEqual(0)
         }
     })
 
@@ -366,7 +373,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}js-yaml@(\d+\.\d+\.\d+):/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         for (const resolvedVersion of resolvedVersions) {
@@ -378,7 +385,7 @@ describe("Dependency security guards", () => {
         const lockfile = readFileSync(join(process.cwd(), "pnpm-lock.yaml"), "utf8")
         const resolvedVersions = Array.from(
             lockfile.matchAll(/^\s{2}'@babel\/core@(\d+\.\d+\.\d+)':/gm),
-            (match) => match[1],
+            (match) => capture(match, 1),
         )
 
         expect(resolvedVersions.length).toBeGreaterThan(0)

@@ -77,6 +77,7 @@ describe("PageHeader adoption", () => {
                 activeTab="org"
                 canUseAI={false}
                 canManageEmailTemplates
+                canCreatePersonal
                 onCreatePersonal={vi.fn()}
                 onCreateOrganization={vi.fn()}
             />

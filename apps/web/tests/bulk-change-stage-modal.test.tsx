@@ -146,12 +146,12 @@ const stages: PipelineStage[] = [
     stage("s-archived", "legacy", "Legacy Stage", 26, { is_active: false }),
 ]
 
-const newRows: BulkStageSurrogate[] = [
+const newRows: [BulkStageSurrogate, BulkStageSurrogate] = [
     { id: "a", full_name: "Ava Cole", stage_id: "s-new", paused_from_stage_id: null },
     { id: "b", full_name: "Mia Ross", stage_id: "s-new", paused_from_stage_id: null },
 ]
 
-function modal(surrogates: BulkStageSurrogate[], onSubmit: () => unknown, isPending = false) {
+function modal(surrogates: BulkStageSurrogate[], onSubmit: React.ComponentProps<typeof BulkChangeStageModal>["onSubmit"], isPending = false) {
     return (
         <BulkChangeStageModal
             open

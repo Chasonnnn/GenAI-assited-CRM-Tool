@@ -21,6 +21,7 @@ from app.db.enums import (
     JobStatus,
     JobType,
     SurrogateActivityType,
+    WorkflowTriggerType,
 )
 from app.db.models import (
     Donor,
@@ -827,6 +828,31 @@ def request_submission_file_rescan(
     return record
 
 
+def _fire_review_workflows(
+    db: Session, submission: FormSubmission, trigger_type: WorkflowTriggerType
+) -> None:
+    """Run Application Approved/Rejected workflows after the review committed."""
+    from app.services import workflow_side_effects, workflow_triggers
+
+    submission_id = submission.id
+    org_id = submission.organization_id
+    workflow_side_effects.run_post_commit_trigger(
+        db,
+        org_id=org_id,
+        load=lambda session: (
+            session.query(FormSubmission)
+            .filter(FormSubmission.id == submission_id, FormSubmission.organization_id == org_id)
+            .one_or_none()
+        ),
+        trigger=lambda session, entity: workflow_triggers.trigger_form_submission_reviewed(
+            session, entity, trigger_type
+        ),
+        integration_key=trigger_type.value,
+        title="Application review workflow trigger failed",
+        details={"submission_id": str(submission_id), "trigger_type": trigger_type.value},
+    )
+
+
 def _approve_donor_submission(
     db: Session,
     submission: FormSubmission,
@@ -881,6 +907,7 @@ def _approve_donor_submission(
         db.rollback()
         raise
     db.refresh(submission)
+    _fire_review_workflows(db, submission, WorkflowTriggerType.FORM_SUBMISSION_APPROVED)
     return submission
 
 
@@ -941,6 +968,7 @@ def approve_submission(
 
     db.commit()
     db.refresh(submission)
+    _fire_review_workflows(db, submission, WorkflowTriggerType.FORM_SUBMISSION_APPROVED)
     return submission
 
 
@@ -1013,6 +1041,7 @@ def reject_submission(
 
     db.commit()
     db.refresh(submission)
+    _fire_review_workflows(db, submission, WorkflowTriggerType.FORM_SUBMISSION_REJECTED)
     return submission
 
 

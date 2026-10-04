@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { type Mock, describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { useQuery } from '@tanstack/react-query'
 
@@ -70,12 +70,18 @@ const mockExecution = {
     error_message: 'Workflow email bounced via Resend webhook',
 }
 
+function requiredAt<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
+
 describe('WorkflowExecutionsPage', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockPermissions = new Set(['manage_automation'])
         mockPolicyVersion = undefined
-        ;(useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+        ;(useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).mockImplementation(({ queryKey }) => {
             if (queryKey[0] === 'workflow-executions') {
                 return { data: { items: [mockExecution], total: 1 }, isLoading: false, error: null }
             }
@@ -102,7 +108,7 @@ describe('WorkflowExecutionsPage', () => {
         expect(screen.queryByText('Success Rate')).not.toBeInTheDocument()
         expect(screen.queryByText('No executions found')).not.toBeInTheDocument()
         expect(screen.getByRole('link', { name: 'Back to Workflows' })).toHaveAttribute('href', '/automation')
-        const calls = (useQuery as ReturnType<typeof vi.fn>).mock.calls.map(([options]) => options)
+        const calls = (useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).mock.calls.map(([options]) => options)
         expect(calls.length).toBeGreaterThan(0)
         expect(calls.every((options) => options.enabled === false)).toBe(true)
     })
@@ -120,7 +126,7 @@ describe('WorkflowExecutionsPage', () => {
     })
 
     it('renders a 403 from the executions request as the denied state', () => {
-        ;(useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+        ;(useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).mockImplementation(({ queryKey }) => {
             if (queryKey[0] === 'workflow-executions') {
                 return {
                     data: undefined,
@@ -158,7 +164,7 @@ describe('WorkflowExecutionsPage', () => {
     })
 
     it('labels running intake recovery and exposes a running filter', async () => {
-        const queryMock = useQuery as ReturnType<typeof vi.fn>
+        const queryMock = useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>
         const existingQuery = queryMock.getMockImplementation()
         queryMock.mockImplementation((options) => {
             if (options.queryKey[0] === 'workflow-executions') {
@@ -172,11 +178,11 @@ describe('WorkflowExecutionsPage', () => {
         })
         render(<WorkflowExecutionsPage />)
         expect(screen.getByText('Running')).toBeInTheDocument()
-        fireEvent.click(screen.getAllByRole('combobox')[0])
+        fireEvent.click(requiredAt(screen.getAllByRole('combobox'), 0))
         const option = screen.getByRole('option', { name: 'Running' })
         fireEvent.mouseMove(option)
         fireEvent.click(option)
-        await waitFor(() => expect(screen.getAllByRole('combobox')[0]).toHaveTextContent('Running'))
+        await waitFor(() => expect(requiredAt(screen.getAllByRole('combobox'), 0)).toHaveTextContent('Running'))
     })
 
     it('routes donor executions through their donor subject context', () => {
@@ -191,7 +197,7 @@ describe('WorkflowExecutionsPage', () => {
             entity_name: 'Maya Thompson',
             entity_number: 'D10001',
         }
-        ;(useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+        ;(useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).mockImplementation(({ queryKey }) => {
             if (queryKey[0] === 'workflow-executions') {
                 return { data: { items: [donorExecution], total: 1 }, isLoading: false, error: null }
             }
@@ -229,7 +235,7 @@ describe('WorkflowExecutionsPage', () => {
             entity_name: null,
             entity_number: null,
         }
-        ;(useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+        ;(useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).mockImplementation(({ queryKey }) => {
             if (queryKey[0] === 'workflow-executions') {
                 return { data: { items: [donorExecution], total: 1 }, isLoading: false, error: null }
             }

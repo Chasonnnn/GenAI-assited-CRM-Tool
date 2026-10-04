@@ -132,7 +132,7 @@ describe("client error telemetry route", () => {
         for (const [host, protocol] of [
             ["attacker.example.net", "https"],
             ["agency.example.com", "http"],
-        ]) {
+        ] as const) {
             const request = new Request("http://localhost:3000/client-errors", {
                 method: "POST",
                 headers: {

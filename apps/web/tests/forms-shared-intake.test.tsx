@@ -85,6 +85,12 @@ function render(ui: React.ReactElement) {
     })
 }
 
+function requiredAt<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
+
 describe('Shared Intake Public Page', () => {
     beforeEach(() => {
         vi.clearAllMocks()
@@ -1230,7 +1236,7 @@ describe('Shared Intake Public Page', () => {
             await screen.findByText('Review Your Application')
             fireEvent.click(getSmsCheckbox())
             fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
-            fireEvent.click(screen.getAllByRole('button', { name: /edit/i })[1])
+            fireEvent.click(requiredAt(screen.getAllByRole('button', { name: /edit/i }), 1))
 
             fireEvent.change(await screen.findByLabelText('Contact Preference'), { target: { value: 'Text' } })
             fireEvent.click(screen.getByRole('button', { name: /continue/i }))

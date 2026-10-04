@@ -154,13 +154,10 @@ describe("EmailAttachmentsPanel", () => {
             isLoading: false,
         })
 
-        let resolveFirstUpload: ((value: { id: string }) => void) | null = null
-        const firstUpload = new Promise<{ id: string }>((resolve) => {
-            resolveFirstUpload = resolve
-        })
+        const firstUpload = Promise.withResolvers<{ id: string }>()
         const mutateAsync = vi
             .fn()
-            .mockReturnValueOnce(firstUpload)
+            .mockReturnValueOnce(firstUpload.promise)
             .mockResolvedValueOnce({ id: "att-two" })
         mockUseUploadAttachment.mockReturnValue({
             mutateAsync,
@@ -186,7 +183,7 @@ describe("EmailAttachmentsPanel", () => {
             expect(mutateAsync).toHaveBeenCalledTimes(2)
         })
 
-        resolveFirstUpload?.({ id: "att-one" })
+        firstUpload.resolve({ id: "att-one" })
 
         await waitFor(() => {
             expect(onSelectionChange).toHaveBeenLastCalledWith(

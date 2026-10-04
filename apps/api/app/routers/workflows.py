@@ -356,6 +356,10 @@ def retry_workflow_execution(
     event_data = dict(execution.trigger_event or {})
     event_data.setdefault("triggered_by_user_id", str(session.user_id))
     event_data["retry_of_execution_id"] = str(execution.id)
+    # Retries of retries keep the first run's id so one-time effects stay one-time.
+    event_data["retry_root_execution_id"] = event_data.get("retry_root_execution_id") or str(
+        execution.id
+    )
 
     new_execution = engine.execute_workflow(
         db=db,

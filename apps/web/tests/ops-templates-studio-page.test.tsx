@@ -42,7 +42,6 @@ describe("Templates Studio (Ops)", () => {
         }
 
         try {
-            // @ts-expect-error - window.location may be a test stub.
             window.location.search = "?tab=system"
         } catch {
             // Ignore if the environment uses a real Location object.

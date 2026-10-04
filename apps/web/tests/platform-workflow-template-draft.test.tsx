@@ -1,9 +1,10 @@
 import type { ReactNode } from "react"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { assert, beforeEach, describe, expect, it, vi } from "vitest"
 
 import PlatformWorkflowTemplatePage from "@/app/ops/templates/workflows/[id]/page.client"
 import type { PlatformWorkflowTemplate } from "@/lib/api/platform"
+import type { Condition } from "@/lib/api/workflows"
 
 const templateState = vi.hoisted(() => ({
     data: {
@@ -270,6 +271,13 @@ describe("platform workflow template draft ownership", () => {
     })
 
     it("requires stage references to be reselected when the donor subtype changes", async () => {
+        const legacyStageCondition = {
+            field: "stage_id",
+            operator: "equals",
+            value: "egg-stage-to",
+            stage_key: "egg-ready",
+            stage_keys: ["egg-ready"],
+        } satisfies Condition & { stage_key: string; stage_keys: string[] }
         workflowOptions.statuses = [
             { id: "egg-stage-from", value: "egg_review", label: "Egg Review" },
             { id: "egg-stage-to", value: "egg_ready", label: "Egg Ready" },
@@ -292,13 +300,7 @@ describe("platform workflow template draft ownership", () => {
                     to_stage_key: "egg-ready",
                 },
                 conditions: [
-                    {
-                        field: "stage_id",
-                        operator: "equals",
-                        value: "egg-stage-to",
-                        stage_key: "egg-ready",
-                        stage_keys: ["egg-ready"],
-                    },
+                    legacyStageCondition,
                     { field: "education", operator: "equals", value: "college" },
                 ],
                 actions: [
@@ -342,17 +344,25 @@ describe("platform workflow template draft ownership", () => {
         fireEvent.click(donorCreatedOption)
 
         expect(screen.getByText("Select a stage for each stage condition.")).toBeInTheDocument()
-        const stageCondition = screen.getAllByRole("button", { name: "Remove condition" })[0]
-            .closest('[data-slot="card"]') as HTMLElement
-        fireEvent.click(within(stageCondition).getAllByRole("combobox")[2])
+        const removeCondition = screen.getAllByRole("button", { name: "Remove condition" })[0]
+        assert.isDefined(removeCondition)
+        const stageCondition = removeCondition.closest<HTMLElement>('[data-slot="card"]')
+        assert.isNotNull(stageCondition)
+        const conditionStageSelect = within(stageCondition).getAllByRole("combobox")[2]
+        assert.isDefined(conditionStageSelect)
+        fireEvent.click(conditionStageSelect)
         const spermConditionStage = screen.getByRole("option", { name: "Sperm Ready" })
         fireEvent.mouseMove(spermConditionStage)
         fireEvent.click(spermConditionStage)
 
         expect(screen.getByText("Update actions need a value.")).toBeInTheDocument()
-        const stageAction = screen.getAllByRole("button", { name: "Remove action" })[0]
-            .closest('[data-slot="card"]') as HTMLElement
-        fireEvent.click(within(stageAction).getAllByRole("combobox")[2])
+        const removeAction = screen.getAllByRole("button", { name: "Remove action" })[0]
+        assert.isDefined(removeAction)
+        const stageAction = removeAction.closest<HTMLElement>('[data-slot="card"]')
+        assert.isNotNull(stageAction)
+        const actionStageSelect = within(stageAction).getAllByRole("combobox")[2]
+        assert.isDefined(actionStageSelect)
+        fireEvent.click(actionStageSelect)
         const spermActionStage = screen.getAllByRole("option", { name: "Sperm Ready" }).at(-1) as HTMLElement
         fireEvent.mouseMove(spermActionStage)
         fireEvent.click(spermActionStage)

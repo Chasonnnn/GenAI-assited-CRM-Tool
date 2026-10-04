@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.db.models import EmailTemplate, PlatformSystemEmailTemplate
 
 ORG_INVITE_SYSTEM_KEY = "org_invite"
+STAFF_NOTIFICATION_SYSTEM_KEY = "staff_notification"
 
 _ORG_INVITE_BODY_V1 = """
 <div style="background-color: #f5f5f7; padding: 32px 16px; margin: 0;">
@@ -202,6 +203,47 @@ _ORG_INVITE_BODY = """
 </div>
 """.strip()
 
+_STAFF_NOTIFICATION_BODY = """
+<div style="background-color: #f5f5f7; padding: 32px 16px; margin: 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f7;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0"
+               style="width: 100%; max-width: 600px; background-color: #ffffff;
+                      border: 1px solid #e5e7eb; border-radius: 20px;
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;">
+          <tr>
+            <td style="padding: 28px 40px 0 40px;">
+              <div style="font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase;
+                          font-weight: 600; color: #6b7280;">
+                {{org_name}}
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 40px 0 40px;">
+              <h1 style="margin: 0; font-size: 22px; line-height: 1.35; color: #111827; font-weight: 600;">
+                {{title}}
+              </h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 40px 0 40px;">
+              {{body_block}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 40px 32px 40px;">
+              {{link_block}}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</div>
+""".strip()
+
 DEFAULT_SYSTEM_TEMPLATES: dict[str, dict[str, str]] = {
     ORG_INVITE_SYSTEM_KEY: {
         "category": "system",
@@ -209,6 +251,13 @@ DEFAULT_SYSTEM_TEMPLATES: dict[str, dict[str, str]] = {
         "subject": "Invitation to join {{org_name}} as {{role_title}}",
         # NOTE: This HTML must remain compatible with email_service.sanitize_template_html.
         "body": _ORG_INVITE_BODY,
+    },
+    STAFF_NOTIFICATION_SYSTEM_KEY: {
+        "category": "system",
+        "name": "Staff Notification",
+        "subject": "{{title}}",
+        # NOTE: This HTML must remain compatible with email_service.sanitize_template_html.
+        "body": _STAFF_NOTIFICATION_BODY,
     },
     "platform_update": {
         "category": "system",

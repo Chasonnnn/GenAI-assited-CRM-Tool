@@ -19,7 +19,13 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
-from app.db.enums import AppointmentEmailType, AppointmentStatus, AuditEventType, MeetingMode
+from app.db.enums import (
+    AppointmentEmailType,
+    AppointmentStatus,
+    AuditEventType,
+    MeetingMode,
+    WorkflowTriggerType,
+)
 from app.db.models import (
     Appointment,
     AppointmentEmailLog,
@@ -1976,6 +1982,12 @@ def cancel_booking(
         client_name=appointment.client_name,
         appointment_type=appt_type.name if appt_type else "Appointment",
         cancelled_time=appointment.scheduled_start.strftime("%Y-%m-%d %H:%M"),
+    )
+
+    from app.services import workflow_triggers
+
+    workflow_triggers.trigger_appointment_event(
+        db, appointment, WorkflowTriggerType.APPOINTMENT_CANCELLED
     )
 
     return appointment

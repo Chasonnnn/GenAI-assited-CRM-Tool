@@ -72,7 +72,7 @@ export interface OrgMember {
     display_name: string;
     role: string;
     is_active: boolean;
-    last_login_at?: string;
+    last_login_at?: string | null;
     created_at: string;
 }
 

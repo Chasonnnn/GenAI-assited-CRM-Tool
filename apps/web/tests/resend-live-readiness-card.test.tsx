@@ -65,7 +65,7 @@ describe("ResendLiveReadinessCard", () => {
             ["live-readiness-webhook", "Webhook"],
             ["live-readiness-delivery", "Delivery events"],
             ["live-readiness-engagement", "Open and click events"],
-        ]) {
+        ] as const) {
             const capability = screen.getByTestId(testId)
             expect(within(capability).getByText(label)).toBeInTheDocument()
             expect(within(capability).getByText("Ready")).toBeInTheDocument()

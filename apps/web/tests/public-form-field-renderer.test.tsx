@@ -356,8 +356,8 @@ describe("PublicFormFieldRenderer", () => {
 
         const options = within(group).getAllByRole("radio")
         expect(options.map((option) => option.textContent)).toEqual(["Yes", "No"])
-        expect(within(options[0]).getByText("Yes")).toHaveClass("text-sm", "font-medium")
-        expect(within(options[1]).getByText("No")).toHaveClass("text-sm", "font-medium")
+        expect(within(within(group).getByRole("radio", { name: "Yes" })).getByText("Yes")).toHaveClass("text-sm", "font-medium")
+        expect(within(within(group).getByRole("radio", { name: "No" })).getByText("No")).toHaveClass("text-sm", "font-medium")
     })
 
     it("keeps non-binary compact choices stacked on narrow screens", () => {

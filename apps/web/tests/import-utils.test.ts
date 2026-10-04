@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
+import type { ColumnSuggestion } from '@/lib/api/import'
+import type { ColumnMappingDraft } from '@/lib/import-utils'
 import { applyUnknownColumnBehavior, buildColumnMappingsFromSuggestions, buildImportSubmitPayload } from '@/lib/import-utils'
 
 describe('buildColumnMappingsFromSuggestions', () => {
     it('maps confident suggestions to map action', () => {
-        const suggestions = [
+        const suggestions: ColumnSuggestion[] = [
             {
                 csv_column: 'Email',
                 suggested_field: 'email',
@@ -45,7 +47,7 @@ describe('buildColumnMappingsFromSuggestions', () => {
     })
 
     it('respects default_action metadata when no suggested field', () => {
-        const suggestions = [
+        const suggestions: ColumnSuggestion[] = [
             {
                 csv_column: 'Extra Column',
                 suggested_field: null,
@@ -72,7 +74,7 @@ describe('buildColumnMappingsFromSuggestions', () => {
 
 describe('applyUnknownColumnBehavior', () => {
     it('applies global behavior only to untouched unmapped columns', () => {
-        const mappings = [
+        const mappings: ColumnMappingDraft[] = [
             {
                 csv_column: 'Email',
                 surrogate_field: 'email',
@@ -104,14 +106,14 @@ describe('applyUnknownColumnBehavior', () => {
         const touched = new Set<string>(['Unknown'])
         const updated = applyUnknownColumnBehavior(mappings, 'metadata', touched)
 
-        expect(updated[0].action).toBe('map')
-        expect(updated[1].action).toBe('ignore')
+        expect(updated[0]).toMatchObject({ action: 'map' })
+        expect(updated[1]).toMatchObject({ action: 'ignore' })
     })
 })
 
 describe('buildImportSubmitPayload', () => {
     it('omits untouched unknown columns when behavior is warn', () => {
-        const mappings = [
+        const mappings: ColumnMappingDraft[] = [
             {
                 csv_column: 'Email',
                 surrogate_field: 'email',

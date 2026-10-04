@@ -128,7 +128,7 @@ const OTHER_USER_PERSONAL_TEMPLATE: EmailTemplateListItem = {
     owner_name: "Maegan Fee",
 }
 
-const TEMPLATE_DETAIL_BY_ID: Record<string, EmailTemplate> = {
+const TEMPLATE_DETAIL_BY_ID: Record<"tpl_personal_1" | "tpl_org_1", EmailTemplate> = {
     tpl_personal_1: {
         id: "tpl_personal_1",
         organization_id: "org_1",
@@ -557,8 +557,10 @@ describe("EmailTemplatesPage", () => {
         fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
         await waitFor(() => expect(mockSendTestEmailTemplate).toHaveBeenCalledTimes(2))
 
-        const firstKey = mockSendTestEmailTemplate.mock.calls[0][0].payload.idempotency_key
-        const retriedKey = mockSendTestEmailTemplate.mock.calls[1][0].payload.idempotency_key
+        const [firstCall, retriedCall] = mockSendTestEmailTemplate.mock.calls
+        if (!firstCall || !retriedCall) throw new Error("Expected initial and retried test sends")
+        const firstKey = firstCall[0].payload.idempotency_key
+        const retriedKey = retriedCall[0].payload.idempotency_key
         expect(firstKey).toEqual(expect.any(String))
         expect(retriedKey).toBe(firstKey)
     })
@@ -1117,7 +1119,7 @@ describe("EmailTemplatesPage", () => {
     it("disables personal creation when version 2 grants only template viewing", () => {
         mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["view_email_templates"] } })
         render(<EmailTemplatesPage />)
-        expect(screen.getByRole("button", { name: "Create Template", exact: true })).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Create Template" })).toBeDisabled()
         expect(screen.queryByRole("button", { name: "Create Your First Template" })).not.toBeInTheDocument()
     })
 

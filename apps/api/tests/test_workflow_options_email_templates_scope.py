@@ -141,6 +141,7 @@ async def test_workflow_options_filters_email_templates_by_scope(db, test_org):
             item["value"] for item in org_payload["action_types"]
         }
         assert org_payload["action_types_by_trigger"]["intake_lead_created"] == [
+            "send_email",
             "send_notification",
             "promote_intake_lead",
         ]

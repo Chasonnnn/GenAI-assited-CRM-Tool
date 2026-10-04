@@ -365,39 +365,39 @@ async def _generate_with_openai(
     studio_settings: AIStudioSettings,
     request: AIStudioGenerateRequest,
 ) -> AIStudioGeneratedAsset:
-    client = AsyncOpenAI(api_key=api_key, timeout=90.0)
     try:
-        text_response = await client.responses.parse(
-            model=AI_STUDIO_REASONING_MODEL,
-            input=[
-                {"role": "system", "content": _build_system_prompt(studio_settings)},
-                {"role": "user", "content": _build_user_content(request)},
-            ],
-            text_format=AIStudioStructuredDraft,
-            reasoning={"effort": DEFAULT_REASONING_EFFORT},
-        )
-        structured = _extract_parsed_draft(text_response)
-        image_prompt = _build_image_prompt(structured.image_prompt, request)
+        async with AsyncOpenAI(api_key=api_key, timeout=90.0) as client:
+            text_response = await client.responses.parse(
+                model=AI_STUDIO_REASONING_MODEL,
+                input=[
+                    {"role": "system", "content": _build_system_prompt(studio_settings)},
+                    {"role": "user", "content": _build_user_content(request)},
+                ],
+                text_format=AIStudioStructuredDraft,
+                reasoning={"effort": DEFAULT_REASONING_EFFORT},
+            )
+            structured = _extract_parsed_draft(text_response)
+            image_prompt = _build_image_prompt(structured.image_prompt, request)
 
-        if request.reference_images:
-            image_response = await client.images.edit(
-                model=AI_STUDIO_IMAGE_MODEL,
-                image=_reference_image_files(request.reference_images),
-                prompt=image_prompt,
-                size=_image_size_for_request(request),
-                quality=request.image_quality,
-                output_format="png",
-                response_format="b64_json",
-            )
-        else:
-            image_response = await client.images.generate(
-                model=AI_STUDIO_IMAGE_MODEL,
-                prompt=image_prompt,
-                size=_image_size_for_request(request),
-                quality=request.image_quality,
-                output_format="png",
-                response_format="b64_json",
-            )
+            if request.reference_images:
+                image_response = await client.images.edit(
+                    model=AI_STUDIO_IMAGE_MODEL,
+                    image=_reference_image_files(request.reference_images),
+                    prompt=image_prompt,
+                    size=_image_size_for_request(request),
+                    quality=request.image_quality,
+                    output_format="png",
+                    response_format="b64_json",
+                )
+            else:
+                image_response = await client.images.generate(
+                    model=AI_STUDIO_IMAGE_MODEL,
+                    prompt=image_prompt,
+                    size=_image_size_for_request(request),
+                    quality=request.image_quality,
+                    output_format="png",
+                    response_format="b64_json",
+                )
     except AIStudioGenerationError:
         raise
     except Exception as exc:  # noqa: BLE001

@@ -323,7 +323,7 @@ describe('NotificationsPage', () => {
         await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
 
         fireEvent.click(screen.getByRole('combobox'))
-        const all = await screen.findByRole('option', { name: 'All', exact: true })
+        const all = await screen.findByRole('option', { name: 'All' })
         fireEvent.mouseMove(all)
         fireEvent.click(all)
         expect(screen.getByRole('combobox')).toHaveTextContent('All')

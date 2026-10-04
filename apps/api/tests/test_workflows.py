@@ -330,7 +330,6 @@ def test_ai_workflow_service_triggers():
     expected_triggers = [
         "surrogate_created",
         "status_changed",
-        "form_started",
         "form_submitted",
         "inactivity",
         "scheduled",
@@ -341,6 +340,8 @@ def test_ai_workflow_service_triggers():
         "note_added",
         "appointment_scheduled",
         "appointment_completed",
+        "appointment_cancelled",
+        "appointment_no_show",
     ]
 
     for trigger in expected_triggers:

@@ -166,6 +166,11 @@ describe("getSurrogateStageContext", () => {
                     suggestion_profile_key: "custom_followup",
                     capabilities: {
                         counts_as_contacted: true,
+                        eligible_for_matching: false,
+                        locks_match_state: false,
+                        shows_pregnancy_tracking: false,
+                        requires_delivery_details: false,
+                        tracks_interview_outcome: false,
                     },
                 },
             })

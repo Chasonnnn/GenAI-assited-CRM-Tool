@@ -1,8 +1,7 @@
 import type { ReactNode } from "react"
-import { expect, afterEach, vi } from 'vitest'
+import { afterEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
-import * as matchers from '@testing-library/jest-dom/matchers'
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
 
 vi.mock('@testing-library/react', async (importOriginal) => {
     const testingLibrary = await importOriginal<typeof import('@testing-library/react')>()
@@ -63,7 +62,6 @@ vi.mock('@/lib/context/ai-context', () => ({
     useSetAIContext: () => {},
 }))
 
-expect.extend(matchers)
 
 afterEach(() => {
     cleanup()
@@ -93,7 +91,6 @@ class MockResizeObserver {
     disconnect() {}
 }
 
-// @ts-expect-error - test environment polyfill
 globalThis.ResizeObserver = globalThis.ResizeObserver ?? MockResizeObserver
 
 class MockIntersectionObserver {
@@ -102,7 +99,6 @@ class MockIntersectionObserver {
     disconnect() {}
 }
 
-// @ts-expect-error - test environment polyfill
 globalThis.IntersectionObserver = globalThis.IntersectionObserver ?? MockIntersectionObserver
 
 class MockWebSocket {
@@ -145,7 +141,6 @@ if (!Element.prototype.scrollIntoView) {
 
 // Base UI ScrollArea uses getAnimations() for smooth updates.
 if (!Element.prototype.getAnimations) {
-    // @ts-expect-error - minimal Web Animations API polyfill for tests
     Element.prototype.getAnimations = () => []
 }
 

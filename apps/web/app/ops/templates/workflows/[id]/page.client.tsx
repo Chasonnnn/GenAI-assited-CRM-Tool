@@ -41,7 +41,6 @@ import type { PlatformWorkflowTemplate } from "@/lib/api/platform"
 import type { ActionConfig, Condition, WorkflowSubjectType } from "@/lib/api/workflows"
 import type { JsonObject, JsonValue } from "@/lib/types/json"
 import { PublishDialog } from "@/components/ops/templates/PublishDialog"
-import { getSurrogateFieldLabel } from "@/lib/constants/surrogate-field-labels"
 import { US_STATES } from "@/lib/constants/us-states"
 import {
     Loader2Icon,
@@ -54,8 +53,13 @@ import {
 import { toast } from "@/components/ui/toast"
 import {
     areJsonObjectsEqual,
+    CONTACT_STATUS_OPTIONS,
     ConditionValueInput,
     EMAIL_RECIPIENT_OPTIONS,
+    FORM_TRIGGER_TYPES,
+    MATCH_KIND_OPTIONS,
+    MEETING_MODE_OPTIONS,
+    STATUS_OPTIONS_BY_ENTITY,
     FORM_MATCH_STATUS_OPTIONS,
     FORM_SOURCE_MODE_OPTIONS,
     LIST_OPERATORS,
@@ -77,32 +81,12 @@ import {
     type EditableCondition,
     type SelectOption,
 } from "@/components/automation/workflow-editor/shared"
-
-const triggerLabels: Record<string, string> = {
-    surrogate_created: "Surrogate Created",
-    status_changed: "Status Changed",
-    surrogate_assigned: "Surrogate Assigned",
-    surrogate_updated: "Field Updated",
-    form_started: "Form Started",
-    form_submitted: "Application Submitted",
-    intake_lead_created: "Intake Lead Created",
-    task_due: "Task Due",
-    task_overdue: "Task Overdue",
-    scheduled: "Scheduled",
-    inactivity: "Inactivity",
-    match_proposed: "Match Proposed",
-    match_accepted: "Match Accepted",
-    match_declined: "Match Declined",
-    match_cancelled: "Match Cancelled",
-    appointment_scheduled: "Appointment Scheduled",
-    appointment_completed: "Appointment Completed",
-    note_added: "Note Added",
-    document_uploaded: "Document Uploaded",
-    donor_created: "Donor Created",
-    donor_stage_changed: "Donor Stage Changed",
-    donor_assigned: "Donor Assigned",
-    donor_updated: "Donor Updated",
-}
+import {
+    CONDITION_FIELD_LABELS,
+    FIXED_TRIGGER_SUBJECT_TYPES,
+    TRIGGER_LABELS,
+    getConditionFieldLabel,
+} from "@/lib/workflows/workflow-editor-state"
 
 const WORKFLOW_SUBJECT_LABELS: Record<WorkflowSubjectType, string> = {
     surrogate: "Surrogate",
@@ -168,17 +152,6 @@ function getWorkflowOptionsSubjectType(value: string | null): WorkflowSubjectTyp
     return isWorkflowSubjectType(value) ? value : "surrogate"
 }
 
-// Mirrors workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES; the engine matches on subject_type.
-const FIXED_TRIGGER_SUBJECT_TYPES: Partial<Record<string, WorkflowSubjectType>> = {
-    form_submitted: "form_submission",
-    intake_lead_created: "intake_lead",
-    match_proposed: "match",
-    match_accepted: "match",
-    match_declined: "match",
-    match_cancelled: "match",
-    appointment_scheduled: "appointment",
-    appointment_completed: "appointment",
-}
 const FIXED_TRIGGER_SUBJECTS = new Set(Object.values(FIXED_TRIGGER_SUBJECT_TYPES))
 
 // Mirrors workflow_service._subject_type_for_trigger: donor subjects stay explicit.
@@ -212,52 +185,14 @@ const ICON_LABELS: Record<string, string> = {
     "alert-circle": "Alert Circle",
 }
 
-const conditionFieldLabels: Record<string, string> = {
-    status_label: "Stage",
-    stage_id: "Stage",
-    source: "Source",
-    is_priority: "Is Priority",
-    is_archived: "Is Archived",
-    owner_id: "Assigned User",
-    queue_id: "Queue",
-    state: "State",
-    full_name: "Full Name",
-    email: "Email",
-    phone: "Phone",
-    owner_type: "Owner Type",
-    form_id: "Form",
-    created_at: "Created At",
-    source_mode: "Submission Source",
-    lead_kind: "Applicant Type",
-    match_status: "Match Status",
-    date_of_birth: "Date of Birth",
-    age: "Age",
-    bmi: "BMI",
-    height_ft: "Height (ft)",
-    weight_lb: "Weight (lb)",
-    journey_timing_preference: "Journey Timing",
-    num_deliveries: "Deliveries",
-    num_csections: "C-Sections",
-    race: "Race",
-    meta_lead_id: "Meta Lead ID",
-    meta_ad_external_id: "Meta Ad External ID",
-    meta_form_id: "Meta Form ID",
-    education: "Education",
-    donor_type: "Donor Type",
-    donor_number: "Donor Number",
-}
-
-function getConditionFieldLabel(value: string): string {
-    return getSurrogateFieldLabel(value) ?? conditionFieldLabels[value] ?? "Unknown field"
-}
-
 const FALLBACK_TRIGGER_TYPES = [
     { value: "surrogate_created", label: "Surrogate Created", description: "When a new case is created" },
     { value: "status_changed", label: "Status Changed", description: "When case status changes" },
     { value: "surrogate_assigned", label: "Surrogate Assigned", description: "When case is assigned" },
     { value: "surrogate_updated", label: "Surrogate Updated", description: "When specific fields change" },
-    { value: "form_started", label: "Form Started", description: "When a form draft is started" },
     { value: "form_submitted", label: "Application Submitted", description: "When a form is submitted" },
+    { value: "form_submission_approved", label: "Application Approved", description: "When a submission is approved" },
+    { value: "form_submission_rejected", label: "Application Rejected", description: "When a submission is rejected" },
     { value: "intake_lead_created", label: "Intake Lead Created", description: "When a lead is created from shared intake" },
     { value: "task_due", label: "Task Due", description: "Before a task is due" },
     { value: "task_overdue", label: "Task Overdue", description: "When a task becomes overdue" },
@@ -269,6 +204,8 @@ const FALLBACK_TRIGGER_TYPES = [
     { value: "match_cancelled", label: "Match Cancelled", description: "When a match cancellation is approved" },
     { value: "appointment_scheduled", label: "Appointment Scheduled", description: "When an appointment is scheduled" },
     { value: "appointment_completed", label: "Appointment Completed", description: "When an appointment is completed" },
+    { value: "appointment_cancelled", label: "Appointment Cancelled", description: "When an appointment is cancelled" },
+    { value: "appointment_no_show", label: "Appointment No-Show", description: "When an appointment is marked no-show" },
     { value: "note_added", label: "Note Added", description: "When a note is added to a case" },
     { value: "document_uploaded", label: "Document Uploaded", description: "When a document is uploaded" },
 ]
@@ -354,7 +291,7 @@ function getWorkflowTemplateFallbackOptions(isDonorSubject: boolean) {
         actionTypes: FALLBACK_ACTION_TYPES,
         triggerTypes: FALLBACK_TRIGGER_TYPES,
         updateFields: ["stage_id", "is_priority", "owner_type", "owner_id"],
-        conditionFields: Object.keys(conditionFieldLabels),
+        conditionFields: Object.keys(CONDITION_FIELD_LABELS),
     }
 }
 
@@ -396,11 +333,16 @@ function getWorkflowStageConditionValidationError(conditions: EditableCondition[
     return null
 }
 
+// Queue recipients are tenant ids, and role and custom recipients have no template editor yet.
+const TEMPLATE_EMAIL_RECIPIENT_OPTIONS = EMAIL_RECIPIENT_OPTIONS.filter(
+    (option) => !["queue", "role", "custom"].includes(option.value),
+)
+
 function getWorkflowEmailRecipientOptions(isDonorSubject: boolean): SelectOption[] {
-    if (!isDonorSubject) return EMAIL_RECIPIENT_OPTIONS
+    if (!isDonorSubject) return TEMPLATE_EMAIL_RECIPIENT_OPTIONS
     return [
         { value: "donor", label: "Donor" },
-        ...EMAIL_RECIPIENT_OPTIONS.flatMap((option) => {
+        ...TEMPLATE_EMAIL_RECIPIENT_OPTIONS.flatMap((option) => {
             if (option.value === "surrogate") return []
             return [option.value === "owner" ? { ...option, label: "Donor Owner" } : option]
         }),
@@ -502,7 +444,7 @@ function normalizeTriggerConfigForUi(
         delete next.to_user_id
     }
     if (
-        ["form_started", "form_submitted", "intake_lead_created"].includes(triggerType) &&
+        FORM_TRIGGER_TYPES.has(triggerType) &&
         typeof next.form_id !== "string"
     ) {
         next.form_id = ""
@@ -1402,23 +1344,7 @@ function WorkflowTemplateTriggerConfigFields({
         )
     }
 
-    if (triggerType === "form_started") {
-        return (
-            <WorkflowTemplateFormTriggerField
-                label="Form *"
-                placeholder="Select form"
-                emptyHint="Publish a form to use this trigger."
-                allowAnyForm={false}
-                formId={typeof triggerConfig.form_id === "string" ? triggerConfig.form_id : ""}
-                formOptions={formOptions}
-                onChange={(value) =>
-                    value && setTriggerConfig((current) => ({ ...current, form_id: value }))
-                }
-            />
-        )
-    }
-
-    if (triggerType === "form_submitted") {
+    if (triggerType === "form_submitted" || triggerType === "form_submission_approved" || triggerType === "form_submission_rejected") {
         return (
             <WorkflowTemplateFormTriggerField
                 label="Form (optional)"
@@ -1513,7 +1439,7 @@ function WorkflowTemplateTriggerSection({
                                 {(value: string | null) => {
                                     if (!value) return "Select trigger"
                                     const trigger = triggerTypeOptions.find((option) => option.value === value)
-                                    return trigger?.label ?? triggerLabels[value] ?? "Unknown trigger"
+                                    return trigger?.label ?? TRIGGER_LABELS[value] ?? "Unknown trigger"
                                 }}
                             </SelectValue>
                         </SelectTrigger>
@@ -2472,7 +2398,7 @@ function WorkflowTemplateSidebar({
                     )}
                     <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Trigger</span>
-                        <Badge variant="secondary">{triggerLabels[triggerType] || triggerType || "—"}</Badge>
+                        <Badge variant="secondary">{TRIGGER_LABELS[triggerType] || triggerType || "—"}</Badge>
                     </div>
                     <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Conditions</span>
@@ -2600,7 +2526,10 @@ function useWorkflowTemplatePageState() {
     const triggerTypeOptions = options?.trigger_types ?? fallbackOptions.triggerTypes
     const updateFields = options?.update_fields ?? fallbackOptions.updateFields
     const conditionOperators = options?.condition_operators ?? FALLBACK_OPERATORS
-    const conditionFields = options?.condition_fields ?? fallbackOptions.conditionFields
+    const conditionFields =
+        (triggerType ? options?.condition_fields_by_trigger?.[triggerType] : undefined) ??
+        options?.condition_fields ??
+        fallbackOptions.conditionFields
     const userOptions = options?.users ?? []
     const queueOptions = options?.queues ?? []
     const formOptions: SelectOption[] = (options?.forms ?? []).map((form) => ({ value: form.id, label: form.name }))
@@ -2679,15 +2608,18 @@ function useWorkflowTemplatePageState() {
         if (field === "lead_kind") return FORM_LEAD_KIND_OPTIONS
         if (field === "source_mode") return FORM_SOURCE_MODE_OPTIONS
         if (field === "match_status") return FORM_MATCH_STATUS_OPTIONS
+        if (field === "contact_status") return CONTACT_STATUS_OPTIONS
+        if (field === "match_kind") return MATCH_KIND_OPTIONS
+        if (field === "meeting_mode") return MEETING_MODE_OPTIONS
+        if (field === "status") {
+            const entityType = triggerType ? options?.trigger_entity_types?.[triggerType] : undefined
+            return (entityType && STATUS_OPTIONS_BY_ENTITY[entityType]) || null
+        }
         return null
     }
 
     const getTriggerValidationError = (): string | null => {
         if (!triggerType) return "Trigger type is required."
-        if (triggerType === "form_started") {
-            const formId = triggerConfig.form_id
-            if (!formId || typeof formId !== "string") return "Select a form."
-        }
         if (triggerType === "scheduled") {
             const cron = triggerConfig.cron
             if (!cron || typeof cron !== "string") return "Cron schedule is required."
@@ -2782,13 +2714,7 @@ function useWorkflowTemplatePageState() {
         if (ASSIGNED_TRIGGER_TYPES.has(triggerType)) {
             if (typeof next.to_user_id !== "string") delete next.to_user_id
         }
-        if (triggerType === "form_started") {
-            if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
-        }
-        if (triggerType === "form_submitted") {
-            if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
-        }
-        if (triggerType === "intake_lead_created") {
+        if (FORM_TRIGGER_TYPES.has(triggerType)) {
             if (typeof next.form_id !== "string" || !next.form_id) delete next.form_id
         }
         return next

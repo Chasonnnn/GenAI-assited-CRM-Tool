@@ -35,6 +35,7 @@ export interface NotificationSettings {
     status_change_decisions: boolean
     approval_timeouts: boolean
     security_alerts: boolean
+    email_workflow_notifications: boolean
 }
 
 // API Functions

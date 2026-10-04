@@ -14,6 +14,8 @@ from app.services import workflow_service
 
 FIXED_TRIGGER_SUBJECTS = [
     (WorkflowTriggerType.FORM_SUBMITTED, "form_submission"),
+    (WorkflowTriggerType.FORM_SUBMISSION_APPROVED, "form_submission"),
+    (WorkflowTriggerType.FORM_SUBMISSION_REJECTED, "form_submission"),
     (WorkflowTriggerType.INTAKE_LEAD_CREATED, "intake_lead"),
     (WorkflowTriggerType.MATCH_PROPOSED, "match"),
     (WorkflowTriggerType.MATCH_ACCEPTED, "match"),
@@ -21,6 +23,8 @@ FIXED_TRIGGER_SUBJECTS = [
     (WorkflowTriggerType.MATCH_CANCELLED, "match"),
     (WorkflowTriggerType.APPOINTMENT_SCHEDULED, "appointment"),
     (WorkflowTriggerType.APPOINTMENT_COMPLETED, "appointment"),
+    (WorkflowTriggerType.APPOINTMENT_CANCELLED, "appointment"),
+    (WorkflowTriggerType.APPOINTMENT_NO_SHOW, "appointment"),
 ]
 
 

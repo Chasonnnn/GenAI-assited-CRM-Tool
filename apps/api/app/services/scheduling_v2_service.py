@@ -17,6 +17,7 @@ from app.db.enums import (
     JobType,
     MeetingMode,
     NotificationType,
+    WorkflowTriggerType,
 )
 from app.db.models import Appointment, AppointmentType, Membership, User
 from app.services import (
@@ -30,6 +31,34 @@ from app.services import (
 
 class SchedulingConflict(ValueError):
     """A request has a stale revision or reuses an idempotency key."""
+
+
+def _fire_appointment_workflows(
+    db: Session, appointment: Appointment, trigger_type: WorkflowTriggerType
+) -> None:
+    """Run appointment workflows after the scheduling change committed.
+
+    Replayed requests return before this runs, so a retry does not fire twice.
+    """
+    from app.services import workflow_side_effects, workflow_triggers
+
+    appointment_id = appointment.id
+    org_id = appointment.organization_id
+    workflow_side_effects.run_post_commit_trigger(
+        db,
+        org_id=org_id,
+        load=lambda session: (
+            session.query(Appointment)
+            .filter(Appointment.id == appointment_id, Appointment.organization_id == org_id)
+            .one_or_none()
+        ),
+        trigger=lambda session, entity: workflow_triggers.trigger_appointment_event(
+            session, entity, trigger_type
+        ),
+        integration_key=f"appointment_{trigger_type.value}",
+        title="Appointment workflow trigger failed",
+        details={"appointment_id": str(appointment_id), "trigger_type": trigger_type.value},
+    )
 
 
 def public_actor_scope(token: str) -> str:
@@ -704,6 +733,8 @@ def create_booking(
     )
     db.commit()
     db.refresh(appointment)
+    if appointment.status == AppointmentStatus.CONFIRMED.value:
+        _fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
     return appointment
 
 
@@ -768,6 +799,7 @@ def approve_booking(
     )
     db.commit()
     db.refresh(appointment)
+    _fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_SCHEDULED)
     return appointment
 
 
@@ -1024,6 +1056,7 @@ def cancel_booking(
     )
     db.commit()
     db.refresh(appointment)
+    _fire_appointment_workflows(db, appointment, WorkflowTriggerType.APPOINTMENT_CANCELLED)
     return appointment
 
 
@@ -1080,4 +1113,11 @@ def complete_booking(
     )
     db.commit()
     db.refresh(appointment)
+    _fire_appointment_workflows(
+        db,
+        appointment,
+        WorkflowTriggerType.APPOINTMENT_COMPLETED
+        if status == AppointmentStatus.COMPLETED.value
+        else WorkflowTriggerType.APPOINTMENT_NO_SHOW,
+    )
     return appointment

@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from "react"
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { assert, describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, within } from "@testing-library/react"
 import "@testing-library/jest-dom"
 import { AppointmentSettings } from "../components/appointments/AppointmentSettings"
@@ -640,7 +640,9 @@ describe("Appointments Google Meet UI", () => {
         })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Casey Client")[0])
+        const appointmentEntry = screen.getAllByText("Casey Client")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
 
         expect(screen.getByText(/Join Google Meet/i)).toBeInTheDocument()
         const header = within(screen.getByTestId("dialog-header"))
@@ -834,7 +836,9 @@ describe("Appointments Google Meet UI", () => {
         mockUseRescheduleSlots.mockReturnValue({ data: { slots: [], appointment_type: null }, isLoading: false, isError: true, refetch })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Test Zhang")[0])
+        const appointmentEntry = screen.getAllByText("Test Zhang")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
         fireEvent.click(screen.getByRole("button", { name: /reschedule appointment/i }))
         fireEvent.click(screen.getByRole("button", { name: "Retry availability" }))
 
@@ -895,7 +899,9 @@ describe("Appointments Google Meet UI", () => {
         }))
 
         const { rerender } = render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Casey Client")[0])
+        const appointmentEntry = screen.getAllByText("Casey Client")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
         fireEvent.click(screen.getByRole("button", { name: /cancel appointment/i }))
         fireEvent.change(screen.getByLabelText("Reason (optional)"), {
             target: { value: "Client requested a new date" },
@@ -987,7 +993,9 @@ describe("Appointments Google Meet UI", () => {
         })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Test Zhang")[0])
+        const appointmentEntry = screen.getAllByText("Test Zhang")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
 
         fireEvent.click(screen.getByRole("button", { name: /reschedule appointment/i }))
         fireEvent.click(screen.getByRole("button", { name: /9:15 AM PST/i }))
@@ -1095,7 +1103,9 @@ describe("Appointments Google Meet UI", () => {
         })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Test Zhang")[0])
+        const appointmentEntry = screen.getAllByText("Test Zhang")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
 
         fireEvent.click(screen.getByRole("button", { name: /reschedule appointment/i }))
         fireEvent.click(screen.getByRole("button", { name: /9:15 AM PST/i }))
@@ -1368,10 +1378,14 @@ describe("Appointments Google Meet UI", () => {
         })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Casey Client")[0])
+        const appointmentEntry = screen.getAllByText("Casey Client")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
 
         expect(screen.getByText(/Unable to load appointment details/i)).toBeInTheDocument()
-        fireEvent.click(screen.getAllByRole("button", { name: /retry/i })[0])
+        const retryButton = screen.getAllByRole("button", { name: /retry/i })[0]
+        assert.isDefined(retryButton)
+        fireEvent.click(retryButton)
         expect(refetch).toHaveBeenCalled()
     })
 

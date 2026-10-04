@@ -24,7 +24,6 @@ describe("useDuoCallbackVerification", () => {
             // Some test setups replace window.location with a plain object not linked to history.
         }
         try {
-            // @ts-expect-error - window.location may be a test stub.
             window.location.search = search
         } catch {
             // Ignore if the environment uses a real Location object.

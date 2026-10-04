@@ -32,6 +32,8 @@ def _default_workflow_subject_type(context) -> str:
     trigger_type = context.get_current_parameters().get("trigger_type")
     return {
         "form_submitted": "form_submission",
+        "form_submission_approved": "form_submission",
+        "form_submission_rejected": "form_submission",
         "intake_lead_created": "intake_lead",
         "match_proposed": "match",
         "match_accepted": "match",
@@ -39,6 +41,8 @@ def _default_workflow_subject_type(context) -> str:
         "match_cancelled": "match",
         "appointment_scheduled": "appointment",
         "appointment_completed": "appointment",
+        "appointment_cancelled": "appointment",
+        "appointment_no_show": "appointment",
     }.get(trigger_type, "surrogate")
 
 
