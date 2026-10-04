@@ -156,14 +156,6 @@ export function useDonorAttachments(donorId: string | null) {
     })
 }
 
-export function useAttachmentPreviewUrl(attachmentId: string | null) {
-    return useQuery({
-        queryKey: ["attachments", "download-url", attachmentId ?? ""],
-        queryFn: () => attachmentsApi.getDownloadUrl(attachmentId!),
-        enabled: Boolean(attachmentId),
-    })
-}
-
 function invalidateDonorAttachmentSurfaces(
     queryClient: ReturnType<typeof useQueryClient>,
     donorId: string,
@@ -180,17 +172,6 @@ export function useUploadDonorAttachment() {
     return useMutation({
         mutationFn: ({ donorId, file }: { donorId: string; file: File }) =>
             attachmentsApi.uploadForDonor(donorId, file),
-        onSuccess: (_, variables) => {
-            invalidateDonorAttachmentSurfaces(queryClient, variables.donorId)
-        },
-    })
-}
-
-export function useUploadDonorProfilePhoto() {
-    const queryClient = useQueryClient()
-    return useMutation({
-        mutationFn: ({ donorId, file }: { donorId: string; file: File }) =>
-            attachmentsApi.uploadDonorProfilePhoto(donorId, file),
         onSuccess: (_, variables) => {
             invalidateDonorAttachmentSurfaces(queryClient, variables.donorId)
         },
