@@ -1033,7 +1033,6 @@ export function useAutomationFormBuilderPage({ initialTab = "edit" }: { initialT
         },
         previewProps: {
             pages,
-            activePage,
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
             publicSubtitle: state.publicSubtitle,
@@ -1042,7 +1041,6 @@ export function useAutomationFormBuilderPage({ initialTab = "edit" }: { initialT
             previewDevice: state.previewDevice,
             desktopCanvasWidthClass: "max-w-[min(100%,72rem)]",
             mobileCanvasWidthClass: "max-w-sm",
-            onSetActivePage: setActivePage,
             onPreviewDeviceChange: (value: "desktop" | "mobile") => patchState({ previewDevice: value }),
         },
         settingsPanelProps: {

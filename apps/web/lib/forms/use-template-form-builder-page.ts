@@ -590,7 +590,6 @@ export function useTemplateFormBuilderPage() {
         },
         previewProps: {
             pages,
-            activePage,
             publicEyebrow: state.publicEyebrow,
             publicTitle: state.publicTitle,
             publicSubtitle: state.publicSubtitle,
@@ -599,7 +598,6 @@ export function useTemplateFormBuilderPage() {
             previewDevice: state.previewDevice,
             desktopCanvasWidthClass: "max-w-[min(100%,76rem)]",
             mobileCanvasWidthClass: "max-w-sm",
-            onSetActivePage: setActivePage,
             onPreviewDeviceChange: (value: "desktop" | "mobile") => patchState({ previewDevice: value }),
         },
         formSettingsProps: {

@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 
-import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { PublicFormFieldRenderer, type PublicFormAnswerValue } from "@/components/forms/PublicFormFieldRenderer"
 import { PublicFormHeader } from "@/components/forms/PublicFormHeader"
@@ -13,7 +12,6 @@ import { cn } from "@/lib/utils"
 
 type FormBuilderCanvasPreviewProps = {
     pages: BuilderFormPage[]
-    activePage: number
     publicEyebrow: string
     publicTitle: string
     publicSubtitle: string
@@ -22,10 +20,12 @@ type FormBuilderCanvasPreviewProps = {
     previewDevice: "desktop" | "mobile"
     desktopWidthClass: string
     mobileWidthClass: string
-    onSetActivePage: (pageId: number) => void
 }
 
 type PreviewAnswers = Record<string, PublicFormAnswerValue>
+
+// Mirrors the hosted intake grid: short single-line answers share a row.
+const PREVIEW_HALF_WIDTH_FIELD_TYPES = new Set(["text", "email", "phone", "number", "date", "select", "height"])
 
 function isEmptyValue(value: PublicFormAnswerValue) {
     if (value === null || value === undefined) return true
@@ -114,7 +114,6 @@ function PreviewFallbackField({ field }: { field: FormField }) {
 
 export function FormBuilderCanvasPreview({
     pages,
-    activePage,
     publicEyebrow,
     publicTitle,
     publicSubtitle,
@@ -123,7 +122,6 @@ export function FormBuilderCanvasPreview({
     previewDevice,
     desktopWidthClass,
     mobileWidthClass,
-    onSetActivePage,
 }: FormBuilderCanvasPreviewProps) {
     const [answers, setAnswers] = useState<PreviewAnswers>({})
     const [datePickerOpen, setDatePickerOpen] = useState<Record<string, boolean>>({})
@@ -136,13 +134,13 @@ export function FormBuilderCanvasPreview({
         privacyNotice,
     })
 
-    const activeIndex = Math.max(0, pages.findIndex((page) => page.id === activePage))
-    const previewPage = previewSchema.pages[activeIndex]
-    const currentPage = pages[activeIndex]
-    const canGoBack = activeIndex > 0
-    const canGoForward = activeIndex < pages.length - 1
-
-    const visibleFields = (previewPage?.fields ?? []).filter((field) => isFieldVisible(field, answers))
+    const sections = previewSchema.pages
+        .map((page, pageIndex) => ({
+            id: pages[pageIndex]?.id ?? pageIndex,
+            title: page.title?.trim() || `Section ${pageIndex + 1}`,
+            fields: page.fields.filter((field) => isFieldVisible(field, answers)),
+        }))
+        .filter((section) => section.fields.length > 0)
 
     const previewTitle = publicTitle.trim()
     const previewEyebrow = publicEyebrow.trim()
@@ -163,83 +161,65 @@ export function FormBuilderCanvasPreview({
                 resolvedLogoUrl={resolvedLogoUrl || null}
                 showLogo={Boolean(resolvedLogoUrl)}
                 onLogoError={() => undefined}
-                metadata={
-                    <span>
-                        Page {activeIndex + 1} of {Math.max(1, pages.length)}
-                    </span>
-                }
+                metadata="Preview"
             >
-                <span className="inline-flex rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">
+                <span className="inline-flex w-fit rounded-full border border-stone-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-500">
                     Builder preview
                 </span>
             </PublicFormHeader>
 
-            <div className="mx-auto max-w-3xl px-4 pb-8">
-                <div className="min-h-[58rem] rounded-[24px] border border-stone-200/80 bg-white/95 p-5 md:p-6">
-                    <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200/80 pb-4">
-                        <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-stone-400">
-                                Active page
-                            </p>
-                            <h2 className="mt-1.5 text-lg font-semibold text-stone-900">
-                                {currentPage?.name || `Page ${activeIndex + 1}`}
+            <div className="flex flex-col gap-6 px-4 pb-10 sm:px-6 lg:px-12">
+                {sections.length > 0 ? (
+                    sections.map((section) => (
+                        <section
+                            key={section.id}
+                            aria-labelledby={`preview-section-${section.id}`}
+                            className="flex flex-col gap-5 rounded-lg border border-stone-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(28,25,23,0.05),0_8px_24px_rgba(28,25,23,0.04)] sm:p-8"
+                        >
+                            <h2 id={`preview-section-${section.id}`} className="text-xl font-semibold text-stone-950">
+                                {section.title}
                             </h2>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => canGoBack && onSetActivePage(pages[activeIndex - 1]?.id ?? activePage)}
-                                disabled={!canGoBack}
+                            <div
+                                className={cn(
+                                    "grid gap-x-5 gap-y-6",
+                                    previewDevice === "desktop" && "sm:grid-cols-2",
+                                )}
                             >
-                                Previous
-                            </Button>
-                            <Button
-                                type="button"
-                                onClick={() =>
-                                    canGoForward ? onSetActivePage(pages[activeIndex + 1]?.id ?? activePage) : undefined
-                                }
-                                disabled={!canGoForward}
-                            >
-                                {canGoForward ? "Next" : "Final page"}
-                            </Button>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        {visibleFields.length > 0 ? (
-                            visibleFields.map((field) =>
-                                ["address", "file"].includes(field.type) ? (
-                                    <PreviewFallbackField key={field.key} field={field} />
-                                ) : (
-                                    <PublicFormFieldRenderer
+                                {section.fields.map((field) => (
+                                    <div
                                         key={field.key}
-                                        field={field}
-                                        value={answers[field.key]}
-                                        updateField={(fieldKey, value) =>
-                                            setAnswers((prev) => ({ ...prev, [fieldKey]: value }))
-                                        }
-                                        datePickerOpen={datePickerOpen}
-                                        setDatePickerOpen={setDatePickerOpen}
-                                    />
-                                ),
-                            )
-                        ) : (
-                            <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-8 text-center">
-                                <p className="text-base font-semibold text-stone-900">Nothing to preview on this page yet</p>
-                                <p className="mt-2 text-sm text-stone-500">
-                                    Add fields in Edit to see the branded preview here.
-                                </p>
+                                        className={cn(
+                                            "min-w-0",
+                                            !PREVIEW_HALF_WIDTH_FIELD_TYPES.has(field.type) && "sm:col-span-2",
+                                        )}
+                                    >
+                                        {["address", "file"].includes(field.type) ? (
+                                            <PreviewFallbackField field={field} />
+                                        ) : (
+                                            <PublicFormFieldRenderer
+                                                field={field}
+                                                value={answers[field.key]}
+                                                updateField={(fieldKey, value) =>
+                                                    setAnswers((prev) => ({ ...prev, [fieldKey]: value }))
+                                                }
+                                                datePickerOpen={datePickerOpen}
+                                                setDatePickerOpen={setDatePickerOpen}
+                                            />
+                                        )}
+                                    </div>
+                                ))}
                             </div>
-                        )}
+                        </section>
+                    ))
+                ) : (
+                    <div className="rounded-lg border border-dashed border-stone-300 bg-white p-8 text-center">
+                        <p className="text-base font-semibold text-stone-900">Nothing to preview yet</p>
                     </div>
+                )}
 
-                    {privacyNotice ? (
-                        <p className="mt-6 border-t border-stone-200/80 pt-4 text-xs text-stone-500">
-                            {privacyNotice}
-                        </p>
-                    ) : null}
-                </div>
+                {privacyNotice ? (
+                    <p className="text-xs text-stone-500">{privacyNotice}</p>
+                ) : null}
             </div>
         </div>
     )

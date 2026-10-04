@@ -8,7 +8,6 @@ import type { BuilderFormPage } from "@/lib/forms/form-builder-document"
 
 type FormBuilderPreviewPaneProps = {
     pages: BuilderFormPage[]
-    activePage: number
     publicEyebrow: string
     publicTitle: string
     publicSubtitle: string
@@ -17,13 +16,11 @@ type FormBuilderPreviewPaneProps = {
     previewDevice: "desktop" | "mobile"
     desktopCanvasWidthClass: string
     mobileCanvasWidthClass: string
-    onSetActivePage: (pageId: number) => void
     onPreviewDeviceChange: (value: "desktop" | "mobile") => void
 }
 
 export function FormBuilderPreviewPane({
     pages,
-    activePage,
     publicEyebrow,
     publicTitle,
     publicSubtitle,
@@ -32,7 +29,6 @@ export function FormBuilderPreviewPane({
     previewDevice,
     desktopCanvasWidthClass,
     mobileCanvasWidthClass,
-    onSetActivePage,
     onPreviewDeviceChange,
 }: FormBuilderPreviewPaneProps) {
     return (
@@ -68,7 +64,6 @@ export function FormBuilderPreviewPane({
 
                 <FormBuilderCanvasPreview
                     pages={pages}
-                    activePage={activePage}
                     publicEyebrow={publicEyebrow}
                     publicTitle={publicTitle}
                     publicSubtitle={publicSubtitle}
@@ -77,7 +72,6 @@ export function FormBuilderPreviewPane({
                     previewDevice={previewDevice}
                     desktopWidthClass={desktopCanvasWidthClass}
                     mobileWidthClass={mobileCanvasWidthClass}
-                    onSetActivePage={onSetActivePage}
                 />
             </div>
         </div>
