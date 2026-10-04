@@ -1,0 +1,133 @@
+{
+  "heads": {
+    "baseline": "e6d86954a919a7261a90ea58ffdf9cd79f893507",
+    "candidate": "dbbc70a351455770fdfbe4648afbc560b9ee9fea"
+  },
+  "frontend_tree_revisions": {
+    "baseline": "d881caa072b562c7023e8fe61261d02595b93602",
+    "candidate": "dbbc70a351455770fdfbe4648afbc560b9ee9fea"
+  },
+  "versions": {
+    "baseline": {
+      "node": "v24.18.0",
+      "vitest": "5.0.1",
+      "@vitest/coverage-v8": "5.0.1",
+      "jsdom": "29.1.1",
+      "vite": "8.1.0",
+      "@typescript/native": "7.0.2",
+      "typescript": "6.0.2"
+    },
+    "candidate": {
+      "node": "v24.18.0",
+      "vitest": "5.0.3",
+      "@vitest/coverage-v8": "5.0.3",
+      "jsdom": "30.1.1",
+      "vite": "8.1.0",
+      "@typescript/native": "7.0.2",
+      "typescript": "6.0.2"
+    }
+  },
+  "source_files_identical": true,
+  "source_file_count": 799,
+  "covered_file_count": {
+    "baseline": 799,
+    "candidate": 799
+  },
+  "coverage_paths_added": [],
+  "coverage_paths_removed": [],
+  "totals": {
+    "lines": {
+      "baseline": {
+        "total": 33823,
+        "covered": 23290,
+        "skipped": 0,
+        "pct": 68.85
+      },
+      "candidate": {
+        "total": 33823,
+        "covered": 23290,
+        "skipped": 0,
+        "pct": 68.85
+      },
+      "delta_percentage_points": 0.0
+    },
+    "statements": {
+      "baseline": {
+        "total": 37696,
+        "covered": 25185,
+        "skipped": 0,
+        "pct": 66.81
+      },
+      "candidate": {
+        "total": 37696,
+        "covered": 25185,
+        "skipped": 0,
+        "pct": 66.81
+      },
+      "delta_percentage_points": 0.0
+    },
+    "branches": {
+      "baseline": {
+        "total": 35568,
+        "covered": 22676,
+        "skipped": 0,
+        "pct": 63.75
+      },
+      "candidate": {
+        "total": 35568,
+        "covered": 22676,
+        "skipped": 0,
+        "pct": 63.75
+      },
+      "delta_percentage_points": 0.0
+    },
+    "functions": {
+      "baseline": {
+        "total": 12206,
+        "covered": 7293,
+        "skipped": 0,
+        "pct": 59.74
+      },
+      "candidate": {
+        "total": 12206,
+        "covered": 7293,
+        "skipped": 0,
+        "pct": 59.74
+      },
+      "delta_percentage_points": 0.0
+    }
+  },
+  "runs": {
+    "baseline": {
+      "success": true,
+      "numTotalTests": 3072,
+      "numPassedTests": 3072,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTotalTestSuites": 876,
+      "numPassedTestSuites": 876,
+      "numFailedTestSuites": 0,
+      "file_count": 386,
+      "wall_seconds": 110.88,
+      "failed_files": []
+    },
+    "candidate": {
+      "success": true,
+      "numTotalTests": 3056,
+      "numPassedTests": 3056,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "numTotalTestSuites": 876,
+      "numPassedTestSuites": 876,
+      "numFailedTestSuites": 0,
+      "file_count": 386,
+      "wall_seconds": 150.47,
+      "failed_files": []
+    }
+  },
+  "per_file_changes": [],
+  "per_file_losses": [],
+  "coverage_limit_passed": true,
+  "test_reduction": 16,
+  "coverage_location_changes": []
+}

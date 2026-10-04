@@ -1,95 +1,74 @@
 {
-  "source_revision": "bef1a04161f9d5f78fffe9cc15a0db8143a9995f",
+  "source_revision": "d881caa072b562c7023e8fe61261d02595b93602",
+  "backend_baseline_checkout_revision": "e6d86954a919a7261a90ea58ffdf9cd79f893507",
+  "candidate_revision": "dbbc70a351455770fdfbe4648afbc560b9ee9fea",
+  "merged_revision": "87523300699322736fe1d82fc5eca6cb4ddb2a45",
   "counts": {
-    "backend_before": 5574,
-    "backend_after": 5562,
+    "backend_before": 5610,
+    "backend_after": 5598,
     "backend_subtests_before": 503,
     "backend_subtests_after": 503,
-    "frontend_before": 3033,
-    "frontend_after": 3017,
-    "collected_before": 8607,
-    "collected_after": 8579,
+    "frontend_before": 3072,
+    "frontend_after": 3056,
+    "collected_before": 8682,
+    "collected_after": 8654,
     "removed": 28,
-    "removed_percent": 0.32531660276519114,
-    "target_removals": 1722
+    "removed_percent": 0.322506334945865,
+    "target_removals": 1737
   },
   "coverage": [
     {
+      "suite": "backend",
+      "metric": "lines",
+      "baseline": 81.73114326226896,
+      "final": 81.72737881620719,
+      "delta_pp": -0.003764446061765625
+    },
+    {
+      "suite": "backend",
+      "metric": "branches",
+      "baseline": 66.05964122078124,
+      "final": 66.0557583288033,
+      "delta_pp": -0.0038828919779518856
+    },
+    {
+      "suite": "backend",
+      "metric": "combined",
+      "baseline": 77.90359137765891,
+      "final": 77.89979800278813,
+      "delta_pp": -0.003793374870781463
+    },
+    {
       "suite": "frontend",
       "metric": "lines",
-      "baseline": 68.6826793972848,
-      "final": 68.6826793972848,
+      "baseline": 68.8584690890814,
+      "final": 68.8584690890814,
       "delta_pp": 0.0
     },
     {
       "suite": "frontend",
       "metric": "statements",
-      "baseline": 66.62916532733311,
-      "final": 66.62916532733311,
+      "baseline": 66.81080220713073,
+      "final": 66.81080220713073,
       "delta_pp": 0.0
     },
     {
       "suite": "frontend",
       "metric": "branches",
-      "baseline": 63.52640545144804,
-      "final": 63.52640545144804,
+      "baseline": 63.753936122357175,
+      "final": 63.753936122357175,
       "delta_pp": 0.0
     },
     {
       "suite": "frontend",
       "metric": "functions",
-      "baseline": 59.58433385774613,
-      "final": 59.58433385774613,
+      "baseline": 59.749303621169915,
+      "final": 59.749303621169915,
       "delta_pp": 0.0
-    },
-    {
-      "suite": "backend",
-      "metric": "lines",
-      "baseline": 81.65696834114645,
-      "final": 81.6594819460329,
-      "delta_pp": 0.002513604886445364
-    },
-    {
-      "suite": "backend",
-      "metric": "branches",
-      "baseline": 65.97697573117611,
-      "final": 65.98475420037337,
-      "delta_pp": 0.007778469197262439
     }
   ],
+  "final_maximum_coverage_drop_pp": 0.0038828919779518856,
   "coverage_limit_pp": 2,
   "production_source_drift": [],
-  "four_shard_coverage_before_optional_msw_deduplication": [
-    {
-      "suite": "frontend",
-      "metric": "lines",
-      "baseline": 68.6826793972848,
-      "final": 68.67969565866031,
-      "delta_pp": -0.002983738624493526
-    },
-    {
-      "suite": "frontend",
-      "metric": "statements",
-      "baseline": 66.62916532733311,
-      "final": 66.62648666023786,
-      "delta_pp": -0.0026786670952532177
-    },
-    {
-      "suite": "frontend",
-      "metric": "branches",
-      "baseline": 63.52640545144804,
-      "final": 63.52640545144804,
-      "delta_pp": 0.0
-    },
-    {
-      "suite": "frontend",
-      "metric": "functions",
-      "baseline": 59.58433385774613,
-      "final": 59.5760536557092,
-      "delta_pp": -0.008280202036928586
-    }
-  ],
-  "maximum_observed_coverage_drop_pp": 0.008280202036928586,
-  "final_maximum_coverage_drop_pp": 0,
-  "frontend_final_lock_sha256": "570b298009c7b49f3b8fb908f209246e982706c7658db49e64543d97184c5b42"
+  "notes": "Backend e6 and d881 source/test trees are identical. Frontend baseline overlays only the two d881 sidebar files onto e6, then verifies every covered source hash against candidate. Both run the same coverage scope. Original earlier-revision results are retained separately."
 }

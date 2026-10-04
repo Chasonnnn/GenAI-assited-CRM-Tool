@@ -1,0 +1,190 @@
+{
+  "metrics": {
+    "baseline": {
+      "lines": {
+        "covered": 65134,
+        "denominator": 79693,
+        "percent": 81.73114326226896
+      },
+      "branches": {
+        "covered": 17013,
+        "denominator": 25754,
+        "percent": 66.05964122078124
+      },
+      "combined": {
+        "covered": 82147,
+        "denominator": 105447,
+        "percent": 77.90359137765891
+      }
+    },
+    "candidate": {
+      "lines": {
+        "covered": 65131,
+        "denominator": 79693,
+        "percent": 81.72737881620719
+      },
+      "branches": {
+        "covered": 17012,
+        "denominator": 25754,
+        "percent": 66.0557583288033
+      },
+      "combined": {
+        "covered": 82143,
+        "denominator": 105447,
+        "percent": 77.89979800278813
+      }
+    },
+    "delta_percentage_points": {
+      "lines": -0.003764446061765625,
+      "branches": -0.0038828919779518856,
+      "combined": -0.003793374870781463
+    }
+  },
+  "per_file_losses": [
+    {
+      "path": "app/services/form_submission_service.py",
+      "baseline": {
+        "covered_lines": 717,
+        "num_statements": 925,
+        "percent_covered": 72.09302325581395,
+        "percent_covered_display": "72.09",
+        "missing_lines": 208,
+        "excluded_lines": 0,
+        "percent_statements_covered": 77.51351351351352,
+        "percent_statements_covered_display": "77.51",
+        "num_branches": 494,
+        "num_partial_branches": 118,
+        "covered_branches": 306,
+        "missing_branches": 188,
+        "percent_branches_covered": 61.94331983805668,
+        "percent_branches_covered_display": "61.94"
+      },
+      "candidate": {
+        "covered_lines": 716,
+        "num_statements": 925,
+        "percent_covered": 71.95207892882311,
+        "percent_covered_display": "71.95",
+        "missing_lines": 209,
+        "excluded_lines": 0,
+        "percent_statements_covered": 77.4054054054054,
+        "percent_statements_covered_display": "77.41",
+        "num_branches": 494,
+        "num_partial_branches": 119,
+        "covered_branches": 305,
+        "missing_branches": 189,
+        "percent_branches_covered": 61.74089068825911,
+        "percent_branches_covered_display": "61.74"
+      },
+      "lost_lines": [
+        558
+      ],
+      "gained_lines": [],
+      "lost_branches": [
+        [
+          557,
+          558
+        ]
+      ],
+      "gained_branches": []
+    },
+    {
+      "path": "app/services/notification_service.py",
+      "baseline": {
+        "covered_lines": 407,
+        "num_statements": 483,
+        "percent_covered": 80.31383737517832,
+        "percent_covered_display": "80.31",
+        "missing_lines": 76,
+        "excluded_lines": 0,
+        "percent_statements_covered": 84.26501035196688,
+        "percent_statements_covered_display": "84.27",
+        "num_branches": 218,
+        "num_partial_branches": 46,
+        "covered_branches": 156,
+        "missing_branches": 62,
+        "percent_branches_covered": 71.55963302752293,
+        "percent_branches_covered_display": "71.56"
+      },
+      "candidate": {
+        "covered_lines": 405,
+        "num_statements": 483,
+        "percent_covered": 80.02853067047076,
+        "percent_covered_display": "80.03",
+        "missing_lines": 78,
+        "excluded_lines": 0,
+        "percent_statements_covered": 83.85093167701864,
+        "percent_statements_covered_display": "83.85",
+        "num_branches": 218,
+        "num_partial_branches": 46,
+        "covered_branches": 156,
+        "missing_branches": 62,
+        "percent_branches_covered": 71.55963302752293,
+        "percent_branches_covered_display": "71.56"
+      },
+      "lost_lines": [
+        763,
+        764
+      ],
+      "gained_lines": [],
+      "lost_branches": [],
+      "gained_branches": []
+    }
+  ],
+  "file_count": {
+    "baseline": 547,
+    "candidate": 547
+  },
+  "source_universe_equal": true,
+  "denominator_changes": [],
+  "case_reduction": 12,
+  "within_two_percentage_points_each_metric": true,
+  "runs": {
+    "baseline": {
+      "sha": "e6d86954a919a7261a90ea58ffdf9cd79f893507",
+      "summary": "5610 passed, 1 warning, 503 subtests passed in 540.87s (0:09:00)",
+      "passed": 5610,
+      "subtests_passed": 503,
+      "warnings": 1,
+      "totals": {
+        "covered_lines": 65134,
+        "num_statements": 79693,
+        "percent_covered": 77.90359137765891,
+        "percent_covered_display": "77.90",
+        "missing_lines": 14559,
+        "excluded_lines": 150,
+        "percent_statements_covered": 81.73114326226896,
+        "percent_statements_covered_display": "81.73",
+        "num_branches": 25754,
+        "num_partial_branches": 5631,
+        "covered_branches": 17013,
+        "missing_branches": 8741,
+        "percent_branches_covered": 66.05964122078124,
+        "percent_branches_covered_display": "66.06"
+      }
+    },
+    "candidate": {
+      "sha": "dbbc70a351455770fdfbe4648afbc560b9ee9fea",
+      "summary": "5598 passed, 1 warning, 503 subtests passed in 563.38s (0:09:23)",
+      "passed": 5598,
+      "subtests_passed": 503,
+      "warnings": 1,
+      "totals": {
+        "covered_lines": 65131,
+        "num_statements": 79693,
+        "percent_covered": 77.89979800278813,
+        "percent_covered_display": "77.90",
+        "missing_lines": 14562,
+        "excluded_lines": 150,
+        "percent_statements_covered": 81.72737881620719,
+        "percent_statements_covered_display": "81.73",
+        "num_branches": 25754,
+        "num_partial_branches": 5632,
+        "covered_branches": 17012,
+        "missing_branches": 8742,
+        "percent_branches_covered": 66.0557583288033,
+        "percent_branches_covered_display": "66.06"
+      }
+    }
+  },
+  "preexisting_warning": "ResourceWarning: unclosed sqlite3.Connection in test_migration_20260907_work_authority.py::test_donor_approval_seed_is_idempotent_and_preserves_existing_stage_ids, present in both runs."
+}

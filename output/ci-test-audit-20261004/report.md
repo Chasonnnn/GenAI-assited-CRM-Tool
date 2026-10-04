@@ -1,76 +1,80 @@
 # CI and test audit — 2026-10-04
 
-The verified batch removes 28 of 8,607 collected tests (0.33%). The requested 20% reduction would require 1,722 removals and remains unmet. Final backend and frontend coverage has no measured loss. The first hosted candidate passed in 5m45s, 18.44% faster than the three-run baseline median of 7m03s. That misses the 20% target; a subsequent reporting optimization is awaiting hosted verification.
+Hosted CI median time fell from **6m01s to 4m30s (25.2%)** across two baseline and two final runs. The audit removes **28 of 8,682 collected cases (0.32%)**. The requested 20% test reduction would require 1,737 removals and remains unmet. Maximum measured coverage loss is **0.003883 percentage points**, within the 2-point limit per metric per suite.
 
-## Test reduction
+[PR #789](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/pull/789) was merged outside this session at 2026-10-04 05:25:08 UTC, as `87523300699322736fe1d82fc5eca6cb4ddb2a45`. This session pushed the reviewed changes and opened the PR; it did not perform the merge or a deployment.
 
-Baseline: `bef1a04161f9d5f78fffe9cc15a0db8143a9995f`, on the existing `chore/pnpm-12-release-followups` branch. Production source hashes remained unchanged. Counts are collected cases, including parameter rows; the backend's 503 subtests are reported separately and unchanged.
+## Test reduction and scope
 
 | Suite | Before | After | Removed |
 | --- | ---: | ---: | ---: |
-| Backend | 5,574 | 5,562 | 12 |
-| Frontend | 3,033 | 3,017 | 16 |
-| Combined | 8,607 | 8,579 | 28 |
+| Backend | 5,610 | 5,598 | 12 |
+| Frontend | 3,072 | 3,056 | 16 |
+| Combined | 8,682 | 8,654 | 28 |
 
-The removals cover duplicate match lifecycle smoke tests, AI action registry/validation checks already exercised by execution tests, repeated initial component renders, and three Markdown wording assertions. Required assertions were carried into the named retained tests before deletion. Independent preservation reviews found no gaps. No production or shared test-support seam became obsolete.
+The backend's 503 subtests are unchanged and reported separately. Counts use collected cases, including parameter rows. No production or shared test-support code was removed.
 
-Mechanical scans covered both test directories. Complete owner, caller, history, and retained-test reviews covered selected candidates; this is not a complete classification of all 8,607 cases. The reviewed evidence supports these 28 removals, not 1,722. Equal line coverage does not establish equivalent behavior. Distinct consent, tenant, permission, malformed-input, migration, concurrency, retry, accessibility, and lifecycle cases remain.
+The batch removes duplicate match lifecycle smoke tests, AI registry/validation checks already exercised by execution tests, repeated component initial renders, and three Markdown wording assertions. Required assertions were carried into named retained tests before deletion. Independent preservation reviews found no gaps.
 
-The invoked [test-audit skill](/Users/chason/.codex/skills/test-audit/SKILL.md) requires: “do not convert uncertain candidates into cleanup to increase deletion counts.” Further reductions require additional owner-by-owner evidence, not a coverage-only deletion list.
+Mechanical discovery covered both test directories; complete owner, caller, history, and retained-test review covered selected candidates. This is not a complete classification of all 8,682 cases. The reviewed evidence supports 28 removals, not 1,737. Distinct consent, tenant, permission, malformed-input, migration, concurrency, retry, accessibility, and lifecycle cases remain. The invoked test-audit skill requires: “do not convert uncertain candidates into cleanup to increase deletion counts.”
 
-Evidence: [backend ledger](backend-ledger.md), [frontend ledger](frontend-ledger.md), [cross-cutting ledger](crosscut-ledger.md), [backend preservation review](backend-preservation-review.md), [frontend preservation review](frontend-preservation-review.md).
+[Backend ledger](backend-ledger.md), [frontend ledger](frontend-ledger.md), [cross-cutting ledger](crosscut-ledger.md), [backend preservation review](backend-preservation-review.md), [frontend preservation review](frontend-preservation-review.md).
 
-## Coverage
+## Final coverage
 
-All comparisons use the same production source universe. The permitted drop is 2 percentage points for each metric in each suite.
+Baseline application/test source is main `d881caa07`; candidate code is `dbbc70a35`. The merged commit has the identical tree. The backend baseline checkout was `e6d86954a`, whose API source/tests are identical to `d881caa07`. The frontend baseline added exactly the two intervening sidebar files and verified all covered source hashes against the candidate. This refreshed comparison follows the concurrent upstream pipeline and sidebar merges.
 
-| Suite / metric | Baseline | Final | Change, percentage points |
+| Suite / metric | Baseline | Candidate | Change, percentage points |
 | --- | ---: | ---: | ---: |
-| Backend lines | 81.65697% | 81.65948% | +0.00251 |
-| Backend branches | 65.97698% | 65.98475% | +0.00778 |
-| Frontend lines | 68.68268% | 68.68268% | 0 |
-| Frontend statements | 66.62917% | 66.62917% | 0 |
-| Frontend branches | 63.52641% | 63.52641% | 0 |
-| Frontend functions | 59.58433% | 59.58433% | 0 |
+| Backend lines | 81.73114% | 81.72738% | -0.00376 |
+| Backend branches | 66.05964% | 66.05576% | -0.00388 |
+| Backend combined | 77.90359% | 77.89980% | -0.00379 |
+| Frontend lines | 68.85847% | 68.85847% | +0.00000 |
+| Frontend statements | 66.81080% | 66.81080% | +0.00000 |
+| Frontend branches | 63.75394% | 63.75394% | +0.00000 |
+| Frontend functions | 59.74930% | 59.74930% | +0.00000 |
 
-Pruning alone preserved every frontend per-file coverage count. The four-shard upgraded-toolchain run also passed all floors, with one fewer covered frontend line, statement, and function: its largest drop was 0.00828 percentage points. The final full-suite run against the finalized lockfile exactly matched baseline frontend totals and had no per-file losses. Backend coverage also had no per-file losses. [Exact results](results.json), [backend coverage](backend-coverage.json), [pruning-only frontend coverage](frontend-pruning-coverage.json), [final frontend coverage](frontend-final-coverage.json).
+Coverage scope and denominators are identical. Backend measures 547 files, 79,693 lines, and 25,754 branches. The measured loss is three lines and one branch: scan-job iteration in `form_submission_service.py` and websocket exception logging in `notification_service.py`. Frontend metrics, per-file counts, and covered locations are identical across all 799 measured source files.
 
-## CI changes
+[Exact current results](results.json), [backend comparison](refreshed-backend.json), [frontend comparison](refreshed-frontend.json). The original earlier-revision results remain in [original-results.json](original-results.json); their counts and source universe are historical, not the final baseline.
 
-- Backend: three parallel groups instead of two, retaining four workers per group. All 496 safe files appear exactly once; 45 migration/outbox files remain in the isolated serial group.
-- Frontend: four shards instead of two, covering all 382 files. Blob reports merge into fresh combined coverage with the existing thresholds.
-- Frontend coverage no longer waits for the production build. Required `Frontend Tests` still fails unless both the build and merged coverage succeed. Failure, cancellation, and skipped dependencies cannot produce a passing gate.
+## CI implementation
 
-Security scans, launch gates, production image checks, required check names, source scope, coverage floors, and test isolation remain unchanged. The partition test executes the actual selector; the gate test executes all 16 dependency-result combinations. No passing result is reused from an earlier commit.
+- Backend: four parallel groups instead of two, with four workers per group. All 497 safe files run exactly once; 47 migration, outbox, and OPS CLI files run in the isolated serial group.
+- Frontend: four shards instead of two. Fresh blob reports merge with existing coverage thresholds. Coverage merging can overlap the build; required `Frontend Tests` still requires both to succeed.
+- Coverage reporting: remove one redundant text-report analysis pass. Retained XML and JSON commands each enforce the configured combined floor, followed by separate line/branch checks. The XML artifact and changed-line reporting remain.
 
-The first candidate's backend coverage job took 67 seconds, including 41 seconds generating coverage reports. The follow-up removes redundant text reporting: both retained XML and JSON commands enforce the same configured combined floor of 75.85, and the separate line/branch checks still run. The XML artifact and changed-line report remain. Installed Coverage.py source and official [XML](https://coverage.readthedocs.io/en/latest/commands/cmd_xml.html) / [JSON](https://coverage.readthedocs.io/en/latest/commands/cmd_json.html) documentation confirm this behavior. [Independent review](coverage-report-review.md).
+Required check names, security scans, launch gates, production image checks, coverage floors, source scope, and test isolation remain intact. The partition test executes the actual selector; the frontend gate test executes all 16 dependency-result combinations. Passing results are never substituted from an earlier commit.
 
-Three alternating local report-generation runs reduced median reporting time from 14.17 to 10.15 seconds (28.35%) using identical frozen coverage data. JSON totals were identical. Both remaining commands passed the normal floor and returned exit code 2 when a temporary configuration raised the floor to 100. The 14 CI configuration tests and changed-file Ruff/format checks passed. [Report benchmark and negative controls](coverage-report-benchmark.json).
+The first hosted candidate exposed a scheduling imbalance; the final fourth backend group reduces it. A concurrent merge run also exposed the OPS CLI global-row-count assertion racing with committed Jobs from another worker. Moving the intact OPS CLI suite into the serial group preserves its all-organization no-execution assertion. The failing test was retained. [Isolation review](ops-cli-serial-review.md), [coverage-report review](coverage-report-review.md).
 
-The three latest successful baseline runs took 370, 423, and 477 seconds from workflow creation to final job completion, including runner queue time. Candidate one took 345 seconds on `0d2943db2`; every job passed. The observed improvement is 18.44% against the baseline median, with substantial runner variability. Extra jobs increase runner demand, and file-count balance does not guarantee equal execution time. Human review and merge availability are outside this timing metric. [Hosted measurements](hosted-ci.json), [first candidate run](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37178294086).
+## Hosted timing
 
-The repository's main branch requires branches to be up to date. Merging one PR can therefore require the others to rerun CI. GitHub merge queues address that workflow, but GitHub documents them for organization-owned repositories; this repository is personal-owned. Protection settings were not changed. [GitHub merge queue requirements](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue).
+| Run | Source | Total |
+| --- | --- | ---: |
+| [Baseline PR](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37178647847) | `c4b69b8e7` | 5m41s |
+| [Baseline main](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37179205963) | `d881caa07` | 6m21s |
+| [Final PR](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37179543041) | `dbbc70a35` | 4m37s |
+| [Final main](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/actions/runs/37179825258) | `875233006` | 4m23s |
+
+Each pair has identical application/test/workflow source within that pair. Timing starts at workflow creation and ends at the last job completion, including runner queue time. Both pairs contain one PR and one main push; main omits the nonblocking changed-line report. Every final job passed. The observed median improvement is 25.2%, exceeding the 20% target. Four observational runs do not establish a guaranteed speedup under every runner load. Extra shard jobs increase runner demand. Human review and merge availability are outside this metric. [Raw timing summary](hosted-ci.json).
+
+Main still requires branches to be up to date, so later merges can require CI reruns. Protection settings were not changed. GitHub documents merge queues for organization-owned repositories; this repository is personal-owned. [GitHub requirements](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue).
 
 ## Tooling
 
-Vitest and its coverage provider are upgraded from 5.0.1 to 5.0.3; jsdom from 29.1.1 to 30.1.1. TS7 was already on stable 7.0.2. Runtime pins and dependency policies remain unchanged.
+Vitest and its coverage provider move from 5.0.1 to 5.0.3; jsdom from 29.1.1 to 30.1.1. TS7 was already current at stable 7.0.2; the TS6 API compatibility package remains. Runtime pins, release-age policy, trust policy, overrides, and dependency build allowlists are unchanged.
 
-Across three repetitions of the same 588 tests, the upgraded dependency group reduced local median time by 15.38% with a cold transform cache and 13.57% with a warm cache. Ranges overlap. These are sample test timings, not full-suite or hosted PR CI timings. The proposed GitHub transform cache was removed because the measurements did not show a warm-cache benefit. [Toolchain decisions, compatibility, and sources](toolchain.md), [benchmark measurements](toolchain-benchmark.json), [final independent review](ci-toolchain-final-review.md).
+The original controlled 588-test sample improved local median time by 15.38% with cold transform caches and 13.57% with warm caches across three repetitions. These sample timings are separate from the hosted result. The proposed GitHub transform cache was dropped because warm-cache benefit was not demonstrated. Removing redundant backend text reporting reduced local reporting median from 14.17 to 10.15 seconds, with identical totals; XML and JSON each returned exit code 2 under a deliberately failing configured floor. [Toolchain evidence](toolchain.md), [test benchmark](toolchain-benchmark.json), [reporting benchmark](coverage-report-benchmark.json).
 
-## Verification and delivery
+## Verification and cleanup
 
-- Full backend suite: 5,562 cases plus 503 subtests passed on a migrated disposable PostgreSQL database. Baseline passed 5,574 cases plus the same subtests. Backend durations are not a performance comparison because frontend work ran concurrently.
-- Final frontend check: application/test type checks, ESLint, and all 382 files / 3,017 tests passed. Full V8 coverage, four-shard execution and blob merge, and the Next.js Webpack production build passed.
-- Final CI configuration tests: 14 passed. Changed Python files passed Ruff and formatting checks. Whitespace checks passed.
-- Both backend runs emitted the same pre-existing SQLite connection `ResourceWarning` in `test_donor_approval_seed_is_idempotent_and_preserves_existing_stage_ids`; this unrelated warning remains.
-- The skill's OpenClaw-specific scripts and `$autoreview` were unavailable. Repository validation and independent preservation reviews were used instead; those unavailable tools were not run.
+Full paired backend and frontend suites passed with no failures or skips. Candidate application/test type checks and lint passed. Hosted production builds, Docker artifacts, all test shards, merged coverage, and security gates passed. The focused OPS CLI and CI configuration run passed 27 tests; changed Python files passed Ruff and formatting checks.
 
-Test pruning removes 306 net test lines. Stronger existing CI guards add 53 net test lines, for a total net reduction of 253 test lines. Production and shared test-support LOC changes are zero; workflow changes add five net lines. Dependency manifests and generated lockfile changes are separate from these counts.
+Both backend runs emitted the same pre-existing SQLite connection ResourceWarning in `test_donor_approval_seed_is_idempotent_and_preserves_existing_stage_ids`. Full local suite timings were affected by concurrent host work and are not performance evidence. The skill's OpenClaw-specific scripts and autoreview were unavailable; repository checks and independent preservation reviews were used instead.
 
-Changes are published in [PR #789](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/pull/789) on the existing branch. No PR merge, release, or deployment is authorized. The first hosted run passed; the reporting follow-up awaits its own run.
+Pruning removes 306 net test lines; stronger existing CI guards add 56, for a net test reduction of 250 lines. Workflow changes add seven net lines. Production and shared test-support LOC changes are zero; dependency manifests and generated lockfiles are separate.
 
-Before publication, main at `e772a87f4` was merged into the branch without conflicts. Its only additional file change was the already-merged Google Tasks concurrency-test fix; no production source or collected-case count changed. All 21 concurrency and CI configuration tests passed after reconciliation. The repository wrapper could not find the local `createdb` client, so validation used an explicitly created, migrated disposable database through the existing container instead; that database was removed afterward.
+All audit databases, the detached baseline checkout, temporary symlink, and task-specific benchmark/uv caches were removed. No application server was started. The pre-existing `crm_db` service remains running. Raw logs remain in ignored `output/ci-test-audit-20261003.local/`; compact final evidence is recorded here.
 
-The two audit databases and temporary transform/fixture/uv caches were removed. No application servers were started. The pre-existing `crm_db` service remains running. Detailed local execution logs remain under `output/ci-test-audit-20261003.local/`; compact evidence is committed in this directory.
-
-Remaining work: measure hosted total PR CI time on the candidate; audit additional test owners before claiming the count target; review the pre-existing nested, uncollected `test_validate_update_status_action_normalizes` and the query-invalidation assertion concerns recorded in the ledgers. An uncollected declaration is not a test-count reduction.
+Remaining test-count work requires further owner-by-owner audit. Named follow-ups include the pre-existing nested, uncollected `test_validate_update_status_action_normalizes` and query-invalidation assertion concerns in the ledgers. Uncollected declarations are not test-count reductions.
