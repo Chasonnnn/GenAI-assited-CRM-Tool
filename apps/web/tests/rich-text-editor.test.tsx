@@ -89,16 +89,6 @@ describe("RichTextEditor", () => {
         chain.insertContent.mockClear()
     })
 
-    it("shows an emoji insert control when enabled", async () => {
-        render(<RichTextEditor content="<p>hello</p>" enableEmojiPicker />)
-
-        await waitFor(() => {
-            expect(screen.getByLabelText("Bold")).toBeInTheDocument()
-        })
-
-        expect(screen.getByLabelText("Insert Emoji")).toBeInTheDocument()
-    })
-
     it("labels undo and redo and hides the default emoji control", async () => {
         render(<RichTextEditor content="<p>hello</p>" />)
 
@@ -117,6 +107,7 @@ describe("RichTextEditor", () => {
         await waitFor(() => {
             expect(screen.getByLabelText("Insert Emoji")).toBeInTheDocument()
         })
+        expect(screen.getByLabelText("Bold")).toBeInTheDocument()
 
         fireEvent.click(screen.getByLabelText("Insert Emoji"))
         fireEvent.click(screen.getByRole("button", { name: "pick-emoji" }))
@@ -124,7 +115,7 @@ describe("RichTextEditor", () => {
         expect(chain.insertContent).toHaveBeenCalledWith("🚀")
     })
 
-    it("renders the full emoji picker with frequent suggestions by default", async () => {
+    it("opens with frequent suggestions and switches suggested mode to recent", async () => {
         render(<RichTextEditor content="<p>hello</p>" enableEmojiPicker />)
 
         await waitFor(() => {
@@ -140,16 +131,6 @@ describe("RichTextEditor", () => {
                 (props as { emojiStyle?: string }).emojiStyle === "native"
         )
         expect(hasFrequentMode).toBe(true)
-    })
-
-    it("can switch suggested mode to recent", async () => {
-        render(<RichTextEditor content="<p>hello</p>" enableEmojiPicker />)
-
-        await waitFor(() => {
-            expect(screen.getByLabelText("Insert Emoji")).toBeInTheDocument()
-        })
-
-        fireEvent.click(screen.getByLabelText("Insert Emoji"))
         fireEvent.click(screen.getByRole("button", { name: "Recent" }))
 
         const hasRecentMode = mockEmojiPickerProps.mock.calls.some(

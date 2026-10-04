@@ -275,7 +275,7 @@ describe('WorkflowEditorPage', () => {
         mockUpdateWorkflow.mutate.mockReset()
     })
 
-    it('renders the trigger and exit nodes with the trigger panel and build palette', () => {
+    it('renders the initial editor and selects a typed action added from the build palette', () => {
         renderNewWorkflow()
 
         expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveAttribute('aria-pressed', 'true')
@@ -285,19 +285,6 @@ describe('WorkflowEditorPage', () => {
         expect(screen.getByRole('button', { name: 'Add filter' })).toBeInTheDocument()
         expect(screen.getByTestId('workflow-build-panel')).toHaveTextContent('Add Note')
         expect(screen.getByText('Draft')).toBeInTheDocument()
-    })
-
-    it('gives the header actions their own full-width row on phones', () => {
-        renderNewWorkflow()
-        const actions = launchButton().parentElement
-        expect(actions).toHaveClass('w-full', 'sm:w-auto')
-        expect(actions).toContainElement(screen.getByRole('button', { name: 'Save draft' }))
-        expect(screen.getByRole('button', { name: 'Save draft' })).toHaveClass('flex-1', 'sm:flex-none')
-        expect(launchButton()).toHaveClass('flex-1', 'sm:flex-none')
-    })
-
-    it('adds a typed action from the build palette and selects it', () => {
-        renderNewWorkflow()
 
         fireEvent.click(screen.getByRole('button', { name: 'Add Note' }))
 
@@ -372,6 +359,12 @@ describe('WorkflowEditorPage', () => {
 
     it('saves a draft with the workflow disabled', () => {
         renderNewWorkflow()
+
+        const actions = launchButton().parentElement
+        expect(actions).toHaveClass('w-full', 'sm:w-auto')
+        expect(actions).toContainElement(screen.getByRole('button', { name: 'Save draft' }))
+        expect(screen.getByRole('button', { name: 'Save draft' })).toHaveClass('flex-1', 'sm:flex-none')
+        expect(launchButton()).toHaveClass('flex-1', 'sm:flex-none')
 
         fireEvent.change(nameInput(), { target: { value: 'Draft Workflow' } })
         fireEvent.change(triggerSelect(), { target: { value: 'surrogate_created' } })

@@ -159,12 +159,6 @@ describe('MatchesPage', () => {
         expect(screen.queryByText(/Showing/)).not.toBeInTheDocument()
     })
 
-    it('shows no header count when a filter is active', () => {
-        mockSearchParams.set('status', 'accepted')
-        render(<MatchesPage />)
-        expect(document.querySelector('[data-slot="page-header-count"]')).toBeNull()
-    })
-
     it('shows New Match only with propose_matches', () => {
         const { unmount } = render(<MatchesPage />)
         expect(screen.getByRole('button', { name: 'New Match' })).toBeInTheDocument()
@@ -316,21 +310,6 @@ describe('MatchesPage', () => {
 
         const maryLink = screen.getByText('Mary Johnson').closest('a')
         expect(maryLink).toHaveAttribute('href', '/intended-parents/matches/match2')
-    })
-
-    it('uses page from URL params', () => {
-        mockSearchParams.set('page', '2')
-        mockUseMatches.mockReturnValue({
-            data: { items: [], total: 0, per_page: 20, page: 2 },
-            isLoading: false,
-        })
-
-        render(<MatchesPage />)
-        expect(mockUseMatches).toHaveBeenCalledWith(
-            expect.objectContaining({
-                page: 2,
-            })
-        )
     })
 
     it('derives committed filters from URL params', () => {

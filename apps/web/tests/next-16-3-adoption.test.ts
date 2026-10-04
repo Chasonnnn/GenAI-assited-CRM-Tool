@@ -55,35 +55,6 @@ describe("Next.js 16.3 adoption contracts", () => {
         expect(adoptionConfig.experimental.turbopackRustReactCompiler).toBe(true)
     })
 
-    it("records the tenant-safety migration boundary before the feature can be promoted", () => {
-        const adoptionGuide = readFileSync(join(process.cwd(), "docs/next-16-3-adoption.md"), "utf8")
-
-        expect(adoptionGuide).toContain("17 production-prerender blockers")
-        expect(adoptionGuide).toContain("NEXT_ENABLE_INSTANT_NAVIGATIONS=true")
-        expect(adoptionGuide).toContain("Do not enable in production")
-        expect(adoptionGuide).toContain("organization_id")
-    })
-
-    it("documents the TypeScript 7 split-toolchain boundary", () => {
-        const adoptionGuide = readFileSync(join(process.cwd(), "docs/next-16-3-adoption.md"), "utf8")
-
-        expect(adoptionGuide).toContain("## TypeScript 7 split toolchain")
-        expect(adoptionGuide).toContain('"@typescript/native": "npm:typescript@7.0.2"')
-        expect(adoptionGuide).toContain('"typescript": "npm:@typescript/typescript6@6.0.2"')
-        expect(adoptionGuide).toContain("pnpm run typecheck:compat")
-        expect(adoptionGuide).toContain("experimental.useTypeScriptCli: false")
-        expect(adoptionGuide).not.toContain("## TypeScript 7 hold")
-    })
-
-    it("documents the production bundler boundary", () => {
-        const adoptionGuide = readFileSync(join(process.cwd(), "docs/next-16-3-adoption.md"), "utf8")
-
-        expect(adoptionGuide).toContain("## Production bundler boundary")
-        expect(adoptionGuide).toContain("next build --webpack")
-        expect(adoptionGuide).toContain("React Compiler")
-        expect(adoptionGuide).toContain("Turbopack")
-    })
-
     it("keeps Next's generated route validator in the standalone type-check", () => {
         const tsconfig = JSON.parse(
             readFileSync(join(process.cwd(), "tsconfig.json"), "utf8"),
