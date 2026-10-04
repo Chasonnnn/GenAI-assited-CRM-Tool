@@ -1,0 +1,192 @@
+{
+  "admin": [
+    {
+      "level": "warn",
+      "message": "[WS] Handshake rejected - notifications will use polling fallback",
+      "timestamp": "2026-10-04T20:04:09.892Z",
+      "url": "http://localhost:3000/_next/static/chunks/09la_next_dist_1m5i66u._.js"
+    }
+  ],
+  "developer": [
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:05:42.362Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:05:49.514Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:05:58.331Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:06:33.334Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:07:43.337Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] range failed 3 times — giving up until the next ensureCoverage Object",
+      "timestamp": "2026-10-04T20:07:43.337Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:08:55.478Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:09:30.479Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:10:40.823Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:11:15.826Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "error",
+      "message": "ApiError: entity_id: Input should be a valid UUID, invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `n` at 1\n    at request (http://localhost:3000/_next/static/chunks/_076cbul._.js:2026:15)",
+      "timestamp": "2026-10-04T20:12:06.890Z",
+      "url": "http://localhost:3000/_next/static/chunks/_076cbul._.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:12:25.828Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] range failed 3 times — giving up until the next ensureCoverage Object",
+      "timestamp": "2026-10-04T20:12:25.829Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "error",
+      "message": "ApiError: Link target was not found in this organization\n    at request (http://localhost:3000/_next/static/chunks/_076cbul._.js:2026:15)",
+      "timestamp": "2026-10-04T20:13:11.002Z",
+      "url": "http://localhost:3000/_next/static/chunks/_076cbul._.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:19:55.683Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "error",
+      "message": "ApiError: entity_id: Input should be a valid UUID, invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `n` at 1\n    at request (http://localhost:3000/_next/static/chunks/_076cbul._.js:2026:15)",
+      "timestamp": "2026-10-04T20:20:18.377Z",
+      "url": "http://localhost:3000/_next/static/chunks/_076cbul._.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:20:30.685Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:21:40.688Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] range failed 3 times — giving up until the next ensureCoverage Object",
+      "timestamp": "2026-10-04T20:21:40.688Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:22:28.777Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:23:03.780Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:23:53.843Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:24:28.846Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:25:38.857Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] range failed 3 times — giving up until the next ensureCoverage Object",
+      "timestamp": "2026-10-04T20:25:38.857Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:28:58.108Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:29:33.112Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:30:43.114Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] range failed 3 times — giving up until the next ensureCoverage Object",
+      "timestamp": "2026-10-04T20:30:43.114Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    },
+    {
+      "level": "warn",
+      "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+      "timestamp": "2026-10-04T20:31:11.070Z",
+      "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+    }
+  ]
+}

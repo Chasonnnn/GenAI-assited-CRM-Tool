@@ -1,0 +1,32 @@
+[
+  {
+    "level": "warn",
+    "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+    "timestamp": "2026-10-04T20:36:34.204Z",
+    "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+  },
+  {
+    "level": "warn",
+    "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+    "timestamp": "2026-10-04T20:37:09.207Z",
+    "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+  },
+  {
+    "level": "warn",
+    "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+    "timestamp": "2026-10-04T20:38:19.210Z",
+    "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+  },
+  {
+    "level": "warn",
+    "message": "[AssignmentCache] range failed 3 times — giving up until the next ensureCoverage Object",
+    "timestamp": "2026-10-04T20:38:19.210Z",
+    "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+  },
+  {
+    "level": "warn",
+    "message": "[AssignmentCache] no LMS adapter active — skipping fetch Object",
+    "timestamp": "2026-10-04T20:40:16.847Z",
+    "url": "chrome-extension://cndibmoanboadcifjkjbdpjgfedanolh/content-scripts/all.js"
+  }
+]
