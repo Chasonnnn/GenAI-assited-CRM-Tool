@@ -20,6 +20,8 @@ Migration 1400 uses PostgreSQL `AT TIME ZONE`; an unrecognized organization time
 
 Migration 1400 takes organization and workflow row locks with `lock_timeout = '3s'` in the same transaction as migration 1300's `ACCESS EXCLUSIVE` locks. Run `migrate-release` at low traffic and retry on lock timeout.
 
+Migration `20261003_1800_timezone_aware_form_timestamps` converts 34 UTC timestamp columns to `timestamptz` on: `forms`, `form_logos`, `form_field_mappings`, `form_submissions`, `form_submission_drafts`, `form_submission_files`, `form_intake_links`, `published_intake_versions`, `intake_leads`, `lead_attribution`, `consent_records`, `embed_sessions`, `tracking_event_logs`, `form_submission_match_candidates`, `form_intake_drafts`, and `pipeline_stages`. With the session zone set to UTC the conversion changes metadata only, but each table still takes a brief `ACCESS EXCLUSIVE` lock and rebuilds its indexes on these columns. Run at low traffic; it uses a 3-second lock timeout and a 120-second statement timeout. Retry after a lock timeout. Migration `20261003_1200_repair_seeded_system_workflows` repairs only seeded workflows that still match their original configuration exactly; on the Cloud SQL clone, compare each system_key's row count with its exact-match count to see how many rows it will repair.
+
 After all API and worker instances use module routing, run the organization-scoped inventory from `apps/api`:
 
 ```sh

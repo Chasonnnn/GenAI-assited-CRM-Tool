@@ -1,7 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { EntityTasksSection } from "@/components/tasks/EntityTasksSection"
 import type { TaskListItem, TaskListParams } from "@/lib/api/tasks"
+
+// A US zone, set before modules build their Intl formatters, so a date-only due date read as
+// UTC midnight would show the previous day.
+const originalTimeZone = vi.hoisted(() => {
+    const original = process.env.TZ
+    process.env.TZ = "America/New_York"
+    return original
+})
+afterAll(() => {
+    if (originalTimeZone === undefined) delete process.env.TZ
+    else process.env.TZ = originalTimeZone
+})
 
 const mocks = vi.hoisted(() => ({
     useTask: vi.fn(), useTasks: vi.fn(), create: vi.fn(), batch: vi.fn(), update: vi.fn(), complete: vi.fn(), reopen: vi.fn(), delete: vi.fn(),
@@ -42,6 +54,11 @@ describe("EntityTasksSection", () => {
         mocks.permissions.mockReturnValue({ data: { permissions: ["edit_tasks", "delete_tasks"] } })
         mocks.useTasks.mockImplementation((params: TaskListParams) => ({ data: { items: [{ ...task, is_completed: params.is_completed === true }], pages: 3 }, isLoading: false, isError: false }))
         for (const mutation of [mocks.create, mocks.batch, mocks.update, mocks.complete, mocks.reopen, mocks.delete]) mutation.mockResolvedValue({})
+    })
+
+    it("shows the due date as the stored calendar day", () => {
+        render(<EntityTasksSection {...props} />)
+        expect(screen.getByText(/^Sep 10, 2026/)).toHaveTextContent("Sep 10, 2026 · Owner")
     })
 
     it("fetches complete details when a list projection lacks description and creator", () => {

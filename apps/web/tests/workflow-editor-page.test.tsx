@@ -274,6 +274,15 @@ describe('WorkflowEditorPage', () => {
         expect(screen.getByText('Draft')).toBeInTheDocument()
     })
 
+    it('gives the header actions their own full-width row on phones', () => {
+        renderNewWorkflow()
+        const actions = launchButton().parentElement
+        expect(actions).toHaveClass('w-full', 'sm:w-auto')
+        expect(actions).toContainElement(screen.getByRole('button', { name: 'Save draft' }))
+        expect(screen.getByRole('button', { name: 'Save draft' })).toHaveClass('flex-1', 'sm:flex-none')
+        expect(launchButton()).toHaveClass('flex-1', 'sm:flex-none')
+    })
+
     it('adds a typed action from the build palette and selects it', () => {
         renderNewWorkflow()
 
@@ -1058,6 +1067,7 @@ describe('WorkflowEditorPage', () => {
         fireEvent.change(triggerSelect(), { target: { value: 'form_submitted' } })
         fireEvent.change(formSelect('form-surrogate'), { target: { value: 'form-surrogate' } })
         expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Form: Surrogate Application')
+        expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Runs for form submissions')
         expect(radioLabels('Record type')).toEqual(['Form Submission'])
         expect(screen.getByRole('radio', { name: 'Form Submission' })).toBeDisabled()
         addNoteAction('Review application')
@@ -1117,6 +1127,7 @@ describe('WorkflowEditorPage', () => {
 
             expect(triggerSelect()).toHaveValue('form_submission_approved')
             expect(formSelect('form-egg-donor')).toHaveValue('form-egg-donor')
+            expect(screen.getByRole('button', { name: 'Trigger step' })).toHaveTextContent('Runs for form submissions')
             const routingLink = screen.getByRole('link', { name: 'Matching and lead creation: Routing tab' })
             expect(routingLink).toHaveAttribute('href', '/automation/forms/form-egg-donor?tab=routing')
             // The arrow stays on the line of its last words.

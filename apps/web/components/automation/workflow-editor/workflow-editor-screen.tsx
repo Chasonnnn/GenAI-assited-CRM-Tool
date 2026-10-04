@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { cn } from "@/lib/utils"
 import type { WorkflowEditorController, WorkflowEditorSelection } from "@/lib/workflows/use-workflow-editor"
 import { WorkflowActionPanel } from "./workflow-action-panel"
 import { WorkflowBuildPanel } from "./workflow-build-panel"
@@ -83,12 +84,15 @@ function WorkflowBreadcrumb({ controller }: { controller: WorkflowEditorControll
 function SaveButton({
     reason,
     disabled,
+    className,
     children,
     ...props
 }: React.ComponentProps<typeof Button> & { reason: string | null }) {
+    // Phones give each button an equal share of the actions row.
+    const sizeClassName = "flex-1 sm:flex-none"
     if (!reason) {
         return (
-            <Button size="sm" disabled={disabled} {...props}>
+            <Button size="sm" disabled={disabled} className={cn(sizeClassName, className)} {...props}>
                 {children}
             </Button>
         )
@@ -101,7 +105,7 @@ function SaveButton({
                         size="sm"
                         disabled
                         focusableWhenDisabled
-                        className="data-disabled:cursor-not-allowed data-disabled:opacity-50"
+                        className={cn(sizeClassName, "data-disabled:cursor-not-allowed data-disabled:opacity-50", className)}
                         {...props}
                     />
                 }
@@ -138,7 +142,7 @@ function WorkflowEditorHeader({ controller }: { controller: WorkflowEditorContro
                     </Badge>
                 </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                 {isEditing ? (
                     <SaveButton
                         reason={workflowValidationError}

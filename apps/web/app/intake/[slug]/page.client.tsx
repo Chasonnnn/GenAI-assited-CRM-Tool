@@ -26,6 +26,7 @@ import { PublicFormFieldRenderer, getPublicFieldErrorId } from "@/components/for
 import { PublicFormHeader } from "@/components/forms/PublicFormHeader"
 import { PublicSmsConsent } from "@/components/forms/PublicSmsConsent"
 import { FieldError } from "@/components/ui/field"
+import { getFormOptionLabel, getFormOptionLabels } from "@/lib/forms/option-labels"
 import { getPublicFieldValidationError } from "@/lib/forms/public-field-validation"
 import { focusFirstInvalid } from "@/lib/forms/use-form-validation"
 import {
@@ -157,9 +158,10 @@ function ReviewValue({
         )
     }
     if (Array.isArray(value)) {
-        return <span className="font-medium">{value.join(", ") || "—"}</span>
+        const labels = getFormOptionLabels(field.options, value)
+        return <span className="font-medium">{labels.join(", ") || "—"}</span>
     }
-    return <span className="font-medium">{String(value)}</span>
+    return <span className="font-medium">{getFormOptionLabel(field.options, value) ?? String(value)}</span>
 }
 
 function formatSavedDateTime(value: string | null): string {

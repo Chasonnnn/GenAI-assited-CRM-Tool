@@ -7,6 +7,7 @@ from typing import Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.constants import SYSTEM_USER_ID, WORKFLOW_APPROVAL_TIMEOUT_HOURS
@@ -24,7 +25,12 @@ from app.db.models import (
 )
 from app.schemas.auth import UserSession
 from app.schemas.forms import FormRoutingRead, FormRoutingUpdate, FormWorkflowSummary
-from app.services import audit_service, form_intake_service, notification_service
+from app.services import (
+    audit_service,
+    form_intake_service,
+    form_submission_access,
+    notification_service,
+)
 from app.utils.business_hours import calculate_approval_due_date, get_effective_timezone
 
 DONOR_KINDS = {FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value}
@@ -155,9 +161,9 @@ def _form(db: Session, submission: FormSubmission) -> Form:
 
 
 def _review_owner(db: Session, form: Form, submission: FormSubmission) -> User | None:
-    # Unlinked form workflow approvals use the editor/creator, then the oldest active admin.
+    # Preserve owner/editor priority, but only assign someone who can open the review.
     active_members = (
-        db.query(User)
+        db.query(User, Membership.role)
         .join(Membership, Membership.user_id == User.id)
         .filter(
             Membership.organization_id == form.organization_id,
@@ -165,6 +171,35 @@ def _review_owner(db: Session, form: Form, submission: FormSubmission) -> User |
             User.is_active.is_(True),
         )
     )
+
+    def eligible(rows):
+        for user, role in rows:
+            session = UserSession(
+                user_id=user.id,
+                org_id=form.organization_id,
+                role=Role(role),
+                email=user.email,
+                display_name=user.display_name,
+            )
+            try:
+                form_submission_access.require_routing_review(db, session, submission)
+                if (
+                    submission.routing_review_step == "create_lead"
+                    or form.routing_no_match == "auto"
+                ):
+                    check_record_creation(
+                        db,
+                        session,
+                        "donors" if submission.lead_kind in DONOR_KINDS else "surrogates",
+                        v2_only=True,
+                    )
+            except HTTPException as exc:
+                if exc.status_code not in {403, 404}:
+                    raise
+                continue
+            return user
+        return None
+
     model, record_id = (
         (Donor, submission.donor_id)
         if submission.donor_id
@@ -177,7 +212,7 @@ def _review_owner(db: Session, form: Form, submission: FormSubmission) -> User |
             .first()
         )
         owner = (
-            active_members.filter(User.id == record.owner_id).first()
+            eligible(active_members.filter(User.id == record.owner_id))
             if record is not None and record.owner_type == OwnerType.USER.value
             else None
         )
@@ -188,15 +223,13 @@ def _review_owner(db: Session, form: Form, submission: FormSubmission) -> User |
         form.created_by_user_id,
     ):
         if user_id:
-            owner = active_members.filter(User.id == user_id).first()
+            owner = eligible(active_members.filter(User.id == user_id))
             if owner:
                 return owner
-    owner = (
+    owner = eligible(
         active_members.filter(
             Membership.role.in_([Role.ADMIN.value, Role.DEVELOPER.value]),
-        )
-        .order_by(User.created_at.asc())
-        .first()
+        ).order_by(User.created_at.asc())
     )
     return owner
 
@@ -271,6 +304,8 @@ def _request_review(
         org=org,
         timeout_hours=WORKFLOW_APPROVAL_TIMEOUT_HOURS,
     )
+    # Whole minutes; browser time inputs drop values with fractional seconds.
+    due_at = due_at.replace(second=0, microsecond=0)
     local_due = due_at.astimezone(ZoneInfo(get_effective_timezone(owner, org)))
     task = Task(
         organization_id=submission.organization_id,
@@ -404,12 +439,10 @@ def _review(
     session: UserSession,
     operation: Literal["run_match", "create_lead", "dismiss"],
 ) -> tuple[FormSubmission, str]:
-    from app.services import form_submission_access
-
     after_commit: list[Callable[[], None]] = []
     # Reject before any write so a refused request leaves the review and its task untouched.
     submission = lock_submission(db, session.org_id, submission_id)
-    form_submission_access.check_submission(db, session, submission, write=True)
+    form_submission_access.require_routing_review(db, session, submission)
     step = submission.routing_review_step
     expected = {"run_match": "match", "create_lead": "create_lead"}.get(operation)
     if submission.match_status != "routing_review" or not step or (expected and step != expected):
