@@ -47,5 +47,15 @@ describe("PageHeader", () => {
 
         expect(screen.queryByRole("link")).not.toBeInTheDocument()
         expect(container.querySelector('[data-slot="page-header-actions"]')).toBeNull()
+        expect(container.querySelector('[data-slot="page-header-eyebrow"]')).toBeNull()
+    })
+
+    it("renders an optional eyebrow line above the title", () => {
+        const { container } = render(<PageHeader title="Dashboard" eyebrow="Good morning, Test" />)
+
+        const eyebrow = container.querySelector('[data-slot="page-header-eyebrow"]')
+        expect(eyebrow).toHaveTextContent("Good morning, Test")
+        expect(eyebrow).toHaveClass("text-sm", "text-muted-foreground", "truncate")
+        expect(screen.getByRole("heading", { level: 1, name: "Dashboard" })).toBeInTheDocument()
     })
 })

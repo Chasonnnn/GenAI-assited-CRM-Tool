@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils"
 type PageHeaderProps = {
     /** Must match the sidebar label for top-level pages. */
     title: React.ReactNode
+    /** Small muted line above the title, such as a greeting. */
+    eyebrow?: React.ReactNode
     /** Leading back button for detail and editor pages. Top-level pages leave it unset. */
     back?: { href: string; label: string } | undefined
     /** Inline status after the title, such as a status badge or save state. */
@@ -29,6 +31,7 @@ type PageHeaderProps = {
  */
 function PageHeader({
     title,
+    eyebrow,
     back,
     meta,
     actions,
@@ -45,20 +48,27 @@ function PageHeader({
             )}
         >
             <div className="flex min-h-16 flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3">
-                <div className="flex min-w-0 max-w-full items-center gap-2">
-                    {back ? (
-                        <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="-ml-2"
-                            aria-label={back.label}
-                            render={<Link href={back.href} />}
-                        >
-                            <ArrowLeftIcon aria-hidden="true" />
-                        </Button>
+                <div className="flex min-w-0 max-w-full flex-col">
+                    {eyebrow ? (
+                        <p data-slot="page-header-eyebrow" className="truncate text-sm text-muted-foreground">
+                            {eyebrow}
+                        </p>
                     ) : null}
-                    <h1 className="truncate text-2xl font-semibold">{title}</h1>
-                    {meta}
+                    <div className="flex min-w-0 max-w-full items-center gap-2">
+                        {back ? (
+                            <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="-ml-2"
+                                aria-label={back.label}
+                                render={<Link href={back.href} />}
+                            >
+                                <ArrowLeftIcon aria-hidden="true" />
+                            </Button>
+                        ) : null}
+                        <h1 className="truncate text-2xl font-semibold">{title}</h1>
+                        {meta}
+                    </div>
                 </div>
                 {actions ? (
                     <div

@@ -18,6 +18,7 @@ import { DashboardFiltersProvider, useDashboardFilters } from "./context/dashboa
 import { DashboardFilterBar } from "./components/dashboard-filter-bar"
 import { KPICardsSection } from "./components/kpi-cards-section"
 import { AttentionNeededPanel } from "./components/attention-needed-panel"
+import { DashboardGreeting } from "./components/dashboard-greeting"
 import { trackDashboardViewed } from "@/lib/workflow-metrics"
 
 const TrendChart = dynamic(
@@ -137,6 +138,15 @@ function DashboardContent() {
         <div className="flex flex-1 flex-col">
             <PageHeader
                 title="Dashboard"
+                eyebrow={
+                    user ? (
+                        <DashboardGreeting
+                            key={user.user_id}
+                            userId={user.user_id}
+                            displayName={user.display_name}
+                        />
+                    ) : null
+                }
                 actions={
                     <DashboardFilterBar
                         lastUpdated={lastUpdated}
