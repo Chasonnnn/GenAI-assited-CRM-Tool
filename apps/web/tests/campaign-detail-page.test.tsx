@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
 import { useQuery } from "@tanstack/react-query"
+import type { Campaign } from "@/lib/api/campaigns"
 import { ApiError } from "@/lib/api"
 
 vi.mock("@tanstack/react-query", async (importOriginal) => {
@@ -29,7 +30,7 @@ let mockPreviewData: {
         stage: string | null
     }>
 } = { total_count: 0, sample_recipients: [] }
-let mockCampaignData = {
+let mockCampaignData: Campaign = {
     scope: "org" as "personal" | "org",
     can_edit: true, can_send: true, can_publish: false,
     proposed_by_name: null as string | null,
@@ -42,6 +43,7 @@ let mockCampaignData = {
     message_template_version_id: null as string | null,
     message_template_name: null as string | null,
     recipient_type: "case",
+    include_unsubscribed: false,
     filter_criteria: {} as Record<string, unknown>,
     scheduled_at: null as string | null,
     status: "completed",
@@ -193,6 +195,7 @@ describe("CampaignDetailPage", () => {
             message_template_version_id: null,
             message_template_name: null,
             recipient_type: "case",
+            include_unsubscribed: false,
             filter_criteria: {},
             scheduled_at: null,
             status: "completed",

@@ -1,9 +1,10 @@
 import type { ReactNode } from "react"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { assert, beforeEach, describe, expect, it, vi } from "vitest"
 
 import PlatformWorkflowTemplatePage from "@/app/ops/templates/workflows/[id]/page.client"
 import type { PlatformWorkflowTemplate } from "@/lib/api/platform"
+import type { Condition } from "@/lib/api/workflows"
 
 const templateState = vi.hoisted(() => ({
     data: {
@@ -153,27 +154,25 @@ describe("platform workflow template draft ownership", () => {
         }
     })
 
-    it("saves donor-only conditions and the explicit automatic creation option", async () => {
+    it("saves donor-only conditions on a form-submitted template", async () => {
         templateState.data = {
             ...templateState.data,
             draft: {
                 ...templateState.data.draft,
                 trigger_type: "form_submitted",
                 conditions: [{ field: "lead_kind", operator: "in", value: ["egg_donor", "sperm_donor"] }],
-                actions: [{ action_type: "create_intake_lead", source: "website" }],
+                actions: [{ action_type: "add_note", content: "Review the application." }],
             },
         }
         mutationMocks.update.mockResolvedValue(templateState.data)
         render(<PlatformWorkflowTemplatePage />)
-        const automaticCreation = screen.getByRole("switch", { name: "Create donor after photo scan" })
-        expect(automaticCreation).not.toBeChecked()
-        fireEvent.click(automaticCreation)
+        expect(screen.queryByRole("switch", { name: "Create donor after photo scan" })).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
         await waitFor(() => expect(mutationMocks.update).toHaveBeenCalledWith({
             id: "workflow-template-1",
             payload: expect.objectContaining({
                 conditions: [{ field: "lead_kind", operator: "in", value: ["egg_donor", "sperm_donor"] }],
-                actions: [{ action_type: "create_intake_lead", source: "website", auto_promote: true }],
+                actions: [{ action_type: "add_note", content: "Review the application." }],
             }),
         }))
     })
@@ -270,6 +269,13 @@ describe("platform workflow template draft ownership", () => {
     })
 
     it("requires stage references to be reselected when the donor subtype changes", async () => {
+        const legacyStageCondition = {
+            field: "stage_id",
+            operator: "equals",
+            value: "egg-stage-to",
+            stage_key: "egg-ready",
+            stage_keys: ["egg-ready"],
+        } satisfies Condition & { stage_key: string; stage_keys: string[] }
         workflowOptions.statuses = [
             { id: "egg-stage-from", value: "egg_review", label: "Egg Review" },
             { id: "egg-stage-to", value: "egg_ready", label: "Egg Ready" },
@@ -292,13 +298,7 @@ describe("platform workflow template draft ownership", () => {
                     to_stage_key: "egg-ready",
                 },
                 conditions: [
-                    {
-                        field: "stage_id",
-                        operator: "equals",
-                        value: "egg-stage-to",
-                        stage_key: "egg-ready",
-                        stage_keys: ["egg-ready"],
-                    },
+                    legacyStageCondition,
                     { field: "education", operator: "equals", value: "college" },
                 ],
                 actions: [
@@ -342,17 +342,25 @@ describe("platform workflow template draft ownership", () => {
         fireEvent.click(donorCreatedOption)
 
         expect(screen.getByText("Select a stage for each stage condition.")).toBeInTheDocument()
-        const stageCondition = screen.getAllByRole("button", { name: "Remove condition" })[0]
-            .closest('[data-slot="card"]') as HTMLElement
-        fireEvent.click(within(stageCondition).getAllByRole("combobox")[2])
+        const removeCondition = screen.getAllByRole("button", { name: "Remove condition" })[0]
+        assert.isDefined(removeCondition)
+        const stageCondition = removeCondition.closest<HTMLElement>('[data-slot="card"]')
+        assert.isNotNull(stageCondition)
+        const conditionStageSelect = within(stageCondition).getAllByRole("combobox")[2]
+        assert.isDefined(conditionStageSelect)
+        fireEvent.click(conditionStageSelect)
         const spermConditionStage = screen.getByRole("option", { name: "Sperm Ready" })
         fireEvent.mouseMove(spermConditionStage)
         fireEvent.click(spermConditionStage)
 
         expect(screen.getByText("Update actions need a value.")).toBeInTheDocument()
-        const stageAction = screen.getAllByRole("button", { name: "Remove action" })[0]
-            .closest('[data-slot="card"]') as HTMLElement
-        fireEvent.click(within(stageAction).getAllByRole("combobox")[2])
+        const removeAction = screen.getAllByRole("button", { name: "Remove action" })[0]
+        assert.isDefined(removeAction)
+        const stageAction = removeAction.closest<HTMLElement>('[data-slot="card"]')
+        assert.isNotNull(stageAction)
+        const actionStageSelect = within(stageAction).getAllByRole("combobox")[2]
+        assert.isDefined(actionStageSelect)
+        fireEvent.click(actionStageSelect)
         const spermActionStage = screen.getAllByRole("option", { name: "Sperm Ready" }).at(-1) as HTMLElement
         fireEvent.mouseMove(spermActionStage)
         fireEvent.click(spermActionStage)
@@ -502,13 +510,13 @@ describe("platform workflow template draft ownership", () => {
 
     it("offers sample loaders only on a new, empty workflow", () => {
         const { unmount } = render(<PlatformWorkflowTemplatePage />)
-        expect(screen.queryByRole("button", { name: "Load Shared Intake Sample" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Load Zapier Conversion Sample" })).not.toBeInTheDocument()
         unmount()
 
         routeState.id = "new"
         render(<PlatformWorkflowTemplatePage />)
-        expect(screen.getByRole("button", { name: "Load Shared Intake Sample" })).toBeInTheDocument()
         expect(screen.getByRole("button", { name: "Load Zapier Conversion Sample" })).toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Load Shared Intake Sample" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument()
     })
 

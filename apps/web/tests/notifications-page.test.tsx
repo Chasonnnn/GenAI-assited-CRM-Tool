@@ -131,7 +131,7 @@ describe('NotificationsPage', () => {
         )
     })
 
-    it('routes approval-needed notifications to tasks', () => {
+    it('routes approval-needed notifications to their approval row', () => {
         mockUseNotifications.mockReturnValue({
             data: {
                 unread_count: 1,
@@ -143,6 +143,7 @@ describe('NotificationsPage', () => {
                         body: 'A status change requires approval.',
                         entity_type: 'surrogate',
                         entity_id: 's2',
+                        request_id: 'req-2',
                         read_at: null,
                         created_at: new Date().toISOString(),
                     },
@@ -155,10 +156,10 @@ describe('NotificationsPage', () => {
         render(<NotificationsPage />)
         fireEvent.click(screen.getByText('Approval needed'))
         expect(mockMarkRead).toHaveBeenCalledWith('n3')
-        expect(mockPush).toHaveBeenCalledWith('/tasks?filter=my_tasks&focus=approvals')
+        expect(mockPush).toHaveBeenCalledWith('/tasks?filter=my_tasks&focus=approvals&approval=req-2')
     })
 
-    it('routes overdue task notifications to the overdue section', () => {
+    it('routes overdue task notifications to the task in the overdue section', () => {
         mockUseNotifications.mockReturnValue({
             data: {
                 unread_count: 1,
@@ -182,7 +183,7 @@ describe('NotificationsPage', () => {
         render(<NotificationsPage />)
         fireEvent.click(screen.getByText('Task overdue'))
         expect(mockMarkRead).toHaveBeenCalledWith('n4')
-        expect(mockPush).toHaveBeenCalledWith('/tasks?filter=my_tasks&focus=overdue')
+        expect(mockPush).toHaveBeenCalledWith('/tasks?filter=my_tasks&focus=overdue&task=t2')
     })
 
     it('shows empty state when no notifications', () => {
@@ -290,6 +291,17 @@ describe('NotificationsPage', () => {
         expect(mockMarkAllRead).toHaveBeenCalledTimes(1)
     })
 
+    it('includes routing review notifications in Task Updates', async () => {
+        render(<NotificationsPage />)
+        fireEvent.click(screen.getByRole('combobox'))
+        const option = await screen.findByRole('option', { name: 'Task Updates' })
+        fireEvent.mouseMove(option)
+        fireEvent.click(option)
+        expect(mockUseNotifications.mock.lastCall?.[0].notification_types).toEqual(
+            expect.arrayContaining(['workflow_approval_requested', 'form_submission_routing_review']),
+        )
+    })
+
     it('applies match and appointment filters and restores All', async () => {
         render(<NotificationsPage />)
         expect(mockUseNotifications.mock.lastCall?.[0]).not.toHaveProperty('notification_types')
@@ -323,7 +335,7 @@ describe('NotificationsPage', () => {
         await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
 
         fireEvent.click(screen.getByRole('combobox'))
-        const all = await screen.findByRole('option', { name: 'All', exact: true })
+        const all = await screen.findByRole('option', { name: 'All' })
         fireEvent.mouseMove(all)
         fireEvent.click(all)
         expect(screen.getByRole('combobox')).toHaveTextContent('All')

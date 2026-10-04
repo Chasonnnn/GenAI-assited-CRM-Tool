@@ -1,12 +1,7 @@
 import type { Notification } from "@/lib/api/notifications"
 
-type NotificationRouteInput = Pick<Notification, "type" | "entity_type" | "entity_id">
-
-const APPROVAL_NOTIFICATION_TYPES = new Set([
-    "workflow_approval_requested",
-    "workflow_approval_expired",
-    "status_change_requested",
-])
+type NotificationRouteInput = Pick<Notification, "type" | "entity_type" | "entity_id"> &
+    Partial<Pick<Notification, "request_id">>
 
 const TASK_FOCUS_BY_TYPE: Record<string, string> = {
     task_overdue: "overdue",
@@ -14,46 +9,53 @@ const TASK_FOCUS_BY_TYPE: Record<string, string> = {
     task_assigned: "tasks",
 }
 
-const buildTasksHref = (focus?: string) => {
-    const params = new URLSearchParams({ filter: "my_tasks" })
-    if (focus) {
-        params.set("focus", focus)
-    }
-    return `/tasks?${params.toString()}`
+const buildTasksHref = (params: { focus?: string; task?: string; approval?: string } = {}) => {
+    const search = new URLSearchParams({ filter: "my_tasks" })
+    if (params.focus) search.set("focus", params.focus)
+    if (params.task) search.set("task", params.task)
+    if (params.approval) search.set("approval", params.approval)
+    return `/tasks?${search.toString()}`
+}
+
+function getRecordHref(notification: NotificationRouteInput): string | null {
+    const { entity_type: entityType, entity_id: entityId } = notification
+    if (!entityId) return null
+    if (entityType === "surrogate" || entityType === "case") return `/surrogates/${entityId}`
+    if (entityType === "intended_parent") return `/intended-parents/${entityId}`
+    if (entityType === "match") return `/intended-parents/matches/${entityId}`
+    if (entityType === "donor") return `/donors/${entityId}`
+    if (entityType === "task" || entityType === "donor_task") return buildTasksHref({ task: entityId })
+    if (entityType === "appointment") return `/appointments?appointment=${entityId}`
+    return null
 }
 
 export function getNotificationHref(notification: NotificationRouteInput): string {
-    if (notification.type === "intelligent_suggestion_digest") {
-        return "/surrogates?dynamic_filter=intelligent_any"
-    }
+    const entityId = notification.entity_id ?? undefined
 
-    if (APPROVAL_NOTIFICATION_TYPES.has(notification.type)) {
-        return buildTasksHref("approvals")
+    switch (notification.type) {
+        case "intelligent_suggestion_digest":
+            return "/surrogates?dynamic_filter=intelligent_any"
+        case "workflow_approval_requested":
+            return buildTasksHref({ focus: "approvals", ...(entityId ? { approval: entityId } : {}) })
+        case "workflow_approval_expired":
+            return buildTasksHref({ focus: "approvals" })
+        case "status_change_requested":
+            // Pending: the approval row on /tasks. Resolved: the record itself.
+            if (notification.request_id) {
+                return buildTasksHref({ focus: "approvals", approval: notification.request_id })
+            }
+            return getRecordHref(notification) ?? buildTasksHref({ focus: "approvals" })
+        case "form_submission_routing_review":
+            if (notification.entity_type === "form" && entityId) {
+                return `/automation/form-submissions?${new URLSearchParams({ form: entityId })}`
+            }
+            break
     }
 
     const taskFocus = TASK_FOCUS_BY_TYPE[notification.type]
     if (taskFocus) {
-        return buildTasksHref(taskFocus)
+        return buildTasksHref({ focus: taskFocus, ...(entityId ? { task: entityId } : {}) })
     }
 
-    if ((notification.entity_type === "surrogate" || notification.entity_type === "case") && notification.entity_id) {
-        return `/surrogates/${notification.entity_id}`
-    }
-    if (notification.entity_type === "intended_parent" && notification.entity_id) {
-        return `/intended-parents/${notification.entity_id}`
-    }
-    if (notification.entity_type === "match" && notification.entity_id) {
-        return `/intended-parents/matches/${notification.entity_id}`
-    }
-    if (notification.entity_type === "donor" && notification.entity_id) {
-        return `/donors/${notification.entity_id}`
-    }
-    if ((notification.entity_type === "task" || notification.entity_type === "donor_task") && notification.entity_id) {
-        return buildTasksHref()
-    }
-    if (notification.entity_type === "appointment" && notification.entity_id) {
-        return "/appointments"
-    }
-
-    return "/notifications"
+    return getRecordHref(notification) ?? "/notifications"
 }

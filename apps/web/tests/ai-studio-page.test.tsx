@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react"
+import type { AIStudioSettings } from "@/lib/api/ai-studio"
 import AIStudioPage from "../app/(app)/ai-studio/page"
 
 const mockUseAuth = vi.fn()
@@ -30,7 +31,7 @@ const generatedDraft = {
     updated_at: "2026-05-09T12:00:00Z",
 }
 
-let studioSettings = {
+let studioSettings: AIStudioSettings = {
     has_api_key: true,
     api_key_masked: "sk-s...1234",
     agents_md: "Studio agents",
@@ -172,7 +173,9 @@ describe("AIStudioPage", () => {
         await waitFor(() => {
             expect(mockGenerate).toHaveBeenCalled()
         })
-        const payload = mockGenerate.mock.calls[0][0]
+        const call = mockGenerate.mock.calls[0]
+        if (!call) throw new Error("Expected generated draft request")
+        const payload = call[0]
         expect(payload.audience).toBe("")
         expect(payload.reference_images).toEqual([
             {

@@ -69,7 +69,12 @@ import {
     useSetAvailabilityRules,
 } from "@/lib/hooks/use-appointments"
 import { useUserIntegrations } from "@/lib/hooks/use-user-integrations"
-import type { AppointmentType, MeetingMode } from "@/lib/api/appointments"
+import type { AppointmentClientMessages, AppointmentType, MeetingMode } from "@/lib/api/appointments"
+import {
+    AppointmentClientMessagesFields,
+    AppointmentTypeWorkflows,
+    DEFAULT_CLIENT_MESSAGES,
+} from "@/components/appointments/appointment-type-messages"
 import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
 import { useFormValidation } from "@/lib/forms/use-form-validation"
 import { validateRequired } from "@/lib/forms/validators"
@@ -252,6 +257,7 @@ type AppointmentTypeFormState = {
     dial_in_number: string
     auto_approve: boolean
     reminder_hours_before: number
+    client_messages: AppointmentClientMessages
 }
 
 type AppointmentTypeFormUpdater = (
@@ -742,6 +748,20 @@ function AppointmentTypeDialog({
                     validation={validation}
                     onFormDataChange={onFormDataChange}
                 />
+                <AppointmentClientMessagesFields
+                    messages={formData.client_messages}
+                    reminderHours={formData.reminder_hours_before}
+                    onMessageChange={(key, message) =>
+                        onFormDataChange((current) => ({
+                            ...current,
+                            client_messages: { ...current.client_messages, [key]: message },
+                        }))
+                    }
+                    onReminderHoursChange={(hours) =>
+                        onFormDataChange((current) => ({ ...current, reminder_hours_before: hours }))
+                    }
+                />
+                {editingType && <AppointmentTypeWorkflows typeName={editingType.name} />}
             </DialogBody>
             <DialogFooter>
                 <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
@@ -981,6 +1001,7 @@ function AppointmentTypesCard() {
         dial_in_number: "",
         auto_approve: false,
         reminder_hours_before: 24,
+        client_messages: DEFAULT_CLIENT_MESSAGES,
     })
 
     const validation = useFormValidation({ values: formData, validate: validateAppointmentTypeForm })
@@ -998,6 +1019,7 @@ function AppointmentTypesCard() {
             dial_in_number: "",
             auto_approve: false,
             reminder_hours_before: 24,
+            client_messages: DEFAULT_CLIENT_MESSAGES,
         })
         setDialogOpen(true)
     }
@@ -1019,6 +1041,7 @@ function AppointmentTypesCard() {
             dial_in_number: type.dial_in_number || "",
             auto_approve: type.auto_approve ?? false,
             reminder_hours_before: type.reminder_hours_before,
+            client_messages: type.client_messages ?? DEFAULT_CLIENT_MESSAGES,
         })
         setDialogOpen(true)
     }

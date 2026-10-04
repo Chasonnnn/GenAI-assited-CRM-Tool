@@ -798,6 +798,7 @@ async def sync_binding(db: Session, *, binding_id: UUID, org_id: UUID) -> int:
     binding.sync_error = None
     db.flush()
 
+    external_changes = []
     for event_id, remote in remotes.items():
         appointment = (
             db.query(Appointment)
@@ -812,12 +813,23 @@ async def sync_binding(db: Session, *, binding_id: UUID, org_id: UUID) -> int:
             .one_or_none()
         )
         if appointment is not None:
+            before = (appointment.status, appointment.scheduled_start)
             observed = appointment_google_sync_service.observe_remote(db, appointment, remote)
             if inspect.isawaitable(observed):
-                await observed
+                observed = await observed
+            if observed == "applied":
+                external_changes.append((appointment, *before))
     try:
         db.commit()
     except Exception:
         db.rollback()
         raise
+    from app.services import scheduling_v2_service
+
+    for appointment, before_status, before_start in external_changes:
+        trigger = scheduling_v2_service.external_change_trigger(
+            before_status, before_start, appointment
+        )
+        if trigger is not None:
+            scheduling_v2_service.fire_appointment_workflows(db, appointment, trigger)
     return changed

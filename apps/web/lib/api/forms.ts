@@ -11,7 +11,8 @@ export type FormPurpose = 'surrogate_application' | 'lead_capture' | 'event_inta
 export type FormLeadKind = 'surrogate' | 'egg_donor' | 'sperm_donor'
 export type FormSubmissionStatus = 'pending_review' | 'approved' | 'rejected'
 type FormLinkMode = 'shared'
-type SharedSubmissionOutcome = 'workflow_pending' | 'linked' | 'ambiguous_review' | 'lead_created'
+type SharedSubmissionOutcome = 'workflow_pending' | 'linked' | 'ambiguous_review' | 'lead_created' | 'routing_review'
+export type FormSubmissionRoutingReviewStep = 'match' | 'create_lead'
 type EmbedHealthCheckStatus = 'pass' | 'warning' | 'block'
 type EmbedHealthStatus = 'ready' | 'needs_attention' | 'blocked'
 export type FieldSensitivity =
@@ -246,6 +247,7 @@ export interface FormSubmissionRead {
     match_status: SharedSubmissionOutcome
     match_reason?: string | null
     matched_at?: string | null
+    routing_review_step?: FormSubmissionRoutingReviewStep | null
     files: FormSubmissionFileRead[]
 }
 
@@ -325,6 +327,33 @@ export interface FormIntakeLinkCreatePayload {
 
 export interface FormIntakeLinkUpdatePayload extends FormIntakeLinkCreatePayload {
     is_active?: boolean
+}
+
+export type FormRoutingExactMatch = 'auto' | 'review'
+export type FormRoutingNoMatch = 'auto' | 'review' | 'off'
+export type FormRoutingLeadSource = 'website' | 'form_embed'
+
+export interface FormRoutingUpdate {
+    exact_match: FormRoutingExactMatch
+    no_match: FormRoutingNoMatch
+    lead_source: FormRoutingLeadSource | null
+    auto_create_donor: boolean
+}
+
+export interface FormRoutingRead extends FormRoutingUpdate {
+    form_id: string
+    lead_kind: FormLeadKind
+    updated_at: string
+}
+
+export type FormWorkflowTriggerType = 'form_submitted' | 'form_submission_approved' | 'form_submission_rejected'
+
+export interface FormWorkflowSummary {
+    id: string
+    name: string
+    trigger_type: FormWorkflowTriggerType
+    is_enabled: boolean
+    scope: 'org' | 'personal'
 }
 
 export interface FormDeliverySettings {
@@ -658,6 +687,18 @@ export function updateFormDeliverySettings(
     return api.patch<FormDeliverySettings>(`/forms/${formId}/delivery-settings`, payload)
 }
 
+export function getFormRouting(formId: string): Promise<FormRoutingRead> {
+    return api.get<FormRoutingRead>(`/forms/${formId}/routing`)
+}
+
+export function updateFormRouting(formId: string, payload: FormRoutingUpdate): Promise<FormRoutingRead> {
+    return api.put<FormRoutingRead>(`/forms/${formId}/routing`, payload)
+}
+
+export function listFormWorkflows(formId: string): Promise<FormWorkflowSummary[]> {
+    return api.get<FormWorkflowSummary[]>(`/forms/${formId}/workflows`)
+}
+
 export function listFormIntakeLinks(
     formId: string,
     includeInactive = false,
@@ -936,6 +977,18 @@ export function retrySubmissionMatch(
         `/forms/submissions/${submissionId}/match/retry`,
         payload
     )
+}
+
+export function runSubmissionRoutingMatch(submissionId: string): Promise<ResolveSubmissionMatchResponse> {
+    return api.post<ResolveSubmissionMatchResponse>(`/forms/submissions/${submissionId}/routing/run-match`)
+}
+
+export function createSubmissionRoutingLead(submissionId: string): Promise<ResolveSubmissionMatchResponse> {
+    return api.post<ResolveSubmissionMatchResponse>(`/forms/submissions/${submissionId}/routing/create-lead`)
+}
+
+export function dismissSubmissionRoutingReview(submissionId: string): Promise<ResolveSubmissionMatchResponse> {
+    return api.post<ResolveSubmissionMatchResponse>(`/forms/submissions/${submissionId}/routing/dismiss`)
 }
 
 export function getIntakeLead(leadId: string): Promise<IntakeLeadRead> {

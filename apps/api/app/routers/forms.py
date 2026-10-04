@@ -53,6 +53,8 @@ from app.schemas.forms import (
     FormMappingOption,
     FormPublishResponse,
     FormRead,
+    FormRoutingRead,
+    FormRoutingUpdate,
     FormSchema,
     FormSubmissionAnswersUpdate,
     FormSubmissionAnswersUpdateResponse,
@@ -65,6 +67,7 @@ from app.schemas.forms import (
     FormSubmissionStatusUpdate,
     FormSummary,
     FormUpdate,
+    FormWorkflowSummary,
     IntakeLeadPromoteRequest,
     IntakeLeadPromoteResponse,
     IntakeLeadRead,
@@ -83,6 +86,7 @@ from app.services import (
     form_application_access,
     form_draft_service,
     form_intake_service,
+    form_routing_service,
     form_service,
     form_submission_access,
     form_submission_service,
@@ -305,6 +309,7 @@ def _submission_read(
         intake_link_id=submission.intake_link_id,
         intake_lead_id=submission.intake_lead_id,
         match_status=submission.match_status,
+        routing_review_step=submission.routing_review_step,
         match_reason=submission.match_reason,
         matched_at=submission.matched_at,
         files=[
@@ -571,6 +576,8 @@ def use_form_template(
         raise HTTPException(status_code=400, detail="Template schema is missing")
     lead_kind = _template_lead_kind(settings)
     _require_donor_form_mutation(db, session, lead_kind)
+    if lead_kind in DONOR_LEAD_KINDS:
+        check_record_creation(db, session, "donors", v2_only=True)
     template_purpose = settings.get("purpose")
     purpose = (
         template_purpose
@@ -617,6 +624,8 @@ def create_form(
     db: Annotated[Session, "fastapi_param"] = Depends(get_db),
 ):
     _require_donor_form_mutation(db, session, body.lead_kind)
+    if body.lead_kind in DONOR_LEAD_KINDS:
+        check_record_creation(db, session, "donors", v2_only=True)
     form = form_service.create_form(
         db=db,
         org_id=session.org_id,
@@ -695,6 +704,8 @@ def update_form(
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
     _require_donor_form_mutation(db, session, form.lead_kind, body.lead_kind)
+    if body.lead_kind in DONOR_LEAD_KINDS and body.lead_kind != form.lead_kind:
+        check_record_creation(db, session, "donors", v2_only=True)
     update_kwargs = {
         "db": db,
         "form": form,
@@ -771,6 +782,62 @@ def set_default_surrogate_application_form(
         status_code = 404 if "not found" in detail.lower() else 400
         raise HTTPException(status_code=status_code, detail=detail) from exc
     return _form_read(form, default_form_id=form.id)
+
+
+@router.get(
+    "/{form_id}/routing",
+    response_model=FormRoutingRead,
+    dependencies=[Depends(require_permission(POLICIES["forms"].default))],
+)
+def get_form_routing(
+    form_id: UUID,
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    form = form_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return form_routing_service.routing_read(form)
+
+
+@router.put(
+    "/{form_id}/routing",
+    response_model=FormRoutingRead,
+    dependencies=[
+        Depends(require_permission(POLICIES["forms"].default)),
+        Depends(require_csrf_header),
+    ],
+)
+def update_form_routing(
+    form_id: UUID,
+    body: FormRoutingUpdate,
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    form = form_service.get_form_for_update(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    _require_donor_form_mutation(db, session, form.lead_kind)
+    try:
+        return form_routing_service.update_routing(db, form=form, body=body, session=session)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{form_id}/workflows",
+    response_model=list[FormWorkflowSummary],
+    dependencies=[Depends(require_permission(POLICIES["forms"].default))],
+)
+def list_form_workflows(
+    form_id: UUID,
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    form = form_service.get_form(db, session.org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+    return form_routing_service.list_form_workflows(db, form=form, session=session)
 
 
 @router.patch(
@@ -885,13 +952,6 @@ def publish_form(
             form_service.ensure_default_surrogate_application_form(
                 db,
                 session.org_id,
-                commit=False,
-            )
-            form_intake_service.ensure_default_intake_routing_workflow(
-                db,
-                org_id=session.org_id,
-                form=form,
-                user_id=session.user_id,
                 commit=False,
             )
             db.commit()
@@ -1597,6 +1657,8 @@ def retry_submission_match(
             reviewer_id=session.user_id,
             review_notes=body.review_notes,
         )
+    except form_intake_service.SubmissionLinkConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1611,6 +1673,68 @@ def retry_submission_match(
         outcome=outcome,
         candidate_count=candidate_count,
     )
+
+
+def _routing_review_response(db: Session, session: UserSession, submission_id: UUID, operation):
+    submission = form_submission_service.get_submission(db, session.org_id, submission_id)
+    if not submission:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    form_submission_access.check_submission(db, session, submission, write=True)
+    _require_donor_lead_access(db, session, submission.lead_kind, require_write=True)
+    try:
+        submission, outcome = operation(db, submission_id=submission_id, session=session)
+    except form_routing_service.RoutingReviewConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    files = form_submission_service.list_submission_files(db, session.org_id, submission.id)
+    candidates = form_intake_service.list_match_candidates(
+        db, org_id=session.org_id, submission_id=submission.id, session=session
+    )
+    return FormSubmissionMatchResolveResponse(
+        submission=_submission_read_for_org(db, session.org_id, submission, files),
+        outcome=outcome,
+        candidate_count=len(candidates),
+    )
+
+
+@router.post(
+    "/submissions/{submission_id}/routing/run-match",
+    response_model=FormSubmissionMatchResolveResponse,
+    dependencies=[Depends(_require_submission_review), Depends(require_csrf_header)],
+)
+def routing_run_match(
+    submission_id: UUID,
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return _routing_review_response(db, session, submission_id, form_routing_service.run_match)
+
+
+@router.post(
+    "/submissions/{submission_id}/routing/create-lead",
+    response_model=FormSubmissionMatchResolveResponse,
+    dependencies=[Depends(_require_submission_review), Depends(require_csrf_header)],
+)
+def routing_create_lead(
+    submission_id: UUID,
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return _routing_review_response(db, session, submission_id, form_routing_service.create_lead)
+
+
+@router.post(
+    "/submissions/{submission_id}/routing/dismiss",
+    response_model=FormSubmissionMatchResolveResponse,
+    dependencies=[Depends(_require_submission_review), Depends(require_csrf_header)],
+)
+def routing_dismiss(
+    submission_id: UUID,
+    session: Annotated[UserSession, Depends(get_current_session)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return _routing_review_response(db, session, submission_id, form_routing_service.dismiss)
 
 
 @router.get(

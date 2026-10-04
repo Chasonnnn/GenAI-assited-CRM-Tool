@@ -151,6 +151,7 @@ export interface WorkflowOptions {
     trigger_entity_types?: Record<string, string>
     condition_operators: { value: string; label: string }[]
     condition_fields: string[]
+    condition_fields_by_trigger?: Record<string, string[]>
     update_fields: string[]
     email_variables: string[]
     email_templates: { id: string; name: string }[]
@@ -164,6 +165,7 @@ export interface WorkflowOptions {
     queues: { id: string; name: string }[]
     statuses: { id?: string; value: string; label: string; is_active?: boolean }[]
     forms?: { id: string; name: string; lead_kind?: string; lead_kinds?: string[] }[]
+    appointment_type_names?: string[]
 }
 
 export interface WorkflowTestRequest {
@@ -203,6 +205,7 @@ export interface ListWorkflowsParams {
     trigger_type?: string
     scope?: WorkflowScope | null
     subject_type?: WorkflowSubjectType
+    appointment_type_name?: string
 }
 
 export async function listWorkflows(params?: ListWorkflowsParams): Promise<WorkflowListItem[]> {
@@ -211,6 +214,7 @@ export async function listWorkflows(params?: ListWorkflowsParams): Promise<Workf
     if (params?.trigger_type) searchParams.set("trigger_type", params.trigger_type)
     if (params?.scope) searchParams.set("scope", params.scope)
     if (params?.subject_type) searchParams.set("subject_type", params.subject_type)
+    if (params?.appointment_type_name) searchParams.set("appointment_type_name", params.appointment_type_name)
 
     const query = searchParams.toString()
     return api.get<WorkflowListItem[]>(`/workflows${query ? `?${query}` : ""}`)

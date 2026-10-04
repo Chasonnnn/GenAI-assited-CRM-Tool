@@ -48,7 +48,16 @@ async def lifespan(_: FastAPI):
                 _worker_task = None
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    lifespan=lifespan,
+    telemetry={
+        "tracing": False,
+        "operation_spans": False,
+        "logs": False,
+        "metrics": False,
+        "auto_configure": False,
+    },
+)
 
 
 @app.get("/health")

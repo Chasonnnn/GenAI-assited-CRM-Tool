@@ -6,6 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
 import { useFormBuilderSaveQueue } from "@/lib/forms/use-form-builder-save-queue"
 
+function requiredItem<T>(items: readonly T[], index: number): T {
+    const item = items[index]
+    if (item === undefined) throw new Error(`Expected item at index ${index}`)
+    return item
+}
+
 type SaveRequest = { fingerprint: string; finish: () => void; fail: () => void }
 
 // A minimal builder: a real save mutation, the save queue, and autosave paused while the queue
@@ -99,12 +105,12 @@ describe("useFormBuilderSaveQueue", () => {
         expect(requests).toHaveLength(1)
         expect(result.current.isBusy).toBe(true)
 
-        requests[0].fail()
+        requiredItem(requests, 0).fail()
         await advance(10)
         expect(result.current.status).toBe("error")
         expect(requests.map((request) => request.fingerprint)).toEqual(["draft-1", "draft-2"])
 
-        requests[1].finish()
+        requiredItem(requests, 1).finish()
         await advance(10)
         await advance(5000)
         expect(result.current.status).toBe("saved")
@@ -123,7 +129,7 @@ describe("useFormBuilderSaveQueue", () => {
         await advance(3000)
         expect(requests).toHaveLength(1)
 
-        requests[0].finish()
+        requiredItem(requests, 0).finish()
         await advance(10)
         expect(result.current.savedFingerprint).toBe("draft-1")
 
@@ -131,7 +137,7 @@ describe("useFormBuilderSaveQueue", () => {
         await advance(3000)
         expect(requests.map((request) => request.fingerprint)).toEqual(["draft-1", "draft-2"])
 
-        requests[1].finish()
+        requiredItem(requests, 1).finish()
         await advance(10)
         await advance(5000)
         expect(result.current.savedFingerprint).toBe("draft-2")
@@ -145,7 +151,7 @@ describe("useFormBuilderSaveQueue", () => {
         rerender({ scopeKey: "form-b" })
         rerender({ scopeKey: "form-a" })
 
-        requests[0].finish()
+        requiredItem(requests, 0).finish()
         await advance(10)
 
         expect(result.current.savedFingerprint).toBe("draft-0")
@@ -156,9 +162,9 @@ describe("useFormBuilderSaveQueue", () => {
     it("applies a result after the builder is hidden and shown again", async () => {
         let finish = () => {}
         const onSuccess = vi.fn()
-        let queue: ReturnType<typeof useFormBuilderSaveQueue> | null = null
+        const builder: { queue?: ReturnType<typeof useFormBuilderSaveQueue> } = {}
         function Builder() {
-            queue = useFormBuilderSaveQueue("form-a")
+            builder.queue = useFormBuilderSaveQueue("form-a")
             return null
         }
         const view = render(
@@ -167,7 +173,7 @@ describe("useFormBuilderSaveQueue", () => {
             </Activity>,
         )
         act(() => {
-            void queue?.enqueue(() => new Promise<string>((resolve) => (finish = () => resolve("saved"))), {
+            void builder.queue?.enqueue(() => new Promise<string>((resolve) => (finish = () => resolve("saved"))), {
                 onSuccess,
                 onError: () => {},
             })
@@ -188,6 +194,6 @@ describe("useFormBuilderSaveQueue", () => {
         await advance(10)
 
         expect(onSuccess).toHaveBeenCalledWith("saved", expect.anything())
-        expect(queue?.isBusy).toBe(false)
+        expect(builder.queue?.isBusy).toBe(false)
     })
 })

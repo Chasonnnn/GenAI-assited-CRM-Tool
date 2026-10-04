@@ -10,6 +10,7 @@ const notification = {
     entity_type: "surrogate",
     entity_id: "surrogate-1",
     type: "surrogate_assigned",
+    tier: "action",
 }
 
 describe("useBrowserNotificationDelivery", () => {
@@ -46,5 +47,18 @@ describe("useBrowserNotificationDelivery", () => {
         rerender({ latest: { ...notification } })
 
         expect(showNotification).toHaveBeenCalledTimes(1)
+    })
+
+    it("does not alert for updates", () => {
+        const showNotification = vi.fn()
+        renderHook(() =>
+            useBrowserNotificationDelivery({
+                latest: { ...notification, type: "surrogate_status_changed", tier: "update" },
+                permission: "granted",
+                showNotification,
+            }),
+        )
+
+        expect(showNotification).not.toHaveBeenCalled()
     })
 })

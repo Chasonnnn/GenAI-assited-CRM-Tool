@@ -79,10 +79,11 @@ describe("permission cache hooks", () => {
             vi.mocked(getMyEffectivePermissions)
                 .mockResolvedValueOnce(originalPermissions)
                 .mockReturnValue(new Promise(() => {}))
+            const initialProps: { userId: string | null } = { userId: "user-1" }
             const view = renderHook(
                 ({ userId }: { userId: string | null }) => useEffectivePermissions(userId),
                 {
-                    initialProps: { userId: "user-1" },
+                    initialProps,
                     wrapper: wrapperFor(createQueryClient()),
                 },
             )

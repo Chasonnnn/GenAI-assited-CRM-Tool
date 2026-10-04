@@ -43,6 +43,15 @@ import {
     getFormTemplate,
     createFormFromTemplate,
     deleteFormTemplate,
+    getFormRouting,
+    updateFormRouting,
+    listFormWorkflows,
+    runSubmissionRoutingMatch,
+    createSubmissionRoutingLead,
+    dismissSubmissionRoutingReview,
+    type FormRoutingRead,
+    type FormRoutingUpdate,
+    type ResolveSubmissionMatchResponse,
     type FormTemplateLibraryItem,
     type FormTemplateLibraryDetail,
     type FormTemplateUseRequest,
@@ -65,6 +74,7 @@ import { invalidateSurrogateCrmCaches, surrogateKeys } from './use-surrogates'
 import { donorKeys } from './use-donors'
 import { donorAttachmentKeys } from './use-attachments'
 import { entityActivityKeys } from './use-entity-activity'
+import { taskKeys } from './use-tasks'
 
 export const formKeys = {
     all: ['forms'] as const,
@@ -73,6 +83,9 @@ export const formKeys = {
     details: () => [...formKeys.all, 'detail'] as const,
     detail: (id: string) => [...formKeys.details(), id] as const,
     mappings: (formId: string) => [...formKeys.detail(formId), 'mappings'] as const,
+    routing: (formId: string) => [...formKeys.detail(formId), 'routing'] as const,
+    // Under the workflow list key so workflow create, update, toggle and delete refresh it.
+    workflows: (formId: string) => ['workflows', 'list', 'form', formId] as const,
     intakeLinks: (formId: string) => [...formKeys.detail(formId), 'intake-links'] as const,
     embedHealth: (linkId: string) => [...formKeys.all, 'embed-health', linkId] as const,
     intakeLead: (leadId: string) => [...formKeys.all, 'intake-lead', leadId] as const,
@@ -103,6 +116,43 @@ function invalidateLinkedDonorCaches(
     void queryClient.invalidateQueries({ queryKey: donorAttachmentKeys.list(submission.donor_id) })
     void queryClient.invalidateQueries({ queryKey: entityActivityKeys.entity('donor', submission.donor_id) })
     void queryClient.invalidateQueries({ queryKey: formKeys.donorSubmissions(submission.donor_id) })
+}
+
+// A match resolve, retry or routing review response changes the submission and its linked records.
+function invalidateSubmissionMatchResult(
+    queryClient: ReturnType<typeof useQueryClient>,
+    result: ResolveSubmissionMatchResponse,
+) {
+    const submission = result.submission
+    void queryClient.invalidateQueries({
+        queryKey: formKeys.submissionLists(submission.form_id),
+        exact: false,
+    })
+
+    if (submission.surrogate_id) {
+        void queryClient.invalidateQueries({
+            queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
+        })
+        void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(submission.surrogate_id) })
+        void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(submission.surrogate_id) })
+        void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
+        void queryClient.invalidateQueries({
+            queryKey: ['analytics', 'activity-feed'],
+            exact: false,
+        })
+    }
+
+    if (submission.intake_lead_id) {
+        void queryClient.invalidateQueries({
+            queryKey: formKeys.intakeLead(submission.intake_lead_id),
+        })
+    }
+
+    invalidateLinkedDonorCaches(queryClient, submission)
+
+    void queryClient.invalidateQueries({
+        queryKey: formKeys.submissionMatchCandidates(submission.id),
+    })
 }
 
 export function useForms(options: { enabled?: boolean } = {}) {
@@ -170,6 +220,11 @@ export function useUpdateForm() {
             updateForm(formId, payload),
         onSuccess: async (form) => {
             void queryClient.invalidateQueries({ queryKey: formKeys.lists() })
+            // Changing the lead kind resets routing to that kind's defaults on the server.
+            const previous = queryClient.getQueryData<FormRead>(formKeys.detail(form.id))
+            if (previous && previous.lead_kind !== form.lead_kind) {
+                void queryClient.invalidateQueries({ queryKey: formKeys.routing(form.id) })
+            }
             await writeFormDetail(queryClient, form.id, form)
         },
     })
@@ -277,6 +332,36 @@ export function useUpdateFormDeliverySettings() {
         onSuccess: (_settings, { formId }) => {
             void queryClient.invalidateQueries({ queryKey: formKeys.detail(formId) })
         },
+    })
+}
+
+export function useFormRouting(formId: string | null) {
+    return useQuery({
+        queryKey: formKeys.routing(formId || ''),
+        queryFn: () => getFormRouting(formId!),
+        enabled: !!formId,
+    })
+}
+
+export function useUpdateFormRouting() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ formId, payload }: { formId: string; payload: FormRoutingUpdate }) =>
+            updateFormRouting(formId, payload),
+        onSuccess: async (routing) => {
+            // An older GET still in flight would overwrite the saved settings when it resolves.
+            await queryClient.cancelQueries({ queryKey: formKeys.routing(routing.form_id), exact: true })
+            queryClient.setQueryData<FormRoutingRead>(formKeys.routing(routing.form_id), routing)
+        },
+    })
+}
+
+export function useFormWorkflows(formId: string | null) {
+    return useQuery({
+        queryKey: formKeys.workflows(formId || ''),
+        queryFn: () => listFormWorkflows(formId!),
+        enabled: !!formId,
     })
 }
 
@@ -512,38 +597,7 @@ export function useResolveSubmissionMatch() {
             submissionId: string
             payload: ResolveSubmissionMatchPayload
         }) => resolveSubmissionMatch(submissionId, payload),
-        onSuccess: (result) => {
-            const submission = result.submission
-            void queryClient.invalidateQueries({
-                queryKey: formKeys.submissionLists(submission.form_id),
-                exact: false,
-            })
-
-            if (submission.surrogate_id) {
-                void queryClient.invalidateQueries({
-                    queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
-                })
-                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(submission.surrogate_id) })
-                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(submission.surrogate_id) })
-                void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
-                void queryClient.invalidateQueries({
-                    queryKey: ['analytics', 'activity-feed'],
-                    exact: false,
-                })
-            }
-
-            if (submission.intake_lead_id) {
-                void queryClient.invalidateQueries({
-                    queryKey: formKeys.intakeLead(submission.intake_lead_id),
-                })
-            }
-
-            invalidateLinkedDonorCaches(queryClient, submission)
-
-            void queryClient.invalidateQueries({
-                queryKey: formKeys.submissionMatchCandidates(submission.id),
-            })
-        },
+        onSuccess: (result) => invalidateSubmissionMatchResult(queryClient, result),
     })
 }
 
@@ -558,39 +612,41 @@ export function useRetrySubmissionMatch() {
             submissionId: string
             payload: RetrySubmissionMatchPayload
         }) => retrySubmissionMatch(submissionId, payload),
+        onSuccess: (result) => invalidateSubmissionMatchResult(queryClient, result),
+    })
+}
+
+type SubmissionRoutingReviewVariables = { submissionId: string; formId: string }
+
+// Each review action completes the submission's review task; a 409 means another reviewer moved
+// the submission on, so the queue refreshes either way.
+function useSubmissionRoutingReviewAction(
+    action: (submissionId: string) => Promise<ResolveSubmissionMatchResponse>,
+) {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ submissionId }: SubmissionRoutingReviewVariables) => action(submissionId),
         onSuccess: (result) => {
-            const submission = result.submission
-            void queryClient.invalidateQueries({
-                queryKey: formKeys.submissionLists(submission.form_id),
-                exact: false,
-            })
-
-            if (submission.surrogate_id) {
-                void queryClient.invalidateQueries({
-                    queryKey: formKeys.surrogateSubmission(submission.form_id, submission.surrogate_id),
-                })
-                void queryClient.invalidateQueries({ queryKey: surrogateKeys.activity(submission.surrogate_id) })
-                void queryClient.invalidateQueries({ queryKey: surrogateKeys.detail(submission.surrogate_id) })
-                void queryClient.invalidateQueries({ queryKey: surrogateKeys.lists() })
-                void queryClient.invalidateQueries({
-                    queryKey: ['analytics', 'activity-feed'],
-                    exact: false,
-                })
-            }
-
-            if (submission.intake_lead_id) {
-                void queryClient.invalidateQueries({
-                    queryKey: formKeys.intakeLead(submission.intake_lead_id),
-                })
-            }
-
-            invalidateLinkedDonorCaches(queryClient, submission)
-
-            void queryClient.invalidateQueries({
-                queryKey: formKeys.submissionMatchCandidates(submission.id),
-            })
+            invalidateSubmissionMatchResult(queryClient, result)
+            void queryClient.invalidateQueries({ queryKey: taskKeys.all })
+        },
+        onError: (_error, { formId }) => {
+            void queryClient.invalidateQueries({ queryKey: formKeys.submissionLists(formId), exact: false })
         },
     })
+}
+
+export function useRunSubmissionRoutingMatch() {
+    return useSubmissionRoutingReviewAction(runSubmissionRoutingMatch)
+}
+
+export function useCreateSubmissionRoutingLead() {
+    return useSubmissionRoutingReviewAction(createSubmissionRoutingLead)
+}
+
+export function useDismissSubmissionRoutingReview() {
+    return useSubmissionRoutingReviewAction(dismissSubmissionRoutingReview)
 }
 
 export function useIntakeLead(leadId: string | null) {

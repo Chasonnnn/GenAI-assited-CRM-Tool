@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('../lib/api.ts', () => {
+vi.mock('../lib/api', () => {
     const api = {
         get: vi.fn(),
         post: vi.fn(),
@@ -13,7 +13,7 @@ vi.mock('../lib/api.ts', () => {
     }
 })
 
-import api from '../lib/api.ts'
+import api from '../lib/api'
 import { acceptConsent, approveAction, rejectAction, sendChatMessage, testAPIKey } from '../lib/api/ai'
 
 type ApiMock = {

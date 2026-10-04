@@ -76,7 +76,7 @@ class UserNotificationSettings(Base):
     """
     Per-user notification preferences.
 
-    Missing row = all defaults ON.
+    Missing row = in-app toggles ON, email toggles OFF.
     """
 
     __tablename__ = "user_notification_settings"
@@ -121,6 +121,14 @@ class UserNotificationSettings(Base):
     security_alerts: Mapped[bool] = mapped_column(
         default=True, server_default=text("true")
     )  # Security-relevant notifications
+
+    # Email toggles (default FALSE, see docs/adr/0008-notification-email-is-opt-in-per-type.md)
+    email_workflow_notifications: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false")
+    )  # Workflow "Send Notification" action
+    email_daily_digest: Mapped[bool] = mapped_column(
+        default=False, server_default=text("false")
+    )  # One morning email with open action items and new updates
 
     updated_at: Mapped[datetime] = mapped_column(
         server_default=text("now()"), onupdate=text("now()"), nullable=False

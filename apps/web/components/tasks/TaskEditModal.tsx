@@ -35,6 +35,7 @@ import { CalendarIcon, Loader2 } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { cn } from "@/lib/utils"
 import type { TaskListItem, TaskUpdatePayload } from "@/lib/api/tasks"
+import { TaskFormSubmissionField } from "@/components/tasks/TaskRelatedRecordLinks"
 import { TaskRelatedRecordPicker } from "@/components/tasks/TaskRelatedRecordPicker"
 import { getTaskTypeLabel, isEditableTaskType, TASK_TYPE_OPTIONS } from "@/lib/task-labels"
 import {
@@ -214,6 +215,8 @@ export function TaskEditModal({
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        {task ? <TaskFormSubmissionField task={task} /> : null}
 
                         {task ? (
                             <TaskRelatedRecordPicker

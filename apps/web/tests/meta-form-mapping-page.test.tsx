@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { assert, describe, it, expect, vi, beforeEach } from "vitest"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import MetaFormMappingPage from "../app/(app)/settings/integrations/meta/forms/[id]/page"
 import { ApiError } from "@/lib/api"
@@ -519,6 +519,7 @@ describe("MetaFormMappingPage", () => {
             lead_kind: "surrogate",
             unknown_column_behavior: "warn",
         })
+        assert.isDefined(mutateAsync.mock.calls[0])
         expect(mutateAsync.mock.calls[0][0].column_mappings).not.toEqual(
             expect.arrayContaining([expect.objectContaining({ csv_column: "hobby" })])
         )
@@ -634,6 +635,7 @@ describe("MetaFormMappingPage", () => {
 
         fireEvent.click(screen.getByRole("button", { name: /save mapping/i }))
         await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1))
+        assert.isDefined(mutateAsync.mock.calls[0])
         const payload = mutateAsync.mock.calls[0][0]
         expect(payload.lead_kind).toBe("egg_donor")
         expect(payload.unknown_column_behavior).toBe("ignore")

@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation"
+
 import AutomationPageClient from "./page.client"
 
 type AutomationTab = "workflows" | "email-templates" | "campaigns"
@@ -24,12 +26,18 @@ export default async function AutomationPage({ searchParams }: PageProps) {
     const tabParam = firstSearchParam(resolvedSearchParams.tab)
     const scopeParam = firstSearchParam(resolvedSearchParams.scope)
     const createParam = firstSearchParam(resolvedSearchParams.create)
+    const workflowScopeTab = normalizeWorkflowScopeTab(scopeParam)
+
+    // The legacy create flag opened a dialog; the editor is now its own route.
+    if (createParam === "true") {
+        redirect(`/automation/workflows/new?scope=${workflowScopeTab === "org" ? "org" : "personal"}`)
+    }
 
     return (
         <AutomationPageClient
             initialTab={normalizeAutomationTab(tabParam)}
-            initialWorkflowScopeTab={normalizeWorkflowScopeTab(scopeParam)}
-            initialCreateOpen={createParam === "true"}
+            initialWorkflowScopeTab={workflowScopeTab}
+            hasInitialScopeParam={scopeParam !== undefined}
         />
     )
 }

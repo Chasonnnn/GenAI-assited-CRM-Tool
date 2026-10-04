@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import String, and_, cast, exists, func, or_
 from sqlalchemy.orm import Session
 
-from app.db.enums import OwnerType, WorkflowExecutionStatus, WorkflowTriggerType
+from app.db.enums import ContactStatus, OwnerType, WorkflowExecutionStatus, WorkflowTriggerType
 from app.db.models import (
     AutomationWorkflow,
     Donor,
@@ -30,17 +30,16 @@ from app.db.models import (
 )
 from app.schemas.donor import normalize_donor_source
 from app.schemas.workflow import (
-    ALLOWED_CONDITION_FIELDS,
     ALLOWED_EMAIL_VARIABLES,
+    CONDITION_FIELDS_BY_ENTITY,
     DONOR_ALLOWED_CONDITION_FIELDS,
     DONOR_ALLOWED_UPDATE_FIELDS,
     SURROGATE_ALLOWED_UPDATE_FIELDS,
+    SURROGATE_CONDITION_FIELDS,
     AddNoteActionConfig,
     AssignDonorActionConfig,
     AssignSurrogateActionConfig,
-    AutoMatchSubmissionActionConfig,
     Condition,
-    CreateIntakeLeadActionConfig,
     CreateTaskActionConfig,
     ExecutionRead,
     PromoteIntakeLeadActionConfig,
@@ -54,15 +53,18 @@ from app.schemas.workflow import (
     WorkflowRead,
     WorkflowStats,
     WorkflowUpdate,
+    is_subject_email_recipient,
 )
 from app.services import user_service, workflow_execution_authority
 from app.services.workflow_definition_rules import (
-    normalize_actions_for_trigger as _normalize_actions_for_trigger,
+    APPOINTMENT_TRIGGER_TYPES,
+    appointment_record_type,
 )
 from app.services.workflow_definition_rules import (
     validate_trigger_config as _validate_trigger_config,
 )
 from app.services.workflow_email_provider import validate_email_provider
+from app.services.workflow_routing_retirement import GENERATED_ROUTING_PREFIX
 from app.utils.pagination import paginate_query_by_offset
 
 # =============================================================================
@@ -79,8 +81,9 @@ TRIGGER_ENTITY_TYPES = {
     "donor_stage_changed": "donor",
     "donor_assigned": "donor",
     "donor_updated": "donor",
-    "form_started": "surrogate",
     "form_submitted": "form_submission",
+    "form_submission_approved": "form_submission",
+    "form_submission_rejected": "form_submission",
     "intake_lead_created": "intake_lead",
     "task_due": "task",
     "task_overdue": "task",
@@ -92,6 +95,12 @@ TRIGGER_ENTITY_TYPES = {
     "match_cancelled": "match",
     "appointment_scheduled": "appointment",
     "appointment_completed": "appointment",
+    "appointment_cancelled": "appointment",
+    "appointment_no_show": "appointment",
+    "appointment_requested": "appointment",
+    "appointment_rescheduled": "appointment",
+    "appointment_expired": "appointment",
+    "appointment_time": "appointment",
     "note_added": "note",
     "document_uploaded": "document",
 }
@@ -118,10 +127,24 @@ DONOR_TRIGGER_TYPES = {
     WorkflowTriggerType.NOTE_ADDED,
     WorkflowTriggerType.DOCUMENT_UPLOADED,
 }
+# Triggers whose entity is a form submission; they share form and lead-kind scoping.
+FORM_SUBMISSION_TRIGGER_TYPES = frozenset(
+    {
+        WorkflowTriggerType.FORM_SUBMITTED,
+        WorkflowTriggerType.FORM_SUBMISSION_APPROVED,
+        WorkflowTriggerType.FORM_SUBMISSION_REJECTED,
+    }
+)
 INTAKE_CONTEXT_KEYS = {
-    WorkflowTriggerType.FORM_SUBMITTED.value: "lead_kind",
+    **{trigger.value: "lead_kind" for trigger in FORM_SUBMISSION_TRIGGER_TYPES},
     WorkflowTriggerType.INTAKE_LEAD_CREATED.value: "lead_type",
 }
+
+
+def _appointment_effective_subject(trigger_config: dict[str, object] | None) -> str:
+    """Appointment workflows that act on donors need donor permissions."""
+    record_type = appointment_record_type(trigger_config)
+    return record_type if record_type in DONOR_SUBJECT_TYPES else "appointment"
 
 
 def resolve_unbound_workflow_subject_type(
@@ -138,6 +161,8 @@ def resolve_unbound_workflow_subject_type(
         subject_type = LEGACY_TRIGGER_SUBJECT_TYPES.get(trigger_value, "surrogate")
     if subject_type in DONOR_SUBJECT_TYPES:
         return subject_type
+    if subject_type == "appointment":
+        return _appointment_effective_subject(trigger_config)
 
     trigger_value = (
         trigger_type.value if isinstance(trigger_type, WorkflowTriggerType) else trigger_type
@@ -168,6 +193,8 @@ def resolve_effective_workflow_subject_type(
     """Resolve donor-sensitive generic intake workflows without changing execution subjects."""
     if subject_type in DONOR_SUBJECT_TYPES:
         return subject_type
+    if subject_type == "appointment":
+        return _appointment_effective_subject(trigger_config)
 
     trigger_value = (
         trigger_type.value if isinstance(trigger_type, WorkflowTriggerType) else trigger_type
@@ -247,6 +274,8 @@ def resolve_workflow_record_type(
     """
     if subject_type in DONOR_SUBJECT_TYPES:
         return subject_type
+    if subject_type == "appointment":
+        return appointment_record_type(trigger_config)
     if subject_type not in INTAKE_SUBJECT_TYPES:
         return "surrogate"
 
@@ -349,7 +378,9 @@ def _workflow_is_donor_related():
     return or_(
         AutomationWorkflow.subject_type.in_(DONOR_SUBJECT_TYPES),
         and_(
-            AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
+            AutomationWorkflow.trigger_type.in_(
+                [trigger.value for trigger in FORM_SUBMISSION_TRIGGER_TYPES]
+            ),
             or_(
                 AutomationWorkflow.trigger_config["lead_kind"].astext.in_(DONOR_SUBJECT_TYPES),
                 donor_form,
@@ -448,6 +479,8 @@ def _exact_donor_execution_identity_match():
 
 LEGACY_TRIGGER_SUBJECT_TYPES = {
     WorkflowTriggerType.FORM_SUBMITTED.value: "form_submission",
+    WorkflowTriggerType.FORM_SUBMISSION_APPROVED.value: "form_submission",
+    WorkflowTriggerType.FORM_SUBMISSION_REJECTED.value: "form_submission",
     WorkflowTriggerType.INTAKE_LEAD_CREATED.value: "intake_lead",
     WorkflowTriggerType.MATCH_PROPOSED.value: "match",
     WorkflowTriggerType.MATCH_ACCEPTED.value: "match",
@@ -455,6 +488,12 @@ LEGACY_TRIGGER_SUBJECT_TYPES = {
     WorkflowTriggerType.MATCH_CANCELLED.value: "match",
     WorkflowTriggerType.APPOINTMENT_SCHEDULED.value: "appointment",
     WorkflowTriggerType.APPOINTMENT_COMPLETED.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_CANCELLED.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_NO_SHOW.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_REQUESTED.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_RESCHEDULED.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_EXPIRED.value: "appointment",
+    WorkflowTriggerType.APPOINTMENT_TIME.value: "appointment",
 }
 FIXED_TRIGGER_SUBJECT_TYPES = frozenset(LEGACY_TRIGGER_SUBJECT_TYPES.values())
 
@@ -496,16 +535,29 @@ def _validate_subject_trigger(
         raise ValueError(f"Subject {subject_type} does not support trigger {trigger_type.value}")
 
 
-def _validate_subject_conditions(subject_type: str, conditions: list[dict]) -> None:
-    if subject_type not in DONOR_SUBJECT_TYPES:
-        return
+def condition_fields_for_trigger(trigger_type: str, subject_type: str) -> frozenset[str]:
+    """Return the condition fields readable on the record a trigger's conditions evaluate."""
+    if subject_type in DONOR_SUBJECT_TYPES:
+        return DONOR_ALLOWED_CONDITION_FIELDS
+    entity_type = TRIGGER_ENTITY_TYPES.get(trigger_type, "surrogate")
+    return CONDITION_FIELDS_BY_ENTITY.get(entity_type, SURROGATE_CONDITION_FIELDS)
+
+
+def _validate_trigger_conditions(
+    trigger_type: WorkflowTriggerType, subject_type: str, conditions: list[dict]
+) -> None:
+    allowed = condition_fields_for_trigger(trigger_type.value, subject_type)
     invalid = sorted(
-        condition.get("field")
-        for condition in conditions
-        if condition.get("field") not in DONOR_ALLOWED_CONDITION_FIELDS
+        {
+            str(condition.get("field"))
+            for condition in conditions
+            if condition.get("field") not in allowed
+        }
     )
     if invalid:
-        raise ValueError(f"Condition fields do not support {subject_type}: {', '.join(invalid)}")
+        raise ValueError(
+            f"Condition fields do not apply to {trigger_type.value}: {', '.join(invalid)}"
+        )
 
 
 def _validate_action_subject_compatibility(
@@ -663,7 +715,7 @@ def _canonicalize_trigger_config(
 ) -> dict[str, object]:
     config = deepcopy(trigger_config or {})
     intake_context_key = {
-        WorkflowTriggerType.FORM_SUBMITTED: "lead_kind",
+        **{trigger: "lead_kind" for trigger in FORM_SUBMISSION_TRIGGER_TYPES},
         WorkflowTriggerType.INTAKE_LEAD_CREATED: "lead_type",
     }.get(trigger_type)
     if intake_context_key is not None and config.get("form_id"):
@@ -690,6 +742,17 @@ def _canonicalize_trigger_config(
         elif configured_kind is None:
             # A form-only workflow covers both programs; explicit subtype filters remain exact.
             config.pop(intake_context_key, None)
+
+    if trigger_type in APPOINTMENT_TRIGGER_TYPES and "appointment_type_names" in config:
+        names = config.get("appointment_type_names")
+        if isinstance(names, list):
+            # Keep the first spelling of each name; matching ignores case.
+            unique: dict[str, str] = {}
+            for name in names:
+                cleaned = str(name).strip()
+                if cleaned:
+                    unique.setdefault(cleaned.casefold(), cleaned)
+            config["appointment_type_names"] = list(unique.values())
 
     if trigger_type not in {
         WorkflowTriggerType.STATUS_CHANGED,
@@ -962,12 +1025,12 @@ def create_workflow(
         trigger_type=data.trigger_type,
         trigger_config=trigger_config,
     )
-    raw_actions = _normalize_actions_for_trigger(data.trigger_type, data.actions)
+    raw_actions = [dict(action) for action in data.actions]
     stage_entity_type = _stage_reference_entity_type(record_type, data.conditions, raw_actions)
     conditions = _canonicalize_conditions(
         db, org_id, data.conditions, entity_type=stage_entity_type
     )
-    _validate_subject_conditions(subject_type, conditions)
+    _validate_trigger_conditions(data.trigger_type, subject_type, conditions)
 
     # Validate trigger config
     _validate_trigger_config(data.trigger_type, trigger_config)
@@ -1078,12 +1141,7 @@ def update_workflow(
         trigger_type=trigger_type,
         trigger_config=trigger_config,
     )
-    effective_trigger_type = trigger_type
-    raw_actions = (
-        _normalize_actions_for_trigger(effective_trigger_type, data.actions)
-        if data.actions is not None
-        else None
-    )
+    raw_actions = [dict(action) for action in data.actions] if data.actions is not None else None
     stage_entity_type = _stage_reference_entity_type(
         record_type,
         data.conditions if data.conditions is not None else workflow.conditions,
@@ -1104,7 +1162,10 @@ def update_workflow(
             entity_type=stage_entity_type,
         )
     )
-    _validate_subject_conditions(subject_type, normalized_conditions)
+    # Stored conditions are revalidated only when they or the trigger change, so a
+    # rename does not fail on fields that an older field list allowed.
+    if data.conditions is not None or data.trigger_type is not None:
+        _validate_trigger_conditions(trigger_type, subject_type, normalized_conditions)
 
     if data.trigger_type is not None or data.trigger_config is not None:
         _validate_trigger_config(trigger_type, trigger_config)
@@ -1124,7 +1185,7 @@ def update_workflow(
                 action,
                 workflow.scope,
                 workflow.owner_user_id,
-                effective_trigger_type,
+                trigger_type,
                 subject_type=subject_type,
                 effective_subject_type=effective_subject_type,
                 record_type=record_type,
@@ -1146,7 +1207,7 @@ def update_workflow(
                 dict(action),
                 workflow.scope,
                 workflow.owner_user_id,
-                effective_trigger_type,
+                trigger_type,
                 subject_type=subject_type,
                 effective_subject_type=effective_subject_type,
                 record_type=record_type,
@@ -1226,6 +1287,7 @@ def list_workflows(
     enabled_only: bool = False,
     trigger_type: WorkflowTriggerType | None = None,
     subject_type: str | None = None,
+    appointment_type_name: str | None = None,
 ) -> list[AutomationWorkflow]:
     """
     List workflows for an organization with scope-based filtering.
@@ -1242,7 +1304,15 @@ def list_workflows(
     Returns:
         List of workflows the user can see
     """
-    query = db.query(AutomationWorkflow).filter(AutomationWorkflow.organization_id == org_id)
+    query = db.query(AutomationWorkflow).filter(
+        AutomationWorkflow.organization_id == org_id,
+        or_(
+            AutomationWorkflow.system_key.is_(None),
+            ~AutomationWorkflow.system_key.startswith(GENERATED_ROUTING_PREFIX, autoescape=True),
+            AutomationWorkflow.is_enabled.is_(True),
+            AutomationWorkflow.actions != [],
+        ),
+    )
 
     # Apply scope filter
     if scope_filter == "org":
@@ -1286,8 +1356,24 @@ def list_workflows(
         if subject_type not in SUPPORTED_WORKFLOW_SUBJECT_TYPES:
             return []
         query = query.filter(AutomationWorkflow.subject_type == subject_type)
+    if appointment_type_name is None:
+        return query.order_by(AutomationWorkflow.name).all()
 
-    return query.order_by(AutomationWorkflow.name).all()
+    # Matches the engine's type filter: names compare stripped and case-insensitively.
+    wanted = appointment_type_name.strip().casefold()
+    workflows = (
+        query.filter(AutomationWorkflow.subject_type == "appointment")
+        .order_by(AutomationWorkflow.name)
+        .all()
+    )
+    return [
+        workflow
+        for workflow in workflows
+        if any(
+            isinstance(name, str) and name.strip().casefold() == wanted
+            for name in (workflow.trigger_config or {}).get("appointment_type_names") or []
+        )
+    ]
 
 
 def toggle_workflow(
@@ -1649,6 +1735,76 @@ def get_workflow_stats(
     )
 
 
+DONOR_ACTION_VALUES = (
+    "send_email",
+    "create_task",
+    "assign_donor",
+    "send_notification",
+    "update_field",
+    "add_note",
+)
+
+
+def trigger_action_types(trigger: str, *, messaging_available: bool) -> list[str]:
+    """Action types a non-donor workflow may use for one trigger, in editor order."""
+    sms = ["send_message"] if messaging_available else []
+    surrogate_actions = [
+        "send_email",
+        *sms,
+        "create_task",
+        "assign_surrogate",
+        "send_notification",
+        "update_field",
+        "add_note",
+    ]
+    entity_type = TRIGGER_ENTITY_TYPES.get(trigger)
+    if trigger == WorkflowTriggerType.STATUS_CHANGED.value:
+        return [*surrogate_actions, "send_zapier_conversion_event"]
+    if entity_type in ("surrogate", "task"):
+        return surrogate_actions
+    if entity_type == "form_submission":
+        # Forms own routing; workflows act on the linked record only.
+        return surrogate_actions
+    if entity_type == "intake_lead":
+        return ["send_email", "send_notification", "promote_intake_lead", *sms]
+    if entity_type == "appointment":
+        # Record actions run on the linked record; notifications reach staff for any booking.
+        return [
+            "send_email",
+            *sms,
+            "create_task",
+            "send_notification",
+            "update_field",
+            "add_note",
+        ]
+    return ["send_notification"]
+
+
+def _validate_action_allowed_for_trigger(
+    action_type: str | None,
+    trigger_type: WorkflowTriggerType | None,
+    subject_type: str,
+    workflow_scope: str | None,
+) -> None:
+    if trigger_type is None:
+        return
+    if subject_type in DONOR_SUBJECT_TYPES:
+        allowed = list(DONOR_ACTION_VALUES)
+    else:
+        # Org messaging access is checked with the send_message config itself.
+        allowed = trigger_action_types(
+            trigger_type.value, messaging_available=workflow_scope != "personal"
+        )
+        if TRIGGER_ENTITY_TYPES.get(trigger_type.value) == "intake_lead":
+            # The editor offers fewer, but promoted leads run surrogate record actions.
+            allowed += trigger_action_types(
+                WorkflowTriggerType.SURROGATE_CREATED.value,
+                messaging_available=workflow_scope != "personal",
+            )
+    if action_type not in allowed:
+        raise ValueError(f"Action {action_type} is not available for {trigger_type.value}")
+
+
 def get_workflow_options(
     db: Session,
     org_id: UUID,
@@ -1685,14 +1841,19 @@ def get_workflow_options(
             "description": "When specific fields change",
         },
         {
-            "value": "form_started",
-            "label": "Form Started",
-            "description": "When an applicant starts a form draft",
-        },
-        {
             "value": "form_submitted",
             "label": "Application Submitted",
             "description": "When an applicant submits a form",
+        },
+        {
+            "value": "form_submission_approved",
+            "label": "Application Approved",
+            "description": "When a submitted application is approved",
+        },
+        {
+            "value": "form_submission_rejected",
+            "label": "Application Rejected",
+            "description": "When a submitted application is rejected",
         },
         {
             "value": "intake_lead_created",
@@ -1740,14 +1901,44 @@ def get_workflow_options(
             "description": "When a match cancellation is approved",
         },
         {
+            "value": "appointment_requested",
+            "label": "Appointment Requested",
+            "description": "When a booking request is waiting for approval",
+        },
+        {
             "value": "appointment_scheduled",
             "label": "Appointment Scheduled",
-            "description": "When an appointment is scheduled",
+            "description": "When an appointment is confirmed",
+        },
+        {
+            "value": "appointment_rescheduled",
+            "label": "Appointment Rescheduled",
+            "description": "When an appointment moves to a new time",
         },
         {
             "value": "appointment_completed",
             "label": "Appointment Completed",
-            "description": "When an appointment is completed",
+            "description": "When an appointment is marked completed",
+        },
+        {
+            "value": "appointment_cancelled",
+            "label": "Appointment Cancelled",
+            "description": "When an appointment is cancelled",
+        },
+        {
+            "value": "appointment_no_show",
+            "label": "Appointment No-Show",
+            "description": "When an appointment is marked as a no-show",
+        },
+        {
+            "value": "appointment_expired",
+            "label": "Appointment Request Expired",
+            "description": "When a booking request expires without approval",
+        },
+        {
+            "value": "appointment_time",
+            "label": "Before or After Appointment",
+            "description": "Hours before an appointment starts or after it ends",
         },
         {
             "value": "note_added",
@@ -1848,16 +2039,6 @@ def get_workflow_options(
             "label": "Promote Intake Lead",
             "description": "Create a surrogate or donor record from an intake lead",
         },
-        {
-            "value": "auto_match_submission",
-            "label": "Auto-Match Submission",
-            "description": "Match a submission to an existing applicant record",
-        },
-        {
-            "value": "create_intake_lead",
-            "label": "Create Intake Lead",
-            "description": "Create provisional intake lead for unmatched submission",
-        },
     ]
 
     messaging_available = allow_messaging and workflow_scope != "personal"
@@ -1889,54 +2070,15 @@ def get_workflow_options(
             },
         )
 
-    surrogate_action_values = [
-        "send_email",
-        "create_task",
-        "assign_surrogate",
-        "send_notification",
-        "update_field",
-        "add_note",
-    ]
-    if messaging_available:
-        surrogate_action_values.insert(1, "send_message")
-    status_changed_action_values = [
-        *surrogate_action_values,
-        "send_zapier_conversion_event",
-    ]
-    form_submission_action_values = [
-        "auto_match_submission",
-        "create_intake_lead",
-        *surrogate_action_values,
-    ]
-    action_types_by_trigger: dict[str, list[str]] = {}
-    for trigger, entity_type in TRIGGER_ENTITY_TYPES.items():
-        if trigger == WorkflowTriggerType.STATUS_CHANGED.value:
-            action_types_by_trigger[trigger] = status_changed_action_values
-        elif entity_type in ("surrogate", "task"):
-            action_types_by_trigger[trigger] = surrogate_action_values
-        elif entity_type == "form_submission":
-            action_types_by_trigger[trigger] = form_submission_action_values
-        elif entity_type == "intake_lead":
-            action_types_by_trigger[trigger] = [
-                "send_notification",
-                "promote_intake_lead",
-                *(["send_message"] if messaging_available else []),
-            ]
-        else:
-            action_types_by_trigger[trigger] = ["send_notification"]
+    action_types_by_trigger = {
+        trigger: trigger_action_types(trigger, messaging_available=messaging_available)
+        for trigger in TRIGGER_ENTITY_TYPES
+    }
     trigger_entity_types = dict(TRIGGER_ENTITY_TYPES)
     if is_donor_subject:
-        donor_action_values = [
-            "send_email",
-            "create_task",
-            "assign_donor",
-            "send_notification",
-            "update_field",
-            "add_note",
-        ]
         donor_trigger_values = [item["value"] for item in trigger_types]
         action_types_by_trigger = {
-            trigger: list(donor_action_values) for trigger in donor_trigger_values
+            trigger: list(DONOR_ACTION_VALUES) for trigger in donor_trigger_values
         }
         trigger_entity_types = {trigger: subject_type for trigger in donor_trigger_values}
 
@@ -2076,15 +2218,33 @@ def get_workflow_options(
         for f in published_forms
     ]
 
+    from app.db.models import AppointmentType
+
+    # Hosts name their own types; offer each name once, matching ignores case.
+    type_names_by_key: dict[str, str] = {}
+    for (name,) in (
+        db.query(AppointmentType.name)
+        .filter(
+            AppointmentType.organization_id == org_id,
+            AppointmentType.is_active.is_(True),
+        )
+        .order_by(AppointmentType.name)
+    ):
+        type_names_by_key.setdefault(name.strip().casefold(), name.strip())
+    appointment_type_names = sorted(type_names_by_key.values(), key=str.casefold)
     return WorkflowOptions(
         trigger_types=trigger_types,
         action_types=action_types,
         action_types_by_trigger=action_types_by_trigger,
         trigger_entity_types=trigger_entity_types,
         condition_operators=condition_operators,
-        condition_fields=list(
-            DONOR_ALLOWED_CONDITION_FIELDS if is_donor_subject else ALLOWED_CONDITION_FIELDS
+        condition_fields=sorted(
+            DONOR_ALLOWED_CONDITION_FIELDS if is_donor_subject else SURROGATE_CONDITION_FIELDS
         ),
+        condition_fields_by_trigger={
+            item["value"]: sorted(condition_fields_for_trigger(item["value"], subject_type))
+            for item in trigger_types
+        },
         update_fields=list(
             DONOR_ALLOWED_UPDATE_FIELDS if is_donor_subject else SURROGATE_ALLOWED_UPDATE_FIELDS
         ),
@@ -2095,6 +2255,7 @@ def get_workflow_options(
         queues=queue_options,
         statuses=statuses,
         forms=forms,
+        appointment_type_names=appointment_type_names,
     )
 
 
@@ -2532,6 +2693,25 @@ def _validate_action_config(
             if missing_ids:
                 missing_str = ", ".join(str(uid) for uid in sorted(missing_ids, key=str))
                 raise ValueError(f"Missing recipients in organization: {missing_str}")
+        if config.recipients == "queue":
+            queue = (
+                db.query(Queue.id)
+                .filter(
+                    Queue.id == config.recipient_queue_id,
+                    Queue.organization_id == org_id,
+                    Queue.is_active.is_(True),
+                )
+                .first()
+            )
+            if queue is None:
+                raise ValueError("Recipient queue not found in organization")
+        if (
+            trigger_type is not None
+            and TRIGGER_ENTITY_TYPES.get(trigger_type.value) == "intake_lead"
+            and is_subject_email_recipient(config.recipients)
+        ):
+            # A new lead is not a surrogate or donor yet, so only staff can be emailed.
+            raise ValueError("Intake lead emails must go to staff recipients")
         # Enforce scope rules for workflow email templates
         if workflow_scope == "org":
             if template.scope != "org":
@@ -2611,6 +2791,8 @@ def _validate_action_config(
 
     elif action_type == "send_notification":
         config = SendNotificationActionConfig.model_validate(action)
+        if config.recipients == "host" and subject_type != "appointment":
+            raise ValueError("Only appointment workflows can notify the appointment host")
         # If recipients is list of UUIDs, verify all exist
         if isinstance(config.recipients, list):
             from app.db.models import Membership
@@ -2648,6 +2830,10 @@ def _validate_action_config(
         )
         if config.field not in allowed_fields:
             raise ValueError(f"Field '{config.field}' is not allowed for {record_type}")
+        if config.field == "contact_status" and config.value not in {
+            status.value for status in ContactStatus
+        }:
+            raise ValueError("Contact status must be reached or unreached")
         if config.field == "stage_id":
             stage_entity_type = _stage_pipeline_entity_type(record_type)
             resolved = _resolve_stage_ref(
@@ -2675,16 +2861,6 @@ def _validate_action_config(
         if action.get("requires_approval") is True:
             raise ValueError("promote_intake_lead does not support requires_approval")
 
-    elif action_type == "auto_match_submission":
-        AutoMatchSubmissionActionConfig.model_validate(action)
-        if workflow_scope == "personal":
-            raise ValueError("auto_match_submission is only supported for org workflows")
-
-    elif action_type == "create_intake_lead":
-        CreateIntakeLeadActionConfig.model_validate(action)
-        if workflow_scope == "personal":
-            raise ValueError("create_intake_lead is only supported for org workflows")
-
     else:
         raise ValueError(f"Unknown action type: {action_type}")
 
@@ -2692,3 +2868,6 @@ def _validate_action_config(
     requires_approval = action.get("requires_approval", False)
     if requires_approval is not None and not isinstance(requires_approval, bool):
         raise ValueError("requires_approval must be a boolean")
+
+    # Last, so action-specific errors above explain the common mistakes first.
+    _validate_action_allowed_for_trigger(action_type, trigger_type, subject_type, workflow_scope)

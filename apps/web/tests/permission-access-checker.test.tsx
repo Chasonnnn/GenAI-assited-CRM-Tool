@@ -34,7 +34,7 @@ describe("record access checker", () => {
         await waitFor(() => expect(vi.mocked(checkRecordAccess).mock.calls[1]?.[0]).toEqual({ user_id: "user-1", record_id: "record-1", kind: "surrogate", personal_only: true }))
     })
     it("shows empty search results with no record selected", async () => {
-        vi.mocked(getSurrogates).mockResolvedValue({ items: [], total: 0 } as Awaited<ReturnType<typeof getSurrogates>>)
+        vi.mocked(getSurrogates).mockResolvedValue({ items: [], total: 0, page: 1, per_page: 20, pages: 0 })
         render(<PermissionAccessChecker />)
         fireEvent.click(await screen.findByRole("button", { name: "Search" }))
         expect(await screen.findByText("No records found.")).toBeVisible()

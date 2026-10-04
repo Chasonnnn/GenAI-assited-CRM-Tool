@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
-import { Bell, BellOff, AlertTriangle, CheckCircle2, Loader2, FolderOpen, RefreshCw, ArrowRightLeft, ListChecks, CheckSquare, Calendar } from "lucide-react"
+import { Bell, BellOff, AlertTriangle, CheckCircle2, Loader2, FolderOpen, RefreshCw, ArrowRightLeft, ListChecks, CheckSquare, Calendar, Mail, Newspaper, Workflow } from "lucide-react"
 import { toast } from "@/components/ui/toast"
 import { useState } from "react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
@@ -119,6 +119,79 @@ function BrowserNotificationsCard() {
     )
 }
 
+type EmailNotificationSettingKey = "email_workflow_notifications" | "email_daily_digest"
+type InAppNotificationSettingKey = Exclude<keyof NotificationSettings, EmailNotificationSettingKey>
+
+const EMAIL_NOTIFICATION_TYPES: Array<{
+    key: EmailNotificationSettingKey
+    icon: typeof Bell
+    title: string
+}> = [
+    {
+        key: "email_workflow_notifications",
+        icon: Workflow,
+        title: "Workflow Notifications",
+    },
+    {
+        key: "email_daily_digest",
+        icon: Newspaper,
+        title: "Daily Digest",
+    },
+]
+
+function EmailNotificationsCard() {
+    const { data: settings, isLoading } = useNotificationSettings()
+    const updateSettings = useUpdateNotificationSettings()
+
+    const handleToggle = async (key: EmailNotificationSettingKey, value: boolean) => {
+        try {
+            await updateSettings.mutateAsync({ [key]: value })
+        } catch {
+            toast.error("Failed to update notification settings")
+        }
+    }
+
+    if (isLoading) {
+        return (
+            <Card>
+                <CardContent className="flex items-center justify-center py-8">
+                    <Loader2 className="size-6 animate-spin motion-reduce:animate-none text-muted-foreground" aria-hidden="true" />
+                </CardContent>
+            </Card>
+        )
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Mail className="size-5" aria-hidden="true" />
+                    Email Notifications
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {EMAIL_NOTIFICATION_TYPES.map((type) => (
+                    <div
+                        key={type.key}
+                        className="flex items-center justify-between p-4 rounded-lg border"
+                    >
+                        <div className="flex items-center gap-3">
+                            <type.icon className="size-5 text-muted-foreground" aria-hidden="true" />
+                            <p className="font-medium">{type.title}</p>
+                        </div>
+                        <Switch
+                            checked={settings?.[type.key] ?? false}
+                            onCheckedChange={(checked) => handleToggle(type.key, checked)}
+                            disabled={!settings || updateSettings.isPending}
+                            aria-label={`${type.title} email`}
+                        />
+                    </div>
+                ))}
+            </CardContent>
+        </Card>
+    )
+}
+
 // Notification preferences card matching actual API schema
 function NotificationsSettingsCard() {
     const { data: settings, isLoading } = useNotificationSettings()
@@ -144,7 +217,7 @@ function NotificationsSettingsCard() {
 
     // These match the NotificationSettings interface in notifications.ts
     const notificationTypes: Array<{
-        key: keyof NotificationSettings
+        key: InAppNotificationSettingKey
         icon: typeof Bell
         title: string
         description: string
@@ -261,6 +334,7 @@ export default function NotificationSettingsPage() {
             <div className="flex max-w-3xl flex-col gap-6 p-6">
                 <BrowserNotificationsCard />
                 <NotificationsSettingsCard />
+                <EmailNotificationsCard />
             </div>
         </div>
     )

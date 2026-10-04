@@ -366,7 +366,7 @@ describe("DonorDetailPage", () => {
         fireEvent.mouseMove(claimItem)
         fireEvent.click(claimItem)
         await waitFor(() => expect(mockClaimDonor).toHaveBeenCalledWith("donor-1"))
-        expect(screen.queryByRole("menuitem", { name: "Edit", exact: true })).not.toBeInTheDocument()
+        expect(screen.queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument()
     })
 
     it("uses the compact entity header and action hierarchy shared by other detail pages", async () => {

@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from "react"
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { assert, describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, within } from "@testing-library/react"
 import "@testing-library/jest-dom"
 import { AppointmentSettings } from "../components/appointments/AppointmentSettings"
@@ -18,6 +18,7 @@ const mockUseRegenerateBookingLink = vi.fn()
 const mockUseAppointments = vi.fn()
 const mockUseAppointment = vi.fn()
 const mockUseApproveAppointment = vi.fn()
+const mockUseCompleteAppointment = vi.fn()
 const mockUseRescheduleAppointment = vi.fn()
 const mockUseRescheduleSlots = vi.fn()
 const mockUseCancelAppointment = vi.fn()
@@ -95,10 +96,11 @@ vi.mock("@/components/ui/dialog", () => ({
     DialogTitle: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
 }))
 
-const mockNavigation = vi.hoisted(() => ({ search: "" }))
+const mockNavigation = vi.hoisted(() => ({ search: "", pathname: "/settings/appointments", replace: vi.fn() }))
 vi.mock("next/navigation", () => ({
     useSearchParams: () => new URLSearchParams(mockNavigation.search),
-    usePathname: () => "/settings/appointments",
+    usePathname: () => mockNavigation.pathname,
+    useRouter: () => ({ replace: mockNavigation.replace }),
 }))
 
 vi.mock("@/lib/hooks/use-permissions", () => ({
@@ -185,6 +187,11 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
         mutate: mockUseCancelAppointment,
         isPending: false,
     }),
+    useCompleteAppointment: () => ({
+        mutate: mockUseCompleteAppointment,
+        isPending: false,
+        variables: undefined,
+    }),
     useRetryAppointmentGoogleSync: () => ({ mutate: vi.fn(), isPending: false }),
     useResolveAppointmentGoogleConflict: () => ({ mutate: vi.fn(), isPending: false }),
     usePublicBookingPage: (publicSlug: string, enabled?: boolean) =>
@@ -205,6 +212,7 @@ describe("Appointments Google Meet UI", () => {
     beforeEach(() => {
         vi.clearAllMocks()
         mockNavigation.search = ""
+        mockNavigation.pathname = "/settings/appointments"
         mockUseAppointmentStatusCounts.mockReturnValue({
             data: { pending: 0, confirmed: 0, completed: 0, cancelled: 0, expired: 0, no_show: 0 },
             isError: false,
@@ -627,7 +635,7 @@ describe("Appointments Google Meet UI", () => {
                 scheduling: syncState ? {
                     revision: 1,
                     google_sync: { state: syncState, conflict: null },
-                    capabilities: { can_reschedule: true, can_cancel: true, can_retry_google_sync: true },
+                    capabilities: { can_reschedule: true, can_cancel: true, can_complete: false, can_retry_google_sync: true },
                 } : null,
                 surrogate_id: null,
                 surrogate_number: null,
@@ -640,7 +648,9 @@ describe("Appointments Google Meet UI", () => {
         })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Casey Client")[0])
+        const appointmentEntry = screen.getAllByText("Casey Client")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
 
         expect(screen.getByText(/Join Google Meet/i)).toBeInTheDocument()
         const header = within(screen.getByTestId("dialog-header"))
@@ -655,6 +665,63 @@ describe("Appointments Google Meet UI", () => {
             expect(screen.getByRole("button", { name: "Retry Google update" })).toBeEnabled()
             expect(header.queryByRole("alert")).not.toBeInTheDocument()
         }
+    })
+
+    it.each([
+        [true, "completed"],
+        [true, "no_show"],
+        [false, null],
+    ] as const)("offers outcome buttons only when completion is allowed (%s, %s)", (canComplete, outcome) => {
+        const scheduledStart = new Date("2024-02-01T18:00:00Z").toISOString()
+        const scheduledEnd = new Date("2024-02-01T18:30:00Z").toISOString()
+        const appointment = {
+            id: "appt-outcome",
+            user_id: "u1",
+            appointment_type_id: "type1",
+            appointment_type_name: "Intro Call",
+            client_name: "Outcome Client",
+            client_email: "outcome@example.com",
+            client_phone: "555-0100",
+            client_timezone: "America/Los_Angeles",
+            client_notes: null,
+            scheduled_start: scheduledStart,
+            scheduled_end: scheduledEnd,
+            duration_minutes: 30,
+            meeting_mode: "phone",
+            status: "confirmed",
+            surrogate_id: null,
+            surrogate_number: null,
+            intended_parent_id: null,
+            intended_parent_name: null,
+            created_at: scheduledStart,
+            updated_at: scheduledStart,
+            scheduling: {
+                revision: 4,
+                google_sync: { state: null, linked: false, error_code: null, conflict: null },
+                capabilities: { can_reschedule: true, can_cancel: true, can_complete: canComplete, can_retry_google_sync: false, can_resolve_google_conflict: false },
+            },
+        }
+        mockUseAppointments.mockReturnValue({
+            data: { items: [appointment], total: 1, page: 1, per_page: 50, pages: 1 },
+            isLoading: false,
+        })
+        mockUseAppointment.mockReturnValue({ data: appointment, isLoading: false })
+
+        render(<AppointmentsList />)
+        const entry = screen.getAllByText("Outcome Client")[0]
+        assert.isDefined(entry)
+        fireEvent.click(entry)
+
+        if (!outcome) {
+            expect(screen.queryByRole("button", { name: "Completed" })).not.toBeInTheDocument()
+            expect(screen.queryByRole("button", { name: "No-show" })).not.toBeInTheDocument()
+            return
+        }
+        fireEvent.click(screen.getByRole("button", { name: outcome === "completed" ? "Completed" : "No-show" }))
+        expect(mockUseCompleteAppointment).toHaveBeenCalledWith(
+            expect.objectContaining({ appointmentId: "appt-outcome", status: outcome, expectedRevision: 4, requestId: expect.any(String) }),
+            expect.any(Object),
+        )
     })
 
     it("keeps pending appointment selection separate from approval actions", () => {
@@ -708,6 +775,56 @@ describe("Appointments Google Meet UI", () => {
 
         expect(mockUseApproveAppointment).toHaveBeenCalledWith({ appointmentId: "appt-pending" })
         expect(mockUseAppointment).not.toHaveBeenCalledWith("appt-pending")
+    })
+
+    it("opens the appointment named in the URL and drops the param once handled", () => {
+        mockNavigation.pathname = "/appointments"
+        mockNavigation.search = "appointment=appt-linked"
+        mockUseAppointment.mockReturnValue({
+            data: {
+                id: "appt-linked",
+                user_id: "u1",
+                appointment_type_id: "type1",
+                appointment_type_name: "Initial Interview",
+                client_name: "Linked Client",
+                client_email: "linked@example.com",
+                client_phone: "5550100",
+                client_timezone: "America/Los_Angeles",
+                client_notes: null,
+                scheduled_start: "2026-02-23T20:00:00Z",
+                scheduled_end: "2026-02-23T20:30:00Z",
+                duration_minutes: 30,
+                meeting_mode: "phone",
+                status: "pending",
+                pending_expires_at: null,
+                approved_at: null,
+                approved_by_user_id: null,
+                approved_by_name: null,
+                cancelled_at: null,
+                cancelled_by_client: false,
+                cancellation_reason: null,
+                zoom_join_url: null,
+                google_event_id: null,
+                google_meet_url: null,
+                surrogate_id: null,
+                surrogate_number: null,
+                intended_parent_id: null,
+                intended_parent_name: null,
+                created_at: "2026-02-20T20:00:00Z",
+                updated_at: "2026-02-20T20:00:00Z",
+            },
+            isLoading: false,
+        })
+
+        render(<AppointmentsList />)
+
+        expect(mockUseAppointment).toHaveBeenCalledWith("appt-linked")
+        expect(screen.getAllByText("Linked Client").length).toBeGreaterThan(0)
+        mockUseApproveAppointment.mockImplementation(
+            (_payload: unknown, options?: { onSuccess?: () => void }) => options?.onSuccess?.()
+        )
+        fireEvent.click(screen.getByRole("button", { name: "Approve" }))
+        expect(mockNavigation.replace).toHaveBeenCalledWith("/appointments", { scroll: false })
     })
 
     it("shows reschedule action in appointment details", () => {
@@ -834,7 +951,9 @@ describe("Appointments Google Meet UI", () => {
         mockUseRescheduleSlots.mockReturnValue({ data: { slots: [], appointment_type: null }, isLoading: false, isError: true, refetch })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Test Zhang")[0])
+        const appointmentEntry = screen.getAllByText("Test Zhang")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
         fireEvent.click(screen.getByRole("button", { name: /reschedule appointment/i }))
         fireEvent.click(screen.getByRole("button", { name: "Retry availability" }))
 
@@ -895,7 +1014,9 @@ describe("Appointments Google Meet UI", () => {
         }))
 
         const { rerender } = render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Casey Client")[0])
+        const appointmentEntry = screen.getAllByText("Casey Client")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
         fireEvent.click(screen.getByRole("button", { name: /cancel appointment/i }))
         fireEvent.change(screen.getByLabelText("Reason (optional)"), {
             target: { value: "Client requested a new date" },
@@ -987,7 +1108,9 @@ describe("Appointments Google Meet UI", () => {
         })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Test Zhang")[0])
+        const appointmentEntry = screen.getAllByText("Test Zhang")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
 
         fireEvent.click(screen.getByRole("button", { name: /reschedule appointment/i }))
         fireEvent.click(screen.getByRole("button", { name: /9:15 AM PST/i }))
@@ -1095,7 +1218,9 @@ describe("Appointments Google Meet UI", () => {
         })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Test Zhang")[0])
+        const appointmentEntry = screen.getAllByText("Test Zhang")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
 
         fireEvent.click(screen.getByRole("button", { name: /reschedule appointment/i }))
         fireEvent.click(screen.getByRole("button", { name: /9:15 AM PST/i }))
@@ -1368,10 +1493,14 @@ describe("Appointments Google Meet UI", () => {
         })
 
         render(<AppointmentsList />)
-        fireEvent.click(screen.getAllByText("Casey Client")[0])
+        const appointmentEntry = screen.getAllByText("Casey Client")[0]
+        assert.isDefined(appointmentEntry)
+        fireEvent.click(appointmentEntry)
 
         expect(screen.getByText(/Unable to load appointment details/i)).toBeInTheDocument()
-        fireEvent.click(screen.getAllByRole("button", { name: /retry/i })[0])
+        const retryButton = screen.getAllByRole("button", { name: /retry/i })[0]
+        assert.isDefined(retryButton)
+        fireEvent.click(retryButton)
         expect(refetch).toHaveBeenCalled()
     })
 

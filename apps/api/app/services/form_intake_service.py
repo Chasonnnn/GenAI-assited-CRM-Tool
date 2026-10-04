@@ -34,10 +34,8 @@ from app.db.enums import (
     TrackingMode,
     WorkflowExecutionStatus,
 )
-from app.db.enums.workflows import WorkflowTriggerType
 from app.db.models import (
     Attachment,
-    AutomationWorkflow,
     ConsentRecord,
     Donor,
     EmbedSession,
@@ -66,7 +64,6 @@ from app.services import (
     meta_crm_dataset_service,
     org_service,
     surrogate_input_normalization_service,
-    workflow_execution_authority,
     zapier_outbound_service,
 )
 from app.services.attachment_service import (
@@ -743,258 +740,6 @@ def get_embed_setup_health(
     }
 
 
-def _trigger_config_form_id(trigger_config: dict[str, Any] | None) -> str | None:
-    if not isinstance(trigger_config, dict):
-        return None
-    value = trigger_config.get("form_id")
-    if value is None:
-        return None
-    return str(value)
-
-
-def _has_enabled_form_scoped_submission_workflow(
-    db: Session,
-    *,
-    org_id: uuid.UUID,
-    form_id: uuid.UUID,
-    exclude_workflow_id: uuid.UUID | None = None,
-) -> bool:
-    # Only form_submission-subject workflows run for submissions; a surrogate-subject
-    # workflow with a form trigger never executes and must not suppress default routing.
-    query = db.query(AutomationWorkflow).filter(
-        AutomationWorkflow.organization_id == org_id,
-        AutomationWorkflow.scope == "org",
-        AutomationWorkflow.subject_type == "form_submission",
-        AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
-        AutomationWorkflow.is_enabled.is_(True),
-    )
-    if exclude_workflow_id is not None:
-        query = query.filter(AutomationWorkflow.id != exclude_workflow_id)
-    target_form_id = str(form_id)
-    return any(
-        _trigger_config_form_id(workflow.trigger_config) == target_form_id
-        for workflow in query.all()
-    )
-
-
-SURROGATE_DEFAULT_INTAKE_ROUTING_ACTIONS: tuple[dict[str, Any], ...] = (
-    {"action_type": "auto_match_submission", "requires_approval": True},
-    {"action_type": "create_intake_lead", "requires_approval": True},
-)
-# Matches scripts/fixtures/donor-intake-workflow.json: link exact matches, otherwise create
-# the donor once the profile photo scan is clean.
-DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS: tuple[dict[str, Any], ...] = (
-    {"action_type": "auto_match_submission", "requires_approval": False},
-    {
-        "action_type": "create_intake_lead",
-        "source": "website",
-        "auto_promote": True,
-        "requires_approval": False,
-    },
-)
-# Earlier generated donor routing; republishing upgrades it because no admin edited it.
-_LEGACY_DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS: tuple[dict[str, Any], ...] = (
-    {"action_type": "create_intake_lead", "requires_approval": True},
-)
-_GENERATED_INTAKE_ROUTING_ACTION_SETS = (
-    SURROGATE_DEFAULT_INTAKE_ROUTING_ACTIONS,
-    DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS,
-    _LEGACY_DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS,
-)
-
-
-def _default_intake_routing_actions(form: Form) -> list[dict[str, Any]]:
-    if form.lead_kind in DONOR_LEAD_KINDS:
-        return [dict(action) for action in DONOR_DEFAULT_INTAKE_ROUTING_ACTIONS]
-    return [dict(action) for action in SURROGATE_DEFAULT_INTAKE_ROUTING_ACTIONS]
-
-
-def _generated_intake_routing_trigger_config(db: Session, form: Form) -> dict[str, Any]:
-    """Return the trigger config a builder save would store for the generated workflow.
-
-    Matching the builder's canonical form keeps a no-op save from changing the
-    execution-authority digest.
-    """
-    from app.services import workflow_service
-
-    return workflow_service._canonicalize_trigger_config(
-        db,
-        form.organization_id,
-        WorkflowTriggerType.FORM_SUBMITTED,
-        {"form_id": str(form.id)},
-        entity_type="form_submission",
-    )
-
-
-def _has_generated_intake_routing_configuration(workflow: AutomationWorkflow, form: Form) -> bool:
-    """True when the routing workflow still holds a generated configuration, not admin edits."""
-    if workflow.conditions:
-        return False
-    # Earlier releases stored only the form id; the builder adds a single-kind form's kind,
-    # which may be a kind the form had before an applicant type change.
-    trigger_config = workflow.trigger_config or {}
-    if set(trigger_config) - {"form_id", "lead_kind"} or trigger_config.get("form_id") != str(
-        form.id
-    ):
-        return False
-    if "lead_kind" in trigger_config and trigger_config["lead_kind"] not in {
-        "surrogate",
-        *DONOR_LEAD_KINDS,
-    }:
-        return False
-    actions = list(workflow.actions or [])
-    return any(actions == list(generated) for generated in _GENERATED_INTAKE_ROUTING_ACTION_SETS)
-
-
-def _generated_intake_routing_is_equivalent(
-    workflow: AutomationWorkflow,
-    trigger_config: dict[str, Any],
-    actions: list[dict[str, Any]],
-) -> bool:
-    """True when the stored routing runs exactly like the current generated routing.
-
-    A stored config without lead_kind matches every submission of a single-kind form,
-    so it runs like the canonical config that names that kind.
-    """
-    stored_kind = (workflow.trigger_config or {}).get("lead_kind")
-    return list(workflow.actions or []) == actions and stored_kind in (
-        None,
-        trigger_config.get("lead_kind"),
-    )
-
-
-def _authorize_generated_intake_routing(
-    db: Session,
-    workflow: AutomationWorkflow,
-    *,
-    form: Form,
-    trigger_config: dict[str, Any],
-    actions: list[dict[str, Any]],
-    user_id: uuid.UUID | None,
-) -> None:
-    """Grant system execution authority only to the exact current generated configuration."""
-    if (
-        workflow.conditions
-        or workflow.subject_type != "form_submission"
-        or workflow.trigger_config != trigger_config
-        or workflow.actions != actions
-    ):
-        return
-    create_permission = (
-        "create_donors" if form.lead_kind in DONOR_LEAD_KINDS else "create_surrogates"
-    )
-    workflow_execution_authority.authorize_generated_routing(
-        db, workflow, user_id, create_permission
-    )
-
-
-def ensure_default_intake_routing_workflow(
-    db: Session,
-    *,
-    org_id: uuid.UUID,
-    form: Form,
-    user_id: uuid.UUID | None,
-    commit: bool = True,
-) -> AutomationWorkflow | None:
-    """Ensure a form-scoped shared-intake routing workflow exists.
-
-    A new routing workflow starts enabled. Republishing refreshes only a
-    configuration that still matches a generated default, keeps admin edits and
-    their execution grant, and never re-enables a paused workflow. Under permission
-    v2 an exact generated configuration gets a system execution grant when the
-    publisher can create the form's record type.
-    """
-    if form.status != FormStatus.PUBLISHED.value:
-        return None
-
-    system_key = f"shared_intake_routing:{form.id}"
-    workflow = (
-        db.query(AutomationWorkflow)
-        .filter(
-            AutomationWorkflow.organization_id == org_id,
-            AutomationWorkflow.system_key == system_key,
-            AutomationWorkflow.scope == "org",
-            AutomationWorkflow.trigger_type == WorkflowTriggerType.FORM_SUBMITTED.value,
-        )
-        .first()
-    )
-
-    # Respect existing enabled custom workflows for this form.
-    if _has_enabled_form_scoped_submission_workflow(
-        db,
-        org_id=org_id,
-        form_id=form.id,
-        exclude_workflow_id=workflow.id if workflow else None,
-    ):
-        return None
-
-    trigger_config = _generated_intake_routing_trigger_config(db, form)
-    actions = _default_intake_routing_actions(form)
-
-    if workflow:
-        if not _has_generated_intake_routing_configuration(workflow, form):
-            return workflow
-        # Rewriting an equivalent config would change the digest and void a current grant.
-        if workflow_execution_authority.grant_is_current(
-            workflow
-        ) and _generated_intake_routing_is_equivalent(workflow, trigger_config, actions):
-            return workflow
-        workflow.subject_type = "form_submission"
-        workflow.trigger_config = trigger_config
-        workflow.actions = actions
-        workflow.conditions = []
-        workflow.condition_logic = "AND"
-        workflow.requires_review = False
-        workflow.is_system_workflow = True
-        workflow.updated_by_user_id = user_id
-        workflow.updated_at = datetime.now(UTC)
-    else:
-        workflow = AutomationWorkflow(
-            organization_id=org_id,
-            name=f"Intake Routing ({str(form.id)[:8]})",
-            description=(
-                "Matches donor submissions to an existing donor, or creates a donor after the "
-                "uploaded photo passes scanning."
-                if form.lead_kind in DONOR_LEAD_KINDS
-                else (
-                    "Automatically routes shared form submissions by running auto-match first, "
-                    "then creating an intake lead if no deterministic match exists."
-                )
-            ),
-            icon="workflow",
-            scope="org",
-            owner_user_id=None,
-            subject_type="form_submission",
-            trigger_type=WorkflowTriggerType.FORM_SUBMITTED.value,
-            trigger_config=trigger_config,
-            conditions=[],
-            condition_logic="AND",
-            actions=actions,
-            is_enabled=True,
-            is_system_workflow=True,
-            system_key=system_key,
-            requires_review=False,
-            created_by_user_id=user_id,
-            updated_by_user_id=user_id,
-        )
-        db.add(workflow)
-    db.flush()
-    _authorize_generated_intake_routing(
-        db,
-        workflow,
-        form=form,
-        trigger_config=trigger_config,
-        actions=actions,
-        user_id=user_id,
-    )
-    if commit:
-        db.commit()
-        db.refresh(workflow)
-    else:
-        db.flush()
-    return workflow
-
-
 def list_intake_links(
     db: Session,
     *,
@@ -1661,20 +1406,14 @@ def _trigger_intake_lead_created_workflow(
     form_id: uuid.UUID | None,
     submission_id: uuid.UUID | None,
 ) -> None:
-    try:
-        from app.services import workflow_triggers
+    from app.services import workflow_triggers
 
-        workflow_triggers.trigger_intake_lead_created(
-            db,
-            lead,
-            form_id=form_id,
-            submission_id=submission_id,
-        )
-    except Exception:
-        logger.debug(
-            "trigger_intake_lead_created_failed",
-            exc_info=True,
-        )
+    workflow_triggers.trigger_intake_lead_created(
+        db,
+        lead,
+        form_id=form_id,
+        submission_id=submission_id,
+    )
 
 
 def _resolve_surrogate_owner_user_id(
@@ -1761,6 +1500,9 @@ def process_form_submission_workflow(
     if submission is None:
         raise ValueError("Form submission not found")
 
+    from app.services import form_routing_service
+
+    form_routing_service.route_submission(db, org_id=org_id, submission_id=submission_id)
     executions = _trigger_form_submitted_workflow(db, submission=submission)
     incomplete_statuses = {
         WorkflowExecutionStatus.FAILED.value,
@@ -1855,6 +1597,7 @@ def _normalize_shared_outcome(match_status: str | None) -> str:
         FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value,
         FormSubmissionMatchStatus.LEAD_CREATED.value,
         FormSubmissionMatchStatus.WORKFLOW_PENDING.value,
+        FormSubmissionMatchStatus.ROUTING_REVIEW.value,
     }:
         return match_status
     return FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
@@ -2912,15 +2655,47 @@ def auto_match_submission(
     return submission, FormSubmissionMatchStatus.AMBIGUOUS_REVIEW.value
 
 
+def can_create_intake_lead(
+    db: Session,
+    submission: FormSubmission,
+    *,
+    allow_ambiguous: bool = False,
+) -> bool:
+    """Shared admission guard for module routing and intake creation."""
+    from app.services import donor_intake_service
+
+    if submission.source_mode != FormLinkMode.SHARED.value:
+        return False
+    if submission.surrogate_id or submission.donor_id:
+        return False
+    if allow_ambiguous:
+        return True
+    if submission.match_reason == "manual_review_required":
+        return False
+    if (
+        submission.lead_kind in DONOR_LEAD_KINDS
+        and submission.match_reason in donor_intake_service.REVIEW_REQUIRED_REASONS
+    ):
+        return False
+    return (
+        not db.query(FormSubmissionMatchCandidate.id)
+        .filter(
+            FormSubmissionMatchCandidate.organization_id == submission.organization_id,
+            FormSubmissionMatchCandidate.submission_id == submission.id,
+        )
+        .first()
+    )
+
+
 def create_intake_lead_for_submission(
     db: Session,
     *,
     submission: FormSubmission,
     user_id: uuid.UUID | None,
+    session=None,
     source: str | None = None,
     allow_ambiguous: bool = False,
     auto_promote: bool = False,
-    workflow_execution_id: uuid.UUID | None = None,
     commit: bool = True,
     after_commit: list[Callable[[], None]] | None = None,
 ) -> tuple[FormSubmission, IntakeLead | None]:
@@ -2943,27 +2718,10 @@ def create_intake_lead_for_submission(
             .one()
         )
         if auto_promote and not submission.intake_lead_id and not submission.donor_id:
-            donor_intake_service.match_submission(db, submission)
-        if (
-            submission.match_reason in donor_intake_service.REVIEW_REQUIRED_REASONS
-            and not allow_ambiguous
-        ):
-            _persist_submission(db, submission, commit=commit)
-            return submission, None
-    if submission.surrogate_id or submission.donor_id:
-        if auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
-            _persist_submission(db, submission, commit=commit)
+            donor_intake_service.match_submission(db, submission, session=session)
+    if not can_create_intake_lead(db, submission, allow_ambiguous=allow_ambiguous):
+        _persist_submission(db, submission, commit=commit)
         return submission, None
-
-    if not allow_ambiguous:
-        has_candidates = (
-            db.query(FormSubmissionMatchCandidate.id)
-            .filter(FormSubmissionMatchCandidate.submission_id == submission.id)
-            .first()
-            is not None
-        )
-        if has_candidates:
-            return submission, None
 
     if submission.intake_lead_id:
         lead = (
@@ -2983,9 +2741,6 @@ def create_intake_lead_for_submission(
             lead.source_metadata = {
                 **(lead.source_metadata or {}),
                 "auto_create_donor": True,
-                "workflow_execution_id": str(workflow_execution_id)
-                if workflow_execution_id
-                else None,
             }
             db.flush()
             donor_intake_service.enqueue_promotion(db, submission=submission)
@@ -3018,9 +2773,6 @@ def create_intake_lead_for_submission(
     metadata: dict[str, Any] = {"submission_id": str(submission.id)}
     if auto_promote and submission.lead_kind in DONOR_LEAD_KINDS:
         metadata["auto_create_donor"] = True
-        metadata["workflow_execution_id"] = (
-            str(workflow_execution_id) if workflow_execution_id else None
-        )
     if source:
         metadata["source"] = source
     if link and link.campaign_name:
@@ -3035,8 +2787,6 @@ def create_intake_lead_for_submission(
         and link.embed_enabled
         and submission.lead_kind == FormLeadKind.SURROGATE.value
     )
-    if auto_promote_website_lead and not commit:
-        raise ValueError("Website promotion must own its transaction")
     if submission.lead_kind in DONOR_LEAD_KINDS:
         lead_source = DONOR_INTAKE_SOURCE
     else:
@@ -3057,9 +2807,7 @@ def create_intake_lead_for_submission(
     )
     submission.intake_lead_id = lead.id
     submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
-    submission.match_reason = (
-        "workflow_website_lead_creation" if auto_promote_website_lead else "workflow_lead_creation"
-    )
+    submission.match_reason = "routing_lead_creation"
     submission.matched_at = None
     db.query(FormSubmissionMatchCandidate).filter(
         FormSubmissionMatchCandidate.submission_id == submission.id
@@ -3070,7 +2818,7 @@ def create_intake_lead_for_submission(
     _persist_submission(db, submission, commit=commit)
     db.refresh(lead)
 
-    if auto_promote_website_lead:
+    def promote_website_lead() -> None:
         surrogate, _linked_submission_count = promote_intake_lead(
             db=db,
             lead=lead,
@@ -3080,13 +2828,13 @@ def create_intake_lead_for_submission(
             assign_to_user=False,
         )
         submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
-        submission.match_reason = "workflow_website_lead_creation"
+        submission.match_reason = "routing_lead_creation"
         submission.matched_at = None
-        _persist_submission(db, submission, commit=commit)
+        _persist_submission(db, submission, commit=True)
         db.refresh(lead)
         db.refresh(surrogate)
 
-    def trigger_created() -> None:
+    def link_website_event() -> None:
         meta_crm_dataset_service.link_website_lead_event_to_intake_lead(
             db,
             organization_id=submission.organization_id,
@@ -3094,6 +2842,7 @@ def create_intake_lead_for_submission(
             intake_lead_id=lead.id,
         )
 
+    def trigger_created() -> None:
         _trigger_intake_lead_created_workflow(
             db,
             lead=lead,
@@ -3101,10 +2850,18 @@ def create_intake_lead_for_submission(
             submission_id=submission.id,
         )
 
+    # Each side effect has its own transaction. Promotion failures must be reported
+    # without suppressing CRM attribution or staff workflows for the saved lead.
+    callbacks = ([promote_website_lead] if auto_promote_website_lead else []) + [
+        link_website_event,
+        trigger_created,
+    ]
     if commit:
-        trigger_created()
+        from app.services import form_routing_service
+
+        form_routing_service.run_after_commit(db, submission, callbacks)
     else:
-        after_commit.append(trigger_created)
+        after_commit.extend(callbacks)
     db.refresh(submission)
     return submission, lead
 
@@ -3413,7 +3170,7 @@ def _link_submission_to_donor(
     review_notes: str | None,
 ) -> tuple[FormSubmission, str]:
     """Manually link a held donor application; the caller authorized the donor."""
-    from app.services import audit_service, donor_intake_service
+    from app.services import audit_service, donor_intake_service, form_routing_service
 
     if submission.lead_kind not in DONOR_LEAD_KINDS:
         raise ValueError("Only donor submissions can be linked to a donor")
@@ -3442,9 +3199,9 @@ def _link_submission_to_donor(
         raise ValueError("Donor not found")
     if donor.donor_type != submission.lead_kind.removesuffix("_donor"):
         raise ValueError("Donor type does not match this application")
-    if submission.donor_id == donor.id:
+    if submission.donor_id == donor.id and not submission.routing_review_step:
         return submission, FormSubmissionMatchStatus.LINKED.value
-    if submission.donor_id:
+    if submission.donor_id and submission.donor_id != donor.id:
         raise ValueError("Submission is already linked to another donor")
     if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
         raise ValueError("Only pending_review submissions can be linked")
@@ -3454,6 +3211,7 @@ def _link_submission_to_donor(
             FormSubmission.organization_id == submission.organization_id,
             FormSubmission.form_id == submission.form_id,
             FormSubmission.donor_id == donor.id,
+            FormSubmission.id != submission.id,
         )
         .first()
         is not None
@@ -3461,6 +3219,7 @@ def _link_submission_to_donor(
         raise SubmissionLinkConflictError(DONOR_FORM_SUBMISSION_CONFLICT_MESSAGE)
 
     try:
+        form_routing_service.finish_review(db, submission, reviewer_id)
         now = datetime.now(UTC)
         submission.donor_id = donor.id
         submission.match_status = FormSubmissionMatchStatus.LINKED.value
@@ -3517,6 +3276,9 @@ def resolve_submission_match(
     review_notes: str | None = None,
     donor_id: uuid.UUID | None = None,
 ) -> tuple[FormSubmission, str]:
+    from app.services import form_routing_service
+
+    submission = form_routing_service.lock_submission(db, submission.organization_id, submission.id)
     if submission.source_mode != FormLinkMode.SHARED.value:
         raise ValueError("Only shared submissions can be match-resolved")
 
@@ -3552,56 +3314,51 @@ def resolve_submission_match(
             exclude_submission_id=submission.id,
         ):
             raise SubmissionLinkConflictError(SURROGATE_FORM_SUBMISSION_CONFLICT_MESSAGE)
-        submission.surrogate_id = surrogate.id
-        submission.match_status = FormSubmissionMatchStatus.LINKED.value
-        submission.match_reason = "manually_linked"
-        submission.matched_at = datetime.now(UTC)
+    else:
+        if not create_intake_lead:
+            raise ValueError("Provide surrogate_id or set create_intake_lead=true")
+        if submission.status == FormSubmissionStatus.REJECTED.value:
+            raise ValueError("Rejected submissions cannot be moved to intake")
+
+    after_commit: list[Callable[[], None]] = []
+    try:
+        form_routing_service.finish_review(db, submission, reviewer_id)
+        if surrogate_id:
+            submission.surrogate_id = surrogate.id
+            submission.match_status = FormSubmissionMatchStatus.LINKED.value
+            submission.match_reason = "manually_linked"
+            submission.matched_at = datetime.now(UTC)
+        elif submission.intake_lead_id:
+            submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
+            submission.match_reason = "existing_lead_retained"
+            submission.matched_at = None
+        else:
+            submission, _ = create_intake_lead_for_submission(
+                db=db,
+                submission=submission,
+                user_id=reviewer_id,
+                source="manual_review_resolution",
+                allow_ambiguous=True,
+                commit=False,
+                after_commit=after_commit,
+            )
+            submission.match_reason = "manual_lead_creation"
         if review_notes is not None:
             submission.review_notes = review_notes.strip() or None
         db.query(FormSubmissionMatchCandidate).filter(
-            FormSubmissionMatchCandidate.submission_id == submission.id
-        ).delete(synchronize_session=False)
-        try:
-            db.commit()
-        except IntegrityError as exc:
-            db.rollback()
-            if _is_unique_violation(exc, "uq_form_submission_surrogate_non_null"):
-                raise SubmissionLinkConflictError(
-                    SURROGATE_FORM_SUBMISSION_CONFLICT_MESSAGE
-                ) from None
-            raise
-        db.refresh(submission)
-        return submission, FormSubmissionMatchStatus.LINKED.value
-
-    if not create_intake_lead:
-        raise ValueError("Provide surrogate_id or set create_intake_lead=true")
-    if submission.status == FormSubmissionStatus.REJECTED.value:
-        raise ValueError("Rejected submissions cannot be moved to intake")
-
-    if submission.intake_lead_id:
-        submission.match_status = FormSubmissionMatchStatus.LEAD_CREATED.value
-        submission.match_reason = "existing_lead_retained"
-        submission.matched_at = None
-        if review_notes is not None:
-            submission.review_notes = review_notes.strip() or None
-        db.query(FormSubmissionMatchCandidate).filter(
-            FormSubmissionMatchCandidate.submission_id == submission.id
+            FormSubmissionMatchCandidate.organization_id == submission.organization_id,
+            FormSubmissionMatchCandidate.submission_id == submission.id,
         ).delete(synchronize_session=False)
         db.commit()
-        db.refresh(submission)
-        return submission, FormSubmissionMatchStatus.LEAD_CREATED.value
-
-    submission, _ = create_intake_lead_for_submission(
-        db=db,
-        submission=submission,
-        user_id=reviewer_id,
-        source="manual_review_resolution",
-        allow_ambiguous=True,
-    )
-    submission.match_reason = "manual_lead_creation"
-    if review_notes is not None:
-        submission.review_notes = review_notes.strip() or None
-    db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if surrogate_id and _is_unique_violation(exc, "uq_form_submission_surrogate_non_null"):
+            raise SubmissionLinkConflictError(SURROGATE_FORM_SUBMISSION_CONFLICT_MESSAGE) from None
+        raise
+    except Exception:
+        db.rollback()
+        raise
+    form_routing_service.run_after_commit(db, submission, after_commit)
     db.refresh(submission)
     return submission, _normalize_shared_outcome(submission.match_status)
 
@@ -3619,8 +3376,16 @@ def retry_submission_match(
     session=None,
 ) -> tuple[FormSubmission, str]:
     """Commit the reset, matching, and lead creation as one retry operation."""
+    from app.services import form_routing_service
+
+    submission = form_routing_service.lock_submission(db, submission.organization_id, submission.id)
+    if submission.source_mode != FormLinkMode.SHARED.value:
+        raise ValueError("Only shared submissions can be reprocessed")
+    if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
+        raise ValueError("Only pending_review submissions can be reprocessed")
     after_commit: list[Callable[[], None]] = []
     try:
+        form_routing_service.finish_review(db, submission, reviewer_id)
         submission, outcome = _retry_submission_match(
             db,
             submission=submission,
@@ -3637,8 +3402,7 @@ def retry_submission_match(
     except Exception:
         db.rollback()
         raise
-    for callback in after_commit:
-        callback()
+    form_routing_service.run_after_commit(db, submission, after_commit)
     db.refresh(submission)
     if after_commit:
         outcome = _normalize_shared_outcome(submission.match_status)
@@ -3659,11 +3423,6 @@ def _retry_submission_match(
     session=None,
 ) -> tuple[FormSubmission, str]:
     """Reset and optionally reprocess matching for a shared submission."""
-    if submission.source_mode != FormLinkMode.SHARED.value:
-        raise ValueError("Only shared submissions can be reprocessed")
-    if submission.status != FormSubmissionStatus.PENDING_REVIEW.value:
-        raise ValueError("Only pending_review submissions can be reprocessed")
-
     previous_lead: IntakeLead | None = None
     if submission.intake_lead_id:
         previous_lead = (

@@ -14,6 +14,8 @@ export type TaskFocusTarget =
 
 type TaskFocusNavigationOptions = {
     focusTarget: TaskFocusTarget | null
+    // Approval row to scroll to inside the approvals section.
+    highlightedApprovalId?: string | null
     activeView: "list" | "calendar"
     isLoading: boolean
     loadingApprovals: boolean
@@ -23,20 +25,22 @@ type TaskFocusNavigationOptions = {
 
 export function useTaskFocusNavigation({
     focusTarget,
+    highlightedApprovalId = null,
     activeView,
     isLoading,
     loadingApprovals,
     loadingStatusRequests,
     loadingImportApprovals,
 }: TaskFocusNavigationOptions) {
-    const handledFocusRef = useRef<TaskFocusTarget | null>(null)
+    const handledFocusRef = useRef<string | null>(null)
 
     useEffect(() => {
         if (!focusTarget) {
             handledFocusRef.current = null
             return
         }
-        if (handledFocusRef.current === focusTarget) return
+        const focusKey = `${focusTarget}:${highlightedApprovalId ?? ""}`
+        if (handledFocusRef.current === focusKey) return
         if (focusTarget !== "approvals" && activeView !== "list") return
         if (isLoading) return
         if (
@@ -52,17 +56,24 @@ export function useTaskFocusNavigation({
                 : focusTarget === "tasks"
                     ? "tasks-list"
                     : `tasks-${focusTarget}`
+        const highlighted =
+            focusTarget === "approvals" && highlightedApprovalId
+                ? document.getElementById(`approval-${highlightedApprovalId}`)
+                : null
         const target =
-            document.getElementById(targetId) || document.getElementById("tasks-list")
+            highlighted ||
+            document.getElementById(targetId) ||
+            document.getElementById("tasks-list")
         if (!target) return
 
-        target.scrollIntoView({ behavior: "smooth", block: "start" })
+        target.scrollIntoView({ behavior: "smooth", block: highlighted ? "center" : "start" })
         if (focusTarget !== "approvals") {
             localStorage.setItem("tasks-view", "list")
         }
-        handledFocusRef.current = focusTarget
+        handledFocusRef.current = focusKey
     }, [
         focusTarget,
+        highlightedApprovalId,
         activeView,
         isLoading,
         loadingApprovals,

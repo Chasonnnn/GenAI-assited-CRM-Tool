@@ -1,0 +1,79 @@
+{
+  "frontend": [
+    {
+      "path": "/health",
+      "host": "127.0.0.1",
+      "status": 200,
+      "content_type": null
+    },
+    {
+      "path": "/login",
+      "host": "app.surrogacyforce.com",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    {
+      "path": "/_next/static/chunks/fca85cbb-a2fcdcbc14cd80da.js",
+      "host": "app.surrogacyforce.com",
+      "status": 200,
+      "bytes": 201059
+    },
+    {
+      "path": "/login",
+      "host": "ops.surrogacyforce.com",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    {
+      "path": "/automation",
+      "host": "unknown.invalid",
+      "status": 404,
+      "content_type": null
+    }
+  ],
+  "telemetry": {
+    "status": "passed",
+    "transport": "loopback TCP HTTP",
+    "process_id": 6511,
+    "ports": {
+      "uvicorn": 57978,
+      "collector": 57977
+    },
+    "http_statuses": [
+      200,
+      200
+    ],
+    "otlp_batches": 2,
+    "span_count": 8,
+    "span_names": [
+      "GET",
+      "GET /records/{token}",
+      "SQL",
+      "fastapi.dependencies",
+      "fastapi.endpoint",
+      "fastapi.serialization",
+      "operation"
+    ],
+    "scopes": [
+      "application",
+      "fastapi",
+      "opentelemetry.instrumentation.httpx",
+      "opentelemetry.instrumentation.sqlalchemy"
+    ],
+    "health_trace_span_count": 0,
+    "provider_http_requests": 2,
+    "canaries_in_protobuf": [],
+    "synthetic_collector_secret_in_logs": false,
+    "content_type": "application/x-protobuf",
+    "collector_secret_header_received": true,
+    "uvicorn_stopped": true,
+    "collector_thread_stopped": true,
+    "telemetry_provider_cleared": true,
+    "sqlite_engine_disposed": true,
+    "process_exit_verified": true,
+    "listener_closure_verified": {
+      "uvicorn": true,
+      "collector": true
+    }
+  }
+}

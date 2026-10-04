@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from app.services.import_transformers import transform_height_flexible, transform_int_flexible
 
 
@@ -119,6 +121,49 @@ def test_transform_height_flexible_interprets_standard_feet_inches_quotes() -> N
     result = transform_height_flexible("4'11\"")
     assert result.success is True
     assert result.value == Decimal("4.92")
+
+
+@pytest.mark.parametrize("value", ["5 ft 4 ins.", "5'4ins", "64 INS", "64 ins."])
+def test_transform_height_flexible_accepts_plural_inch_abbreviations(value: str) -> None:
+    result = transform_height_flexible(value)
+
+    assert result.success is True
+    assert result.value == Decimal("5.33")
+
+
+@pytest.mark.parametrize("value", ["5 ft 4 inside", "5'4insect", "64 insulin"])
+def test_transform_height_flexible_rejects_unrecognized_inch_suffixes(value: str) -> None:
+    result = transform_height_flexible(value)
+
+    assert result.success is False
+    assert result.value is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("5”2 1/3", "5.17"),
+        ("5 ft 2 2/3 ins", "5.25"),
+        ("5'2 1/4\"", "5.17"),
+        ("5.2 3/4", "5.25"),
+        ("5'2 1/2\"", "5.25"),
+        ("5 ft 2½ inches", "5.25"),
+        ("5 ft 2.5 in", "5.25"),
+    ],
+)
+def test_transform_height_flexible_rounds_fractional_inches(value: str, expected: str) -> None:
+    result = transform_height_flexible(value)
+
+    assert result.success is True
+    assert result.value == Decimal(expected)
+
+
+@pytest.mark.parametrize("value", ["5”2 1/0", "5 ft 2 3/2 ins", "5.2 1/", "5'2 -1/3"])
+def test_transform_height_flexible_rejects_invalid_fractions(value: str) -> None:
+    result = transform_height_flexible(value)
+
+    assert result.success is False
+    assert result.value is None
 
 
 def test_transform_int_flexible_interprets_common_word_counts() -> None:

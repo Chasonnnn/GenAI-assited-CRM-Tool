@@ -14,10 +14,13 @@ export type TaskRelatedRecordFields = {
     donor_number?: string | null
     donor_type?: "egg" | "sperm" | null
     donor_name?: string | null
+    form_submission_id?: string | null
+    form_id?: string | null
+    form_name?: string | null
 }
 
 export type TaskRelatedRecordPresentation = {
-    kind: "surrogate" | "intended_parent" | "donor"
+    kind: "surrogate" | "intended_parent" | "donor" | "form_submission"
     id: string
     href: Route | null
     label: string
@@ -64,7 +67,26 @@ export function getTaskRelatedRecords(
         })
     }
 
+    const submission = getTaskFormSubmissionRecord(task)
+    if (submission) records.push(submission)
+
     return records
+}
+
+/** The form submission a review task belongs to; it opens Form Submissions on that form. */
+export function getTaskFormSubmissionRecord(
+    task: Pick<TaskRelatedRecordFields, "form_submission_id" | "form_id" | "form_name">,
+): TaskRelatedRecordPresentation | null {
+    if (!task.form_submission_id) return null
+    if (!task.form_id) {
+        return { kind: "form_submission", id: task.form_submission_id, href: null, label: "Submission unavailable" }
+    }
+    return {
+        kind: "form_submission",
+        id: task.form_submission_id,
+        href: `/automation/form-submissions?${new URLSearchParams({ form: task.form_id })}` as Route,
+        label: task.form_name || "Open submission",
+    }
 }
 
 export function getTaskRelatedRecordSelection(

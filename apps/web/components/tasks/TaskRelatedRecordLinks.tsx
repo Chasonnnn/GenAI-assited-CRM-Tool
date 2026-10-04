@@ -1,6 +1,7 @@
 import Link from "@/components/app-link"
 import { cn } from "@/lib/utils"
 import {
+    getTaskFormSubmissionRecord,
     getTaskRelatedRecords,
     type TaskRelatedRecordFields,
 } from "@/lib/task-related-record"
@@ -28,6 +29,25 @@ export function TaskRelatedRecordLinks({
             ) : (
                 <span key={`${record.kind}:${record.id}`}>{record.label}</span>
             ))}
+        </div>
+    )
+}
+
+/** Submission row for the task dialogs; renders nothing for tasks without a form submission. */
+export function TaskFormSubmissionField({ task }: { task: TaskRelatedRecordFields }) {
+    const submission = getTaskFormSubmissionRecord(task)
+    if (!submission) return null
+
+    return (
+        <div className="space-y-1 text-sm">
+            <p className="font-medium">Submission</p>
+            {submission.href ? (
+                <Link href={submission.href} className="text-primary hover:underline">
+                    {submission.label}
+                </Link>
+            ) : (
+                <p className="text-muted-foreground">{submission.label}</p>
+            )}
         </div>
     )
 }

@@ -2,6 +2,8 @@
 
 Callers commit configuration writes and their audit records together. Organization
 row locking serializes policy activation with role and individual-permission writes.
+Activation with paused workflow cancellations commits them with form routing before
+returning, after all configuration writes and their audit have been staged.
 """
 
 import hashlib
@@ -427,6 +429,7 @@ def activate(
         raise PermissionPolicyConflict(
             "Resolve all legacy revokes, record-scope review items, and unreviewed execution first"
         )
+    completions = []
     if changes.execution_resolutions:
         from app.services import campaign_access, workflow_execution_authority
 
@@ -440,7 +443,11 @@ def activate(
                 if item.item_type == item_type
             ]
             if resolutions:
-                service.apply_policy_execution_resolutions(db, org_id, actor_user_id, resolutions)
+                ended = service.apply_policy_execution_resolutions(
+                    db, org_id, actor_user_id, resolutions
+                )
+                if item_type == "workflow":
+                    completions.extend(ended)
     _apply_role_changes(db, org_id, reviewed.role_permissions)
     for resolution in changes.revoke_resolutions:
         row = (
@@ -513,6 +520,11 @@ def activate(
         },
     )
     db.flush()
+    if completions:
+        from app.services.workflow_engine_core import complete_paused_executions
+
+        # Configuration, its audit, cancellations, and form routing share this commit.
+        complete_paused_executions(db, completions)
     return get_configuration(db, org_id)
 
 

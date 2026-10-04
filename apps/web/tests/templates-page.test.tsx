@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { type Mock, describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
@@ -97,8 +97,8 @@ const mockTemplateWithEmail = {
 
 const mockFormScopedTemplate = {
     id: 'tmpl-form',
-    name: 'Pre-Screening: Auto-Match then Create Lead (Approval)',
-    description: 'Approval-gated intake routing for the Surrogate Pre-Screening Questionnaire',
+    name: 'Pre-Screening: Notify Intake Team (Approval)',
+    description: 'Approval-gated intake notification for the Surrogate Pre-Screening Questionnaire',
     category: 'onboarding',
     trigger_type: 'form_submitted',
     is_global: true,
@@ -109,8 +109,7 @@ const mockFormScopedTemplate = {
     conditions: [],
     condition_logic: 'AND',
     actions: [
-        { action_type: 'auto_match_submission', requires_approval: true },
-        { action_type: 'create_intake_lead', requires_approval: true },
+        { action_type: 'send_notification', title: 'New pre-screening submission', requires_approval: true },
     ],
 }
 
@@ -150,7 +149,9 @@ let mockForms = baseForms
 
 function getModalCreateButton() {
     const createButtons = screen.getAllByRole('button', { name: /create workflow/i })
-    return createButtons[createButtons.length - 1]
+    const button = createButtons.at(-1)
+    if (!button) throw new Error("Expected modal create button")
+    return button
 }
 
 describe('WorkflowTemplatesPanel', () => {
@@ -162,7 +163,7 @@ describe('WorkflowTemplatesPanel', () => {
         mockApiPost.mockResolvedValue({ id: 'workflow-1' })
 
         // Mock useQuery to return different data based on queryKey
-        ; (useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+        ; (useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).mockImplementation(({ queryKey }) => {
             if (queryKey[0] === 'template-categories') {
                 return { data: { categories: mockCategories }, isLoading: false, isError: false, error: null }
             }
@@ -228,7 +229,7 @@ describe('WorkflowTemplatesPanel', () => {
     })
 
     it('shows "No workflow templates" without a filter hint when no category is selected', () => {
-        ; (useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+        ; (useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).mockImplementation(({ queryKey }) => {
             if (queryKey[0] === 'template-categories') {
                 return { data: { categories: mockCategories }, isLoading: false, isError: false, error: null }
             }
@@ -257,7 +258,7 @@ describe('WorkflowTemplatesPanel', () => {
 
         expect(screen.getByText('No access to workflow templates')).toBeInTheDocument()
         expect(screen.queryByText('No workflow templates')).not.toBeInTheDocument()
-        const templateQueries = (useQuery as ReturnType<typeof vi.fn>).mock.calls
+        const templateQueries = (useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).mock.calls
             .map(([options]) => options)
             .filter((options) => options.queryKey[0] === 'templates' || options.queryKey[0] === 'template-categories')
         expect(templateQueries.length).toBeGreaterThan(0)
@@ -265,7 +266,7 @@ describe('WorkflowTemplatesPanel', () => {
     })
 
     it('renders a 403 from the templates request as the denied state, not an empty list', () => {
-        ; (useQuery as ReturnType<typeof vi.fn>).mockImplementation(({ queryKey }) => {
+        ; (useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).mockImplementation(({ queryKey }) => {
             if (queryKey[0] === 'templates') {
                 return {
                     data: undefined,
@@ -290,8 +291,8 @@ describe('WorkflowTemplatesPanel', () => {
         ['match_declined', 'Match Declined'],
         ['match_cancelled', 'Match Cancelled'],
     ])('labels the %s trigger', (triggerType, label) => {
-        const baseQuery = (useQuery as ReturnType<typeof vi.fn>).getMockImplementation()!
-        ; (useQuery as ReturnType<typeof vi.fn>).mockImplementation((options) => options.queryKey[0] === 'templates'
+        const baseQuery = (useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).getMockImplementation()!
+        ; (useQuery as Mock<(options: { queryKey: readonly unknown[]; enabled?: boolean }) => unknown>).mockImplementation((options) => options.queryKey[0] === 'templates'
             ? { data: [{ ...mockTemplates[0], id: `tmpl-${triggerType}`, name: `Template ${triggerType}`, trigger_type: triggerType }], isLoading: false, isError: false, error: null }
             : baseQuery(options))
         render(<WorkflowTemplatesPanel />)
@@ -329,7 +330,7 @@ describe('WorkflowTemplatesPanel', () => {
 
         fireEvent.click(
             screen.getByRole('button', {
-                name: /use template pre-screening: auto-match then create lead/i,
+                name: /use template pre-screening: notify intake team/i,
             })
         )
 
@@ -344,7 +345,7 @@ describe('WorkflowTemplatesPanel', () => {
 
         fireEvent.click(
             screen.getByRole('button', {
-                name: /use template pre-screening: auto-match then create lead/i,
+                name: /use template pre-screening: notify intake team/i,
             })
         )
 
@@ -407,7 +408,7 @@ describe('WorkflowTemplatesPanel', () => {
 
         fireEvent.click(
             screen.getByRole('button', {
-                name: /use template pre-screening: auto-match then create lead/i,
+                name: /use template pre-screening: notify intake team/i,
             })
         )
 
@@ -433,7 +434,7 @@ describe('WorkflowTemplatesPanel', () => {
 
         fireEvent.click(
             screen.getByRole('button', {
-                name: /use template pre-screening: auto-match then create lead/i,
+                name: /use template pre-screening: notify intake team/i,
             })
         )
 

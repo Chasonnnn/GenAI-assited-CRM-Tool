@@ -58,10 +58,27 @@ export interface AppointmentType {
     dial_in_number: string | null;
     auto_approve: boolean;
     reminder_hours_before: number;
+    /** Present on the owner's appointment type endpoints only. */
+    client_messages?: AppointmentClientMessages;
     is_active: boolean;
     created_at: string;
     updated_at: string;
 }
+
+export type AppointmentClientMessageKey =
+    | "request_received"
+    | "confirmed"
+    | "reminder"
+    | "rescheduled"
+    | "cancelled";
+
+export interface AppointmentClientMessage {
+    enabled: boolean;
+    /** Null uses the org default template for the message. */
+    template_id: string | null;
+}
+
+export type AppointmentClientMessages = Record<AppointmentClientMessageKey, AppointmentClientMessage>;
 
 export interface AppointmentTypeCreate {
     name: string;
@@ -75,6 +92,7 @@ export interface AppointmentTypeCreate {
     dial_in_number?: string | null;
     auto_approve?: boolean;
     reminder_hours_before?: number;
+    client_messages?: AppointmentClientMessages;
 }
 
 export interface AvailabilityRule {
@@ -178,6 +196,7 @@ export type GoogleSyncState = 'pending' | 'completed' | 'failed' | 'conflict' | 
 export interface AppointmentSchedulingCapabilities {
     can_reschedule: boolean;
     can_cancel: boolean;
+    can_complete: boolean;
     can_retry_google_sync: boolean;
     can_resolve_google_conflict: boolean;
 }
@@ -251,6 +270,7 @@ export interface BookingCreate {
     request_id?: string;
     override_availability?: boolean;
     override_reason?: string | null;
+    record_token?: string;
 }
 
 export interface PublicAppointmentView {
@@ -385,6 +405,18 @@ export function approveAppointment(
     options: SchedulingMutationOptions = {},
 ): Promise<Appointment> {
     return api.post<Appointment>(`/appointments/${appointmentId}/approve`, {
+        expected_revision: options.expectedRevision,
+        request_id: options.requestId,
+    });
+}
+
+export function completeAppointment(
+    appointmentId: string,
+    status: 'completed' | 'no_show',
+    options: Required<Pick<SchedulingMutationOptions, 'expectedRevision' | 'requestId'>>,
+): Promise<Appointment> {
+    return api.post<Appointment>(`/appointments/${appointmentId}/complete`, {
+        status,
         expected_revision: options.expectedRevision,
         request_id: options.requestId,
     });

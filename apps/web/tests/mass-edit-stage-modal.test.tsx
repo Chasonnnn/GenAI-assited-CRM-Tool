@@ -40,6 +40,7 @@ vi.mock("@/lib/hooks/use-surrogates", () => ({
 const STAGES: PipelineStage[] = [
     {
         id: "stage-disqualified",
+        stage_key: "disqualified",
         slug: "disqualified",
         label: "Disqualified",
         color: "#ef4444",
@@ -150,7 +151,9 @@ describe("MassEditStageModal", () => {
         fireEvent.click(screen.getByRole("button", { name: "Preview Matches" }))
 
         await waitFor(() => expect(mockPreviewMutateAsync).toHaveBeenCalledTimes(1))
-        const sentFilters = mockPreviewMutateAsync.mock.calls[0][0].data.filters as Record<string, unknown>
+        const request = mockPreviewMutateAsync.mock.calls[0]
+        if (!request) throw new Error("Expected mass edit preview request")
+        const sentFilters = request[0].data.filters as Record<string, unknown>
         expect(sentFilters.created_from).toBe("2025-02-01")
         expect(sentFilters).not.toHaveProperty("created_to")
     })
