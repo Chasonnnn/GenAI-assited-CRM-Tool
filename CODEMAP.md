@@ -24,7 +24,7 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 ## Repo Map
 - Root docs and audits: `README.md`, `CHANGELOG.md`, `REVIEW.md`, `LAUNCH_READINESS.md`, `ENTERPRISE_GAPS.md`, `CLAUDE.md`, `code_reviews.md`, `database_optimization.md`, `deployment.md`, `terraform.md`
 - CI/CD: `.github/workflows/*`, `cloudbuild/*`
-- Infra: `docker-compose.yml`, `infra/terraform/*`, `release-please-config.json`, `zap-baseline.conf`, `zap-baseline-report.html`, `zap.yaml`
+- Infra: `docker-compose.yml`, `infra/terraform/*`, `release-please-config.json`, `zap-baseline.conf`
 - Scripts/tests: `scripts/`, `load-tests/`
 - Backend: `apps/api`
 - Frontend: `apps/web`
@@ -36,13 +36,13 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - App entry: `apps/api/app/main.py`
 - Worker: `apps/api/app/worker.py`
 - CLI: `apps/api/app/cli.py`
-- Core utilities: `apps/api/app/core/*` (20 files: config, deps, csrf, rate limits, permissions, policies, logging, stage rules, async_utils, redis, telemetry, websocket, encryption, security, etc.)
+- Core utilities: `apps/api/app/core/*` (config, deps, csrf, rate limits, permissions, policies, logging, async_utils, redis, telemetry, websocket, encryption, security, etc.)
 - DB: `apps/api/app/db/*` (models package with 22 files, enums package with 17 files, session, types, base)
 - Utils: `apps/api/app/utils/*` (normalization, pagination, datetime_parsing, business_hours)
 - Routers: `apps/api/app/routers/*` (75 router files - see API Index)
 - Services: `apps/api/app/services/*` (100+ service files - see Services Index)
 - Service events: `apps/api/app/services/task_events.py`, `apps/api/app/services/surrogate_events.py`
-- Email providers: `apps/api/app/services/email_provider_service.py`, `apps/api/app/services/resend_email_service.py`, `apps/api/app/services/email_sender.py`
+- Email providers: `apps/api/app/services/email_provider_service.py`, `apps/api/app/services/resend_transport.py`, `apps/api/app/services/email_sender.py`
 - Webhook handlers: `apps/api/app/services/webhooks/*` (base, registry, meta, zoom, resend, zapier)
 - Appointment integrations: `apps/api/app/services/appointment_integrations.py`
 - Surrogate status helper: `apps/api/app/services/surrogate_status_service.py`
@@ -60,7 +60,7 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 ## Frontend Map (`apps/web`)
 - App entry: `apps/web/app/layout.tsx`
 - Authenticated layout: `apps/web/app/(app)/layout.tsx`
-- Public routes: `apps/web/app/login/page.tsx`, `apps/web/app/mfa/page.tsx`, `apps/web/app/invite/[id]/page.tsx`, `apps/web/app/apply/[token]/page.tsx`, `apps/web/app/book/*`, `apps/web/app/auth/*`, `apps/web/app/org-not-found/page.tsx`
+- Public routes: `apps/web/app/login/page.tsx`, `apps/web/app/mfa/page.tsx`, `apps/web/app/invite/[id]/page.tsx`, `apps/web/app/intake/[slug]/page.tsx`, `apps/web/app/book/*`, `apps/web/app/auth/*`
 - Print routes: `apps/web/app/(print)/*`
 - Core pages: `apps/web/app/(app)/dashboard/page.tsx`, `apps/web/app/(app)/surrogates/page.tsx`, `apps/web/app/(app)/surrogates/[id]/page.tsx`, `apps/web/app/(app)/intended-parents/page.tsx`, `apps/web/app/(app)/matches/page.tsx`, `apps/web/app/(app)/tasks/page.tsx`, `apps/web/app/(app)/ai-assistant/page.tsx`, `apps/web/app/(app)/reports/page.tsx`, `apps/web/app/(app)/automation/page.tsx`, `apps/web/app/(app)/settings/*`, `apps/web/app/(app)/search/page.tsx`, `apps/web/app/(app)/welcome/page.tsx`
 - Ops Console (platform admin): `apps/web/app/ops/layout.tsx`, `apps/web/app/ops/page.tsx`, `apps/web/app/ops/login/page.tsx`, `apps/web/app/ops/agencies/*`, `apps/web/app/ops/alerts/page.tsx`
@@ -87,7 +87,7 @@ Browser -> Next.js route -> `apps/web/lib/api.ts` or `apps/web/lib/api/*` -> Fas
 - Tasks: UI in `apps/web/app/(app)/tasks/page.tsx`, `apps/web/components/tasks/*`; API in `apps/api/app/routers/tasks.py`; services in `apps/api/app/services/task_service.py`, `apps/api/app/services/task_events.py`
 - Interviews: UI in `apps/web/components/surrogates/interviews/*`; API in `apps/api/app/routers/interviews.py`; services in `apps/api/app/services/interview_service.py`, `apps/api/app/services/interview_note_service.py`, `apps/api/app/services/interview_attachment_service.py`
 - Appointments/booking: UI in `apps/web/app/(app)/appointments/page.tsx`, `apps/web/app/book/*`, `apps/web/components/appointments/*`; API in `apps/api/app/routers/appointments.py`, `apps/api/app/routers/booking.py`; services in `apps/api/app/services/appointment_service.py`, `apps/api/app/services/appointment_integrations.py`, `apps/api/app/services/appointment_email_service.py`
-- Forms: UI in `apps/web/app/(app)/automation/forms/*`, public in `apps/web/app/apply/[token]/page.tsx`; API in `apps/api/app/routers/forms.py`, `apps/api/app/routers/forms_public.py`, `apps/api/app/routers/meta_forms.py`; services in `apps/api/app/services/form_service.py`, `apps/api/app/services/form_submission_service.py`
+- Forms: UI in `apps/web/app/(app)/automation/forms/*`, public in `apps/web/app/intake/[slug]/page.tsx`; API in `apps/api/app/routers/forms.py`, `apps/api/app/routers/forms_public.py`, `apps/api/app/routers/meta_forms.py`; services in `apps/api/app/services/form_service.py`, `apps/api/app/services/form_submission_service.py`
 - CSV imports + templates: UI in `apps/web/app/(app)/surrogates/import/page.tsx`, `apps/web/components/import/*`; API in `apps/api/app/routers/surrogates_import.py`, `apps/api/app/routers/import_templates.py`, `apps/api/app/routers/custom_fields.py`; services in `apps/api/app/services/import_service.py`, `apps/api/app/services/import_template_service.py`, `apps/api/app/services/custom_field_service.py`, `apps/api/app/services/import_detection_service.py`, `apps/api/app/services/import_ai_mapper_service.py`, `apps/api/app/services/import_transformers.py`
 - Automation/workflows: UI in `apps/web/app/(app)/automation/*`; API in `apps/api/app/routers/workflows.py`, `apps/api/app/routers/templates.py`; services in `apps/api/app/services/workflow_engine.py`, `apps/api/app/services/workflow_triggers.py`, `apps/api/app/services/workflow_action_preview.py`, `apps/api/app/services/workflow_access.py`, `apps/api/app/services/workflow_service.py`, `apps/api/app/services/workflow_email_provider.py`
 - Campaigns + email templates: UI in `apps/web/app/(app)/automation/campaigns/*`, `apps/web/app/(app)/automation/email-templates/page.tsx`; API in `apps/api/app/routers/campaigns.py`, `apps/api/app/routers/email_templates.py`; services in `apps/api/app/services/campaign_service.py`, `apps/api/app/services/email_service.py`, `apps/api/app/services/template_service.py`, `apps/api/app/services/system_email_template_service.py`
@@ -410,7 +410,7 @@ Services live in `apps/api/app/services/*`. Total: 100+ service files.
 ### Email Services
 - `email_service.py` - Email sending orchestration
 - `email_sender.py` - Email provider abstraction
-- `resend_email_service.py` - Resend API integration
+- `resend_transport.py` - Resend HTTP transport
 - `email_provider_service.py` - Email provider management
 - `resend_settings_service.py` - Resend configuration
 - `platform_email_service.py` - Platform admin emails
@@ -468,7 +468,6 @@ Services live in `apps/api/app/services/*`. Total: 100+ service files.
 - `media_service.py` - Media file handling
 - `pdf_export_service.py` - PDF generation
 - `transcription_service.py` - Interview transcription
-- `transcript_storage_service.py` - Transcript storage
 - `notification_service.py` - Notification routing
 - `search_service.py` - Full-text search
 - `http_service.py` - HTTP utility methods
@@ -514,7 +513,7 @@ Scheduled triggers live in `apps/api/app/routers/internal.py`.
 - Google OAuth + Gmail/Calendar: `apps/api/app/services/google_oauth.py`, `apps/api/app/services/gmail_service.py`, `apps/api/app/services/calendar_service.py`, `apps/api/app/routers/integrations.py`
 - Zoom: `apps/api/app/services/zoom_service.py`, `apps/api/app/routers/integrations.py`, `apps/api/app/routers/webhooks.py`
 - Meta Lead Ads + CAPI + Insights: `apps/api/app/services/meta_*`, `apps/api/app/routers/webhooks.py`, `apps/api/app/routers/admin_meta.py`, `apps/api/app/routers/meta_oauth.py`, `apps/api/app/routers/meta_forms.py`
-- Email provider (Resend): `apps/api/app/services/email_service.py`, `apps/api/app/services/resend_email_service.py`, `apps/api/app/worker.py`
+- Email provider (Resend): `apps/api/app/services/email_service.py`, `apps/api/app/services/resend_transport.py`, `apps/api/app/worker.py`
 - File storage: `apps/api/app/services/media_service.py`, `apps/api/app/services/attachment_service.py`, `apps/api/app/services/storage_client.py`
 - AI providers: `apps/api/app/services/ai_provider.py`, `apps/api/app/services/ai_chat_service.py`
 - PDF export: `apps/api/app/services/pdf_export_service.py`

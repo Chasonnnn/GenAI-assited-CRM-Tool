@@ -47,6 +47,8 @@ report_json.json
 report_md.md
 report_html.html
 zap.yaml
+/.build-test
+/zap-baseline-report.html
 
 # Local gcloud config/credentials (never commit)
 .authmux.toml

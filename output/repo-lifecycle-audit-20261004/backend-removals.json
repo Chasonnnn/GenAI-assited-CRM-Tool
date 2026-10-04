@@ -1,0 +1,45 @@
+{
+  "removed_modules": [
+    {
+      "path": "apps/api/app/core/stage_rules.py",
+      "proof": "No callers for either exported role-stage constant; live policies use surrogate_access and record_scope_service.",
+      "history": "1a1009ae1; fa33edccb",
+      "retained_tests": [
+        "test_surrogate_stage_role_permissions.py",
+        "test_surrogate_permission_access.py",
+        "test_stage_generation.py"
+      ]
+    },
+    {
+      "path": "apps/api/app/services/transcript_storage_service.py",
+      "proof": "No non-test callers including CLI, jobs, scripts and migrations; current interview creation stores inline TipTap JSON, and updates clear storage keys.",
+      "history": "f41782a44",
+      "retained_tests": [
+        "test_interviews.py",
+        "test_interviews_router_rbac_streaming_exports.py",
+        "test_pdf_export_service_interviews_and_profiles.py"
+      ],
+      "preserved": "Persisted storage-key columns, models and migration history remain unchanged."
+    },
+    {
+      "path": "apps/api/app/services/email_service.py:list_templates",
+      "proof": "No callers; router uses list_templates_for_user since ab221c599.",
+      "history": "ab221c599",
+      "retained_tests": [
+        "test_email_templates_personal_scope.py"
+      ]
+    }
+  ],
+  "removed_test_owner": "apps/api/tests/test_cli_and_transcript_storage.py",
+  "removed_tests": [
+    "test_transcript_storage_inline_and_offloaded",
+    "test_transcript_storage_load_and_delete_paths",
+    "test_transcript_storage_local_backend_roundtrip",
+    "test_transcript_storage_s3_backend_paths",
+    "test_transcript_storage_s3_download_no_such_key",
+    "test_transcript_storage_local_cleanup_versions"
+  ],
+  "removed_tests_contract": "Only the unreachable HTML/S3 offloading subsystem. Every CLI test is retained; independent AST review found retained functions unchanged.",
+  "independent_review": "No blocking findings; static caller/registry scan, AST test preservation, data/schema check and diff whitespace check.",
+  "risk": "Low: no active runtime path, endpoint, schema or data removed."
+}

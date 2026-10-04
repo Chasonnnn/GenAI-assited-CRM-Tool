@@ -1,0 +1,83 @@
+{
+  "observed_date": "2026-10-04",
+  "project": "probable-dream-484923-n7",
+  "region": "us-central1",
+  "source_head": "dbbc70a35",
+  "production_reported_version": "0.91.79",
+  "production_migration_head": "20261003_1800_timezone_aware_form_timestamps",
+  "local_migration_head": "20261004_1300_organization_logo",
+  "method": "Read-only authmux gcloud run services list, scheduler jobs list, public /health and /health/live; no tenant database or message contents read.",
+  "services": {
+    "crm-api": {
+      "revision": "crm-api-00258-j4d",
+      "traffic_percent": 100,
+      "minimum_instances": 1,
+      "explicit_flags": {
+        "ATTACHMENT_SCAN_ENABLED": "true",
+        "DB_AUTO_MIGRATE": "false",
+        "DB_MIGRATION_CHECK": "true",
+        "GCP_MONITORING_ENABLED": "true",
+        "MESSAGING_DELIVERY_DISPATCH_ENABLED": "true"
+      }
+    },
+    "crm-worker": {
+      "revision": "crm-worker-00303-m26",
+      "traffic_percent": 100,
+      "minimum_instances": 1,
+      "explicit_flags": {
+        "ATTACHMENT_SCAN_ENABLED": "true",
+        "DB_AUTO_MIGRATE": "false",
+        "DB_MIGRATION_CHECK": "true",
+        "GCP_MONITORING_ENABLED": "true",
+        "MESSAGING_DELIVERY_DISPATCH_ENABLED": "true",
+        "WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED": "false",
+        "WORKFLOW_MAINTENANCE_FALLBACK_ENABLED": "false",
+        "WORKFLOW_SWEEP_FALLBACK_ENABLED": "true"
+      }
+    },
+    "crm-web": {
+      "revision": "crm-web-00235-zvw",
+      "traffic_percent": 100,
+      "minimum_instances": 1
+    }
+  },
+  "absent_on_api_and_worker": [
+    "SCHEDULING_V2_ENABLED",
+    "MATCH_CASE_EXPANSION_ENABLED",
+    "OTEL_ENABLED",
+    "META_CAPI_ENABLED",
+    "FORMS_SHARED_INTAKE",
+    "FORMS_AUTO_MATCH",
+    "FORMS_TOKEN_LOCK",
+    "GMAIL_PUSH_TOPIC",
+    "GMAIL_PUSH_WEBHOOK_TOKEN",
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_EXPORTER_OTLP_HEADERS"
+  ],
+  "release_tag_defaults": {
+    "SCHEDULING_V2_ENABLED": false,
+    "MATCH_CASE_EXPANSION_ENABLED": false,
+    "OTEL_ENABLED": false,
+    "META_CAPI_ENABLED": false,
+    "FORMS_SHARED_INTAKE": true,
+    "FORMS_AUTO_MATCH": true,
+    "FORMS_TOKEN_LOCK": true
+  },
+  "scheduler_jobs": [
+    {
+      "name": "crm-billing-weekly-schedule",
+      "state": "ENABLED",
+      "schedule": "0 13 * * 1"
+    },
+    {
+      "name": "crm-clamav-update-schedule",
+      "state": "ENABLED",
+      "schedule": "0 3 * * 1"
+    }
+  ],
+  "limits": [
+    "Cloud Run flags describe the observed revisions; no historical never-enabled claim.",
+    "Absent flags evaluated against local release tag surrogacy-crm-platform-v0.91.79; deployed source digest not independently mapped.",
+    "Per-organization policy, bindings, provider settings, queue counts and authenticated production journeys not inspected."
+  ]
+}
