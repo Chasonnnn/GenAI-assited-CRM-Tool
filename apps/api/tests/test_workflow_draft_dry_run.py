@@ -2,6 +2,7 @@
 
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -11,10 +12,20 @@ from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email
 from app.core.security import create_session_token
 from app.db.enums import Role, WorkflowTriggerType
-from app.db.models import Membership, Organization, Surrogate, User
+from app.db.models import (
+    Appointment,
+    Attachment,
+    EntityNote,
+    IntendedParent,
+    Match,
+    Membership,
+    Organization,
+    Surrogate,
+    User,
+)
 from app.main import app
 from app.schemas.workflow import WorkflowCreate
-from app.services import session_service, workflow_service
+from app.services import pipeline_service, session_service, workflow_service
 from app.utils.normalization import normalize_email
 
 NOTIFY = {"action_type": "send_notification", "title": "Follow up", "recipients": "owner"}
@@ -176,9 +187,7 @@ async def test_draft_dry_run_requires_csrf(db, test_org, test_user, default_stag
 async def test_draft_dry_run_cannot_read_another_orgs_record(
     authed_client, db, test_org, test_user, default_stage
 ):
-    other_org = Organization(
-        id=uuid.uuid4(), name="Other", slug=f"other-{uuid.uuid4().hex[:8]}"
-    )
+    other_org = Organization(id=uuid.uuid4(), name="Other", slug=f"other-{uuid.uuid4().hex[:8]}")
     db.add(other_org)
     db.flush()
     other_owner = _user(db, other_org.id, Role.ADMIN)
@@ -198,9 +207,7 @@ async def test_draft_dry_run_cannot_read_another_orgs_record(
 async def test_draft_dry_run_cannot_target_another_orgs_workflow(
     authed_client, db, test_org, test_user, default_stage
 ):
-    other_org = Organization(
-        id=uuid.uuid4(), name="Other", slug=f"other-{uuid.uuid4().hex[:8]}"
-    )
+    other_org = Organization(id=uuid.uuid4(), name="Other", slug=f"other-{uuid.uuid4().hex[:8]}")
     db.add(other_org)
     db.flush()
     other_owner = _user(db, other_org.id, Role.ADMIN)
@@ -249,9 +256,7 @@ async def test_draft_dry_run_enforces_record_scope(db, test_org, test_user, defa
 
 
 @pytest.mark.asyncio
-async def test_saved_workflow_dry_run_enforces_record_scope(
-    db, test_org, test_user, default_stage
-):
+async def test_saved_workflow_dry_run_enforces_record_scope(db, test_org, test_user, default_stage):
     intake_user = _user(db, test_org.id, Role.INTAKE_SPECIALIST)
     workflow = workflow_service.create_workflow(
         db,
@@ -278,3 +283,140 @@ async def test_saved_workflow_dry_run_enforces_record_scope(
 
     assert response.status_code == 403
     assert "CA" not in response.text
+
+
+def _out_of_scope_records(db, org_id, owner, stage) -> dict[str, uuid.UUID]:
+    """One record of each linked type, all hanging off a surrogate the intake user cannot see."""
+    surrogate = _surrogate(db, org_id, owner.id, stage)
+    note = EntityNote(
+        organization_id=org_id,
+        entity_type="surrogate",
+        entity_id=surrogate.id,
+        content="Private note",
+        author_id=owner.id,
+    )
+    attachment = Attachment(
+        organization_id=org_id,
+        surrogate_id=surrogate.id,
+        uploaded_by_user_id=owner.id,
+        filename="private.txt",
+        storage_key="synthetic/private.txt",
+        content_type="text/plain",
+        file_size=4,
+        checksum_sha256="a" * 64,
+        scan_status="clean",
+    )
+    start = datetime.now(UTC) + timedelta(days=4)
+    appointment = Appointment(
+        organization_id=org_id,
+        user_id=owner.id,
+        surrogate_id=surrogate.id,
+        client_name="Private appointment",
+        client_email="private@example.com",
+        client_phone="6075550100",
+        client_timezone="UTC",
+        scheduled_start=start,
+        scheduled_end=start + timedelta(minutes=30),
+        duration_minutes=30,
+        meeting_mode="phone",
+        status="confirmed",
+    )
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, org_id, entity_type="intended_parent"
+    )
+    ip_stage = pipeline_service.get_stage_by_key(db, pipeline.id, "new")
+    ip_email = normalize_email(f"draft-ip-{uuid.uuid4().hex[:8]}@test.com")
+    intended_parent = IntendedParent(
+        id=uuid.uuid4(),
+        organization_id=org_id,
+        intended_parent_number=f"I{uuid.uuid4().int % 90000 + 10000:05d}",
+        full_name="Private IP",
+        email=ip_email,
+        email_hash=hash_email(ip_email),
+        stage_id=ip_stage.id,
+        status=ip_stage.stage_key,
+    )
+    db.add_all([note, attachment, appointment, intended_parent])
+    db.flush()
+    match = Match(
+        id=uuid.uuid4(),
+        organization_id=org_id,
+        match_number=f"M{uuid.uuid4().int % 90000 + 10000:05d}",
+        surrogate_id=surrogate.id,
+        intended_parent_id=intended_parent.id,
+        proposed_by_user_id=owner.id,
+    )
+    db.add(match)
+    db.flush()
+    return {
+        "note": note.id,
+        "document": attachment.id,
+        "appointment": appointment.id,
+        "match": match.id,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("entity_type", "trigger_type", "subject_type"),
+    [
+        ("note", "note_added", "surrogate"),
+        ("document", "document_uploaded", "surrogate"),
+        ("appointment", "appointment_scheduled", "appointment"),
+        ("match", "match_proposed", "match"),
+    ],
+)
+async def test_draft_dry_run_enforces_linked_record_scope(
+    db, test_org, test_user, default_stage, entity_type, trigger_type, subject_type
+):
+    intake_user = _user(db, test_org.id, Role.INTAKE_SPECIALIST)
+    records = _out_of_scope_records(db, test_org.id, test_user, default_stage)
+    db.commit()
+
+    async with _authed_client_for_user(
+        db, test_org.id, intake_user, Role.INTAKE_SPECIALIST
+    ) as client:
+        response = await client.post(
+            "/workflows/test-draft",
+            json={
+                "workflow": _draft(
+                    scope="personal",
+                    subject_type=subject_type,
+                    trigger_type=trigger_type,
+                    conditions=[],
+                ),
+                "entity_id": str(records[entity_type]),
+                "entity_type": entity_type,
+            },
+        )
+
+    assert response.status_code in (403, 404), response.text
+    assert "Private" not in response.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("entity_type", "trigger_type", "subject_type"),
+    [
+        ("note", "note_added", "surrogate"),
+        ("document", "document_uploaded", "surrogate"),
+        ("appointment", "appointment_scheduled", "appointment"),
+        ("match", "match_proposed", "match"),
+    ],
+)
+async def test_draft_dry_run_reads_linked_records_in_scope(
+    authed_client, db, test_org, test_user, default_stage, entity_type, trigger_type, subject_type
+):
+    records = _out_of_scope_records(db, test_org.id, test_user, default_stage)
+    db.commit()
+
+    response = await authed_client.post(
+        "/workflows/test-draft",
+        json={
+            "workflow": _draft(subject_type=subject_type, trigger_type=trigger_type, conditions=[]),
+            "entity_id": str(records[entity_type]),
+            "entity_type": entity_type,
+        },
+    )
+
+    assert response.status_code == 200, response.text

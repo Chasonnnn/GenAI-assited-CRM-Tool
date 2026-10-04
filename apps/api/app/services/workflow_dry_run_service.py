@@ -21,7 +21,7 @@ from app.services import (
     attachment_service,
     form_intake_service,
     form_submission_service,
-    match_queries,
+    match_access,
     note_service,
     record_access_service,
     task_service,
@@ -44,6 +44,19 @@ def _require_subject_view(db: Session, session: UserSession, subject_type: str |
         raise HTTPException(status_code=403, detail="Missing permission: view_donors")
 
 
+_PARENT_RECORD_KINDS = {"surrogate", "intended_parent", "donor"}
+
+
+def _authorize_parent(db: Session, session: UserSession, kind: str, record_id: UUID) -> None:
+    """Apply the parent record's read access, as the record's own read endpoints do."""
+    if kind == "match":
+        match_access.load(db, session, record_id)
+    elif kind in _PARENT_RECORD_KINDS:
+        record_access_service.get_record_with_access(db, session, kind, record_id)
+    else:
+        raise HTTPException(status_code=404, detail="Record not found")
+
+
 def resolve_test_entity(
     db: Session,
     session: UserSession,
@@ -63,7 +76,7 @@ def resolve_test_entity(
     if entity_type == "task":
         entity = task_service.get_task(db, entity_id, session.org_id)
     elif entity_type == "match":
-        entity = match_queries.get_match(db, entity_id, session.org_id)
+        return match_access.load(db, session, entity_id)
     elif entity_type == "appointment":
         entity = appointment_service.get_appointment(db, entity_id, session.org_id)
     elif entity_type == "note":
@@ -83,6 +96,17 @@ def resolve_test_entity(
         raise HTTPException(status_code=404, detail=f"{entity_type.capitalize()} not found")
     if entity_type == "task":
         task_service.check_task_subject_access(db, entity, session)
+    elif entity_type == "appointment":
+        appointment_service.validate_existing_appointment_access(db, session, entity)
+    elif entity_type == "note":
+        _authorize_parent(db, session, entity.entity_type, entity.entity_id)
+    elif entity_type == "document":
+        if entity.match_id:
+            _authorize_parent(db, session, "match", entity.match_id)
+        for kind in ("surrogate", "intended_parent", "donor"):
+            record_id = getattr(entity, f"{kind}_id")
+            if record_id:
+                _authorize_parent(db, session, kind, record_id)
     elif entity_type == "form_submission":
         _require_subject_view(db, session, entity.lead_kind)
     elif entity_type == "intake_lead":
