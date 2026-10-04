@@ -4,6 +4,8 @@ Revision: `65bca746e7e90b0da768e31dc06691c589eb07fb` on `main`, fast-forwarded t
 
 Live browser checks used a disposable migrated PostgreSQL database, synthetic people and records, real application session/CSRF/role checks, and a guarded synthetic Google provider. Six parallel QA agents covered separate product areas. No production data or external delivery was used.
 
+[UI/UX review and six current-versus-proposed mockups](../ui-ux-20261004/README.md)
+
 ## Findings
 
 17 product findings and one test-isolation failure were confirmed. No fixes were applied.
