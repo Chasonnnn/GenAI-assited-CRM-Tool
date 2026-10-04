@@ -77,6 +77,7 @@ import {
 } from "@/components/appointments/appointment-type-messages"
 import { createSelectLabelGetter, toSelectOptions } from "@/lib/select-labels"
 import { useFormValidation } from "@/lib/forms/use-form-validation"
+import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import { validateRequired } from "@/lib/forms/validators"
 import { useTabSearchParam } from "@/lib/hooks/use-tab-search-param"
 
@@ -368,6 +369,7 @@ function AvailabilityRulesCard() {
     const { user } = useAuth()
     const { data: rules, isLoading, isError, error, refetch, isFetching } = useAvailabilityRules()
     const setRulesMutation = useSetAvailabilityRules()
+    const [saveError, setSaveError] = useState<string | null>(null)
     const [availabilityState, setAvailabilityState] = useState<AvailabilityRulesState>(() => ({
         draft: null,
         hasChanges: false,
@@ -384,6 +386,11 @@ function AvailabilityRulesCard() {
         serverFingerprint
     )
     const { hasChanges } = availabilityState
+    const invalidDays = new Set(
+        localRules
+            .filter((rule) => rule.enabled && rule.end_time <= rule.start_time)
+            .map((rule) => rule.day_of_week)
+    )
 
     const toggleDay = (dayValue: number) => {
         setAvailabilityState((current) => {
@@ -418,6 +425,8 @@ function AvailabilityRulesCard() {
     }
 
     const saveRules = () => {
+        if (invalidDays.size > 0) return
+        setSaveError(null)
         const enabledRules: Array<{ day_of_week: number; start_time: string; end_time: string }> = []
         for (const rule of localRules) {
             if (!rule.enabled) continue
@@ -432,6 +441,9 @@ function AvailabilityRulesCard() {
                     hasChanges: false,
                     sourceFingerprintAtSave: serverFingerprint,
                 }))
+            },
+            onError: (error) => {
+                setSaveError(getActionErrorMessage(error, "Couldn't save availability. Try again."))
             },
         })
     }
@@ -461,20 +473,54 @@ function AvailabilityRulesCard() {
 
     return (
         <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="flex items-center gap-2">
                     <ClockIcon className="size-5" />
                     Weekly Availability
                 </CardTitle>
+                <div className="w-full sm:w-48">
+                    <Label htmlFor="availability-timezone" className="sr-only">Timezone</Label>
+                    <Select
+                        value={timezone}
+                        onValueChange={(v) => {
+                            if (!v) return
+                            setAvailabilityState((current) => {
+                                const currentDraft = resolveAvailabilityDraft(
+                                    current,
+                                    serverDraft,
+                                    serverFingerprint
+                                )
+                                return {
+                                    draft: { ...currentDraft, timezone: v },
+                                    hasChanges: true,
+                                    sourceFingerprintAtSave: null,
+                                }
+                            })
+                        }}
+                    >
+                        <SelectTrigger id="availability-timezone" className="w-full">
+                            <SelectValue>{getTimezoneLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {toSelectOptions(TIMEZONE_LABELS).map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className="space-y-3">
+                <div className="divide-y divide-border border-t border-border">
                     {DAYS_OF_WEEK.map((day) => {
                         const rule = localRules.find((r) => r.day_of_week === day.value)
+                        const invalid = invalidDays.has(day.value)
+                        const errorId = `availability-${day.value}-end-error`
                         return (
                             <div
                                 key={day.value}
-                                className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-border p-3"
+                                className="flex flex-wrap items-center gap-x-4 gap-y-3 py-3"
                             >
                                 <div className="flex items-center gap-3 sm:w-36">
                                     <Switch
@@ -486,44 +532,53 @@ function AvailabilityRulesCard() {
                                 </div>
                                 {rule?.enabled ? (
                                     // Below sm the times take their own row so both selects stay fully visible.
-                                    <div className="flex w-full items-center gap-2 sm:w-auto">
-                                        <Select
-                                            value={rule.start_time}
-                                            onValueChange={(v) => v && updateTime(day.value, "start_time", v)}
-                                        >
-                                            <SelectTrigger
-                                                className="min-w-0 flex-1 sm:w-32 sm:flex-none"
-                                                aria-label={`${day.label} start time`}
+                                    <div className="w-full min-w-0 space-y-1.5 sm:w-auto">
+                                        <div className="flex w-full items-center gap-2 sm:w-auto">
+                                            <Select
+                                                value={rule.start_time}
+                                                onValueChange={(v) => v && updateTime(day.value, "start_time", v)}
                                             >
-                                                <SelectValue>{getTimeOptionLabel}</SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {TIME_OPTIONS.map((opt) => (
-                                                    <SelectItem key={opt.value} value={opt.value}>
-                                                        {opt.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <span className="text-muted-foreground">to</span>
-                                        <Select
-                                            value={rule.end_time}
-                                            onValueChange={(v) => v && updateTime(day.value, "end_time", v)}
-                                        >
-                                            <SelectTrigger
-                                                className="min-w-0 flex-1 sm:w-32 sm:flex-none"
-                                                aria-label={`${day.label} end time`}
+                                                <SelectTrigger
+                                                    className="min-w-0 flex-1 sm:w-32 sm:flex-none"
+                                                    aria-label={`${day.label} start time`}
+                                                >
+                                                    <SelectValue>{getTimeOptionLabel}</SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {TIME_OPTIONS.map((opt) => (
+                                                        <SelectItem key={opt.value} value={opt.value}>
+                                                            {opt.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <span className="text-muted-foreground">to</span>
+                                            <Select
+                                                value={rule.end_time}
+                                                onValueChange={(v) => v && updateTime(day.value, "end_time", v)}
                                             >
-                                                <SelectValue>{getTimeOptionLabel}</SelectValue>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {TIME_OPTIONS.map((opt) => (
-                                                    <SelectItem key={opt.value} value={opt.value}>
-                                                        {opt.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                                <SelectTrigger
+                                                    className="min-w-0 flex-1 sm:w-32 sm:flex-none"
+                                                    aria-label={`${day.label} end time`}
+                                                    aria-invalid={invalid || undefined}
+                                                    aria-describedby={invalid ? errorId : undefined}
+                                                >
+                                                    <SelectValue>{getTimeOptionLabel}</SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {TIME_OPTIONS.map((opt) => (
+                                                        <SelectItem key={opt.value} value={opt.value}>
+                                                            {opt.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        {invalid ? (
+                                            <p id={errorId} role="alert" className="text-sm text-destructive">
+                                                End time must be after start time.
+                                            </p>
+                                        ) : null}
                                     </div>
                                 ) : (
                                     <span className="ml-auto text-muted-foreground sm:ml-0">Unavailable</span>
@@ -533,42 +588,13 @@ function AvailabilityRulesCard() {
                     })}
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <Label htmlFor="availability-timezone">Timezone</Label>
-                        <Select
-                            value={timezone}
-                            onValueChange={(v) => {
-                                if (!v) return
-                                setAvailabilityState((current) => {
-                                    const currentDraft = resolveAvailabilityDraft(
-                                        current,
-                                        serverDraft,
-                                        serverFingerprint
-                                    )
-                                    return {
-                                        draft: { ...currentDraft, timezone: v },
-                                        hasChanges: true,
-                                        sourceFingerprintAtSave: null,
-                                    }
-                                })
-                            }}
-                        >
-                            <SelectTrigger id="availability-timezone" className="w-full sm:w-48">
-                                <SelectValue>{getTimezoneLabel}</SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                                {toSelectOptions(TIMEZONE_LABELS).map((option) => (
-                                    <SelectItem key={option.value} value={option.value}>
-                                        {option.label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-end">
+                    {saveError ? (
+                        <p role="alert" className="text-sm text-destructive sm:mr-auto">{saveError}</p>
+                    ) : null}
                     <Button
                         onClick={saveRules}
-                        disabled={!hasChanges || setRulesMutation.isPending}
+                        disabled={!hasChanges || invalidDays.size > 0 || setRulesMutation.isPending}
                         className="w-full sm:w-auto"
                     >
                         {setRulesMutation.isPending ? (
