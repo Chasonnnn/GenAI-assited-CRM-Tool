@@ -716,10 +716,35 @@ class WorkflowTestRequest(BaseModel):
     entity_type: str | None = None
 
 
+class WorkflowDraftTestRequest(BaseModel):
+    """Dry run of an unsaved workflow definition against one record."""
+
+    workflow: WorkflowCreate
+    entity_id: UUID
+    entity_type: str | None = None
+    # The saved workflow being edited; access then follows edit rights instead of create rights.
+    workflow_id: UUID | None = None
+
+
+class WorkflowTestConditionResult(BaseModel):
+    field: str
+    operator: str
+    expected: object | None = None
+    actual: str
+    result: bool
+
+
+class WorkflowTestActionPreview(BaseModel):
+    action_type: str
+    # PII-sanitized, as shown on approval tasks.
+    description: str
+    requires_approval: bool = False
+
+
 class WorkflowTestResponse(BaseModel):
     """Response from testing a workflow."""
 
     would_trigger: bool
     conditions_matched: bool
-    conditions_evaluated: list[dict]  # {field, operator, value, result}
-    actions_preview: list[dict]  # {action_type, description}
+    conditions_evaluated: list[WorkflowTestConditionResult]
+    actions_preview: list[WorkflowTestActionPreview]

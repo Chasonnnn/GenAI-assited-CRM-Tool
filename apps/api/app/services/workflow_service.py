@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -985,35 +986,37 @@ def remap_workflow_stage_references(
 # =============================================================================
 
 
-def create_workflow(
+@dataclass(frozen=True)
+class PreparedWorkflowDefinition:
+    """A workflow definition canonicalized and validated as create would store it."""
+
+    subject_type: str
+    trigger_config: dict
+    conditions: list[dict]
+    actions: list[dict]
+
+
+def prepare_workflow_definition(
     db: Session,
     org_id: UUID,
     user_id: UUID,
     data: WorkflowCreate,
-) -> AutomationWorkflow:
-    """Create a new workflow with validation."""
-    from app.services import permission_policy_service
+) -> PreparedWorkflowDefinition:
+    """Canonicalize and validate a definition without persisting it.
 
-    permission_policy_service.lock_configuration(db, org_id)
-    if permission_policy_service.is_enabled(db, org_id):
-        from app.services import workflow_access
-
-        actor = workflow_execution_authority.active_session(db, org_id, user_id)
-        if actor is None or not workflow_access.can_create(db, actor, data.scope):
-            raise workflow_execution_authority.WorkflowAuthorityError(
-                "Workflow creation is not permitted"
-            )
+    Shared by create and the draft dry run so both apply the same rules. Raises ValueError
+    for an invalid definition.
+    """
     subject_type = data.subject_type
     if "subject_type" not in data.model_fields_set:
         subject_type = LEGACY_TRIGGER_SUBJECT_TYPES.get(data.trigger_type.value, "surrogate")
     _validate_subject_trigger(subject_type, data.trigger_type)
-    entity_type = subject_type
     trigger_config = _canonicalize_trigger_config(
         db,
         org_id,
         data.trigger_type,
         data.trigger_config,
-        entity_type=entity_type,
+        entity_type=subject_type,
     )
     effective_subject_type = resolve_effective_workflow_subject_type(
         db,
@@ -1035,13 +1038,9 @@ def create_workflow(
         db, org_id, data.conditions, entity_type=stage_entity_type
     )
     _validate_trigger_conditions(data.trigger_type, subject_type, conditions)
-
-    # Validate trigger config
     _validate_trigger_config(data.trigger_type, trigger_config)
 
     actions = _canonicalize_actions(db, org_id, raw_actions, entity_type=stage_entity_type)
-
-    # Validate actions
     for action in actions:
         _validate_action_config(
             db,
@@ -1054,6 +1053,37 @@ def create_workflow(
             effective_subject_type=effective_subject_type,
             record_type=record_type,
         )
+    return PreparedWorkflowDefinition(
+        subject_type=subject_type,
+        trigger_config=trigger_config,
+        conditions=conditions,
+        actions=actions,
+    )
+
+
+def create_workflow(
+    db: Session,
+    org_id: UUID,
+    user_id: UUID,
+    data: WorkflowCreate,
+) -> AutomationWorkflow:
+    """Create a new workflow with validation."""
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, org_id)
+    if permission_policy_service.is_enabled(db, org_id):
+        from app.services import workflow_access
+
+        actor = workflow_execution_authority.active_session(db, org_id, user_id)
+        if actor is None or not workflow_access.can_create(db, actor, data.scope):
+            raise workflow_execution_authority.WorkflowAuthorityError(
+                "Workflow creation is not permitted"
+            )
+    definition = prepare_workflow_definition(db, org_id, user_id, data)
+    subject_type = definition.subject_type
+    trigger_config = definition.trigger_config
+    conditions = definition.conditions
+    actions = definition.actions
 
     # Determine owner_user_id based on scope
     owner_user_id = user_id if data.scope == "personal" else None
