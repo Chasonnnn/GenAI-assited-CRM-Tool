@@ -78,3 +78,21 @@ def test_public_forms_declare_sms_phone_field_key() -> None:
         phone_key = body["properties"]["sms_phone_field_key"]
         assert {item["type"] for item in phone_key["anyOf"]} == {"string", "null"}
         assert "sms_phone_field_key" not in body["required"]
+
+
+def test_record_scope_migration_review_routes_declare_response_schemas() -> None:
+    paths = app.openapi()["paths"]
+    expected = {
+        ("/record-scopes/migration-review", "get"): "ScopeMigrationReviewRead",
+        (
+            "/record-scopes/migration-review/records/{kind}/{record_id}",
+            "post",
+        ): "HandoffMigrationReviewResult",
+        (
+            "/record-scopes/migration-review/pool-grants/{grant_id}",
+            "post",
+        ): "LegacyPoolResolutionResult",
+    }
+    for (path, method), schema in expected.items():
+        response = paths[path][method]["responses"]["200"]["content"]["application/json"]
+        assert response["schema"] == {"$ref": f"#/components/schemas/{schema}"}
