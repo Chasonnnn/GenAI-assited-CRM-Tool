@@ -17,6 +17,7 @@
     "test": "NODE_OPTIONS=--no-experimental-webstorage vitest run",
     "test:watch": "NODE_OPTIONS=--no-experimental-webstorage vitest",
     "test:all": "pnpm run test",
+    "test:e2e": "E2E_TELEMETRY_DISABLED=1 e2e run",
     "check": "pnpm run typecheck && pnpm run typecheck:tests && pnpm run lint && pnpm run test",
     "analyze": "next experimental-analyze"
   },
@@ -56,6 +57,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@e2e-dev/web": "0.12.0",
     "@eslint/js": "^10.0.1",
     "@next/bundle-analyzer": "16.3.8",
     "@tailwindcss/postcss": "^4.3.3",
@@ -70,6 +72,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "5.0.3",
     "babel-plugin-react-compiler": "^1.0.0",
+    "e2e": "0.17.0",
     "eslint": "^10.6.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-unused-imports": "^4.4.1",
