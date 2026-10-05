@@ -211,7 +211,15 @@ steps:
         if [[ "$_MATCH_EXPANSION_ROLLOUT" == "true" ]]; then
           api_env="$${api_env},MATCH_CASE_EXPANSION_ENABLED=false"
         fi
+        # Select the ingress container so sidecar images survive ordinary releases.
+        api_container="$$(gcloud run services describe "$_API_SERVICE" \
+          --region "$_REGION" --format='value(spec.template.spec.containers[0].name)')"
+        set --
+        if [[ -n "$${api_container}" ]]; then
+          set -- --container "$${api_container}"
+        fi
         gcloud run services update "$_API_SERVICE" \
+          "$$@" \
           --image "$${api_image_ref}" \
           --update-env-vars "$${api_env}" \
           --max "$_API_MAX_INSTANCES" \

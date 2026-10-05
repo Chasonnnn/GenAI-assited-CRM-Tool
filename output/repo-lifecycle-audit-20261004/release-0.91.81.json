@@ -1,0 +1,78 @@
+{
+  "commit": "83ec7910bd653c74e9f57bc3102a4f0aa86693b3",
+  "health": {
+    "db_migrations": {
+      "current_heads": [
+        "20261004_1300_organization_logo"
+      ],
+      "head_revisions": [
+        "20261004_1300_organization_logo"
+      ],
+      "status": "ok"
+    },
+    "env": "production",
+    "redis": {
+      "configured": true,
+      "fail_open": true,
+      "required": false,
+      "status": "ok"
+    },
+    "status": "ok",
+    "version": "0.91.81"
+  },
+  "observed_at": "2026-10-04T14:17:11.175337+00:00",
+  "release": "0.91.81",
+  "services": [
+    {
+      "flags": {
+        "DB_AUTO_MIGRATE": "false",
+        "DB_MIGRATION_CHECK": "true",
+        "MATCH_CASE_EXPANSION_ENABLED": "true",
+        "SCHEDULING_V2_ENABLED": "true"
+      },
+      "image": "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/api@sha256:ec62076572fd7cfd6951df01c8b331b42795f2458812013f63048a90564e7ffa",
+      "revision": "crm-api-00262-spp",
+      "service": "crm-api",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "crm-api-00262-spp"
+        }
+      ]
+    },
+    {
+      "flags": {
+        "DB_AUTO_MIGRATE": "false",
+        "DB_MIGRATION_CHECK": "true",
+        "MATCH_CASE_EXPANSION_ENABLED": "true",
+        "SCHEDULING_V2_ENABLED": "true",
+        "WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED": "true",
+        "WORKFLOW_MAINTENANCE_FALLBACK_ENABLED": "true"
+      },
+      "image": "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/worker@sha256:98dcbf530156f63bd77b24c3b490404575dfb2c984b4ce81a70e9c25d438cd20",
+      "revision": "crm-worker-00307-dfk",
+      "service": "crm-worker",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "crm-worker-00307-dfk"
+        }
+      ]
+    },
+    {
+      "flags": {},
+      "image": "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/web@sha256:7e39e5f2679f3b6e8af8f66014602d7732e34318d7fd29133d67cbc690766285",
+      "revision": "crm-web-00237-ccw",
+      "service": "crm-web",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "crm-web-00237-ccw"
+        }
+      ]
+    }
+  ]
+}

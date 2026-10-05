@@ -98,7 +98,15 @@ match_case_expansion_enabled = false
 match_case_expansion_worker_enabled = false
 workflow_maintenance_fallback_enabled = false
 workflow_approval_expiry_fallback_enabled = false
+private_tracing_enabled = false
+private_tracing_sample_rate = 0.1
+gmail_push_enabled = false
 ```
+
+Tracing and Gmail push require the deployment and verification sequence in
+[Cloud Trace and Gmail push](../../docs/operations/tracing-gmail-push.md). Tracing adds a
+collector and instance-based CPU allocation. Gmail push requires the OAuth client
+and Pub/Sub topic to share a Google project and a deployed authenticated webhook.
 
 Scheduling and match API/worker switches are separate. Prepare scheduling with
 the [operator command](../../apps/api/docs/scheduling-v2.md#rollout-and-recovery)

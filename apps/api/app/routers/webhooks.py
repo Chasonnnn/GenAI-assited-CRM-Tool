@@ -4,15 +4,18 @@ import base64
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.deps import get_db
+from app.core.gmail_push_auth import require_gmail_push
 
 # Rate limiting
 from app.core.rate_limit import limiter
+from app.schemas.ticketing import GmailPushResponse
 from app.services import google_calendar_sync_service, ticketing_service
 from app.services.webhooks import get_handler
 from app.services.webhooks import twilio as twilio_webhook_service
@@ -115,7 +118,13 @@ def google_calendar_push_webhook(
     return JSONResponse(result, status_code=202)
 
 
-@router.post("/google-gmail")
+@router.post(
+    "/google-gmail",
+    status_code=202,
+    response_model=GmailPushResponse,
+    response_model_exclude_none=True,
+    dependencies=[Depends(require_gmail_push)],
+)
 @limiter.limit(f"{settings.RATE_LIMIT_WEBHOOK}/minute")
 async def google_gmail_push_webhook(
     request: Request,
@@ -127,34 +136,32 @@ async def google_gmail_push_webhook(
     Pub/Sub envelope payload:
       {"message": {"data": base64(json({"emailAddress","historyId"})), "messageId": "..."}}
     """
-    expected_token = (settings.GMAIL_PUSH_WEBHOOK_TOKEN.get_secret_value() or "").strip()
-    if expected_token and request.query_params.get("token") != expected_token:
-        return JSONResponse({"status": "ignored", "reason": "invalid_token"}, status_code=202)
-
     try:
         envelope = await request.json()
     except Exception:
-        return JSONResponse({"status": "ignored", "reason": "invalid_json"}, status_code=202)
+        return {"status": "ignored", "reason": "invalid_json"}
     if not isinstance(envelope, dict):
-        return JSONResponse({"status": "ignored", "reason": "invalid_envelope"}, status_code=202)
+        return {"status": "ignored", "reason": "invalid_envelope"}
+
+    if envelope.get("subscription") != settings.GMAIL_PUSH_SUBSCRIPTION.strip():
+        raise HTTPException(status_code=403, detail="Gmail push subscription not allowed")
 
     message = envelope.get("message")
     if not isinstance(message, dict):
-        return JSONResponse({"status": "ignored", "reason": "missing_message"}, status_code=202)
+        return {"status": "ignored", "reason": "missing_message"}
 
     payload = _decode_pubsub_json(message.get("data"))
     if not payload:
-        return JSONResponse(
-            {"status": "ignored", "reason": "invalid_message_data"}, status_code=202
-        )
+        return {"status": "ignored", "reason": "invalid_message_data"}
 
-    result = ticketing_service.process_gmail_push_notification(
+    result = await run_in_threadpool(
+        ticketing_service.process_gmail_push_notification,
         db=db,
         email_address=str(payload.get("emailAddress") or ""),
         history_id=payload.get("historyId"),
         pubsub_message_id=str(message.get("messageId") or message.get("message_id") or ""),
     )
-    return JSONResponse(result, status_code=202)
+    return result
 
 
 # =============================================================================

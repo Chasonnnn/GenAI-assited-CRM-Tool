@@ -61,14 +61,21 @@ locals {
   }, local.optional_env)
 
   api_env = merge(local.common_env, {
-    SCHEDULING_V2_ENABLED        = tostring(var.scheduling_v2_enabled)
-    MATCH_CASE_EXPANSION_ENABLED = tostring(var.match_case_expansion_enabled)
-    GCP_SERVICE_NAME             = var.api_service_name
-    TRUST_PROXY_HEADERS          = tostring(var.trust_proxy_headers)
-    TRUST_PROXY_HOSTS            = var.trust_proxy_hosts
-    RATE_LIMIT_AUTH              = tostring(var.rate_limit_auth)
-    RATE_LIMIT_API               = tostring(var.rate_limit_api)
-    RATE_LIMIT_PUBLIC_READ       = tostring(var.rate_limit_public_read)
+    SCHEDULING_V2_ENABLED            = tostring(var.scheduling_v2_enabled)
+    MATCH_CASE_EXPANSION_ENABLED     = tostring(var.match_case_expansion_enabled)
+    GCP_SERVICE_NAME                 = var.api_service_name
+    TRUST_PROXY_HEADERS              = tostring(var.trust_proxy_headers)
+    TRUST_PROXY_HOSTS                = var.trust_proxy_hosts
+    RATE_LIMIT_AUTH                  = tostring(var.rate_limit_auth)
+    RATE_LIMIT_API                   = tostring(var.rate_limit_api)
+    RATE_LIMIT_PUBLIC_READ           = tostring(var.rate_limit_public_read)
+    OTEL_ENABLED                     = tostring(var.private_tracing_enabled)
+    OTEL_SERVICE_NAME                = var.api_service_name
+    OTEL_EXPORTER_OTLP_ENDPOINT      = var.private_tracing_enabled ? "http://127.0.0.1:4318/v1/traces" : ""
+    OTEL_SAMPLE_RATE                 = tostring(var.private_tracing_sample_rate)
+    GMAIL_PUSH_AUDIENCE              = var.gmail_push_enabled ? local.gmail_push_endpoint : ""
+    GMAIL_PUSH_SERVICE_ACCOUNT_EMAIL = var.gmail_push_enabled ? google_service_account.gmail_push[0].email : ""
+    GMAIL_PUSH_SUBSCRIPTION          = var.gmail_push_enabled ? google_pubsub_subscription.gmail[0].id : ""
   })
 
   worker_env = merge(local.common_env, {
@@ -78,6 +85,7 @@ locals {
     WORKFLOW_SWEEP_FALLBACK_ENABLED           = tostring(var.workflow_sweep_fallback_enabled)
     WORKFLOW_MAINTENANCE_FALLBACK_ENABLED     = tostring(var.workflow_maintenance_fallback_enabled)
     WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED = tostring(var.workflow_approval_expiry_fallback_enabled)
+    GMAIL_PUSH_TOPIC                          = var.gmail_push_enabled ? google_pubsub_topic.gmail[0].id : ""
   })
 
   job_env = merge(local.common_env, {

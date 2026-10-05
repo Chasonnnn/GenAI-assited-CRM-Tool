@@ -1,0 +1,557 @@
+{
+  "execution": "crm-migrate-h2489",
+  "migration_heads": [
+    {
+      "version_num": "20261003_1800_timezone_aware_form_timestamps"
+    }
+  ],
+  "mode": "read_only",
+  "observed_at": "2026-10-04T12:50:43.654396Z",
+  "organizations": [
+    {
+      "job_backlog": [],
+      "maintenance_action_types": [],
+      "matches": [],
+      "medical_import": [
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "insurance",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "pcp",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "lab_clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "monitoring_clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "ob",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "delivery_hospital",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "insurance",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "pcp",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "lab_clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "monitoring_clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "ob",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "delivery_hospital",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        }
+      ],
+      "organization_index": 1,
+      "overdue_approvals": 0,
+      "permission_policy": [],
+      "scheduling": {
+        "appointments": [],
+        "bindings": {
+          "active": 0,
+          "booking_destinations": 0,
+          "unavailable_busy_sources": 0
+        },
+        "jobs": [],
+        "links": {
+          "ambiguous_links": 0,
+          "duplicate_exact_resources": 0,
+          "legacy_unknown": 0,
+          "linked": 0
+        }
+      },
+      "workflows": []
+    },
+    {
+      "job_backlog": [
+        {
+          "count": 3,
+          "job_type": "attachment_scan",
+          "status": "failed"
+        },
+        {
+          "count": 11,
+          "job_type": "google_calendar_sync",
+          "status": "failed"
+        },
+        {
+          "count": 3,
+          "job_type": "google_calendar_sync",
+          "status": "pending"
+        },
+        {
+          "count": 6,
+          "job_type": "google_tasks_sync",
+          "status": "failed"
+        },
+        {
+          "count": 3,
+          "job_type": "google_tasks_sync",
+          "status": "pending"
+        },
+        {
+          "count": 4,
+          "job_type": "meta_crm_dataset_event",
+          "status": "failed"
+        },
+        {
+          "count": 1,
+          "job_type": "resend_event_reconcile",
+          "status": "failed"
+        },
+        {
+          "count": 7,
+          "job_type": "workflow_email",
+          "status": "failed"
+        },
+        {
+          "count": 6,
+          "job_type": "zapier_stage_event",
+          "status": "failed"
+        }
+      ],
+      "maintenance_action_types": [],
+      "matches": [
+        {
+          "count": 1,
+          "status": "cancelled"
+        },
+        {
+          "count": 28,
+          "status": "accepted"
+        }
+      ],
+      "medical_import": [
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "insurance",
+          "source_rows": 24,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "pcp",
+          "source_rows": 7,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "lab_clinic",
+          "source_rows": 2,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "clinic",
+          "source_rows": 24,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "monitoring_clinic",
+          "source_rows": 10,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "ob",
+          "source_rows": 12,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "delivery_hospital",
+          "source_rows": 9,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "insurance",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "pcp",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "lab_clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "monitoring_clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "ob",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "delivery_hospital",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        }
+      ],
+      "organization_index": 2,
+      "overdue_approvals": 0,
+      "permission_policy": [],
+      "scheduling": {
+        "appointments": [
+          {
+            "count": 1,
+            "google_sync_state": null,
+            "meeting_mode": "phone",
+            "origin": "crm",
+            "status": "cancelled"
+          },
+          {
+            "count": 21,
+            "google_sync_state": null,
+            "meeting_mode": "phone",
+            "origin": "crm",
+            "status": "confirmed"
+          },
+          {
+            "count": 11,
+            "google_sync_state": null,
+            "meeting_mode": "google_meet",
+            "origin": "google_import",
+            "status": "cancelled"
+          },
+          {
+            "count": 94,
+            "google_sync_state": null,
+            "meeting_mode": "google_meet",
+            "origin": "google_import",
+            "status": "confirmed"
+          },
+          {
+            "count": 1,
+            "google_sync_state": "completed",
+            "meeting_mode": "google_meet",
+            "origin": "legacy_unknown",
+            "status": "cancelled"
+          },
+          {
+            "count": 116,
+            "google_sync_state": null,
+            "meeting_mode": "google_meet",
+            "origin": "legacy_unknown",
+            "status": "cancelled"
+          },
+          {
+            "count": 13,
+            "google_sync_state": null,
+            "meeting_mode": "phone",
+            "origin": "legacy_unknown",
+            "status": "cancelled"
+          },
+          {
+            "count": 1,
+            "google_sync_state": "completed",
+            "meeting_mode": "zoom",
+            "origin": "legacy_unknown",
+            "status": "cancelled"
+          },
+          {
+            "count": 2749,
+            "google_sync_state": null,
+            "meeting_mode": "google_meet",
+            "origin": "legacy_unknown",
+            "status": "confirmed"
+          },
+          {
+            "count": 271,
+            "google_sync_state": null,
+            "meeting_mode": "phone",
+            "origin": "legacy_unknown",
+            "status": "confirmed"
+          }
+        ],
+        "bindings": {
+          "active": 0,
+          "booking_destinations": 0,
+          "unavailable_busy_sources": 0
+        },
+        "jobs": [
+          {
+            "count": 2,
+            "job_type": "appointment_google_sync",
+            "status": "completed"
+          },
+          {
+            "count": 236211,
+            "job_type": "google_calendar_sync",
+            "status": "completed"
+          },
+          {
+            "count": 11,
+            "job_type": "google_calendar_sync",
+            "status": "failed"
+          },
+          {
+            "count": 3,
+            "job_type": "google_calendar_sync",
+            "status": "pending"
+          },
+          {
+            "count": 19856,
+            "job_type": "google_calendar_watch_refresh",
+            "status": "completed"
+          }
+        ],
+        "links": {
+          "ambiguous_links": 2971,
+          "duplicate_exact_resources": 0,
+          "legacy_unknown": 3151,
+          "linked": 2973
+        }
+      },
+      "workflows": [
+        {
+          "count": 1,
+          "is_enabled": false,
+          "scope": "org",
+          "subject_type": "form_submission",
+          "trigger_type": "form_submitted"
+        },
+        {
+          "count": 1,
+          "is_enabled": true,
+          "scope": "org",
+          "subject_type": "surrogate",
+          "trigger_type": "surrogate_created"
+        }
+      ]
+    },
+    {
+      "job_backlog": [
+        {
+          "count": 1,
+          "job_type": "csv_import",
+          "status": "failed"
+        }
+      ],
+      "maintenance_action_types": [],
+      "matches": [],
+      "medical_import": [
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "insurance",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "pcp",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "lab_clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "monitoring_clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "ob",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "surrogates",
+          "section": "delivery_hospital",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "insurance",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "pcp",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "lab_clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "monitoring_clinic",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "ob",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        },
+        {
+          "missing_import": 0,
+          "owner": "donors",
+          "section": "delivery_hospital",
+          "source_rows": 0,
+          "unchanged_import_mismatch": 0
+        }
+      ],
+      "organization_index": 3,
+      "overdue_approvals": 0,
+      "permission_policy": [],
+      "scheduling": {
+        "appointments": [],
+        "bindings": {
+          "active": 0,
+          "booking_destinations": 0,
+          "unavailable_busy_sources": 0
+        },
+        "jobs": [],
+        "links": {
+          "ambiguous_links": 0,
+          "duplicate_exact_resources": 0,
+          "legacy_unknown": 0,
+          "linked": 0
+        }
+      },
+      "workflows": []
+    }
+  ]
+}

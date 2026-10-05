@@ -1,5 +1,5 @@
 locals {
-  required_services = toset([
+  required_services = toset(concat([
     "run.googleapis.com",
     "sqladmin.googleapis.com",
     "secretmanager.googleapis.com",
@@ -18,7 +18,10 @@ locals {
     "billingbudgets.googleapis.com",
     "cloudbilling.googleapis.com",
     "certificatemanager.googleapis.com",
-  ])
+    ],
+    var.private_tracing_enabled ? ["cloudtrace.googleapis.com", "telemetry.googleapis.com"] : [],
+    var.gmail_push_enabled ? ["pubsub.googleapis.com"] : [],
+  ))
 }
 
 resource "google_project_service" "required" {
