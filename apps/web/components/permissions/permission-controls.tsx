@@ -13,7 +13,8 @@ export const ROLE_LABELS: Record<string, string> = {
 }
 export const MODULE_LABELS: Record<RecordModule, string> = { surrogates: "Surrogates", donors: "Donors", intended_parents: "Intended Parents" }
 export const ASSIGNMENT_LABELS = { all: "All records", assigned: "Assigned records", none: "No role access" }
-export const PHASE_LABELS = { all: "All phases", pre_approval: "Before approval", post_approval: "After approval" }
+const APPROVAL_PHASE_LABELS = { all: "All phases", pre_approval: "Before approval", post_approval: "After approval" }
+export const PHASE_LABELS = { ...APPROVAL_PHASE_LABELS, under_review_onward: "Under Review and later" }
 export const emptyScope: RecordScopeRule = { assignment: "none", phase: "all", stage_ids: [] }
 
 export function PermissionLoading() {
@@ -59,7 +60,7 @@ export function ScopeFields({ module, rule, onChange, disabled = false, addition
     return <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
             <ChoiceField label="Assignment" value={rule.assignment} options={assignments} onChange={(assignment) => onChange({ ...rule, assignment })} disabled={disabled} />
-            <ChoiceField label="Phase" value={rule.phase} options={PHASE_LABELS} onChange={(phase) => onChange({ ...rule, phase })} disabled={disabled || module === "intended_parents" || rule.assignment === "none"} />
+            <ChoiceField label="Phase" value={rule.phase} options={module === "surrogates" ? PHASE_LABELS : APPROVAL_PHASE_LABELS} onChange={(phase) => onChange({ ...rule, phase })} disabled={disabled || module === "intended_parents" || rule.assignment === "none"} />
         </div>
         {module !== "intended_parents" && rule.assignment !== "none" && <details className="rounded-xl border p-3">
             <summary className="cursor-pointer text-sm font-medium">Specific stages{rule.stage_ids.length ? ` (${rule.stage_ids.length})` : ""}</summary>

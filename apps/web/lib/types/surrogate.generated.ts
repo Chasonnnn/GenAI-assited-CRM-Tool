@@ -17,6 +17,7 @@ export interface SurrogateListItem {
     phone: string | null;
     state: string | null;
     race?: string | null;
+    is_shared_pool?: boolean;
     owner_type?: string | null;
     owner_id?: string | null;
     owner_name?: string | null;
@@ -63,6 +64,7 @@ export interface SurrogateRead {
     paused_from_stage_type?: string | null;
     source: SurrogateSource;
     is_priority: boolean;
+    is_shared_pool?: boolean;
     owner_type: string;
     owner_id: string;
     owner_name?: string | null;

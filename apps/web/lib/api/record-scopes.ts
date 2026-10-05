@@ -4,7 +4,7 @@ export type RecordModule = "surrogates" | "donors" | "intended_parents"
 export type RecordKind = "surrogate" | "donor" | "intended_parent"
 export interface RecordScopeRule {
     assignment: "all" | "assigned" | "none"
-    phase: "all" | "pre_approval" | "post_approval"
+    phase: "all" | "pre_approval" | "post_approval" | "under_review_onward"
     stage_ids: string[]
 }
 export interface ScopeAddition extends RecordScopeRule {
@@ -46,6 +46,7 @@ export interface ScopeMigrationReview {
     handoff_candidates: HandoffCandidate[]
     unresolved_handoffs: HandoffCandidate[]
     missing_approval_gate_pipeline_ids: string[]
+    missing_visibility_stage_pipeline_ids: string[]
     legacy_pool_grants: LegacyPoolGrant[]
 }
 export interface RecordAccessResult {

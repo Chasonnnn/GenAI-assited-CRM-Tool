@@ -161,6 +161,7 @@ function buildSurrogateListItem(
         owner_type: string
         owner_id: string
         owner_name: string
+        is_shared_pool: boolean
         created_at: string
         last_activity_at: string
         is_priority: boolean
@@ -663,6 +664,50 @@ describe('SurrogatesPage', () => {
         expect(screen.getByRole('button', { name: 'Assign to user' })).toBeInTheDocument()
     })
 
+    it('keeps shared pool records out of bulk user assignment across list pages', () => {
+        const shared = buildSurrogateListItem({ owner_type: 'queue', owner_id: 'pool-1', owner_name: 'Surrogate Pool', is_shared_pool: true })
+        const ordinary = buildSurrogateListItem({ id: '2', full_name: 'Intake Applicant' })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates', 'assign_surrogates'] } })
+        mockUseSurrogates.mockReturnValue({ data: { items: [shared], total: 2, pages: 2 }, isLoading: false, error: null })
+        const view = render(<SurrogatesPage />)
+
+        fireEvent.click(screen.getByLabelText('Select John Doe'))
+        expect(screen.queryByRole('button', { name: 'Assign to user' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Change stage' })).toBeEnabled()
+        expect(screen.getByRole('cell', { name: 'Surrogate Pool' })).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Assigned to Surrogate Pool' })).not.toBeInTheDocument()
+
+        mockSearchParams.set('page', '2')
+        mockUseSurrogates.mockReturnValue({ data: { items: [ordinary], total: 2, pages: 2 }, isLoading: false, error: null })
+        view.rerender(<SurrogatesPage />)
+        fireEvent.click(screen.getByLabelText('Select Intake Applicant'))
+        expect(screen.getByText('2 surrogates selected')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Assign to user' })).not.toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+        fireEvent.click(screen.getByLabelText('Select Intake Applicant'))
+        expect(screen.getByRole('button', { name: 'Assign to user' })).toBeEnabled()
+    })
+
+    it('does not select shared pool records when assignment is the only available bulk action', () => {
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'cm-1' } })
+        mockGrantedPermissions.value = []
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ['view_surrogates', 'assign_surrogates'] } })
+        mockUseSurrogates.mockReturnValue({ data: { items: [
+            buildSurrogateListItem({ is_shared_pool: true }),
+            buildSurrogateListItem({ id: '2', full_name: 'Intake Applicant' }),
+        ], total: 2, pages: 1 }, isLoading: false, error: null })
+
+        render(<SurrogatesPage />)
+
+        expect(screen.getByLabelText('Select John Doe')).toHaveAttribute('aria-disabled', 'true')
+        fireEvent.click(screen.getByLabelText('Select all surrogates'))
+        expect(screen.getByLabelText('Select John Doe')).not.toBeChecked()
+        expect(screen.getByLabelText('Select Intake Applicant')).toBeChecked()
+        expect(screen.getByText('1 surrogate selected')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Assign to user' })).toBeEnabled()
+    })
+
     it('shows Change stage in the floating selection bar only for admin and developer users', () => {
         mockUseSurrogates.mockReturnValue({
             data: { items: [buildSurrogateListItem()], total: 1, pages: 1 },
@@ -761,8 +806,8 @@ describe('SurrogatesPage', () => {
 
         const modalProps = mockBulkChangeStageModal.mock.lastCall?.[0] as { surrogates: unknown[] }
         expect(modalProps.surrogates).toEqual([
-            { id: '1', full_name: 'Jane Doe', stage_id: 's1', paused_from_stage_id: null },
-            { id: '2', full_name: 'Mia Ross', stage_id: 's1', paused_from_stage_id: null },
+            { id: '1', full_name: 'Jane Doe', stage_id: 's1', paused_from_stage_id: null, is_shared_pool: false },
+            { id: '2', full_name: 'Mia Ross', stage_id: 's1', paused_from_stage_id: null, is_shared_pool: false },
         ])
         fireEvent.click(screen.getByRole('button', { name: 'Mock submit bulk stage change' }))
 

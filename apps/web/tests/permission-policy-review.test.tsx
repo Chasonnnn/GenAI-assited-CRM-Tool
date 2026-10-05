@@ -7,7 +7,7 @@ vi.mock("@/lib/api/permissions", async (original) => ({ ...await original<typeof
 vi.mock("@/components/app-link", () => ({ default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a href={href} {...props}>{children}</a> }))
 
 const configuration: api.PolicyConfiguration = { version: 1, configuration_revision: 1, status: "legacy", role_permissions: {}, protected_roles: ["admin", "developer"] }
-const initial: api.PolicyPreview = { digest: "initial-digest", current_version: 1, target_version: 2, configuration_revision: 1, ready: false, members: [{ membership_id: "member-1", user_id: "user-1", role: "case_manager", current: [], proposed: ["view_reports"], gained: ["view_reports"], lost: [] }], revokes: [{ override_id: "revoke-1", user_id: "user-1", role: "case_manager", permission: "view_reports", resolution: null, can_deny_for_role: true }], unresolved_revoke_ids: ["revoke-1"], role_permissions: {}, scope_review: { ready: true, collaborators: [], handoff_candidates: [], unresolved_handoffs: [], missing_approval_gate_pipeline_ids: [], legacy_pool_grants: [] }, execution_review: [{ item_type: "workflow", id: "workflow-1", name: "Intake follow-up" }], unresolved_execution_ids: ["workflow:workflow-1"] }
+const initial: api.PolicyPreview = { digest: "initial-digest", current_version: 1, target_version: 2, configuration_revision: 1, ready: false, members: [{ membership_id: "member-1", user_id: "user-1", role: "case_manager", current: [], proposed: ["view_reports"], gained: ["view_reports"], lost: [] }], revokes: [{ override_id: "revoke-1", user_id: "user-1", role: "case_manager", permission: "view_reports", resolution: null, can_deny_for_role: true }], unresolved_revoke_ids: ["revoke-1"], role_permissions: {}, scope_review: { ready: true, collaborators: [], handoff_candidates: [], unresolved_handoffs: [], missing_approval_gate_pipeline_ids: [], missing_visibility_stage_pipeline_ids: [], legacy_pool_grants: [] }, execution_review: [{ item_type: "workflow", id: "workflow-1", name: "Intake follow-up" }], unresolved_execution_ids: ["workflow:workflow-1"] }
 
 function choose(label: string, option: string) {
     fireEvent.click(screen.getByRole("combobox", { name: label }))
@@ -72,6 +72,25 @@ describe("permission policy activation review", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Generate preview" }))
         expect(await screen.findByRole("alert")).toHaveTextContent("Unable to prepare review")
         expect(screen.queryByRole("button", { name: "Review activation" })).not.toBeInTheDocument()
+    })
+
+    it("shows planned pool ownership and retained Intake access before activation", async () => {
+        vi.mocked(api.previewPolicy).mockResolvedValue({
+            ...initial, ready: true, revokes: [], execution_review: [],
+            surrogate_pool_transfers: [
+                { record_id: "surrogate-1", record_number: "S10001", expected_fingerprint: "reviewed", owner_type: "user", owner_id: "user-1", retained_intake_user_id: "user-1" },
+                { record_id: "surrogate-2", record_number: "S10002", expected_fingerprint: "reviewed-2", owner_type: "user", owner_id: "user-2", retained_intake_user_id: null },
+            ],
+        })
+        render(<PermissionPolicyReview />)
+        fireEvent.click(await screen.findByRole("button", { name: "Generate preview" }))
+        expect(await screen.findByRole("heading", { name: "Shared Surrogate Pool" })).toBeVisible()
+        expect(screen.getByRole("link", { name: "S10001" })).toHaveAttribute("href", "/surrogates/surrogate-1")
+        expect(screen.getByText("Retain Taylor Morgan as Intake collaborator")).toBeVisible()
+        expect(screen.getByRole("link", { name: "S10002" })).toHaveAttribute("href", "/surrogates/surrogate-2")
+        expect(api.activatePolicy).not.toHaveBeenCalled()
+        fireEvent.click(screen.getByRole("button", { name: "Review activation" }))
+        expect(screen.getByRole("dialog")).toHaveTextContent("2 surrogates will move to the shared pool")
     })
 
     it("shows gained and lost match actions from the server preview with readable labels", async () => {

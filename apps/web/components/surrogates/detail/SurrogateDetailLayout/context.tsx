@@ -337,12 +337,12 @@ function useSurrogateDetailDataValue({
     returnTo: string
 }) {
     const isV2 = permissions?.policy_version === 2
-    const canManageQueue = isV2
-        ? permissions.permissions.includes("assign_surrogates")
-        : !!user?.role && ["case_manager", "admin", "developer"].includes(user.role)
     const timezoneName = getLocalTimezoneName()
     const { data: surrogateData, isLoading, error, refetch, isFetching } = useSurrogate(surrogateId)
     const surrogate = surrogateData || null
+    const canManageQueue = !surrogate?.is_shared_pool && (isV2
+        ? permissions.permissions.includes("assign_surrogates")
+        : !!user?.role && ["case_manager", "admin", "developer"].includes(user.role))
     const { data: defaultPipeline } = useDefaultPipeline()
     // Counts load only after the record loads, so a denied or missing record sends no extra requests.
     const { data: notes } = useNotes(surrogateId, { enabled: !!surrogate })
