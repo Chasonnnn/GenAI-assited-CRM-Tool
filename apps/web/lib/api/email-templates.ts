@@ -137,6 +137,7 @@ export interface EmailTemplateTestSendResponse {
     email_log_id?: string | null
     message_id?: string | null
     error?: string | null
+    error_code?: 'idempotency_conflict' | null
 }
 
 export interface EmailLog {

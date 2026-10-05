@@ -216,6 +216,7 @@ class EmailTemplateTestSendResponse(BaseModel):
     email_log_id: UUID | None = None
     message_id: str | None = None
     error: str | None = None
+    error_code: Literal["idempotency_conflict"] | None = None
 
 
 class EmailLogRead(BaseModel):

@@ -1,0 +1,52 @@
+{
+  "active_booking_memberships": 6,
+  "connected_memberships": 6,
+  "errors": [],
+  "execution": "crm-migrate-5k4jn",
+  "observed_at": "2026-10-04T13:19:36.862085Z",
+  "prepared": [
+    {
+      "calendar_index": 1,
+      "projection_rows": 2633,
+      "ready": true,
+      "synced_at": "2026-10-04T13:17:24.586787+00:00",
+      "writable": true
+    },
+    {
+      "calendar_index": 2,
+      "projection_rows": 4680,
+      "ready": true,
+      "synced_at": "2026-10-04T13:17:53.300312+00:00",
+      "writable": true
+    },
+    {
+      "calendar_index": 3,
+      "projection_rows": 739,
+      "ready": true,
+      "synced_at": "2026-10-04T13:18:32.341756+00:00",
+      "writable": true
+    },
+    {
+      "calendar_index": 4,
+      "projection_rows": 3003,
+      "ready": true,
+      "synced_at": "2026-10-04T13:18:42.429252+00:00",
+      "writable": true
+    },
+    {
+      "calendar_index": 5,
+      "projection_rows": 2772,
+      "ready": true,
+      "synced_at": "2026-10-04T13:19:09.774195+00:00",
+      "writable": true
+    },
+    {
+      "calendar_index": 6,
+      "projection_rows": 490,
+      "ready": true,
+      "synced_at": "2026-10-04T13:19:33.081634+00:00",
+      "writable": true
+    }
+  ],
+  "scope": "isolated process with tested importer; production Scheduling V2 remains disabled"
+}

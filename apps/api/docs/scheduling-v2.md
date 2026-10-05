@@ -74,7 +74,16 @@ A failed sync may leave the explicit binding prepared; repeat the command after
 repair and keep the service flags off until every required snapshot is complete.
 
 Enable the worker first, verify current binding sync jobs complete, then enable
-the API. During rollback, disable the API first, drain queued binding work with
+the API. Cloud Run can briefly keep the retiring background worker running after
+the new revision starts. During the October 4 rollout, the disabled retiring
+revision claimed three binding jobs and rejected them for missing `user_id`.
+Check the failed job's revision and exact error before recovery. Once the retiring
+revision has stopped processing, use `job_service.replay_failed_job` for only the
+tenant-scoped sync/watch jobs with that pre-provider payload rejection. Verify
+their completion, fresh availability for every binding, and active watches before
+API activation. Do not replay appointment or message jobs as part of this recovery.
+
+During rollback, disable the API first, drain queued binding work with
 the worker still enabled, then disable the worker. Legacy user-scoped calendar
 jobs are intentionally ignored by the V2 worker; polling the explicit bindings
 replaces that import path.

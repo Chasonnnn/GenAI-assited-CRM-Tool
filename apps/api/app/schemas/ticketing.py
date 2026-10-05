@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+
+class GmailPushResponse(BaseModel):
+    status: Literal["accepted", "ignored"]
+    reason: str | None = None
+    matched_mailboxes: int | None = None
+    jobs_created: int | None = None
+    duplicates_skipped: int | None = None
 
 
 class TicketListItem(BaseModel):

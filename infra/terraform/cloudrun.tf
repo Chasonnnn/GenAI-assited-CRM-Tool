@@ -9,6 +9,9 @@ resource "google_cloud_run_v2_service" "api" {
   depends_on = [
     google_secret_manager_secret_iam_member.api_secret_access,
     google_cloud_run_v2_service.worker,
+    google_project_iam_member.api_trace_writer,
+    google_project_iam_member.api_telemetry_consumer,
+    google_project_service.required,
   ]
 
   template {
@@ -25,14 +28,17 @@ resource "google_cloud_run_v2_service" "api" {
     }
 
     containers {
-      image = local.api_image
+      name       = "api"
+      image      = local.api_image
+      depends_on = var.private_tracing_enabled ? ["trace-collector"] : []
 
       resources {
         limits = {
           cpu    = var.api_cpu
           memory = var.api_memory
         }
-        cpu_idle = var.run_cpu_idle
+        # Export batches must drain after a response, even when no new request arrives.
+        cpu_idle = var.private_tracing_enabled ? false : var.run_cpu_idle
       }
 
       ports {
@@ -83,6 +89,44 @@ resource "google_cloud_run_v2_service" "api" {
               secret  = google_secret_manager_secret.secrets[env.value].secret_id
               version = "latest"
             }
+          }
+        }
+      }
+    }
+
+    dynamic "containers" {
+      for_each = var.private_tracing_enabled ? [1] : []
+      content {
+        name  = "trace-collector"
+        image = "us-docker.pkg.dev/cloud-ops-agents-artifacts/google-cloud-opentelemetry-collector/otelcol-google:0.160.0"
+        args  = ["--config=env:OTELCOL_CONFIG"]
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "256Mi"
+          }
+          cpu_idle = false
+        }
+        env {
+          name  = "GOOGLE_CLOUD_PROJECT"
+          value = var.project_id
+        }
+        env {
+          name  = "OTELCOL_CONFIG"
+          value = file("${path.module}/otel-collector.yaml")
+        }
+        startup_probe {
+          http_get {
+            path = "/"
+            port = 13133
+          }
+          period_seconds    = 5
+          failure_threshold = 12
+        }
+        liveness_probe {
+          http_get {
+            path = "/"
+            port = 13133
           }
         }
       }
@@ -203,7 +247,11 @@ resource "google_cloud_run_v2_service" "worker" {
 
   # Ensure the service account has Secret Manager access before we update
   # the service template to reference Secret Manager env vars.
-  depends_on = [google_secret_manager_secret_iam_member.worker_secret_access]
+  depends_on = [
+    google_secret_manager_secret_iam_member.worker_secret_access,
+    google_pubsub_topic_iam_member.gmail_publisher,
+    google_pubsub_subscription.gmail,
+  ]
 
   template {
     service_account = google_service_account.worker.email

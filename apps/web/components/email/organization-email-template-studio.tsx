@@ -707,7 +707,9 @@ function OrganizationEmailTemplateEditor({
             })
             if (!result.success) {
                 setTestError(
-                    "Test email was not queued. Check the recipient and email integration, then try again.",
+                    result.error_code === "idempotency_conflict"
+                        ? "Test email details changed since the previous attempt. Close and reopen this dialog to start a new test."
+                        : "Test email was not queued. Check the recipient and email integration, then try again.",
                 )
                 setIsSendingTest(false)
                 return
@@ -1171,14 +1173,24 @@ function OrganizationEmailTemplateEditor({
                 onOpenChange={handleTestOpenChange}
                 description="This sends the saved draft only. It does not publish the template."
                 toEmail={testRecipient}
-                onToEmailChange={setTestRecipient}
+                onToEmailChange={(value) => {
+                    testOccurrenceIdRef.current = null
+                    setTestError(null)
+                    setTestRecipient(value)
+                }}
                 ignoreOptOut={ignoreOptOut}
-                onIgnoreOptOutChange={setIgnoreOptOut}
+                onIgnoreOptOutChange={(value) => {
+                    testOccurrenceIdRef.current = null
+                    setTestError(null)
+                    setIgnoreOptOut(value)
+                }}
                 variableNames={testVariableNames}
                 variables={testVariables}
-                onVariableChange={(name, value) =>
+                onVariableChange={(name, value) => {
+                    testOccurrenceIdRef.current = null
+                    setTestError(null)
                     setTestVariables((current) => ({ ...current, [name]: value }))
-                }
+                }}
                 hasUnsubscribeUrl={templateVariableNames.includes("unsubscribe_url")}
                 error={testError}
                 isSending={isSendingTest}

@@ -1,0 +1,86 @@
+{
+  "cutover_job_recovery": {
+    "calendar_event_writes": 0,
+    "replayed": 3,
+    "timestamp": "2026-10-04T14:13:20.764819Z"
+  },
+  "cutover_job_results": {
+    "completed": 3,
+    "timestamp": "2026-10-04T14:13:30.813810Z"
+  },
+  "execution": "crm-migrate-4rtmq",
+  "scheduling_readiness": {
+    "active_zoom_types": 0,
+    "binding_jobs": [
+      {
+        "count": 12,
+        "job_type": "google_calendar_sync",
+        "status": "completed"
+      },
+      {
+        "count": 6,
+        "job_type": "google_calendar_watch_refresh",
+        "status": "completed"
+      }
+    ],
+    "booking_calendars": 6,
+    "calendars": [
+      {
+        "age_seconds": 294,
+        "availability_ready": true,
+        "busy_intervals_7d": 0,
+        "calendar": 1,
+        "sync_error": false,
+        "watch_active": true,
+        "write_role": true
+      },
+      {
+        "age_seconds": 5,
+        "availability_ready": true,
+        "busy_intervals_7d": 10,
+        "calendar": 2,
+        "sync_error": false,
+        "watch_active": true,
+        "write_role": true
+      },
+      {
+        "age_seconds": 294,
+        "availability_ready": true,
+        "busy_intervals_7d": 8,
+        "calendar": 3,
+        "sync_error": false,
+        "watch_active": true,
+        "write_role": true
+      },
+      {
+        "age_seconds": 293,
+        "availability_ready": true,
+        "busy_intervals_7d": 1,
+        "calendar": 4,
+        "sync_error": false,
+        "watch_active": true,
+        "write_role": true
+      },
+      {
+        "age_seconds": 293,
+        "availability_ready": true,
+        "busy_intervals_7d": 17,
+        "calendar": 5,
+        "sync_error": false,
+        "watch_active": true,
+        "write_role": true
+      },
+      {
+        "age_seconds": 293,
+        "availability_ready": true,
+        "busy_intervals_7d": 13,
+        "calendar": 6,
+        "sync_error": false,
+        "watch_active": true,
+        "write_role": true
+      }
+    ],
+    "observed_at": "2026-10-04T14:13:30.917664+00:00",
+    "timestamp": "2026-10-04T14:13:31.035762Z"
+  }
+}

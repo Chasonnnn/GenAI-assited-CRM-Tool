@@ -82,6 +82,32 @@ async def test_test_send_renders_the_saved_draft_without_publishing_it(
     delivery = db.query(EmailDelivery).filter(EmailDelivery.email_log_id == log.id).one()
     assert delivery.status == "pending"
 
+    retry_response = await authed_client.post(
+        f"/email-template-drafts/{draft['id']}/test",
+        json={
+            "to_email": "draft-recipient@example.com",
+            "variables": {"full_name": "Avery"},
+            "idempotency_key": log.idempotency_key,
+            "expected_revision": 2,
+        },
+    )
+    assert retry_response.status_code == 200
+    assert retry_response.json()["email_log_id"] == str(log.id)
+
+    conflict_response = await authed_client.post(
+        f"/email-template-drafts/{draft['id']}/test",
+        json={
+            "to_email": "draft-recipient@example.com",
+            "variables": {"full_name": "Changed"},
+            "idempotency_key": log.idempotency_key,
+            "expected_revision": 2,
+        },
+    )
+    assert conflict_response.status_code == 200
+    assert conflict_response.json()["success"] is False
+    assert conflict_response.json()["error_code"] == "idempotency_conflict"
+    assert db.query(EmailLog).filter(EmailLog.idempotency_key == log.idempotency_key).count() == 1
+
     db.expire_all()
     still_published = db.get(EmailTemplate, template.id)
     assert still_published is not None

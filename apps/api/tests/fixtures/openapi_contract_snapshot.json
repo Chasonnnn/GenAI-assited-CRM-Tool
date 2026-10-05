@@ -4489,7 +4489,7 @@
   },
   "/webhooks/google-gmail": {
     "POST": [
-      "200"
+      "202"
     ]
   },
   "/webhooks/meta": {
