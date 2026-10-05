@@ -468,6 +468,7 @@ def execute_action(
     """
     from app.services import ai_settings_service, permission_policy_service
 
+    permission_policy_service.lock_configuration(db, org_id)
     if not ai_settings_service.is_org_ai_enabled(db, org_id):
         return {
             "success": False,

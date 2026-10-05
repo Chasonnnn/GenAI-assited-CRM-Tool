@@ -114,10 +114,13 @@ def approve_action_for_session(
     )
     from app.services.ai_action_executor import execute_action
 
+    try:
+        permission_policy_service.lock_configuration(db, session.org_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Action not found") from exc
     if permission_policy_service.is_enabled(db, session.org_id):
         from app.services.workflow_execution_authority import active_session
 
-        permission_policy_service.lock_configuration(db, session.org_id)
         actor = active_session(db, session.org_id, session.user_id)
         if actor is None:
             raise HTTPException(status_code=403, detail="Active organization membership required")
@@ -251,8 +254,12 @@ def reject_action_for_session(
     session: UserSession,
 ) -> dict[str, object]:
     """Reject under the same row lock used by approval, without changing access rules."""
-    from app.services import ai_service, audit_service
+    from app.services import ai_service, audit_service, permission_policy_service
 
+    try:
+        permission_policy_service.lock_configuration(db, session.org_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Action not found") from exc
     approval, message, conversation = ai_service.get_approval_with_conversation(
         db, approval_id, session.org_id
     )

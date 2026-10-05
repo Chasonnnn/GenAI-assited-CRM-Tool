@@ -176,14 +176,16 @@ _ROW_LOCK = re.compile(r"FOR (NO KEY )?UPDATE")
 
 @contextmanager
 def _locked_tables(db):
-    """Record the table of every SELECT ... FOR [NO KEY] UPDATE, in execution order."""
+    """Record first domain-table locks; activation races own the organization-lock contract."""
     locked: list[str] = []
     connection = db.connection()
 
     def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
         if _ROW_LOCK.search(statement):
             match = re.search(r"\bFROM\s+(\w+)", statement)
-            locked.append(match.group(1) if match else statement)
+            table = match.group(1) if match else statement
+            if table != "organizations" and table not in locked:
+                locked.append(table)
 
     event.listen(connection, "before_cursor_execute", before_cursor_execute)
     try:
@@ -656,7 +658,7 @@ async def test_accept_keeps_other_open_proposals_for_same_surrogate(
 
 
 @pytest.mark.asyncio
-async def test_accept_with_competing_proposals_locks_each_row_once_in_engine_order(
+async def test_accept_with_competing_proposals_locks_tables_in_engine_order(
     authed_client, db, test_auth, monkeypatch
 ):
     surrogate = await _create_surrogate(authed_client)
@@ -686,14 +688,22 @@ async def test_accept_with_competing_proposals_locks_each_row_once_in_engine_ord
     finally:
         event.remove(connection, "before_cursor_execute", record)
 
-    assert [re.search(r"\bFROM\s+(\w+)", sql).group(1) for sql in statements] == [
+    first_locks = {}
+    for sql in statements:
+        first_locks.setdefault(re.search(r"\bFROM\s+(\w+)", sql).group(1), sql)
+    assert list(first_locks) == [
+        "organizations",
         "matches",
         "surrogates",
         "intended_parents",
     ]
-    assert "ORDER BY matches.id" in statements[0]
-    assert statements[0].rstrip().endswith("FOR UPDATE")
-    assert all(sql.rstrip().endswith("FOR NO KEY UPDATE") for sql in statements[1:])
+    assert "ORDER BY matches.id" in first_locks["matches"]
+    assert first_locks["matches"].rstrip().endswith("FOR UPDATE")
+    assert all(
+        sql.rstrip().endswith("FOR NO KEY UPDATE")
+        for table, sql in first_locks.items()
+        if table != "matches"
+    )
     for other in competing:
         assert _match_row(db, other["id"]).status == "under_review"
 

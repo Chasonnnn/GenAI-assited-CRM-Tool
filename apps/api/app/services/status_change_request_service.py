@@ -101,11 +101,10 @@ def _reviewer_session(db, org_id, user_id, *, legacy_match=False):
 
     from app.services import permission_policy_service, permission_service
 
+    permission_policy_service.lock_configuration(db, org_id)
     uses_v2 = permission_policy_service.is_enabled(db, org_id)
     if not uses_v2 and not legacy_match:
         return None
-    if uses_v2:
-        permission_policy_service.lock_configuration(db, org_id)
     actor = _actor_session(db, org_id, user_id)
     if not permission_service.check_permission(
         db, org_id, user_id, actor.role.value, "approve_status_change_requests"
@@ -749,6 +748,9 @@ def cancel_request(
     Raises:
         ValueError: If request not found, not pending, or user not the requester
     """
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, org_id)
     request = (
         db.query(StatusChangeRequest)
         .filter(

@@ -475,8 +475,11 @@ class DefaultWorkflowDomainAdapter:
         """Execute a single action."""
         action_type = action.get("action_type")
         action_entity = entity
+        from app.services import permission_policy_service
         from app.services.workflow_execution_authority import enabled
 
+        if workflow_execution_id:
+            permission_policy_service.lock_configuration(db, entity.organization_id)
         v2_authority = bool(workflow_execution_id) and enabled(db, entity.organization_id)
         workflow_actor_id = (
             (workflow_owner_id if workflow_scope == "personal" else SYSTEM_USER_ID)
