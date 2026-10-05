@@ -224,63 +224,78 @@ def _stage_filter(session, kind, model, rule):
             (current.c.stage_type == "terminal", historical_stage),
             else_=model.stage_id,
         )
-    source = current.outerjoin(effective, effective.c.id == effective_id).join(
-        pipeline, pipeline.c.id == current.c.pipeline_id
-    )
+    source = current.join(pipeline, pipeline.c.id == current.c.pipeline_id)
     conditions = [
         current.c.id == model.stage_id,
         current.c.is_active.is_(True),
-        or_(current.c.pipeline_id == effective.c.pipeline_id, effective.c.id.is_(None)),
         pipeline.c.organization_id == session.org_id,
-        or_(effective.c.is_active.is_(True), effective.c.id.is_(None)),
     ]
     if rule.stage_ids:
         conditions.append(current.c.id.in_(rule.stage_ids))
-    conditions.append(
-        or_(effective.c.stage_type.notin_(["paused", "terminal"]), effective.c.id.is_(None))
+    gate = PipelineStage.__table__.alias("scope_approval_gate")
+    gate_keys = {
+        key
+        for entity in RECORDS[kind][2]
+        for key, definition in PROTECTED_SYSTEM_STAGES_BY_ENTITY.get(entity, {}).items()
+        if definition.system_role == "approval_gate"
+    }
+    # Older donor pipelines have phase categories before an approval gate is installed.
+    if gate_keys:
+        gate_order = (
+            select(gate.c.order)
+            .where(
+                gate.c.pipeline_id == effective.c.pipeline_id,
+                gate.c.stage_key.in_(gate_keys),
+                gate.c.is_active.is_(True),
+            )
+            .limit(1)
+            .correlate_except(gate)
+            .scalar_subquery()
+        )
+        post = effective.c.order >= gate_order
+        pre = effective.c.order < gate_order
+    else:
+        post = effective.c.stage_type == "post_approval"
+        pre = effective.c.stage_type == "intake"
+    phase = post if rule.phase == "post_approval" else pre
+    # A computed-key outer join produced different phases for list and detail queries.
+    # Keep effective-stage validation correlated to the current record.
+    effective_phase = (
+        select(literal(1))
+        .select_from(effective)
+        .where(
+            effective.c.id == effective_id,
+            effective.c.pipeline_id == current.c.pipeline_id,
+            effective.c.is_active.is_(True),
+            effective.c.stage_type.notin_(["paused", "terminal"]),
+            phase,
+        )
+        .correlate_except(effective)
+        .exists()
     )
-    if rule.phase != "all":
-        gate = PipelineStage.__table__.alias("scope_approval_gate")
-        gate_keys = {
-            key
-            for entity in RECORDS[kind][2]
-            for key, definition in PROTECTED_SYSTEM_STAGES_BY_ENTITY.get(entity, {}).items()
-            if definition.system_role == "approval_gate"
-        }
-        # Older donor pipelines have phase categories before an approval gate is installed.
-        if gate_keys:
-            gate_order = (
-                select(gate.c.order)
-                .where(
-                    gate.c.pipeline_id == effective.c.pipeline_id,
-                    gate.c.stage_key.in_(gate_keys),
-                    gate.c.is_active.is_(True),
-                )
-                .limit(1)
-                .scalar_subquery()
+    if kind in {"surrogate", "donor"}:
+        reviewed_phase = (
+            select(literal(1))
+            .select_from(RecordScopeMigrationReview)
+            .where(
+                RecordScopeMigrationReview.organization_id == session.org_id,
+                getattr(RecordScopeMigrationReview, f"{kind}_id") == model.id,
+                RecordScopeMigrationReview.reviewed_stage_id == model.stage_id,
+                RecordScopeMigrationReview.resolved_phase == rule.phase,
+                RecordScopeMigrationReview.evidence_reference.isnot(None),
             )
-            post = effective.c.order >= gate_order
-            pre = effective.c.order < gate_order
-        else:
-            post = effective.c.stage_type == "post_approval"
-            pre = effective.c.stage_type == "intake"
-        phase = post if rule.phase == "post_approval" else pre
-        if kind in {"surrogate", "donor"}:
-            reviewed_phase = (
-                select(literal(1))
-                .select_from(RecordScopeMigrationReview)
-                .where(
-                    RecordScopeMigrationReview.organization_id == session.org_id,
-                    getattr(RecordScopeMigrationReview, f"{kind}_id") == model.id,
-                    RecordScopeMigrationReview.reviewed_stage_id == model.stage_id,
-                    RecordScopeMigrationReview.resolved_phase == rule.phase,
-                    RecordScopeMigrationReview.evidence_reference.isnot(None),
-                )
-                .correlate_except(RecordScopeMigrationReview)
-                .exists()
-            )
-            phase = or_(phase, and_(effective.c.id.is_(None), reviewed_phase))
-        conditions.append(phase)
+            .correlate_except(RecordScopeMigrationReview)
+            .exists()
+        )
+        effective_exists = (
+            select(literal(1))
+            .select_from(effective)
+            .where(effective.c.id == effective_id)
+            .correlate_except(effective)
+            .exists()
+        )
+        effective_phase = or_(effective_phase, and_(~effective_exists, reviewed_phase))
+    conditions.append(effective_phase)
     return select(literal(1)).select_from(source).where(*conditions).exists()
 
 
