@@ -1,0 +1,62 @@
+{
+  "phase": "read_only_collection",
+  "status": "blocked",
+  "code": "collection_failed",
+  "error_type": "ProgrammingError",
+  "sqlstate": "42501",
+  "frames": [
+    {
+      "file": "runner.py",
+      "line": 321
+    },
+    {
+      "file": "runner.py",
+      "line": 251
+    },
+    {
+      "file": "session.py",
+      "line": 2351
+    },
+    {
+      "file": "session.py",
+      "line": 2258
+    },
+    {
+      "file": "base.py",
+      "line": 1419
+    },
+    {
+      "file": "elements.py",
+      "line": 527
+    },
+    {
+      "file": "base.py",
+      "line": 1641
+    },
+    {
+      "file": "base.py",
+      "line": 1846
+    },
+    {
+      "file": "base.py",
+      "line": 1986
+    },
+    {
+      "file": "base.py",
+      "line": 2363
+    },
+    {
+      "file": "base.py",
+      "line": 1967
+    },
+    {
+      "file": "default.py",
+      "line": 952
+    },
+    {
+      "file": "cursor.py",
+      "line": 117
+    }
+  ],
+  "frames_truncated": false
+}

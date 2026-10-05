@@ -1,0 +1,8 @@
+{
+  "source_commit": "91da87428dc6d90ac051f96a25ae2decf0f6de43",
+  "expected_database": "crm",
+  "expected_clone_ip": "10.9.0.26",
+  "run_id": "handoff-review-20261004-91da8742",
+  "public_key_sha256": "95cf4d1affb7e15b3b66a59b38a6e4f6026c97965cc6eb1aa2c4d1f1f61a3c34",
+  "expected_database_user": "crm_user"
+}

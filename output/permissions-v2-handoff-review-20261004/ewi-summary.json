@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "handoff_records": 46,
+  "historical_classification": {
+    "ambiguous": 44,
+    "candidate": 2
+  },
+  "reason_counts": {
+    "approval_effective_time_differs_or_missing": 44,
+    "no_recorded_user_owner_at_approval": 30
+  },
+  "current_direct_owner_preservation_candidates": 3,
+  "role_audit_observations": 3,
+  "read_only": true,
+  "grant_decisions_made": false,
+  "approval_time_difference_buckets": {
+    "under_one_second": 44,
+    "equal": 2
+  },
+  "candidate_role_evidence_counts": {
+    "no_candidate": 30,
+    "no_historical_role_observation": 16
+  },
+  "evidence_counts": {
+    "recorded_candidate_user": 16,
+    "ownership_activity": 96,
+    "ownership_audit_observations": 60,
+    "workflow_owner_observations": 0,
+    "status_history": 215
+  }
+}

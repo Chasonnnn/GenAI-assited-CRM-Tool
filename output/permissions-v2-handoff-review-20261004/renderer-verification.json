@@ -1,0 +1,18 @@
+{
+  "fixture": "three synthetic records; no production identifiers",
+  "method": "repository-pinned Node and installed JSDOM execute generated HTML",
+  "rendered_rows": 3,
+  "all_decisions_start_unreviewed": true,
+  "missing_active_intake_selection_blocks_retention_export": true,
+  "missing_evidence_blocks_reviewed_export": true,
+  "retention_export_contains_selected_user": true,
+  "no_owner_export_clears_user": true,
+  "all_exports_remain_unapplied": true,
+  "dom_errors": 0,
+  "live_browser_visual_check": "not completed: browser policy rejected file URLs; no bypass attempted",
+  "actual_records_rendered": 46,
+  "actual_unverified_assignment_badges": 16,
+  "actual_no_owner_identified_badges": 30,
+  "actual_all_unreviewed": true,
+  "actual_dom_errors": 0
+}

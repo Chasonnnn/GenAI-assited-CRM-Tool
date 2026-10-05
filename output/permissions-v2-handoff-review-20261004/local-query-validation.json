@@ -1,0 +1,31 @@
+{
+  "collector_sha256": "d04617887dbc2193bcdfdf679db0b809ae573eabb73d44068658b2c92155c639",
+  "runner": "apps/api/run_tests.sh tests/test_handoff_collector_probe.py --tb=short",
+  "database": "unique disposable local PostgreSQL database per invocation",
+  "empty_evidence": {
+    "tests_passed": 1,
+    "elapsed_seconds": 3.49
+  },
+  "populated_evidence": {
+    "tests_passed": 1,
+    "elapsed_seconds": 2.22
+  },
+  "synthetic_cases": [
+    "surrogate and donor postapproval candidates",
+    "read-only repeatable-read UTC collection",
+    "status histories with approval crossing",
+    "valid and malformed ownership UUID references",
+    "organization role audit JSON",
+    "platform member role and active boolean JSON",
+    "workflow ownership observation JSON",
+    "ownership audit observation JSON",
+    "existing collaborator and migration-review metadata",
+    "cross-organization activity excluded even when referencing candidate record",
+    "unselected private sentinel payload fields absent from serialized ledger"
+  ],
+  "result": "No local SQL defect reproduced; collector unchanged. Clone diagnostics later identified insufficient table privileges for postgres before collector execution. The same collector succeeded with the clone-only crm_user credential.",
+  "temporary_test_adapter_removed": true,
+  "production_files_changed": false,
+  "cloud_calls": false,
+  "services_started_or_stopped": false
+}
