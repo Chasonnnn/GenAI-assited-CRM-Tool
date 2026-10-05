@@ -1,0 +1,985 @@
+[
+  {
+    "jsonPayload": {
+      "business_counts": {
+        "appointment_types": 6,
+        "appointments": 3278,
+        "attachments": 308,
+        "availability_overrides": 0,
+        "availability_rules": 40,
+        "booking_links": 10,
+        "consent_records": 7,
+        "donor_status_history": 2,
+        "donors": 1,
+        "entity_notes": 1994,
+        "form_intake_drafts": 2,
+        "form_intake_links": 2,
+        "form_submission_drafts": 0,
+        "form_submission_files": 0,
+        "form_submissions": 7,
+        "forms": 3,
+        "intake_leads": 6,
+        "intended_parent_status_history": 57,
+        "intended_parents": 25,
+        "interview_attachments": 0,
+        "interview_notes": 0,
+        "lead_attribution": 7,
+        "match_attempts": 0,
+        "match_events": 0,
+        "matches": 29,
+        "medical_records": 88,
+        "memberships": 10,
+        "organizations": 4,
+        "record_collaborators": 0,
+        "surrogate_activity_log": 31801,
+        "surrogate_contact_attempts": 6325,
+        "surrogate_interviews": 0,
+        "surrogate_status_history": 12445,
+        "surrogates": 9117,
+        "tasks": 92,
+        "users": 13
+      },
+      "business_identities_preserved": true,
+      "phase": "bootstrap",
+      "protected_table_count": 36,
+      "schema_after": "20261004_1300_organization_logo",
+      "schema_before": "20261004_1300_organization_logo",
+      "source_commit": "c9b0018a418b01362f71a21a27f20f582473b029",
+      "status": "passed"
+    },
+    "timestamp": "2026-10-05T00:57:09.730270Z"
+  },
+  {
+    "jsonPayload": {
+      "organizations": [
+        {
+          "action_changes_by_role": {},
+          "blockers": {
+            "execution_items_by_type": {},
+            "handoffs_by_kind": {},
+            "legacy_pool_grants": 0,
+            "missing_approval_gates": 0,
+            "revokes_by_role_permission": {},
+            "running_campaign_runs": 0,
+            "unknown_phase_by_kind": {},
+            "unreviewed_workflow_executions": 0
+          },
+          "digest": "4206920827fa39e834038405ced622687d89c1b7e7d87d98b515f6fefdbce965",
+          "existing_collaborators": 0,
+          "historical_reviews_by_decision": {},
+          "members": {
+            "active_by_role": {},
+            "inactive": 0
+          },
+          "org_id": "60ea9cf1-f75a-4fb6-9048-85c75540f296",
+          "ready": true,
+          "records": {
+            "donor": {
+              "archived": 0,
+              "total": 0
+            },
+            "intended_parent": {
+              "archived": 0,
+              "total": 0
+            },
+            "surrogate": {
+              "archived": 0,
+              "total": 1
+            }
+          },
+          "scope_member_record_access_pairs_by_role_module": {},
+          "source_commit": "c9b0018a418b01362f71a21a27f20f582473b029",
+          "version": 1
+        },
+        {
+          "action_changes_by_role": {
+            "admin": {
+              "gained": {
+                "approve_donors": 1,
+                "approve_surrogates": 1,
+                "assign_donors": 1,
+                "create_donors": 1,
+                "create_intended_parents": 1,
+                "create_surrogates": 1,
+                "edit_campaigns": 1,
+                "manage_org_campaigns": 1,
+                "manage_org_templates": 1,
+                "manage_org_workflows": 1,
+                "manage_roles": 1,
+                "review_form_submissions": 1,
+                "send_campaigns": 1,
+                "send_email": 1,
+                "send_sms": 1,
+                "view_campaigns": 1,
+                "view_form_submissions": 1
+              },
+              "lost": {
+                "approve_ai_actions": 1,
+                "use_ai_assistant": 1
+              },
+              "members": 1
+            }
+          },
+          "blockers": {
+            "execution_items_by_type": {},
+            "handoffs_by_kind": {},
+            "legacy_pool_grants": 0,
+            "missing_approval_gates": 0,
+            "revokes_by_role_permission": {},
+            "running_campaign_runs": 0,
+            "unknown_phase_by_kind": {},
+            "unreviewed_workflow_executions": 0
+          },
+          "digest": "2ab52b047e6750b552cf3b8b5a8f59401aee8eeadf5a6d626de0cfa96f26fe8a",
+          "existing_collaborators": 0,
+          "historical_reviews_by_decision": {},
+          "members": {
+            "active_by_role": {
+              "admin": 1
+            },
+            "inactive": 0
+          },
+          "org_id": "997bf01a-6b77-497c-b09c-717861be7c95",
+          "ready": true,
+          "records": {
+            "donor": {
+              "archived": 0,
+              "total": 0
+            },
+            "intended_parent": {
+              "archived": 0,
+              "total": 0
+            },
+            "surrogate": {
+              "archived": 0,
+              "total": 0
+            }
+          },
+          "scope_member_record_access_pairs_by_role_module": {
+            "admin:donors": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            },
+            "admin:intended_parents": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            },
+            "admin:surrogates": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            }
+          },
+          "source_commit": "c9b0018a418b01362f71a21a27f20f582473b029",
+          "version": 1
+        },
+        {
+          "action_changes_by_role": {
+            "admin": {
+              "gained": {
+                "approve_donors": 1,
+                "approve_surrogates": 1,
+                "assign_donors": 1,
+                "create_donors": 1,
+                "create_intended_parents": 1,
+                "create_surrogates": 1,
+                "edit_campaigns": 1,
+                "manage_org_campaigns": 1,
+                "manage_org_templates": 1,
+                "manage_org_workflows": 1,
+                "manage_roles": 1,
+                "review_form_submissions": 1,
+                "send_campaigns": 1,
+                "send_email": 1,
+                "send_sms": 1,
+                "view_campaigns": 1,
+                "view_form_submissions": 1
+              },
+              "lost": {},
+              "members": 1
+            },
+            "case_manager": {
+              "gained": {
+                "assign_donors": 1,
+                "create_donors": 1,
+                "create_intended_parents": 1,
+                "create_surrogates": 1,
+                "edit_campaigns": 1,
+                "manage_automation": 1,
+                "manage_email_templates": 1,
+                "review_form_submissions": 1,
+                "send_email": 1,
+                "send_sms": 1,
+                "view_campaigns": 1,
+                "view_form_submissions": 1
+              },
+              "lost": {
+                "manage_ai_settings": 1
+              },
+              "members": 1
+            },
+            "developer": {
+              "gained": {},
+              "lost": {},
+              "members": 1
+            },
+            "intake_specialist": {
+              "gained": {
+                "approve_donors": 4,
+                "approve_surrogates": 4,
+                "create_donors": 4,
+                "create_surrogates": 4,
+                "edit_campaigns": 4,
+                "manage_automation": 4,
+                "manage_email_templates": 4,
+                "review_form_submissions": 4,
+                "send_email": 4,
+                "send_sms": 4,
+                "view_campaigns": 4,
+                "view_form_submissions": 4
+              },
+              "lost": {
+                "manage_ai_settings": 4
+              },
+              "members": 4
+            }
+          },
+          "blockers": {
+            "execution_items_by_type": {
+              "workflow": 1
+            },
+            "handoffs_by_kind": {
+              "surrogate": 46
+            },
+            "legacy_pool_grants": 0,
+            "missing_approval_gates": 0,
+            "revokes_by_role_permission": {},
+            "running_campaign_runs": 0,
+            "unknown_phase_by_kind": {},
+            "unreviewed_workflow_executions": 0
+          },
+          "digest": "c3e760bc16690a46416e56027e9e47fb8e0103d95769c53e16c41134c442900a",
+          "existing_collaborators": 0,
+          "historical_reviews_by_decision": {},
+          "members": {
+            "active_by_role": {
+              "admin": 1,
+              "case_manager": 1,
+              "developer": 1,
+              "intake_specialist": 4
+            },
+            "inactive": 1
+          },
+          "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+          "ready": false,
+          "records": {
+            "donor": {
+              "archived": 1,
+              "total": 1
+            },
+            "intended_parent": {
+              "archived": 0,
+              "total": 25
+            },
+            "surrogate": {
+              "archived": 5638,
+              "total": 8215
+            }
+          },
+          "scope_member_record_access_pairs_by_role_module": {
+            "admin:donors": {
+              "current": 1,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 1
+            },
+            "admin:intended_parents": {
+              "current": 25,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 25
+            },
+            "admin:surrogates": {
+              "current": 8215,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 8215
+            },
+            "case_manager:donors": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            },
+            "case_manager:intended_parents": {
+              "current": 25,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 25
+            },
+            "case_manager:surrogates": {
+              "current": 2120,
+              "gained": 0,
+              "lost": 2074,
+              "members": 1,
+              "proposed": 46
+            },
+            "developer:donors": {
+              "current": 1,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 1
+            },
+            "developer:intended_parents": {
+              "current": 25,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 25
+            },
+            "developer:surrogates": {
+              "current": 8215,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 8215
+            },
+            "intake_specialist:donors": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 4,
+              "proposed": 0
+            },
+            "intake_specialist:intended_parents": {
+              "current": 100,
+              "gained": 0,
+              "lost": 100,
+              "members": 4,
+              "proposed": 0
+            },
+            "intake_specialist:surrogates": {
+              "current": 1500,
+              "gained": 0,
+              "lost": 3,
+              "members": 4,
+              "proposed": 1497
+            }
+          },
+          "source_commit": "c9b0018a418b01362f71a21a27f20f582473b029",
+          "version": 1
+        },
+        {
+          "action_changes_by_role": {
+            "admin": {
+              "gained": {
+                "approve_donors": 1,
+                "approve_surrogates": 1,
+                "assign_donors": 1,
+                "create_donors": 1,
+                "create_intended_parents": 1,
+                "create_surrogates": 1,
+                "edit_campaigns": 1,
+                "manage_org_campaigns": 1,
+                "manage_org_templates": 1,
+                "manage_org_workflows": 1,
+                "manage_roles": 1,
+                "review_form_submissions": 1,
+                "send_campaigns": 1,
+                "send_email": 1,
+                "send_sms": 1,
+                "view_campaigns": 1,
+                "view_form_submissions": 1
+              },
+              "lost": {},
+              "members": 1
+            }
+          },
+          "blockers": {
+            "execution_items_by_type": {},
+            "handoffs_by_kind": {
+              "surrogate": 1
+            },
+            "legacy_pool_grants": 0,
+            "missing_approval_gates": 0,
+            "revokes_by_role_permission": {},
+            "running_campaign_runs": 0,
+            "unknown_phase_by_kind": {},
+            "unreviewed_workflow_executions": 0
+          },
+          "digest": "67a89d0c572d9aab5c952889a4f71a90eca9a6c26d0f6d11244f25caf25ab445",
+          "existing_collaborators": 0,
+          "historical_reviews_by_decision": {},
+          "members": {
+            "active_by_role": {
+              "admin": 1
+            },
+            "inactive": 0
+          },
+          "org_id": "ef8599ee-db82-491f-a465-d288b5e07d91",
+          "ready": false,
+          "records": {
+            "donor": {
+              "archived": 0,
+              "total": 0
+            },
+            "intended_parent": {
+              "archived": 0,
+              "total": 0
+            },
+            "surrogate": {
+              "archived": 20,
+              "total": 901
+            }
+          },
+          "scope_member_record_access_pairs_by_role_module": {
+            "admin:donors": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            },
+            "admin:intended_parents": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            },
+            "admin:surrogates": {
+              "current": 901,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 901
+            }
+          },
+          "source_commit": "c9b0018a418b01362f71a21a27f20f582473b029",
+          "version": 1
+        }
+      ],
+      "status": "preview_complete",
+      "write_free": true
+    },
+    "timestamp": "2026-10-05T00:57:15.669816Z"
+  },
+  {
+    "jsonPayload": {
+      "case_manager_creator_counts": {
+        "all_created": 0,
+        "archived_created": 0,
+        "nonarchived_created": 0,
+        "visible_v1": 0,
+        "visible_v2": 0
+      },
+      "handoff_evidence_groups": [
+        {
+          "classification": [
+            "known_post_approval",
+            "active",
+            "active_case_manager",
+            "no_intake_stage_actor"
+          ],
+          "records": 21
+        },
+        {
+          "classification": [
+            "known_post_approval",
+            "active",
+            "active_case_manager",
+            "one_intake_stage_actor"
+          ],
+          "records": 19
+        },
+        {
+          "classification": [
+            "known_post_approval",
+            "active",
+            "active_intake_specialist",
+            "no_intake_stage_actor"
+          ],
+          "records": 2
+        },
+        {
+          "classification": [
+            "known_post_approval",
+            "active",
+            "active_intake_specialist",
+            "one_intake_stage_actor"
+          ],
+          "records": 1
+        },
+        {
+          "classification": [
+            "known_post_approval",
+            "active",
+            "queue_or_unassigned",
+            "multiple_intake_stage_actors"
+          ],
+          "records": 1
+        },
+        {
+          "classification": [
+            "known_post_approval",
+            "active",
+            "queue_or_unassigned",
+            "no_intake_stage_actor"
+          ],
+          "records": 1
+        },
+        {
+          "classification": [
+            "known_post_approval",
+            "active",
+            "queue_or_unassigned",
+            "one_intake_stage_actor"
+          ],
+          "records": 1
+        }
+      ],
+      "intake_owner_candidate_evidence": {
+        "activity_counts": {
+          "recognized_events": 96
+        },
+        "current_active_intake_owner_records": 3,
+        "historical_owner_inference_performed": false,
+        "limitations": [
+          "Some workflow and approval owner changes emit no ownership activity; continuous ownership cannot be verified.",
+          "Current active Intake membership does not prove membership or role at the historical event.",
+          "Activity created_at is compared with approval recorded_at, not the approval effective time.",
+          "Only an explicit transition from an active operational stage below the current approval gate into that gate is counted.",
+          "Current stage configuration does not establish historical stage ordering.",
+          "Missing or malformed owner references and equal timestamps remain ambiguous.",
+          "Current owner candidates and recorded assignment targets are not verified past owners."
+        ],
+        "recorded_assignment_evidence_groups": [
+          {
+            "approval_history": "no_explicit_approval_transition",
+            "approval_timestamp_comparison": "not_evaluated",
+            "assignment_targets": "not_evaluated",
+            "later_recorded_ownership_evidence": "not_evaluated",
+            "records": 24,
+            "timestamp_order": "not_evaluated"
+          },
+          {
+            "approval_history": "single_explicit_approval_transition",
+            "approval_timestamp_comparison": "effective_time_differs",
+            "assignment_targets": "no_active_intake_assignment_target",
+            "later_recorded_ownership_evidence": "not_evaluated",
+            "records": 6,
+            "timestamp_order": "distinct_recorded_timestamps"
+          },
+          {
+            "approval_history": "single_explicit_approval_transition",
+            "approval_timestamp_comparison": "effective_time_differs",
+            "assignment_targets": "one_active_intake_assignment_target",
+            "later_recorded_ownership_evidence": "no_later_recorded_owner_event",
+            "records": 14,
+            "timestamp_order": "distinct_recorded_timestamps"
+          },
+          {
+            "approval_history": "single_explicit_approval_transition",
+            "approval_timestamp_comparison": "recorded_and_effective_time_equal",
+            "assignment_targets": "one_active_intake_assignment_target",
+            "later_recorded_ownership_evidence": "no_later_recorded_owner_event",
+            "records": 2,
+            "timestamp_order": "distinct_recorded_timestamps"
+          }
+        ],
+        "records_with_recognized_ownership_events": 45,
+        "surrogate_handoff_review_records": 46
+      },
+      "intended_parent_owner_membership": {
+        "queue_or_unassigned": 25
+      },
+      "intended_parent_role_rules": {
+        "case_manager": {
+          "assignment": "all",
+          "phase": "all",
+          "stage_filter_count": 0
+        },
+        "intake_specialist": {
+          "assignment": "assigned",
+          "phase": "all",
+          "stage_filter_count": 0
+        }
+      },
+      "lost_scope_groups": [
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "cold_leads:terminal:order=23:active=True",
+          "member_record_pairs": 94,
+          "role": "case_manager",
+          "v1_effective_stage": "cold_leads:terminal:order=23:active=True",
+          "v2_effective_stage_evidence": "contacted:intake:order=2:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "cold_leads:terminal:order=23:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "cold_leads:terminal:order=23:active=True",
+          "v2_effective_stage_evidence": "interview_scheduled:intake:order=5:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "active_intake_specialist",
+          "current_stage": "cold_leads:terminal:order=23:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "cold_leads:terminal:order=23:active=True",
+          "v2_effective_stage_evidence": "under_review:intake:order=8:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "cold_leads:terminal:order=23:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "cold_leads:terminal:order=23:active=True",
+          "v2_effective_stage_evidence": "under_review:intake:order=8:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "active_intake_specialist",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "application_submitted:intake:order=4:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 2,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "application_submitted:intake:order=4:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 271,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "contacted:intake:order=2:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 81,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "interview_scheduled:intake:order=5:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "active_intake_specialist",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 2,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "new_unread:intake:order=1:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 1083,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "new_unread:intake:order=1:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "active_intake_specialist",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "pending_docusign:intake:order=7:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 6,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "pending_docusign:intake:order=7:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "pre_qualified:intake:order=3:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "active_intake_specialist",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 2,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "under_review:intake:order=8:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "disqualified:terminal:order=25:active=True",
+          "member_record_pairs": 15,
+          "role": "case_manager",
+          "v1_effective_stage": "disqualified:terminal:order=25:active=True",
+          "v2_effective_stage_evidence": "under_review:intake:order=8:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "lost:terminal:order=24:active=True",
+          "member_record_pairs": 3,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "application_submitted:intake:order=4:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "active_intake_specialist",
+          "current_stage": "lost:terminal:order=24:active=True",
+          "member_record_pairs": 3,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "contacted:intake:order=2:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "lost:terminal:order=24:active=True",
+          "member_record_pairs": 400,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "contacted:intake:order=2:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "lost:terminal:order=24:active=True",
+          "member_record_pairs": 55,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "interview_scheduled:intake:order=5:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "lost:terminal:order=24:active=True",
+          "member_record_pairs": 13,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "new_unread:intake:order=1:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "active_intake_specialist",
+          "current_stage": "lost:terminal:order=24:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "pending_docusign:intake:order=7:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "lost:terminal:order=24:active=True",
+          "member_record_pairs": 24,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "pending_docusign:intake:order=7:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "lost:terminal:order=24:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "pre_qualified:intake:order=3:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "active_intake_specialist",
+          "current_stage": "lost:terminal:order=24:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "under_review:intake:order=8:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "lost:terminal:order=24:active=True",
+          "member_record_pairs": 9,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "under_review:intake:order=8:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "on_hold:paused:order=22:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "contacted:intake:order=2:active=True"
+        },
+        {
+          "canonical_v2_phase": "pre_approval",
+          "creator_membership": "none",
+          "current_stage": "on_hold:paused:order=22:active=True",
+          "member_record_pairs": 1,
+          "role": "case_manager",
+          "v1_effective_stage": "lost:terminal:order=24:active=True",
+          "v2_effective_stage_evidence": "interview_scheduled:intake:order=5:active=True"
+        },
+        {
+          "canonical_v2_phase": "post_approval",
+          "creator_membership": "inactive_or_missing",
+          "current_stage": "heartbeat_confirmed:post_approval:order=16:active=True",
+          "member_record_pairs": 1,
+          "role": "intake_specialist",
+          "v1_effective_stage": "heartbeat_confirmed:post_approval:order=16:active=True",
+          "v2_effective_stage_evidence": "heartbeat_confirmed:post_approval:order=16:active=True"
+        },
+        {
+          "canonical_v2_phase": "post_approval",
+          "creator_membership": "none",
+          "current_stage": "legal_clearance_passed:post_approval:order=13:active=True",
+          "member_record_pairs": 1,
+          "role": "intake_specialist",
+          "v1_effective_stage": "legal_clearance_passed:post_approval:order=13:active=True",
+          "v2_effective_stage_evidence": "legal_clearance_passed:post_approval:order=13:active=True"
+        },
+        {
+          "canonical_v2_phase": "post_approval",
+          "creator_membership": "inactive_or_missing",
+          "current_stage": "ob_care_established:post_approval:order=18:active=True",
+          "member_record_pairs": 1,
+          "role": "intake_specialist",
+          "v1_effective_stage": "ob_care_established:post_approval:order=18:active=True",
+          "v2_effective_stage_evidence": "ob_care_established:post_approval:order=18:active=True"
+        }
+      ],
+      "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+      "policy_versions_unchanged": true,
+      "status": "diagnose_complete",
+      "status_actor_is_not_verified_owner": true,
+      "surrogate_role_rules": {
+        "case_manager": {
+          "assignment": "all",
+          "phase": "post_approval",
+          "stage_filter_count": 0
+        },
+        "intake_specialist": {
+          "assignment": "assigned",
+          "phase": "pre_approval",
+          "stage_filter_count": 0
+        }
+      },
+      "workflow_review": {
+        "authority_missing": 1,
+        "enabled": 1,
+        "generated_routing_key": 0,
+        "pending_unreviewed_executions": 0,
+        "review_items": 1,
+        "system_workflow": 0
+      }
+    },
+    "timestamp": "2026-10-05T00:57:18.740760Z"
+  },
+  {
+    "jsonPayload": {
+      "context_groups": [
+        {
+          "agreement_checks": {
+            "count_filters_match": true,
+            "handoff_inclusion_matches": true,
+            "handoff_values_match": true,
+            "raw_phases_valid": true,
+            "record_phase_matches": true,
+            "scalar_contexts_match": true,
+            "snapshot_matches": true
+          },
+          "contexts_agree": true,
+          "count": 2,
+          "entity_handoff_included": false,
+          "entity_handoff_post": null,
+          "entity_handoff_pre": null,
+          "post_filter_count": 0,
+          "pre_filter_count": 1,
+          "record_phase": "pre_approval",
+          "scalar_full_org_post": false,
+          "scalar_full_org_pre": true,
+          "scalar_selected_post": false,
+          "scalar_selected_pre": true,
+          "snapshot_candidate": false,
+          "snapshot_phase_requires_review": null,
+          "snapshot_resolved": null
+        }
+      ],
+      "contexts_agree": true,
+      "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+      "phase_contexts_elapsed_ms": 2720.31,
+      "policy_versions_unchanged": true,
+      "selected_records": 2,
+      "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+      "server_version": "18.4",
+      "source_commit": "c9b0018a418b01362f71a21a27f20f582473b029",
+      "status": "phase-contexts_complete",
+      "write_free": true
+    },
+    "timestamp": "2026-10-05T00:57:21.486334Z"
+  },
+  {
+    "jsonPayload": {
+      "activation_blocked_by_unresolved_review": true,
+      "policy_versions_unchanged": true,
+      "status": "assert-blocked_complete"
+    },
+    "timestamp": "2026-10-05T00:57:25.088570Z"
+  },
+  {
+    "jsonPayload": {
+      "modes": [
+        "preview",
+        "diagnose",
+        "phase-contexts",
+        "assert-blocked"
+      ],
+      "resolutions_applied": false,
+      "status": "recheck_complete"
+    },
+    "timestamp": "2026-10-05T00:57:25.088601Z"
+  }
+]
