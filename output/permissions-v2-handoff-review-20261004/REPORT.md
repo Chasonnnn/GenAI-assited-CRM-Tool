@@ -2,6 +2,8 @@
 
 The isolated evidence collection succeeded. No historical access decision was applied, and permission V2 was not activated.
 
+The user resolved the business decisions on 2026-10-05. See [approved migration decisions](DECISIONS-20261005.md). The original evidence findings below remain unchanged; the later decision replaces the requirement for individual historical-owner confirmations.
+
 ## EWI findings
 
 | Finding | Records |
