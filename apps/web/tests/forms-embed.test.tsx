@@ -658,6 +658,26 @@ describe("EmbedFormPageClient", () => {
         expect(screen.queryByRole("heading", { name: "Request received" })).not.toBeInTheDocument()
     })
 
+    it("shows an email address the API rejects as invalid and does not submit", async () => {
+        renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
+
+        expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
+        await waitForEmbedMessageListener()
+        window.dispatchEvent(
+            new MessageEvent("message", {
+                origin: "https://www.ewisurrogacy.com",
+                data: { type: "sf:form:init", attribution: {} },
+            }),
+        )
+        await waitFor(() => expect(createEmbedFormSession).toHaveBeenCalled())
+        fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: "Embed Lead" } })
+        fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "embed@example.test" } })
+        fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+        expect(await screen.findByText("Email must be a valid email address.")).toBeInTheDocument()
+        expect(submitEmbedPublicForm).not.toHaveBeenCalled()
+    })
+
     describe("SMS consent", () => {
         const [fullNameField, emailField] = requiredItem(embedForm.form_schema.pages, 0).fields
         const homePhoneField = {

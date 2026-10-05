@@ -524,6 +524,34 @@ describe('Shared Intake Public Page', () => {
         expect(screen.queryByText('Full Name is required.')).not.toBeInTheDocument()
     })
 
+    it('marks an email address the API rejects inline and does not submit', async () => {
+        const { toast } = await import('@/components/ui/toast')
+        getSharedPublicForm.mockResolvedValue({
+            ...baseForm,
+            form_schema: {
+                ...baseForm.form_schema,
+                pages: [
+                    {
+                        title: 'Application',
+                        fields: [{ key: 'email', label: 'Email', type: 'email', required: true }],
+                    },
+                ],
+            },
+        })
+
+        render(<PublicIntakeFormClient slug="event-abc" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        const email = screen.getByLabelText(/email/i)
+        fireEvent.change(email, { target: { value: 'erin.example@example.test' } })
+        fireEvent.click(screen.getByRole('checkbox', { name: /information provided is accurate/i }))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+
+        expect(email).toHaveAttribute('aria-invalid', 'true')
+        expect(email).toHaveAccessibleDescription('Email must be a valid email address.')
+        expect(toast.error).not.toHaveBeenCalled()
+        expect(submitSharedPublicForm).not.toHaveBeenCalled()
+    })
+
     it('marks a missing required upload inline on submit', async () => {
         getSharedPublicForm.mockResolvedValue({
             ...baseForm,
