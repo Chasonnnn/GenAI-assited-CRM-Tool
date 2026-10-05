@@ -252,11 +252,6 @@ def test_approval_event_preserves_v2_case_manager_owner_and_v1_pool_behavior(
     monkeypatch.setattr(
         "app.services.notification_service.notify_surrogate_status_changed", lambda **kwargs: None
     )
-    ready_notifications = []
-    monkeypatch.setattr(
-        "app.services.notification_service.notify_surrogate_ready_for_claim",
-        lambda **kwargs: ready_notifications.append(kwargs["surrogate"].id),
-    )
     monkeypatch.setattr(surrogate_events, "_maybe_send_capi_event", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         surrogate_events, "_dispatch_conversion_events", lambda *args, **kwargs: None
@@ -280,10 +275,8 @@ def test_approval_event_preserves_v2_case_manager_owner_and_v1_pool_behavior(
     )
     if version == 2:
         assert record.owner_type == "user" and record.owner_id == actor.id
-        assert ready_notifications == []
     else:
         assert record.owner_type == "queue"
-        assert ready_notifications == [record.id]
 
 
 @pytest.mark.parametrize("version", [1, 2])

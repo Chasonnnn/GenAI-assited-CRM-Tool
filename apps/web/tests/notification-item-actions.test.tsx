@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => ({
     resolveApproval: vi.fn(),
     approveRequest: vi.fn(),
     rejectRequest: vi.fn(),
-    claimSurrogate: vi.fn(),
     approveAppointment: vi.fn(),
     cancelAppointment: vi.fn(),
     completeTask: vi.fn(),
@@ -33,9 +32,6 @@ vi.mock("@/lib/hooks/use-tasks", () => ({
 vi.mock("@/lib/hooks/use-status-change-requests", () => ({
     useApproveStatusChangeRequest: () => ({ mutateAsync: mocks.approveRequest }),
     useRejectStatusChangeRequest: () => ({ mutateAsync: mocks.rejectRequest }),
-}))
-vi.mock("@/lib/hooks/use-queues", () => ({
-    useClaimSurrogate: () => ({ mutateAsync: mocks.claimSurrogate }),
 }))
 vi.mock("@/lib/hooks/use-appointments", () => ({
     useApproveAppointment: () => ({ mutateAsync: mocks.approveAppointment }),
@@ -126,15 +122,7 @@ describe("NotificationItemActions", () => {
         expect(container).toBeEmptyDOMElement()
     })
 
-    it("claims, approves appointments, and completes tasks", async () => {
-        mocks.claimSurrogate.mockResolvedValue({})
-        const claim = renderActions(
-            makeNotification({ type: "surrogate_claim_available", entity_type: "surrogate", entity_id: "s-2" })
-        )
-        fireEvent.click(screen.getByRole("button", { name: "Claim" }))
-        await waitFor(() => expect(mocks.claimSurrogate).toHaveBeenCalledWith("s-2"))
-        claim.unmount()
-
+    it("approves appointments and completes tasks", async () => {
         mocks.approveAppointment.mockResolvedValue({})
         const appointment = renderActions(
             makeNotification({ type: "appointment_requested", entity_type: "appointment", entity_id: "a-1" })
@@ -154,34 +142,28 @@ describe("NotificationItemActions", () => {
 
     it("hides actions the viewer lacks permission for", () => {
         mocks.permissions = new Set()
-        const claim = renderActions(
-            makeNotification({ type: "surrogate_claim_available", entity_type: "surrogate", entity_id: "s-2" })
-        )
-        expect(claim.container).toBeEmptyDOMElement()
-        claim.unmount()
-
         const task = renderActions(makeNotification({ type: "task_assigned", entity_id: "task-4" }))
         expect(task.container).toBeEmptyDOMElement()
     })
 
     it("shows the API message when the action fails and re-enables the buttons", async () => {
-        mocks.claimSurrogate.mockRejectedValue(
-            new ApiError(409, "Conflict", "Surrogate already claimed")
+        mocks.completeTask.mockRejectedValue(
+            new ApiError(409, "Conflict", "Task already completed")
         )
         renderActions(
-            makeNotification({ type: "surrogate_claim_available", entity_type: "surrogate", entity_id: "s-2" })
+            makeNotification({ type: "task_overdue", entity_id: "task-2" })
         )
 
-        fireEvent.click(screen.getByRole("button", { name: "Claim" }))
+        fireEvent.click(screen.getByRole("button", { name: "Complete" }))
 
-        await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("Surrogate already claimed"))
+        await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("Task already completed"))
         expect(mocks.toastSuccess).not.toHaveBeenCalled()
-        expect(screen.getByRole("button", { name: "Claim" })).not.toBeDisabled()
+        expect(screen.getByRole("button", { name: "Complete" })).not.toBeDisabled()
     })
 
-    it("renders nothing for types without an inline action", () => {
+    it.each(["match_conflict", "surrogate_claim_available"])("renders no inline action for %s", (type) => {
         const { container } = renderActions(
-            makeNotification({ type: "match_conflict", entity_type: "match", entity_id: "m-1" })
+            makeNotification({ type, entity_id: "record-1" })
         )
         expect(container).toBeEmptyDOMElement()
     })

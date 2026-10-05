@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
-import { Bell, BellOff, AlertTriangle, CheckCircle2, Loader2, FolderOpen, RefreshCw, ArrowRightLeft, ListChecks, CheckSquare, Calendar, Mail, Newspaper, Workflow } from "lucide-react"
+import { Bell, BellOff, AlertTriangle, CheckCircle2, Loader2, FolderOpen, RefreshCw, ListChecks, CheckSquare, Calendar, Mail, Newspaper, Workflow } from "lucide-react"
 import { toast } from "@/components/ui/toast"
 import { useState } from "react"
 import { useNotificationSettings, useUpdateNotificationSettings } from "@/lib/hooks/use-notifications"
@@ -233,12 +233,6 @@ function NotificationsSettingsCard() {
             icon: RefreshCw,
             title: "Surrogate Status Changed",
             description: "When a surrogate status is updated",
-        },
-        {
-            key: "surrogate_claim_available",
-            icon: ArrowRightLeft,
-            title: "Surrogate Claim Available",
-            description: "When a surrogate is ready to be claimed",
         },
         {
             key: "task_assigned",

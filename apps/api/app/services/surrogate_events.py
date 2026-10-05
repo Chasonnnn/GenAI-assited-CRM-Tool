@@ -132,16 +132,8 @@ def handle_status_changed(
                 )
                 db.commit()
                 db.refresh(surrogate)
-            if pool_queue and (
-                not upgraded_policy
-                or (
-                    surrogate.owner_type == OwnerType.QUEUE.value
-                    and surrogate.owner_id == pool_queue.id
-                )
-            ):
-                notification_service.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
         except Exception:
-            logger.debug("surrogate_ready_for_claim_notify_failed", exc_info=True)
+            logger.debug("surrogate_pool_assignment_failed", exc_info=True)
 
     _maybe_send_capi_event(db, surrogate, old_stage_key, new_stage_key)
     _dispatch_conversion_events(
