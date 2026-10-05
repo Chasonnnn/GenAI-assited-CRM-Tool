@@ -772,6 +772,60 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(screen.queryByText("Tested current draft")).not.toBeInTheDocument()
     })
 
+    it.each(["recipient", "variables", "opt-out"])(
+        "starts a new test occurrence after changing %s",
+        async (field) => {
+            mocks.state.draft = { ...draftFromPublished, body: "<p>{{first_name}}</p>" }
+            mocks.sendTestDraft.mockRejectedValue(new Error("Temporary failure"))
+            render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+            fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+            fireEvent.change(screen.getByLabelText("To email"), {
+                target: { value: "qa@example.com" },
+            })
+            fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
+            await screen.findByRole("alert")
+
+            if (field === "recipient") {
+                fireEvent.change(screen.getByLabelText("To email"), {
+                    target: { value: "changed@example.com" },
+                })
+            } else if (field === "variables") {
+                fireEvent.click(screen.getByRole("button", { name: "Variables (optional)" }))
+                fireEvent.change(await screen.findByLabelText("First name"), {
+                    target: { value: "Changed" },
+                })
+            } else {
+                fireEvent.click(screen.getByRole("checkbox", { name: "Send even if unsubscribed" }))
+            }
+            fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
+            await waitFor(() => expect(mocks.sendTestDraft).toHaveBeenCalledTimes(2))
+            expect(mocks.sendTestDraft.mock.calls[1]?.[0].payload.idempotency_key).not.toBe(
+                mocks.sendTestDraft.mock.calls[0]?.[0].payload.idempotency_key,
+            )
+        },
+    )
+
+    it("shows a recoverable send conflict without treating the draft as stale", async () => {
+        mocks.state.draft = draftFromPublished
+        mocks.sendTestDraft.mockResolvedValue({
+            success: false,
+            error_code: "idempotency_conflict",
+            error: "Private provider detail",
+        })
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+        fireEvent.click(screen.getByRole("button", { name: "Send test" }))
+        fireEvent.change(screen.getByLabelText("To email"), {
+            target: { value: "qa@example.com" },
+        })
+        fireEvent.click(screen.getByRole("button", { name: "Send test email" }))
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            "Test email details changed since the previous attempt. Close and reopen this dialog to start a new test.",
+        )
+        expect(screen.queryByText("Private provider detail")).not.toBeInTheDocument()
+        expect(screen.queryByText("Refresh required")).not.toBeInTheDocument()
+        expect(screen.getByText("Not tested")).toBeInTheDocument()
+    })
+
     it("keeps the test dialog open when the provider returns a resolved failure", async () => {
         mocks.state.draft = draftFromPublished
         mocks.sendTestDraft.mockResolvedValue({
