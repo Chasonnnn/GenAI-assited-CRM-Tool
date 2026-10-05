@@ -64,6 +64,15 @@ class LegacyRevoke(BaseModel):
     resolution: Literal["remove", "deny_for_role"] | None
 
 
+class SurrogatePoolTransfer(BaseModel):
+    record_id: UUID
+    record_number: str
+    expected_fingerprint: str
+    owner_type: Literal["user", "queue"]
+    owner_id: UUID
+    retained_intake_user_id: UUID | None
+
+
 class PermissionPolicyPreview(BaseModel):
     digest: str
     current_version: int
@@ -78,3 +87,4 @@ class PermissionPolicyPreview(BaseModel):
     scope_review: dict = Field(default_factory=dict)
     execution_review: list[dict] = Field(default_factory=list)
     unresolved_execution_ids: list[str] = Field(default_factory=list)
+    surrogate_pool_transfers: list[SurrogatePoolTransfer] = Field(default_factory=list)

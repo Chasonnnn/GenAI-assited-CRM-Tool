@@ -62,7 +62,7 @@ async def test_surrogate_write_requires_action_and_record_scope(db, context, ope
         db,
         owner,
         "surrogate",
-        key="approved",
+        key="under_review",
         archived=operation in {"restore", "delete"},
     )
     record_id, was_archived, previous_owner_id = record.id, record.is_archived, record.owner_id

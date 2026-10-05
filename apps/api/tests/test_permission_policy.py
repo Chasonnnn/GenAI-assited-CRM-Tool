@@ -93,6 +93,113 @@ def test_creator_access_is_preserved_through_reviewed_activation(db, test_org, t
     assert record_scope_service.can_access_record(db, actor, "surrogate", record)
 
 
+@pytest.mark.parametrize("audit_failure", [False, True])
+def test_activation_pools_existing_surrogates_and_retains_only_current_intake(
+    db, test_org, test_user, monkeypatch, audit_failure
+):
+    from app.db.models import Queue
+    from app.db.models.record_access import RecordCollaborator, RoleRecordScope
+    from app.schemas.record_scope import HandoffMigrationReviewRequest
+    from tests.test_record_scopes_v2 import _record
+
+    intake, _ = add_member(db, test_org.id)
+    previous_intake, _ = add_member(db, test_org.id)
+    manager, _ = add_member(db, test_org.id, "case_manager")
+    actor = SimpleNamespace(org_id=test_org.id, user_id=test_user.id, role="admin")
+    owned = _record(db, actor, "surrogate", key="approved", owner_id=intake.id)
+    managed = _record(db, actor, "surrogate", key="approved", owner_id=manager.id, suffix=2)
+    early = _record(db, actor, "surrogate", owner_id=intake.id, suffix=3)
+    db.add(
+        RoleRecordScope(
+            organization_id=test_org.id,
+            role="case_manager",
+            module="surrogates",
+            assignment="assigned",
+            phase="post_approval",
+        )
+    )
+    foreign_org = Organization(name="Other", slug=f"pool-other-{uuid.uuid4().hex}")
+    db.add(foreign_org)
+    db.flush()
+    foreign = _record(
+        db,
+        SimpleNamespace(org_id=foreign_org.id, user_id=test_user.id),
+        "surrogate",
+        key="approved",
+    )
+    for row in record_scope_service.get_policy_scope_snapshot(db, test_org.id)[
+        "unresolved_handoffs"
+    ]:
+        record_scope_service.resolve_handoff_migration(
+            db,
+            actor,
+            row["kind"],
+            uuid.UUID(row["record_id"]),
+            HandoffMigrationReviewRequest(
+                decision="no_verified_owner",
+                evidence_reference="No verified historical owner; preserve current assignments at activation",
+                expected_fingerprint=row["fingerprint"],
+            ),
+        )
+    changes = PermissionPolicyChanges()
+    reviewed = policy_service.preview(db, test_org.id, changes)
+    assert reviewed.ready
+    proposed_counts = {
+        row["user_id"]: row["proposed_count"]
+        for row in reviewed.scope_review["member_record_scope_differences"]
+        if row["module"] == "surrogates"
+    }
+    assert proposed_counts[str(intake.id)] == 2
+    assert proposed_counts[str(manager.id)] == 0
+    assert owned.owner_type == managed.owner_type == "user"
+    assert not db.query(RecordCollaborator).filter_by(organization_id=test_org.id).count()
+
+    if audit_failure:
+        log_event = policy_service.audit_service.log_event
+
+        def fail_activation_audit(*args, **kwargs):
+            if kwargs.get("target_type") == "permission_policy":
+                assert owned.owner_type == managed.owner_type == "queue"
+                assert (
+                    db.query(RecordCollaborator).filter_by(organization_id=test_org.id).count() == 1
+                )
+                raise RuntimeError("Activation audit unavailable")
+            return log_event(*args, **kwargs)
+
+        monkeypatch.setattr(policy_service.audit_service, "log_event", fail_activation_audit)
+        with pytest.raises(RuntimeError, match="Activation audit unavailable"), db.begin_nested():
+            policy_service.activate(db, test_org.id, test_user.id, changes, reviewed.digest)
+        assert policy_service.get_version(db, test_org.id) == 1
+        assert owned.owner_type == managed.owner_type == "user"
+        assert (
+            not db.query(Queue)
+            .filter_by(organization_id=test_org.id, name="Surrogate Pool")
+            .count()
+        )
+        assert not db.query(RecordCollaborator).filter_by(organization_id=test_org.id).count()
+        return
+
+    assert len(reviewed.surrogate_pool_transfers) == 2
+    assert {
+        row.record_id: row.retained_intake_user_id for row in reviewed.surrogate_pool_transfers
+    } == {owned.id: intake.id, managed.id: None}
+    policy_service.activate(db, test_org.id, test_user.id, changes, reviewed.digest)
+
+    assert owned.owner_type == managed.owner_type == "queue"
+    pool = db.query(Queue).filter_by(organization_id=test_org.id, name="Surrogate Pool").one()
+    assert owned.owner_id == managed.owner_id == pool.id
+    assert (early.owner_type, early.owner_id) == ("user", intake.id)
+    assert (foreign.owner_type, foreign.owner_id) == ("user", test_user.id)
+    collaborators = db.query(RecordCollaborator).filter_by(organization_id=test_org.id).all()
+    assert {(row.surrogate_id, row.user_id) for row in collaborators} == {(owned.id, intake.id)}
+    assert all(row.user_id != previous_intake.id for row in collaborators)
+    intake_actor = SimpleNamespace(org_id=test_org.id, user_id=intake.id, role="intake_specialist")
+    assert record_scope_service.can_access_record(db, intake_actor, "surrogate", owned)
+    manager_actor = SimpleNamespace(org_id=test_org.id, user_id=manager.id, role="case_manager")
+    assert not record_scope_service.can_access_record(db, manager_actor, "surrogate", managed)
+    assert record_scope_service.get_policy_scope_snapshot(db, test_org.id)["ready"]
+
+
 @pytest.mark.parametrize("review_type", ["scope", "execution"])
 def test_activation_blocks_unresolved_scope_and_work_review(
     db, test_org, test_user, ready_review, monkeypatch, review_type
@@ -199,11 +306,16 @@ def test_explicit_revoke_removal_displays_access_gain(db, test_org, test_user, r
     assert db.get(UserPermissionOverride, revoke.id) is None
 
 
-@pytest.mark.parametrize("changed", ["role", "member", "scope", "execution"])
+@pytest.mark.parametrize("changed", ["role", "member", "scope", "execution", "pool", "owner"])
 def test_activation_rejects_state_changed_after_preview(
     db, test_org, test_user, ready_review, monkeypatch, changed
 ):
     changes = PermissionPolicyChanges()
+    if changed in {"pool", "owner"}:
+        from tests.test_record_scopes_v2 import _record
+
+        actor = SimpleNamespace(org_id=test_org.id, user_id=test_user.id)
+        record = _record(db, actor, "surrogate", key="approved")
     reviewed = policy_service.preview(db, test_org.id, changes)
     if changed == "role":
         db.add(
@@ -220,12 +332,19 @@ def test_activation_rejects_state_changed_after_preview(
         monkeypatch.setattr(
             policy_service, "get_scope_review", lambda *_: {"ready": True, "revision": 2}
         )
-    else:
+    elif changed == "execution":
         monkeypatch.setattr(
             policy_service,
             "get_execution_review",
             lambda *_: [{"item_type": "workflow", "id": str(uuid.uuid4())}],
         )
+    elif changed == "pool":
+        from app.services import queue_service
+
+        queue_service.get_or_create_surrogate_pool_queue(db, test_org.id)
+    else:
+        user, _ = add_member(db, test_org.id)
+        record.owner_id = user.id
     db.flush()
     with pytest.raises(policy_service.PermissionPolicyConflict, match="fresh preview"):
         policy_service.activate(db, test_org.id, test_user.id, changes, reviewed.digest)

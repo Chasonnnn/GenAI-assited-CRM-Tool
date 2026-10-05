@@ -235,7 +235,7 @@ def test_ai_approval_service_keeps_domain_status_activity_single(db, ai_context,
 
 
 @pytest.mark.parametrize("version", [1, 2])
-def test_approval_event_preserves_v2_case_manager_owner_and_v1_pool_behavior(
+def test_approval_event_keeps_surrogates_in_pool_for_both_permission_versions(
     db, ai_context, monkeypatch, version
 ):
     from datetime import UTC, datetime
@@ -273,10 +273,7 @@ def test_approval_event_preserves_v2_case_manager_owner_and_v1_pool_behavior(
         requested_at=None,
         trigger_workflows=False,
     )
-    if version == 2:
-        assert record.owner_type == "user" and record.owner_id == actor.id
-    else:
-        assert record.owner_type == "queue"
+    assert record.owner_type == "queue"
 
 
 @pytest.mark.parametrize("version", [1, 2])

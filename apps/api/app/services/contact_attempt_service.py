@@ -11,6 +11,7 @@ from app.core.surrogate_access import check_surrogate_access
 from app.db.enums import ContactStatus, OwnerType, SurrogateActivityType
 from app.db.models import (
     Organization,
+    Queue,
     Surrogate,
     SurrogateActivityLog,
     SurrogateContactAttempt,
@@ -22,7 +23,13 @@ from app.schemas.surrogate import (
     ContactAttemptResponse,
     ContactAttemptsSummary,
 )
-from app.services import pipeline_semantics_service, pipeline_service, surrogate_service
+from app.services import (
+    approval_handoff_service,
+    pipeline_semantics_service,
+    pipeline_service,
+    queue_service,
+    surrogate_service,
+)
 
 
 def _sanitize_note_preview(note: str | None, max_chars: int = 120) -> str | None:
@@ -53,7 +60,7 @@ def create_contact_attempt(
     Validates:
     - User has access to surrogate
     - attempted_at is not in future
-    - attempted_at is not before surrogate.assigned_at
+    - attempted_at is not before assignment, or creation for a shared pool record
 
     Updates surrogate.contact_status if outcome='reached'.
     """
@@ -72,10 +79,23 @@ def create_contact_attempt(
 
     check_surrogate_access(surrogate, user.role, user.user_id, db=session, org_id=user.org_id)
 
-    if surrogate.owner_type != OwnerType.USER.value:
+    is_shared_pool = (
+        surrogate.owner_type == OwnerType.QUEUE.value
+        and approval_handoff_service.is_shared_surrogate_pool(session, surrogate)
+        and session.query(Queue.id)
+        .filter(
+            Queue.id == surrogate.owner_id,
+            Queue.organization_id == user.org_id,
+            Queue.name == queue_service.SURROGATE_POOL_QUEUE_NAME,
+            Queue.is_active.is_(True),
+        )
+        .first()
+        is not None
+    )
+    if surrogate.owner_type != OwnerType.USER.value and not is_shared_pool:
         raise ValueError("Cannot log attempts for unassigned surrogates")
 
-    if not surrogate.assigned_at:
+    if not surrogate.assigned_at and not is_shared_pool:
         raise ValueError("Cannot log attempts before assignment")
 
     # Default attempted_at to now if not provided
@@ -85,7 +105,9 @@ def create_contact_attempt(
     if attempted_at > datetime.now(UTC):
         raise ValueError("Cannot log future attempts")
 
-    if surrogate.assigned_at and attempted_at < surrogate.assigned_at:
+    if is_shared_pool and attempted_at < surrogate.created_at:
+        raise ValueError("Cannot log attempt before surrogate creation")
+    if not is_shared_pool and surrogate.assigned_at and attempted_at < surrogate.assigned_at:
         raise ValueError(
             f"Cannot log attempt before assignment date ({surrogate.assigned_at.isoformat()})"
         )
@@ -116,7 +138,7 @@ def create_contact_attempt(
         surrogate.last_contact_method = data.contact_methods[0]
 
         current_stage = pipeline_service.get_stage_by_id(session, surrogate.stage_id)
-        if current_stage and current_stage.stage_type == "intake":
+        if not is_shared_pool and current_stage and current_stage.stage_type == "intake":
             pipeline_snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(
                 session,
                 current_stage.pipeline_id,

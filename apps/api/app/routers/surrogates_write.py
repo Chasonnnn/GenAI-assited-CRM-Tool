@@ -35,6 +35,7 @@ from app.services import (
     queue_service,
     surrogate_service,
 )
+from app.services.approval_handoff_service import SharedSurrogatePoolError
 
 from .surrogates_shared import _surrogate_to_read
 
@@ -178,7 +179,7 @@ def claim_surrogate(
         )
     except NotQueueMemberError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except SurrogateAlreadyClaimedError as e:
+    except (SurrogateAlreadyClaimedError, SharedSurrogatePoolError) as e:
         raise HTTPException(status_code=409, detail=str(e))
 
 
@@ -378,9 +379,12 @@ def assign_surrogate(
     else:
         raise HTTPException(status_code=400, detail="Invalid owner_type")
 
-    surrogate = surrogate_service.assign_surrogate(
-        db, surrogate, data.owner_type, data.owner_id, session.user_id
-    )
+    try:
+        surrogate = surrogate_service.assign_surrogate(
+            db, surrogate, data.owner_type, data.owner_id, session.user_id
+        )
+    except SharedSurrogatePoolError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     audit_service.log_event(
         db=db,
         org_id=session.org_id,

@@ -148,6 +148,143 @@ def test_assignment_and_phase_are_conjoined_and_approved_starts_post(db, context
     } == {mine.id}
 
 
+@pytest.mark.parametrize("state", ["current", "paused", "terminal"])
+@pytest.mark.parametrize(
+    "stage_key, visible", [("application_submitted", False), ("under_review", True)]
+)
+def test_case_manager_surrogate_visibility_starts_at_review_before_approval(
+    db, context, state, stage_key, visible
+):
+    key = {"current": stage_key, "paused": "on_hold", "terminal": "lost"}[state]
+    record = _record(
+        db, context.intake, "surrogate", key=key, paused=stage_key if state == "paused" else None
+    )
+    if state == "terminal":
+        pipeline = pipeline_service.get_or_create_default_pipeline(db, context.org.id)
+        prior = next(stage for stage in pipeline.stages if stage.stage_key == stage_key)
+        _stage_history(db, record, "surrogate", prior.id, record.stage_id)
+    _assert_parity(db, context.manager, "surrogate", [record], [record] if visible else [])
+    # Review visibility must not move the approval handoff or Intake boundary.
+    assert scopes.record_phase(db, context.org.id, "surrogate", record) == "pre_approval"
+    _assert_parity(db, context.intake, "surrogate", [record], [record])
+    db.query(OrganizationPermissionPolicy).filter_by(
+        organization_id=context.org.id
+    ).one().version = 1
+    db.flush()
+    _assert_parity(
+        db, context.manager, "surrogate", [record], [record] if state == "terminal" else []
+    )
+
+
+def test_review_scope_tracks_configured_order_and_preserves_explicit_scopes(db, context):
+    from app.db.models import PipelineStage
+
+    record = _record(db, context.intake, "surrogate", key="under_review")
+    boundary = db.get(PipelineStage, record.stage_id)
+    boundary.label = "Agency review"
+    for stage in boundary.pipeline.stages:
+        if stage.order > boundary.order:
+            stage.order += 10
+    custom = PipelineStage(
+        id=uuid4(),
+        pipeline_id=boundary.pipeline_id,
+        stage_key="review_followup",
+        slug="review_followup",
+        label="Review follow-up",
+        color="#123456",
+        stage_type="intake",
+        order=boundary.order + 1,
+        is_active=True,
+    )
+    db.add(custom)
+    db.flush()
+    record.stage_id = custom.id
+    db.flush()
+    _assert_parity(db, context.manager, "surrogate", [record], [record])
+    boundary.order = custom.order + 1
+    db.flush()
+    _assert_parity(db, context.manager, "surrogate", [record], [])
+    boundary.order = custom.order - 1
+    db.flush()
+    scopes.save_role_scope(
+        db,
+        context.admin,
+        "case_manager",
+        "surrogates",
+        RecordScopeRule(assignment="all", phase="post_approval"),
+    )
+    _assert_parity(db, context.manager, "surrogate", [record], [])
+    scopes.save_role_scope(
+        db,
+        context.admin,
+        "case_manager",
+        "surrogates",
+        RecordScopeRule(assignment="all", phase="under_review_onward", stage_ids=[boundary.id]),
+    )
+    _assert_parity(db, context.manager, "surrogate", [record], [])
+    scopes.save_role_scope(
+        db,
+        context.admin,
+        "case_manager",
+        "surrogates",
+        RecordScopeRule(assignment="all", phase="under_review_onward", stage_ids=[custom.id]),
+    )
+    _assert_parity(db, context.manager, "surrogate", [record], [record])
+    for module in ("donors", "intended_parents"):
+        with pytest.raises(ValueError):
+            scopes.save_role_scope(
+                db,
+                context.admin,
+                "case_manager",
+                module,
+                RecordScopeRule(assignment="all", phase="under_review_onward"),
+            )
+
+
+@pytest.mark.parametrize("missing_boundary", ["inactive", "foreign_pipeline", "after_approval"])
+def test_review_scope_fails_closed_and_blocks_upgrade_without_its_boundary(
+    db, context, missing_boundary
+):
+    from app.db.models import PipelineStage
+
+    record = _record(db, context.intake, "surrogate", key="under_review")
+    boundary = db.get(PipelineStage, record.stage_id)
+    pipeline_id = boundary.pipeline_id
+    approved = next(stage for stage in boundary.pipeline.stages if stage.stage_key == "approved")
+    record.stage_id = approved.id
+    if missing_boundary == "inactive":
+        boundary.is_active = False
+    elif missing_boundary == "after_approval":
+        boundary.order = approved.order + 1
+    else:
+        foreign_org = Organization(id=uuid4(), name="Other", slug=f"scope-{uuid4()}")
+        db.add(foreign_org)
+        db.flush()
+        foreign_pipeline = pipeline_service.get_or_create_default_pipeline(db, foreign_org.id)
+        boundary.stage_key = "former_review"
+        boundary.slug = "former_review"
+        assert any(stage.stage_key == "under_review" for stage in foreign_pipeline.stages)
+    db.flush()
+    _assert_parity(db, context.manager, "surrogate", [record], [])
+    snapshot = scopes.get_policy_scope_snapshot(db, context.org.id)
+    assert snapshot["missing_visibility_stage_pipeline_ids"] == [str(pipeline_id)]
+    assert not snapshot["ready"]
+    scopes.save_role_scope(
+        db,
+        context.admin,
+        "case_manager",
+        "surrogates",
+        RecordScopeRule(assignment="all", phase="post_approval"),
+    )
+    _assert_parity(db, context.manager, "surrogate", [record], [record])
+    assert (
+        scopes.get_policy_scope_snapshot(db, context.org.id)[
+            "missing_visibility_stage_pipeline_ids"
+        ]
+        == []
+    )
+
+
 def test_creator_route_is_explained_but_does_not_grant_personal_work_or_survive_departure(
     db, context
 ):
@@ -629,6 +766,18 @@ def test_scope_mutations_recheck_actor_after_permission_removal(db, context):
         )
 
 
+def test_mutation_scope_refreshes_preloaded_surrogate_before_assignment(db, context):
+    record = _record(db, context.manager, "surrogate", key="under_review")
+    db.query(Surrogate).filter_by(id=record.id).update(
+        {"owner_id": context.intake.user_id}, synchronize_session=False
+    )
+    assert record.owner_id == context.manager.user_id
+
+    scopes.require_mutation_scope(db, context.manager, "surrogate", record.id)
+
+    assert record.owner_id == context.intake.user_id
+
+
 def test_role_scope_can_participate_in_callers_atomic_transaction(db, context, monkeypatch):
     commit = []
     monkeypatch.setattr(db, "commit", lambda: commit.append(True))
@@ -661,14 +810,50 @@ def test_migration_scope_counts_compare_legacy_without_changing_policy(db, conte
     )
     assert row["scope_only"]
     assert row["current_count"] == 1
-    assert row["proposed_count"] == 0
-    assert row["lost_count"] == 1
-    assert row["lost_record_id_samples"] == [str(record.id)]
+    assert row["proposed_count"] == 1
+    assert row["lost_count"] == 0
+    assert row["lost_record_id_samples"] == []
     assert policy.version == 1
     setattr(record, changed_field, context.manager.user_id)
     db.flush()
     updated = scopes.get_policy_scope_snapshot(db, context.org.id)
     assert snapshot["record_state_digest"] != updated["record_state_digest"]
+
+
+@pytest.mark.parametrize("phase", ["all", "post_approval"])
+def test_migration_scope_counts_project_shared_pool_without_changing_owners(db, context, phase):
+    plain, created, collaborated = [
+        _record(db, context.manager, "surrogate", key="approved", suffix=index)
+        for index in range(1, 4)
+    ]
+    intake_owned = _record(db, context.intake, "surrogate", key="approved", suffix=4)
+    created.created_by_user_id = context.manager.user_id
+    scopes.grant_collaborator(
+        db, context.admin, "surrogate", collaborated.id, context.manager.user_id
+    )
+    scopes.save_role_scope(
+        db,
+        context.admin,
+        "case_manager",
+        "surrogates",
+        RecordScopeRule(assignment="assigned", phase=phase),
+    )
+    db.get(OrganizationPermissionPolicy, context.org.id).version = 1
+    db.flush()
+    snapshot = scopes.get_policy_scope_snapshot(db, context.org.id)
+    rows = {
+        row["user_id"]: row
+        for row in snapshot["member_record_scope_differences"]
+        if row["module"] == "surrogates"
+    }
+    manager = rows[str(context.manager.user_id)]
+    assert (manager["current_count"], manager["proposed_count"]) == (4, 2)
+    assert set(manager["lost_record_id_samples"]) == {str(plain.id), str(intake_owned.id)}
+    intake = rows[str(context.intake.user_id)]
+    assert (intake["current_count"], intake["proposed_count"], intake["lost_count"]) == (1, 1, 0)
+    assert plain.owner_type == "user" and plain.owner_id == context.manager.user_id
+    assert intake_owned.owner_type == "user" and intake_owned.owner_id == context.intake.user_id
+    assert db.query(RecordCollaborator).filter_by(user_id=context.intake.user_id).count() == 0
 
 
 def test_consumer_lists_filter_before_pagination_and_counts(db, context, monkeypatch):

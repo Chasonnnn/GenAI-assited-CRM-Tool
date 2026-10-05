@@ -12,7 +12,7 @@ RecordKind = Literal["surrogate", "donor", "intended_parent"]
 
 class RecordScopeRule(BaseModel):
     assignment: Literal["all", "assigned", "none"]
-    phase: Literal["all", "pre_approval", "post_approval"] = "all"
+    phase: Literal["all", "pre_approval", "post_approval", "under_review_onward"] = "all"
     stage_ids: list[UUID] = Field(default_factory=list, max_length=100)
 
 
@@ -76,7 +76,7 @@ class LegacyPoolResolutionRequest(BaseModel):
 
 
 ScopeAssignment = Literal["all", "assigned", "none"]
-ScopePhase = Literal["all", "pre_approval", "post_approval"]
+ScopePhase = Literal["all", "pre_approval", "post_approval", "under_review_onward"]
 ApprovalPhase = Literal["pre_approval", "post_approval"]
 HandoffDecision = Literal["retain_verified_owner", "no_verified_owner"]
 PoolDecision = Literal["remove", "replace_with_scope_addition"]
@@ -161,6 +161,7 @@ class ScopeMigrationReviewRead(BaseModel):
     handoff_candidates: list[HandoffCandidateRead]
     unresolved_handoffs: list[HandoffCandidateRead]
     missing_approval_gate_pipeline_ids: list[UUID]
+    missing_visibility_stage_pipeline_ids: list[UUID]
     legacy_pool_grants: list[LegacyPoolGrantRead]
     member_record_scope_differences: list[MemberScopeDifference]
     record_state_digest: str

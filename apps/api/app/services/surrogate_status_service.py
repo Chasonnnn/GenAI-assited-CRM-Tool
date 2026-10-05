@@ -405,8 +405,16 @@ def change_status(
     Returns:
         StatusChangeResult with status='applied' or 'pending_approval'
     """
-    from app.services import pipeline_semantics_service, pipeline_service, surrogate_stage_context
+    from app.services import (
+        permission_policy_service,
+        pipeline_semantics_service,
+        pipeline_service,
+        surrogate_stage_context,
+    )
 
+    permission_policy_service.lock_configuration(db, surrogate.organization_id)
+    db.flush()
+    db.refresh(surrogate)
     now = datetime.now(UTC)
     org_tz_str = _get_org_timezone(db, surrogate.organization_id)
     normalized_effective_at = normalize_effective_at(effective_at, org_tz_str, now=now)
@@ -792,7 +800,14 @@ def apply_status_change(
     Entering Delivered completes the surrogate's accepted match; undoing that entry
     restores it. Both run first so the match rows lock before the surrogate row.
     """
-    from app.services import approval_handoff_service, match_lifecycle, pipeline_service
+    from app.services import (
+        approval_handoff_service,
+        match_lifecycle,
+        permission_policy_service,
+        pipeline_service,
+    )
+
+    permission_policy_service.lock_configuration(db, surrogate.organization_id)
 
     match_actor_id = approved_by_user_id or user_id
     if is_undo:
@@ -896,6 +911,8 @@ def apply_status_change(
         approved_at=approved_at,
     )
     db.add(history)
+    db.flush()
+    approval_handoff_service.normalize_shared_surrogate_pool(db, surrogate, user_id)
     reason_note = None
     if reason and user_id:
         from app.services import note_service

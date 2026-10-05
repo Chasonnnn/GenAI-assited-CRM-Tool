@@ -7,6 +7,143 @@ from app.db.enums import ContactStatus
 from app.db.models import PipelineStage, Surrogate, SurrogateActivityLog
 
 
+@pytest.fixture
+def shared_contact_record(db, test_org):
+    from app.db.models import OrganizationPermissionPolicy
+    from app.db.models.record_access import RecordCollaborator
+    from app.services import queue_service
+    from tests.test_record_scopes_v2 import _member, _record
+
+    actor, member = _member(db, test_org.id, "intake_specialist")
+    record = _record(db, actor, "surrogate", key="approved")
+    pool = queue_service.get_or_create_surrogate_pool_queue(db, test_org.id)
+    record.owner_type, record.owner_id, record.assigned_at = "queue", pool.id, None
+    record.created_at = datetime.now(UTC) - timedelta(days=2)
+    policy = OrganizationPermissionPolicy(organization_id=test_org.id, version=2)
+    collaborator = RecordCollaborator(
+        organization_id=test_org.id,
+        membership_id=member.id,
+        user_id=actor.user_id,
+        surrogate_id=record.id,
+    )
+    db.add_all([policy, collaborator])
+    db.flush()
+    return record, member, pool, policy, collaborator
+
+
+@pytest.mark.asyncio
+async def test_retained_intake_logs_shared_pool_followup_without_regressing_approval(
+    db,
+    test_org,
+    shared_contact_record,
+):
+    from app.db.enums import Role
+    from app.db.models import SurrogateContactAttempt
+    from tests.test_email_templates_personal_scope import authed_client_for_user
+
+    record, member, pool, _, _ = shared_contact_record
+    approved_id = record.stage_id
+    async with authed_client_for_user(
+        db, test_org.id, member.user, Role.INTAKE_SPECIALIST
+    ) as client:
+        for outcome in ("no_answer", "reached"):
+            result = await client.post(
+                f"/surrogates/{record.id}/contact-attempts",
+                json={"contact_methods": ["phone"], "outcome": outcome},
+            )
+            assert result.status_code == 201, result.text
+            assert result.json()["surrogate_owner_id_at_attempt"] == str(pool.id)
+        summary = await client.get(f"/surrogates/{record.id}/contact-attempts")
+        assert summary.status_code == 200, summary.text
+        assert summary.json()["current_assignment_attempts"] == 2
+        assert summary.json()["distinct_days_current_assignment"] == 1
+    db.refresh(record)
+    assert (record.owner_type, record.owner_id, record.stage_id, record.assigned_at) == (
+        "queue",
+        pool.id,
+        approved_id,
+        None,
+    )
+    assert record.contact_status == ContactStatus.REACHED.value
+    assert db.query(SurrogateContactAttempt).filter_by(surrogate_id=record.id).count() == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("boundary", "expected_status"),
+    [
+        ("ordinary_queue", 400),
+        ("v1_pool", 400),
+        ("preapproval_pool", 400),
+        ("inactive_pool", 400),
+        ("foreign_queue", 400),
+        ("missing_collaborator", 403),
+        ("edit_denied", 403),
+        ("archived", 403),
+        ("foreign_record", 404),
+        ("before_creation", 400),
+    ],
+)
+async def test_shared_pool_contact_attempt_keeps_assignment_and_access_boundaries(
+    db,
+    test_org,
+    shared_contact_record,
+    boundary,
+    expected_status,
+):
+    from uuid import uuid4
+
+    from app.db.enums import Role
+    from app.db.models import Organization, RolePermission, SurrogateContactAttempt
+    from app.services import pipeline_service, queue_service
+    from tests.test_email_templates_personal_scope import authed_client_for_user
+
+    record, member, pool, policy, collaborator = shared_contact_record
+    actor_role = Role.INTAKE_SPECIALIST
+    payload = {"contact_methods": ["phone"], "outcome": "no_answer"}
+    if boundary == "ordinary_queue":
+        record.owner_id = queue_service.create_queue(db, test_org.id, "Other Queue").id
+    elif boundary == "v1_pool":
+        policy.version = 1
+        member.role = "admin"
+        actor_role = Role.ADMIN
+    elif boundary == "preapproval_pool":
+        pipeline = pipeline_service.get_or_create_default_pipeline(db, test_org.id)
+        record.stage_id = next(
+            stage.id for stage in pipeline.stages if stage.stage_key == "contacted"
+        )
+    elif boundary == "inactive_pool":
+        pool.is_active = False
+    elif boundary == "missing_collaborator":
+        db.delete(collaborator)
+    elif boundary == "edit_denied":
+        db.add(
+            RolePermission(
+                organization_id=test_org.id,
+                role="intake_specialist",
+                permission="edit_surrogates",
+                is_granted=False,
+            )
+        )
+    elif boundary == "archived":
+        record.is_archived = True
+    elif boundary == "before_creation":
+        payload["attempted_at"] = (record.created_at - timedelta(days=1)).isoformat()
+    else:
+        other = Organization(id=uuid4(), name="Other", slug=uuid4().hex)
+        db.add(other)
+        db.flush()
+        if boundary == "foreign_queue":
+            record.owner_id = queue_service.create_queue(db, other.id, "Surrogate Pool").id
+        else:
+            record.organization_id = other.id
+    db.flush()
+    async with authed_client_for_user(db, test_org.id, member.user, actor_role) as client:
+        response = await client.post(f"/surrogates/{record.id}/contact-attempts", json=payload)
+        assert response.status_code == expected_status, response.text
+    assert db.query(SurrogateContactAttempt).filter_by(surrogate_id=record.id).count() == 0
+
+
 @pytest.mark.asyncio
 async def test_contact_attempt_blocked_for_queue_owned(authed_client):
     queue_res = await authed_client.post("/queues", json={"name": "Queue A", "description": ""})

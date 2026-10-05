@@ -71,7 +71,6 @@ def handle_status_changed(
     from app.db.enums import AlertType
     from app.services import (
         notification_service,
-        permission_policy_service,
         pipeline_service,
         queue_service,
         workflow_triggers,
@@ -114,14 +113,8 @@ def handle_status_changed(
             pool_queue = queue_service.get_or_create_surrogate_pool_queue(
                 db, surrogate.organization_id
             )
-            upgraded_policy = permission_policy_service.is_enabled(db, surrogate.organization_id)
-            if (
-                pool_queue
-                and not upgraded_policy
-                and (
-                    surrogate.owner_type != OwnerType.QUEUE.value
-                    or surrogate.owner_id != pool_queue.id
-                )
+            if pool_queue and (
+                surrogate.owner_type != OwnerType.QUEUE.value or surrogate.owner_id != pool_queue.id
             ):
                 surrogate = queue_service.assign_surrogate_to_queue(
                     db=db,

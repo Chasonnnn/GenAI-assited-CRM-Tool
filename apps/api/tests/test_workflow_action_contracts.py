@@ -11,6 +11,44 @@ from app.services import donor_service, note_service, task_service, workflow_exe
 from app.services.workflow_engine_adapters import DefaultWorkflowDomainAdapter
 
 
+@pytest.mark.parametrize("assignee", ["creator", "owner"])
+def test_creatorless_surrogate_workflow_task_preserves_queue_ownership(
+    db,
+    test_org,
+    test_user,
+    assignee,
+):
+    from types import SimpleNamespace
+
+    from app.db.models import Task
+    from app.services import queue_service, workflow_task_actions
+    from tests.test_record_scopes_v2 import _record
+
+    queue = queue_service.get_or_create_surrogate_pool_queue(db, test_org.id)
+    record = _record(
+        db,
+        SimpleNamespace(org_id=test_org.id, user_id=test_user.id),
+        "surrogate",
+        key="approved",
+    )
+    record.owner_type, record.owner_id, record.created_by_user_id = "queue", queue.id, None
+    db.flush()
+    result = workflow_task_actions.create_task(
+        db,
+        {"title": "Pool followup", "assignee": assignee},
+        record,
+        workflow_actor_id=test_user.id,
+        use_workflow_actor=True,
+    )
+    assert result["success"] is True
+    task = db.query(Task).filter_by(surrogate_id=record.id).one()
+    assert (task.owner_type, task.owner_id, task.created_by_user_id) == (
+        "queue",
+        queue.id,
+        test_user.id,
+    )
+
+
 def subject(kind):
     values = {
         "id": uuid4(),
@@ -114,6 +152,9 @@ def test_note_action_preserves_execution_author_and_outer_transaction(monkeypatc
 
 @pytest.mark.parametrize("kind", ["surrogate", "egg_donor", "sperm_donor"])
 def test_assignment_action_preserves_event_and_domain_boundary(monkeypatch, kind):
+    from app.services import permission_policy_service
+
+    monkeypatch.setattr(permission_policy_service, "is_enabled", lambda *_: False)
     db = Mock()
     record = subject(kind)
     old_owner_id, new_owner_id, event_id = record.owner_id, uuid4(), uuid4()

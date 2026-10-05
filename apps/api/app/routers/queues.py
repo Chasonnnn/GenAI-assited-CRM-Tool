@@ -17,6 +17,7 @@ from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.schemas.auth import UserSession
 from app.services import queue_service
+from app.services.approval_handoff_service import SharedSurrogatePoolError
 from app.services.queue_service import (
     DuplicateQueueNameError,
     NotQueueMemberError,
@@ -38,6 +39,7 @@ router = APIRouter(
 def _check_record_assignment_scope(db: Session, session: UserSession, surrogate_id: UUID) -> bool:
     from app.services import permission_policy_service, record_access_service
 
+    permission_policy_service.lock_configuration(db, session.org_id)
     enabled = permission_policy_service.is_enabled(db, session.org_id)
     if enabled:
         record_access_service.get_record_with_access(db, session, "surrogate", surrogate_id)
@@ -178,6 +180,8 @@ def update_queue(
         )
         db.commit()
         return queue
+    except SharedSurrogatePoolError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except QueueNotFoundError:
         raise HTTPException(status_code=404, detail="Queue not found")
     except DuplicateQueueNameError as e:
@@ -201,6 +205,8 @@ def delete_queue(
     try:
         queue_service.delete_queue(db, session.org_id, queue_id)
         db.commit()
+    except SharedSurrogatePoolError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except QueueNotFoundError:
         raise HTTPException(status_code=404, detail="Queue not found")
 
@@ -241,7 +247,7 @@ def claim_surrogate(
         return {"message": "Surrogate claimed", "surrogate_id": str(surrogate.id)}
     except SurrogateNotFoundError:
         raise HTTPException(status_code=404, detail="Surrogate not found")
-    except SurrogateAlreadyClaimedError as e:
+    except (SurrogateAlreadyClaimedError, SharedSurrogatePoolError) as e:
         raise HTTPException(status_code=409, detail=str(e))
     except NotQueueMemberError as e:
         raise HTTPException(status_code=403, detail=str(e))
@@ -273,6 +279,8 @@ def release_surrogate(
         return {"message": "Surrogate released to queue", "surrogate_id": str(surrogate.id)}
     except SurrogateNotFoundError:
         raise HTTPException(status_code=404, detail="Surrogate not found")
+    except SharedSurrogatePoolError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except QueueNotFoundError:
         raise HTTPException(status_code=404, detail="Queue not found or inactive")
 
@@ -302,6 +310,8 @@ def assign_surrogate_to_queue(
         return {"message": "Surrogate assigned to queue", "surrogate_id": str(surrogate.id)}
     except SurrogateNotFoundError:
         raise HTTPException(status_code=404, detail="Surrogate not found")
+    except SharedSurrogatePoolError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except QueueNotFoundError:
         raise HTTPException(status_code=404, detail="Queue not found or inactive")
 

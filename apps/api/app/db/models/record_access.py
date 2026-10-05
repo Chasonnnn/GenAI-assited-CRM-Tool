@@ -21,7 +21,9 @@ class RoleRecordScope(Base):
             "assignment IN ('all', 'assigned', 'none')", name="ck_role_scope_assignment"
         ),
         CheckConstraint(
-            "phase IN ('all', 'pre_approval', 'post_approval')", name="ck_role_scope_phase"
+            "phase IN ('all', 'pre_approval', 'post_approval') OR "
+            "(phase = 'under_review_onward' AND module = 'surrogates')",
+            name="ck_role_scope_phase",
         ),
     )
 
@@ -49,7 +51,9 @@ class UserRecordScopeAddition(Base):
         ),
         CheckConstraint("assignment IN ('all', 'assigned')", name="ck_user_scope_assignment"),
         CheckConstraint(
-            "phase IN ('all', 'pre_approval', 'post_approval')", name="ck_user_scope_phase"
+            "phase IN ('all', 'pre_approval', 'post_approval') OR "
+            "(phase = 'under_review_onward' AND module = 'surrogates')",
+            name="ck_user_scope_phase",
         ),
     )
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm.attributes import NO_VALUE
 from app.db.enums import OwnerType, SurrogateSource
 from app.schemas.surrogate import SurrogateListItem, SurrogateRead
 from app.services import (
+    approval_handoff_service,
     queue_service,
     surrogate_outcome_summary_service,
     surrogate_service,
@@ -60,6 +61,7 @@ def _surrogate_to_read(surrogate, db: Session) -> SurrogateRead:
         paused_from_stage_type=paused_from_stage.stage_type if paused_from_stage else None,
         source=SurrogateSource(surrogate.source),
         is_priority=surrogate.is_priority,
+        is_shared_pool=approval_handoff_service.is_shared_surrogate_pool(db, surrogate),
         owner_type=surrogate.owner_type,
         owner_id=surrogate.owner_id,
         owner_name=owner_name,
@@ -164,6 +166,7 @@ def _surrogate_to_list_item(surrogate, last_activity_at=None) -> SurrogateListIt
         phone=surrogate.phone,
         state=surrogate.state,
         race=surrogate.race,
+        is_shared_pool=getattr(surrogate, "is_shared_pool", False),
         owner_type=surrogate.owner_type,
         owner_id=surrogate.owner_id,
         owner_name=owner_name,

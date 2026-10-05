@@ -458,8 +458,15 @@ def create_surrogate(
     Phone and state are validated in schema layer.
     """
     from app.db.enums import OwnerType
-    from app.services import activity_service, pipeline_service, queue_service
+    from app.services import (
+        activity_service,
+        approval_handoff_service,
+        permission_policy_service,
+        pipeline_service,
+        queue_service,
+    )
 
+    permission_policy_service.lock_configuration(db, org_id)
     assign_to_user = data.assign_to_user if data.assign_to_user is not None else user_id is not None
     if user_id and assign_to_user:
         owner_type = OwnerType.USER.value
@@ -555,6 +562,7 @@ def create_surrogate(
                 )
                 db.add(surrogate)
                 db.flush()
+                approval_handoff_service.normalize_shared_surrogate_pool(db, surrogate, user_id)
             db.commit()
             db.refresh(surrogate)
             break
@@ -865,8 +873,17 @@ def assign_surrogate(
 ) -> Surrogate:
     """Assign surrogateto a user or queue."""
     from app.db.enums import OwnerType
-    from app.services import activity_service, queue_service
+    from app.services import (
+        activity_service,
+        approval_handoff_service,
+        permission_policy_service,
+        queue_service,
+    )
 
+    permission_policy_service.lock_configuration(db, surrogate.organization_id)
+    db.flush()
+    db.refresh(surrogate, with_for_update=True)
+    approval_handoff_service.require_surrogate_owner_allowed(db, surrogate, owner_type, owner_id)
     old_owner_type = surrogate.owner_type
     old_owner_id = surrogate.owner_id
 
@@ -1026,7 +1043,11 @@ def restore_surrogate(
     Returns:
         (case, error) - surrogateis None if error occurred
     """
-    from app.services import activity_service
+    from app.services import activity_service, approval_handoff_service, permission_policy_service
+
+    permission_policy_service.lock_configuration(db, surrogate.organization_id)
+    db.flush()
+    db.refresh(surrogate, with_for_update=True)
 
     if not surrogate.is_archived:
         return surrogate, None  # Already active
@@ -1062,6 +1083,8 @@ def restore_surrogate(
         reason="Surrogaterestored",
     )
     db.add(history)
+    db.flush()
+    approval_handoff_service.normalize_shared_surrogate_pool(db, surrogate, user_id)
     db.commit()
     db.refresh(surrogate)
 
@@ -1146,24 +1169,42 @@ def _attach_last_activity_to_surrogates(
     if not surrogates:
         return
 
-    from app.db.models import SurrogateActivityLog
+    from app.db.models import OrganizationPermissionPolicy, SurrogateActivityLog
+    from app.services import record_scope_service
 
     surrogate_ids = [surrogate.id for surrogate in surrogates]
+    upgraded_policy = (
+        select(OrganizationPermissionPolicy.organization_id)
+        .where(
+            OrganizationPermissionPolicy.organization_id == org_id,
+            OrganizationPermissionPolicy.version >= 2,
+        )
+        .exists()
+    )
     rows = db.execute(
         select(
-            SurrogateActivityLog.surrogate_id,
+            Surrogate.id,
             func.max(SurrogateActivityLog.created_at).label("last_activity_at"),
+            and_(
+                upgraded_policy,
+                record_scope_service.build_phase_filter(org_id, "surrogate", "post_approval"),
+            ).label("is_shared_pool"),
         )
-        .where(
-            SurrogateActivityLog.organization_id == org_id,
-            SurrogateActivityLog.surrogate_id.in_(surrogate_ids),
+        .outerjoin(
+            SurrogateActivityLog,
+            and_(
+                SurrogateActivityLog.organization_id == org_id,
+                SurrogateActivityLog.surrogate_id == Surrogate.id,
+            ),
         )
-        .group_by(SurrogateActivityLog.surrogate_id)
+        .where(Surrogate.organization_id == org_id, Surrogate.id.in_(surrogate_ids))
+        .group_by(Surrogate.id)
     ).all()
-    activity_by_surrogate_id = {row.surrogate_id: row.last_activity_at for row in rows}
-
+    values_by_id = {row.id: row for row in rows}
     for surrogate in surrogates:
-        surrogate.last_activity_at = activity_by_surrogate_id.get(surrogate.id)
+        values = values_by_id[surrogate.id]
+        surrogate.last_activity_at = values.last_activity_at
+        surrogate.is_shared_pool = bool(values.is_shared_pool)
 
 
 def _build_surrogate_filter_clauses(
@@ -1669,9 +1710,20 @@ def list_claim_queue(
     """List approved surrogates in the Surrogate Pool queue (org-scoped)."""
     from app.db.enums import OwnerType
     from app.db.models import PipelineStage, Queue
-    from app.services import pipeline_service, queue_service
+    from app.services import (
+        permission_policy_service,
+        pipeline_service,
+        queue_service,
+        record_scope_service,
+    )
 
-    pool_queue = queue_service.get_or_create_surrogate_pool_queue(db, org_id)
+    pool_queue = (
+        db.query(Queue)
+        .filter_by(organization_id=org_id, name=queue_service.SURROGATE_POOL_QUEUE_NAME)
+        .first()
+    )
+    if pool_queue is None or not pool_queue.is_active:
+        pool_queue = queue_service.get_or_create_surrogate_pool_queue(db, org_id)
     if not pool_queue:
         return [], 0
 
@@ -1681,7 +1733,8 @@ def list_claim_queue(
         pipeline.id,
         "approval_gate",
     )
-    if not approved_stage:
+    upgraded = permission_policy_service.is_enabled(db, org_id)
+    if not approved_stage and not upgraded:
         return [], 0
 
     base_query = db.query(Surrogate).filter(
@@ -1689,7 +1742,9 @@ def list_claim_queue(
         Surrogate.is_archived.is_(False),
         Surrogate.owner_type == OwnerType.QUEUE.value,
         Surrogate.owner_id == pool_queue.id,
-        Surrogate.stage_id == approved_stage.id,
+        record_scope_service.build_phase_filter(org_id, "surrogate", "post_approval")
+        if upgraded
+        else Surrogate.stage_id == approved_stage.id,
     )
     if session is not None:
         from app.services import permission_policy_service, record_scope_service
