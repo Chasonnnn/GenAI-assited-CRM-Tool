@@ -1,0 +1,8 @@
+{
+  "source_commit": "00dc316eba4bb7261a9498d0ab7803407d226efc",
+  "overlay": {
+    "apps/api/_rehearsal/rehearsal.py": "3ec637d3eefe5cdb0e0ec03e1b6dd65edea52d99b10b8d353f1956c73b5306b8",
+    "apps/api/_rehearsal/bootstrap.py": "71b90e6fae8e7a48abf86b75a094a3354fa9c662d56a47a9096eceae4c8e1176",
+    "cloudbuild.yaml": "31bbde859e37d2b690fe418e3496a6b3b1ac6d0a569499b796652098d9c5c5cf"
+  }
+}

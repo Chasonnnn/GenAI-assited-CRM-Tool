@@ -121,6 +121,8 @@ def load(
     allow_archived: bool = False,
 ) -> Match:
     """Resolve the match under authenticated membership, then authorize the action."""
+    if action != "view":
+        permission_policy_service.lock_configuration(db, session.org_id)
     match = match_queries.get_match(db, match_id, session.org_id)
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")
@@ -136,6 +138,7 @@ def authorize_proposal(
     intended_parent_id: UUID,
 ) -> None:
     """Authorize proposing under the org's policy and scope both proposed parties."""
+    permission_policy_service.lock_configuration(db, session.org_id)
     for permission in required_permissions(db, session, "propose"):
         if not permission_service.check_permission(
             db, session.org_id, session.user_id, session.role.value, permission

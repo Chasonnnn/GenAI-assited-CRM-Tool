@@ -497,6 +497,36 @@ describe('SurrogateDetailPage', () => {
         expect(screen.getByRole('button', { name: 'Assign scoped record' })).toBeEnabled()
     })
 
+    it.each(['queue', 'user'])('keeps a V2 shared pool record collaborative instead of offering exclusive ownership (%s)', (ownerType) => {
+        mockUseAuth.mockReturnValue({ user: { role: 'case_manager', user_id: 'member-1' } })
+        mockUseEffectivePermissions.mockReturnValue({ data: {
+            policy_version: 2,
+            permissions: ['view_surrogates', 'edit_surrogates', 'change_surrogate_status', 'assign_surrogates'],
+        } })
+        mockUseSurrogate.mockReturnValue({ data: {
+            ...baseSurrogateData,
+            stage_id: 's5',
+            stage_key: 'lost',
+            stage_slug: 'lost',
+            stage_type: 'terminal',
+            owner_type: ownerType,
+            owner_id: ownerType === 'queue' ? 'pool-1' : 'member-1',
+            is_shared_pool: true,
+        }, isLoading: false, error: null })
+        mockUseQueues.mockReturnValue({ data: [{ id: 'unassigned', name: 'Unassigned' }] })
+
+        render(<SurrogateDetailLayoutClient>{null}</SurrogateDetailLayoutClient>)
+
+        expect(screen.queryByRole('button', { name: 'Claim Surrogate' })).not.toBeInTheDocument()
+        expect(screen.getByRole('button', { name: 'Change Stage' })).toBeEnabled()
+        fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+        expect(screen.queryByRole('menuitem', { name: 'Assign' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('menuitem', { name: 'Release to Queue' })).not.toBeInTheDocument()
+        expect(screen.getByRole('menuitem', { name: 'Edit' })).toBeEnabled()
+        expect(screen.getByText('Surrogate Pool')).toBeInTheDocument()
+        expect(mockClaimSurrogate).not.toHaveBeenCalled()
+    })
+
     it('renders surrogate header and allows copying email', () => {
         render(
             <SurrogateDetailLayoutClient>

@@ -16,7 +16,7 @@ describe("bulk member role review", () => {
         vi.mocked(api.getRoleDetail).mockReset().mockResolvedValue({ role: "case_manager", label: "Case Manager", permissions_by_category: { Surrogates: [{ key: "view_surrogates", label: "View Surrogates", description: "", is_granted: true, developer_only: false }] } })
         vi.mocked(scopes.getRoleScopes).mockReset().mockImplementation(async (role) => ({ surrogates: { assignment: role === "operations" ? "all" : "assigned", phase: role === "operations" ? "all" : "post_approval", stage_ids: [] }, donors: { assignment: "all", phase: "post_approval", stage_ids: [] }, intended_parents: { assignment: "all", phase: "all", stage_ids: [] } }))
         vi.mocked(scopes.getScopeAdditions).mockReset().mockResolvedValue([])
-        vi.mocked(scopes.getScopeMigrationReview).mockReset().mockResolvedValue({ ready: true, collaborators: [], handoff_candidates: [], unresolved_handoffs: [], missing_approval_gate_pipeline_ids: [], legacy_pool_grants: [] })
+        vi.mocked(scopes.getScopeMigrationReview).mockReset().mockResolvedValue({ ready: true, collaborators: [], handoff_candidates: [], unresolved_handoffs: [], missing_approval_gate_pipeline_ids: [], missing_visibility_stage_pipeline_ids: [], legacy_pool_grants: [] })
         vi.mocked(api.bulkUpdateRoles).mockReset().mockResolvedValue({ success: 1, failed: 0 })
     })
     it("requires carry decisions and submits only after review", async () => {

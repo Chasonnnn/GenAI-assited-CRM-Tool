@@ -951,6 +951,13 @@ def import_surrogates_csv(
     *,
     commit: bool = True,
 ) -> int:
+    from app.services import (
+        approval_handoff_service,
+        permission_policy_service,
+        record_scope_service,
+    )
+
+    permission_policy_service.lock_configuration(db, org_id)
     if db.scalar(
         select(func.count(1)).select_from(Surrogate).where(Surrogate.organization_id == org_id)
     ):
@@ -1173,6 +1180,17 @@ def import_surrogates_csv(
         imported += 1
 
     db.flush()
+    if permission_policy_service.is_enabled(db, org_id):
+        post_approval = (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.organization_id == org_id,
+                record_scope_service.build_phase_filter(org_id, "surrogate", "post_approval"),
+            )
+            .all()
+        )
+        for surrogate in post_approval:
+            approval_handoff_service.normalize_shared_surrogate_pool(db, surrogate)
 
     if meta_leads_to_link:
         db.bulk_update_mappings(

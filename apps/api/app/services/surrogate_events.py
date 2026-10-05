@@ -71,7 +71,6 @@ def handle_status_changed(
     from app.db.enums import AlertType
     from app.services import (
         notification_service,
-        permission_policy_service,
         pipeline_service,
         queue_service,
         workflow_triggers,
@@ -114,14 +113,8 @@ def handle_status_changed(
             pool_queue = queue_service.get_or_create_surrogate_pool_queue(
                 db, surrogate.organization_id
             )
-            upgraded_policy = permission_policy_service.is_enabled(db, surrogate.organization_id)
-            if (
-                pool_queue
-                and not upgraded_policy
-                and (
-                    surrogate.owner_type != OwnerType.QUEUE.value
-                    or surrogate.owner_id != pool_queue.id
-                )
+            if pool_queue and (
+                surrogate.owner_type != OwnerType.QUEUE.value or surrogate.owner_id != pool_queue.id
             ):
                 surrogate = queue_service.assign_surrogate_to_queue(
                     db=db,
@@ -132,16 +125,8 @@ def handle_status_changed(
                 )
                 db.commit()
                 db.refresh(surrogate)
-            if pool_queue and (
-                not upgraded_policy
-                or (
-                    surrogate.owner_type == OwnerType.QUEUE.value
-                    and surrogate.owner_id == pool_queue.id
-                )
-            ):
-                notification_service.notify_surrogate_ready_for_claim(db=db, surrogate=surrogate)
         except Exception:
-            logger.debug("surrogate_ready_for_claim_notify_failed", exc_info=True)
+            logger.debug("surrogate_pool_assignment_failed", exc_info=True)
 
     _maybe_send_capi_event(db, surrogate, old_stage_key, new_stage_key)
     _dispatch_conversion_events(

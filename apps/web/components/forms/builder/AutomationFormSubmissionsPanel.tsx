@@ -3,8 +3,9 @@
 import Image from "next/image"
 import Link from "next/link"
 import type { Route } from "next"
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { ChevronDownIcon } from "lucide-react"
 
 import {
     getSubmissionFileDownloadUrl,
@@ -31,6 +32,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -48,7 +51,7 @@ type RetryMatchOptions = {
 
 type RoutingReviewAction = "review" | "create_lead"
 
-type RoutingReviewQueueStatus = "loading" | "error" | "ready"
+type SubmissionQueueStatus = "loading" | "error" | "ready"
 
 type AutomationFormSubmissionsPanelProps = {
     canPromoteLead?: ((submission: FormSubmissionRead) => boolean) | undefined
@@ -61,11 +64,17 @@ type AutomationFormSubmissionsPanelProps = {
     processedSubmissionHistory: FormSubmissionRead[]
     routingReviewSubmissions: FormSubmissionRead[]
     /** Load state of the routing review queue; its count and empty state show only when ready. */
-    routingReviewQueueStatus: RoutingReviewQueueStatus
+    routingReviewQueueStatus: SubmissionQueueStatus
     isRoutingReviewRetrying: boolean
     onRetryRoutingReview: () => void
     ambiguousSubmissions: FormSubmissionRead[]
+    ambiguousQueueStatus: SubmissionQueueStatus
+    isAmbiguousQueueRetrying: boolean
+    onRetryAmbiguousQueue: () => void
     leadQueueSubmissions: FormSubmissionRead[]
+    leadQueueStatus: SubmissionQueueStatus
+    isLeadQueueRetrying: boolean
+    onRetryLeadQueue: () => void
     visibleSubmissionHistory: FormSubmissionRead[]
     submissionHistoryFilter: SubmissionHistoryFilter
     selectedQueueSubmissionId: string | null
@@ -396,50 +405,76 @@ function FailedScanFiles({ submission, canRescan }: { submission: FormSubmission
     )
 }
 
-function SubmissionMetricCard({
-    label,
-    value,
-}: {
-    label: string
-    value: number | string
-}) {
-    return (
-        <Card>
-            <CardContent className="space-y-1 p-4">
-                <p className="text-xs uppercase tracking-wide text-neutral-500">{label}</p>
-                <p className="text-2xl font-semibold">{value}</p>
-            </CardContent>
-        </Card>
-    )
-}
-
 function SubmissionMetricsGrid({
     pendingSubmissionHistory,
     processedSubmissionHistory,
-    routingReviewSubmissions,
-    routingReviewQueueStatus,
-    ambiguousSubmissions,
-    leadQueueSubmissions,
 }: Pick<
     AutomationFormSubmissionsPanelProps,
     | "pendingSubmissionHistory"
     | "processedSubmissionHistory"
-    | "routingReviewSubmissions"
-    | "routingReviewQueueStatus"
-    | "ambiguousSubmissions"
-    | "leadQueueSubmissions"
 >) {
     return (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <SubmissionMetricCard label="Pending Applications" value={pendingSubmissionHistory.length} />
-            <SubmissionMetricCard label="Processed Outcomes" value={processedSubmissionHistory.length} />
-            <SubmissionMetricCard
-                label="Routing Review"
-                value={routingReviewQueueStatus === "ready" ? routingReviewSubmissions.length : "—"}
-            />
-            <SubmissionMetricCard label="Ambiguous Queue" value={ambiguousSubmissions.length} />
-            <SubmissionMetricCard label="Lead Queue" value={leadQueueSubmissions.length} />
-        </div>
+        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            <div className="flex items-center gap-2">
+                <dt className="text-muted-foreground">Pending Applications</dt>
+                <dd className="font-semibold">{pendingSubmissionHistory.length}</dd>
+            </div>
+            <div className="flex items-center gap-2">
+                <dt className="text-muted-foreground">Processed Outcomes</dt>
+                <dd className="font-semibold">{processedSubmissionHistory.length}</dd>
+            </div>
+        </dl>
+    )
+}
+
+function SubmissionQueueSection({
+    title,
+    count,
+    status,
+    isRetrying,
+    onRetry,
+    subject,
+    children,
+}: {
+    title: string
+    count: number
+    status: SubmissionQueueStatus
+    isRetrying: boolean
+    onRetry: () => void
+    subject: string
+    children: ReactNode
+}) {
+    if (status === "ready" && count === 0) {
+        return (
+            <Collapsible>
+                <h3>
+                    <CollapsibleTrigger className="group flex w-full items-center gap-3 rounded-lg p-4 text-left text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <span className="flex-1">{title}</span>{" "}
+                        <Badge variant="outline">{count}</Badge>
+                        <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-aria-expanded:rotate-180" aria-hidden="true" />
+                    </CollapsibleTrigger>
+                </h3>
+                <CollapsibleContent className="px-4 pb-4">{children}</CollapsibleContent>
+            </Collapsible>
+        )
+    }
+    return (
+        <section aria-label={title} className="space-y-4 p-4">
+            <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">{title}</h3>
+                {status === "ready" ? <Badge variant="outline">{count}</Badge> : null}
+            </div>
+            {status === "loading" ? (
+                <p className="text-sm text-neutral-500" role="status">Loading {subject}…</p>
+            ) : status === "error" ? (
+                <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
+                    <p>Unable to load {subject}.</p>
+                    <Button type="button" size="sm" variant="outline" disabled={isRetrying} onClick={onRetry}>
+                        Retry
+                    </Button>
+                </div>
+            ) : children}
+        </section>
     )
 }
 
@@ -605,59 +640,43 @@ function RoutingReviewQueueCard({
     | "formatSubmissionDateTime"
 >) {
     return (
-        <Card>
-            <CardContent className="space-y-4 p-5">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">Routing Review</h3>
-                    {routingReviewQueueStatus === "ready" ? (
-                        <Badge variant="outline">{routingReviewSubmissions.length}</Badge>
-                    ) : null}
-                </div>
-                {routingReviewQueueStatus === "loading" ? (
-                    <p className="text-sm text-neutral-500" role="status">Loading routing review…</p>
-                ) : routingReviewQueueStatus === "error" ? (
-                    <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
-                        <p>Unable to load routing review.</p>
-                        <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={isRoutingReviewRetrying}
-                            onClick={onRetryRoutingReview}
-                        >
-                            Retry
-                        </Button>
-                    </div>
-                ) : routingReviewSubmissions.length === 0 ? (
-                    <p className="text-sm text-neutral-500">No submissions waiting for routing review.</p>
-                ) : (
-                    // Explicit roles keep table semantics where browsers drop them for cells restyled as a grid below sm.
-                    <Table role="table" className="max-sm:block">
-                        <TableHeader role="rowgroup" className="max-sm:sr-only">
-                            <TableRow role="row">
-                                <TableHead role="columnheader">Applicant</TableHead>
-                                <TableHead role="columnheader">Submitted</TableHead>
-                                <TableHead role="columnheader">Waiting on</TableHead>
-                                <TableHead role="columnheader">
-                                    <span className="sr-only">Actions</span>
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody role="rowgroup" className="max-sm:block">
-                            {routingReviewSubmissions.map((submission) => (
-                                <RoutingReviewRow
-                                    key={submission.id}
-                                    submission={submission}
-                                    canReviewRouting={canReviewRouting}
-                                    readAnswerValue={readAnswerValue}
-                                    formatSubmissionDateTime={formatSubmissionDateTime}
-                                />
-                            ))}
-                        </TableBody>
-                    </Table>
-                )}
-            </CardContent>
-        </Card>
+        <SubmissionQueueSection
+            title="Routing Review"
+            count={routingReviewSubmissions.length}
+            status={routingReviewQueueStatus}
+            isRetrying={isRoutingReviewRetrying}
+            onRetry={onRetryRoutingReview}
+            subject="routing review"
+        >
+            {routingReviewSubmissions.length === 0 ? (
+                <p className="text-sm text-neutral-500">No submissions waiting for routing review.</p>
+            ) : (
+                // Explicit roles keep table semantics where browsers drop them for cells restyled as a grid below sm.
+                <Table role="table" className="max-sm:block">
+                    <TableHeader role="rowgroup" className="max-sm:sr-only">
+                        <TableRow role="row">
+                            <TableHead role="columnheader">Applicant</TableHead>
+                            <TableHead role="columnheader">Submitted</TableHead>
+                            <TableHead role="columnheader">Waiting on</TableHead>
+                            <TableHead role="columnheader">
+                                <span className="sr-only">Actions</span>
+                            </TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody role="rowgroup" className="max-sm:block">
+                        {routingReviewSubmissions.map((submission) => (
+                            <RoutingReviewRow
+                                key={submission.id}
+                                submission={submission}
+                                canReviewRouting={canReviewRouting}
+                                readAnswerValue={readAnswerValue}
+                                formatSubmissionDateTime={formatSubmissionDateTime}
+                            />
+                        ))}
+                    </TableBody>
+                </Table>
+            )}
+        </SubmissionQueueSection>
     )
 }
 
@@ -729,6 +748,9 @@ function AmbiguousSubmissionCard({
 function AmbiguousMatchQueueCard({
     canEditSubject,
     ambiguousSubmissions,
+    ambiguousQueueStatus,
+    isAmbiguousQueueRetrying,
+    onRetryAmbiguousQueue,
     selectedQueueSubmissionId,
     readAnswerValue,
     resolveSubmissionMatchPending,
@@ -737,6 +759,9 @@ function AmbiguousMatchQueueCard({
 }: Pick<
     AutomationFormSubmissionsPanelProps,
     | "ambiguousSubmissions"
+    | "ambiguousQueueStatus"
+    | "isAmbiguousQueueRetrying"
+    | "onRetryAmbiguousQueue"
     | "selectedQueueSubmissionId"
     | "readAnswerValue"
     | "resolveSubmissionMatchPending"
@@ -746,32 +771,33 @@ function AmbiguousMatchQueueCard({
     canEditSubject: SubjectEditCheck
 }) {
     return (
-        <Card>
-            <CardContent className="space-y-4 p-5">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">Ambiguous Match Queue</h3>
-                    <Badge variant="outline">{ambiguousSubmissions.length}</Badge>
+        <SubmissionQueueSection
+            title="Ambiguous Match Queue"
+            count={ambiguousSubmissions.length}
+            status={ambiguousQueueStatus}
+            isRetrying={isAmbiguousQueueRetrying}
+            onRetry={onRetryAmbiguousQueue}
+            subject="ambiguous submissions"
+        >
+            {ambiguousSubmissions.length === 0 ? (
+                <p className="text-sm text-neutral-500">No ambiguous submissions.</p>
+            ) : (
+                <div className="space-y-3">
+                    {ambiguousSubmissions.map((submission) => (
+                        <AmbiguousSubmissionCard
+                            key={submission.id}
+                            submission={submission}
+                            isSelected={selectedQueueSubmissionId === submission.id}
+                            canEditSubject={canEditSubject(submission)}
+                            readAnswerValue={readAnswerValue}
+                            resolveSubmissionMatchPending={resolveSubmissionMatchPending}
+                            onSelectQueueSubmission={onSelectQueueSubmission}
+                            onResolveSubmissionToLead={onResolveSubmissionToLead}
+                        />
+                    ))}
                 </div>
-                {ambiguousSubmissions.length === 0 ? (
-                    <p className="text-sm text-neutral-500">No ambiguous submissions.</p>
-                ) : (
-                    <div className="space-y-3">
-                        {ambiguousSubmissions.map((submission) => (
-                            <AmbiguousSubmissionCard
-                                key={submission.id}
-                                submission={submission}
-                                isSelected={selectedQueueSubmissionId === submission.id}
-                                canEditSubject={canEditSubject(submission)}
-                                readAnswerValue={readAnswerValue}
-                                resolveSubmissionMatchPending={resolveSubmissionMatchPending}
-                                onSelectQueueSubmission={onSelectQueueSubmission}
-                                onResolveSubmissionToLead={onResolveSubmissionToLead}
-                            />
-                        ))}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+            )}
+        </SubmissionQueueSection>
     )
 }
 
@@ -813,6 +839,9 @@ function LeadPromotionSubmissionCard({
 
 function LeadPromotionQueueCard({
     leadQueueSubmissions,
+    leadQueueStatus,
+    isLeadQueueRetrying,
+    onRetryLeadQueue,
     readAnswerValue,
     promoteIntakeLeadPending,
     onPromoteLeadFromSubmission,
@@ -820,36 +849,40 @@ function LeadPromotionQueueCard({
 }: Pick<
     AutomationFormSubmissionsPanelProps,
     | "leadQueueSubmissions"
+    | "leadQueueStatus"
+    | "isLeadQueueRetrying"
+    | "onRetryLeadQueue"
     | "readAnswerValue"
     | "promoteIntakeLeadPending"
     | "onPromoteLeadFromSubmission"
     | "canPromoteLead"
 >) {
     return (
-        <Card>
-            <CardContent className="space-y-4 p-5">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">Lead Promotion Queue</h3>
-                    <Badge variant="outline">{leadQueueSubmissions.length}</Badge>
+        <SubmissionQueueSection
+            title="Lead Promotion Queue"
+            count={leadQueueSubmissions.length}
+            status={leadQueueStatus}
+            isRetrying={isLeadQueueRetrying}
+            onRetry={onRetryLeadQueue}
+            subject="lead submissions"
+        >
+            {leadQueueSubmissions.length === 0 ? (
+                <p className="text-sm text-neutral-500">No pending lead submissions.</p>
+            ) : (
+                <div className="space-y-3">
+                    {leadQueueSubmissions.map((submission) => (
+                        <LeadPromotionSubmissionCard
+                            key={submission.id}
+                            submission={submission}
+                            readAnswerValue={readAnswerValue}
+                            promoteIntakeLeadPending={promoteIntakeLeadPending}
+                            onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
+                            canPromoteLead={canPromoteLead}
+                        />
+                    ))}
                 </div>
-                {leadQueueSubmissions.length === 0 ? (
-                    <p className="text-sm text-neutral-500">No pending lead submissions.</p>
-                ) : (
-                    <div className="space-y-3">
-                        {leadQueueSubmissions.map((submission) => (
-                            <LeadPromotionSubmissionCard
-                                key={submission.id}
-                                submission={submission}
-                                readAnswerValue={readAnswerValue}
-                                promoteIntakeLeadPending={promoteIntakeLeadPending}
-                                onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
-                                canPromoteLead={canPromoteLead}
-                            />
-                        ))}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+            )}
+        </SubmissionQueueSection>
     )
 }
 
@@ -862,7 +895,13 @@ function SubmissionReviewQueues({
     isRoutingReviewRetrying,
     onRetryRoutingReview,
     ambiguousSubmissions,
+    ambiguousQueueStatus,
+    isAmbiguousQueueRetrying,
+    onRetryAmbiguousQueue,
     leadQueueSubmissions,
+    leadQueueStatus,
+    isLeadQueueRetrying,
+    onRetryLeadQueue,
     selectedQueueSubmissionId,
     readAnswerValue,
     formatSubmissionDateTime,
@@ -882,7 +921,13 @@ function SubmissionReviewQueues({
     | "onRetryRoutingReview"
     | "formatSubmissionDateTime"
     | "ambiguousSubmissions"
+    | "ambiguousQueueStatus"
+    | "isAmbiguousQueueRetrying"
+    | "onRetryAmbiguousQueue"
     | "leadQueueSubmissions"
+    | "leadQueueStatus"
+    | "isLeadQueueRetrying"
+    | "onRetryLeadQueue"
     | "selectedQueueSubmissionId"
     | "readAnswerValue"
     | "resolveSubmissionMatchPending"
@@ -905,7 +950,7 @@ function SubmissionReviewQueues({
     }
 
     return (
-        <div className="space-y-6">
+        <Card className="gap-0 divide-y py-0">
             <RoutingReviewQueueCard
                 routingReviewSubmissions={routingReviewSubmissions}
                 routingReviewQueueStatus={routingReviewQueueStatus}
@@ -915,25 +960,29 @@ function SubmissionReviewQueues({
                 readAnswerValue={readAnswerValue}
                 formatSubmissionDateTime={formatSubmissionDateTime}
             />
-            <div className="grid gap-6 xl:grid-cols-2">
-                <AmbiguousMatchQueueCard
-                    canEditSubject={canEditSubject}
-                    ambiguousSubmissions={ambiguousSubmissions}
-                    selectedQueueSubmissionId={selectedQueueSubmissionId}
-                    readAnswerValue={readAnswerValue}
-                    resolveSubmissionMatchPending={resolveSubmissionMatchPending}
-                    onSelectQueueSubmission={onSelectQueueSubmission}
-                    onResolveSubmissionToLead={onResolveSubmissionToLead}
-                />
-                <LeadPromotionQueueCard
-                    leadQueueSubmissions={leadQueueSubmissions}
-                    readAnswerValue={readAnswerValue}
-                    promoteIntakeLeadPending={promoteIntakeLeadPending}
-                    onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
-                    canPromoteLead={canPromoteLead}
-                />
-            </div>
-        </div>
+            <AmbiguousMatchQueueCard
+                canEditSubject={canEditSubject}
+                ambiguousSubmissions={ambiguousSubmissions}
+                ambiguousQueueStatus={ambiguousQueueStatus}
+                isAmbiguousQueueRetrying={isAmbiguousQueueRetrying}
+                onRetryAmbiguousQueue={onRetryAmbiguousQueue}
+                selectedQueueSubmissionId={selectedQueueSubmissionId}
+                readAnswerValue={readAnswerValue}
+                resolveSubmissionMatchPending={resolveSubmissionMatchPending}
+                onSelectQueueSubmission={onSelectQueueSubmission}
+                onResolveSubmissionToLead={onResolveSubmissionToLead}
+            />
+            <LeadPromotionQueueCard
+                leadQueueSubmissions={leadQueueSubmissions}
+                leadQueueStatus={leadQueueStatus}
+                isLeadQueueRetrying={isLeadQueueRetrying}
+                onRetryLeadQueue={onRetryLeadQueue}
+                readAnswerValue={readAnswerValue}
+                promoteIntakeLeadPending={promoteIntakeLeadPending}
+                onPromoteLeadFromSubmission={onPromoteLeadFromSubmission}
+                canPromoteLead={canPromoteLead}
+            />
+        </Card>
     )
 }
 
@@ -974,7 +1023,7 @@ function SubmissionHistoryFilters({
     )
 }
 
-function SubmissionHistoryIdentityGrid({
+function SubmissionHistoryIdentity({
     submission,
     readAnswerValue,
     formatSubmissionDateTime,
@@ -984,61 +1033,61 @@ function SubmissionHistoryIdentityGrid({
 > & {
     submission: FormSubmissionRead
 }) {
-    const fullName = readAnswerValue(submission, ["full_name", "name"])
-    const email = readAnswerValue(submission, ["email", "email_address"])
-    const phone = readAnswerValue(submission, ["phone", "phone_number", "mobile_phone"])
+    const identity = readSubmissionIdentity(submission, readAnswerValue)
     const isDonor = isDonorFormLeadKind(submission.lead_kind)
-    const state = readAnswerValue(submission, ["state", "residence_state"])
-    const education = readAnswerValue(submission, ["education", "education_level"])
 
     return (
-        <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-            <div><span className="font-medium">Name:</span> {fullName}</div>
-            <div><span className="font-medium">Email:</span> {email}</div>
-            <div><span className="font-medium">Phone:</span> {phone}</div>
-            {isDonor ? (
-                <div><span className="font-medium">Education:</span> {education}</div>
-            ) : null}
-            {isDonor ? (
-                <div><span className="font-medium">State:</span> {state}</div>
-            ) : null}
-            <div>
-                <span className="font-medium">Submitted:</span>{" "}
-                {formatSubmissionDateTime(submission.submitted_at)}
-            </div>
-            <div>
-                <span className="font-medium">Record:</span>{" "}
-                {submission.donor_id && submission.donor_number ? (
-                    <Link
-                        href={`/donors/${submission.donor_id}` as Route}
-                        aria-label={`Open donor ${submission.donor_number}`}
-                        className="text-primary hover:underline"
-                    >
-                        {submission.donor_number}
-                    </Link>
-                ) : submission.donor_id ? (
-                    <span className="text-muted-foreground">Donor record unavailable</span>
-                ) : submission.surrogate_id ? (
-                    <Link
-                        href={`/surrogates/${submission.surrogate_id}` as Route}
-                        aria-label={`Open surrogate ${submission.surrogate_id}`}
-                        className="text-primary hover:underline"
-                    >
-                        {submission.surrogate_id}
-                    </Link>
-                ) : "—"}
-            </div>
-            <div>
-                <span className="font-medium">Lead:</span>{" "}
-                {submission.intake_lead_id ? submission.intake_lead_id : "—"}
-            </div>
-            <MatchReason submission={submission} />
-            {isDonor ? (
-                <div className="sm:col-span-2 lg:col-span-3">
-                    <DonorProfilePhotoPreview submission={submission} />
+        <div className="flex min-w-0 items-start gap-3">
+            {isDonor ? <DonorProfilePhotoPreview submission={submission} /> : null}
+            <div className="min-w-0 space-y-1">
+                <p className="break-words font-semibold">{identity.fullName}</p>
+                <p className="break-all text-muted-foreground">{identity.email}</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+                    <span>{identity.phone}</span>
+                    <time dateTime={submission.submitted_at}>{formatSubmissionDateTime(submission.submitted_at)}</time>
                 </div>
-            ) : null}
+                {isDonor ? (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+                        <span>Education: <span>{identity.education}</span></span>
+                        <span>State: <span>{identity.state}</span></span>
+                    </div>
+                ) : null}
+            </div>
         </div>
+    )
+}
+
+function SubmissionRecordLink({ submission, fullName }: { submission: FormSubmissionRead; fullName: string }) {
+    if (submission.donor_id && !submission.donor_number) {
+        return <span className="text-muted-foreground">Donor record unavailable</span>
+    }
+    const href = submission.donor_id
+        ? `/donors/${submission.donor_id}`
+        : submission.surrogate_id ? `/surrogates/${submission.surrogate_id}` : null
+    if (!href) return null
+    return (
+        <Button variant="outline" size="sm" render={
+            <Link href={href as Route} aria-label={submission.donor_id ? `Open record for donor ${submission.donor_number}` : `Open record for ${fullName}`} />
+        }>
+            Open record
+        </Button>
+    )
+}
+
+function SubmissionHistoryDetails({ submission }: { submission: FormSubmissionRead }) {
+    return (
+        <Collapsible>
+            <CollapsibleTrigger className="group flex items-center gap-2 rounded text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Matching details
+                <ChevronDownIcon className="size-3.5 transition-transform group-aria-expanded:rotate-180" aria-hidden="true" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-1 pt-3 text-xs text-muted-foreground">
+                <div><span className="font-medium">Source:</span> Shared form</div>
+                <div className="break-all"><span className="font-medium">Record:</span> {submission.donor_id ? submission.donor_number ?? "Donor record unavailable" : submission.surrogate_id ?? "—"}</div>
+                <div className="break-all"><span className="font-medium">Lead:</span> {submission.intake_lead_id ?? "—"}</div>
+                <MatchReason submission={submission} />
+            </CollapsibleContent>
+        </Collapsible>
     )
 }
 
@@ -1059,7 +1108,6 @@ function SubmissionHistoryBadges({
 }) {
     return (
         <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">Shared</Badge>
             <Badge variant="outline">{FORM_LEAD_KIND_LABELS[submission.lead_kind]}</Badge>
             <Badge variant="outline" className={submissionOutcomeBadgeClass(submission)}>
                 {submissionOutcomeLabel(submission)}
@@ -1106,68 +1154,69 @@ function SubmissionHistoryActions({
                     Review Candidates
                 </Button>
             )}
-            {canReprocess && (
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={retrySubmissionMatchPending}
-                    onClick={() =>
-                        void onRetrySubmissionMatch(
-                            submission,
-                            {
-                                unlinkSurrogate: isDonor ? false : Boolean(submission.surrogate_id),
-                                rerunAutoMatch: true,
-                                ...(isDonor ? { createIntakeLeadIfUnmatched: true } : {}),
-                            },
-                            isDonor ? "Submission reprocessed" : "Auto-match re-run complete",
-                        )
-                    }
-                >
-                    {isDonor ? "Reprocess" : "Re-run Auto-Match"}
-                </Button>
-            )}
-            {submission.surrogate_id && (
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={retrySubmissionMatchPending}
-                    onClick={() =>
-                        void onRetrySubmissionMatch(
-                            submission,
-                            {
-                                unlinkSurrogate: true,
-                                rerunAutoMatch: false,
-                            },
-                            "Submission unlinked. Select the correct surrogate.",
-                        )
-                    }
-                >
-                    Unlink
-                </Button>
-            )}
-            {submission.intake_lead_id && (
-                <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={retrySubmissionMatchPending}
-                    onClick={() =>
-                        void onRetrySubmissionMatch(
-                            submission,
-                            {
-                                unlinkSurrogate: isDonor ? false : Boolean(submission.surrogate_id),
-                                unlinkIntakeLead: true,
-                                rerunAutoMatch: true,
-                                createIntakeLeadIfUnmatched: true,
-                            },
-                            "Lead link reset and submission reprocessed",
-                        )
-                    }
-                >
-                    Undo Lead + Reprocess
-                </Button>
+            {(canReprocess || submission.surrogate_id || submission.intake_lead_id) && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+                        Actions
+                        <ChevronDownIcon className="ml-1 size-4" aria-hidden="true" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-auto">
+                        {canReprocess && (
+                            <DropdownMenuItem
+                                disabled={retrySubmissionMatchPending}
+                                onClick={() =>
+                                    void onRetrySubmissionMatch(
+                                        submission,
+                                        {
+                                            unlinkSurrogate: isDonor ? false : Boolean(submission.surrogate_id),
+                                            rerunAutoMatch: true,
+                                            ...(isDonor ? { createIntakeLeadIfUnmatched: true } : {}),
+                                        },
+                                        isDonor ? "Submission reprocessed" : "Auto-match re-run complete",
+                                    )
+                                }
+                            >
+                                {isDonor ? "Reprocess" : "Re-run Auto-Match"}
+                            </DropdownMenuItem>
+                        )}
+                        {submission.surrogate_id && (
+                            <DropdownMenuItem
+                                disabled={retrySubmissionMatchPending}
+                                onClick={() =>
+                                    void onRetrySubmissionMatch(
+                                        submission,
+                                        {
+                                            unlinkSurrogate: true,
+                                            rerunAutoMatch: false,
+                                        },
+                                        "Submission unlinked. Select the correct surrogate.",
+                                    )
+                                }
+                            >
+                                Unlink
+                            </DropdownMenuItem>
+                        )}
+                        {submission.intake_lead_id && (
+                            <DropdownMenuItem
+                                disabled={retrySubmissionMatchPending}
+                                onClick={() =>
+                                    void onRetrySubmissionMatch(
+                                        submission,
+                                        {
+                                            unlinkSurrogate: isDonor ? false : Boolean(submission.surrogate_id),
+                                            unlinkIntakeLead: true,
+                                            rerunAutoMatch: true,
+                                            createIntakeLeadIfUnmatched: true,
+                                        },
+                                        "Lead link reset and submission reprocessed",
+                                    )
+                                }
+                            >
+                                Undo Lead + Reprocess
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             )}
         </div>
     )
@@ -1210,32 +1259,41 @@ function SubmissionHistoryEntry({
         isPendingDonorReview(submission) &&
         submission.match_status !== "ambiguous_review"
 
+    const fullName = readAnswerValue(submission, ["full_name", "name"])
     return (
-        <div className="space-y-3 rounded-lg border border-neutral-200 p-3 text-sm">
-            <SubmissionHistoryBadges
-                submission={submission}
-                submissionOutcomeLabel={submissionOutcomeLabel}
-                submissionOutcomeBadgeClass={submissionOutcomeBadgeClass}
-                submissionReviewLabel={submissionReviewLabel}
-                submissionReviewBadgeClass={submissionReviewBadgeClass}
-            />
-            <SubmissionHistoryIdentityGrid
-                submission={submission}
-                readAnswerValue={readAnswerValue}
-                formatSubmissionDateTime={formatSubmissionDateTime}
-            />
+        <article aria-label={fullName} className="space-y-3 p-4 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-3">
+                    <SubmissionHistoryIdentity
+                        submission={submission}
+                        readAnswerValue={readAnswerValue}
+                        formatSubmissionDateTime={formatSubmissionDateTime}
+                    />
+                    <SubmissionHistoryBadges
+                        submission={submission}
+                        submissionOutcomeLabel={submissionOutcomeLabel}
+                        submissionOutcomeBadgeClass={submissionOutcomeBadgeClass}
+                        submissionReviewLabel={submissionReviewLabel}
+                        submissionReviewBadgeClass={submissionReviewBadgeClass}
+                    />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <SubmissionRecordLink submission={submission} fullName={fullName} />
+                    <SubmissionHistoryActions
+                        canReview={canReview}
+                        submission={submission}
+                        retrySubmissionMatchPending={retrySubmissionMatchPending}
+                        onSelectQueueSubmission={onSelectQueueSubmission}
+                        onRetrySubmissionMatch={onRetrySubmissionMatch}
+                    />
+                </div>
+            </div>
+            <SubmissionHistoryDetails submission={submission} />
             {hasFailedScan ? (
                 <FailedScanFiles submission={submission} canRescan={canReview && canEditSubject} />
             ) : null}
-            <SubmissionHistoryActions
-                canReview={canReview}
-                submission={submission}
-                retrySubmissionMatchPending={retrySubmissionMatchPending}
-                onSelectQueueSubmission={onSelectQueueSubmission}
-                onRetrySubmissionMatch={onRetrySubmissionMatch}
-            />
             {showDonorControls ? <DonorReviewControls submission={submission} align="end" /> : null}
-        </div>
+        </article>
     )
 }
 
@@ -1275,43 +1333,41 @@ function SubmissionHistoryCard({
     canEditSubject: SubjectEditCheck
 }) {
     return (
-        <Card>
-            <CardContent className="space-y-4 p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="text-sm font-semibold">Submission History</h3>
-                    <SubmissionHistoryFilters
-                        submissionHistoryFilter={submissionHistoryFilter}
-                        onSubmissionHistoryFilterChange={onSubmissionHistoryFilterChange}
-                    />
-                </div>
+        <section className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold">Submission History</h3>
+                <SubmissionHistoryFilters
+                    submissionHistoryFilter={submissionHistoryFilter}
+                    onSubmissionHistoryFilterChange={onSubmissionHistoryFilterChange}
+                />
+            </div>
 
-                {isSubmissionHistoryLoading ? (
-                    <p className="text-sm text-neutral-500">Loading submission history…</p>
-                ) : visibleSubmissionHistory.length === 0 ? (
-                    <p className="text-sm text-neutral-500">No submissions in this view.</p>
-                ) : (
-                    <div className="space-y-3">
-                        {visibleSubmissionHistory.map((submission) => (
-                            <SubmissionHistoryEntry
-                                canReview={canReview}
-                                canEditSubject={canEditSubject(submission)}
-                                key={submission.id}
-                                submission={submission}
-                                readAnswerValue={readAnswerValue}
-                                formatSubmissionDateTime={formatSubmissionDateTime}
-                                submissionOutcomeLabel={submissionOutcomeLabel}
-                                submissionOutcomeBadgeClass={submissionOutcomeBadgeClass}
-                                submissionReviewLabel={submissionReviewLabel}
-                                submissionReviewBadgeClass={submissionReviewBadgeClass}
-                                retrySubmissionMatchPending={retrySubmissionMatchPending}
-                                onSelectQueueSubmission={onSelectQueueSubmission}
-                                onRetrySubmissionMatch={onRetrySubmissionMatch}
-                            />
-                        ))}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+            {isSubmissionHistoryLoading ? (
+                <p className="text-sm text-neutral-500">Loading submission history…</p>
+            ) : visibleSubmissionHistory.length === 0 ? (
+                <p className="text-sm text-neutral-500">No submissions in this view.</p>
+            ) : (
+                <Card className="gap-0 divide-y py-0">
+                    {visibleSubmissionHistory.map((submission) => (
+                        <SubmissionHistoryEntry
+                            canReview={canReview}
+                            canEditSubject={canEditSubject(submission)}
+                            key={submission.id}
+                            submission={submission}
+                            readAnswerValue={readAnswerValue}
+                            formatSubmissionDateTime={formatSubmissionDateTime}
+                            submissionOutcomeLabel={submissionOutcomeLabel}
+                            submissionOutcomeBadgeClass={submissionOutcomeBadgeClass}
+                            submissionReviewLabel={submissionReviewLabel}
+                            submissionReviewBadgeClass={submissionReviewBadgeClass}
+                            retrySubmissionMatchPending={retrySubmissionMatchPending}
+                            onSelectQueueSubmission={onSelectQueueSubmission}
+                            onRetrySubmissionMatch={onRetrySubmissionMatch}
+                        />
+                    ))}
+                </Card>
+            )}
+        </section>
     )
 }
 
@@ -1440,7 +1496,13 @@ export function AutomationFormSubmissionsPanel({
     isRoutingReviewRetrying,
     onRetryRoutingReview,
     ambiguousSubmissions,
+    ambiguousQueueStatus,
+    isAmbiguousQueueRetrying,
+    onRetryAmbiguousQueue,
     leadQueueSubmissions,
+    leadQueueStatus,
+    isLeadQueueRetrying,
+    onRetryLeadQueue,
     visibleSubmissionHistory,
     submissionHistoryFilter,
     selectedQueueSubmissionId,
@@ -1477,10 +1539,6 @@ export function AutomationFormSubmissionsPanel({
             <SubmissionMetricsGrid
                 pendingSubmissionHistory={pendingSubmissionHistory}
                 processedSubmissionHistory={processedSubmissionHistory}
-                routingReviewSubmissions={openRoutingReviewSubmissions}
-                routingReviewQueueStatus={routingReviewQueueStatus}
-                ambiguousSubmissions={openAmbiguousSubmissions}
-                leadQueueSubmissions={openLeadQueueSubmissions}
             />
             {canReview && <SubmissionReviewQueues
                 canEditSubject={canEditSubject}
@@ -1492,7 +1550,13 @@ export function AutomationFormSubmissionsPanel({
                 onRetryRoutingReview={onRetryRoutingReview}
                 formatSubmissionDateTime={formatSubmissionDateTime}
                 ambiguousSubmissions={openAmbiguousSubmissions}
+                ambiguousQueueStatus={ambiguousQueueStatus}
+                isAmbiguousQueueRetrying={isAmbiguousQueueRetrying}
+                onRetryAmbiguousQueue={onRetryAmbiguousQueue}
                 leadQueueSubmissions={openLeadQueueSubmissions}
+                leadQueueStatus={leadQueueStatus}
+                isLeadQueueRetrying={isLeadQueueRetrying}
+                onRetryLeadQueue={onRetryLeadQueue}
                 selectedQueueSubmissionId={selectedQueueSubmissionId}
                 readAnswerValue={readAnswerValue}
                 resolveSubmissionMatchPending={resolveSubmissionMatchPending}

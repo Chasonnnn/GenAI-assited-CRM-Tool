@@ -191,6 +191,10 @@ def _lock_match_rows(
 
 
 def _lock(db: Session, match: Match, *, with_competitors: bool = False) -> tuple[Match, list]:
+    from app.services import permission_policy_service
+
+    # Activation takes organization then record locks, including while still on V1.
+    permission_policy_service.lock_configuration(db, match.organization_id)
     locked, competitors = _lock_match_rows(db, match, with_competitors=with_competitors)
     for party in match_participants.parties(locked):
         party.lock(db, locked)
@@ -198,7 +202,7 @@ def _lock(db: Session, match: Match, *, with_competitors: bool = False) -> tuple
 
 
 def lock_match(db: Session, match: Match, org_id: UUID | None = None) -> Match:
-    """Lock the match, then its parties, in the engine order; return the fresh match row."""
+    """Lock organization, match, then parties; return the fresh match row."""
     return _lock(db, match)[0]
 
 
@@ -465,13 +469,6 @@ def transition(
     seeding a dev database does not run org workflows.
     """
     spec = TRANSITIONS[action]
-    if action == "accept":
-        from app.services import permission_policy_service
-
-        # V2 approvals and manual stage changes acquire this lock first. Taking
-        # it during a stage move instead can deadlock on a shared participant.
-        if permission_policy_service.is_enabled(db, match.organization_id):
-            permission_policy_service.lock_configuration(db, match.organization_id)
     locked, _ = _lock(db, match, with_competitors=action == "accept" and bool(match.surrogate_id))
     if action == "accept" and locked.donor_id:
         require_expansion()
@@ -741,8 +738,7 @@ def _lock_surrogate_matches(
 ) -> list[Match]:
     from app.services import permission_policy_service
 
-    if permission_policy_service.is_enabled(db, surrogate.organization_id):
-        permission_policy_service.lock_configuration(db, surrogate.organization_id)
+    permission_policy_service.lock_configuration(db, surrogate.organization_id)
     query = db.query(Match).filter(
         Match.organization_id == surrogate.organization_id,
         Match.surrogate_id == surrogate.id,

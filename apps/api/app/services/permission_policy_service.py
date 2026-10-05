@@ -186,6 +186,13 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
     policy = db.get(OrganizationPermissionPolicy, org_id)
     version = policy.version if policy else 1
     revision = policy.configuration_revision if policy else 1
+    from app.services import approval_handoff_service
+
+    pool_transfers = (
+        approval_handoff_service.build_surrogate_pool_transfer_plan(db, org_id)
+        if version < 2
+        else []
+    )
     member_rows = (
         db.query(Membership, User.is_active)
         .join(User, User.id == Membership.user_id)
@@ -344,6 +351,7 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
         "changes": changes.model_dump(mode="json"),
         "scope_review": scope_review,
         "execution_review": execution_review,
+        "surrogate_pool_transfers": pool_transfers,
     }
     digest = hashlib.sha256(json.dumps(snapshot, sort_keys=True, default=str).encode()).hexdigest()
     unresolved = [row.id for row in revokes if row.id not in resolutions]
@@ -362,6 +370,7 @@ def preview(db: Session, org_id: UUID, changes: PermissionPolicyChanges) -> Perm
         scope_review=scope_review,
         execution_review=execution_review,
         unresolved_execution_ids=unresolved_executions,
+        surrogate_pool_transfers=pool_transfers,
     )
 
 
@@ -501,6 +510,20 @@ def activate(
     policy.activated_at = datetime.now(UTC)
     policy.activated_by_user_id = actor_user_id
     policy.updated_at = datetime.now(UTC)
+    db.flush()
+    from app.services import approval_handoff_service
+
+    try:
+        transferred = approval_handoff_service.apply_surrogate_pool_transfers(
+            db,
+            org_id,
+            actor_user_id,
+            [row.model_dump(mode="json") for row in reviewed.surrogate_pool_transfers],
+        )
+    except ValueError as exc:
+        raise PermissionPolicyConflict(
+            "Records changed; review a fresh preview before activation"
+        ) from exc
     audit_service.log_event(
         db=db,
         org_id=org_id,
@@ -510,6 +533,7 @@ def activate(
         target_id=org_id,
         details={
             "policy_version": 2,
+            "surrogate_pool_transfers": transferred,
             "review_digest": digest,
             "resolved_revokes": [
                 resolution.model_dump(mode="json") for resolution in changes.revoke_resolutions

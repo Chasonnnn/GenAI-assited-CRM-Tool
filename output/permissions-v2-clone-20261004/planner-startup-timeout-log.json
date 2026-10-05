@@ -1,0 +1,11 @@
+[
+  {
+    "jsonPayload": {
+      "code": "phase_failed",
+      "error_type": "ConnectionTimeout",
+      "phase": "clone_sentinel",
+      "status": "blocked"
+    },
+    "timestamp": "2026-10-05T00:26:35.413036Z"
+  }
+]

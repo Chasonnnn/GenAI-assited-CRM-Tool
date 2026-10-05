@@ -252,6 +252,15 @@ function canCreateOrgWorkflows(access: { policy_version?: number; permissions: s
     return permissions.includes("manage_automation") && (access?.policy_version !== 2 || permissions.includes("manage_org_workflows"))
 }
 
+function submissionQueueStatus(
+    query: Pick<ReturnType<typeof useFormSubmissions>, "isLoading" | "isError" | "data">,
+): "loading" | "error" | "ready" {
+    if (query.isLoading) return "loading"
+    // A failed background refetch keeps the last rows on screen.
+    if (query.isError && query.data === undefined) return "error"
+    return "ready"
+}
+
 export function useAutomationFormBuilderPage({ initialTab = "edit" }: { initialTab?: WorkspaceTab } = {}) {
     const params = useParams<{ id: string }>()
     const idParam = params?.id
@@ -294,14 +303,15 @@ export function useAutomationFormBuilderPage({ initialTab = "edit" }: { initialT
     const resolveSubmissionMatchMutation = useResolveSubmissionMatch()
     const retrySubmissionMatchMutation = useRetrySubmissionMatch()
     const promoteIntakeLeadMutation = usePromoteIntakeLead()
-    const {
-        data: ambiguousSubmissions = [],
-        refetch: refetchAmbiguousSubmissions,
-    } = useFormSubmissions(formId, {
+    const ambiguousQueueQuery = useFormSubmissions(formId, {
         source_mode: "shared",
         match_status: "ambiguous_review",
         limit: 50,
     })
+    const {
+        data: ambiguousSubmissions = [],
+        refetch: refetchAmbiguousSubmissions,
+    } = ambiguousQueueQuery
     const routingReviewQuery = useFormSubmissions(formId, {
         source_mode: "shared",
         match_status: "routing_review",
@@ -311,15 +321,16 @@ export function useAutomationFormBuilderPage({ initialTab = "edit" }: { initialT
         data: routingReviewSubmissions = [],
         refetch: refetchRoutingReviewSubmissions,
     } = routingReviewQuery
-    const {
-        data: leadQueueSubmissions = [],
-        refetch: refetchLeadQueueSubmissions,
-    } = useFormSubmissions(formId, {
+    const leadQueueQuery = useFormSubmissions(formId, {
         source_mode: "shared",
         status: "pending_review",
         match_status: "lead_created",
         limit: 50,
     })
+    const {
+        data: leadQueueSubmissions = [],
+        refetch: refetchLeadQueueSubmissions,
+    } = leadQueueQuery
     const {
         data: submissionHistory = [],
         refetch: refetchSubmissionHistory,
@@ -1118,18 +1129,23 @@ export function useAutomationFormBuilderPage({ initialTab = "edit" }: { initialT
             pendingSubmissionHistory,
             processedSubmissionHistory,
             routingReviewSubmissions,
-            // A failed background refetch keeps the last rows on screen.
-            routingReviewQueueStatus: routingReviewQuery.isLoading
-                ? ("loading" as const)
-                : routingReviewQuery.isError && routingReviewQuery.data === undefined
-                  ? ("error" as const)
-                  : ("ready" as const),
+            routingReviewQueueStatus: submissionQueueStatus(routingReviewQuery),
             isRoutingReviewRetrying: routingReviewQuery.isFetching,
             onRetryRoutingReview: () => {
                 void refetchRoutingReviewSubmissions()
             },
             ambiguousSubmissions,
+            ambiguousQueueStatus: submissionQueueStatus(ambiguousQueueQuery),
+            isAmbiguousQueueRetrying: ambiguousQueueQuery.isFetching,
+            onRetryAmbiguousQueue: () => {
+                void refetchAmbiguousSubmissions()
+            },
             leadQueueSubmissions,
+            leadQueueStatus: submissionQueueStatus(leadQueueQuery),
+            isLeadQueueRetrying: leadQueueQuery.isFetching,
+            onRetryLeadQueue: () => {
+                void refetchLeadQueueSubmissions()
+            },
             visibleSubmissionHistory,
             submissionHistoryFilter: state.submissionHistoryFilter,
             selectedQueueSubmissionId: state.selectedQueueSubmissionId,

@@ -18,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.encryption import hash_email, hash_phone
-from app.core.surrogate_access import case_manager_approved_onward_joined_filter
+from app.core.surrogate_access import case_manager_visibility_joined_filter
 from app.db.enums import OwnerType, Role
 from app.db.models import Attachment, Donor, EntityNote, IntendedParent, PipelineStage, Surrogate
 from app.schemas.auth import UserSession
@@ -137,7 +137,9 @@ def _build_surrogate_access_filter(
     if role == Role.ADMIN.value:
         ownership_filter = true()
     elif role == Role.CASE_MANAGER.value:
-        ownership_filter = case_manager_approved_onward_joined_filter(surrogate_table, stage_table)
+        ownership_filter = case_manager_visibility_joined_filter(
+            surrogate_table, stage_table, user_id
+        )
     elif role == Role.INTAKE_SPECIALIST.value:
         ownership_filter = and_(
             surrogate_table.c.owner_type == OwnerType.USER.value,

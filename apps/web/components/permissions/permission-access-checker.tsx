@@ -10,6 +10,7 @@ import { ChoiceField, PermissionError, PermissionLoading } from "./permission-co
 
 import { PermissionRecordPicker, type SelectedPermissionRecord } from "./permission-record-picker"
 const SOURCE_LABELS: Record<string, string> = {
+    creator: "Created by this member",
     role_scope: "Role scope", role: "Role scope", individual_scope: "Individual scope addition", individual_addition: "Individual addition", collaborator: "Record collaboration", intake_collaborator: "Record collaboration", legacy: "Legacy record access", protected_role: "Protected role", owner: "Assignment", assigned: "Assignment", admin: "Admin access", developer: "Developer access",
 }
 

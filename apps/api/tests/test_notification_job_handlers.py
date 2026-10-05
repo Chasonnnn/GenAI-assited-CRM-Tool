@@ -6,6 +6,34 @@ from uuid import uuid4
 import pytest
 
 from app.db.enums import NotificationType
+from app.db.models import Notification
+
+
+@pytest.mark.asyncio
+async def test_queued_claim_notification_is_not_created_or_pushed(
+    db, test_org, test_user, monkeypatch
+):
+    from app.jobs.handlers import notifications
+
+    def unexpected_push(coro):
+        coro.close()
+        pytest.fail("Retired notification must not be pushed")
+
+    monkeypatch.setattr("app.services.notification_service._schedule_ws_send", unexpected_push)
+    job = SimpleNamespace(
+        id=uuid4(),
+        organization_id=test_org.id,
+        payload={
+            "user_id": str(test_user.id),
+            "title": "Ready for claiming",
+            "body": "Legacy queued claim notification",
+            "type": NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
+        },
+    )
+
+    await notifications.process_notification(db, job)
+
+    assert db.query(Notification).filter(Notification.organization_id == test_org.id).count() == 0
 
 
 @pytest.mark.asyncio

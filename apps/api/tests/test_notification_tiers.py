@@ -135,11 +135,8 @@ async def test_task_items_clear_when_reassigned_or_rescheduled(
 
 
 @pytest.mark.asyncio
-async def test_status_change_and_claim_items_follow_domain_state(
-    authed_client, db, test_org, test_user
-):
+async def test_status_change_items_follow_domain_state(authed_client, db, test_org, test_user):
     surrogate_id = await _create_surrogate(authed_client)
-    surrogate = db.get(Surrogate, surrogate_id)
     now = datetime.now(UTC)
     request = StatusChangeRequest(
         organization_id=test_org.id,
@@ -152,8 +149,6 @@ async def test_status_change_and_claim_items_follow_domain_state(
         status="pending",
     )
     db.add(request)
-    surrogate.owner_type = OwnerType.QUEUE.value
-    surrogate.owner_id = uuid.uuid4()
     db.flush()
     approval = _notify(
         db,
@@ -163,19 +158,9 @@ async def test_status_change_and_claim_items_follow_domain_state(
         entity_type="surrogate",
         entity_id=surrogate_id,
     )
-    claim = _notify(
-        db,
-        test_org.id,
-        test_user.id,
-        NotificationType.SURROGATE_CLAIM_AVAILABLE,
-        entity_type="surrogate",
-        entity_id=surrogate_id,
-    )
-    assert _open_action_ids(db, test_user, test_org) == {approval.id, claim.id}
+    assert _open_action_ids(db, test_user, test_org) == {approval.id}
 
     request.status = "approved"
-    surrogate.owner_type = OwnerType.USER.value
-    surrogate.owner_id = test_user.id
     db.flush()
 
     assert _open_action_ids(db, test_user, test_org) == set()
@@ -279,8 +264,31 @@ def test_read_cleared_items_and_appointment_requests(db, test_org, test_user):
 
 
 @pytest.mark.asyncio
-async def test_tier_endpoints_split_counts_and_mark_read(authed_client, db, test_org, test_user):
+async def test_tier_endpoints_hide_retired_claim_notices_and_preserve_other_notifications(
+    authed_client, db, test_org, test_user
+):
     surrogate_id = await _create_surrogate(authed_client)
+    surrogate = db.get(Surrogate, surrogate_id)
+    surrogate.owner_type = OwnerType.QUEUE.value
+    surrogate.owner_id = uuid.uuid4()
+    claim = _notify(
+        db,
+        test_org.id,
+        test_user.id,
+        NotificationType.SURROGATE_CLAIM_AVAILABLE,
+        entity_type="surrogate",
+        entity_id=surrogate_id,
+    )
+    read_claim = _notify(
+        db,
+        test_org.id,
+        test_user.id,
+        NotificationType.SURROGATE_CLAIM_AVAILABLE,
+        entity_type="surrogate",
+        entity_id=surrogate_id,
+        read_at=datetime.now(UTC),
+        created_at=datetime.now(UTC) - timedelta(days=1),
+    )
     task = _task(
         db,
         test_org,
@@ -311,6 +319,20 @@ async def test_tier_endpoints_split_counts_and_mark_read(authed_client, db, test
     assert counts.status_code == 200
     assert counts.json() == {"action_count": 1, "updates_unread": 1}
 
+    for query in ("", "?unread_only=true"):
+        response = await authed_client.get(f"/me/notifications{query}")
+        assert response.status_code == 200
+        assert {item["id"] for item in response.json()["items"]} == {
+            str(action.id),
+            str(update.id),
+        }
+        assert response.json()["unread_count"] == 2
+    retired_only = await authed_client.get(
+        "/me/notifications?notification_types=surrogate_claim_available"
+    )
+    assert retired_only.status_code == 200
+    assert retired_only.json()["items"] == []
+
     action_list = (await authed_client.get("/me/notifications?tier=action")).json()
     assert [(item["id"], item["tier"]) for item in action_list["items"]] == [
         (str(action.id), "action")
@@ -329,6 +351,13 @@ async def test_tier_endpoints_split_counts_and_mark_read(authed_client, db, test
 
     counts = await authed_client.get("/me/notifications/count")
     assert counts.json() == {"action_count": 1, "updates_unread": 0}
+
+    assert (await authed_client.patch(f"/me/notifications/{claim.id}/read")).status_code == 404
+    marked = await authed_client.post("/me/notifications/read-all")
+    assert marked.json() == {"marked_read": 1}
+    db.expire_all()
+    assert db.get(Notification, claim.id).read_at is None
+    assert db.get(Notification, read_claim.id).read_at is not None
 
 
 def test_counts_and_action_list_exclude_other_organizations(db, test_org, test_user):

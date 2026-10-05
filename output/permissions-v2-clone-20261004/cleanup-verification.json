@@ -1,0 +1,94 @@
+{
+  "job": {
+    "verified": true,
+    "remaining": 0
+  },
+  "clone": {
+    "verified": true,
+    "remaining": 0
+  },
+  "secret": {
+    "verified": true,
+    "remaining": 0
+  },
+  "service_account": {
+    "verified": true,
+    "remaining": 0
+  },
+  "firewalls": {
+    "verified": true,
+    "remaining": 0
+  },
+  "images": {
+    "verified": true,
+    "remaining": 0
+  },
+  "project_iam_bindings": {
+    "verified": true,
+    "remaining": 0
+  },
+  "source_uploads": [
+    {
+      "url": "gs://probable-dream-484923-n7_cloudbuild/source/1791156218.805529-162e8513dc5a4e0fb516bb6db95b7c76.tgz",
+      "verified_absent": true,
+      "result": "not_found"
+    },
+    {
+      "url": "gs://probable-dream-484923-n7_cloudbuild/source/1791156970.029752-a6dfa05ceeed42859496baa0081f246d.tgz",
+      "verified_absent": true,
+      "result": "not_found"
+    },
+    {
+      "url": "gs://probable-dream-484923-n7_cloudbuild/source/1791157946.784867-64ec652c482a4c2696a40e3435f47227.tgz",
+      "verified_absent": true,
+      "result": "not_found"
+    },
+    {
+      "url": "gs://probable-dream-484923-n7_cloudbuild/source/1791159001.216608-974a9956b1e740d191b4f38d2ec040cb.tgz",
+      "verified_absent": true,
+      "result": "not_found"
+    },
+    {
+      "url": "gs://probable-dream-484923-n7_cloudbuild/source/1791159293.548619-00d0166911f141ac8786fd34a69197c9.tgz",
+      "verified_absent": true,
+      "result": "not_found"
+    },
+    {
+      "url": "gs://probable-dream-484923-n7_cloudbuild/source/1791159670.480375-c42b90e68c1e42e99da3dfabadff767f.tgz",
+      "verified_absent": true,
+      "result": "not_found"
+    },
+    {
+      "url": "gs://probable-dream-484923-n7_cloudbuild/source/1791160849.314125-f693da4e43ce4ecf90760920e16095d1.tgz",
+      "verified_absent": true,
+      "result": "not_found"
+    },
+    {
+      "url": "gs://probable-dream-484923-n7_cloudbuild/source/1791161527.09279-10ed5c1c72df4fccaca898dbb1cae27a.tgz",
+      "verified_absent": true,
+      "result": "not_found"
+    }
+  ],
+  "production_sql": {
+    "databaseVersion": "POSTGRES_18",
+    "name": "crm-db",
+    "settings": {
+      "settingsVersion": "367"
+    },
+    "state": "RUNNABLE"
+  },
+  "production_api": {
+    "status": {
+      "latestReadyRevisionName": "crm-api-00262-spp",
+      "traffic": [
+        {
+          "latestRevision": true,
+          "percent": 100,
+          "revisionName": "crm-api-00262-spp"
+        }
+      ]
+    }
+  },
+  "checked_at": "2026-10-05T01:04:31.039294+00:00",
+  "all_task_resources_absent": true
+}

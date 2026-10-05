@@ -1,0 +1,10 @@
+{
+  "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+  "tracked_api_files_verified": 1409,
+  "base_manifest": "final-source-manifest.json",
+  "overlay": {
+    "apps/api/_rehearsal/rehearsal.py": "713dac78c3a7ba78c58130bd07e46d2afa8e69ad48120bb75469c9abd8c97200",
+    "apps/api/_rehearsal/bootstrap.py": "12072d23b2d8dbf05145fa8fd6693e0e4023f450601b0f4a280ee1efd4f53465",
+    "cloudbuild.yaml": "e1b195421e0b72d694d97a6132e5a650fd58ba1fd457b5623b1d8a3ec688bd30"
+  }
+}

@@ -238,6 +238,14 @@ export interface PolicyPreview {
     scope_review: import("./record-scopes").ScopeMigrationReview
     execution_review: { item_type: "workflow" | "campaign"; id: string; name?: string; unreviewed_execution_ids?: string[] }[]
     unresolved_execution_ids: string[]
+    surrogate_pool_transfers?: {
+        record_id: string
+        record_number: string
+        expected_fingerprint: string
+        owner_type: "user" | "queue"
+        owner_id: string
+        retained_intake_user_id: string | null
+    }[]
 }
 
 export const getPolicyConfiguration = () => api.get<PolicyConfiguration>("/settings/permissions/policy")

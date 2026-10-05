@@ -112,12 +112,15 @@ function useSurrogateBulkActions() {
 
 const BULK_STAGE_FAILURES_SHOWN = 5
 
-function toBulkStageSurrogate(surrogate: SurrogateListItem): BulkStageSurrogate {
+type SelectedSurrogate = BulkStageSurrogate & Pick<SurrogateListItem, "is_shared_pool">
+
+function toSelectedSurrogate(surrogate: SurrogateListItem): SelectedSurrogate {
     return {
         id: surrogate.id,
         full_name: surrogate.full_name,
         stage_id: surrogate.stage_id,
         paused_from_stage_id: surrogate.paused_from_stage_id ?? null,
+        is_shared_pool: surrogate.is_shared_pool === true,
     }
 }
 
@@ -128,7 +131,7 @@ function FloatingActionBar({
     onClear,
     onSelectionChange,
 }: {
-    selectedSurrogates: BulkStageSurrogate[]
+    selectedSurrogates: SelectedSurrogate[]
     stages: PipelineStage[]
     onClear: () => void
     onSelectionChange: (surrogateIds: string[]) => void
@@ -142,6 +145,7 @@ function FloatingActionBar({
     const bulkChangeStageMutation = useBulkChangeStage()
     const [isChangeStageOpen, setIsChangeStageOpen] = useState(false)
     const { canAssign, canBulkChangeStage, canArchive } = useSurrogateBulkActions()
+    const canAssignSelection = canAssign && !selectedSurrogates.some((surrogate) => surrogate.is_shared_pool)
 
     const handleAssign = async (userId: string) => {
         await bulkAssignMutation.mutateAsync({
@@ -237,7 +241,7 @@ function FloatingActionBar({
                     <span className="font-medium">{selectedCount} surrogate{selectedCount > 1 ? 's' : ''} selected</span>
                     <div className="hidden h-4 w-px bg-primary-foreground/30 sm:block" />
 
-                    {canAssign && (
+                    {canAssignSelection && (
                         <DropdownMenu>
                             <DropdownMenuTrigger
                                 className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "inline-flex items-center gap-1")}
@@ -640,7 +644,7 @@ export function SurrogatesPageClient() {
     const assigneeFilterOptions = assignees ?? []
     const canManagePriority = user?.role === "admin" || user?.role === "developer"
     const canArchive = usePermissionCheck().can("archive_surrogates")
-    const { canSelect: canSelectRows } = useSurrogateBulkActions()
+    const { canSelect: canSelectRows, canAssign, canBulkChangeStage } = useSurrogateBulkActions()
     const listUrlState = readSurrogateListUrlState(normalizedSearchParams, canFilterByAssignee)
     const { data: defaultPipeline, isLoading: isPipelineLoading } = useDefaultPipeline()
     const stageOptions = defaultPipeline?.stages || []
@@ -671,7 +675,7 @@ export function SurrogatesPageClient() {
         value: debouncedSearch,
     }))
     const searchQuery = searchDraft.query === currentQuery ? searchDraft.value : debouncedSearch
-    const [selectedSurrogates, setSelectedSurrogates] = useState<Map<string, BulkStageSurrogate>>(new Map())
+    const [selectedSurrogates, setSelectedSurrogates] = useState<Map<string, SelectedSurrogate>>(new Map())
     const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false)
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const [isMassEditOpen, setIsMassEditOpen] = useState(false)
@@ -1190,9 +1194,13 @@ export function SurrogatesPageClient() {
     ]
 
     // Multi-select handlers
+    const selectableItems = (data?.items ?? []).filter((surrogate) =>
+        canArchive || canBulkChangeStage || (canAssign && !surrogate.is_shared_pool)
+    )
+    const selectableIds = new Set(selectableItems.map((surrogate) => surrogate.id))
     const handleSelectAll = (checked: boolean) => {
-        if (checked && data?.items) {
-            setSelectedSurrogates(new Map(data.items.map(s => [s.id, toBulkStageSurrogate(s)])))
+        if (checked) {
+            setSelectedSurrogates(new Map(selectableItems.map(s => [s.id, toSelectedSurrogate(s)])))
         } else {
             setSelectedSurrogates(new Map())
         }
@@ -1201,7 +1209,7 @@ export function SurrogatesPageClient() {
     const handleSelectSurrogate = (surrogate: SurrogateListItem, checked: boolean) => {
         const newSelected = new Map(selectedSurrogates)
         if (checked) {
-            newSelected.set(surrogate.id, toBulkStageSurrogate(surrogate))
+            newSelected.set(surrogate.id, toSelectedSurrogate(surrogate))
         } else {
             newSelected.delete(surrogate.id)
         }
@@ -1216,7 +1224,7 @@ export function SurrogatesPageClient() {
     const visibleItemsById = new Map((data?.items ?? []).map(item => [item.id, item]))
     const selectedRows = Array.from(selectedSurrogates.values(), (snapshot) => {
         const visible = visibleItemsById.get(snapshot.id)
-        return visible ? toBulkStageSurrogate(visible) : snapshot
+        return visible ? toSelectedSurrogate(visible) : snapshot
     })
 
     const handleArchive = async (target: { id: string; number: string }) => {
@@ -1628,7 +1636,8 @@ export function SurrogatesPageClient() {
                                         {canSelectRows && (
                                             <TableHead className="w-[40px]">
                                                 <Checkbox
-                                                    checked={data?.items && data.items.length > 0 && selectedSurrogates.size === data.items.length}
+                                                    checked={selectableItems.length > 0 && selectableItems.every((surrogate) => selectedSurrogates.has(surrogate.id))}
+                                                    disabled={selectableItems.length === 0}
                                                     onCheckedChange={(checked) => handleSelectAll(!!checked)}
                                                     aria-label="Select all surrogates"
                                                 />
@@ -1667,6 +1676,7 @@ export function SurrogatesPageClient() {
                                                 {canSelectRows && (
                                                     <TableCell>
                                                         <Checkbox
+                                                            disabled={!selectableIds.has(surrogateItem.id)}
                                                             checked={selectedSurrogates.has(surrogateItem.id)}
                                                             onCheckedChange={(checked) => handleSelectSurrogate(surrogateItem, !!checked)}
                                                             aria-label={`Select ${surrogateItem.full_name}`}
@@ -1700,7 +1710,9 @@ export function SurrogatesPageClient() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {surrogateItem.owner_name ? (
+                                                    {surrogateItem.is_shared_pool ? (
+                                                        <span>Surrogate Pool</span>
+                                                    ) : surrogateItem.owner_name ? (
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger aria-label={`Assigned to ${surrogateItem.owner_name}`}>

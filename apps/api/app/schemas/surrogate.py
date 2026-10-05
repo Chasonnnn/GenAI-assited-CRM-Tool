@@ -422,6 +422,7 @@ class SurrogateRead(BaseModel):
     is_priority: bool
 
     # Ownership (Salesforce-style)
+    is_shared_pool: bool = False
     owner_type: str  # 'user' | 'queue'
     owner_id: UUID
     owner_name: str | None = None
@@ -512,6 +513,7 @@ class SurrogateListItem(BaseModel):
     phone: str | None
     state: str | None
     race: str | None = None  # Added for table display
+    is_shared_pool: bool = False
     owner_type: str | None = None
     owner_id: UUID | None = None
     owner_name: str | None = None

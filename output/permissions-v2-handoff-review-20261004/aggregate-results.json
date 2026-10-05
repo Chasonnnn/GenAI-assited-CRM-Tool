@@ -1,0 +1,61 @@
+{
+  "phase": "encrypted_ledger",
+  "status": "complete",
+  "source_commit": "91da87428dc6d90ac051f96a25ae2decf0f6de43",
+  "run_id": "handoff-review-20261004-91da8742",
+  "organization_count": 4,
+  "aggregate_summaries": [
+    {
+      "current_direct_owner_preservation_candidates": 0,
+      "grant_decisions_made": false,
+      "handoff_records": 0,
+      "historical_classification": {},
+      "read_only": true,
+      "reason_counts": {},
+      "role_audit_observations": 1,
+      "schema_version": 1
+    },
+    {
+      "current_direct_owner_preservation_candidates": 0,
+      "grant_decisions_made": false,
+      "handoff_records": 0,
+      "historical_classification": {},
+      "read_only": true,
+      "reason_counts": {},
+      "role_audit_observations": 0,
+      "schema_version": 1
+    },
+    {
+      "current_direct_owner_preservation_candidates": 3,
+      "grant_decisions_made": false,
+      "handoff_records": 46,
+      "historical_classification": {
+        "ambiguous": 44,
+        "candidate": 2
+      },
+      "read_only": true,
+      "reason_counts": {
+        "approval_effective_time_differs_or_missing": 44,
+        "no_recorded_user_owner_at_approval": 30
+      },
+      "role_audit_observations": 3,
+      "schema_version": 1
+    },
+    {
+      "current_direct_owner_preservation_candidates": 0,
+      "grant_decisions_made": false,
+      "handoff_records": 1,
+      "historical_classification": {
+        "ambiguous": 1
+      },
+      "read_only": true,
+      "reason_counts": {
+        "approval_effective_time_differs_or_missing": 1,
+        "no_recorded_user_owner_at_approval": 1
+      },
+      "role_audit_observations": 0,
+      "schema_version": 1
+    }
+  ],
+  "business_read_only": true
+}

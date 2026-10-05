@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     types: vi.fn(),
     link: vi.fn(),
     create: vi.fn(),
+    setRules: vi.fn(),
     toast: { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() },
 }))
 
@@ -28,12 +29,21 @@ vi.mock("@/lib/hooks/use-appointments", () => ({
     useBookingLink: () => mocks.link(),
     useRegenerateBookingLink: () => ({ mutate: vi.fn(), isPending: false }),
     useAvailabilityRules: () => mocks.rules(),
-    useSetAvailabilityRules: () => ({ mutate: vi.fn(), isPending: false }),
+    useSetAvailabilityRules: () => ({ mutate: mocks.setRules, isPending: false }),
     useAppointmentTypes: () => mocks.types(),
     useCreateAppointmentType: () => ({ mutateAsync: mocks.create, isPending: false }),
     useUpdateAppointmentType: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useDeleteAppointmentType: () => ({ mutate: vi.fn(), isPending: false }),
 }))
+
+async function chooseOption(name: string, optionName: string) {
+    const trigger = screen.getByRole("combobox", { name })
+    fireEvent.click(trigger)
+    const option = await screen.findByRole("option", { name: optionName })
+    fireEvent.mouseMove(option)
+    fireEvent.click(option)
+    await waitFor(() => expect(trigger).toHaveTextContent(optionName))
+}
 
 describe("AppointmentSettings scheduling fixes", () => {
     beforeEach(() => {
@@ -45,6 +55,7 @@ describe("AppointmentSettings scheduling fixes", () => {
             isLoading: false,
         })
         mocks.create.mockReset().mockResolvedValue({})
+        mocks.setRules.mockReset()
         Object.values(mocks.toast).forEach((fn) => fn.mockReset())
         window.history.replaceState(null, "", "/settings/appointments")
     })
@@ -59,6 +70,69 @@ describe("AppointmentSettings scheduling fixes", () => {
         expect(screen.getByRole("combobox", { name: "Monday start time" })).toHaveTextContent("9:00 AM")
         expect(screen.getByRole("combobox", { name: "Monday end time" })).toHaveTextContent("5:30 PM")
         expect(screen.queryByText(/Unknown/)).not.toBeInTheDocument()
+    })
+
+    it.each(["8:00 AM", "9:00 AM"])("blocks an enabled day ending at %s and recovers when corrected", async (endTime) => {
+        render(<AppointmentSettings />)
+        const save = screen.getByRole("button", { name: "Save availability" })
+        expect(save).toBeDisabled()
+
+        fireEvent.click(screen.getByRole("switch", { name: "Available on Monday" }))
+        await chooseOption("Monday end time", endTime)
+
+        const end = screen.getByRole("combobox", { name: "Monday end time" })
+        expect(screen.getByRole("alert")).toHaveTextContent("End time must be after start time.")
+        expect(end).toHaveAttribute("aria-invalid", "true")
+        expect(end).toHaveAccessibleDescription("End time must be after start time.")
+        expect(save).toBeDisabled()
+        fireEvent.click(save)
+        expect(mocks.setRules).not.toHaveBeenCalled()
+
+        fireEvent.click(screen.getByRole("switch", { name: "Available on Monday" }))
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+        expect(save).toBeEnabled()
+        fireEvent.click(screen.getByRole("switch", { name: "Available on Monday" }))
+        expect(save).toBeDisabled()
+
+        await chooseOption("Monday end time", "5:00 PM")
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+        expect(screen.getByRole("combobox", { name: "Monday end time" })).not.toHaveAttribute("aria-invalid", "true")
+        expect(save).toBeEnabled()
+        fireEvent.click(save)
+        expect(mocks.setRules.mock.calls[0]?.[0]).toEqual({
+            rules: [{ day_of_week: 0, start_time: "09:00", end_time: "17:00" }],
+            timezone: "America/New_York",
+        })
+    })
+
+    it("shows a save failure, preserves the edited schedule and timezone, and allows retry", async () => {
+        mocks.setRules.mockImplementationOnce((_input, options) => {
+            options.onError?.(new ApiError(500, "Internal Server Error", "private server detail"))
+        }).mockImplementationOnce((_input, options) => {
+            options.onSuccess?.()
+        })
+        render(<AppointmentSettings />)
+
+        fireEvent.click(screen.getByRole("switch", { name: "Available on Monday" }))
+        await chooseOption("Timezone", "Central Time")
+        const save = screen.getByRole("button", { name: "Save availability" })
+        fireEvent.click(save)
+
+        expect(screen.getByRole("alert")).toHaveTextContent("Couldn't save availability. Try again.")
+        expect(screen.queryByText(/private server detail/)).not.toBeInTheDocument()
+        expect(screen.getByRole("switch", { name: "Available on Monday" })).toHaveAttribute("aria-checked", "true")
+        expect(screen.getByRole("combobox", { name: "Monday end time" })).toHaveTextContent("5:00 PM")
+        expect(screen.getByRole("combobox", { name: "Timezone" })).toHaveTextContent("Central Time")
+        expect(save).toBeEnabled()
+
+        fireEvent.click(save)
+        expect(mocks.setRules).toHaveBeenCalledTimes(2)
+        expect(mocks.setRules.mock.calls[1]?.[0]).toEqual({
+            rules: [{ day_of_week: 0, start_time: "09:00", end_time: "17:00" }],
+            timezone: "America/Chicago",
+        })
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+        expect(save).toBeDisabled()
     })
 
     it("keeps the tab list compact and reads the active tab from the URL", () => {

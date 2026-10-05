@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from types import SimpleNamespace
 
-from app.db.enums import JobType, Role, SurrogateSource
-from app.db.models import Job, MetaLead
+import pytest
+
+from app.db.enums import JobType, NotificationType, OwnerType, Role, SurrogateSource
+from app.db.models import Job, MetaLead, Notification
 from app.schemas.surrogate import SurrogateCreate
 from app.services import (
     pipeline_service,
@@ -126,72 +127,38 @@ def test_event_bus_triggers_notification_and_workflow(monkeypatch, db, test_org,
     assert called["workflow"] is True
 
 
-def test_event_bus_assigns_pool_queue_on_approved(monkeypatch, db, test_org, test_user):
-    surrogate = _create_surrogate(db, test_org.id, test_user.id)
-    approved_stage = _get_stage(db, test_org.id, "approved")
-
-    pool_queue = SimpleNamespace(id=uuid.uuid4())
-    called = {"assign": False, "ready": False}
-
-    from app.services import notification_service, queue_service, workflow_triggers
-
-    def fake_assign(*_args, **_kwargs):
-        called["assign"] = True
-        return surrogate
-
-    def mark_ready(*_args, **_kwargs):
-        called["ready"] = True
-
-    monkeypatch.setattr(queue_service, "get_or_create_surrogate_pool_queue", lambda *_: pool_queue)
-    monkeypatch.setattr(queue_service, "assign_surrogate_to_queue", fake_assign)
-    monkeypatch.setattr(notification_service, "notify_surrogate_ready_for_claim", mark_ready)
-    monkeypatch.setattr(
-        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
-    )
-    monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
-
-    event_kwargs = _event_kwargs(surrogate, approved_stage, user_id=test_user.id)
-    event_kwargs["db"] = db
-    surrogate_events.handle_status_changed(**event_kwargs)
-
-    assert called["assign"] is True
-    assert called["ready"] is True
-
-
-def test_event_bus_assigns_pool_queue_on_approved_when_slug_is_renamed(
-    monkeypatch, db, test_org, test_user
+@pytest.mark.parametrize("rename_stage", [False, True])
+def test_approval_assigns_pool_without_claim_notifications(
+    monkeypatch, db, test_org, test_user, rename_stage
 ):
     surrogate = _create_surrogate(db, test_org.id, test_user.id)
     approved_stage = _get_stage(db, test_org.id, "approved")
-    approved_stage.slug = "screened_and_approved"
-    db.commit()
+    if rename_stage:
+        approved_stage.slug = "screened_and_approved"
+        db.commit()
 
-    pool_queue = SimpleNamespace(id=uuid.uuid4())
-    called = {"assign": False, "ready": False}
+    from app.services import queue_service, workflow_triggers
 
-    from app.services import notification_service, queue_service, workflow_triggers
-
-    def fake_assign(*_args, **_kwargs):
-        called["assign"] = True
-        return surrogate
-
-    def mark_ready(*_args, **_kwargs):
-        called["ready"] = True
-
-    monkeypatch.setattr(queue_service, "get_or_create_surrogate_pool_queue", lambda *_: pool_queue)
-    monkeypatch.setattr(queue_service, "assign_surrogate_to_queue", fake_assign)
-    monkeypatch.setattr(notification_service, "notify_surrogate_ready_for_claim", mark_ready)
-    monkeypatch.setattr(
-        notification_service, "notify_surrogate_status_changed", lambda *_args, **_kwargs: None
-    )
     monkeypatch.setattr(workflow_triggers, "trigger_status_changed", lambda *_args, **_kwargs: None)
 
     event_kwargs = _event_kwargs(surrogate, approved_stage, user_id=test_user.id)
     event_kwargs["db"] = db
     surrogate_events.handle_status_changed(**event_kwargs)
 
-    assert called["assign"] is True
-    assert called["ready"] is True
+    pool_queue = queue_service.get_or_create_surrogate_pool_queue(db, test_org.id)
+    db.refresh(surrogate)
+    assert surrogate.owner_type == OwnerType.QUEUE.value
+    assert surrogate.owner_id == pool_queue.id
+    assert (
+        db.query(Notification)
+        .filter(
+            Notification.organization_id == test_org.id,
+            Notification.entity_id == surrogate.id,
+            Notification.type == NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
+        )
+        .count()
+        == 0
+    )
 
 
 def test_status_change_enqueues_zapier_stage_event(monkeypatch, db, test_org, test_user):

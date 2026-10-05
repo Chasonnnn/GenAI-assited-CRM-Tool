@@ -16,7 +16,11 @@ describe("record access checker", () => {
         vi.mocked(getSurrogates).mockReset().mockResolvedValue({ items: [{ id: "record-1", surrogate_number: "S10001", full_name: "Sample Record" }], total: 1 } as Awaited<ReturnType<typeof getSurrogates>>)
         vi.mocked(checkRecordAccess).mockReset().mockResolvedValue({ allowed: true, sources: ["role"], reason: null })
     })
-    it("checks the selected member and record, then clears the result when scope changes", async () => {
+    it.each([
+        { source: "role", label: "Role scope" },
+        { source: "creator", label: "Created by this member" },
+    ])("explains $source access and clears the result when scope changes", async ({ source, label }) => {
+        vi.mocked(checkRecordAccess).mockResolvedValue({ allowed: true, sources: [source], reason: null })
         render(<PermissionAccessChecker />)
         await screen.findByRole("combobox", { name: "Person" })
         choose("Person", "Taylor Morgan")
@@ -26,7 +30,7 @@ describe("record access checker", () => {
         choose("Record", "S10001 · Sample Record")
         fireEvent.click(screen.getByRole("button", { name: "Check access" }))
         expect(await screen.findByText("Record visible")).toBeVisible()
-        expect(screen.getByText("Role scope")).toBeVisible()
+        expect(screen.getByText(label)).toBeVisible()
         expect(vi.mocked(checkRecordAccess).mock.calls[0]?.[0]).toEqual({ user_id: "user-1", record_id: "record-1", kind: "surrogate", personal_only: false })
         fireEvent.click(screen.getByRole("switch", { name: "Personal workflow scope" }))
         expect(screen.queryByText("Record visible")).not.toBeInTheDocument()

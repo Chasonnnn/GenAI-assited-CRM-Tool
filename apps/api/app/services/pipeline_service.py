@@ -3,9 +3,9 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
 from app.core.pipeline_stage_colors import resolve_stage_color
 from app.core.stage_definitions import (
@@ -29,6 +29,7 @@ from app.db.models import (
     OrgIntelligentSuggestionRule,
     Pipeline,
     PipelineStage,
+    Queue,
     StatusChangeRequest,
     Surrogate,
     ZapierWebhookSettings,
@@ -43,6 +44,61 @@ from app.utils.presentation import humanize_identifier
 
 ENTITY_TYPE = "pipeline"
 VALID_STAGE_TYPES = {"intake", "post_approval", "paused", "terminal"}
+
+
+def _lock_pipeline_configuration(db: Session, pipeline: Pipeline) -> None:
+    from app.services import permission_policy_service
+
+    # Stage order changes affect access and approval, so serialize with activation
+    # before writing stages or locking records. Refresh objects loaded before the wait.
+    permission_policy_service.lock_configuration(db, pipeline.organization_id)
+    db.refresh(pipeline)
+
+
+def _normalize_pipeline_surrogate_pool(
+    db: Session, pipeline: Pipeline, user_id: UUID | None
+) -> None:
+    from app.services import (
+        approval_handoff_service,
+        permission_policy_service,
+        queue_service,
+        record_scope_service,
+    )
+
+    if (
+        pipeline.entity_type != SURROGATE_PIPELINE_ENTITY
+        or not permission_policy_service.is_enabled(db, pipeline.organization_id)
+    ):
+        return
+    db.flush()
+    pool = (
+        db.query(Queue)
+        .filter_by(
+            organization_id=pipeline.organization_id, name=queue_service.SURROGATE_POOL_QUEUE_NAME
+        )
+        .first()
+    )
+    # Include paused/terminal records: their effective phase may reference a
+    # reordered stage through paused_from_stage_id or status history.
+    query = db.query(Surrogate).filter(
+        Surrogate.organization_id == pipeline.organization_id,
+        Surrogate.stage_id.in_(
+            select(PipelineStage.id).where(PipelineStage.pipeline_id == pipeline.id)
+        ),
+        record_scope_service.build_phase_filter(
+            pipeline.organization_id, "surrogate", "post_approval"
+        ),
+    )
+    if pool is not None and pool.is_active:
+        query = query.filter(
+            or_(
+                Surrogate.owner_type != "queue",
+                Surrogate.owner_id != pool.id,
+                Surrogate.assigned_at.isnot(None),
+            )
+        )
+    for record in query.order_by(Surrogate.id).with_for_update().populate_existing().all():
+        approval_handoff_service.normalize_shared_surrogate_pool(db, record, user_id)
 
 
 def _normalize_slug(value: str | None) -> str:
@@ -797,6 +853,7 @@ def sync_missing_stages(
     Reuse soft-deleted rows to preserve references and unique stage identities.
     Returns count of stages added or restored.
     """
+    _lock_pipeline_configuration(db, pipeline)
     active_stages = [stage for stage in pipeline.stages if not stage.deleted_at]
     existing_stage_keys = {
         _normalize_stage_key(stage.stage_key or stage.slug) for stage in active_stages
@@ -849,6 +906,7 @@ def sync_missing_stages(
     db.refresh(pipeline)
     _ensure_pipeline_semantics_defaults(db, pipeline)
     _validate_pipeline_configuration(db, pipeline)
+    _normalize_pipeline_surrogate_pool(db, pipeline, user_id)
     _bump_pipeline_version(db, pipeline, user_id, f"Synced {len(missing)} missing stages")
 
     if commit:
@@ -871,6 +929,7 @@ def update_pipeline_name(
 
     Creates version snapshot on name change.
     """
+    _lock_pipeline_configuration(db, pipeline)
     pipeline.name = name
     _bump_pipeline_version(db, pipeline, user_id, comment or "Renamed")
 
@@ -887,6 +946,7 @@ def update_pipeline_feature_config(
     comment: str | None = None,
 ) -> Pipeline:
     """Update pipeline-level feature configuration with version control."""
+    _lock_pipeline_configuration(db, pipeline)
     pipeline.feature_config = pipeline_semantics_service.get_pipeline_feature_config(
         {"entity_type": pipeline.entity_type, "feature_config": feature_config}
     ).model_dump(mode="json")
@@ -911,6 +971,9 @@ def create_pipeline(
 
     Uses default stages if not provided.
     """
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, org_id)
     normalized_entity_type = _normalize_pipeline_entity_type(entity_type)
     stage_defs = _merge_required_stage_defs(
         stages or get_default_stage_defs(normalized_entity_type),
@@ -983,6 +1046,7 @@ def delete_pipeline(db: Session, pipeline: Pipeline) -> bool:
     Cannot delete the default pipeline.
     Note: Versions are retained for audit history.
     """
+    _lock_pipeline_configuration(db, pipeline)
     if pipeline.is_default:
         return False
 
@@ -1000,11 +1064,7 @@ def _bump_pipeline_version(
     """Create a new pipeline version snapshot after stage changes."""
     db.flush()
     locked_pipeline = (
-        db.query(Pipeline)
-        .options(selectinload(Pipeline.stages))
-        .filter(Pipeline.id == pipeline.id)
-        .with_for_update()
-        .first()
+        db.query(Pipeline).filter(Pipeline.id == pipeline.id).with_for_update().first()
     )
     if not locked_pipeline:
         return
@@ -1057,6 +1117,7 @@ def rollback_pipeline(
     Returns:
         (updated_pipeline, error) - error is set if rollback failed
     """
+    _lock_pipeline_configuration(db, pipeline)
     payload, error = version_service.get_verified_version_payload(
         db,
         pipeline.organization_id,
@@ -1184,6 +1245,7 @@ def rollback_pipeline(
 
     _ensure_pipeline_semantics_defaults(db, pipeline)
     _validate_pipeline_configuration(db, pipeline)
+    _normalize_pipeline_surrogate_pool(db, pipeline, user_id)
 
     db.commit()
     db.refresh(pipeline)
@@ -1424,6 +1486,8 @@ def create_stage(
     Raises ValueError if slug/stage_key already exists or stage_type is invalid.
     """
     pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+    if pipeline:
+        _lock_pipeline_configuration(db, pipeline)
     pipeline_entity_type = pipeline.entity_type if pipeline else SURROGATE_PIPELINE_ENTITY
 
     normalized_slug = _normalize_slug(slug)
@@ -1488,6 +1552,7 @@ def create_stage(
         _normalize_existing_stage_orders(pipeline)
         _ensure_pipeline_semantics_defaults(db, pipeline)
         _validate_pipeline_configuration(db, pipeline)
+        _normalize_pipeline_surrogate_pool(db, pipeline, user_id)
         _bump_pipeline_version(db, pipeline, user_id, f"Added stage {normalized_slug}")
     db.commit()
     db.refresh(stage)
@@ -1512,6 +1577,9 @@ def update_stage(
     Syncs case status_label when label changes.
     """
     pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
+    if pipeline:
+        _lock_pipeline_configuration(db, pipeline)
+        db.refresh(stage)
     pipeline_entity_type = pipeline.entity_type if pipeline else SURROGATE_PIPELINE_ENTITY
 
     label_changed = False
@@ -1569,6 +1637,7 @@ def update_stage(
     if pipeline:
         _ensure_pipeline_semantics_defaults(db, pipeline)
         _validate_pipeline_configuration(db, pipeline)
+        _normalize_pipeline_surrogate_pool(db, pipeline, user_id)
         _bump_pipeline_version(db, pipeline, user_id, f"Updated stage {stage.stage_key}")
     db.commit()
     db.refresh(stage)
@@ -1595,6 +1664,9 @@ def delete_stage(
     if stage.id == migrate_to_stage_id:
         raise ValueError("Cannot migrate cases to the same stage")
     pipeline = db.query(Pipeline).filter(Pipeline.id == stage.pipeline_id).first()
+    if pipeline:
+        _lock_pipeline_configuration(db, pipeline)
+        db.refresh(stage)
     pipeline_entity_type = pipeline.entity_type if pipeline else SURROGATE_PIPELINE_ENTITY
     if get_stage_protection(stage.stage_key, pipeline_entity_type):
         raise ValueError(
@@ -1669,6 +1741,7 @@ def delete_stage(
     if pipeline:
         _ensure_pipeline_semantics_defaults(db, pipeline)
         _validate_pipeline_configuration(db, pipeline)
+        _normalize_pipeline_surrogate_pool(db, pipeline, user_id)
         _bump_pipeline_version(db, pipeline, user_id, f"Deleted stage {stage.slug}")
 
     db.commit()
@@ -1687,6 +1760,9 @@ def reorder_stages(
     Normalizes order values to 1, 2, 3...
     Only active stages can be reordered.
     """
+    pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+    if pipeline:
+        _lock_pipeline_configuration(db, pipeline)
     stages = get_stages(db, pipeline_id)
     stage_map = {s.id: s for s in stages}
     active_ids = set(stage_map.keys())
@@ -1698,7 +1774,6 @@ def reorder_stages(
     for i, stage_id in enumerate(ordered_ids):
         if stage_id not in stage_map:
             raise ValueError(f"Stage ID {stage_id} not found or not active")
-    pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
     ordered_stage_payload = [
         _serialize_stage(stage_map[stage_id], pipeline.entity_type if pipeline else None)
         for stage_id in ordered_ids
@@ -1723,6 +1798,7 @@ def reorder_stages(
     if pipeline:
         _ensure_pipeline_semantics_defaults(db, pipeline)
         _validate_pipeline_configuration(db, pipeline)
+        _normalize_pipeline_surrogate_pool(db, pipeline, user_id)
         _bump_pipeline_version(db, pipeline, user_id, "Reordered stages")
     db.commit()
     return get_stages(db, pipeline_id)
@@ -2039,6 +2115,7 @@ def apply_pipeline_draft(
     user_id: UUID | None,
     comment: str | None = None,
 ) -> Pipeline:
+    _lock_pipeline_configuration(db, pipeline)
     preview = build_pipeline_draft_preview(
         db,
         pipeline,
@@ -2236,6 +2313,7 @@ def apply_pipeline_draft(
     _apply_external_stage_remaps(db, pipeline, remap_by_key)
     _ensure_pipeline_semantics_defaults(db, pipeline)
     _validate_pipeline_configuration(db, pipeline)
+    _normalize_pipeline_surrogate_pool(db, pipeline, user_id)
     _bump_pipeline_version(db, pipeline, user_id, comment or "Applied pipeline draft")
 
     db.commit()

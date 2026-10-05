@@ -1,0 +1,24 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: pull-cache
+    args:
+      - pull
+      - us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/api@sha256:ec62076572fd7cfd6951df01c8b331b42795f2458812013f63048a90564e7ffa
+  - name: gcr.io/cloud-builders/docker
+    id: build-rehearsal
+    env: [DOCKER_BUILDKIT=1]
+    args:
+      - build
+      - --cache-from
+      - us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/api@sha256:ec62076572fd7cfd6951df01c8b331b42795f2458812013f63048a90564e7ffa
+      - --label
+      - org.opencontainers.image.revision=f9b908de80430aa03f008d515550cb02e549695e
+      - -t
+      - us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/permission-rehearsal:1004-f9b908de-contexts
+      - apps/api
+images:
+  - us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/permission-rehearsal:1004-f9b908de-contexts
+serviceAccount: projects/probable-dream-484923-n7/serviceAccounts/crm-cloudbuild-sa@probable-dream-484923-n7.iam.gserviceaccount.com
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1800s

@@ -23,7 +23,6 @@ from app.db.enums import (
     NotificationTier,
     NotificationType,
     OwnerType,
-    Role,
     TaskStatus,
     notification_tier,
 )
@@ -253,17 +252,6 @@ def _action_open_condition(now: datetime) -> ColumnElement[bool]:
             .correlate(Notification),
         ),
         and_(
-            Notification.type == NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
-            exists()
-            .where(
-                Surrogate.id == Notification.entity_id,
-                Surrogate.organization_id == Notification.organization_id,
-                Surrogate.owner_type == OwnerType.QUEUE.value,
-                Surrogate.is_archived.is_(False),
-            )
-            .correlate(Notification),
-        ),
-        and_(
             Notification.type == NotificationType.APPOINTMENT_REQUESTED.value,
             exists()
             .where(
@@ -469,6 +457,10 @@ def create_notification(
     Dedupes by dedupe_key + org_id + user_id within a time window
     (or forever when dedupe_window_hours is None).
     """
+    # Legacy queued jobs can still carry the retired type.
+    if type == NotificationType.SURROGATE_CLAIM_AVAILABLE:
+        return None
+
     donor_related = _notification_target_is_donor_related(
         db,
         org_id,
@@ -513,7 +505,7 @@ def create_notification(
 
     # Best-effort realtime push for connected clients.
     counts = get_notification_counts(db, user_id, org_id)
-    _schedule_ws_send(_send_ws_updates(user_id, notification, counts))
+    _schedule_ws_send(_send_ws_updates(user_id, _notification_ws_payload(notification), counts))
     return notification
 
 
@@ -574,6 +566,7 @@ def get_notifications(
     query = db.query(Notification).filter(
         Notification.user_id == user_id,
         Notification.organization_id == org_id,
+        Notification.type != NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
     )
     if not _user_can_view_donors(db, org_id, user_id):
         query = query.filter(_visible_without_donor_access())
@@ -668,6 +661,7 @@ def get_unread_count(
     stmt = select(func.count(Notification.id)).where(
         Notification.user_id == user_id,
         Notification.organization_id == org_id,
+        Notification.type != NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
         Notification.read_at.is_(None),
     )
     if not _user_can_view_donors(db, org_id, user_id):
@@ -696,6 +690,7 @@ def get_notification_counts(
     ).where(
         Notification.user_id == user_id,
         Notification.organization_id == org_id,
+        Notification.type != NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
     )
     if not _user_can_view_donors(db, org_id, user_id):
         stmt = stmt.where(_visible_without_donor_access())
@@ -714,6 +709,7 @@ def mark_read(
         Notification.id == notification_id,
         Notification.user_id == user_id,
         Notification.organization_id == org_id,
+        Notification.type != NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
     )
     if not _user_can_view_donors(db, org_id, user_id):
         query = query.filter(_visible_without_donor_access())
@@ -739,6 +735,7 @@ def mark_all_read(
     query = db.query(Notification).filter(
         Notification.user_id == user_id,
         Notification.organization_id == org_id,
+        Notification.type != NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
         Notification.read_at.is_(None),
     )
     if not _user_can_view_donors(db, org_id, user_id):
@@ -776,11 +773,10 @@ def _ws_counts_payload(counts: NotificationCounts) -> dict:
     return {"action_count": counts.action, "updates_unread": counts.updates_unread}
 
 
-async def _send_ws_updates(
-    user_id: UUID, notification: Notification, counts: NotificationCounts
-) -> None:
-    """Send realtime notification + counts to websocket clients."""
-    payload = {
+def _notification_ws_payload(notification: Notification) -> dict:
+    # Snapshot on the owning thread: later commits expire ORM attributes, which
+    # would otherwise lazy-load through the caller's Session in the background.
+    return {
         "id": str(notification.id),
         "type": notification.type,
         "tier": notification_tier(notification.type).value,
@@ -792,6 +788,9 @@ async def _send_ws_updates(
         "created_at": notification.created_at.isoformat(),
     }
 
+
+async def _send_ws_updates(user_id: UUID, payload: dict, counts: NotificationCounts) -> None:
+    """Send realtime notification + counts without accessing the caller's Session."""
     await send_ws_to_user(
         user_id,
         {
@@ -973,42 +972,6 @@ def notify_donor_stage_changed(
             entity_type="donor",
             entity_id=donor.id,
             dedupe_key=f"donor_stage:{donor.id}:{to_stage}:{user_id}",
-        )
-
-
-def notify_surrogate_ready_for_claim(
-    db: Session,
-    surrogate: Surrogate,
-) -> None:
-    """Notify all case_manager+ when a surrogate is approved and ready for claiming."""
-    # Get all case_manager+ in org
-    managers = (
-        db.query(Membership)
-        .filter(
-            Membership.organization_id == surrogate.organization_id,
-            Membership.role.in_([Role.CASE_MANAGER, Role.ADMIN, Role.DEVELOPER]),
-            Membership.is_active.is_(True),
-        )
-        .all()
-    )
-
-    for membership in managers:
-        if not should_notify(
-            db, membership.user_id, surrogate.organization_id, "surrogate_claim_available"
-        ):
-            continue
-
-        dedupe_key = f"surrogate_ready_for_claim:{surrogate.id}:{membership.user_id}"
-        create_notification(
-            db=db,
-            org_id=surrogate.organization_id,
-            user_id=membership.user_id,
-            type=NotificationType.SURROGATE_CLAIM_AVAILABLE,
-            title=f"Surrogate #{surrogate.surrogate_number} ready for claiming",
-            body=f"Surrogate {surrogate.full_name} is approved and waiting to be claimed",
-            entity_type="surrogate",
-            entity_id=surrogate.id,
-            dedupe_key=dedupe_key,
         )
 
 

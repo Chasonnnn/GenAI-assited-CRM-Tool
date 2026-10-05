@@ -1,0 +1,9 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'Dockerfile', '-t', '${_IMAGE}', '.']
+images: ['${_IMAGE}']
+substitutions:
+  _IMAGE: us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/handoff-review:1004-91da8742-appuser
+timeout: 1200s
+options:
+  logging: CLOUD_LOGGING_ONLY

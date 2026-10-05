@@ -1,0 +1,1128 @@
+[
+  {
+    "jsonPayload": {
+      "business_counts": {
+        "appointment_types": 6,
+        "appointments": 3278,
+        "attachments": 308,
+        "availability_overrides": 0,
+        "availability_rules": 40,
+        "booking_links": 10,
+        "consent_records": 7,
+        "donor_status_history": 2,
+        "donors": 1,
+        "entity_notes": 1994,
+        "form_intake_drafts": 2,
+        "form_intake_links": 2,
+        "form_submission_drafts": 0,
+        "form_submission_files": 0,
+        "form_submissions": 7,
+        "forms": 3,
+        "intake_leads": 6,
+        "intended_parent_status_history": 57,
+        "intended_parents": 25,
+        "interview_attachments": 0,
+        "interview_notes": 0,
+        "lead_attribution": 7,
+        "match_attempts": 0,
+        "match_events": 0,
+        "matches": 29,
+        "medical_records": 88,
+        "memberships": 10,
+        "organizations": 4,
+        "record_collaborators": 0,
+        "surrogate_activity_log": 31801,
+        "surrogate_contact_attempts": 6325,
+        "surrogate_interviews": 0,
+        "surrogate_status_history": 12445,
+        "surrogates": 9117,
+        "tasks": 92,
+        "users": 13
+      },
+      "business_identities_preserved": true,
+      "phase": "bootstrap",
+      "protected_table_count": 36,
+      "schema_after": "20261004_1300_organization_logo",
+      "schema_before": "20261004_1300_organization_logo",
+      "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+      "status": "passed"
+    },
+    "timestamp": "2026-10-05T00:48:21.585104Z"
+  },
+  {
+    "jsonPayload": {
+      "activation_performed": false,
+      "baseline_planner_contexts": {
+        "settings_restored": true,
+        "variants": [
+          {
+            "context_groups": [
+              {
+                "agreement_checks": {
+                  "count_filters_match": true,
+                  "handoff_inclusion_matches": false,
+                  "handoff_values_match": false,
+                  "raw_phases_valid": true,
+                  "record_phase_matches": true,
+                  "scalar_contexts_match": false,
+                  "snapshot_matches": false
+                },
+                "contexts_agree": false,
+                "count": 2,
+                "entity_handoff_included": true,
+                "entity_handoff_post": false,
+                "entity_handoff_pre": true,
+                "post_filter_count": 0,
+                "pre_filter_count": 1,
+                "record_phase": "pre_approval",
+                "scalar_full_org_post": false,
+                "scalar_full_org_pre": false,
+                "scalar_selected_post": false,
+                "scalar_selected_pre": true,
+                "snapshot_candidate": true,
+                "snapshot_phase_requires_review": false,
+                "snapshot_resolved": false
+              }
+            ],
+            "contexts_agree": false,
+            "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+            "phase_contexts_elapsed_ms": 2559.78,
+            "plan_summaries": {
+              "full_org_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Hash": 2,
+                  "Hash Join": 2,
+                  "Index Scan": 26,
+                  "Limit": 8,
+                  "Nested Loop": 14,
+                  "Seq Scan": 5,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              },
+              "selected_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Bitmap Heap Scan": 1,
+                  "Bitmap Index Scan": 1,
+                  "Hash": 2,
+                  "Hash Join": 2,
+                  "Index Scan": 26,
+                  "Limit": 8,
+                  "Nested Loop": 14,
+                  "Seq Scan": 4,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              }
+            },
+            "selected_records": 2,
+            "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+            "server_version": "18.4",
+            "settings": {
+              "enable_hashjoin": "on",
+              "enable_memoize": "on",
+              "enable_mergejoin": "on",
+              "jit": "on",
+              "jit_above_cost": "100000",
+              "plan_cache_mode": "auto"
+            },
+            "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+            "variant": "baseline",
+            "write_free": true
+          },
+          {
+            "context_groups": [
+              {
+                "agreement_checks": {
+                  "count_filters_match": true,
+                  "handoff_inclusion_matches": false,
+                  "handoff_values_match": false,
+                  "raw_phases_valid": true,
+                  "record_phase_matches": true,
+                  "scalar_contexts_match": false,
+                  "snapshot_matches": false
+                },
+                "contexts_agree": false,
+                "count": 2,
+                "entity_handoff_included": true,
+                "entity_handoff_post": false,
+                "entity_handoff_pre": true,
+                "post_filter_count": 0,
+                "pre_filter_count": 1,
+                "record_phase": "pre_approval",
+                "scalar_full_org_post": false,
+                "scalar_full_org_pre": false,
+                "scalar_selected_post": false,
+                "scalar_selected_pre": true,
+                "snapshot_candidate": true,
+                "snapshot_phase_requires_review": false,
+                "snapshot_resolved": false
+              }
+            ],
+            "contexts_agree": false,
+            "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+            "phase_contexts_elapsed_ms": 2695.84,
+            "plan_summaries": {
+              "full_org_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Hash": 2,
+                  "Hash Join": 2,
+                  "Index Scan": 26,
+                  "Limit": 8,
+                  "Nested Loop": 14,
+                  "Seq Scan": 5,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              },
+              "selected_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Bitmap Heap Scan": 1,
+                  "Bitmap Index Scan": 1,
+                  "Hash": 2,
+                  "Hash Join": 2,
+                  "Index Scan": 26,
+                  "Limit": 8,
+                  "Nested Loop": 14,
+                  "Seq Scan": 4,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              }
+            },
+            "selected_records": 2,
+            "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+            "server_version": "18.4",
+            "settings": {
+              "enable_hashjoin": "on",
+              "enable_memoize": "on",
+              "enable_mergejoin": "on",
+              "jit": "off",
+              "jit_above_cost": "100000",
+              "plan_cache_mode": "auto"
+            },
+            "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+            "variant": "jit_off",
+            "write_free": true
+          },
+          {
+            "context_groups": [
+              {
+                "agreement_checks": {
+                  "count_filters_match": true,
+                  "handoff_inclusion_matches": false,
+                  "handoff_values_match": false,
+                  "raw_phases_valid": true,
+                  "record_phase_matches": true,
+                  "scalar_contexts_match": false,
+                  "snapshot_matches": false
+                },
+                "contexts_agree": false,
+                "count": 2,
+                "entity_handoff_included": true,
+                "entity_handoff_post": false,
+                "entity_handoff_pre": true,
+                "post_filter_count": 0,
+                "pre_filter_count": 1,
+                "record_phase": "pre_approval",
+                "scalar_full_org_post": false,
+                "scalar_full_org_pre": false,
+                "scalar_selected_post": false,
+                "scalar_selected_pre": true,
+                "snapshot_candidate": true,
+                "snapshot_phase_requires_review": false,
+                "snapshot_resolved": false
+              }
+            ],
+            "contexts_agree": false,
+            "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+            "phase_contexts_elapsed_ms": 2126.8,
+            "plan_summaries": {
+              "full_org_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Hash": 2,
+                  "Hash Join": 2,
+                  "Index Scan": 26,
+                  "Limit": 8,
+                  "Nested Loop": 14,
+                  "Seq Scan": 5,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              },
+              "selected_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Bitmap Heap Scan": 1,
+                  "Bitmap Index Scan": 1,
+                  "Hash": 2,
+                  "Hash Join": 2,
+                  "Index Scan": 26,
+                  "Limit": 8,
+                  "Nested Loop": 14,
+                  "Seq Scan": 4,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              }
+            },
+            "selected_records": 2,
+            "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+            "server_version": "18.4",
+            "settings": {
+              "enable_hashjoin": "on",
+              "enable_memoize": "off",
+              "enable_mergejoin": "on",
+              "jit": "on",
+              "jit_above_cost": "100000",
+              "plan_cache_mode": "auto"
+            },
+            "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+            "variant": "memoize_off",
+            "write_free": true
+          },
+          {
+            "context_groups": [
+              {
+                "agreement_checks": {
+                  "count_filters_match": true,
+                  "handoff_inclusion_matches": false,
+                  "handoff_values_match": false,
+                  "raw_phases_valid": true,
+                  "record_phase_matches": true,
+                  "scalar_contexts_match": false,
+                  "snapshot_matches": false
+                },
+                "contexts_agree": false,
+                "count": 2,
+                "entity_handoff_included": true,
+                "entity_handoff_post": false,
+                "entity_handoff_pre": true,
+                "post_filter_count": 0,
+                "pre_filter_count": 1,
+                "record_phase": "pre_approval",
+                "scalar_full_org_post": false,
+                "scalar_full_org_pre": false,
+                "scalar_selected_post": false,
+                "scalar_selected_pre": true,
+                "snapshot_candidate": true,
+                "snapshot_phase_requires_review": false,
+                "snapshot_resolved": false
+              }
+            ],
+            "contexts_agree": false,
+            "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+            "phase_contexts_elapsed_ms": 2354.51,
+            "plan_summaries": {
+              "full_org_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Hash": 2,
+                  "Hash Join": 2,
+                  "Index Scan": 26,
+                  "Limit": 8,
+                  "Nested Loop": 14,
+                  "Seq Scan": 5,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              },
+              "selected_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Bitmap Heap Scan": 1,
+                  "Bitmap Index Scan": 1,
+                  "Hash": 2,
+                  "Hash Join": 2,
+                  "Index Scan": 26,
+                  "Limit": 8,
+                  "Nested Loop": 14,
+                  "Seq Scan": 4,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              }
+            },
+            "selected_records": 2,
+            "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+            "server_version": "18.4",
+            "settings": {
+              "enable_hashjoin": "on",
+              "enable_memoize": "off",
+              "enable_mergejoin": "on",
+              "jit": "off",
+              "jit_above_cost": "100000",
+              "plan_cache_mode": "auto"
+            },
+            "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+            "variant": "jit_and_memoize_off",
+            "write_free": true
+          },
+          {
+            "context_groups": [
+              {
+                "agreement_checks": {
+                  "count_filters_match": true,
+                  "handoff_inclusion_matches": true,
+                  "handoff_values_match": true,
+                  "raw_phases_valid": true,
+                  "record_phase_matches": true,
+                  "scalar_contexts_match": true,
+                  "snapshot_matches": true
+                },
+                "contexts_agree": true,
+                "count": 2,
+                "entity_handoff_included": false,
+                "entity_handoff_post": null,
+                "entity_handoff_pre": null,
+                "post_filter_count": 0,
+                "pre_filter_count": 1,
+                "record_phase": "pre_approval",
+                "scalar_full_org_post": false,
+                "scalar_full_org_pre": true,
+                "scalar_selected_post": false,
+                "scalar_selected_pre": true,
+                "snapshot_candidate": false,
+                "snapshot_phase_requires_review": null,
+                "snapshot_resolved": null
+              }
+            ],
+            "contexts_agree": true,
+            "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+            "phase_contexts_elapsed_ms": 1825.4,
+            "plan_summaries": {
+              "full_org_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Index Scan": 28,
+                  "Limit": 8,
+                  "Nested Loop": 16,
+                  "Seq Scan": 3,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              },
+              "selected_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Bitmap Heap Scan": 1,
+                  "Bitmap Index Scan": 1,
+                  "Index Scan": 28,
+                  "Limit": 8,
+                  "Nested Loop": 16,
+                  "Seq Scan": 2,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              }
+            },
+            "selected_records": 2,
+            "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+            "server_version": "18.4",
+            "settings": {
+              "enable_hashjoin": "off",
+              "enable_memoize": "off",
+              "enable_mergejoin": "off",
+              "jit": "off",
+              "jit_above_cost": "100000",
+              "plan_cache_mode": "auto"
+            },
+            "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+            "variant": "joins_off",
+            "write_free": true
+          },
+          {
+            "context_groups": [
+              {
+                "agreement_checks": {
+                  "count_filters_match": true,
+                  "handoff_inclusion_matches": false,
+                  "handoff_values_match": false,
+                  "raw_phases_valid": true,
+                  "record_phase_matches": true,
+                  "scalar_contexts_match": false,
+                  "snapshot_matches": false
+                },
+                "contexts_agree": false,
+                "count": 2,
+                "entity_handoff_included": true,
+                "entity_handoff_post": false,
+                "entity_handoff_pre": true,
+                "post_filter_count": 0,
+                "pre_filter_count": 1,
+                "record_phase": "pre_approval",
+                "scalar_full_org_post": false,
+                "scalar_full_org_pre": false,
+                "scalar_selected_post": false,
+                "scalar_selected_pre": true,
+                "snapshot_candidate": true,
+                "snapshot_phase_requires_review": false,
+                "snapshot_resolved": false
+              }
+            ],
+            "contexts_agree": false,
+            "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+            "phase_contexts_elapsed_ms": 2298.66,
+            "plan_summaries": {
+              "full_org_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Hash": 2,
+                  "Hash Join": 2,
+                  "Index Scan": 26,
+                  "Limit": 8,
+                  "Nested Loop": 14,
+                  "Seq Scan": 5,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              },
+              "selected_scalar": {
+                "cache_key_counts": {},
+                "expressions_omitted": true,
+                "join_types": {
+                  "Inner": 2,
+                  "Left": 14
+                },
+                "node_types": {
+                  "Bitmap Heap Scan": 1,
+                  "Bitmap Index Scan": 1,
+                  "Hash": 2,
+                  "Hash Join": 2,
+                  "Index Scan": 26,
+                  "Limit": 8,
+                  "Nested Loop": 14,
+                  "Seq Scan": 4,
+                  "Sort": 6
+                },
+                "subplan_types": {
+                  "InitPlan": 2,
+                  "SubPlan": 12
+                }
+              }
+            },
+            "selected_records": 2,
+            "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+            "server_version": "18.4",
+            "settings": {
+              "enable_hashjoin": "on",
+              "enable_memoize": "on",
+              "enable_mergejoin": "on",
+              "jit": "on",
+              "jit_above_cost": "100000",
+              "plan_cache_mode": "force_custom_plan"
+            },
+            "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+            "variant": "force_custom_plan",
+            "write_free": true
+          }
+        ],
+        "write_free": true
+      },
+      "candidate_phase_contexts": {
+        "context_groups": [
+          {
+            "agreement_checks": {
+              "count_filters_match": true,
+              "handoff_inclusion_matches": true,
+              "handoff_values_match": true,
+              "raw_phases_valid": true,
+              "record_phase_matches": true,
+              "scalar_contexts_match": true,
+              "snapshot_matches": true
+            },
+            "contexts_agree": true,
+            "count": 2,
+            "entity_handoff_included": false,
+            "entity_handoff_post": null,
+            "entity_handoff_pre": null,
+            "post_filter_count": 0,
+            "pre_filter_count": 1,
+            "record_phase": "pre_approval",
+            "scalar_full_org_post": false,
+            "scalar_full_org_pre": true,
+            "scalar_selected_post": false,
+            "scalar_selected_pre": true,
+            "snapshot_candidate": false,
+            "snapshot_phase_requires_review": null,
+            "snapshot_resolved": null
+          }
+        ],
+        "contexts_agree": true,
+        "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+        "phase_contexts_elapsed_ms": 2503.85,
+        "plan_summaries": {
+          "full_org_scalar": {
+            "cache_key_counts": {},
+            "expressions_omitted": true,
+            "join_types": {
+              "Inner": 2,
+              "Left": 24
+            },
+            "node_types": {
+              "Index Only Scan": 2,
+              "Index Scan": 48,
+              "Limit": 14,
+              "Nested Loop": 26,
+              "Seq Scan": 3,
+              "Sort": 12
+            },
+            "subplan_types": {
+              "InitPlan": 18,
+              "SubPlan": 8
+            }
+          },
+          "selected_scalar": {
+            "cache_key_counts": {},
+            "expressions_omitted": true,
+            "join_types": {
+              "Inner": 2,
+              "Left": 24
+            },
+            "node_types": {
+              "Bitmap Heap Scan": 1,
+              "Bitmap Index Scan": 1,
+              "Index Only Scan": 2,
+              "Index Scan": 48,
+              "Limit": 14,
+              "Nested Loop": 26,
+              "Seq Scan": 2,
+              "Sort": 12
+            },
+            "subplan_types": {
+              "InitPlan": 18,
+              "SubPlan": 8
+            }
+          }
+        },
+        "selected_records": 2,
+        "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+        "server_version": "18.4",
+        "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+        "write_free": true
+      },
+      "candidate_preview_elapsed_ms": 2921.16,
+      "candidate_previews": [
+        {
+          "action_changes_by_role": {},
+          "blockers": {
+            "execution_items_by_type": {},
+            "handoffs_by_kind": {},
+            "legacy_pool_grants": 0,
+            "missing_approval_gates": 0,
+            "revokes_by_role_permission": {},
+            "running_campaign_runs": 0,
+            "unknown_phase_by_kind": {},
+            "unreviewed_workflow_executions": 0
+          },
+          "digest": "4206920827fa39e834038405ced622687d89c1b7e7d87d98b515f6fefdbce965",
+          "existing_collaborators": 0,
+          "historical_reviews_by_decision": {},
+          "members": {
+            "active_by_role": {},
+            "inactive": 0
+          },
+          "org_id": "60ea9cf1-f75a-4fb6-9048-85c75540f296",
+          "ready": true,
+          "records": {
+            "donor": {
+              "archived": 0,
+              "total": 0
+            },
+            "intended_parent": {
+              "archived": 0,
+              "total": 0
+            },
+            "surrogate": {
+              "archived": 0,
+              "total": 1
+            }
+          },
+          "scope_member_record_access_pairs_by_role_module": {},
+          "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+          "version": 1
+        },
+        {
+          "action_changes_by_role": {
+            "admin": {
+              "gained": {
+                "approve_donors": 1,
+                "approve_surrogates": 1,
+                "assign_donors": 1,
+                "create_donors": 1,
+                "create_intended_parents": 1,
+                "create_surrogates": 1,
+                "edit_campaigns": 1,
+                "manage_org_campaigns": 1,
+                "manage_org_templates": 1,
+                "manage_org_workflows": 1,
+                "manage_roles": 1,
+                "review_form_submissions": 1,
+                "send_campaigns": 1,
+                "send_email": 1,
+                "send_sms": 1,
+                "view_campaigns": 1,
+                "view_form_submissions": 1
+              },
+              "lost": {
+                "approve_ai_actions": 1,
+                "use_ai_assistant": 1
+              },
+              "members": 1
+            }
+          },
+          "blockers": {
+            "execution_items_by_type": {},
+            "handoffs_by_kind": {},
+            "legacy_pool_grants": 0,
+            "missing_approval_gates": 0,
+            "revokes_by_role_permission": {},
+            "running_campaign_runs": 0,
+            "unknown_phase_by_kind": {},
+            "unreviewed_workflow_executions": 0
+          },
+          "digest": "2ab52b047e6750b552cf3b8b5a8f59401aee8eeadf5a6d626de0cfa96f26fe8a",
+          "existing_collaborators": 0,
+          "historical_reviews_by_decision": {},
+          "members": {
+            "active_by_role": {
+              "admin": 1
+            },
+            "inactive": 0
+          },
+          "org_id": "997bf01a-6b77-497c-b09c-717861be7c95",
+          "ready": true,
+          "records": {
+            "donor": {
+              "archived": 0,
+              "total": 0
+            },
+            "intended_parent": {
+              "archived": 0,
+              "total": 0
+            },
+            "surrogate": {
+              "archived": 0,
+              "total": 0
+            }
+          },
+          "scope_member_record_access_pairs_by_role_module": {
+            "admin:donors": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            },
+            "admin:intended_parents": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            },
+            "admin:surrogates": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            }
+          },
+          "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+          "version": 1
+        },
+        {
+          "action_changes_by_role": {
+            "admin": {
+              "gained": {
+                "approve_donors": 1,
+                "approve_surrogates": 1,
+                "assign_donors": 1,
+                "create_donors": 1,
+                "create_intended_parents": 1,
+                "create_surrogates": 1,
+                "edit_campaigns": 1,
+                "manage_org_campaigns": 1,
+                "manage_org_templates": 1,
+                "manage_org_workflows": 1,
+                "manage_roles": 1,
+                "review_form_submissions": 1,
+                "send_campaigns": 1,
+                "send_email": 1,
+                "send_sms": 1,
+                "view_campaigns": 1,
+                "view_form_submissions": 1
+              },
+              "lost": {},
+              "members": 1
+            },
+            "case_manager": {
+              "gained": {
+                "assign_donors": 1,
+                "create_donors": 1,
+                "create_intended_parents": 1,
+                "create_surrogates": 1,
+                "edit_campaigns": 1,
+                "manage_automation": 1,
+                "manage_email_templates": 1,
+                "review_form_submissions": 1,
+                "send_email": 1,
+                "send_sms": 1,
+                "view_campaigns": 1,
+                "view_form_submissions": 1
+              },
+              "lost": {
+                "manage_ai_settings": 1
+              },
+              "members": 1
+            },
+            "developer": {
+              "gained": {},
+              "lost": {},
+              "members": 1
+            },
+            "intake_specialist": {
+              "gained": {
+                "approve_donors": 4,
+                "approve_surrogates": 4,
+                "create_donors": 4,
+                "create_surrogates": 4,
+                "edit_campaigns": 4,
+                "manage_automation": 4,
+                "manage_email_templates": 4,
+                "review_form_submissions": 4,
+                "send_email": 4,
+                "send_sms": 4,
+                "view_campaigns": 4,
+                "view_form_submissions": 4
+              },
+              "lost": {
+                "manage_ai_settings": 4
+              },
+              "members": 4
+            }
+          },
+          "blockers": {
+            "execution_items_by_type": {
+              "workflow": 1
+            },
+            "handoffs_by_kind": {
+              "surrogate": 46
+            },
+            "legacy_pool_grants": 0,
+            "missing_approval_gates": 0,
+            "revokes_by_role_permission": {},
+            "running_campaign_runs": 0,
+            "unknown_phase_by_kind": {},
+            "unreviewed_workflow_executions": 0
+          },
+          "digest": "c3e760bc16690a46416e56027e9e47fb8e0103d95769c53e16c41134c442900a",
+          "existing_collaborators": 0,
+          "historical_reviews_by_decision": {},
+          "members": {
+            "active_by_role": {
+              "admin": 1,
+              "case_manager": 1,
+              "developer": 1,
+              "intake_specialist": 4
+            },
+            "inactive": 1
+          },
+          "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+          "ready": false,
+          "records": {
+            "donor": {
+              "archived": 1,
+              "total": 1
+            },
+            "intended_parent": {
+              "archived": 0,
+              "total": 25
+            },
+            "surrogate": {
+              "archived": 5638,
+              "total": 8215
+            }
+          },
+          "scope_member_record_access_pairs_by_role_module": {
+            "admin:donors": {
+              "current": 1,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 1
+            },
+            "admin:intended_parents": {
+              "current": 25,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 25
+            },
+            "admin:surrogates": {
+              "current": 8215,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 8215
+            },
+            "case_manager:donors": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            },
+            "case_manager:intended_parents": {
+              "current": 25,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 25
+            },
+            "case_manager:surrogates": {
+              "current": 2120,
+              "gained": 0,
+              "lost": 2074,
+              "members": 1,
+              "proposed": 46
+            },
+            "developer:donors": {
+              "current": 1,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 1
+            },
+            "developer:intended_parents": {
+              "current": 25,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 25
+            },
+            "developer:surrogates": {
+              "current": 8215,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 8215
+            },
+            "intake_specialist:donors": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 4,
+              "proposed": 0
+            },
+            "intake_specialist:intended_parents": {
+              "current": 100,
+              "gained": 0,
+              "lost": 100,
+              "members": 4,
+              "proposed": 0
+            },
+            "intake_specialist:surrogates": {
+              "current": 1500,
+              "gained": 0,
+              "lost": 3,
+              "members": 4,
+              "proposed": 1497
+            }
+          },
+          "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+          "version": 1
+        },
+        {
+          "action_changes_by_role": {
+            "admin": {
+              "gained": {
+                "approve_donors": 1,
+                "approve_surrogates": 1,
+                "assign_donors": 1,
+                "create_donors": 1,
+                "create_intended_parents": 1,
+                "create_surrogates": 1,
+                "edit_campaigns": 1,
+                "manage_org_campaigns": 1,
+                "manage_org_templates": 1,
+                "manage_org_workflows": 1,
+                "manage_roles": 1,
+                "review_form_submissions": 1,
+                "send_campaigns": 1,
+                "send_email": 1,
+                "send_sms": 1,
+                "view_campaigns": 1,
+                "view_form_submissions": 1
+              },
+              "lost": {},
+              "members": 1
+            }
+          },
+          "blockers": {
+            "execution_items_by_type": {},
+            "handoffs_by_kind": {
+              "surrogate": 1
+            },
+            "legacy_pool_grants": 0,
+            "missing_approval_gates": 0,
+            "revokes_by_role_permission": {},
+            "running_campaign_runs": 0,
+            "unknown_phase_by_kind": {},
+            "unreviewed_workflow_executions": 0
+          },
+          "digest": "67a89d0c572d9aab5c952889a4f71a90eca9a6c26d0f6d11244f25caf25ab445",
+          "existing_collaborators": 0,
+          "historical_reviews_by_decision": {},
+          "members": {
+            "active_by_role": {
+              "admin": 1
+            },
+            "inactive": 0
+          },
+          "org_id": "ef8599ee-db82-491f-a465-d288b5e07d91",
+          "ready": false,
+          "records": {
+            "donor": {
+              "archived": 0,
+              "total": 0
+            },
+            "intended_parent": {
+              "archived": 0,
+              "total": 0
+            },
+            "surrogate": {
+              "archived": 20,
+              "total": 901
+            }
+          },
+          "scope_member_record_access_pairs_by_role_module": {
+            "admin:donors": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            },
+            "admin:intended_parents": {
+              "current": 0,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 0
+            },
+            "admin:surrogates": {
+              "current": 901,
+              "gained": 0,
+              "lost": 0,
+              "members": 1,
+              "proposed": 901
+            }
+          },
+          "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+          "version": 1
+        }
+      ],
+      "candidate_sha256": "705fd172e8017fda30a8171c13afc630d1ac95cc7452f1e0e60997e490098601",
+      "phase_filter_restored": true,
+      "policy_versions_unchanged": true,
+      "status": "query-trial_complete",
+      "write_free": true
+    },
+    "timestamp": "2026-10-05T00:48:45.310245Z"
+  }
+]

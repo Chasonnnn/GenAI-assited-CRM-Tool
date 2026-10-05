@@ -55,7 +55,12 @@ def default_rule(role, module: str) -> RecordScopeRule:
         return RecordScopeRule(assignment="all")
     if role == Role.CASE_MANAGER.value:
         return RecordScopeRule(
-            assignment="all", phase="all" if module == "intended_parents" else "post_approval"
+            assignment="all",
+            phase={
+                "surrogates": "under_review_onward",
+                "donors": "post_approval",
+                "intended_parents": "all",
+            }[module],
         )
     if role == Role.INTAKE_SPECIALIST.value:
         return RecordScopeRule(
@@ -138,6 +143,8 @@ def _collaborator_filter(session, kind, model):
 
 
 def _stage_filter(session, kind, model, rule):
+    if rule.phase == "under_review_onward" and kind != "surrogate":
+        return false()
     if rule.phase == "all" and not rule.stage_ids:
         return true()
     current = PipelineStage.__table__.alias("scope_current")
@@ -198,71 +205,148 @@ def _stage_filter(session, kind, model, rule):
             .correlate_except(history, prior, following)
             .scalar_subquery()
         )
+        paused_origin = PipelineStage.__table__.alias("scope_paused_origin")
+        origin_needs_history = (
+            select(literal(1))
+            .select_from(paused_origin)
+            .where(
+                paused_origin.c.id == model.paused_from_stage_id,
+                paused_origin.c.pipeline_id == current.c.pipeline_id,
+                paused_origin.c.is_active.is_(True),
+                paused_origin.c.stage_type.in_(["paused", "terminal"]),
+            )
+            .correlate_except(paused_origin)
+            .exists()
+        )
+        # A paused/terminal origin needs the same historical phase evidence as a terminal record.
+        paused_effective_id = case(
+            (origin_needs_history, historical_stage),
+            else_=func.coalesce(model.paused_from_stage_id, historical_stage),
+        )
         effective_id = case(
             (
                 current.c.stage_type == "paused",
-                func.coalesce(model.paused_from_stage_id, historical_stage),
+                paused_effective_id,
             ),
             (current.c.stage_type == "terminal", historical_stage),
             else_=model.stage_id,
         )
-    source = current.outerjoin(effective, effective.c.id == effective_id).join(
-        pipeline, pipeline.c.id == current.c.pipeline_id
-    )
+    source = current.join(pipeline, pipeline.c.id == current.c.pipeline_id)
     conditions = [
         current.c.id == model.stage_id,
         current.c.is_active.is_(True),
-        or_(current.c.pipeline_id == effective.c.pipeline_id, effective.c.id.is_(None)),
         pipeline.c.organization_id == session.org_id,
-        or_(effective.c.is_active.is_(True), effective.c.id.is_(None)),
     ]
     if rule.stage_ids:
         conditions.append(current.c.id.in_(rule.stage_ids))
-    conditions.append(
-        or_(effective.c.stage_type.notin_(["paused", "terminal"]), effective.c.id.is_(None))
+    gate = PipelineStage.__table__.alias("scope_approval_gate")
+    gate_keys = {
+        key
+        for entity in RECORDS[kind][2]
+        for key, definition in PROTECTED_SYSTEM_STAGES_BY_ENTITY.get(entity, {}).items()
+        if definition.system_role == "approval_gate"
+    }
+    # Older donor pipelines have phase categories before an approval gate is installed.
+    if gate_keys:
+        gate_order = (
+            select(gate.c.order)
+            .where(
+                gate.c.pipeline_id == effective.c.pipeline_id,
+                gate.c.stage_key.in_(gate_keys),
+                gate.c.is_active.is_(True),
+            )
+            .limit(1)
+            .correlate_except(gate)
+            .scalar_subquery()
+        )
+        post = effective.c.order >= gate_order
+        pre = effective.c.order < gate_order
+    else:
+        post = effective.c.stage_type == "post_approval"
+        pre = effective.c.stage_type == "intake"
+    phase = post if rule.phase == "post_approval" else pre
+    reviewed_phase_match = RecordScopeMigrationReview.resolved_phase == rule.phase
+    if rule.phase == "under_review_onward":
+        review = PipelineStage.__table__.alias("scope_review_boundary")
+        review_order = (
+            select(review.c.order)
+            .where(
+                review.c.pipeline_id == current.c.pipeline_id,
+                review.c.stage_key == "under_review",
+                review.c.is_active.is_(True),
+                review.c.stage_type.notin_(["paused", "terminal"]),
+            )
+            .correlate_except(review)
+            .scalar_subquery()
+        )
+        conditions.append(pipeline.c.entity_type == "surrogate")
+        phase = effective.c.order >= review_order
+        # Verified post-approval evidence proves this boundary only when the
+        # configured approval gate follows it. Pre-approval alone is insufficient.
+        reviewed_phase_match = and_(
+            RecordScopeMigrationReview.resolved_phase == "post_approval",
+            select(literal(1))
+            .select_from(gate)
+            .where(
+                gate.c.pipeline_id == current.c.pipeline_id,
+                gate.c.stage_key.in_(gate_keys),
+                gate.c.is_active.is_(True),
+                gate.c.order >= review_order,
+            )
+            .correlate_except(gate)
+            .exists(),
+        )
+    # A computed-key outer join produced different phases for list and detail queries.
+    # Keep effective-stage validation correlated to the current record.
+    effective_phase = (
+        select(literal(1))
+        .select_from(effective)
+        .where(
+            effective.c.id == effective_id,
+            effective.c.pipeline_id == current.c.pipeline_id,
+            effective.c.is_active.is_(True),
+            effective.c.stage_type.notin_(["paused", "terminal"]),
+            phase,
+        )
+        .correlate_except(effective)
+        .exists()
     )
-    if rule.phase != "all":
-        gate = PipelineStage.__table__.alias("scope_approval_gate")
-        gate_keys = {
-            key
-            for entity in RECORDS[kind][2]
-            for key, definition in PROTECTED_SYSTEM_STAGES_BY_ENTITY.get(entity, {}).items()
-            if definition.system_role == "approval_gate"
-        }
-        # Older donor pipelines have phase categories before an approval gate is installed.
-        if gate_keys:
-            gate_order = (
-                select(gate.c.order)
-                .where(
-                    gate.c.pipeline_id == effective.c.pipeline_id,
-                    gate.c.stage_key.in_(gate_keys),
-                    gate.c.is_active.is_(True),
-                )
-                .limit(1)
-                .scalar_subquery()
+    if kind in {"surrogate", "donor"}:
+        reviewed_phase = (
+            select(literal(1))
+            .select_from(RecordScopeMigrationReview)
+            .where(
+                RecordScopeMigrationReview.organization_id == session.org_id,
+                getattr(RecordScopeMigrationReview, f"{kind}_id") == model.id,
+                RecordScopeMigrationReview.reviewed_stage_id == model.stage_id,
+                reviewed_phase_match,
+                RecordScopeMigrationReview.evidence_reference.isnot(None),
             )
-            post = effective.c.order >= gate_order
-            pre = effective.c.order < gate_order
-        else:
-            post = effective.c.stage_type == "post_approval"
-            pre = effective.c.stage_type == "intake"
-        phase = post if rule.phase == "post_approval" else pre
-        if kind in {"surrogate", "donor"}:
-            reviewed_phase = (
-                select(literal(1))
-                .select_from(RecordScopeMigrationReview)
-                .where(
-                    RecordScopeMigrationReview.organization_id == session.org_id,
-                    getattr(RecordScopeMigrationReview, f"{kind}_id") == model.id,
-                    RecordScopeMigrationReview.reviewed_stage_id == model.stage_id,
-                    RecordScopeMigrationReview.resolved_phase == rule.phase,
-                    RecordScopeMigrationReview.evidence_reference.isnot(None),
-                )
-                .exists()
-            )
-            phase = or_(phase, and_(effective.c.id.is_(None), reviewed_phase))
-        conditions.append(phase)
+            .correlate_except(RecordScopeMigrationReview)
+            .exists()
+        )
+        effective_exists = (
+            select(literal(1))
+            .select_from(effective)
+            .where(effective.c.id == effective_id)
+            .correlate_except(effective)
+            .exists()
+        )
+        effective_phase = or_(effective_phase, and_(~effective_exists, reviewed_phase))
+    conditions.append(effective_phase)
     return select(literal(1)).select_from(source).where(*conditions).exists()
+
+
+def build_phase_filter(org_id: UUID, kind: str, phase: str):
+    """SQL approval phase for handoff and pool consumers, independent of visibility."""
+    if kind not in {"surrogate", "donor"} or phase not in {"pre_approval", "post_approval"}:
+        raise ValueError("Unknown applicant approval phase")
+    return _stage_filter(
+        SimpleNamespace(org_id=org_id),
+        kind,
+        RECORDS[kind][0],
+        RecordScopeRule(assignment="all", phase=phase),
+    )
 
 
 def record_phase(db: Session, org_id: UUID, kind: str, record) -> str | None:
@@ -290,17 +374,29 @@ def record_phase(db: Session, org_id: UUID, kind: str, record) -> str | None:
     return None
 
 
-def _rule_filter(session, kind, model, rule):
+def _rule_filter(session, kind, model, rule, *, assigned_filter=None):
     if rule.assignment == "none":
         return false()
-    assignment = _assigned(model, session.user_id) if rule.assignment == "assigned" else true()
+    assigned = _assigned(model, session.user_id) if assigned_filter is None else assigned_filter
+    assignment = assigned if rule.assignment == "assigned" else true()
     return and_(assignment, _stage_filter(session, kind, model, rule))
 
 
-def _routes(db, session, kind, model):
+def _routes(db, session, kind, model, *, project_shared_pool=False):
     module = RECORDS[kind][1]
+    assigned_filter = None
+    collaborator = _collaborator_filter(session, kind, model)
+    if project_shared_pool and kind == "surrogate":
+        post_approval = build_phase_filter(session.org_id, kind, "post_approval")
+        assigned = _assigned(model, session.user_id)
+        assigned_filter = and_(assigned, ~post_approval)
+        if _role(session.role) == Role.INTAKE_SPECIALIST.value:
+            collaborator = or_(collaborator, and_(assigned, post_approval))
     rule = get_role_scope(db, session.org_id, session.role, module)
-    routes = [("role", _rule_filter(session, kind, model, rule))]
+    routes = [("role", _rule_filter(session, kind, model, rule, assigned_filter=assigned_filter))]
+    if kind == "surrogate" and _role(session.role) == Role.CASE_MANAGER.value:
+        # Creator access survives reassignment; action and tenant boundaries still apply.
+        routes.append(("creator", model.created_by_user_id == session.user_id))
     additions = (
         db.query(UserRecordScopeAddition)
         .join(Membership, Membership.id == UserRecordScopeAddition.membership_id)
@@ -316,8 +412,13 @@ def _routes(db, session, kind, model):
     )
     for addition in additions:
         rule = RecordScopeRule.model_validate(addition, from_attributes=True)
-        routes.append((f"individual:{addition.id}", _rule_filter(session, kind, model, rule)))
-    routes.append(("collaborator", _collaborator_filter(session, kind, model)))
+        routes.append(
+            (
+                f"individual:{addition.id}",
+                _rule_filter(session, kind, model, rule, assigned_filter=assigned_filter),
+            )
+        )
+    routes.append(("collaborator", collaborator))
     return routes
 
 
@@ -445,6 +546,8 @@ def _validate_rule(db, org_id, module, rule):
         raise ValueError("Unknown record module")
     if module == "intended_parents" and rule.phase != "all":
         raise ValueError("Intended parent scope has no applicant approval phase")
+    if module != "surrogates" and rule.phase == "under_review_onward":
+        raise ValueError("Under Review scope is only available for surrogates")
     if rule.stage_ids:
         entities = RECORDS[MODULE_KINDS[module]][2]
         found = (
@@ -858,6 +961,8 @@ def get_policy_scope_snapshot(db, org_id) -> dict:
         if not resolved:
             unresolved.append(candidate)
     missing_gates = []
+    missing_visibility_stages = []
+    manager_scope = get_role_scope(db, org_id, Role.CASE_MANAGER, "surrogates")
     for pipeline in (
         db.query(Pipeline)
         .filter(
@@ -875,7 +980,7 @@ def get_policy_scope_snapshot(db, org_id) -> dict:
             if definition.system_role == "approval_gate"
         ]
         found = (
-            db.query(PipelineStage.id)
+            db.query(PipelineStage)
             .filter(
                 PipelineStage.pipeline_id == pipeline.id,
                 PipelineStage.stage_key.in_(gate_keys),
@@ -885,10 +990,26 @@ def get_policy_scope_snapshot(db, org_id) -> dict:
         )
         if found is None:
             missing_gates.append(str(pipeline.id))
+        if (
+            pipeline.entity_type == "surrogate"
+            and manager_scope.assignment != "none"
+            and manager_scope.phase == "under_review_onward"
+            and not any(
+                stage.stage_key == "under_review"
+                and stage.is_active
+                and stage.stage_type not in {"paused", "terminal"}
+                and (found is None or stage.order <= found.order)
+                for stage in pipeline.stages
+            )
+        ):
+            missing_visibility_stages.append(str(pipeline.id))
     pools = _legacy_pool_rows(db, org_id)
     scope_differences, record_state_digest = _scope_count_preview(db, org_id)
     return {
-        "ready": not unresolved and not pools and not missing_gates,
+        "ready": not unresolved
+        and not pools
+        and not missing_gates
+        and not missing_visibility_stages,
         "default_role_scopes": {
             role.value: {
                 module: default_rule(role, module).model_dump(mode="json")
@@ -930,6 +1051,7 @@ def get_policy_scope_snapshot(db, org_id) -> dict:
         "handoff_candidates": candidates,
         "unresolved_handoffs": unresolved,
         "missing_approval_gate_pipeline_ids": missing_gates,
+        "missing_visibility_stage_pipeline_ids": missing_visibility_stages,
         "legacy_pool_grants": pools,
         "member_record_scope_differences": scope_differences,
         "record_state_digest": record_state_digest,
@@ -1119,6 +1241,8 @@ def _scope_count_preview(db, org_id):
     record_state.append(("stages", [tuple(row) for row in stage_state]))
     for kind, (model, module, _) in RECORDS.items():
         columns = [model.id, model.stage_id, model.owner_type, model.owner_id, model.is_archived]
+        if kind == "surrogate":
+            columns.append(model.created_by_user_id)
         if kind in {"surrogate", "donor"}:
             columns.append(model.paused_from_stage_id)
         rows = db.query(*columns).filter(model.organization_id == org_id).order_by(model.id).all()
@@ -1127,7 +1251,15 @@ def _scope_count_preview(db, org_id):
             session = SimpleNamespace(org_id=org_id, user_id=member.user_id, role=member.role)
             boundary = _boundary_filter(session, model)
             proposed = func.coalesce(
-                or_(*(condition for _, condition in _routes(db, session, kind, model))), false()
+                or_(
+                    *(
+                        condition
+                        for _, condition in _routes(
+                            db, session, kind, model, project_shared_pool=not active
+                        )
+                    )
+                ),
+                false(),
             )
             if active:
                 current = proposed
@@ -1263,7 +1395,10 @@ def collaborator_details(db, session, kind, record_id):
 
 
 def require_mutation_scope(db, session, kind, record_id):
-    """Lock the subject before claim or reassignment changes its visibility."""
+    """Serialize with policy activation before locking the mutation subject."""
+    from app.services import permission_policy_service
+
+    permission_policy_service.lock_configuration(db, session.org_id)
     if not _enabled(db, session.org_id):
         return
     from fastapi import HTTPException
@@ -1273,6 +1408,7 @@ def require_mutation_scope(db, session, kind, record_id):
         db.query(model)
         .filter(model.organization_id == session.org_id, model.id == record_id)
         .with_for_update()
+        .populate_existing()
         .first()
     )
     if record is None:

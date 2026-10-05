@@ -11,7 +11,6 @@ import { getActionErrorMessage } from "@/lib/forms/api-field-errors"
 import { useApproveAppointment, useCancelAppointment } from "@/lib/hooks/use-appointments"
 import { notificationKeys } from "@/lib/hooks/use-notifications"
 import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
-import { useClaimSurrogate } from "@/lib/hooks/use-queues"
 import {
     useApproveStatusChangeRequest,
     useRejectStatusChangeRequest,
@@ -34,7 +33,6 @@ function useItemActions(notification: Notification): ItemActions | null {
     const resolveApproval = useResolveWorkflowApproval()
     const approveRequest = useApproveStatusChangeRequest()
     const rejectRequest = useRejectStatusChangeRequest()
-    const claimSurrogate = useClaimSurrogate()
     const approveAppointment = useApproveAppointment()
     const cancelAppointment = useCancelAppointment()
     const completeTask = useCompleteTask()
@@ -77,16 +75,6 @@ function useItemActions(notification: Notification): ItemActions | null {
                 },
             }
         }
-        case "surrogate_claim_available":
-            if (!entityId || !can("assign_surrogates")) return null
-            return {
-                primary: {
-                    label: "Claim",
-                    run: () => claimSurrogate.mutateAsync(entityId),
-                    success: "Surrogate claimed",
-                    failure: "Couldn't claim",
-                },
-            }
         case "appointment_requested":
             if (!entityId) return null
             return {

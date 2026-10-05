@@ -85,6 +85,7 @@ describe("NotificationSettingsPage", () => {
         expect(screen.getByText("Status Change Decisions")).toBeInTheDocument()
         expect(screen.getByText("Approval Timeouts")).toBeInTheDocument()
         expect(screen.getByText("Security Alerts")).toBeInTheDocument()
+        expect(screen.queryByText("Surrogate Claim Available")).not.toBeInTheDocument()
     })
 
     it("shows unsupported browser notification state when the browser API is unavailable", () => {

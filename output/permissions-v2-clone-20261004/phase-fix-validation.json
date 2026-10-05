@@ -1,0 +1,129 @@
+{
+  "commit": "f9b908de80430aa03f008d515550cb02e549695e",
+  "regression_before": {
+    "failed": 12,
+    "passed": 18
+  },
+  "regression_after": {
+    "passed": 30
+  },
+  "affected_suite": {
+    "passed": 250,
+    "subtests_passed": 19,
+    "files": [
+      "tests/test_analytics_record_scope.py",
+      "tests/test_campaign_permission_authority.py",
+      "tests/test_donor_intake_scope_v2.py",
+      "tests/test_donor_workflow_stage_regression.py",
+      "tests/test_permission_handoff_publication.py",
+      "tests/test_permission_policy.py",
+      "tests/test_permission_record_consumers.py",
+      "tests/test_record_scopes_v2.py",
+      "tests/test_status_requests_scope_v2.py",
+      "tests/test_surrogate_archive_scope_v2.py",
+      "tests/test_surrogate_permission_access.py",
+      "tests/test_surrogate_stage_role_permissions.py",
+      "tests/test_surrogate_status_changes.py",
+      "tests/test_surrogate_status_service.py",
+      "tests/test_workflow_execution_authority.py"
+    ]
+  },
+  "ruff": "passed",
+  "diff_check": "passed",
+  "independent_review": "no material findings",
+  "test_databases_removed": true,
+  "preexisting_postgres_container_unchanged": true,
+  "review_correlation_fix": {
+    "commit": "a95db13ea615cca55963c98e715c074707e17e47",
+    "regression_before": {
+      "failed": 2
+    },
+    "regression_after": {
+      "passed": 2
+    },
+    "affected_suite": {
+      "passed": 256,
+      "subtests_passed": 19
+    },
+    "negative_contracts": [
+      "unreviewed record remains unknown",
+      "aliased lists preserve record isolation",
+      "foreign-tenant review denied",
+      "stale-stage review denied"
+    ],
+    "ruff": "passed",
+    "independent_review": "no material findings",
+    "test_databases_removed": true
+  },
+  "phase_query_shape_fix": {
+    "status": "committed_exact_source_recheck_passed",
+    "base_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+    "candidate_sha256": "705fd172e8017fda30a8171c13afc630d1ac95cc7452f1e0e60997e490098601",
+    "production_function_ast_matches_candidate": true,
+    "regression_environment": "private Cloud SQL clone PostgreSQL 18.4",
+    "clone_evidence": "query-trial-log.json",
+    "baseline_query_contexts_agree_by_variant": {
+      "baseline": false,
+      "jit_off": false,
+      "memoize_off": false,
+      "jit_and_memoize_off": false,
+      "joins_off": true,
+      "force_custom_plan": false
+    },
+    "candidate_query_contexts_agree": true,
+    "candidate_selected_records": 2,
+    "candidate_selected_phase": "pre_approval",
+    "main_org_handoff_blockers_before": 48,
+    "main_org_handoff_blockers_after": 46,
+    "main_org_intake_surrogate_access_pairs_before": 1495,
+    "main_org_intake_surrogate_access_pairs_after": 1497,
+    "single_run_phase_check_elapsed_ms": {
+      "baseline": 2559.78,
+      "candidate": 2503.85
+    },
+    "single_run_timings_are_not_a_benchmark": true,
+    "policy_versions_unchanged": true,
+    "activation_performed": false,
+    "affected_suite": {
+      "passed": 256,
+      "subtests_passed": 19,
+      "elapsed_seconds": 25.04,
+      "files": [
+        "tests/test_analytics_record_scope.py",
+        "tests/test_campaign_permission_authority.py",
+        "tests/test_donor_intake_scope_v2.py",
+        "tests/test_donor_workflow_stage_regression.py",
+        "tests/test_permission_handoff_publication.py",
+        "tests/test_permission_policy.py",
+        "tests/test_permission_record_consumers.py",
+        "tests/test_record_scopes_v2.py",
+        "tests/test_status_requests_scope_v2.py",
+        "tests/test_surrogate_archive_scope_v2.py",
+        "tests/test_surrogate_permission_access.py",
+        "tests/test_surrogate_stage_role_permissions.py",
+        "tests/test_surrogate_status_changes.py",
+        "tests/test_surrogate_status_service.py",
+        "tests/test_workflow_execution_authority.py"
+      ]
+    },
+    "ruff": "passed",
+    "diff_check": "passed",
+    "independent_review": "no material findings; surrogate/donor plain and aliased correlation checked",
+    "exact_committed_source_clone_recheck": "passed",
+    "test_databases_removed": true,
+    "preexisting_postgres_container_unchanged": true,
+    "limitation": "Computed-key outer join query-shape divergence reproduced on clone; precise PostgreSQL cause not established. Memoize and JIT controls did not resolve it.",
+    "commit": "c9b0018a418b01362f71a21a27f20f582473b029",
+    "exact_commit_recheck": {
+      "commit": "c9b0018a418b01362f71a21a27f20f582473b029",
+      "build_id": "38f690a8-413d-4f3a-881e-15fc3c7ff3e0",
+      "execution": "crm-perm-rehearsal-1004-nhg5l",
+      "completed_at": "2026-10-05T00:57:28.915570Z",
+      "organization_previews": 4,
+      "phase_contexts_agree": true,
+      "activation_blocked_by_unresolved_review": true,
+      "resolutions_applied": false,
+      "policy_versions_unchanged": true
+    }
+  }
+}

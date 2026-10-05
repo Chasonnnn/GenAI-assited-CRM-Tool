@@ -1,5 +1,11 @@
 # Permission upgrade verification
 
+## October 5 shared-pool implementation
+
+Case Manager defaults now start at Under Review. Effective postapproval surrogates use shared pool ownership and retain their current active Intake assignee.
+
+The [implementation report](../output/permission-v2-implementation-20261005/REPORT.md) records local verification and the synthetic browser rehearsal. It supersedes earlier surrogate claiming behavior. Donor behavior remains unchanged. Production activation and the saved EWI reviews remain unapplied.
+
 ## September 22 completion
 
 The selected Team/member navigation and the permission-related module refactors are implemented in the isolated completion worktree for draft PR #691. The current draft is stacked on #690 and incorporates main through `a451fefc`. Application validation ends at `93131b86`; subsequent changes in this delivery record are documentation only. This section supersedes the unfinished-work descriptions in older dated entries below. Release, real-organization activation, and eventual v1 retirement remain separate steps.

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, false, func, literal, select, true
+from sqlalchemy import and_, false, func, literal, or_, select, true
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -48,11 +48,12 @@ def _case_manager_approved_onward_filter(surrogate_model=Surrogate) -> ColumnEle
     )
 
 
-def case_manager_approved_onward_joined_filter(
+def case_manager_visibility_joined_filter(
     surrogate_table,
     stage_table,
+    user_id: UUID,
 ) -> ColumnElement[bool]:
-    """SQL filter for aliases where the current stage table is already joined."""
+    """Approved-onward or creator scope for queries with an existing stage join."""
     paused_stage = PipelineStage.__table__.alias("paused_stage_joined_access")
     approved_stage = PipelineStage.__table__.alias("approved_stage_joined_access")
     paused_order = (
@@ -69,9 +70,12 @@ def case_manager_approved_onward_joined_filter(
         )
         .scalar_subquery()
     )
-    return and_(
-        stage_table.c.id.isnot(None),
-        func.coalesce(paused_order, stage_table.c.order) >= approved_order,
+    return or_(
+        surrogate_table.c.created_by_user_id == user_id,
+        and_(
+            stage_table.c.id.isnot(None),
+            func.coalesce(paused_order, stage_table.c.order) >= approved_order,
+        ),
     )
 
 
@@ -108,7 +112,10 @@ def _build_legacy_surrogate_visibility_filter(
     if not user_id:
         return false()
     if role_str == Role.CASE_MANAGER.value:
-        return _case_manager_approved_onward_filter(surrogate_model)
+        return or_(
+            _case_manager_approved_onward_filter(surrogate_model),
+            surrogate_model.created_by_user_id == user_id,
+        )
     if role_str != Role.INTAKE_SPECIALIST.value:
         return false()
 
@@ -133,8 +140,7 @@ def check_surrogate_access(
     Access rules:
     - Developer: always allowed (no DB check)
     - Post-approval stages: requires view_post_approval_surrogates permission
-    - Queue-owned: case_manager+ can see
-    - User-owned: owner, or managers can see
+    - Case managers: approved-onward records or records they created
     - Intake specialists: only their own surrogates
 
     Args:
@@ -236,6 +242,8 @@ def has_surrogate_record_access(
     """Return whether the user can view this specific surrogate record."""
     from app.services import permission_policy_service, record_scope_service
 
+    if surrogate.organization_id != org_id:
+        return False
     if user_id and permission_policy_service.is_enabled(db, org_id):
         return record_scope_service.can_access_record(
             db,
@@ -253,7 +261,7 @@ def has_surrogate_record_access(
         return False
 
     if role_str == Role.CASE_MANAGER.value:
-        return _is_approved_onward(db, surrogate)
+        return surrogate.created_by_user_id == user_id or _is_approved_onward(db, surrogate)
 
     if role_str != Role.INTAKE_SPECIALIST.value:
         return False
@@ -329,7 +337,7 @@ def can_modify_surrogate(
 
     Rules:
     - Admin/developer can modify any non-archived surrogate
-    - Case managers can modify approved-onward surrogates they can access
+    - Case managers can modify approved-onward or self-created surrogates they can access
     - Intake specialists can modify only surrogates assigned to themselves
 
     Returns:

@@ -10,7 +10,15 @@ from app.core.deps import COOKIE_NAME, get_db
 from app.core.encryption import hash_email
 from app.core.security import create_session_token
 from app.db.enums import OwnerType, Role
-from app.db.models import Membership, Surrogate, Task, User
+from app.db.models import (
+    Membership,
+    Organization,
+    OrganizationPermissionPolicy,
+    RolePermission,
+    Surrogate,
+    Task,
+    User,
+)
 from app.main import app
 from app.services import pipeline_service, queue_service, session_service
 from app.utils.normalization import normalize_email, normalize_identifier, normalize_search_text
@@ -148,6 +156,85 @@ async def _client_for_user(db, org_id: UUID, user: User, role: Role):
             yield client
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("policy_version", [1, 2])
+async def test_case_manager_can_reopen_created_surrogate_without_bypassing_boundaries(
+    db, test_org, policy_version
+):
+    db.add(OrganizationPermissionPolicy(organization_id=test_org.id, version=policy_version))
+    manager = _create_user(db, test_org.id, Role.CASE_MANAGER, "Creator Manager")
+    intake = _create_user(db, test_org.id, Role.INTAKE_SPECIALIST, "Other Intake")
+    queue = queue_service.get_or_create_default_queue(db, test_org.id)
+    assigned_only = _create_surrogate(
+        db, test_org.id, owner_id=manager.id, stage_key="new_unread", name="Assigned Only"
+    )
+    assigned_only.created_by_user_id = intake.id
+    other_org = Organization(id=uuid.uuid4(), name="Other agency", slug=uuid.uuid4().hex)
+    db.add(other_org)
+    db.flush()
+    foreign = _create_surrogate(
+        db, other_org.id, owner_id=manager.id, stage_key="new_unread", name="Foreign Created"
+    )
+    db.flush()
+
+    async with _client_for_user(db, test_org.id, manager, Role.CASE_MANAGER) as client:
+        created = await client.post(
+            "/surrogates",
+            json={
+                "full_name": "Creator Access Applicant",
+                "email": f"creator-{uuid.uuid4().hex}@example.com",
+                "owner_type": "queue",
+                "owner_id": str(queue.id),
+            },
+        )
+        assert created.status_code == 201, created.text
+        record_id = created.json()["id"]
+        record = db.get(Surrogate, UUID(record_id))
+        assert record.created_by_user_id == manager.id
+        detail = await client.get(f"/surrogates/{record_id}")
+        assert detail.status_code == 200, detail.text
+
+        # Creation, not current assignment, keeps this access after handoff.
+        record.owner_type, record.owner_id = OwnerType.USER.value, intake.id
+        db.flush()
+        detail = await client.get(f"/surrogates/{record_id}")
+        assert detail.status_code == 200, detail.text
+        listing = await client.get("/surrogates", params={"per_page": 100})
+        assert listing.status_code == 200, listing.text
+        assert {row["id"] for row in listing.json()["items"]} == {record_id}
+        stats = await client.get("/surrogates/stats")
+        assert stats.status_code == 200, stats.text
+        assert stats.json()["total"] == 1
+        search = await client.get(
+            "/search", params={"q": "Creator Access Applicant", "types": "case"}
+        )
+        assert search.status_code == 200, search.text
+        assert search.json()["total"] == 1
+        assert (await client.get(f"/surrogates/{assigned_only.id}")).status_code == 403
+        assert (await client.get(f"/surrogates/{foreign.id}")).status_code == 404
+
+        edited = await client.patch(f"/surrogates/{record_id}", json={"state": "NY"})
+        assert edited.status_code == 200, edited.text
+        db.add(
+            RolePermission(
+                organization_id=test_org.id,
+                role="case_manager",
+                permission="edit_surrogates",
+                is_granted=False,
+            )
+        )
+        db.flush()
+        denied = await client.patch(f"/surrogates/{record_id}", json={"state": "CA"})
+        assert denied.status_code == 403, denied.text
+        db.refresh(record)
+        assert record.state == "NY"
+
+        record.is_archived = True
+        db.flush()
+        assert (await client.get(f"/surrogates/{record_id}")).status_code == 403
+        assert (await client.get("/surrogates")).json()["items"] == []
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,7 @@ vi.mock("@/lib/api/record-scopes", async (original) => ({ ...await original<type
 vi.mock("@/components/app-link", () => ({ default: ({ children, href, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a href={href} {...props}>{children}</a> }))
 vi.mock("@/lib/hooks/use-pipelines", () => ({ usePipelines: () => ({ data: [], isLoading: false }) }))
 const candidate: scopes.HandoffCandidate = { kind: "surrogate", record_id: "record-1", record_number: "S10001", fingerprint: "record-fingerprint", phase_requires_review: true }
-const review: scopes.ScopeMigrationReview = { ready: false, collaborators: [], handoff_candidates: [candidate], unresolved_handoffs: [candidate], missing_approval_gate_pipeline_ids: [], legacy_pool_grants: [] }
+const review: scopes.ScopeMigrationReview = { ready: false, collaborators: [], handoff_candidates: [candidate], unresolved_handoffs: [candidate], missing_approval_gate_pipeline_ids: [], missing_visibility_stage_pipeline_ids: [], legacy_pool_grants: [] }
 function choose(label: string, option: string) { fireEvent.click(screen.getByRole("combobox", { name: label })); const item = screen.getByRole("option", { name: option }); fireEvent.mouseMove(item); fireEvent.click(item) }
 
 describe("record scope migration review", () => {

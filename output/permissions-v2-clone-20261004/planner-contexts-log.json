@@ -1,0 +1,235 @@
+[
+  {
+    "jsonPayload": {
+      "business_counts": {
+        "appointment_types": 6,
+        "appointments": 3278,
+        "attachments": 308,
+        "availability_overrides": 0,
+        "availability_rules": 40,
+        "booking_links": 10,
+        "consent_records": 7,
+        "donor_status_history": 2,
+        "donors": 1,
+        "entity_notes": 1994,
+        "form_intake_drafts": 2,
+        "form_intake_links": 2,
+        "form_submission_drafts": 0,
+        "form_submission_files": 0,
+        "form_submissions": 7,
+        "forms": 3,
+        "intake_leads": 6,
+        "intended_parent_status_history": 57,
+        "intended_parents": 25,
+        "interview_attachments": 0,
+        "interview_notes": 0,
+        "lead_attribution": 7,
+        "match_attempts": 0,
+        "match_events": 0,
+        "matches": 29,
+        "medical_records": 88,
+        "memberships": 10,
+        "organizations": 4,
+        "record_collaborators": 0,
+        "surrogate_activity_log": 31801,
+        "surrogate_contact_attempts": 6325,
+        "surrogate_interviews": 0,
+        "surrogate_status_history": 12445,
+        "surrogates": 9117,
+        "tasks": 92,
+        "users": 13
+      },
+      "business_identities_preserved": true,
+      "phase": "bootstrap",
+      "protected_table_count": 36,
+      "schema_after": "20261004_1300_organization_logo",
+      "schema_before": "20261004_1300_organization_logo",
+      "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+      "status": "passed"
+    },
+    "timestamp": "2026-10-05T00:32:59.928562Z"
+  },
+  {
+    "jsonPayload": {
+      "policy_versions_unchanged": true,
+      "settings_restored": true,
+      "status": "planner-contexts_complete",
+      "variants": [
+        {
+          "context_groups": [
+            {
+              "agreement_checks": {
+                "count_filters_match": true,
+                "handoff_inclusion_matches": false,
+                "handoff_values_match": false,
+                "raw_phases_valid": true,
+                "record_phase_matches": true,
+                "scalar_contexts_match": false,
+                "snapshot_matches": false
+              },
+              "contexts_agree": false,
+              "count": 2,
+              "entity_handoff_included": true,
+              "entity_handoff_post": false,
+              "entity_handoff_pre": true,
+              "post_filter_count": 0,
+              "pre_filter_count": 1,
+              "record_phase": "pre_approval",
+              "scalar_full_org_post": false,
+              "scalar_full_org_pre": false,
+              "scalar_selected_post": false,
+              "scalar_selected_pre": true,
+              "snapshot_candidate": true,
+              "snapshot_phase_requires_review": false,
+              "snapshot_resolved": false
+            }
+          ],
+          "contexts_agree": false,
+          "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+          "selected_records": 2,
+          "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+          "server_version": "18.4",
+          "settings": {
+            "enable_memoize": "on",
+            "jit": "on",
+            "jit_above_cost": "100000"
+          },
+          "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+          "variant": "baseline",
+          "write_free": true
+        },
+        {
+          "context_groups": [
+            {
+              "agreement_checks": {
+                "count_filters_match": true,
+                "handoff_inclusion_matches": false,
+                "handoff_values_match": false,
+                "raw_phases_valid": true,
+                "record_phase_matches": true,
+                "scalar_contexts_match": false,
+                "snapshot_matches": false
+              },
+              "contexts_agree": false,
+              "count": 2,
+              "entity_handoff_included": true,
+              "entity_handoff_post": false,
+              "entity_handoff_pre": true,
+              "post_filter_count": 0,
+              "pre_filter_count": 1,
+              "record_phase": "pre_approval",
+              "scalar_full_org_post": false,
+              "scalar_full_org_pre": false,
+              "scalar_selected_post": false,
+              "scalar_selected_pre": true,
+              "snapshot_candidate": true,
+              "snapshot_phase_requires_review": false,
+              "snapshot_resolved": false
+            }
+          ],
+          "contexts_agree": false,
+          "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+          "selected_records": 2,
+          "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+          "server_version": "18.4",
+          "settings": {
+            "enable_memoize": "on",
+            "jit": "off",
+            "jit_above_cost": "100000"
+          },
+          "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+          "variant": "jit_off",
+          "write_free": true
+        },
+        {
+          "context_groups": [
+            {
+              "agreement_checks": {
+                "count_filters_match": true,
+                "handoff_inclusion_matches": false,
+                "handoff_values_match": false,
+                "raw_phases_valid": true,
+                "record_phase_matches": true,
+                "scalar_contexts_match": false,
+                "snapshot_matches": false
+              },
+              "contexts_agree": false,
+              "count": 2,
+              "entity_handoff_included": true,
+              "entity_handoff_post": false,
+              "entity_handoff_pre": true,
+              "post_filter_count": 0,
+              "pre_filter_count": 1,
+              "record_phase": "pre_approval",
+              "scalar_full_org_post": false,
+              "scalar_full_org_pre": false,
+              "scalar_selected_post": false,
+              "scalar_selected_pre": true,
+              "snapshot_candidate": true,
+              "snapshot_phase_requires_review": false,
+              "snapshot_resolved": false
+            }
+          ],
+          "contexts_agree": false,
+          "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+          "selected_records": 2,
+          "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+          "server_version": "18.4",
+          "settings": {
+            "enable_memoize": "off",
+            "jit": "on",
+            "jit_above_cost": "100000"
+          },
+          "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+          "variant": "memoize_off",
+          "write_free": true
+        },
+        {
+          "context_groups": [
+            {
+              "agreement_checks": {
+                "count_filters_match": true,
+                "handoff_inclusion_matches": false,
+                "handoff_values_match": false,
+                "raw_phases_valid": true,
+                "record_phase_matches": true,
+                "scalar_contexts_match": false,
+                "snapshot_matches": false
+              },
+              "contexts_agree": false,
+              "count": 2,
+              "entity_handoff_included": true,
+              "entity_handoff_post": false,
+              "entity_handoff_pre": true,
+              "post_filter_count": 0,
+              "pre_filter_count": 1,
+              "record_phase": "pre_approval",
+              "scalar_full_org_post": false,
+              "scalar_full_org_pre": false,
+              "scalar_selected_post": false,
+              "scalar_selected_pre": true,
+              "snapshot_candidate": true,
+              "snapshot_phase_requires_review": false,
+              "snapshot_resolved": false
+            }
+          ],
+          "contexts_agree": false,
+          "org_id": "e27e066a-2841-4da5-89ae-98d0735d55b1",
+          "selected_records": 2,
+          "selection": "active_paused_with_active_same_pipeline_paused_or_terminal_origin",
+          "server_version": "18.4",
+          "settings": {
+            "enable_memoize": "off",
+            "jit": "off",
+            "jit_above_cost": "100000"
+          },
+          "source_commit": "a95db13ea615cca55963c98e715c074707e17e47",
+          "variant": "jit_and_memoize_off",
+          "write_free": true
+        }
+      ],
+      "write_free": true
+    },
+    "timestamp": "2026-10-05T00:33:13.606608Z"
+  }
+]

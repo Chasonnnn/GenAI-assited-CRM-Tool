@@ -80,14 +80,23 @@ def assign_surrogate(
     trigger_callback: TriggerCallback | None,
 ) -> dict:
     """Assign surrogate to user or queue."""
+    from app.services import approval_handoff_service, permission_policy_service
+
+    permission_policy_service.lock_configuration(db, entity.organization_id)
+    db.flush()
+    db.refresh(entity, with_for_update=True)
     owner_type = action.get("owner_type")
     owner_id = action.get("owner_id")
 
+    resolved_owner_id = UUID(owner_id) if isinstance(owner_id, str) else owner_id
+    approval_handoff_service.require_surrogate_owner_allowed(
+        db, entity, owner_type, resolved_owner_id
+    )
     old_owner_type = entity.owner_type
     old_owner_id = entity.owner_id
 
     entity.owner_type = owner_type
-    entity.owner_id = UUID(owner_id) if isinstance(owner_id, str) else owner_id
+    entity.owner_id = resolved_owner_id
     entity.updated_at = datetime.now(UTC)
 
     db.commit()
@@ -236,6 +245,17 @@ def update_field(
     if field not in ALLOWED_UPDATE_FIELDS:
         return {"success": False, "error": f"Field {field} not allowed for update"}
 
+    from app.services import approval_handoff_service, permission_policy_service
+
+    if field in {"stage_id", "owner_type", "owner_id"}:
+        permission_policy_service.lock_configuration(db, entity.organization_id)
+        db.flush()
+        db.refresh(entity)
+    if field in {"owner_type", "owner_id"}:
+        owner_type = value if field == "owner_type" else entity.owner_type
+        owner_id = UUID(str(value)) if field == "owner_id" else entity.owner_id
+        approval_handoff_service.require_surrogate_owner_allowed(db, entity, owner_type, owner_id)
+
     old_value = getattr(entity, field, None)
 
     if field == "stage_id":
@@ -310,6 +330,8 @@ def update_field(
                 recorded_at=now,
             )
             db.add(history)
+            db.flush()
+            approval_handoff_service.normalize_shared_surrogate_pool(db, entity, workflow_actor_id)
             db.commit()
 
         # Trigger status_changed workflow with loop protection

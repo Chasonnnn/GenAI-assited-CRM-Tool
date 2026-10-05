@@ -90,14 +90,29 @@ describe("standalone form submission access", () => {
         expect(mocks.submissions).not.toHaveBeenCalled()
     })
 
-    it("renders populated history without review controls or candidate requests for a viewer", () => {
+    it("renders mapped applicant identity without review controls or candidate requests for a viewer", () => {
+        mocks.submissions.mockReturnValue({
+            data: [{
+                ...submission(),
+                answers: { "field-name": "Synthetic Applicant", "field-email": "applicant@test.invalid", "field-phone": "555-0101" },
+                mapping_snapshot: [
+                    { field_key: "field-name", surrogate_field: "full_name" },
+                    { field_key: "field-email", surrogate_field: "email" },
+                    { field_key: "field-phone", surrogate_field: "phone" },
+                ],
+            }],
+            isLoading: false,
+        })
         render(<FormSubmissionsPage />)
         expect(screen.getByText("Synthetic Applicant")).toBeInTheDocument()
+        expect(screen.getByText("applicant@test.invalid")).toBeInTheDocument()
+        expect(screen.getByText("555-0101")).toBeInTheDocument()
         expect(screen.getByRole("combobox", { name: "Form" })).toHaveTextContent("Applicant intake")
         expect(screen.queryByText("Ambiguous Match Queue")).not.toBeInTheDocument()
         expect(screen.queryByText("Lead Promotion Queue")).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Open Approval Queue" })).not.toBeInTheDocument()
         expect(screen.queryByRole("button", { name: "Keep As Lead" })).not.toBeInTheDocument()
+        expect(screen.queryByRole("button", { name: "Actions" })).not.toBeInTheDocument()
         expect(mocks.candidates).toHaveBeenLastCalledWith(null)
         expect(mocks.resolve).not.toHaveBeenCalled()
     })

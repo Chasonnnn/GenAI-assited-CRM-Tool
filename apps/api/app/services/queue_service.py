@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.enums import OwnerType, SurrogateActivityType
 from app.db.models import Queue, QueueMember, Surrogate, SurrogateActivityLog, User
-from app.services import activity_service
+from app.services import activity_service, approval_handoff_service, permission_policy_service
 
 
 class QueueServiceError(Exception):
@@ -137,10 +137,13 @@ def update_queue(
     is_active: bool | None = None,
 ) -> Queue:
     """Update a queue."""
+    permission_policy_service.lock_configuration(db, org_id)
     queue = get_queue(db, org_id, queue_id)
     if not queue:
         raise QueueNotFoundError(f"Queue {queue_id} not found")
 
+    if (name is not None and name.strip() != queue.name) or is_active is False:
+        _require_pool_queue_editable(db, org_id, queue)
     if name is not None:
         queue.name = name.strip()
     if description is not None:
@@ -158,9 +161,11 @@ def update_queue(
 
 def delete_queue(db: Session, org_id: UUID, queue_id: UUID) -> None:
     """Soft-delete a queue (set is_active=False)."""
+    permission_policy_service.lock_configuration(db, org_id)
     queue = get_queue(db, org_id, queue_id)
     if not queue:
         raise QueueNotFoundError(f"Queue {queue_id} not found")
+    _require_pool_queue_editable(db, org_id, queue)
     queue.is_active = False
     db.flush()
 
@@ -212,9 +217,10 @@ def get_or_create_surrogate_pool_queue(db: Session, org_id: UUID) -> Queue:
     """
     Get the Surrogate Pool queue for an org, creating it if missing.
 
-    This queue holds approved surrogates waiting to be claimed by case managers.
+    V2 holds post-approval surrogates permanently; V1 supports individual claiming.
     All case_manager/admin/developer users are automatically members.
     """
+    permission_policy_service.lock_configuration(db, org_id)
     queue = db.execute(
         select(Queue).where(
             and_(
@@ -231,49 +237,62 @@ def get_or_create_surrogate_pool_queue(db: Session, org_id: UUID) -> Queue:
         return queue
 
     try:
-        queue = create_queue(
-            db=db,
-            org_id=org_id,
-            name=SURROGATE_POOL_QUEUE_NAME,
-            description="Approved surrogates waiting for case manager assignment",
-        )
-        db.flush()
-
-        # Auto-add all case_manager+ users as members
-        from app.db.enums import Role
-        from app.db.models import Membership
-
-        manager_roles = [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value]
-        memberships = (
-            db.query(Membership)
-            .filter(
-                Membership.organization_id == org_id,
-                Membership.role.in_(manager_roles),
-                Membership.is_active.is_(True),
+        with db.begin_nested():
+            queue = Queue(
+                organization_id=org_id,
+                name=SURROGATE_POOL_QUEUE_NAME,
+                description="Shared post-approval surrogates",
             )
-            .all()
-        )
+            db.add(queue)
+            db.flush()
+            from app.db.enums import Role
+            from app.db.models import Membership
 
-        for membership in memberships:
-            try:
-                add_queue_member(db, org_id, queue.id, membership.user_id)
-            except QueueMemberExistsError, QueueMemberUserNotFoundError:
-                pass
-
-        return queue
-    except DuplicateQueueNameError:
-        # Race condition: another transaction created it
-        queue = db.execute(
-            select(Queue).where(
-                and_(
-                    Queue.organization_id == org_id,
-                    Queue.name == SURROGATE_POOL_QUEUE_NAME,
+            manager_roles = [Role.CASE_MANAGER.value, Role.ADMIN.value, Role.DEVELOPER.value]
+            user_ids = (
+                db.query(Membership.user_id)
+                .filter(
+                    Membership.organization_id == org_id,
+                    Membership.role.in_(manager_roles),
+                    Membership.is_active.is_(True),
                 )
+                .all()
             )
-        ).scalar_one_or_none()
-        if queue:
+            db.add_all(QueueMember(queue_id=queue.id, user_id=user_id) for (user_id,) in user_ids)
+            db.flush()
+        return queue
+    except IntegrityError:
+        queue = (
+            db.query(Queue)
+            .filter_by(organization_id=org_id, name=SURROGATE_POOL_QUEUE_NAME)
+            .first()
+        )
+        if queue is not None:
             return queue
         raise
+
+
+def _require_pool_queue_editable(db, org_id, queue):
+    from app.services import record_scope_service
+
+    if queue.name != SURROGATE_POOL_QUEUE_NAME or not permission_policy_service.is_enabled(
+        db, org_id
+    ):
+        return
+    referenced = (
+        db.query(Surrogate.id)
+        .filter(
+            Surrogate.organization_id == org_id,
+            Surrogate.owner_type == OwnerType.QUEUE.value,
+            Surrogate.owner_id == queue.id,
+            record_scope_service.build_phase_filter(org_id, "surrogate", "post_approval"),
+        )
+        .first()
+    )
+    if referenced:
+        raise approval_handoff_service.SharedSurrogatePoolError(
+            "The shared Surrogate Pool cannot be renamed or deactivated while it owns post-approval records."
+        )
 
 
 # =============================================================================
@@ -297,16 +316,19 @@ def claim_surrogate(
     - Logs activity for audit trail
     - Returns 409-style error if already claimed
     """
+    permission_policy_service.lock_configuration(db, org_id)
     # Lock row for update (atomic claim)
     surrogate = db.execute(
         select(Surrogate)
         .where(and_(Surrogate.id == surrogate_id, Surrogate.organization_id == org_id))
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
 
     if not surrogate:
         raise SurrogateNotFoundError(f"Surrogate {surrogate_id} not found")
 
+    approval_handoff_service.require_surrogate_owner_allowed(db, surrogate, "user", claimer_user_id)
     if surrogate.owner_type != OwnerType.QUEUE.value:
         raise SurrogateAlreadyClaimedError("Surrogate is already owned by a user, not in a queue")
 
@@ -360,6 +382,7 @@ def release_surrogate(
     - Logs activity for audit trail
     """
     # Verify queue exists
+    permission_policy_service.lock_configuration(db, org_id)
     queue = get_queue(db, org_id, queue_id)
     if not queue or not queue.is_active:
         raise QueueNotFoundError(f"Queue {queue_id} not found or inactive")
@@ -369,11 +392,15 @@ def release_surrogate(
         select(Surrogate)
         .where(and_(Surrogate.id == surrogate_id, Surrogate.organization_id == org_id))
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
 
     if not surrogate:
         raise SurrogateNotFoundError(f"Surrogate {surrogate_id} not found")
 
+    approval_handoff_service.require_surrogate_owner_allowed(db, surrogate, "queue", queue_id)
+    if approval_handoff_service.normalize_shared_surrogate_pool(db, surrogate, releaser_user_id):
+        return surrogate
     old_owner_id = surrogate.owner_id
 
     # Transfer ownership to queue
@@ -409,6 +436,7 @@ def release_user_surrogates_to_unassigned(
     organization so concurrent offboarding cannot move another organization's
     or another user's surrogates.
     """
+    permission_policy_service.lock_configuration(db, org_id)
     queue = get_or_create_default_queue(db, org_id)
     surrogate_ids = list(
         db.execute(
@@ -428,6 +456,24 @@ def release_user_surrogates_to_unassigned(
 
     if not surrogate_ids:
         return 0
+
+    released_count = len(surrogate_ids)
+    if permission_policy_service.is_enabled(db, org_id):
+        from app.services import record_scope_service
+
+        shared = (
+            db.query(Surrogate)
+            .filter(
+                Surrogate.organization_id == org_id,
+                Surrogate.id.in_(surrogate_ids),
+                record_scope_service.build_phase_filter(org_id, "surrogate", "post_approval"),
+            )
+            .all()
+        )
+        for record in shared:
+            approval_handoff_service.normalize_shared_surrogate_pool(db, record, actor_user_id)
+        shared_ids = {record.id for record in shared}
+        surrogate_ids = [record_id for record_id in surrogate_ids if record_id not in shared_ids]
 
     db.execute(
         update(Surrogate)
@@ -461,7 +507,7 @@ def release_user_surrogates_to_unassigned(
         ]
     )
     db.flush()
-    return len(surrogate_ids)
+    return released_count
 
 
 def assign_surrogate_to_queue(
@@ -476,6 +522,7 @@ def assign_surrogate_to_queue(
     Works whether surrogate is currently user-owned or queue-owned.
     """
     # Verify queue exists
+    permission_policy_service.lock_configuration(db, org_id)
     queue = get_queue(db, org_id, queue_id)
     if not queue or not queue.is_active:
         raise QueueNotFoundError(f"Queue {queue_id} not found or inactive")
@@ -484,11 +531,15 @@ def assign_surrogate_to_queue(
         select(Surrogate)
         .where(and_(Surrogate.id == surrogate_id, Surrogate.organization_id == org_id))
         .with_for_update()
+        .execution_options(populate_existing=True)
     ).scalar_one_or_none()
 
     if not surrogate:
         raise SurrogateNotFoundError(f"Surrogate {surrogate_id} not found")
 
+    approval_handoff_service.require_surrogate_owner_allowed(db, surrogate, "queue", queue_id)
+    if approval_handoff_service.normalize_shared_surrogate_pool(db, surrogate, assigner_user_id):
+        return surrogate
     old_owner_type = surrogate.owner_type
     old_owner_id = surrogate.owner_id
 

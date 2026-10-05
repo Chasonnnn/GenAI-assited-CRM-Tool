@@ -1,6 +1,6 @@
 """Concurrent match transitions under the engine lock order.
 
-The engine locks the status-change request, then matches FOR UPDATE, then the
+The engine locks the organization, status-change request, then matches FOR UPDATE, then the
 surrogate or donor and the intended parent FOR NO KEY UPDATE. These tests run
 two transitions on separate connections and check that both finish without a
 deadlock or lock timeout and leave one consistent outcome.
@@ -256,23 +256,9 @@ def test_cross_intended_parent_accepts_finish_without_deadlock(db_engine, monkey
             ]
             setup.commit()
 
-        both_locked = threading.Barrier(2)
-        original = match_lifecycle._lock
-
-        def lock_then_meet(db, match, **kwargs):
-            result = original(db, match, **kwargs)
-            both_locked.wait(timeout=_WAIT)
-            return result
-
-        monkeypatch.setattr(match_lifecycle, "_lock", lock_then_meet)
-
-        def run(match_id):
-            with Session(db_engine) as session:
-                return _attempt(session, _accept(user_id, match_id))
-
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            futures = [pool.submit(run, ids[0]), pool.submit(run, ids[2])]
-            results = [future.result(timeout=_WAIT * 3) for future in futures]
+        results = _run_while_first_holds_locks(
+            db_engine, monkeypatch, _accept(user_id, ids[0]), _accept(user_id, ids[2])
+        )
 
         assert results == ["applied", "applied"]
         with Session(db_engine) as verify:

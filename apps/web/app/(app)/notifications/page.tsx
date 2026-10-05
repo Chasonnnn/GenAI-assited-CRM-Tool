@@ -38,7 +38,6 @@ const TYPE_GROUPS: Record<string, string[]> = {
     surrogate: [
         "surrogate_assigned",
         "surrogate_status_changed",
-        "surrogate_claim_available",
         "surrogate_claimed",
         "surrogate_claim_denied",
         "interview_transcription_completed",

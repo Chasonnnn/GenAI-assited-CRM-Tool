@@ -9,6 +9,7 @@ class NotificationType(str, Enum):
     # Surrogate notifications
     SURROGATE_ASSIGNED = "surrogate_assigned"
     SURROGATE_STATUS_CHANGED = "surrogate_status_changed"
+    # Retired; retained for stored rows and legacy queued jobs.
     SURROGATE_CLAIM_AVAILABLE = "surrogate_claim_available"
 
     # Task notifications
@@ -60,7 +61,6 @@ ACTION_NOTIFICATION_TYPES: frozenset[str] = frozenset(
         NotificationType.STATUS_CHANGE_REQUESTED.value,
         NotificationType.TASK_ASSIGNED.value,
         NotificationType.TASK_OVERDUE.value,
-        NotificationType.SURROGATE_CLAIM_AVAILABLE.value,
         NotificationType.SURROGATE_ASSIGNED.value,
         NotificationType.APPOINTMENT_REQUESTED.value,
         NotificationType.MATCH_CONFLICT.value,

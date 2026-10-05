@@ -1,0 +1,30 @@
+{
+  "job": "crm-handoff-review-1004",
+  "region": "us-central1",
+  "image": "us-central1-docker.pkg.dev/probable-dream-484923-n7/crm/handoff-review:1004-91da8742-appuser",
+  "service_account": "crm-handoff-review-1004@probable-dream-484923-n7.iam.gserviceaccount.com",
+  "network": "crm-vpc",
+  "subnet": "crm-vpc",
+  "network_tags": [
+    "crm-handoff-review-1004"
+  ],
+  "vpc_egress": "all-traffic",
+  "max_retries": 0,
+  "tasks": 1,
+  "parallelism": 1,
+  "cpu": 1,
+  "memory": "1Gi",
+  "task_timeout": "900s",
+  "env": {
+    "ENV": "test",
+    "SOURCE_COMMIT": "91da87428dc6d90ac051f96a25ae2decf0f6de43",
+    "EXPECTED_CLONE_IP": "10.9.0.26",
+    "EXPECTED_DATABASE": "crm",
+    "REHEARSAL_RUN_ID": "handoff-review-20261004-91da8742"
+  },
+  "secret_env": {
+    "DATABASE_URL": "crm-handoff-db-1004:2"
+  },
+  "evidence_only": true,
+  "expected_database_user": "crm_user"
+}

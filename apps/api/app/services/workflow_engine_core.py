@@ -1213,6 +1213,11 @@ class WorkflowEngineCore:
             complete_paused_executions(db, [(execution, workflow, action_index)])
 
     def _action_authority_error(self, db, workflow, execution, action):
+        from app.services import permission_policy_service
+
+        # A prior action may have committed, releasing the initial execution lock.
+        permission_policy_service.lock_configuration(db, workflow.organization_id)
+        db.refresh(workflow)
         try:
             workflow_execution_authority.authorize_action(
                 db,
@@ -1235,6 +1240,11 @@ class WorkflowEngineCore:
         denied = self._action_authority_error(kwargs["db"], workflow, execution, kwargs["action"])
         if denied:
             return denied
+        kwargs.update(
+            workflow_scope=workflow.scope,
+            workflow_owner_id=workflow.owner_user_id,
+            workflow_creator_user_id=workflow.created_by_user_id,
+        )
         if (
             workflow_execution_authority.enabled(kwargs["db"], workflow.organization_id)
             and workflow.scope == "org"

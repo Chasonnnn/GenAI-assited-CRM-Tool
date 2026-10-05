@@ -4,6 +4,7 @@ import * as React from "react"
 import { useParams } from "next/navigation"
 import { QueryErrorState } from "@/components/error-state"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { Loader2Icon, SparklesIcon } from "lucide-react"
 import { SurrogateDetailHeader } from "@/components/surrogates/detail/SurrogateDetailHeader"
@@ -86,7 +87,10 @@ function SurrogateDetailLayoutContent({ children }: { children: React.ReactNode 
                 currentStageSlug={surrogate.stage_slug ?? null}
                 statusLabel={statusLabel}
                 statusColor={statusColor}
-                statusBadge={<AppointmentHeaderBadge surrogateId={surrogate.id} />}
+                statusBadge={<>
+                    {surrogate.is_shared_pool && <Badge variant="secondary">Surrogate Pool</Badge>}
+                    <AppointmentHeaderBadge surrogateId={surrogate.id} />
+                </>}
                 latestContactOutcome={surrogate.latest_contact_outcome}
                 pausedFromLabel={
                     surrogate.paused_from_stage_id

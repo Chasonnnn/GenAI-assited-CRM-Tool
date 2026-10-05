@@ -34,8 +34,9 @@ def create_task(
         owner_type = entity.owner_type
         owner_id = entity.owner_id
     elif assignee == "creator":
-        owner_type = OwnerType.USER.value
-        owner_id = getattr(entity, "created_by_user_id", None) or entity.owner_id
+        creator_id = getattr(entity, "created_by_user_id", None)
+        owner_type = OwnerType.USER.value if creator_id else entity.owner_type
+        owner_id = creator_id or entity.owner_id
     elif isinstance(assignee, str) and assignee.startswith(("admin", "owner", "creator")):
         owner_type = entity.owner_type
         owner_id = entity.owner_id

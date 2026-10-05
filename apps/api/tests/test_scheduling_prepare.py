@@ -190,7 +190,12 @@ async def test_preparation_does_not_apply_google_cancellation_or_fire_workflows(
     result = await prepare_primary(db, organization_id=test_auth.org.id, user_id=test_auth.user.id)
     db.refresh(appointment)
     assert result["ready"] is True
-    assert db.query(ExternalCalendarEvent).one().status == "cancelled"
+    projection = (
+        db.query(ExternalCalendarEvent)
+        .filter_by(organization_id=test_auth.org.id, binding_id=binding.id, event_id=event_id)
+        .one()
+    )
+    assert projection.status == "cancelled"
     assert appointment.status == "confirmed"
     assert appointment.scheduled_start == start
     assert appointment.google_event_etag == '"v1"'

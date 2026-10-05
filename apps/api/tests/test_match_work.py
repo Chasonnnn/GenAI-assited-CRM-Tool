@@ -250,6 +250,8 @@ async def test_archived_match_history_read_preserves_role_checks_and_denies_writ
 
     _, current, _ = cases
     surrogate = db.get(Surrogate, current.surrogate_id)
+    # This historical record exercises stage access without a separate creator grant.
+    surrogate.created_by_user_id = None
     intake_stage_id = surrogate.stage_id
     stage = PipelineStage(
         pipeline_id=surrogate.stage.pipeline_id,
