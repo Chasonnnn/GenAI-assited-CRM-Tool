@@ -24,6 +24,25 @@ pnpm dev
 pnpm build
 ```
 
+## End-to-End Tests (local pilot)
+
+These tests run locally only; CI does not run them. They live in `e2e/tests/` and use the
+[`e2e`](https://github.com/tester-army/e2e) runner with exact locators, so a run makes no model calls.
+
+```bash
+# Requires the compose database and a synced API virtualenv
+docker compose up -d db
+(cd ../api && uv sync)
+
+pnpm run test:e2e               # all tests
+pnpm run test:e2e --tag forms   # one flow
+```
+
+Each run starts its own stack: a fresh `crm_e2e` database, the API on `:8100`, and the web app on `:3100`.
+The API loads no `.env`, so it holds no provider credentials and cannot send email or SMS.
+A failed run writes the screen at failure and a trace under `.e2e/`.
+Stop a running `pnpm dev` first: Next.js allows one dev server per project.
+
 ## Structure
 
 ```
