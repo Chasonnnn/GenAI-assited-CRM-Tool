@@ -276,6 +276,7 @@ def _stage_filter(session, kind, model, rule):
                     RecordScopeMigrationReview.resolved_phase == rule.phase,
                     RecordScopeMigrationReview.evidence_reference.isnot(None),
                 )
+                .correlate_except(RecordScopeMigrationReview)
                 .exists()
             )
             phase = or_(phase, and_(effective.c.id.is_(None), reviewed_phase))

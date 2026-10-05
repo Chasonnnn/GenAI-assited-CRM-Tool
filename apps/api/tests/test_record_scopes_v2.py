@@ -390,6 +390,99 @@ def test_terminal_phase_comes_from_history_not_display_order(db, context, kind, 
     _assert_parity(db, context.manager, kind, [record], [])
 
 
+@pytest.mark.parametrize("kind", ["surrogate", "donor"])
+def test_paused_phase_is_record_specific_across_access_and_migration_queries(db, context, kind):
+    records = [
+        _record(db, context.intake, kind, key="on_hold", paused="disqualified", suffix=index)
+        for index in range(1, 5)
+    ]
+    pre_record, post_record, unknown_record, unreviewed_record = records
+    pipeline = pipeline_service.get_or_create_default_pipeline(
+        db, context.org.id, entity_type="egg_donor" if kind == "donor" else kind
+    )
+    stages = {stage.stage_key: stage for stage in pipeline.stages}
+    pre = stages["new_unread" if kind == "surrogate" else "new"]
+    for record, origin in [(pre_record, pre), (post_record, stages["approved"])]:
+        _stage_history(db, record, kind, origin.id, stages["disqualified"].id)
+        _stage_history(db, record, kind, stages["disqualified"].id, stages["on_hold"].id)
+    assert [scopes.record_phase(db, context.org.id, kind, record) for record in records] == [
+        "pre_approval",
+        "post_approval",
+        None,
+        None,
+    ]
+    _assert_parity(db, context.intake, kind, records, [pre_record])
+    _assert_parity(db, context.manager, kind, records, [post_record])
+    snapshot = scopes.get_policy_scope_snapshot(db, context.org.id)
+    candidates = {row["record_id"]: row for row in snapshot["unresolved_handoffs"]}
+    assert set(candidates) == {
+        str(post_record.id),
+        str(unknown_record.id),
+        str(unreviewed_record.id),
+    }
+    assert not candidates[str(post_record.id)]["phase_requires_review"]
+    assert candidates[str(unknown_record.id)]["phase_requires_review"]
+    scopes.resolve_handoff_migration(
+        db,
+        context.admin,
+        kind,
+        unknown_record.id,
+        HandoffMigrationReviewRequest(
+            decision="no_verified_owner",
+            expected_fingerprint=candidates[str(unknown_record.id)]["fingerprint"],
+            resolved_phase="post_approval",
+            evidence_reference="Reviewed historical application record",
+        ),
+    )
+    assert scopes.record_phase(db, context.org.id, kind, unknown_record) == "post_approval"
+    assert scopes.record_phase(db, context.org.id, kind, unreviewed_record) is None
+    _assert_parity(db, context.intake, kind, records, [pre_record])
+    _assert_parity(db, context.manager, kind, records, [post_record, unknown_record])
+    alias = aliased(scopes.RECORDS[kind][0])
+    assert {
+        record.id
+        for record in db.query(alias).filter(
+            scopes.build_visibility_filter(db, context.manager, kind, model=alias)
+        )
+    } == {post_record.id, unknown_record.id}
+    candidates = {
+        row["record_id"]: row
+        for row in scopes.get_policy_scope_snapshot(db, context.org.id)["unresolved_handoffs"]
+    }
+    assert candidates[str(unreviewed_record.id)]["phase_requires_review"]
+
+
+@pytest.mark.parametrize("kind", ["surrogate", "donor"])
+@pytest.mark.parametrize("boundary", ["foreign_review", "stale_stage"])
+def test_phase_review_requires_matching_tenant_and_current_stage(db, context, kind, boundary):
+    from app.db.models.record_access import RecordScopeMigrationReview
+
+    record = _record(db, context.intake, kind, key="on_hold", paused="disqualified")
+    review_org_id, reviewed_stage_id = context.org.id, record.stage_id
+    if boundary == "foreign_review":
+        other_org = Organization(id=uuid4(), name="Other", slug=f"scope-{uuid4()}")
+        db.add(other_org)
+        db.flush()
+        review_org_id = other_org.id
+    else:
+        reviewed_stage_id = record.paused_from_stage_id
+    db.add(
+        RecordScopeMigrationReview(
+            organization_id=review_org_id,
+            **{f"{kind}_id": record.id},
+            decision="no_verified_owner",
+            resolved_phase="post_approval",
+            reviewed_stage_id=reviewed_stage_id,
+            evidence_reference="Reviewed historical application record",
+            record_fingerprint=scopes._record_fingerprint(kind, record),
+        )
+    )
+    db.flush()
+    assert scopes.record_phase(db, context.org.id, kind, record) is None
+    _assert_parity(db, context.intake, kind, [record], [])
+    _assert_parity(db, context.manager, kind, [record], [])
+
+
 @pytest.mark.parametrize(
     "phase,can_intake,can_manager", [("pre_approval", True, False), ("post_approval", False, True)]
 )
