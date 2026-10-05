@@ -1,7 +1,9 @@
+import json
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 from sqlalchemy import event
@@ -10,6 +12,7 @@ from starlette.datastructures import Headers, UploadFile
 from app.core.encryption import hash_email
 from app.db.enums import FormSubmissionMatchStatus
 from app.db.models import Surrogate
+from app.schemas.forms import FormField
 from app.services import form_intake_service, form_service, form_submission_service
 from app.utils.normalization import normalize_email
 
@@ -360,6 +363,34 @@ def test_validate_answers_accepts_height_field_values(db, test_org, test_user):
     schema = form_submission_service.parse_schema(form.published_schema_json)
 
     form_submission_service._validate_answers(schema, _answers({"height": "5.50"}))
+
+
+# The web suite reads the same file in apps/web/tests/public-field-validation.test.ts, so the
+# public forms and this service keep one verdict for each address.
+_EMAIL_RULE_CASES = json.loads(
+    (Path(__file__).parent / "fixtures/public_email_rule_cases.json").read_text()
+)
+_EMAIL_FIELD = FormField(key="email", label="Email", type="email", required=True)
+
+
+def _email_rule_cases(*groups: str):
+    cases = [case for group in groups for case in _EMAIL_RULE_CASES[group]]
+    return pytest.mark.parametrize(
+        "address",
+        [case["address"] for case in cases],
+        ids=[case["name"] for case in cases],
+    )
+
+
+@_email_rule_cases("accepted", "rejected_by_browser_only")
+def test_email_answer_accepts_shared_rule_cases(address):
+    form_submission_service._validate_field_value(_EMAIL_FIELD, address)
+
+
+@_email_rule_cases("rejected", "rejected_by_api_only")
+def test_email_answer_rejects_shared_rule_cases(address):
+    with pytest.raises(ValueError, match="^Field 'Email' must be a valid email address$"):
+        form_submission_service._validate_field_value(_EMAIL_FIELD, address)
 
 
 def _create_published_form_with_repeatable_table(db, org_id, user_id):

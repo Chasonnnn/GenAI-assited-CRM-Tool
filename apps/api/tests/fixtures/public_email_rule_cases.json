@@ -1,0 +1,242 @@
+{
+  "accepted": [
+    {
+      "name": "a plain address",
+      "address": "erin.example@example.com"
+    },
+    {
+      "name": "surrounding spaces",
+      "address": "  erin@example.com  "
+    },
+    {
+      "name": "a trailing next-line character",
+      "address": "erin@example.com\u0085"
+    },
+    {
+      "name": "an uppercase address",
+      "address": "ERIN@EXAMPLE.COM"
+    },
+    {
+      "name": "a plus tag",
+      "address": "erin+tag@example.com"
+    },
+    {
+      "name": "an apostrophe",
+      "address": "o'brien@example.com"
+    },
+    {
+      "name": "a reserved name that is not the top-level domain",
+      "address": "erin@test.com"
+    },
+    {
+      "name": "the example top-level domain",
+      "address": "erin@example.example"
+    },
+    {
+      "name": "a Punycode domain",
+      "address": "erin@xn--bcher-kva.com"
+    },
+    {
+      "name": "a non-ASCII local part",
+      "address": "jos\u00e9@example.com"
+    },
+    {
+      "name": "a non-ASCII domain",
+      "address": "erin@b\u00fccher.com"
+    },
+    {
+      "name": "a local part over 64 characters",
+      "address": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.com"
+    },
+    {
+      "name": "a 63-character domain label",
+      "address": "erin@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.com"
+    },
+    {
+      "name": "a 254-character address",
+      "address": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.com"
+    }
+  ],
+  "rejected": [
+    {
+      "name": "the test top-level domain",
+      "address": "erin.example@example.test"
+    },
+    {
+      "name": "a subdomain under test",
+      "address": "erin@sub.example.test"
+    },
+    {
+      "name": "an uppercase test domain",
+      "address": "erin@EXAMPLE.TEST"
+    },
+    {
+      "name": "the invalid top-level domain",
+      "address": "erin@example.invalid"
+    },
+    {
+      "name": "the local top-level domain",
+      "address": "erin@example.local"
+    },
+    {
+      "name": "the localhost top-level domain",
+      "address": "erin@example.localhost"
+    },
+    {
+      "name": "the onion top-level domain",
+      "address": "erin@example.onion"
+    },
+    {
+      "name": "the arpa top-level domain",
+      "address": "erin@1.0.0.127.in-addr.arpa"
+    },
+    {
+      "name": "a reserved domain after a non-ASCII local part",
+      "address": "jos\u00e9@example.test"
+    },
+    {
+      "name": "a domain with no period",
+      "address": "erin@localhost"
+    },
+    {
+      "name": "a top-level domain that ends with a digit",
+      "address": "erin@example.c0"
+    },
+    {
+      "name": "a numeric top-level domain",
+      "address": "erin@example.123"
+    },
+    {
+      "name": "a bracketed IP address",
+      "address": "erin@[127.0.0.1]"
+    },
+    {
+      "name": "a domain label that starts with a hyphen",
+      "address": "erin@-example.com"
+    },
+    {
+      "name": "a domain label that ends with a hyphen",
+      "address": "erin@example-.com"
+    },
+    {
+      "name": "an underscore in the domain",
+      "address": "erin@exa_mple.com"
+    },
+    {
+      "name": "an underscore in a non-ASCII domain",
+      "address": "erin@ex_ample.b\u00fccher.com"
+    },
+    {
+      "name": "two periods in a row in the domain",
+      "address": "erin@example..com"
+    },
+    {
+      "name": "a domain that starts with a period",
+      "address": "erin@.example.com"
+    },
+    {
+      "name": "a domain that ends with a period",
+      "address": "erin@example.com."
+    },
+    {
+      "name": "two hyphens after two letters in a domain label",
+      "address": "erin@ab--cd.com"
+    },
+    {
+      "name": "a 64-character domain label",
+      "address": "erin@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.com"
+    },
+    {
+      "name": "a 255-character address",
+      "address": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.com"
+    },
+    {
+      "name": "a local part that starts with a period",
+      "address": ".erin@example.com"
+    },
+    {
+      "name": "a local part that ends with a period",
+      "address": "erin.@example.com"
+    },
+    {
+      "name": "two periods in a row in the local part",
+      "address": "erin..example@example.com"
+    },
+    {
+      "name": "parentheses in the local part",
+      "address": "erin(x)@example.com"
+    },
+    {
+      "name": "a quoted local part",
+      "address": "\"erin\"@example.com"
+    },
+    {
+      "name": "a space in the local part",
+      "address": "erin example@example.com"
+    },
+    {
+      "name": "a no-break space in the local part",
+      "address": "erin\u00a0x@example.com"
+    },
+    {
+      "name": "a space in the domain",
+      "address": "erin@exam ple.com"
+    },
+    {
+      "name": "a leading byte order mark",
+      "address": "\ufefferin@example.com"
+    },
+    {
+      "name": "a trailing zero-width space",
+      "address": "erin@example.com\u200b"
+    },
+    {
+      "name": "a character that normalizes to a semicolon",
+      "address": "erin\u037e@example.com"
+    },
+    {
+      "name": "two at-signs in a row",
+      "address": "erin@@example.com"
+    },
+    {
+      "name": "two at-signs",
+      "address": "erin@a@example.com"
+    },
+    {
+      "name": "no local part",
+      "address": "@example.com"
+    },
+    {
+      "name": "no domain",
+      "address": "erin@"
+    },
+    {
+      "name": "no at-sign",
+      "address": "erin"
+    }
+  ],
+  "rejected_by_api_only": [
+    {
+      "name": "a Punycode label that does not decode",
+      "address": "erin@xn--a.com"
+    },
+    {
+      "name": "a reserved top-level domain after a non-ASCII label",
+      "address": "erin@b\u00fccher.test"
+    }
+  ],
+  "rejected_by_browser_only": [
+    {
+      "name": "an address in angle brackets",
+      "address": "<erin@example.com>"
+    },
+    {
+      "name": "a display name with no space",
+      "address": "Erin<erin@example.com>"
+    },
+    {
+      "name": "a display name",
+      "address": "Erin Example <erin@example.com>"
+    }
+  ]
+}

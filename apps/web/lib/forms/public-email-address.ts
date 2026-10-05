@@ -1,6 +1,7 @@
 // Mirrors the API's rule for email answers: pydantic `EmailStr` with email-validator 2.3.0, called
 // from `_validate_field_value` in apps/api/app/services/form_submission_service.py. Update this
-// file when that rule or package version changes.
+// file when that rule or package version changes. Both test suites check the addresses in
+// apps/api/tests/fixtures/public_email_rule_cases.json against their side.
 //
 // The API decides alone in two cases:
 // - an internationalized domain name, because a browser has no IDNA tables: a domain with
