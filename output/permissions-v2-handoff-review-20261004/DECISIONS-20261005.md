@@ -48,4 +48,6 @@ Changed evidence requires reconciliation before applying a saved request. The bu
 
 The saved evidence contains 46 unique records, no unresolved phases, and no existing human reviews. Exactly three current owners qualify as active Intake members. All 46 request shapes pass the current Pydantic schema. Workflow resolution fields pass the current permission-policy schema.
 
-The working files contain policy documentation and private unapplied plans only. No application code, database, production permission, or workflow state changed. No local servers or test databases were started.
+The original decision snapshot contained policy documentation and private unapplied plans only. The approved behavior is now implemented locally. See the [implementation verification](../permission-v2-implementation-20261005/REPORT.md).
+
+The saved EWI plans remain unapplied. Local validation uses disposable synthetic organizations. Production permissions and workflows remain unchanged.
