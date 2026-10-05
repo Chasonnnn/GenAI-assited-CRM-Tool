@@ -8,8 +8,8 @@ import zipfile
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from email_validator import validate_email
 from fastapi import UploadFile
-from pydantic import EmailStr, TypeAdapter
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -139,7 +139,6 @@ _SURROGATE_FIELD_LABEL_OVERRIDES: dict[str, str] = {
 }
 
 logger = logging.getLogger(__name__)
-_EMAIL_VALIDATOR = TypeAdapter(EmailStr)
 
 
 def parse_schema(schema_json: dict[str, Any]) -> FormSchema:
@@ -1176,7 +1175,9 @@ def _validate_field_value(field: FormField, value: Any) -> None:
             raise ValueError(f"Field '{field.label}' must be a string")
         if field_type == "email":
             try:
-                _EMAIL_VALIDATOR.validate_python(value.strip())
+                # Not pydantic's EmailStr: it also accepts "Name <address>", and the answer is
+                # stored as typed.
+                validate_email(value.strip(), check_deliverability=False)
             except Exception as exc:
                 raise ValueError(f"Field '{field.label}' must be a valid email address") from exc
         if field_type == "phone":

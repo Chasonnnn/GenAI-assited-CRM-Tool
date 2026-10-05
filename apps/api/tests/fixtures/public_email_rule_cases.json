@@ -213,19 +213,7 @@
     {
       "name": "no at-sign",
       "address": "erin"
-    }
-  ],
-  "rejected_by_api_only": [
-    {
-      "name": "a Punycode label that does not decode",
-      "address": "erin@xn--a.com"
     },
-    {
-      "name": "a reserved top-level domain after a non-ASCII label",
-      "address": "erin@b\u00fccher.test"
-    }
-  ],
-  "rejected_by_browser_only": [
     {
       "name": "an address in angle brackets",
       "address": "<erin@example.com>"
@@ -237,6 +225,16 @@
     {
       "name": "a display name",
       "address": "Erin Example <erin@example.com>"
+    }
+  ],
+  "rejected_by_api_only": [
+    {
+      "name": "a Punycode label that does not decode",
+      "address": "erin@xn--a.com"
+    },
+    {
+      "name": "a reserved top-level domain after a non-ASCII label",
+      "address": "erin@b\u00fccher.test"
     }
   ]
 }

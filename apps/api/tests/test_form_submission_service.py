@@ -382,7 +382,7 @@ def _email_rule_cases(*groups: str):
     )
 
 
-@_email_rule_cases("accepted", "rejected_by_browser_only")
+@_email_rule_cases("accepted")
 def test_email_answer_accepts_shared_rule_cases(address):
     form_submission_service._validate_field_value(_EMAIL_FIELD, address)
 

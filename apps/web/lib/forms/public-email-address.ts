@@ -1,7 +1,7 @@
-// Mirrors the API's rule for email answers: pydantic `EmailStr` with email-validator 2.3.0, called
-// from `_validate_field_value` in apps/api/app/services/form_submission_service.py. Update this
-// file when that rule or package version changes. Both test suites check the addresses in
-// apps/api/tests/fixtures/public_email_rule_cases.json against their side.
+// Mirrors the API's rule for email answers: email-validator 2.3.0 with no deliverability check,
+// called from `_validate_field_value` in apps/api/app/services/form_submission_service.py.
+// Update this file when that rule or package version changes. Both test suites check the
+// addresses in apps/api/tests/fixtures/public_email_rule_cases.json against their side.
 //
 // The API decides alone in two cases:
 // - an internationalized domain name, because a browser has no IDNA tables: a domain with
@@ -54,7 +54,6 @@ function isWithinAddressLimit(local: string, domain: string): boolean {
 
 /**
  * Returns false for every email address the API rejects, except the two cases in the file header.
- * It also rejects the "Name <address>" form, which the API accepts and stores unchanged.
  */
 export function isAcceptedPublicEmailAddress(value: string): boolean {
     const address = value.replace(SURROUNDING_WHITESPACE, "")
