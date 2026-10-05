@@ -24,13 +24,13 @@ The following counts come from the exact-commit recheck. [Verified output](verif
 
 All four organizations remain on V1. The largest organization, `e27e066a-2841-4da5-89ae-98d0735d55b1`, has 8,215 surrogates and eight memberships. Seven memberships are active: one Admin, one Developer, one Case Manager and four Intake Specialists.
 
-| Scope | V1 | Proposed V2 | Lost access pairs |
+| Scope | V1 | Proposed V2 | Lost scope pairs |
 | --- | ---: | ---: | ---: |
 | Case Manager, surrogates | 2,120 | 46 | 2,074 |
 | Intake Specialists, surrogates | 1,500 | 1,497 | 3 |
 | Intake Specialists, intended parents | 100 | 0 | 100 |
 
-These are member-record pairs. The 100 intended-parent pairs represent four Intake Specialists and 25 records.
+These are **record-scope-only** member-record pairs. They exclude required module and action permissions. The 100 intended-parent pairs represent four Intake Specialists and 25 records; they do not establish effective access. See the [follow-up correction and permission findings](permission-clarifications.md).
 
 The Case Manager losses comprise 2,072 terminal records with pre-approval operational history and two On Hold records with pre-approval history. V1 uses terminal-stage order; V2 uses the preceding operational phase. The terminal records are 1,465 Disqualified, 510 Lost and 97 Cold Leads. This reduction requires an explicit rollout decision.
 
@@ -38,7 +38,7 @@ The active Case Manager has no creator-owned records in this snapshot. Earlier l
 
 The three remaining Intake Specialist losses are post-approval records: Heartbeat Confirmed, Legal Clearance Passed and OB Care Established. The query fix restores the two On Hold records to Intake scope.
 
-All 25 intended parents are queue-owned or unassigned. V1 grants broad Intake scope. V2 defaults to assigned-only scope, which removes all current Intake access. Preserving current intended-parent scope during migration is recommended; no such change was applied.
+All 25 intended parents are queue-owned or unassigned. V1 applies no IP ownership filter after the required module permission passes. V2 defaults to assigned-only scope. The earlier claim that every Intake member could access all 25 records was incorrect: the preview excludes module permissions. The recommendation to preserve that presumed access is withdrawn. No permission change was applied.
 
 The largest organization has 46 unresolved surrogate handoffs and one workflow review. No unknown-phase handoffs remain. The initial count of 48 included two records incorrectly selected by the old query.
 
@@ -47,7 +47,7 @@ Organization `ef8599ee-db82-491f-a465-d288b5e07d91` has 901 surrogates, one Admi
 ## Reviews required before activation
 
 - Confirm the approved-or-created Case Manager rule despite the reduction in terminal-record access.
-- Decide whether Intake Specialists retain access to all 25 intended parents or move to assigned-only scope.
+- Confirm effective IP permissions separately from record scope. The requested default is no Intake IP access; any match-specific exception needs an explicit access rule.
 - Review 46 historical handoffs in the largest organization and one in the other populated organization.
 - Select execution authority for one enabled, non-system organization workflow.
 
