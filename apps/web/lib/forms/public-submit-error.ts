@@ -16,3 +16,17 @@ export function getPublicSubmitConflictMessage(error: unknown): string | null {
     if (!(error instanceof ApiError) || error.status !== 409) return null
     return FORM_CHANGED_CONFLICT_DETAILS.has(error.message) ? FORM_CHANGED_MESSAGE : null
 }
+
+// Answer validation is the only source of this shape. It names a field label the page already
+// shows and a fixed rule, so it reveals nothing beyond what the applicant typed.
+const FIELD_VALIDATION_DETAIL = /^Field '.+' /
+
+/**
+ * Returns the API's answer validation message for a public submit 400, such as
+ * "Field 'Email' must be a valid email address". Returns null for every other error so pages keep
+ * their generic message.
+ */
+export function getPublicSubmitFieldErrorMessage(error: unknown): string | null {
+    if (!(error instanceof ApiError) || error.status !== 400) return null
+    return FIELD_VALIDATION_DETAIL.test(error.message) ? error.message : null
+}

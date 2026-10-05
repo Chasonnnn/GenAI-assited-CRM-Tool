@@ -804,6 +804,16 @@ describe('Shared Intake Public Page', () => {
             message: 'Failed to submit application. Please try again.',
         },
         {
+            name: 'a bad request that names no field',
+            error: new ApiError(400, 'Bad Request', 'Challenge verification failed'),
+            message: 'Failed to submit application. Please try again.',
+        },
+        {
+            name: 'a field-shaped detail on another status',
+            error: new ApiError(409, 'Conflict', "Field 'Email' must be a valid email address"),
+            message: 'Failed to submit application. Please try again.',
+        },
+        {
             name: 'a network failure',
             error: new Error('Network down'),
             message: 'Failed to submit application. Please try again.',
@@ -820,6 +830,19 @@ describe('Shared Intake Public Page', () => {
         expect(screen.getByRole('button', { name: 'Submit Application' })).toBeEnabled()
         expect(JSON.stringify(vi.mocked(toast.error).mock.calls)).not.toContain(error.message)
         expect(document.body).not.toHaveTextContent(error.message)
+    })
+
+    it('shows the field validation message the API returns', async () => {
+        const detail = "Field 'Email' must be a valid email address"
+        submitSharedPublicForm.mockRejectedValueOnce(new ApiError(400, 'Bad Request', detail))
+        render(<PublicIntakeFormClient slug="event-abc" />)
+        await screen.findByRole('heading', { name: 'Event Intake Form' })
+        fireEvent.click(screen.getByRole('checkbox'))
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
+
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith(detail))
+        expect(toast.error).toHaveBeenCalledTimes(1)
+        expect(screen.getByRole('button', { name: 'Submit Application' })).toBeEnabled()
     })
 
     it('keeps both SMS choices unchecked and optional on hosted intake', async () => {
