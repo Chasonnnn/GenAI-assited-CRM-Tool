@@ -179,7 +179,7 @@ describe("LogContactAttemptDialog", () => {
                 attempted_at: null,
             },
         })
-        expect(toast.success).toHaveBeenCalledWith("Surrogate has been marked as contacted.")
+        expect(toast.success).toHaveBeenCalledWith("Contact attempt logged")
         expect(trackFirstContactLogged).toHaveBeenCalledWith("surrogate-1", {
             outcome: "reached",
             contact_methods: ["phone", "sms"],

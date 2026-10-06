@@ -446,6 +446,47 @@ describe("HeaderActions", () => {
         expect(screen.queryByRole("button", { name: /log contact/i })).not.toBeInTheDocument()
     })
 
+    it("shows Log Contact in reschedule needed after contacted", () => {
+        mockUseAuth.mockReturnValue({
+            user: { role: "intake_specialist", user_id: "intake-user-1" },
+        })
+
+        const rescheduleStage = {
+            stage_key: "reschedule_needed",
+            slug: "needs_new_time",
+            stage_type: "intake",
+            order: 6,
+        }
+        mockUseSurrogateDetailData.mockReturnValue({
+            surrogate: {
+                id: "s1",
+                stage_id: "stage_reschedule",
+                owner_type: "user",
+                owner_id: "intake-user-1",
+                is_archived: false,
+                surrogate_number: "S123",
+                full_name: "Jane Doe",
+                stage_slug: "needs_new_time",
+            },
+            stageById: new Map([["stage_reschedule", rescheduleStage]]),
+            effectiveStage: rescheduleStage,
+            stageOptions: [
+                { stage_key: "contacted", slug: "contacted", stage_type: "intake", order: 2 },
+            ],
+            queues: [],
+            assignees: [],
+            canManageQueue: false,
+            canClaimSurrogate: false,
+            canChangeStage: true,
+            isInQueue: false,
+            isOwnedByUser: true,
+            zoomConnected: false,
+        })
+
+        render(<HeaderActions />)
+        expect(screen.getByRole("button", { name: /log contact/i })).toBeInTheDocument()
+    })
+
     it("hides Log Interview Outcome before interview scheduled", () => {
         mockUseAuth.mockReturnValue({
             user: { role: "intake_specialist", user_id: "intake-user-1" },

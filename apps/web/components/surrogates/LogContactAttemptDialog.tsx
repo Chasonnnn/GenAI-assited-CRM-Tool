@@ -142,11 +142,7 @@ export function LogContactAttemptDialog({
                 },
             })
 
-            toast.success(
-                outcome === "reached"
-                    ? "Surrogate has been marked as contacted."
-                    : "Contact attempt logged"
-            )
+            toast.success("Contact attempt logged")
 
             trackFirstContactLogged(surrogateId, {
                 outcome,
