@@ -623,18 +623,27 @@ async def test_work_tasks_include_due_time(authed_client, db, test_auth, cases):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "attempt_scoped,audit_target_type",
+    [(False, "surrogate"), (False, "match"), (True, "match")],
+    ids=["record-history", "case-history", "attempt-history"],
+)
 async def test_work_activity_with_large_unrelated_audit_history(
-    authed_client, db, test_auth, cases
+    authed_client, db, test_auth, cases, attempt_scoped, audit_target_type
 ):
     """Audit-table work must stay bounded as participant activity grows."""
-    old, current, _ = cases
+    old, current, attempt = cases
     db.execute(
         text("""
             INSERT INTO audit_logs (organization_id, event_type, target_type, target_id, details)
-            SELECT :org_id, 'phi_viewed', 'surrogate', :surrogate_id, '{}'::jsonb
+            SELECT :org_id, 'phi_viewed', :target_type, :target_id, '{}'::jsonb
             FROM generate_series(1, 400000)
         """),
-        {"org_id": test_auth.org.id, "surrogate_id": current.surrogate_id},
+        {
+            "org_id": test_auth.org.id,
+            "target_type": audit_target_type,
+            "target_id": old.id if audit_target_type == "match" else current.surrogate_id,
+        },
     )
     db.execute(
         text("""
@@ -654,6 +663,17 @@ async def test_work_activity_with_large_unrelated_audit_history(
         """),
         {"org_id": test_auth.org.id, "match_id": old.id},
     )
+    if attempt_scoped:
+        db.add(
+            AuditLog(
+                organization_id=test_auth.org.id,
+                event_type="note_created",
+                target_type="match",
+                target_id=current.id,
+                details={"attempt_id": str(attempt.id)},
+            )
+        )
+        db.flush()
     db.execute(text("ANALYZE audit_logs"))
     db.execute(text("ANALYZE surrogate_activity_log"))
     from sqlalchemy import event
@@ -667,7 +687,10 @@ async def test_work_activity_with_large_unrelated_audit_history(
 
     event.listen(connection, "before_cursor_execute", capture_select)
     try:
-        result = await authed_client.get(f"/matches/{current.id}/work")
+        result = await authed_client.get(
+            f"/matches/{current.id}/work",
+            params={"attempt_id": str(attempt.id)} if attempt_scoped else {},
+        )
     finally:
         event.remove(connection, "before_cursor_execute", capture_select)
 
@@ -680,14 +703,20 @@ async def test_work_activity_with_large_unrelated_audit_history(
         return visited + sum(audit_rows_visited(child) for child in node.get("Plans", []))
 
     visited = 0
+    temporary_blocks_written = 0
     with connection.connection.driver_connection.cursor() as cursor:
         for statement, parameters in selects:
-            cursor.execute("EXPLAIN (ANALYZE, FORMAT JSON) " + statement, parameters)
-            visited += audit_rows_visited(cursor.fetchone()[0][0]["Plan"])
-    # Budget complete table passes across the whole request, including auth queries.
+            cursor.execute("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + statement, parameters)
+            plan = cursor.fetchone()[0][0]["Plan"]
+            visited += audit_rows_visited(plan)
+            temporary_blocks_written += plan.get("Temp Written Blocks", 0)
+    # Budget one activity scan plus the separate authentication audit lookup.
     # Measure work instead of elapsed time; parallel EXPLAIN row counts are averaged.
-    assert visited <= 3 * 400800, f"Match work visited {visited:,.0f} audit rows"
+    audit_count = db.execute(text("SELECT count(*) FROM audit_logs")).scalar_one()
+    assert visited <= 2 * audit_count + 10, f"Match work visited {visited:,.0f} audit rows"
 
     assert result.status_code == 200, result.text
-    assert len(result.json()["activity"]) == 128
+    assert len(result.json()["activity"]) == (1 if attempt_scoped else 128)
     assert result.json()["has_more"] is False
+    # Small workspaces must not spill unrelated case history to disk.
+    assert temporary_blocks_written == 0

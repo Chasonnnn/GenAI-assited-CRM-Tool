@@ -139,8 +139,8 @@ def _record_activity_filter(model, org_id, case_audits):
         # Deleted case work still has durable case audit provenance.
         predicates.append(
             ~exists(
-                select(case_audits.c.id).where(
-                    case_audits.c.details[key].astext == reference,
+                select(case_audits.c[key]).where(
+                    case_audits.c[key] == reference,
                 )
             )
         )
@@ -148,8 +148,18 @@ def _record_activity_filter(model, org_id, case_audits):
 
 
 def _list_activity(db, session, match, attempt_id, page):
-    # Materialize once: sparse case events otherwise cause PostgreSQL to rescan
-    # the entire audit history inside each participant activity's anti-joins.
+    # Share one narrow audit scan across case history and deleted-work checks.
+    # Unrelated case views and wide JSON payloads must not enter the shared set.
+    work_refs = {
+        key: AuditLog.details[key].astext for key in ("task_id", "note_id", "attachment_id")
+    }
+    case_scope = and_(
+        AuditLog.target_id == match.id, AuditLog.event_type != AuditEventType.PHI_VIEWED.value
+    )
+    if attempt_id:
+        case_scope = and_(case_scope, AuditLog.details["attempt_id"].astext == str(attempt_id))
+    else:
+        case_scope = or_(case_scope, *(reference.is_not(None) for reference in work_refs.values()))
     case_audits = (
         select(
             AuditLog.id,
@@ -157,12 +167,18 @@ def _list_activity(db, session, match, attempt_id, page):
             AuditLog.actor_user_id,
             AuditLog.created_at,
             AuditLog.target_id,
-            AuditLog.details,
+            AuditLog.details["attempt_id"].astext.label("attempt_id"),
+            *(reference.label(key) for key, reference in work_refs.items()),
         )
-        .where(AuditLog.organization_id == session.org_id, AuditLog.target_type == "match")
+        .where(
+            AuditLog.organization_id == session.org_id,
+            AuditLog.target_type == "match",
+            case_scope,
+        )
         .cte("case_audits")
-        .prefix_with("MATERIALIZED", dialect="postgresql")
     )
+    if not attempt_id:
+        case_audits = case_audits.prefix_with("MATERIALIZED", dialect="postgresql")
 
     def fields(model, event_type, actor, timestamp, source, scope):
         return select(
@@ -187,7 +203,7 @@ def _list_activity(db, session, match, attempt_id, page):
         case_audits.c.event_type != AuditEventType.PHI_VIEWED.value,
     )
     if attempt_id:
-        case_query = case_query.where(case_audits.c.details["attempt_id"].astext == str(attempt_id))
+        case_query = case_query.where(case_audits.c.attempt_id == str(attempt_id))
     queries = [case_query]
     if not attempt_id:
         if match.surrogate_id:
