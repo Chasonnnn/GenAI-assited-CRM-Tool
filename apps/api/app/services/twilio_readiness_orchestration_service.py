@@ -16,6 +16,8 @@ from app.services import job_service, twilio_readiness_service, twilio_settings_
 # Half the send gate: one missed hourly pass still leaves a full refresh window
 # before dispatch starts deferring sends as `<purpose>_provider_evidence_stale`.
 REFRESH_EVIDENCE_AFTER = twilio_readiness_service.PROVIDER_EVIDENCE_MAX_AGE / 2
+# Probes run sequentially on the shared job queue; the rest wait for the next hourly pass.
+REFRESH_BATCH_LIMIT = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +94,12 @@ def _route_sends(route: TwilioRoute) -> bool:
 def _provider_evidence_due(route: TwilioRoute, *, now: datetime, settings_version: int) -> bool:
     evidence = route.capability_evidence or {}
     provider = evidence.get("provider") if isinstance(evidence.get("provider"), dict) else {}
+    readiness = evidence.get("readiness") if isinstance(evidence.get("readiness"), dict) else {}
     if provider.get("settings_version") != settings_version:
+        return True
+    # A probe that failed part-way stamps incomplete route facts with a fresh
+    # checked_at; retry it on the next pass instead of blocking sends until it ages.
+    if readiness.get("error_code"):
         return True
     try:
         checked = datetime.fromisoformat(str(provider.get("checked_at") or ""))
@@ -103,12 +110,18 @@ def _provider_evidence_due(route: TwilioRoute, *, now: datetime, settings_versio
     return now - checked.astimezone(UTC) > REFRESH_EVIDENCE_AFTER
 
 
-def queue_due_refreshes(db: Session, *, now: datetime | None = None) -> int:
+def queue_due_refreshes(
+    db: Session,
+    *,
+    now: datetime | None = None,
+    limit: int = REFRESH_BATCH_LIMIT,
+) -> int:
     """Queue a no-send check for each sending organization whose provider evidence is ageing.
 
-    Returns the number of jobs created. Organizations that cannot send (soft-deleted,
-    disabled, no credentials, no configured route) are skipped so a broken setup is
-    not probed every pass.
+    Returns the number of jobs created, at most ``limit`` per pass so one tick never
+    puts a long run of sequential provider probes ahead of other queued work.
+    Organizations that cannot send (soft-deleted, disabled, no credentials, no
+    configured route) are skipped so a broken setup is not probed every pass.
     """
     now = now or datetime.now(UTC)
     organization_ids = (
@@ -123,6 +136,8 @@ def queue_due_refreshes(db: Session, *, now: datetime | None = None) -> int:
     )
     created = 0
     for organization_id in organization_ids:
+        if created >= limit:
+            break
         settings = twilio_settings_service.get_settings(db, organization_id)
         if settings is None or not twilio_readiness_service.credentials_configured(settings):
             continue

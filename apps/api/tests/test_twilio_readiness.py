@@ -620,14 +620,26 @@ def _persist_configured_settings(db, organization_id, *, enabled: bool = True) -
     return settings
 
 
-def _set_provider_evidence(db, settings, *, checked_at: datetime | None, settings_version: int):
+def _set_provider_evidence(
+    db,
+    settings,
+    *,
+    checked_at: datetime | None,
+    settings_version: int,
+    error_code: str | None = None,
+):
     for route in settings.routes:
         route.capability_evidence = {
             "provider": {
                 "sender_type": "toll_free",
                 "checked_at": checked_at.isoformat() if checked_at else None,
                 "settings_version": settings_version,
-            }
+            },
+            "readiness": {
+                "checked_at": checked_at.isoformat() if checked_at else None,
+                "settings_version": settings_version,
+                "error_code": error_code,
+            },
         }
     db.commit()
 
@@ -698,6 +710,56 @@ def test_scheduled_refresh_skips_organizations_that_cannot_send(db, test_org, re
 
     assert queued == 0
     assert _readiness_jobs(db, test_org.id) == []
+
+
+def test_scheduled_refresh_retries_a_probe_that_failed_part_way(db, test_org) -> None:
+    from app.services import twilio_readiness_orchestration_service
+
+    now = datetime.now(UTC)
+    settings = _persist_configured_settings(db, test_org.id)
+    # Fresh timestamp, but the toll-free lookup timed out and left the facts incomplete.
+    _set_provider_evidence(
+        db,
+        settings,
+        checked_at=now - timedelta(hours=1),
+        settings_version=settings.current_version,
+        error_code="twilio_timeout",
+    )
+
+    queued = twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now)
+
+    assert queued == 1
+    assert len(_readiness_jobs(db, test_org.id)) == 1
+
+
+def test_scheduled_refresh_queues_a_bounded_batch_per_pass(db, test_org) -> None:
+    from app.services import twilio_readiness_orchestration_service
+
+    now = datetime.now(UTC)
+    organizations = [test_org]
+    for index in range(2):
+        organization = Organization(
+            id=uuid4(),
+            name=f"Tenant {index}",
+            slug=f"tenant-{uuid4().hex[:8]}",
+            ai_enabled=True,
+        )
+        db.add(organization)
+        db.flush()
+        organizations.append(organization)
+    for organization in organizations:
+        settings = _persist_configured_settings(db, organization.id)
+        _set_provider_evidence(
+            db, settings, checked_at=None, settings_version=settings.current_version
+        )
+
+    passes = [
+        twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now, limit=2)
+        for _ in range(3)
+    ]
+
+    assert passes == [2, 1, 0]
+    assert all(len(_readiness_jobs(db, organization.id)) == 1 for organization in organizations)
 
 
 def test_readiness_probe_uses_a_bounded_twilio_client(toll_free_settings, monkeypatch) -> None:
