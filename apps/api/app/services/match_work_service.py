@@ -118,7 +118,7 @@ def work_source(item) -> str:
     )
 
 
-def _record_activity_filter(model, org_id):
+def _record_activity_filter(model, org_id, case_work_refs):
     """Exclude case events, including old events with only a linked work ID."""
     predicates = [model.details["match_id"].astext.is_(None)]
     for key, work_model in (
@@ -139,10 +139,8 @@ def _record_activity_filter(model, org_id):
         # Deleted case work still has durable case audit provenance.
         predicates.append(
             ~exists(
-                select(AuditLog.id).where(
-                    AuditLog.organization_id == org_id,
-                    AuditLog.target_type == "match",
-                    AuditLog.details[key].astext == reference,
+                select(case_work_refs.c[key]).where(
+                    case_work_refs.c[key] == reference,
                 )
             )
         )
@@ -150,6 +148,25 @@ def _record_activity_filter(model, org_id):
 
 
 def _list_activity(db, session, match, attempt_id, page):
+    # Share only durable work references. Copying all case audits also retains
+    # unrelated PHI views and wide details, which can spill to temporary storage.
+    work_refs = [AuditLog.details[key].astext for key in ("task_id", "note_id", "attachment_id")]
+    case_work_refs = (
+        select(
+            *(
+                reference.label(key)
+                for reference, key in zip(work_refs, ("task_id", "note_id", "attachment_id"))
+            )
+        )
+        .where(
+            AuditLog.organization_id == session.org_id,
+            AuditLog.target_type == "match",
+            or_(*(reference.is_not(None) for reference in work_refs)),
+        )
+        .cte("case_work_refs")
+        .prefix_with("MATERIALIZED", dialect="postgresql")
+    )
+
     def fields(model, event_type, actor, timestamp, source, scope):
         return select(
             model.id.label("id"),
@@ -186,7 +203,7 @@ def _list_activity(db, session, match, attempt_id, page):
                 ).where(
                     model.organization_id == session.org_id,
                     model.surrogate_id == match.surrogate_id,
-                    _record_activity_filter(model, session.org_id),
+                    _record_activity_filter(model, session.org_id, case_work_refs),
                 )
             )
         for source, field in (("ip", "intended_parent_id"), ("donor", "donor_id")):
@@ -203,7 +220,7 @@ def _list_activity(db, session, match, attempt_id, page):
                     ).where(
                         model.organization_id == session.org_id,
                         getattr(model, field) == getattr(match, field),
-                        _record_activity_filter(model, session.org_id),
+                        _record_activity_filter(model, session.org_id, case_work_refs),
                     )
                 )
         history = IntendedParentStatusHistory
