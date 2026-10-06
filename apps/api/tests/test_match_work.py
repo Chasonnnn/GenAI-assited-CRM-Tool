@@ -623,9 +623,13 @@ async def test_work_tasks_include_due_time(authed_client, db, test_auth, cases):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("attempt_scoped", [False, True], ids=["record-history", "attempt-history"])
+@pytest.mark.parametrize(
+    "attempt_scoped,audit_target_type",
+    [(False, "surrogate"), (False, "match"), (True, "match")],
+    ids=["record-history", "case-history", "attempt-history"],
+)
 async def test_work_activity_with_large_unrelated_audit_history(
-    authed_client, db, test_auth, cases, attempt_scoped
+    authed_client, db, test_auth, cases, attempt_scoped, audit_target_type
 ):
     """Audit-table work must stay bounded as participant activity grows."""
     old, current, attempt = cases
@@ -637,8 +641,8 @@ async def test_work_activity_with_large_unrelated_audit_history(
         """),
         {
             "org_id": test_auth.org.id,
-            "target_type": "match" if attempt_scoped else "surrogate",
-            "target_id": old.id if attempt_scoped else current.surrogate_id,
+            "target_type": audit_target_type,
+            "target_id": old.id if audit_target_type == "match" else current.surrogate_id,
         },
     )
     db.execute(
@@ -708,11 +712,11 @@ async def test_work_activity_with_large_unrelated_audit_history(
             temporary_blocks_written += plan.get("Temp Written Blocks", 0)
     # Budget complete table passes across the whole request, including auth queries.
     # Measure work instead of elapsed time; parallel EXPLAIN row counts are averaged.
-    assert visited <= 3 * 400800, f"Match work visited {visited:,.0f} audit rows"
+    audit_count = db.execute(text("SELECT count(*) FROM audit_logs")).scalar_one()
+    assert visited <= 3 * audit_count + 10, f"Match work visited {visited:,.0f} audit rows"
 
     assert result.status_code == 200, result.text
     assert len(result.json()["activity"]) == (1 if attempt_scoped else 128)
     assert result.json()["has_more"] is False
-    if attempt_scoped:
-        # A one-event attempt must not spill unrelated case history to disk.
-        assert temporary_blocks_written == 0
+    # Small workspaces must not spill unrelated case history to disk.
+    assert temporary_blocks_written == 0
