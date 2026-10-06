@@ -36,10 +36,21 @@ docker compose up -d db
 
 pnpm run test:e2e               # all tests
 pnpm run test:e2e --tag forms   # one flow
+E2E_RESEED=1 pnpm run test:e2e  # rebuild the seeded template first
 ```
 
 Each run starts its own stack: a fresh `crm_e2e` database, the API on `:8100`, and the web app on `:3100`.
 The API loads no `.env`, so it holds no provider credentials and cannot send email or SMS.
+Its encryption and hash keys are fixed test values that protect only the generated mock data.
+
+`crm_e2e` is a clone of `crm_e2e_template`, which holds the mock data from `seed_mock_data.py`:
+5,000 surrogates, 100 intended parents, and 300 matches by default (`E2E_SEED_SURROGATES`,
+`E2E_SEED_INTENDED_PARENTS`, `E2E_SEED_MATCH_COUNT`). The first run builds the template in about
+two minutes; later runs clone it in seconds. The template rebuilds itself when the migrations, the
+seeder, or the seed sizes change, or on `E2E_RESEED=1`. Drop it to free space:
+`docker compose exec db dropdb -U postgres crm_e2e_template`.
+
+Tests sign in with the saved sessions from `e2e/tests/auth.setup.e2e.ts` (`admin`, `case-manager`).
 A failed run writes the screen at failure and a trace under `.e2e/`.
 Stop a running `pnpm dev` first: Next.js allows one dev server per project.
 

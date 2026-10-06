@@ -5,9 +5,13 @@
 //
 // The API starts in a directory without a `.env` and receives only the variables built
 // here. It therefore holds no provider credentials, and no test can send email or SMS.
+//
+// `crm_e2e` is cloned from `crm_e2e_template`, which holds the migrated schema and the mock
+// data of apps/api/scripts/seed_mock_data.py at the sizes in E2E_SEED_*. The template is
+// rebuilt when a migration, the seeder, a size, or E2E_RESEED=1 changes its stamp.
 import { spawn, spawnSync } from "node:child_process"
-import { randomBytes } from "node:crypto"
-import { existsSync, mkdirSync } from "node:fs"
+import { createHash, randomBytes } from "node:crypto"
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -21,6 +25,13 @@ const apiPort = requireEnv("E2E_API_PORT")
 const devSecret = requireEnv("E2E_DEV_SECRET")
 const pgPort = process.env.E2E_PG_PORT ?? "5432"
 const database = "crm_e2e"
+const templateDatabase = "crm_e2e_template"
+const seedSizes = {
+    SEED_RANDOM_SEED: "20260224",
+    SEED_SURROGATES: requireEnv("E2E_SEED_SURROGATES"),
+    SEED_INTENDED_PARENTS: requireEnv("E2E_SEED_INTENDED_PARENTS"),
+    SEED_MATCH_COUNT: requireEnv("E2E_SEED_MATCH_COUNT"),
+}
 
 function requireEnv(name) {
     const value = process.env[name]
@@ -37,43 +48,81 @@ if (!existsSync(python)) {
 }
 mkdirSync(stackDir, { recursive: true })
 
-// Fernet keys are generated per start: the database they encrypt is dropped with them.
-const fernetKey = randomBytes(32).toString("base64url") + "="
+// The encryption and hash keys are fixed because the template database outlives a run and
+// every run must read it. They protect generated mock data on a local database only, so they
+// are test values, not credentials. The session key stays random: sessions never persist.
+const fixedKey = (label) => createHash("sha256").update(`e2e-local-${label}`).digest()
+const fernetKey = fixedKey("fernet").toString("base64url") + "="
+const databaseUrl = (name) => `postgresql+psycopg://postgres:postgres@127.0.0.1:${pgPort}/${name}`
 const apiEnv = {
     PATH: process.env.PATH ?? "",
     HOME: process.env.HOME ?? "",
     PYTHONPATH: apiDir,
     ENV: "test",
     TESTING: "1",
-    DATABASE_URL: `postgresql+psycopg://postgres:postgres@127.0.0.1:${pgPort}/${database}`,
+    DATABASE_URL: databaseUrl(database),
     JWT_SECRET: randomBytes(32).toString("hex"),
     FERNET_KEY: fernetKey,
     META_ENCRYPTION_KEY: fernetKey,
     VERSION_ENCRYPTION_KEY: fernetKey,
     DATA_ENCRYPTION_KEY: fernetKey,
-    PII_HASH_KEY: randomBytes(32).toString("hex"),
+    PII_HASH_KEY: fixedKey("pii-hash").toString("hex"),
     DEV_SECRET: devSecret,
     API_BASE_URL: `http://localhost:${apiPort}`,
     FRONTEND_URL: `http://localhost:${webPort}`,
     CORS_ORIGINS: `http://localhost:${webPort}`,
 }
 
-function runOrExit(label, args) {
-    const result = spawnSync(python, args, { cwd: stackDir, env: apiEnv, stdio: "inherit" })
+function runOrExit(label, args, env = apiEnv) {
+    const result = spawnSync(python, args, { cwd: stackDir, env, stdio: ["inherit", "pipe", "inherit"], encoding: "utf8" })
     if (result.status !== 0) {
         console.error(`${label} failed.`)
         process.exit(1)
     }
+    return result.stdout
 }
 
-const resetDatabase = `
-import psycopg
+const seederPath = path.join(apiDir, "scripts/seed_mock_data.py")
+const stamp = createHash("sha256")
+    .update(readdirSync(path.join(apiDir, "alembic/versions")).sort().join("\n"))
+    .update(readFileSync(seederPath))
+    .update(JSON.stringify(seedSizes))
+    .update(fernetKey)
+    .digest("hex")
+const forceRebuild = process.env.E2E_RESEED ? "1" : "0"
+
+// Drops `crm_e2e`, then clones the template when its stamp matches; otherwise prints "rebuild".
+const prepareDatabase = `
+import psycopg, sys
 with psycopg.connect("postgresql://postgres:postgres@127.0.0.1:${pgPort}/postgres", autocommit=True) as connection:
     connection.execute("DROP DATABASE IF EXISTS ${database} WITH (FORCE)")
-    connection.execute("CREATE DATABASE ${database}")
+    row = connection.execute(
+        "SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = %s", ("${templateDatabase}",)
+    ).fetchone()
+    if row is not None and row[0] == sys.argv[1] and sys.argv[2] == "0":
+        connection.execute("CREATE DATABASE ${database} TEMPLATE ${templateDatabase}")
+        print("cloned")
+    else:
+        connection.execute("DROP DATABASE IF EXISTS ${templateDatabase} WITH (FORCE)")
+        connection.execute("CREATE DATABASE ${templateDatabase}")
+        print("rebuild")
 `
-runOrExit("Database reset (is `docker compose up -d db` running?)", ["-c", resetDatabase])
-runOrExit("Migration", ["-m", "alembic", "-c", path.join(apiDir, "alembic.ini"), "upgrade", "head"])
+const prepared = runOrExit("Database reset (is `docker compose up -d db` running?)", ["-c", prepareDatabase, stamp, forceRebuild])
+if (prepared.trim() === "rebuild") {
+    console.log(`Seeding ${templateDatabase} with ${seedSizes.SEED_SURROGATES} surrogates; later runs clone it.`)
+    const templateEnv = { ...apiEnv, ...seedSizes, DATABASE_URL: databaseUrl(templateDatabase) }
+    runOrExit("Migration", ["-m", "alembic", "-c", path.join(apiDir, "alembic.ini"), "upgrade", "head"], templateEnv)
+    runOrExit("Seeding", ["-m", "scripts.seed_mock_data"], templateEnv)
+    const publishTemplate = `
+import psycopg, sys
+from psycopg import sql
+with psycopg.connect("postgresql://postgres:postgres@127.0.0.1:${pgPort}/postgres", autocommit=True) as connection:
+    # COMMENT is a utility statement and takes no bind parameters.
+    connection.execute(sql.SQL("COMMENT ON DATABASE ${templateDatabase} IS {}").format(sql.Literal(sys.argv[1])))
+    connection.execute("CREATE DATABASE ${database} TEMPLATE ${templateDatabase}")
+`
+    runOrExit("Template publish", ["-c", publishTemplate, stamp])
+}
 
 const children = []
 let stopping = false
