@@ -27,7 +27,11 @@ import {
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
-import { stageHasCapability, stageUsesPauseBehavior } from "@/lib/surrogate-stage-context"
+import {
+    stageHasCapability,
+    stageMatchesKey,
+    stageUsesPauseBehavior,
+} from "@/lib/surrogate-stage-context"
 import { toast } from "@/components/ui/toast"
 import { RecordCollaboratorsDialog } from "@/components/permissions/record-collaborators-dialog"
 import { exportSurrogatePacketPdf } from "@/lib/api/surrogates"
@@ -90,6 +94,7 @@ export function HeaderActions() {
         workflowStageOrder !== null && contactedStage
             ? workflowStageOrder <= contactedStage.order
             : isIntakeStage
+    const isRescheduleNeeded = stageMatchesKey(workflowStage, "reschedule_needed")
     const isV2 = effectivePermissions?.policy_version === 2
     const canManageCollaborators = isV2 && !!effectivePermissions.capabilities?.can_manage_roles
     const canEdit = !isV2 || (effectivePermissions.permissions.includes("edit_surrogates") && !surrogate.is_archived)
@@ -100,7 +105,8 @@ export function HeaderActions() {
         surrogate.owner_type === "user" &&
         (isV2 ? canEdit : isAssignee || canManageQueue) &&
         !surrogate.is_archived
-    const canLogContact = canLogInteraction && !isOnHold && isAtOrBeforeContacted
+    const canLogContact =
+        canLogInteraction && !isOnHold && (isAtOrBeforeContacted || isRescheduleNeeded)
 
     // Determine if propose match button should be shown
     const isReadyToMatchStage = stageHasCapability(
