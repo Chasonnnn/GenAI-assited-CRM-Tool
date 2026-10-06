@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.83](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.82...surrogacy-crm-platform-v0.91.83) (2026-10-06)
+
+
+### Bug Fixes
+
+* align public form email validation with the API and add a local e2e pilot ([#801](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/801)) ([b7e9fc3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/b7e9fc3692b6e9d240667e75262110e305cc9e96))
+* bound audit scans in match activity queries ([#809](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/809)) ([01c801b](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/01c801b2dc7b4d56f0372384954dbc1c7a592ec1))
+
 ## [0.91.82](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.81...surrogacy-crm-platform-v0.91.82) (2026-10-05)
 
 
