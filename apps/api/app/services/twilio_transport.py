@@ -163,7 +163,7 @@ class _Failure:
     ambiguous: bool = False
 
 
-def _client(credentials: TwilioCredentials) -> Client:
+def build_client(credentials: TwilioCredentials) -> Client:
     if not all((credentials.account_sid, credentials.api_key_sid, credentials.api_secret)):
         raise ValueError("Account SID and Restricted API Key credentials are required")
     return Client(
@@ -203,7 +203,7 @@ def fetch_toll_free_verification(
     ):
         return invalid
     try:
-        records = _client(credentials).messaging.v1.tollfree_verifications.list(
+        records = build_client(credentials).messaging.v1.tollfree_verifications.list(
             tollfree_phone_number_sid=phone_number_sid,
             limit=2,
         )
@@ -321,7 +321,7 @@ def send_message(
         create_args["media_url"] = normalized_media_urls
 
     try:
-        message = _client(credentials).messages.create(**create_args)
+        message = build_client(credentials).messages.create(**create_args)
     except TwilioRestException as exc:
         return _send_failure_result(_failure_from_rest_exception(exc))
     except requests_exceptions.RequestException:
@@ -429,7 +429,7 @@ def upsert_route_consent(
         },
     ]
     try:
-        response = _client(credentials).accounts.v1.bulk_consents.create(items=items)
+        response = build_client(credentials).accounts.v1.bulk_consents.create(items=items)
     except TwilioRestException as exc:
         return _consent_failure_result(
             correlation_ids,
@@ -530,7 +530,7 @@ def fetch_inbound_media_metadata(
     _require_sid(message_sid, _MESSAGE_SID_PATTERN, label="Message SID")
     _require_sid(media_sid, _MEDIA_SID_PATTERN, label="Media SID")
     try:
-        media = _client(credentials).messages(message_sid).media(media_sid).fetch()
+        media = build_client(credentials).messages(message_sid).media(media_sid).fetch()
     except TwilioRestException as exc:
         return _media_metadata_failure(_failure_from_rest_exception(exc))
     except requests_exceptions.RequestException:
@@ -637,7 +637,7 @@ def download_inbound_media(
                 content_type=_safe_content_type(response.headers.get("Content-Type")),
                 content=bytes(buffer),
             )
-    except (requests_exceptions.RequestException, ValueError):
+    except requests_exceptions.RequestException, ValueError:
         return TwilioMediaDownloadResult(
             success=False,
             media_sid=media_sid,
@@ -668,7 +668,7 @@ def delete_inbound_media(
     _require_sid(message_sid, _MESSAGE_SID_PATTERN, label="Message SID")
     _require_sid(media_sid, _MEDIA_SID_PATTERN, label="Media SID")
     try:
-        deleted = _client(credentials).messages(message_sid).media(media_sid).delete()
+        deleted = build_client(credentials).messages(message_sid).media(media_sid).delete()
     except TwilioRestException as exc:
         return _media_delete_failure(_failure_from_rest_exception(exc))
     except requests_exceptions.RequestException:

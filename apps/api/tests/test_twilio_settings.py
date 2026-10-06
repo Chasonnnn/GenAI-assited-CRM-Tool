@@ -246,7 +246,7 @@ async def test_twilio_settings_test_validates_account_and_routes_without_sending
     )
     assert configured.status_code == 200
 
-    from app.services import twilio_provider_service
+    from app.services import twilio_transport
 
     fetched_services: list[str] = []
     expected_webhooks = {
@@ -314,10 +314,11 @@ async def test_twilio_settings_test_validates_account_and_routes_without_sending
             )()
 
     class FakeClient:
-        def __init__(self, api_key_sid: str, api_secret: str, account_sid: str):
+        def __init__(self, api_key_sid: str, api_secret: str, account_sid: str, *, http_client):
             assert api_key_sid.startswith("SK")
             assert api_secret == "api-secret"
             assert account_sid.startswith("AC")
+            assert http_client.timeout == 20.0
             self.api = type("Api", (), {"accounts": FakeAccounts()})()
             self.messaging = type(
                 "Messaging",
@@ -329,7 +330,7 @@ async def test_twilio_settings_test_validates_account_and_routes_without_sending
         def messages(self):
             raise AssertionError("Credential checks must never access the Messages API")
 
-    monkeypatch.setattr(twilio_provider_service, "Client", FakeClient)
+    monkeypatch.setattr(twilio_transport, "Client", FakeClient)
 
     response = await authed_client.post(
         "/twilio/settings/test",
@@ -360,9 +361,9 @@ async def test_twilio_settings_test_validates_account_and_routes_without_sending
         "route_capabilities": {
             purpose: {
                 "service_verified": True,
-                    "sender_in_pool": True,
-                    "sender_type": "10dlc",
-                    "sms": True,
+                "sender_in_pool": True,
+                "sender_type": "10dlc",
+                "sms": True,
                 "mms": True,
                 "a2p_status": "VERIFIED",
                 "inbound_webhook_matches": True,

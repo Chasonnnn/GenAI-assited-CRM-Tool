@@ -154,7 +154,7 @@ def test_10dlc_still_requires_a2p_and_consent_api(toll_free_settings):
 
 
 def _mock_toll_free_provider(monkeypatch, settings, *, status="TWILIO_APPROVED", error=None):
-    from app.services import twilio_provider_service, twilio_settings_service, twilio_transport
+    from app.services import twilio_settings_service, twilio_transport
 
     route = _route_by_purpose(settings, "operational")
     calls = []
@@ -203,7 +203,6 @@ def _mock_toll_free_provider(monkeypatch, settings, *, status="TWILIO_APPROVED",
             )
         ),
     )
-    monkeypatch.setattr(twilio_provider_service, "Client", lambda *_args, **_kwargs: client)
     monkeypatch.setattr(twilio_transport, "Client", lambda *_args, **_kwargs: client)
     return calls
 
@@ -681,7 +680,7 @@ def test_scheduled_refresh_queues_one_check_before_provider_evidence_expires(
         }
 
 
-@pytest.mark.parametrize("reason", ["disabled", "route_unconfigured"])
+@pytest.mark.parametrize("reason", ["disabled", "route_unconfigured", "organization_deleted"])
 def test_scheduled_refresh_skips_organizations_that_cannot_send(db, test_org, reason) -> None:
     from app.services import twilio_readiness_orchestration_service
 
@@ -690,12 +689,44 @@ def test_scheduled_refresh_skips_organizations_that_cannot_send(db, test_org, re
         for route in settings.routes:
             route.messaging_service_sid_encrypted = None
         db.commit()
+    if reason == "organization_deleted":
+        test_org.deleted_at = datetime.now(UTC)
+        db.commit()
     _set_provider_evidence(db, settings, checked_at=None, settings_version=settings.current_version)
 
     queued = twilio_readiness_orchestration_service.queue_due_refreshes(db, now=datetime.now(UTC))
 
     assert queued == 0
     assert _readiness_jobs(db, test_org.id) == []
+
+
+def test_readiness_probe_uses_a_bounded_twilio_client(toll_free_settings, monkeypatch) -> None:
+    from twilio.base.exceptions import TwilioRestException
+
+    from app.services import twilio_provider_service, twilio_transport
+
+    calls: list[tuple[tuple, dict]] = []
+
+    class _Accounts:
+        def __call__(self, _sid):
+            return self
+
+        def fetch(self):
+            raise TwilioRestException(503, "/accounts", msg="unavailable")
+
+    def fake_client(*args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(api=SimpleNamespace(accounts=_Accounts()))
+
+    monkeypatch.setattr(twilio_transport, "Client", fake_client)
+
+    result = twilio_provider_service.test_configuration(toll_free_settings)
+
+    assert result.valid is False
+    assert len(calls) == 1
+    http_client = calls[0][1]["http_client"]
+    assert http_client.timeout == twilio_transport.TWILIO_REQUEST_TIMEOUT_SECONDS
+    assert http_client.session.adapters["https://"].max_retries.total == 0
 
 
 async def test_readiness_worker_persists_sanitized_provider_snapshot(

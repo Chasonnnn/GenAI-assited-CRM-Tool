@@ -140,7 +140,7 @@ def test_toll_free_lookup_uses_bounded_authenticated_get(monkeypatch, status):
     from app.services import twilio_transport
 
     phone_sid = "PN" + "7" * 32
-    client = twilio_transport._client(_credentials())
+    client = twilio_transport.build_client(_credentials())
     calls = []
 
     def request(method, url, **kwargs):

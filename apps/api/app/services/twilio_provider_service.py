@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 
 from twilio.base.exceptions import TwilioRestException
-from twilio.rest import Client
 
 from app.db.models import TwilioSettings
 from app.schemas.twilio import TwilioSettingsTestRequest, TwilioSettingsTestResponse
@@ -59,7 +58,15 @@ def test_configuration(
             warning=None,
         )
 
-    client = Client(api_key_sid, api_secret, account_sid)
+    # The worker probes on a schedule, so a stalled Twilio endpoint must time out
+    # instead of holding the job loop; the transport client is bounded and never retries.
+    client = twilio_transport.build_client(
+        twilio_transport.TwilioCredentials(
+            account_sid=account_sid,
+            api_key_sid=api_key_sid,
+            api_secret=api_secret,
+        )
+    )
     route_statuses: dict[str, str] = {}
     error = None
     try:

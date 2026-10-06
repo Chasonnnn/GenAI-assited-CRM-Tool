@@ -10,7 +10,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.db.enums import JobScope, JobStatus, JobType
-from app.db.models import Job, TwilioRoute, TwilioSettings
+from app.db.models import Job, Organization, TwilioRoute, TwilioSettings
 from app.services import job_service, twilio_readiness_service, twilio_settings_service
 
 # Half the send gate: one missed hourly pass still leaves a full refresh window
@@ -106,15 +106,16 @@ def _provider_evidence_due(route: TwilioRoute, *, now: datetime, settings_versio
 def queue_due_refreshes(db: Session, *, now: datetime | None = None) -> int:
     """Queue a no-send check for each sending organization whose provider evidence is ageing.
 
-    Returns the number of jobs created. Organizations that cannot send (disabled,
-    no credentials, no configured route) are skipped so a broken setup is not
-    probed every pass.
+    Returns the number of jobs created. Organizations that cannot send (soft-deleted,
+    disabled, no credentials, no configured route) are skipped so a broken setup is
+    not probed every pass.
     """
     now = now or datetime.now(UTC)
     organization_ids = (
         db.execute(
             select(TwilioSettings.organization_id)
-            .where(TwilioSettings.enabled.is_(True))
+            .join(Organization, Organization.id == TwilioSettings.organization_id)
+            .where(TwilioSettings.enabled.is_(True), Organization.deleted_at.is_(None))
             .order_by(TwilioSettings.organization_id)
         )
         .scalars()
