@@ -23,7 +23,7 @@ test(
 )
 
 test(
-    "an admin duplicates an org workflow and reads the copy's details",
+    "an admin duplicates an org workflow, reads the copy's details, and deletes it",
     { session: "admin", tags: ["workflows"] },
     async ({ app, screen }) => {
         await app.open("/automation")
@@ -39,6 +39,14 @@ test(
         await expect(details).toContainText("Organization", { timeout: 10_000 })
         await details.getByRole("button", "Close").tap()
         await expect(details).toBeHidden()
+
+        // Deletion asks for confirmation; the copy leaves the list, the original stays.
+        await screen.getByRole("button", `Actions for workflow ${copy}`).tap()
+        await screen.getByRole("menuitem", "Delete").tap()
+        await screen.getByRole("alertdialog", `Delete ${copy}?`).getByRole("button", "Delete").tap()
+        await expect(screen.getByText("Workflow deleted")).toBeVisible({ timeout: 10_000 })
+        await expect(screen.getByRole("heading", copy)).toHaveCount(0, { timeout: 10_000 })
+        await expect(screen.getByRole("heading", WORKFLOW)).toBeVisible()
     },
 )
 
