@@ -415,7 +415,7 @@ def backfill_permissions(dry_run: bool):
             click.echo()
 
         existing_permission_keys: set[tuple[UUID, str, str]] = set()
-        if dry_run and orgs:
+        if orgs:
             from app.db.models import RolePermission
 
             existing_permission_keys = {
