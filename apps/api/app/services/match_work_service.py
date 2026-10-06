@@ -118,7 +118,7 @@ def work_source(item) -> str:
     )
 
 
-def _record_activity_filter(model, org_id, case_work_refs):
+def _record_activity_filter(model, org_id, case_audits):
     """Exclude case events, including old events with only a linked work ID."""
     predicates = [model.details["match_id"].astext.is_(None)]
     for key, work_model in (
@@ -139,8 +139,8 @@ def _record_activity_filter(model, org_id, case_work_refs):
         # Deleted case work still has durable case audit provenance.
         predicates.append(
             ~exists(
-                select(case_work_refs.c[key]).where(
-                    case_work_refs.c[key] == reference,
+                select(case_audits.c[key]).where(
+                    case_audits.c[key] == reference,
                 )
             )
         )
@@ -148,24 +148,37 @@ def _record_activity_filter(model, org_id, case_work_refs):
 
 
 def _list_activity(db, session, match, attempt_id, page):
-    # Share only durable work references. Copying all case audits also retains
-    # unrelated PHI views and wide details, which can spill to temporary storage.
-    work_refs = [AuditLog.details[key].astext for key in ("task_id", "note_id", "attachment_id")]
-    case_work_refs = (
+    # Share one narrow audit scan across case history and deleted-work checks.
+    # Unrelated case views and wide JSON payloads must not enter the shared set.
+    work_refs = {
+        key: AuditLog.details[key].astext for key in ("task_id", "note_id", "attachment_id")
+    }
+    case_scope = and_(
+        AuditLog.target_id == match.id, AuditLog.event_type != AuditEventType.PHI_VIEWED.value
+    )
+    if attempt_id:
+        case_scope = and_(case_scope, AuditLog.details["attempt_id"].astext == str(attempt_id))
+    else:
+        case_scope = or_(case_scope, *(reference.is_not(None) for reference in work_refs.values()))
+    case_audits = (
         select(
-            *(
-                reference.label(key)
-                for reference, key in zip(work_refs, ("task_id", "note_id", "attachment_id"))
-            )
+            AuditLog.id,
+            AuditLog.event_type,
+            AuditLog.actor_user_id,
+            AuditLog.created_at,
+            AuditLog.target_id,
+            AuditLog.details["attempt_id"].astext.label("attempt_id"),
+            *(reference.label(key) for key, reference in work_refs.items()),
         )
         .where(
             AuditLog.organization_id == session.org_id,
             AuditLog.target_type == "match",
-            or_(*(reference.is_not(None) for reference in work_refs)),
+            case_scope,
         )
-        .cte("case_work_refs")
-        .prefix_with("MATERIALIZED", dialect="postgresql")
+        .cte("case_audits")
     )
+    if not attempt_id:
+        case_audits = case_audits.prefix_with("MATERIALIZED", dialect="postgresql")
 
     def fields(model, event_type, actor, timestamp, source, scope):
         return select(
@@ -178,16 +191,19 @@ def _list_activity(db, session, match, attempt_id, page):
         )
 
     case_query = fields(
-        AuditLog, AuditLog.event_type, AuditLog.actor_user_id, AuditLog.created_at, "match", "case"
+        case_audits.c,
+        case_audits.c.event_type,
+        case_audits.c.actor_user_id,
+        case_audits.c.created_at,
+        "match",
+        "case",
     ).where(
-        AuditLog.organization_id == session.org_id,
-        AuditLog.target_type == "match",
-        AuditLog.target_id == match.id,
+        case_audits.c.target_id == match.id,
         # Page views write PHI access audits; they belong in the audit log, not the case activity.
-        AuditLog.event_type != AuditEventType.PHI_VIEWED.value,
+        case_audits.c.event_type != AuditEventType.PHI_VIEWED.value,
     )
     if attempt_id:
-        case_query = case_query.where(AuditLog.details["attempt_id"].astext == str(attempt_id))
+        case_query = case_query.where(case_audits.c.attempt_id == str(attempt_id))
     queries = [case_query]
     if not attempt_id:
         if match.surrogate_id:
@@ -203,7 +219,7 @@ def _list_activity(db, session, match, attempt_id, page):
                 ).where(
                     model.organization_id == session.org_id,
                     model.surrogate_id == match.surrogate_id,
-                    _record_activity_filter(model, session.org_id, case_work_refs),
+                    _record_activity_filter(model, session.org_id, case_audits),
                 )
             )
         for source, field in (("ip", "intended_parent_id"), ("donor", "donor_id")):
@@ -220,7 +236,7 @@ def _list_activity(db, session, match, attempt_id, page):
                     ).where(
                         model.organization_id == session.org_id,
                         getattr(model, field) == getattr(match, field),
-                        _record_activity_filter(model, session.org_id, case_work_refs),
+                        _record_activity_filter(model, session.org_id, case_audits),
                     )
                 )
         history = IntendedParentStatusHistory

@@ -710,10 +710,10 @@ async def test_work_activity_with_large_unrelated_audit_history(
             plan = cursor.fetchone()[0][0]["Plan"]
             visited += audit_rows_visited(plan)
             temporary_blocks_written += plan.get("Temp Written Blocks", 0)
-    # Budget complete table passes across the whole request, including auth queries.
+    # Budget one activity scan plus the separate authentication audit lookup.
     # Measure work instead of elapsed time; parallel EXPLAIN row counts are averaged.
     audit_count = db.execute(text("SELECT count(*) FROM audit_logs")).scalar_one()
-    assert visited <= 3 * audit_count + 10, f"Match work visited {visited:,.0f} audit rows"
+    assert visited <= 2 * audit_count + 10, f"Match work visited {visited:,.0f} audit rows"
 
     assert result.status_code == 200, result.text
     assert len(result.json()["activity"]) == (1 if attempt_scoped else 128)
