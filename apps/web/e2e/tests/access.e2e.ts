@@ -15,5 +15,20 @@ test(
             timeout: 10_000,
         })
         await expect(screen.getByRole("button", /^Invite/)).toHaveCount(0)
+
+        // Pipeline configuration is an admin surface.
+        await app.open("/settings/pipelines")
+        await expect(screen.getByRole("heading", "Permission required")).toBeVisible({ timeout: 10_000 })
+        await expect(screen.getByRole("button", "Add Custom Stage")).toHaveCount(0)
+    },
+)
+
+test(
+    "an admin cannot open the developer data management page",
+    { session: "admin", tags: ["access"] },
+    async ({ app, screen }) => {
+        await app.open("/settings/admin")
+        await expect(screen.getByRole("heading", "Permission required")).toBeVisible({ timeout: 10_000 })
+        await expect(screen.getByRole("link", "Back to Settings")).toBeVisible()
     },
 )
