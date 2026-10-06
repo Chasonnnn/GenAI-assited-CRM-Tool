@@ -23,13 +23,7 @@ from app.schemas.surrogate import (
     ContactAttemptResponse,
     ContactAttemptsSummary,
 )
-from app.services import (
-    approval_handoff_service,
-    pipeline_semantics_service,
-    pipeline_service,
-    queue_service,
-    surrogate_service,
-)
+from app.services import approval_handoff_service, queue_service
 
 
 def _sanitize_note_preview(note: str | None, max_chars: int = 120) -> str | None:
@@ -62,7 +56,7 @@ def create_contact_attempt(
     - attempted_at is not in future
     - attempted_at is not before assignment, or creation for a shared pool record
 
-    Updates surrogate.contact_status if outcome='reached'.
+    Updates surrogate.contact_status if outcome='reached'. Never changes the stage.
     """
     # Fetch surrogate with organization for timezone
     surrogate = (
@@ -136,33 +130,6 @@ def create_contact_attempt(
             surrogate.contacted_at = attempted_at
         surrogate.last_contacted_at = attempted_at
         surrogate.last_contact_method = data.contact_methods[0]
-
-        current_stage = pipeline_service.get_stage_by_id(session, surrogate.stage_id)
-        if not is_shared_pool and current_stage and current_stage.stage_type == "intake":
-            pipeline_snapshot = pipeline_semantics_service.get_pipeline_semantics_snapshot(
-                session,
-                current_stage.pipeline_id,
-            )
-            contacted_stage_snapshot = (
-                pipeline_semantics_service.get_first_active_stage_with_capability(
-                    pipeline_snapshot,
-                    "counts_as_contacted",
-                )
-            )
-            if contacted_stage_snapshot and current_stage.id != contacted_stage_snapshot.id:
-                contacted_stage = pipeline_service.get_stage_by_id(
-                    session,
-                    contacted_stage_snapshot.id,
-                )
-                if contacted_stage:
-                    surrogate_service.change_status(
-                        db=session,
-                        surrogate=surrogate,
-                        new_stage_id=contacted_stage.id,
-                        user_id=user.user_id,
-                        user_role=user.role,
-                        reason="Contact reached",
-                    )
 
     # Log in activity log
     activity = SurrogateActivityLog(
