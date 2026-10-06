@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "e2e": {
+      "command": "mise",
+      "args": ["exec", "--", "pnpm", "--dir", "apps/web", "exec", "e2e", "mcp", "--headless"],
+      "env": { "E2E_TELEMETRY_DISABLED": "1" }
+    }
+  }
+}

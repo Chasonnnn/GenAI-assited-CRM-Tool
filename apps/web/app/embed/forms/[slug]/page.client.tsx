@@ -17,7 +17,7 @@ import {
     resolveSmsConsentPhoneField,
     type SmsConsentPurpose,
 } from "@/lib/forms/public-sms-consent"
-import { getPublicSubmitConflictMessage } from "@/lib/forms/public-submit-error"
+import { getPublicSubmitConflictMessage, getPublicSubmitFieldErrorMessage } from "@/lib/forms/public-submit-error"
 import { cn } from "@/lib/utils"
 import type { JsonObject } from "@/lib/types/json"
 import { useEmbedFormResizeReporting } from "@/lib/hooks/use-embed-form-resize-reporting"
@@ -324,7 +324,10 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
         } catch (error) {
             dispatch({
                 type: "submissionFailed",
-                error: getPublicSubmitConflictMessage(error) ?? "Unable to submit the form. Please try again.",
+                error:
+                    getPublicSubmitConflictMessage(error)
+                    ?? getPublicSubmitFieldErrorMessage(error)
+                    ?? "Unable to submit the form. Please try again.",
             })
             postEmbedMessageToParent(parentOrigin, { type: "sf:form:error", reason: "submit" })
         }

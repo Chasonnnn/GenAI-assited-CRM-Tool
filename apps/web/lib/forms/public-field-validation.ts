@@ -1,4 +1,5 @@
 import type { FormField } from "@/lib/api/forms"
+import { isAcceptedPublicEmailAddress } from "@/lib/forms/public-email-address"
 
 type TableRow = Record<string, string | number | null>
 export type PublicFieldValue = string | number | boolean | string[] | TableRow[] | null
@@ -59,7 +60,7 @@ export function getPublicFieldValidationError(
     }
 
     if (field.type === "email") {
-        if (typeof value !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
+        if (typeof value !== "string" || !isAcceptedPublicEmailAddress(value)) {
             return `${field.label} must be a valid email address.`
         }
     }

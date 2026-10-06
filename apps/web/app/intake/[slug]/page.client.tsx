@@ -33,7 +33,7 @@ import {
     resolveSmsConsentPhoneField,
     type SmsConsentPurpose,
 } from "@/lib/forms/public-sms-consent"
-import { getPublicSubmitConflictMessage } from "@/lib/forms/public-submit-error"
+import { getPublicSubmitConflictMessage, getPublicSubmitFieldErrorMessage } from "@/lib/forms/public-submit-error"
 import {
     getSharedPublicForm,
     getSharedPublicFormDraft,
@@ -1228,7 +1228,11 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
         }
         void submit()
             .catch((error: unknown) =>
-                toast.error(getPublicSubmitConflictMessage(error) ?? "Failed to submit application. Please try again."),
+                toast.error(
+                    getPublicSubmitConflictMessage(error)
+                    ?? getPublicSubmitFieldErrorMessage(error)
+                    ?? "Failed to submit application. Please try again.",
+                ),
             )
             .finally(() => setIsSubmitting(false))
     }
