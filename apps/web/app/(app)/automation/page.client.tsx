@@ -55,6 +55,7 @@ import { usePermissionCheck } from "@/lib/hooks/use-permission-check"
 import { EmptyState } from "@/components/empty-state"
 import { QueryErrorState } from "@/components/error-state"
 import { toast } from "@/components/ui/toast"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useCreateEmailTemplate, useUpdateEmailTemplate, useDeleteEmailTemplate } from "@/lib/hooks/use-email-templates"
 import type { EmailTemplateListItem } from "@/lib/api/email-templates"
 import WorkflowTemplatesPanel from "@/components/automation/workflow-templates-panel"
@@ -225,6 +226,7 @@ function useAutomationPageView({
     const policyV2 = (policyVersion ?? 1) >= 2
     const canManageOrgWorkflows = canManageAutomation && (!policyV2 || can("manage_org_workflows"))
     const [detailsWorkflow, setDetailsWorkflow] = useState<WorkflowListItem | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<WorkflowListItem | null>(null)
     const [activeTab] = useState(initialTab)
 
     const [workflowScopeSelection, setWorkflowScopeSelection] = useState<{
@@ -342,10 +344,10 @@ function useAutomationPageView({
         duplicateWorkflow.mutate(id)
     }
 
-    const handleDelete = (id: string) => {
-        if (confirm("Are you sure you want to delete this workflow?")) {
-            deleteWorkflow.mutate(id)
-        }
+    const handleDelete = async () => {
+        if (!deleteTarget) return
+        await deleteWorkflow.mutateAsync(deleteTarget.id)
+        toast.success("Workflow deleted")
     }
 
     const handleViewHistory = (id: string) => {
@@ -419,6 +421,17 @@ function useAutomationPageView({
                 onCreateTemplate={() => handleOpenTemplateModal()}
                 canViewExecutions={canManageOrgWorkflows}
                 onCreateWorkflow={isTemplatesTab && canCreatePersonal ? () => handleCreate("personal") : undefined}
+            />
+
+            <ConfirmDialog
+                open={deleteTarget !== null}
+                onOpenChange={(open) => !open && setDeleteTarget(null)}
+                title={deleteTarget ? `Delete ${deleteTarget.name}?` : "Delete workflow?"}
+                description="This can't be undone."
+                confirmLabel="Delete"
+                confirmVariant="destructive"
+                errorFallback="Couldn't delete workflow."
+                onConfirm={handleDelete}
             />
 
             <Dialog open={detailsWorkflow !== null} onOpenChange={(open) => !open && setDetailsWorkflow(null)}>
@@ -628,7 +641,7 @@ function useAutomationPageView({
                                                         <DropdownMenuItem
                                                             className="text-destructive"
                                                             disabled={!canEdit}
-                                                            onClick={() => handleDelete(workflow.id)}
+                                                            onClick={() => setDeleteTarget(workflow)}
                                                         >
                                                             Delete
                                                         </DropdownMenuItem>

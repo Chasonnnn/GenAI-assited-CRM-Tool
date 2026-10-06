@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ButtonHTMLAttributes, ReactNode } from "react"
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import AutomationPage from '../app/(app)/automation/page.client'
 import { ApiError } from '@/lib/api'
 
@@ -129,6 +129,7 @@ const mockCreateWorkflow = { mutate: vi.fn(), isPending: false }
 const mockUpdateWorkflow = { mutate: vi.fn(), isPending: false }
 const mockPublishWorkflow = { mutate: vi.fn(), isPending: false }
 const mockTestWorkflow = { mutate: vi.fn(), isPending: false }
+const mockDeleteWorkflow = { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }
 const mockListDonors = vi.fn()
 
 vi.mock('@/lib/api/donors', () => ({
@@ -154,7 +155,7 @@ vi.mock('@/lib/hooks/use-workflows', () => ({
     usePublishWorkflow: () => mockPublishWorkflow,
     useDuplicateWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
     useTestWorkflow: () => mockTestWorkflow,
-    useDeleteWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
+    useDeleteWorkflow: () => mockDeleteWorkflow,
     useToggleWorkflow: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 
@@ -619,6 +620,20 @@ describe('AutomationPage', () => {
         expect(screen.getByText("Former teammate")).toBeInTheDocument()
         fireEvent.click(screen.getByRole("button", { name: "Publish to organization" }))
         expect(mockPublishWorkflow.mutate).toHaveBeenCalledWith("private-workflow", expect.any(Object))
+    })
+
+    it("deletes a workflow only after its confirmation dialog", async () => {
+        mockDeleteWorkflow.mutateAsync.mockResolvedValue(undefined)
+        mockUseWorkflows.mockReturnValue({ data: [{ id: "private-workflow", name: "Personal workflow", scope: "personal", owner_name: "Owner", proposed_by_name: null, can_edit: true, can_publish: false, trigger_type: "status_changed", is_enabled: false, run_count: 0, created_at: "2026-09-01T00:00:00Z" }], isLoading: false })
+        renderAutomationPage()
+
+        fireEvent.click(screen.getByRole("button", { name: "Delete" }))
+        const dialog = screen.getByRole("alertdialog", { name: "Delete Personal workflow?" })
+        expect(mockDeleteWorkflow.mutateAsync).not.toHaveBeenCalled()
+
+        fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }))
+        await waitFor(() => expect(mockDeleteWorkflow.mutateAsync).toHaveBeenCalledWith("private-workflow"))
+        await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument())
     })
 
 })

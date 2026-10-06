@@ -21,9 +21,12 @@ test(
     "the surrogates list pages, filters, and searches the seeded records",
     { session: "admin", tags: ["surrogates", "load"] },
     async ({ app, screen }) => {
-        const total = SEED_SIZES.surrogates
+        // Earlier tests in the run may add surrogates, so the total is at least the seeded count.
         await app.open("/surrogates")
-        await expect(screen.getByText(`Showing 1-30 of ${total} surrogates`)).toBeVisible({ timeout: LIST_BUDGET_MS })
+        const footer = screen.getByText(/^Showing 1-30 of \d+ surrogates$/)
+        await expect(footer).toBeVisible({ timeout: LIST_BUDGET_MS })
+        const total = Number(((await footer.textContent()) ?? "").match(/of (\d+) surrogates/)?.[1] ?? 0)
+        expect(total).toBeGreaterThanOrEqual(SEED_SIZES.surrogates)
         await expect(surrogateRows(screen)).toHaveCount(30)
 
         await screen.getByRole("button", "Next").tap()
