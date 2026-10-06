@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.82](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.81...surrogacy-crm-platform-v0.91.82) (2026-10-05)
+
+
+### Features
+
+* prepare private tracing and authenticated Gmail push ([#797](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/797)) ([68bbb8e](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/68bbb8e77a64d133f014ad39c83043c8b0dd78b7))
+
+
+### Bug Fixes
+
+* complete permission v2 handoffs and approved QA fixes ([#800](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/800)) ([6f46071](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/6f4607109d4d16fe99b53a3a2f4909f62cca8180))
+* enlarge dashboard greeting to balanced size ([#795](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/795)) ([65bca74](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/65bca746e7e90b0da768e31dc06691c589eb07fb))
+* repair template test sends and preserve email conversion content ([#793](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/793)) ([d5e096c](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/d5e096cb220df35f3f828f7035a78689118bf76e))
+
 ## [0.91.81](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.80...surrogacy-crm-platform-v0.91.81) (2026-10-04)
 
 

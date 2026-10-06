@@ -603,6 +603,11 @@ describe("EmbedFormPageClient", () => {
             message: "Unable to submit the form. Please try again.",
         },
         {
+            name: "a bad request that names no field",
+            error: new ApiError(400, "Bad Request", "Challenge verification failed"),
+            message: "Unable to submit the form. Please try again.",
+        },
+        {
             name: "a network failure",
             error: new Error("Network down"),
             message: "Unable to submit the form. Please try again.",
@@ -628,6 +633,49 @@ describe("EmbedFormPageClient", () => {
         expect(screen.getByLabelText(/full name/i)).toHaveValue("Embed Lead")
         expect(screen.queryByRole("heading", { name: "Request received" })).not.toBeInTheDocument()
         expect(document.body).not.toHaveTextContent(error.message)
+    })
+
+    it("shows the field validation message the API returns", async () => {
+        const detail = "Field 'Email' must be a valid email address"
+        submitEmbedPublicForm.mockRejectedValueOnce(new ApiError(400, "Bad Request", detail))
+        renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
+
+        expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
+        await waitForEmbedMessageListener()
+        window.dispatchEvent(
+            new MessageEvent("message", {
+                origin: "https://www.ewisurrogacy.com",
+                data: { type: "sf:form:init", attribution: {} },
+            }),
+        )
+        await waitFor(() => expect(createEmbedFormSession).toHaveBeenCalled())
+        fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: "Embed Lead" } })
+        fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "embed@example.com" } })
+        fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+        expect(await screen.findByText(detail)).toBeInTheDocument()
+        expect(screen.getByLabelText(/email/i)).toHaveValue("embed@example.com")
+        expect(screen.queryByRole("heading", { name: "Request received" })).not.toBeInTheDocument()
+    })
+
+    it("shows an email address the API rejects as invalid and does not submit", async () => {
+        renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
+
+        expect(await screen.findByRole("heading", { name: "Become a Surrogate" })).toBeInTheDocument()
+        await waitForEmbedMessageListener()
+        window.dispatchEvent(
+            new MessageEvent("message", {
+                origin: "https://www.ewisurrogacy.com",
+                data: { type: "sf:form:init", attribution: {} },
+            }),
+        )
+        await waitFor(() => expect(createEmbedFormSession).toHaveBeenCalled())
+        fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: "Embed Lead" } })
+        fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "embed@example.test" } })
+        fireEvent.click(screen.getByRole("button", { name: /submit/i }))
+
+        expect(await screen.findByText("Email must be a valid email address.")).toBeInTheDocument()
+        expect(submitEmbedPublicForm).not.toHaveBeenCalled()
     })
 
     describe("SMS consent", () => {

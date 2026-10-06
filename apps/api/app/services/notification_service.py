@@ -505,7 +505,7 @@ def create_notification(
 
     # Best-effort realtime push for connected clients.
     counts = get_notification_counts(db, user_id, org_id)
-    _schedule_ws_send(_send_ws_updates(user_id, notification, counts))
+    _schedule_ws_send(_send_ws_updates(user_id, _notification_ws_payload(notification), counts))
     return notification
 
 
@@ -773,11 +773,10 @@ def _ws_counts_payload(counts: NotificationCounts) -> dict:
     return {"action_count": counts.action, "updates_unread": counts.updates_unread}
 
 
-async def _send_ws_updates(
-    user_id: UUID, notification: Notification, counts: NotificationCounts
-) -> None:
-    """Send realtime notification + counts to websocket clients."""
-    payload = {
+def _notification_ws_payload(notification: Notification) -> dict:
+    # Snapshot on the owning thread: later commits expire ORM attributes, which
+    # would otherwise lazy-load through the caller's Session in the background.
+    return {
         "id": str(notification.id),
         "type": notification.type,
         "tier": notification_tier(notification.type).value,
@@ -789,6 +788,9 @@ async def _send_ws_updates(
         "created_at": notification.created_at.isoformat(),
     }
 
+
+async def _send_ws_updates(user_id: UUID, payload: dict, counts: NotificationCounts) -> None:
+    """Send realtime notification + counts without accessing the caller's Session."""
     await send_ws_to_user(
         user_id,
         {
