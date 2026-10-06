@@ -729,6 +729,28 @@ def test_readiness_probe_uses_a_bounded_twilio_client(toll_free_settings, monkey
     assert http_client.session.adapters["https://"].max_retries.total == 0
 
 
+def test_refresh_skips_an_organization_deleted_after_its_check_was_queued(
+    db, test_org, monkeypatch
+) -> None:
+    from app.services import twilio_provider_service, twilio_readiness_service
+
+    settings = _persist_configured_settings(db, test_org.id)
+    version = settings.current_version
+    test_org.deleted_at = datetime.now(UTC)
+    db.commit()
+
+    def fail_probe(*_args, **_kwargs):
+        raise AssertionError("Deleted organizations must not be probed")
+
+    monkeypatch.setattr(twilio_provider_service, "test_configuration", fail_probe)
+
+    persisted = twilio_readiness_service.refresh_readiness(
+        db, organization_id=test_org.id, expected_settings_version=version
+    )
+
+    assert persisted is False
+
+
 async def test_readiness_worker_persists_sanitized_provider_snapshot(
     authed_client,
     db,

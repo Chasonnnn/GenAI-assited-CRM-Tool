@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings as app_settings
-from app.db.models import TwilioSettings
+from app.db.models import Organization, TwilioSettings
 from app.db.models.messaging_delivery import (
     MessageDelivery,
     MessageReconciliationCase,
@@ -429,6 +429,11 @@ def refresh_readiness(
     expected_settings_version: int,
 ) -> bool:
     """Probe Twilio without sending and persist only sanitized, version-fenced evidence."""
+    # A tenant deleted after its check was queued must not be probed: deletion
+    # does not bump the settings version, so the version fence alone cannot see it.
+    organization = db.get(Organization, organization_id)
+    if organization is None or organization.deleted_at is not None:
+        return False
     settings = twilio_settings_service.get_settings(db, organization_id)
     if settings is None or settings.current_version != expected_settings_version:
         return False
