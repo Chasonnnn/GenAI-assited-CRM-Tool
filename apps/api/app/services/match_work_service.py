@@ -118,7 +118,7 @@ def work_source(item) -> str:
     )
 
 
-def _record_activity_filter(model, org_id):
+def _record_activity_filter(model, org_id, case_audits):
     """Exclude case events, including old events with only a linked work ID."""
     predicates = [model.details["match_id"].astext.is_(None)]
     for key, work_model in (
@@ -139,10 +139,8 @@ def _record_activity_filter(model, org_id):
         # Deleted case work still has durable case audit provenance.
         predicates.append(
             ~exists(
-                select(AuditLog.id).where(
-                    AuditLog.organization_id == org_id,
-                    AuditLog.target_type == "match",
-                    AuditLog.details[key].astext == reference,
+                select(case_audits.c.id).where(
+                    case_audits.c.details[key].astext == reference,
                 )
             )
         )
@@ -150,6 +148,22 @@ def _record_activity_filter(model, org_id):
 
 
 def _list_activity(db, session, match, attempt_id, page):
+    # Materialize once: sparse case events otherwise cause PostgreSQL to rescan
+    # the entire audit history inside each participant activity's anti-joins.
+    case_audits = (
+        select(
+            AuditLog.id,
+            AuditLog.event_type,
+            AuditLog.actor_user_id,
+            AuditLog.created_at,
+            AuditLog.target_id,
+            AuditLog.details,
+        )
+        .where(AuditLog.organization_id == session.org_id, AuditLog.target_type == "match")
+        .cte("case_audits")
+        .prefix_with("MATERIALIZED", dialect="postgresql")
+    )
+
     def fields(model, event_type, actor, timestamp, source, scope):
         return select(
             model.id.label("id"),
@@ -161,16 +175,19 @@ def _list_activity(db, session, match, attempt_id, page):
         )
 
     case_query = fields(
-        AuditLog, AuditLog.event_type, AuditLog.actor_user_id, AuditLog.created_at, "match", "case"
+        case_audits.c,
+        case_audits.c.event_type,
+        case_audits.c.actor_user_id,
+        case_audits.c.created_at,
+        "match",
+        "case",
     ).where(
-        AuditLog.organization_id == session.org_id,
-        AuditLog.target_type == "match",
-        AuditLog.target_id == match.id,
+        case_audits.c.target_id == match.id,
         # Page views write PHI access audits; they belong in the audit log, not the case activity.
-        AuditLog.event_type != AuditEventType.PHI_VIEWED.value,
+        case_audits.c.event_type != AuditEventType.PHI_VIEWED.value,
     )
     if attempt_id:
-        case_query = case_query.where(AuditLog.details["attempt_id"].astext == str(attempt_id))
+        case_query = case_query.where(case_audits.c.details["attempt_id"].astext == str(attempt_id))
     queries = [case_query]
     if not attempt_id:
         if match.surrogate_id:
@@ -186,7 +203,7 @@ def _list_activity(db, session, match, attempt_id, page):
                 ).where(
                     model.organization_id == session.org_id,
                     model.surrogate_id == match.surrogate_id,
-                    _record_activity_filter(model, session.org_id),
+                    _record_activity_filter(model, session.org_id, case_audits),
                 )
             )
         for source, field in (("ip", "intended_parent_id"), ("donor", "donor_id")):
@@ -203,7 +220,7 @@ def _list_activity(db, session, match, attempt_id, page):
                     ).where(
                         model.organization_id == session.org_id,
                         getattr(model, field) == getattr(match, field),
-                        _record_activity_filter(model, session.org_id),
+                        _record_activity_filter(model, session.org_id, case_audits),
                     )
                 )
         history = IntendedParentStatusHistory
