@@ -114,7 +114,7 @@ async def test_work_isolates_repeated_cases_attempts_and_general_notes(
 async def test_match_workspace_preserves_unassigned_history_without_other_case_work(
     authed_client, db, test_auth, cases
 ):
-    from app.db.models import EntityActivityLog, SurrogateActivityLog
+    from app.db.models import EntityActivityLog, Organization, SurrogateActivityLog
 
     old, current, attempt = cases
     org_id, user_id = test_auth.org.id, test_auth.user.id
@@ -174,7 +174,7 @@ async def test_match_workspace_preserves_unassigned_history_without_other_case_w
         organization_id=org_id,
         surrogate_id=current.surrogate_id,
         activity_type="created",
-        details={},
+        details={"task_id": str(general_task.id)},
         actor_user_id=user_id,
     )
     other_activity = EntityActivityLog(
@@ -189,7 +189,39 @@ async def test_match_workspace_preserves_unassigned_history_without_other_case_w
         activity_type="match_accepted",
         details={"match_id": str(old.id)},
     )
-    db.add_all([generic_activity, other_activity, explicit_other_activity])
+    deleted_note_id = uuid.uuid4()
+    deleted_case_activity = SurrogateActivityLog(
+        organization_id=org_id,
+        surrogate_id=current.surrogate_id,
+        activity_type="note_deleted",
+        details={"note_id": str(deleted_note_id)},
+    )
+    other_org = Organization(name="Other history", slug=f"history-{uuid.uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    db.add_all(
+        [
+            generic_activity,
+            other_activity,
+            explicit_other_activity,
+            deleted_case_activity,
+            AuditLog(
+                organization_id=org_id,
+                event_type="note_deleted",
+                target_type="match",
+                target_id=old.id,
+                details={"note_id": str(deleted_note_id)},
+            ),
+            # Another tenant's reference must not suppress this tenant's history.
+            AuditLog(
+                organization_id=other_org.id,
+                event_type="task_created",
+                target_type="match",
+                target_id=old.id,
+                details={"task_id": str(general_task.id)},
+            ),
+        ]
+    )
     db.flush()
     result = await authed_client.get(f"/matches/{current.id}/work")
     assert result.status_code == 200, result.text
@@ -204,6 +236,7 @@ async def test_match_workspace_preserves_unassigned_history_without_other_case_w
     assert str(generic_activity.id) in activity_ids
     assert str(other_activity.id) not in activity_ids
     assert str(explicit_other_activity.id) not in activity_ids
+    assert str(deleted_case_activity.id) not in activity_ids
     scoped = (
         await authed_client.get(
             f"/matches/{current.id}/work", params={"attempt_id": str(attempt.id)}
@@ -587,3 +620,103 @@ async def test_work_tasks_include_due_time(authed_client, db, test_auth, cases):
     item = next(t for t in result.json()["tasks"] if t["id"] == str(task.id))
     assert item["due_date"] == "2026-10-02"
     assert item["due_time"] == "14:30:00"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "attempt_scoped,audit_target_type",
+    [(False, "surrogate"), (False, "match"), (True, "match")],
+    ids=["record-history", "case-history", "attempt-history"],
+)
+async def test_work_activity_with_large_unrelated_audit_history(
+    authed_client, db, test_auth, cases, attempt_scoped, audit_target_type
+):
+    """Audit-table work must stay bounded as participant activity grows."""
+    old, current, attempt = cases
+    db.execute(
+        text("""
+            INSERT INTO audit_logs (organization_id, event_type, target_type, target_id, details)
+            SELECT :org_id, 'phi_viewed', :target_type, :target_id, '{}'::jsonb
+            FROM generate_series(1, 400000)
+        """),
+        {
+            "org_id": test_auth.org.id,
+            "target_type": audit_target_type,
+            "target_id": old.id if audit_target_type == "match" else current.surrogate_id,
+        },
+    )
+    db.execute(
+        text("""
+            INSERT INTO surrogate_activity_log
+                (organization_id, surrogate_id, activity_type, details)
+            SELECT :org_id, :surrogate_id, 'created', '{}'::jsonb
+            FROM generate_series(1, 128)
+        """),
+        {"org_id": test_auth.org.id, "surrogate_id": current.surrogate_id},
+    )
+    db.execute(
+        text("""
+            INSERT INTO audit_logs (organization_id, event_type, target_type, target_id, details)
+            SELECT :org_id, 'task_created', 'match', :match_id,
+                   jsonb_build_object('task_id', gen_random_uuid()::text)
+            FROM generate_series(1, 800)
+        """),
+        {"org_id": test_auth.org.id, "match_id": old.id},
+    )
+    if attempt_scoped:
+        db.add(
+            AuditLog(
+                organization_id=test_auth.org.id,
+                event_type="note_created",
+                target_type="match",
+                target_id=current.id,
+                details={"attempt_id": str(attempt.id)},
+            )
+        )
+        db.flush()
+    db.execute(text("ANALYZE audit_logs"))
+    db.execute(text("ANALYZE surrogate_activity_log"))
+    from sqlalchemy import event
+
+    connection = db.connection()
+    selects = []
+
+    def capture_select(_conn, _cursor, statement, parameters, context, _executemany):
+        if context.compiled is not None and context.compiled.statement.is_select:
+            selects.append((statement, parameters))
+
+    event.listen(connection, "before_cursor_execute", capture_select)
+    try:
+        result = await authed_client.get(
+            f"/matches/{current.id}/work",
+            params={"attempt_id": str(attempt.id)} if attempt_scoped else {},
+        )
+    finally:
+        event.remove(connection, "before_cursor_execute", capture_select)
+
+    def audit_rows_visited(node):
+        visited = 0
+        if node.get("Relation Name") == "audit_logs":
+            visited = node["Actual Loops"] * (
+                node["Actual Rows"] + node.get("Rows Removed by Filter", 0)
+            )
+        return visited + sum(audit_rows_visited(child) for child in node.get("Plans", []))
+
+    visited = 0
+    temporary_blocks_written = 0
+    with connection.connection.driver_connection.cursor() as cursor:
+        for statement, parameters in selects:
+            cursor.execute("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + statement, parameters)
+            plan = cursor.fetchone()[0][0]["Plan"]
+            visited += audit_rows_visited(plan)
+            temporary_blocks_written += plan.get("Temp Written Blocks", 0)
+    # Budget one activity scan plus the separate authentication audit lookup.
+    # Measure work instead of elapsed time; parallel EXPLAIN row counts are averaged.
+    audit_count = db.execute(text("SELECT count(*) FROM audit_logs")).scalar_one()
+    assert visited <= 2 * audit_count + 10, f"Match work visited {visited:,.0f} audit rows"
+
+    assert result.status_code == 200, result.text
+    assert len(result.json()["activity"]) == (1 if attempt_scoped else 128)
+    assert result.json()["has_more"] is False
+    # Small workspaces must not spill unrelated case history to disk.
+    assert temporary_blocks_written == 0
