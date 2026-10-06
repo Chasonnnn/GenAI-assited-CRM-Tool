@@ -603,6 +603,101 @@ async def test_post_readiness_coalesces_one_durable_no_send_job(authed_client, d
     assert "secret" not in str(jobs[0].payload).lower()
 
 
+def _persist_configured_settings(db, organization_id, *, enabled: bool = True) -> TwilioSettings:
+    from app.services import twilio_settings_service
+
+    encrypt = twilio_settings_service.encrypt_credential
+    settings = twilio_settings_service.get_or_create_settings(db, organization_id)
+    settings.enabled = enabled
+    settings.account_sid_encrypted = encrypt("AC" + ("1" * 32))
+    settings.api_key_sid_encrypted = encrypt("SK" + ("2" * 32))
+    settings.api_secret_encrypted = encrypt("secret")
+    settings.auth_token_encrypted = encrypt("auth-token")
+    for route in settings.routes:
+        route.enabled = True
+        route.messaging_service_sid_encrypted = encrypt("MG" + ("3" * 32))
+        route.sender_phone_encrypted = encrypt("+18005550199")
+    db.commit()
+    return settings
+
+
+def _set_provider_evidence(db, settings, *, checked_at: datetime | None, settings_version: int):
+    for route in settings.routes:
+        route.capability_evidence = {
+            "provider": {
+                "sender_type": "toll_free",
+                "checked_at": checked_at.isoformat() if checked_at else None,
+                "settings_version": settings_version,
+            }
+        }
+    db.commit()
+
+
+def _readiness_jobs(db, organization_id) -> list[Job]:
+    return (
+        db.query(Job)
+        .filter(
+            Job.job_type == JobType.TWILIO_READINESS_CHECK.value,
+            Job.organization_id == organization_id,
+        )
+        .all()
+    )
+
+
+@pytest.mark.parametrize(
+    ("evidence_age", "version_lag", "expected_jobs"),
+    [
+        pytest.param(timedelta(hours=1), 0, 0, id="fresh"),
+        pytest.param(timedelta(hours=13), 0, 1, id="older-than-half-the-window"),
+        pytest.param(None, 0, 1, id="never-checked"),
+        pytest.param(timedelta(hours=1), 1, 1, id="settings-version-changed"),
+    ],
+)
+def test_scheduled_refresh_queues_one_check_before_provider_evidence_expires(
+    db, test_org, evidence_age, version_lag, expected_jobs
+) -> None:
+    from app.services import twilio_readiness_orchestration_service
+
+    now = datetime.now(UTC)
+    settings = _persist_configured_settings(db, test_org.id)
+    _set_provider_evidence(
+        db,
+        settings,
+        checked_at=now - evidence_age if evidence_age else None,
+        settings_version=settings.current_version - version_lag,
+    )
+
+    queued = twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now)
+    # A second pass inside the same hour must coalesce onto the active job.
+    twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now)
+
+    assert queued == expected_jobs
+    jobs = _readiness_jobs(db, test_org.id)
+    assert len(jobs) == expected_jobs
+    for job in jobs:
+        assert job.payload == {
+            "provider_scope": "organization",
+            "settings_version": settings.current_version,
+        }
+
+
+@pytest.mark.parametrize("reason", ["disabled", "route_unconfigured"])
+def test_scheduled_refresh_skips_organizations_that_cannot_send(db, test_org, reason) -> None:
+    from app.services import twilio_readiness_orchestration_service
+
+    settings = _persist_configured_settings(db, test_org.id, enabled=reason != "disabled")
+    if reason == "route_unconfigured":
+        for route in settings.routes:
+            route.messaging_service_sid_encrypted = None
+        db.commit()
+    _set_provider_evidence(db, settings, checked_at=None, settings_version=settings.current_version)
+
+    queued = twilio_readiness_orchestration_service.queue_due_refreshes(db, now=datetime.now(UTC))
+
+    assert queued == 0
+    assert _readiness_jobs(db, test_org.id) == []
+
+
 async def test_readiness_worker_persists_sanitized_provider_snapshot(
     authed_client,
     db,
