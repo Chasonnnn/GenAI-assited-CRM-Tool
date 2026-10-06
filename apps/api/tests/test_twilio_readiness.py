@@ -620,6 +620,9 @@ def _persist_configured_settings(db, organization_id, *, enabled: bool = True) -
     return settings
 
 
+_SAME_AS_CHECKED = object()
+
+
 def _set_provider_evidence(
     db,
     settings,
@@ -627,7 +630,11 @@ def _set_provider_evidence(
     checked_at: datetime | None,
     settings_version: int,
     error_code: str | None = None,
+    attempted_at: object = _SAME_AS_CHECKED,
 ):
+    """Write route evidence; `attempted_at` is when the last probe ran (the readiness snapshot)."""
+    if attempted_at is _SAME_AS_CHECKED:
+        attempted_at = checked_at
     for route in settings.routes:
         route.capability_evidence = {
             "provider": {
@@ -636,12 +643,24 @@ def _set_provider_evidence(
                 "settings_version": settings_version,
             },
             "readiness": {
-                "checked_at": checked_at.isoformat() if checked_at else None,
+                "checked_at": attempted_at.isoformat() if attempted_at else None,
                 "settings_version": settings_version,
                 "error_code": error_code,
             },
         }
     db.commit()
+
+
+def _add_tenant(db, index: int) -> Organization:
+    organization = Organization(
+        id=uuid4(),
+        name=f"Tenant {index}",
+        slug=f"tenant-{uuid4().hex[:8]}",
+        ai_enabled=True,
+    )
+    db.add(organization)
+    db.flush()
+    return organization
 
 
 def _readiness_jobs(db, organization_id) -> list[Job]:
@@ -712,7 +731,16 @@ def test_scheduled_refresh_skips_organizations_that_cannot_send(db, test_org, re
     assert _readiness_jobs(db, test_org.id) == []
 
 
-def test_scheduled_refresh_retries_a_probe_that_failed_part_way(db, test_org) -> None:
+@pytest.mark.parametrize(
+    ("attempt_age", "expected_jobs"),
+    [
+        pytest.param(timedelta(hours=1, minutes=1), 1, id="retry-after-the-wait"),
+        pytest.param(timedelta(minutes=10), 0, id="not-before-the-wait"),
+    ],
+)
+def test_scheduled_refresh_retries_a_probe_that_failed_part_way(
+    db, test_org, attempt_age, expected_jobs
+) -> None:
     from app.services import twilio_readiness_orchestration_service
 
     now = datetime.now(UTC)
@@ -721,32 +749,59 @@ def test_scheduled_refresh_retries_a_probe_that_failed_part_way(db, test_org) ->
     _set_provider_evidence(
         db,
         settings,
-        checked_at=now - timedelta(hours=1),
+        checked_at=now - attempt_age,
         settings_version=settings.current_version,
         error_code="twilio_timeout",
     )
 
     queued = twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now)
 
-    assert queued == 1
-    assert len(_readiness_jobs(db, test_org.id)) == 1
+    assert queued == expected_jobs
+    assert len(_readiness_jobs(db, test_org.id)) == expected_jobs
+
+
+def test_scheduled_refresh_probes_the_least_recently_attempted_tenant_first(db, test_org) -> None:
+    from app.services import twilio_readiness_orchestration_service
+
+    now = datetime.now(UTC)
+    version = 1
+    aged, never, failing = test_org, _add_tenant(db, 1), _add_tenant(db, 2)
+    _set_provider_evidence(
+        db,
+        _persist_configured_settings(db, aged.id),
+        checked_at=now - timedelta(hours=13),
+        settings_version=version,
+    )
+    _set_provider_evidence(
+        db, _persist_configured_settings(db, never.id), checked_at=None, settings_version=version
+    )
+    # Probed two hours ago and failed: due again, but behind everyone probed longer ago.
+    _set_provider_evidence(
+        db,
+        _persist_configured_settings(db, failing.id),
+        checked_at=now - timedelta(hours=1),
+        settings_version=version,
+        error_code="twilio_timeout",
+        attempted_at=now - timedelta(hours=2),
+    )
+
+    order: list[Organization] = []
+    for _ in range(3):
+        twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now, limit=1)
+        order.extend(
+            tenant
+            for tenant in (aged, never, failing)
+            if tenant not in order and _readiness_jobs(db, tenant.id)
+        )
+
+    assert order == [never, aged, failing]
 
 
 def test_scheduled_refresh_queues_a_bounded_batch_per_pass(db, test_org) -> None:
     from app.services import twilio_readiness_orchestration_service
 
     now = datetime.now(UTC)
-    organizations = [test_org]
-    for index in range(2):
-        organization = Organization(
-            id=uuid4(),
-            name=f"Tenant {index}",
-            slug=f"tenant-{uuid4().hex[:8]}",
-            ai_enabled=True,
-        )
-        db.add(organization)
-        db.flush()
-        organizations.append(organization)
+    organizations = [test_org, _add_tenant(db, 1), _add_tenant(db, 2)]
     for organization in organizations:
         settings = _persist_configured_settings(db, organization.id)
         _set_provider_evidence(

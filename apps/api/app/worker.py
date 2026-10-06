@@ -98,8 +98,9 @@ TWILIO_READINESS_REFRESH_ENABLED = _env_flag_enabled(
     default=True,
 )
 TWILIO_READINESS_REFRESH_INTERVAL_SECONDS = int(
-    os.getenv("TWILIO_READINESS_REFRESH_INTERVAL_SECONDS", "3600")
+    os.getenv("TWILIO_READINESS_REFRESH_INTERVAL_SECONDS", "900")
 )
+TWILIO_READINESS_REFRESH_BATCH_SIZE = int(os.getenv("TWILIO_READINESS_REFRESH_BATCH_SIZE", "20"))
 WORKFLOW_MAINTENANCE_FALLBACK_ENABLED = _env_flag_enabled(
     os.getenv("WORKFLOW_MAINTENANCE_FALLBACK_ENABLED"),
     default=False,
@@ -441,7 +442,7 @@ def maybe_schedule_twilio_readiness_refresh_jobs(
     now: datetime,
     last_run_at: datetime | None,
 ) -> datetime | None:
-    """Hourly no-send Twilio readiness refresh so provider evidence never expires mid-send."""
+    """Periodic no-send Twilio readiness refresh so provider evidence never expires mid-send."""
     if not TWILIO_READINESS_REFRESH_ENABLED:
         return last_run_at
 
@@ -451,7 +452,11 @@ def maybe_schedule_twilio_readiness_refresh_jobs(
 
     from app.services import twilio_readiness_orchestration_service
 
-    queued = twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now)
+    queued = twilio_readiness_orchestration_service.queue_due_refreshes(
+        db,
+        now=now,
+        limit=max(1, TWILIO_READINESS_REFRESH_BATCH_SIZE),
+    )
     if queued:
         logger.info("Twilio readiness refresh scheduled (jobs=%s)", queued)
     return now

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -16,7 +16,9 @@ from app.services import job_service, twilio_readiness_service, twilio_settings_
 # Half the send gate: one missed hourly pass still leaves a full refresh window
 # before dispatch starts deferring sends as `<purpose>_provider_evidence_stale`.
 REFRESH_EVIDENCE_AFTER = twilio_readiness_service.PROVIDER_EVIDENCE_MAX_AGE / 2
-# Probes run sequentially on the shared job queue; the rest wait for the next hourly pass.
+# A probe that failed is retried, but a broken tenant is never probed more often than this.
+FAILED_PROBE_RETRY_AFTER = timedelta(hours=1)
+# Probes run sequentially on the shared job queue; the rest wait for the next pass.
 REFRESH_BATCH_LIMIT = 20
 
 
@@ -91,23 +93,40 @@ def _route_sends(route: TwilioRoute) -> bool:
     )
 
 
-def _provider_evidence_due(route: TwilioRoute, *, now: datetime, settings_version: int) -> bool:
+def _parse_timestamp(value: object) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value or ""))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _evidence_sections(route: TwilioRoute) -> tuple[dict, dict]:
     evidence = route.capability_evidence or {}
     provider = evidence.get("provider") if isinstance(evidence.get("provider"), dict) else {}
     readiness = evidence.get("readiness") if isinstance(evidence.get("readiness"), dict) else {}
+    return provider, readiness
+
+
+def _last_attempt_at(route: TwilioRoute) -> datetime | None:
+    return _parse_timestamp(_evidence_sections(route)[1].get("checked_at"))
+
+
+def _provider_evidence_due(route: TwilioRoute, *, now: datetime, settings_version: int) -> bool:
+    provider, readiness = _evidence_sections(route)
     if provider.get("settings_version") != settings_version:
         return True
+    checked = _parse_timestamp(provider.get("checked_at"))
+    if checked is None:
+        return True
     # A probe that failed part-way stamps incomplete route facts with a fresh
-    # checked_at; retry it on the next pass instead of blocking sends until it ages.
+    # checked_at; retry it after a bounded wait instead of blocking sends until it ages.
     if readiness.get("error_code"):
-        return True
-    try:
-        checked = datetime.fromisoformat(str(provider.get("checked_at") or ""))
-    except ValueError:
-        return True
-    if checked.tzinfo is None:
-        checked = checked.replace(tzinfo=UTC)
-    return now - checked.astimezone(UTC) > REFRESH_EVIDENCE_AFTER
+        attempted = _parse_timestamp(readiness.get("checked_at"))
+        return attempted is None or now - attempted > FAILED_PROBE_RETRY_AFTER
+    return now - checked > REFRESH_EVIDENCE_AFTER
 
 
 def queue_due_refreshes(
@@ -134,19 +153,27 @@ def queue_due_refreshes(
         .scalars()
         .all()
     )
-    created = 0
+    never = datetime.min.replace(tzinfo=UTC)
+    due: list[tuple[datetime, uuid.UUID]] = []
     for organization_id in organization_ids:
-        if created >= limit:
-            break
         settings = twilio_settings_service.get_settings(db, organization_id)
         if settings is None or not twilio_readiness_service.credentials_configured(settings):
             continue
+        sending = [route for route in settings.routes if _route_sends(route)]
         if not any(
-            _route_sends(route)
-            and _provider_evidence_due(route, now=now, settings_version=settings.current_version)
-            for route in settings.routes
+            _provider_evidence_due(route, now=now, settings_version=settings.current_version)
+            for route in sending
         ):
             continue
+        attempts = [attempt for route in sending if (attempt := _last_attempt_at(route))]
+        due.append((max(attempts) if attempts else never, organization_id))
+    # Least recently probed first, so a run of failing tenants cannot fill the
+    # batch every pass and starve the rest.
+    due.sort()
+    created = 0
+    for _, organization_id in due:
+        if created >= limit:
+            break
         if _queue_check(db, organization_id=organization_id)[1]:
             created += 1
     return created
