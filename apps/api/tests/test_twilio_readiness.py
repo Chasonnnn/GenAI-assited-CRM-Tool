@@ -732,26 +732,31 @@ def test_scheduled_refresh_skips_organizations_that_cannot_send(db, test_org, re
 
 
 @pytest.mark.parametrize(
-    ("attempt_age", "expected_jobs"),
+    ("attempt_age", "provider_written", "version_lag", "expected_jobs"),
     [
-        pytest.param(timedelta(hours=1, minutes=1), 1, id="retry-after-the-wait"),
-        pytest.param(timedelta(minutes=10), 0, id="not-before-the-wait"),
+        pytest.param(timedelta(hours=1, minutes=1), True, 0, 1, id="part-way-retry-after-wait"),
+        pytest.param(timedelta(minutes=10), True, 0, 0, id="part-way-not-before-wait"),
+        pytest.param(timedelta(hours=1, minutes=1), False, 0, 1, id="full-retry-after-wait"),
+        pytest.param(timedelta(minutes=10), False, 0, 0, id="full-not-before-wait"),
+        pytest.param(timedelta(minutes=10), False, 1, 1, id="settings-changed-skips-wait"),
     ],
 )
-def test_scheduled_refresh_retries_a_probe_that_failed_part_way(
-    db, test_org, attempt_age, expected_jobs
+def test_scheduled_refresh_retries_a_failed_probe_after_a_bounded_wait(
+    db, test_org, attempt_age, provider_written, version_lag, expected_jobs
 ) -> None:
     from app.services import twilio_readiness_orchestration_service
 
     now = datetime.now(UTC)
     settings = _persist_configured_settings(db, test_org.id)
-    # Fresh timestamp, but the toll-free lookup timed out and left the facts incomplete.
+    # A part-way failure (toll-free lookup timed out) still writes fresh route facts;
+    # a full failure (account fetch failed) leaves the provider section missing.
     _set_provider_evidence(
         db,
         settings,
-        checked_at=now - attempt_age,
-        settings_version=settings.current_version,
+        checked_at=now - attempt_age if provider_written else None,
+        settings_version=settings.current_version - version_lag,
         error_code="twilio_timeout",
+        attempted_at=now - attempt_age,
     )
 
     queued = twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now)

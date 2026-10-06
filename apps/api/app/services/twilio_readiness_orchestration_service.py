@@ -116,16 +116,18 @@ def _last_attempt_at(route: TwilioRoute) -> datetime | None:
 
 def _provider_evidence_due(route: TwilioRoute, *, now: datetime, settings_version: int) -> bool:
     provider, readiness = _evidence_sections(route)
+    # A failed probe for the current settings waits a bounded time before retry. This
+    # runs first: a full failure leaves the provider section missing, and a part-way
+    # failure stamps incomplete route facts with a fresh checked_at; neither may be
+    # probed every pass, nor left blocking sends until the evidence ages.
+    if readiness.get("error_code") and readiness.get("settings_version") == settings_version:
+        attempted = _parse_timestamp(readiness.get("checked_at"))
+        return attempted is None or now - attempted > FAILED_PROBE_RETRY_AFTER
     if provider.get("settings_version") != settings_version:
         return True
     checked = _parse_timestamp(provider.get("checked_at"))
     if checked is None:
         return True
-    # A probe that failed part-way stamps incomplete route facts with a fresh
-    # checked_at; retry it after a bounded wait instead of blocking sends until it ages.
-    if readiness.get("error_code"):
-        attempted = _parse_timestamp(readiness.get("checked_at"))
-        return attempted is None or now - attempted > FAILED_PROBE_RETRY_AFTER
     return now - checked > REFRESH_EVIDENCE_AFTER
 
 
