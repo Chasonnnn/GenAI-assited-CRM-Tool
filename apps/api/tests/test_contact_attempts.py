@@ -191,13 +191,25 @@ async def test_contact_attempt_rejects_before_assignment(authed_client):
 
 
 @pytest.mark.asyncio
-async def test_contact_attempt_reached_updates_stage_and_status(authed_client, db):
+@pytest.mark.parametrize("stage_key", ["new_unread", "reschedule_needed"])
+async def test_contact_attempt_reached_updates_status_without_moving_stage(
+    authed_client, db, stage_key
+):
+    from app.services import pipeline_service
+
     case_res = await authed_client.post(
         "/surrogates",
-        json={"full_name": "Reached", "email": "reached@example.com"},
+        json={"full_name": "Reached", "email": f"reached-{stage_key}@example.com"},
     )
     assert case_res.status_code == 201, case_res.text
     surrogate_id = case_res.json()["id"]
+
+    case = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate_id)).first()
+    assert case is not None
+    pipeline = pipeline_service.get_or_create_default_pipeline(db, case.organization_id)
+    stage_id = next(stage.id for stage in pipeline.stages if stage.stage_key == stage_key)
+    case.stage_id = stage_id
+    db.commit()
 
     attempt_res = await authed_client.post(
         f"/surrogates/{surrogate_id}/contact-attempts",
@@ -205,14 +217,10 @@ async def test_contact_attempt_reached_updates_stage_and_status(authed_client, d
     )
     assert attempt_res.status_code == 201, attempt_res.text
 
-    case = db.query(Surrogate).filter(Surrogate.id == UUID(surrogate_id)).first()
-    assert case is not None
+    db.refresh(case)
     assert case.contact_status == ContactStatus.REACHED.value
     assert case.contacted_at is not None
-
-    stage = db.query(PipelineStage).filter(PipelineStage.id == case.stage_id).first()
-    assert stage is not None
-    assert stage.slug == "contacted"
+    assert case.stage_id == stage_id
 
 
 @pytest.mark.asyncio
