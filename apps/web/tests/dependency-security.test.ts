@@ -51,7 +51,7 @@ function compareVersions(left: string, right: string): number {
 
 describe("Dependency security guards", () => {
     it.each([
-        ["sharp", "0.35.4"],
+        ["sharp", "0.35.5"],
         ["@tiptap/core", "3.30.5"],
         ["baseline-browser-mapping", "2.11.0"],
     ])("resolves patched %s versions", (name, minimum) => {
