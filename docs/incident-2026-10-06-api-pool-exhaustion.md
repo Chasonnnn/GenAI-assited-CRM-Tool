@@ -1,5 +1,11 @@
 # CRM API connection-pool exhaustion, October 6, 2026
 
+The match activity query repeatedly scanned the audit table, holding API connections and exhausting the small request pool.
+The local correction materializes the authenticated tenant's case-audit lookup once per request.
+The corrected SELECT completed in 369.92 milliseconds against production data under a read-only diagnostic session.
+The original SELECT exceeded the same five-second statement limit.
+The application fix has not been deployed.
+
 ## Confirmed evidence
 
 - Project: `probable-dream-484923-n7`; region: `us-central1`.
@@ -31,33 +37,53 @@ CPU utilization peaked at 86.85%; memory utilization ranged from 49.85% to 55.06
 CPU remained near 50% during many failures.
 These readings do not distinguish a CPU-heavy query, lock contention, or a poor query plan.
 
+## Query-plan evidence
+
+The approved diagnostic job ran inside the existing API network using the deployed image and service account.
+It enforced read-only transactions, five-second statements, and a one-second lock wait.
+Outputs excluded query text, credentials, record identifiers, and customer records.
+
+| Execution | Observation |
+| --- | --- |
+| `crm-db-diagnostic-20261006-ztmrx` | Database limit: 50 connections. Approximately 407,858 audit rows. Seven idle connections; no blockers at sampling. |
+| `crm-db-diagnostic-20261006-vbjgs` | Original query: seven audit scan nodes, including scans nested beneath participant activity loops. EXPLAIN ANALYZE stopped with SQLSTATE `57014` after five seconds. |
+| `crm-db-diagnostic-20261006-ncqrm` | Corrected query: one parallel audit scan; EXPLAIN ANALYZE completed in 369.92 milliseconds. |
+
+The plan samples selected three surrogate matches with the largest participant histories: 128, 128, and 125 activity rows.
+Only the first sample executed EXPLAIN ANALYZE; the other samples used EXPLAIN without execution.
+The original planner estimated one participant row and chose repeated nested-loop anti-joins against the much larger audit table.
+The corrected plan materializes tenant-scoped match audits and reuses that result for case activity and deleted-work provenance checks.
+The executions were sequential, not simultaneous; this is a bounded query benchmark, not an endpoint load test.
+Cloud Logging retrieval returned all 20 diagnostic entries without pagination.
+
+The observed connection limit and memory readings do not justify increasing the API pool without a connection budget.
+The query defect should be released before reassessing capacity under normal traffic.
+No database migration, index creation, network change, or capacity change is required for this correction.
+
 ## Local verification
 
-- All 15 existing match-work tests passed against a migrated, disposable PostgreSQL database.
-- A temporary experiment inserted 20,000 audit records and 1,000 activity records.
-- After ANALYZE, its match-activity query completed in 13.055 milliseconds.
-- That experiment did not reproduce the incident and was removed rather than retained as a misleading regression test.
-- The relevant deployed database, dependency, alert, and match-work files match the local versions inspected.
+- The regression fixture contains 400,000 unrelated audits, 800 case audits, and 128 participant activity rows.
+- Before the fix, the request's SELECT plans visited approximately 103.8 million audit rows and failed the bounded-work assertion.
+- After the fix, the measured work fell to approximately 0.8 million audit rows across the request's SELECTs.
+- The regression measures executed plan work rather than machine-dependent elapsed time.
+- All 31 tests in `test_match_work.py`, `test_match_cases.py`, and `test_tasks_match_scope.py` passed.
+- Coverage includes repeated cases, attempts, deleted-work provenance, cross-tenant references, denied operations, and CSRF.
+- Ruff lint and formatting checks passed for all changed Python files.
+- The initial 20,000-row experiment did not reproduce the incident and was removed.
 
-## Pending diagnosis
+Each test invocation created, migrated, and dropped a disposable local PostgreSQL database.
+Existing local database containers were preserved.
 
-Pool exhaustion is confirmed. The reason match-work requests hold connections for minutes remains unconfirmed.
-The query is a stronger investigation target than changing pool size without a database connection budget.
-No application fix or production configuration change has been made.
+## Operational status
 
-The database has no public IP. Local Cloud SQL Auth Proxy attempts could not reach it.
-Those task-owned proxies were stopped. No network access controls were changed.
+Only the diagnostic job ran in production. The API revision and traffic allocation remain unchanged.
+The corrected SQL ran as a read-only benchmark; this does not establish deployed application recovery.
+The diagnostic job was deleted after its results were collected.
+No task-owned servers or proxies remain running.
 
-`scripts/diagnose_db_contention.py` reports settings, query wait categories, blockers, and table statistics.
-It enforces read-only transactions, five-second statements, and a one-second lock wait.
-It does not print query text, credentials, or customer records.
-Local execution verified these connection settings. Ruff passed.
-
-A prepared temporary Cloud Run job uses the deployed API image and existing API service account/network.
-It has one task, zero retries, a 60-second deadline, one CPU, and 512 MiB of memory.
-It has no HTTP ingress or schedule and references the existing database secret.
-Creating and executing that job requires explicit authorization under the repository deployment rule.
-The job should be deleted after its sanitized output is collected.
+The installed gcloud version failed to decode mixed nested arrays in structured log output.
+The diagnostic helper now emits named row objects; deeply nested plan output was parsed from JSON stdout through the Logging API.
+Cloud authentication remained guarded by the repository's authmux context.
 
 ## Checkout
 

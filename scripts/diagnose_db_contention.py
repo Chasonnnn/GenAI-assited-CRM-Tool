@@ -56,12 +56,12 @@ def main() -> int:
                 try:
                     with connection.cursor() as cursor:
                         cursor.execute(statement)
+                        columns = [column.name for column in cursor.description]
                         print(
                             json.dumps(
                                 {
                                     "diagnostic": name,
-                                    "columns": [column.name for column in cursor.description],
-                                    "rows": cursor.fetchall(),
+                                    "rows": [dict(zip(columns, row)) for row in cursor.fetchall()],
                                 },
                                 default=str,
                             ),
