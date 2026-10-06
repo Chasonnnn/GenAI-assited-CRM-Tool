@@ -150,6 +150,7 @@ def _record_activity_filter(model, org_id, case_audits):
 def _list_activity(db, session, match, attempt_id, page):
     # Materialize once: sparse case events otherwise cause PostgreSQL to rescan
     # the entire audit history inside each participant activity's anti-joins.
+    # Attempts have no participant branches, so allow their filters to push down.
     case_audits = (
         select(
             AuditLog.id,
@@ -161,7 +162,7 @@ def _list_activity(db, session, match, attempt_id, page):
         )
         .where(AuditLog.organization_id == session.org_id, AuditLog.target_type == "match")
         .cte("case_audits")
-        .prefix_with("MATERIALIZED", dialect="postgresql")
+        .prefix_with("NOT MATERIALIZED" if attempt_id else "MATERIALIZED", dialect="postgresql")
     )
 
     def fields(model, event_type, actor, timestamp, source, scope):
