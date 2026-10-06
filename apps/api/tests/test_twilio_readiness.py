@@ -751,6 +751,47 @@ def test_refresh_skips_an_organization_deleted_after_its_check_was_queued(
     assert persisted is False
 
 
+@pytest.mark.parametrize(
+    ("exception_type", "expected_error"),
+    [
+        pytest.param("ConnectTimeout", "twilio_timeout", id="timeout"),
+        pytest.param("ConnectionError", "twilio_connection_failed", id="connection"),
+    ],
+)
+def test_readiness_probe_sanitizes_transport_failures(
+    toll_free_settings, monkeypatch, exception_type, expected_error
+) -> None:
+    from requests import exceptions as requests_exceptions
+
+    from app.services import twilio_provider_service, twilio_transport
+
+    # Requests errors quote the URL, which carries the Account SID.
+    account_sid = "AC" + ("1" * 32)
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}.json"
+
+    class _Accounts:
+        def __call__(self, _sid):
+            return self
+
+        def fetch(self):
+            raise getattr(requests_exceptions, exception_type)(
+                f"Max retries exceeded with url: {url}"
+            )
+
+    monkeypatch.setattr(
+        twilio_transport,
+        "Client",
+        lambda *_args, **_kwargs: SimpleNamespace(api=SimpleNamespace(accounts=_Accounts())),
+    )
+
+    result = twilio_provider_service.test_configuration(toll_free_settings)
+
+    assert result.valid is False
+    assert result.error == expected_error
+    assert account_sid not in result.model_dump_json()
+    assert "api.twilio.com" not in result.model_dump_json()
+
+
 async def test_readiness_worker_persists_sanitized_provider_snapshot(
     authed_client,
     db,

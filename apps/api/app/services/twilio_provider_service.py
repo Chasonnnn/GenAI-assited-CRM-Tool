@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from requests import exceptions as requests_exceptions
 from twilio.base.exceptions import TwilioRestException
 
 from app.db.models import TwilioSettings
@@ -188,14 +189,22 @@ def test_configuration(
         capabilities["messaging_services"] = bool(route_statuses) and all(
             status == "verified" for status in route_statuses.values()
         )
-    except TwilioRestException as exc:
+    except (TwilioRestException, requests_exceptions.RequestException) as exc:
+        # Transport errors carry request URLs with SIDs; the scheduled probe must
+        # never let that text reach Job.last_error or the readiness response.
+        if isinstance(exc, TwilioRestException):
+            error = _sanitized_error_code(exc)
+        elif isinstance(exc, requests_exceptions.Timeout):
+            error = "twilio_timeout"
+        else:
+            error = "twilio_connection_failed"
         return TwilioSettingsTestResponse(
             valid=False,
             account_status=None,
             twilio_edition=settings.twilio_edition,
             capabilities=capabilities,
             route_capabilities=route_capabilities,
-            error=_sanitized_error_code(exc),
+            error=error,
             warning=None,
         )
 
