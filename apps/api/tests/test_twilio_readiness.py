@@ -154,7 +154,7 @@ def test_10dlc_still_requires_a2p_and_consent_api(toll_free_settings):
 
 
 def _mock_toll_free_provider(monkeypatch, settings, *, status="TWILIO_APPROVED", error=None):
-    from app.services import twilio_provider_service, twilio_settings_service, twilio_transport
+    from app.services import twilio_settings_service, twilio_transport
 
     route = _route_by_purpose(settings, "operational")
     calls = []
@@ -203,7 +203,6 @@ def _mock_toll_free_provider(monkeypatch, settings, *, status="TWILIO_APPROVED",
             )
         ),
     )
-    monkeypatch.setattr(twilio_provider_service, "Client", lambda *_args, **_kwargs: client)
     monkeypatch.setattr(twilio_transport, "Client", lambda *_args, **_kwargs: client)
     return calls
 
@@ -601,6 +600,318 @@ async def test_post_readiness_coalesces_one_durable_no_send_job(authed_client, d
     assert jobs[0].payload["provider_scope"] == "organization"
     assert jobs[0].payload["settings_version"] >= 1
     assert "secret" not in str(jobs[0].payload).lower()
+
+
+def _persist_configured_settings(db, organization_id, *, enabled: bool = True) -> TwilioSettings:
+    from app.services import twilio_settings_service
+
+    encrypt = twilio_settings_service.encrypt_credential
+    settings = twilio_settings_service.get_or_create_settings(db, organization_id)
+    settings.enabled = enabled
+    settings.account_sid_encrypted = encrypt("AC" + ("1" * 32))
+    settings.api_key_sid_encrypted = encrypt("SK" + ("2" * 32))
+    settings.api_secret_encrypted = encrypt("secret")
+    settings.auth_token_encrypted = encrypt("auth-token")
+    for route in settings.routes:
+        route.enabled = True
+        route.messaging_service_sid_encrypted = encrypt("MG" + ("3" * 32))
+        route.sender_phone_encrypted = encrypt("+18005550199")
+    db.commit()
+    return settings
+
+
+_SAME_AS_CHECKED = object()
+
+
+def _set_provider_evidence(
+    db,
+    settings,
+    *,
+    checked_at: datetime | None,
+    settings_version: int,
+    error_code: str | None = None,
+    attempted_at: object = _SAME_AS_CHECKED,
+):
+    """Write route evidence; `attempted_at` is when the last probe ran (the readiness snapshot)."""
+    if attempted_at is _SAME_AS_CHECKED:
+        attempted_at = checked_at
+    for route in settings.routes:
+        route.capability_evidence = {
+            "provider": {
+                "sender_type": "toll_free",
+                "checked_at": checked_at.isoformat() if checked_at else None,
+                "settings_version": settings_version,
+            },
+            "readiness": {
+                "checked_at": attempted_at.isoformat() if attempted_at else None,
+                "settings_version": settings_version,
+                "error_code": error_code,
+            },
+        }
+    db.commit()
+
+
+def _add_tenant(db, index: int) -> Organization:
+    organization = Organization(
+        id=uuid4(),
+        name=f"Tenant {index}",
+        slug=f"tenant-{uuid4().hex[:8]}",
+        ai_enabled=True,
+    )
+    db.add(organization)
+    db.flush()
+    return organization
+
+
+def _readiness_jobs(db, organization_id) -> list[Job]:
+    return (
+        db.query(Job)
+        .filter(
+            Job.job_type == JobType.TWILIO_READINESS_CHECK.value,
+            Job.organization_id == organization_id,
+        )
+        .all()
+    )
+
+
+@pytest.mark.parametrize(
+    ("evidence_age", "version_lag", "expected_jobs"),
+    [
+        pytest.param(timedelta(hours=1), 0, 0, id="fresh"),
+        pytest.param(timedelta(hours=13), 0, 1, id="older-than-half-the-window"),
+        pytest.param(None, 0, 1, id="never-checked"),
+        pytest.param(timedelta(hours=1), 1, 1, id="settings-version-changed"),
+    ],
+)
+def test_scheduled_refresh_queues_one_check_before_provider_evidence_expires(
+    db, test_org, evidence_age, version_lag, expected_jobs
+) -> None:
+    from app.services import twilio_readiness_orchestration_service
+
+    now = datetime.now(UTC)
+    settings = _persist_configured_settings(db, test_org.id)
+    _set_provider_evidence(
+        db,
+        settings,
+        checked_at=now - evidence_age if evidence_age else None,
+        settings_version=settings.current_version - version_lag,
+    )
+
+    queued = twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now)
+    # A second pass inside the same hour must coalesce onto the active job.
+    twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now)
+
+    assert queued == expected_jobs
+    jobs = _readiness_jobs(db, test_org.id)
+    assert len(jobs) == expected_jobs
+    for job in jobs:
+        assert job.payload == {
+            "provider_scope": "organization",
+            "settings_version": settings.current_version,
+        }
+
+
+@pytest.mark.parametrize("reason", ["disabled", "route_unconfigured", "organization_deleted"])
+def test_scheduled_refresh_skips_organizations_that_cannot_send(db, test_org, reason) -> None:
+    from app.services import twilio_readiness_orchestration_service
+
+    settings = _persist_configured_settings(db, test_org.id, enabled=reason != "disabled")
+    if reason == "route_unconfigured":
+        for route in settings.routes:
+            route.messaging_service_sid_encrypted = None
+        db.commit()
+    if reason == "organization_deleted":
+        test_org.deleted_at = datetime.now(UTC)
+        db.commit()
+    _set_provider_evidence(db, settings, checked_at=None, settings_version=settings.current_version)
+
+    queued = twilio_readiness_orchestration_service.queue_due_refreshes(db, now=datetime.now(UTC))
+
+    assert queued == 0
+    assert _readiness_jobs(db, test_org.id) == []
+
+
+@pytest.mark.parametrize(
+    ("attempt_age", "provider_written", "version_lag", "expected_jobs"),
+    [
+        pytest.param(timedelta(hours=1, minutes=1), True, 0, 1, id="part-way-retry-after-wait"),
+        pytest.param(timedelta(minutes=10), True, 0, 0, id="part-way-not-before-wait"),
+        pytest.param(timedelta(hours=1, minutes=1), False, 0, 1, id="full-retry-after-wait"),
+        pytest.param(timedelta(minutes=10), False, 0, 0, id="full-not-before-wait"),
+        pytest.param(timedelta(minutes=10), False, 1, 1, id="settings-changed-skips-wait"),
+    ],
+)
+def test_scheduled_refresh_retries_a_failed_probe_after_a_bounded_wait(
+    db, test_org, attempt_age, provider_written, version_lag, expected_jobs
+) -> None:
+    from app.services import twilio_readiness_orchestration_service
+
+    now = datetime.now(UTC)
+    settings = _persist_configured_settings(db, test_org.id)
+    # A part-way failure (toll-free lookup timed out) still writes fresh route facts;
+    # a full failure (account fetch failed) leaves the provider section missing.
+    _set_provider_evidence(
+        db,
+        settings,
+        checked_at=now - attempt_age if provider_written else None,
+        settings_version=settings.current_version - version_lag,
+        error_code="twilio_timeout",
+        attempted_at=now - attempt_age,
+    )
+
+    queued = twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now)
+
+    assert queued == expected_jobs
+    assert len(_readiness_jobs(db, test_org.id)) == expected_jobs
+
+
+def test_scheduled_refresh_probes_the_least_recently_attempted_tenant_first(db, test_org) -> None:
+    from app.services import twilio_readiness_orchestration_service
+
+    now = datetime.now(UTC)
+    version = 1
+    aged, never, failing = test_org, _add_tenant(db, 1), _add_tenant(db, 2)
+    _set_provider_evidence(
+        db,
+        _persist_configured_settings(db, aged.id),
+        checked_at=now - timedelta(hours=13),
+        settings_version=version,
+    )
+    _set_provider_evidence(
+        db, _persist_configured_settings(db, never.id), checked_at=None, settings_version=version
+    )
+    # Probed two hours ago and failed: due again, but behind everyone probed longer ago.
+    _set_provider_evidence(
+        db,
+        _persist_configured_settings(db, failing.id),
+        checked_at=now - timedelta(hours=1),
+        settings_version=version,
+        error_code="twilio_timeout",
+        attempted_at=now - timedelta(hours=2),
+    )
+
+    order: list[Organization] = []
+    for _ in range(3):
+        twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now, limit=1)
+        order.extend(
+            tenant
+            for tenant in (aged, never, failing)
+            if tenant not in order and _readiness_jobs(db, tenant.id)
+        )
+
+    assert order == [never, aged, failing]
+
+
+def test_scheduled_refresh_queues_a_bounded_batch_per_pass(db, test_org) -> None:
+    from app.services import twilio_readiness_orchestration_service
+
+    now = datetime.now(UTC)
+    organizations = [test_org, _add_tenant(db, 1), _add_tenant(db, 2)]
+    for organization in organizations:
+        settings = _persist_configured_settings(db, organization.id)
+        _set_provider_evidence(
+            db, settings, checked_at=None, settings_version=settings.current_version
+        )
+
+    passes = [
+        twilio_readiness_orchestration_service.queue_due_refreshes(db, now=now, limit=2)
+        for _ in range(3)
+    ]
+
+    assert passes == [2, 1, 0]
+    assert all(len(_readiness_jobs(db, organization.id)) == 1 for organization in organizations)
+
+
+def test_readiness_probe_uses_a_bounded_twilio_client(toll_free_settings, monkeypatch) -> None:
+    from twilio.base.exceptions import TwilioRestException
+
+    from app.services import twilio_provider_service, twilio_transport
+
+    calls: list[tuple[tuple, dict]] = []
+
+    class _Accounts:
+        def __call__(self, _sid):
+            return self
+
+        def fetch(self):
+            raise TwilioRestException(503, "/accounts", msg="unavailable")
+
+    def fake_client(*args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(api=SimpleNamespace(accounts=_Accounts()))
+
+    monkeypatch.setattr(twilio_transport, "Client", fake_client)
+
+    result = twilio_provider_service.test_configuration(toll_free_settings)
+
+    assert result.valid is False
+    assert len(calls) == 1
+    http_client = calls[0][1]["http_client"]
+    assert http_client.timeout == twilio_transport.TWILIO_REQUEST_TIMEOUT_SECONDS
+    assert http_client.session.adapters["https://"].max_retries.total == 0
+
+
+def test_refresh_skips_an_organization_deleted_after_its_check_was_queued(
+    db, test_org, monkeypatch
+) -> None:
+    from app.services import twilio_provider_service, twilio_readiness_service
+
+    settings = _persist_configured_settings(db, test_org.id)
+    version = settings.current_version
+    test_org.deleted_at = datetime.now(UTC)
+    db.commit()
+
+    def fail_probe(*_args, **_kwargs):
+        raise AssertionError("Deleted organizations must not be probed")
+
+    monkeypatch.setattr(twilio_provider_service, "test_configuration", fail_probe)
+
+    persisted = twilio_readiness_service.refresh_readiness(
+        db, organization_id=test_org.id, expected_settings_version=version
+    )
+
+    assert persisted is False
+
+
+@pytest.mark.parametrize(
+    ("exception_type", "expected_error"),
+    [
+        pytest.param("ConnectTimeout", "twilio_timeout", id="timeout"),
+        pytest.param("ConnectionError", "twilio_connection_failed", id="connection"),
+    ],
+)
+def test_readiness_probe_sanitizes_transport_failures(
+    toll_free_settings, monkeypatch, exception_type, expected_error
+) -> None:
+    from requests import exceptions as requests_exceptions
+
+    from app.services import twilio_provider_service, twilio_transport
+
+    # Requests errors quote the URL, which carries the Account SID.
+    account_sid = "AC" + ("1" * 32)
+    url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}.json"
+
+    class _Accounts:
+        def __call__(self, _sid):
+            return self
+
+        def fetch(self):
+            raise getattr(requests_exceptions, exception_type)(
+                f"Max retries exceeded with url: {url}"
+            )
+
+    monkeypatch.setattr(
+        twilio_transport,
+        "Client",
+        lambda *_args, **_kwargs: SimpleNamespace(api=SimpleNamespace(accounts=_Accounts())),
+    )
+
+    result = twilio_provider_service.test_configuration(toll_free_settings)
+
+    assert result.valid is False
+    assert result.error == expected_error
+    assert account_sid not in result.model_dump_json()
+    assert "api.twilio.com" not in result.model_dump_json()
 
 
 async def test_readiness_worker_persists_sanitized_provider_snapshot(

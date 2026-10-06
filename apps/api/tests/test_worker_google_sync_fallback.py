@@ -22,6 +22,7 @@ def test_dormant_workflow_maintenance_fallbacks_are_opt_in():
             "maybe_schedule_workflow_approval_expiry_jobs",
             "WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED",
         ),
+        ("maybe_schedule_twilio_readiness_refresh_jobs", "TWILIO_READINESS_REFRESH_ENABLED"),
     ],
 )
 def test_workflow_fallback_schedulers_noop_when_disabled(db, monkeypatch, function_name, flag_name):
@@ -38,6 +39,37 @@ def test_workflow_fallback_schedulers_noop_when_disabled(db, monkeypatch, functi
     )
 
     assert result == last_run_at
+
+
+def test_maybe_schedule_twilio_readiness_refresh_jobs_runs_once_per_interval(db, monkeypatch):
+    from app import worker
+    from app.services import twilio_readiness_orchestration_service
+
+    now = datetime(2026, 10, 6, 3, 0, tzinfo=UTC)
+    called: list[tuple[datetime, int]] = []
+
+    def fake_queue_due_refreshes(db, *, now, limit):
+        called.append((now, limit))
+        return 1
+
+    monkeypatch.setattr(worker, "TWILIO_READINESS_REFRESH_ENABLED", True)
+    monkeypatch.setattr(worker, "TWILIO_READINESS_REFRESH_INTERVAL_SECONDS", 3600)
+    monkeypatch.setattr(worker, "TWILIO_READINESS_REFRESH_BATCH_SIZE", 7)
+    monkeypatch.setattr(
+        twilio_readiness_orchestration_service,
+        "queue_due_refreshes",
+        fake_queue_due_refreshes,
+    )
+
+    recent = now - timedelta(minutes=30)
+    assert (
+        worker.maybe_schedule_twilio_readiness_refresh_jobs(db, now=now, last_run_at=recent)
+        == recent
+    )
+    assert called == []
+
+    assert worker.maybe_schedule_twilio_readiness_refresh_jobs(db, now=now, last_run_at=None) == now
+    assert called == [(now, 7)]
 
 
 def test_maybe_schedule_google_calendar_sync_jobs_calls_scheduler_when_due(db, monkeypatch):
