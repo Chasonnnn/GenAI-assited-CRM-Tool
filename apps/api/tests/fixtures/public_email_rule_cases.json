@@ -55,6 +55,18 @@
     {
       "name": "a 254-character address",
       "address": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.com"
+    },
+    {
+      "name": "an ideographic full stop in the domain",
+      "address": "erin@example\u3002com"
+    },
+    {
+      "name": "a fullwidth full stop in the domain",
+      "address": "erin@example\uff0ecom"
+    },
+    {
+      "name": "a halfwidth ideographic full stop in the domain",
+      "address": "erin@example\uff61com"
     }
   ],
   "rejected": [
@@ -225,6 +237,18 @@
     {
       "name": "a display name",
       "address": "Erin Example <erin@example.com>"
+    },
+    {
+      "name": "an ideographic full stop before a reserved top-level domain",
+      "address": "erin@example\u3002test"
+    },
+    {
+      "name": "two ideographic full stops in a row",
+      "address": "erin@example\u3002\u3002com"
+    },
+    {
+      "name": "an ideographic full stop at the end",
+      "address": "erin@example\u3002"
     }
   ],
   "rejected_by_api_only": [
@@ -235,6 +259,10 @@
     {
       "name": "a reserved top-level domain after a non-ASCII label",
       "address": "erin@b\u00fccher.test"
+    },
+    {
+      "name": "fullwidth letters before a reserved top-level domain",
+      "address": "erin@\uff45\uff58\uff41\uff4d\uff50\uff4c\uff45.test"
     }
   ]
 }

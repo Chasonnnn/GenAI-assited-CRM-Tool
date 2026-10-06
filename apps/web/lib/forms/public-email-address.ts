@@ -15,6 +15,9 @@ const LOCAL_PART = new RegExp(`^[${ATEXT}${NON_ASCII}]+(?:\\.[${ATEXT}${NON_ASCI
 const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/
 const NON_ASCII_CHARACTER = new RegExp(`[${NON_ASCII}]`, "u")
 const NON_ASCII_DOMAIN = new RegExp(`^[A-Za-z0-9.\\-${NON_ASCII}]+\\.[A-Za-z0-9.\\-${NON_ASCII}]+$`, "u")
+// The ideographic, fullwidth, and halfwidth ideographic full stops: UTS-46 maps each to "."
+// before the API splits the domain into labels.
+const IDNA_FULL_STOP = /[。．｡]/gu
 
 // Separators, controls, format characters such as a zero-width space, and private-use characters.
 const UNSAFE_CHARACTER = /[\p{Z}\p{Cc}\p{Cf}\p{Co}\p{Cs}]/u
@@ -70,5 +73,6 @@ export function isAcceptedPublicEmailAddress(value: string): boolean {
     if (!LOCAL_PART.test(local) || !LOCAL_PART.test(normalizedLocal)) return false
     if (!isWithinAddressLimit(local, domain) || !isWithinAddressLimit(normalizedLocal, domain)) return false
 
-    return NON_ASCII_CHARACTER.test(domain) ? NON_ASCII_DOMAIN.test(domain) : isAcceptedAsciiDomain(domain)
+    const mappedDomain = domain.replace(IDNA_FULL_STOP, ".")
+    return NON_ASCII_CHARACTER.test(mappedDomain) ? NON_ASCII_DOMAIN.test(mappedDomain) : isAcceptedAsciiDomain(mappedDomain)
 }
