@@ -74,4 +74,6 @@ Use repo-pinned runtimes in `mise.toml` and `mise.lock`, plus existing package s
 
 After completing each task, always commit the changes in small logical groups. Before each commit, inspect staged files, include only task-owned work, run appropriate validation, and use `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, or `chore:`. Do not create a branch, push, or open a PR unless the user requests it. Work on the current branch unless told otherwise.
 
+In a git worktree, edit files with the Edit/Write tools and use absolute paths; do not put shell variables in paths. Wait for PR checks with `scripts/wait-ci.sh <pr>`.
+
 Start local servers only for active QA; start Postgres or workers only when verification needs them. Record their PIDs, stop only processes started for this task, verify they exited, remove temporary QA artifacts, and report any service intentionally left running.
