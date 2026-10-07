@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import event
 
 from app.core.encryption import hash_email
 from app.db.enums import Role
@@ -125,6 +126,65 @@ def recipient(db, run, record):
     db.add(row)
     db.flush()
     return row
+
+
+def test_policy_snapshot_bounds_queries_and_preserves_run_order_and_tenant_scope(setup, db):
+    org, owner, template, _ = setup
+    other = Organization(id=uuid4(), name="Other", slug=f"other-{uuid4()}")
+    db.add(other)
+    db.flush()
+    campaigns = [create(db, org, owner, template, scope="org") for _ in range(4)]
+    for index, campaign in enumerate(campaigns):
+        campaign.status = "scheduled" if index % 2 else "sending"
+    excluded = create(db, org, owner, template, scope="org")
+    foreign = Campaign(
+        id=uuid4(),
+        organization_id=other.id,
+        name="Foreign",
+        scope="org",
+        email_template_id=template.id,
+        recipient_type="case",
+        status="sending",
+        created_by_user_id=owner.id,
+    )
+    db.add(foreign)
+    db.flush()
+    runs = [
+        CampaignRun(id=uuid4(), organization_id=org.id, campaign_id=campaign.id, status="running")
+        for campaign in campaigns[:3]
+        for _ in range(2)
+    ]
+    db.add_all(runs)
+    db.add_all(
+        [
+            CampaignRun(organization_id=org.id, campaign_id=campaigns[0].id, status="completed"),
+            CampaignRun(organization_id=org.id, campaign_id=excluded.id, status="running"),
+            CampaignRun(organization_id=other.id, campaign_id=foreign.id, status="running"),
+            # A campaign FK alone does not enforce the run's organization scope.
+            CampaignRun(organization_id=other.id, campaign_id=campaigns[0].id, status="running"),
+        ]
+    )
+    db.flush()
+    org_id = org.id
+    statements = []
+
+    def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.lstrip().lower().startswith("select"):
+            statements.append(statement)
+
+    connection = db.get_bind()
+    event.listen(connection, "before_cursor_execute", capture)
+    try:
+        snapshot = campaign_access.get_policy_execution_snapshot(db, org_id)
+    finally:
+        event.remove(connection, "before_cursor_execute", capture)
+
+    assert [row["id"] for row in snapshot] == sorted(str(c.id) for c in campaigns)
+    for row in snapshot:
+        expected = sorted(str(run.id) for run in runs if str(run.campaign_id) == row["id"])
+        assert row["runs"] == [{"id": run_id, "status": "running"} for run_id in expected]
+    assert len(statements) <= 2
+    assert campaign_access.get_policy_execution_snapshot(db, uuid4()) == []
 
 
 def test_personal_campaigns_are_private_but_admin_can_manage(setup, db):

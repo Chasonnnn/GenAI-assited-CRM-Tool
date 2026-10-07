@@ -78,7 +78,7 @@ function HtmlBlockView({ node, getPos, extension, selected }: NodeViewProps) {
 
 /**
  * Raw email HTML kept as one block. Existing templates open as this block so
- * their HTML is saved unchanged until someone converts or edits it (ADR 0006).
+ * their HTML is saved unchanged until someone converts or edits it (ADR 0010).
  */
 export const HtmlBlock = EmailNode.create<HtmlBlockOptions>({
     name: HTML_BLOCK_NODE,

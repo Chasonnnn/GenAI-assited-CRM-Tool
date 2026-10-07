@@ -487,18 +487,19 @@ def maybe_schedule_workflow_maintenance_jobs(
     hourly_sweep_types = {"task_due", "appointment_time"}
     jobs_created = 0
     duplicates_skipped = 0
-    orgs = org_service.list_orgs(db)
-    for org in orgs:
-        enabled_trigger_types = workflow_triggers.get_enabled_workflow_trigger_types(db, org.id)
+    # Scheduling commits or rolls back, expiring ORM rows that may then be deleted.
+    org_ids = [org.id for org in org_service.list_orgs(db)]
+    for org_id in org_ids:
+        enabled_trigger_types = workflow_triggers.get_enabled_workflow_trigger_types(db, org_id)
         for sweep_type in sweep_types:
             if sweep_type not in enabled_trigger_types:
                 continue
             bucket = hourly_bucket if sweep_type in hourly_sweep_types else daily_bucket
-            idempotency_key = f"workflow-sweep:{sweep_type}:{org.id}:{bucket}"
+            idempotency_key = f"workflow-sweep:{sweep_type}:{org_id}:{bucket}"
             try:
                 existing = job_service.get_job_by_idempotency_key(
                     db,
-                    org_id=org.id,
+                    org_id=org_id,
                     idempotency_key=idempotency_key,
                 )
                 if existing is not None:
@@ -506,9 +507,9 @@ def maybe_schedule_workflow_maintenance_jobs(
                     continue
                 job_service.schedule_job(
                     db=db,
-                    org_id=org.id,
+                    org_id=org_id,
                     job_type=JobType.WORKFLOW_SWEEP,
-                    payload={"org_id": str(org.id), "sweep_type": sweep_type},
+                    payload={"org_id": str(org_id), "sweep_type": sweep_type},
                     run_at=now,
                     idempotency_key=idempotency_key,
                 )
@@ -519,7 +520,7 @@ def maybe_schedule_workflow_maintenance_jobs(
 
     logger.info(
         "Workflow maintenance fallback scheduled (organizations=%s jobs=%s duplicates=%s)",
-        len(orgs),
+        len(org_ids),
         jobs_created,
         duplicates_skipped,
     )
@@ -577,12 +578,13 @@ def maybe_schedule_workflow_approval_expiry_jobs(
     bucket = bucket_start.strftime("%Y%m%dT%H%MZ")
     jobs_created = 0
     duplicates_skipped = 0
-    orgs = org_service.list_orgs(db)
-    for org in orgs:
+    # Scheduling commits or rolls back, expiring ORM rows that may then be deleted.
+    org_ids = [org.id for org in org_service.list_orgs(db)]
+    for org_id in org_ids:
         has_due_approval = (
             db.query(Task.id)
             .filter(
-                Task.organization_id == org.id,
+                Task.organization_id == org_id,
                 Task.task_type == TaskType.WORKFLOW_APPROVAL.value,
                 Task.status.in_([TaskStatus.PENDING.value, TaskStatus.IN_PROGRESS.value]),
                 Task.due_at < utc_now,
@@ -593,11 +595,11 @@ def maybe_schedule_workflow_approval_expiry_jobs(
         if not has_due_approval:
             continue
 
-        idempotency_key = f"workflow-approval-expiry:{org.id}:{bucket}"
+        idempotency_key = f"workflow-approval-expiry:{org_id}:{bucket}"
         try:
             existing = job_service.get_job_by_idempotency_key(
                 db,
-                org_id=org.id,
+                org_id=org_id,
                 idempotency_key=idempotency_key,
             )
             if existing is not None:
@@ -605,9 +607,9 @@ def maybe_schedule_workflow_approval_expiry_jobs(
                 continue
             job_service.schedule_job(
                 db=db,
-                org_id=org.id,
+                org_id=org_id,
                 job_type=JobType.WORKFLOW_APPROVAL_EXPIRY,
-                payload={"org_id": str(org.id)},
+                payload={"org_id": str(org_id)},
                 run_at=now,
                 idempotency_key=idempotency_key,
             )
@@ -618,7 +620,7 @@ def maybe_schedule_workflow_approval_expiry_jobs(
 
     logger.info(
         "Workflow approval expiry fallback scheduled (organizations=%s jobs=%s duplicates=%s)",
-        len(orgs),
+        len(org_ids),
         jobs_created,
         duplicates_skipped,
     )

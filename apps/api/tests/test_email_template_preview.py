@@ -1,4 +1,4 @@
-"""Email template previews render through the send composition (ADR 0006)."""
+"""Email template previews render through the send composition (ADR 0010)."""
 
 from __future__ import annotations
 

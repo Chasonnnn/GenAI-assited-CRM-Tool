@@ -414,47 +414,20 @@ def backfill_permissions(dry_run: bool):
             click.echo("🔍 DRY RUN - no changes will be made")
             click.echo()
 
-        existing_permission_keys: set[tuple[UUID, str, str]] = set()
-        if dry_run and orgs:
-            from app.db.models import RolePermission
-
-            existing_permission_keys = {
-                (organization_id, role, permission)
-                for organization_id, role, permission in db.query(
-                    RolePermission.organization_id,
-                    RolePermission.role,
-                    RolePermission.permission,
-                )
-                .filter(RolePermission.organization_id.in_([org.id for org in orgs]))
-                .all()
-            }
-
-        total_created = 0
+        counts = permission_service.seed_role_defaults_bulk(
+            db, [org.id for org in orgs], dry_run=dry_run
+        )
+        total_created = sum(counts.values())
+        verb = "would create" if dry_run else "created"
         for org in orgs:
-            if dry_run:
-                # Count what would be created
-                count = 0
-                for role, permissions in ROLE_DEFAULTS.items():
-                    if role == "developer":
-                        continue
-                    for permission in permissions:
-                        if (org.id, role, permission) not in existing_permission_keys:
-                            count += 1
-                if count > 0:
-                    click.echo(f"  {org.slug}: would create {count} permissions")
-                    total_created += count
-            else:
-                created = permission_service.seed_role_defaults(db, org.id)
-                if created > 0:
-                    click.echo(f"  {org.slug}: created {created} permissions")
-                    total_created += created
+            if counts[org.id] > 0:
+                click.echo(f"  {org.slug}: {verb} {counts[org.id]} permissions")
 
         if not dry_run:
             db.commit()
 
         click.echo()
         if total_created > 0:
-            verb = "would create" if dry_run else "created"
             click.echo(f"[OK] {verb.capitalize()} {total_created} total permission(s)")
         else:
             click.echo("[OK] All permissions already up to date")

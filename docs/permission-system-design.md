@@ -28,7 +28,7 @@ Record scope is configured separately for each module. It defines the same recor
 
 A Case Manager with Edit can therefore edit information on every record they can view, including post-approval records owned by another Case Manager and surrogates they created before approval.
 
-Case Managers retain visibility of surrogates whose stored creator is that member, including after reassignment. This route exists in both permission versions and is separate from configured role scope. It does not apply to donor or intended-parent records, infer a creator for historical rows, bypass action permissions, or expand personal workflow/campaign eligibility. Organization, active-membership and archive checks still apply. [Decision](adr/0008-case-manager-created-surrogate-access.md).
+Case Managers retain visibility of surrogates whose stored creator is that member, including after reassignment. This route exists in both permission versions and is separate from configured role scope. It does not apply to donor or intended-parent records, infer a creator for historical rows, bypass action permissions, or expand personal workflow/campaign eligibility. Organization, active-membership and archive checks still apply. [Decision](adr/0012-case-manager-created-surrogate-access.md).
 
 Within a configured scope rule, assignment and phase/stage restrictions combine with AND. Separate grants, including an individual scope addition or explicit record collaboration, add access to their explicitly covered records.
 

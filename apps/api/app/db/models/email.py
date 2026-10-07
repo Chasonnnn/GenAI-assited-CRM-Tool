@@ -118,7 +118,7 @@ class EmailTemplate(Base):
     # Optional per-template From header override (e.g. "Surrogacy Force <invites@surrogacyforce.com>")
     from_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    # React Email editor document; ``body`` stays the send artifact (ADR 0006).
+    # React Email editor document; ``body`` stays the send artifact (ADR 0010).
     body_design: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
@@ -242,7 +242,7 @@ class EmailTemplateDraft(Base):
     subject: Mapped[str] = mapped_column(String(200), nullable=False)
     from_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    # React Email editor document; ``body`` stays the send artifact (ADR 0006).
+    # React Email editor document; ``body`` stays the send artifact (ADR 0010).
     body_design: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)

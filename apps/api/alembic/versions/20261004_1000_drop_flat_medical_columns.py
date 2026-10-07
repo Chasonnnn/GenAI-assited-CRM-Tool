@@ -1,7 +1,7 @@
 """Drop the flat medical profile columns replaced by medical_records.
 
 20261003_1700_medical_records imported these columns and production was
-verified on the imported records (ADR 0006). Downgrade re-adds the columns
+verified on the imported records (ADR 0011). Downgrade re-adds the columns
 empty and nullable; the 20261003_1700 application version does not read them.
 
 Revision ID: 20261004_1000_drop_flat_medical_columns

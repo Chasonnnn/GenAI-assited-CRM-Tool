@@ -1,4 +1,4 @@
-"""Render unsaved email template content the way sends render it (ADR 0006).
+"""Render unsaved email template content the way sends render it (ADR 0010).
 
 Previews never write unsubscribe tokens and never send. The result is a standalone
 document with a restrictive CSP for a sandboxed iframe.
