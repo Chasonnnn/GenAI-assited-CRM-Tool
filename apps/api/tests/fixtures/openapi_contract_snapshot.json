@@ -1076,6 +1076,18 @@
       "422"
     ]
   },
+  "/dev/google-login": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
+  "/dev/invites": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/dev/login-as/{user_id}": {
     "POST": [
       "200",

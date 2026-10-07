@@ -9,10 +9,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.csrf import set_csrf_cookie
-from app.core.deps import COOKIE_NAME, get_db
+from app.core.deps import COOKIE_NAME, get_db, require_csrf_header, require_permission
+from app.core.policies import POLICIES
 from app.core.security import create_session_token, verify_secret
+from app.db.models import User
+from app.schemas.auth import UserSession
+from app.schemas.dev import DevGoogleLoginRequest, DevInviteCreate, DevInviteRead, DevLoginResponse
 from app.services import (
     dev_service,
+    invite_service,
     membership_service,
     meta_lead_service,
     meta_page_service,
@@ -50,23 +55,10 @@ def seed_test_data(db: Annotated[Session, "fastapi_param"] = Depends(get_db)) ->
     return dev_service.seed_test_data(db)
 
 
-@router.post("/login-as/{user_id}", dependencies=[Depends(_verify_dev_secret)])
-def login_as(
-    user_id: UUID,
-    request: Request,
-    response: Response,
-    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
-) -> object:
-    """
-    Bypass OAuth and directly set session cookie for testing.
-
-    Requires X-Dev-Secret header matching DEV_SECRET env var.
-    Useful for testing role-based access without real OAuth flow.
-    """
-    user = user_service.get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
+def _issue_verified_session(
+    db: Session, request: Request, response: Response, user: User
+) -> DevLoginResponse:
+    """Set an MFA-verified session cookie for the user's active membership."""
     if not user.is_active:
         raise HTTPException(status_code=400, detail="User is disabled")
 
@@ -103,13 +95,108 @@ def login_as(
     )
     set_csrf_cookie(response)
 
-    return {
-        "status": "logged_in",
-        "user_id": str(user.id),
-        "email": user.email,
-        "role": membership.role,
-        "org_id": str(membership.organization_id),
-    }
+    return DevLoginResponse(
+        status="logged_in",
+        user_id=str(user.id),
+        email=user.email,
+        role=membership.role,
+        org_id=str(membership.organization_id),
+    )
+
+
+@router.post(
+    "/login-as/{user_id}",
+    response_model=DevLoginResponse,
+    dependencies=[Depends(_verify_dev_secret)],
+)
+def login_as(
+    user_id: UUID,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> DevLoginResponse:
+    """
+    Bypass OAuth and directly set session cookie for testing.
+
+    Requires X-Dev-Secret header matching DEV_SECRET env var.
+    Useful for testing role-based access without real OAuth flow.
+    """
+    user = user_service.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return _issue_verified_session(db, request, response, user)
+
+
+@router.post(
+    "/google-login",
+    response_model=DevLoginResponse,
+    dependencies=[Depends(_verify_dev_secret)],
+)
+def google_login(
+    body: DevGoogleLoginRequest,
+    request: Request,
+    response: Response,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+) -> DevLoginResponse:
+    """
+    Sign in as if Google had verified `email`, through the OAuth callback's user resolution.
+
+    Unlike login-as, this creates the user and accepts a pending invite, so invite
+    acceptance is testable without Google. A refused sign-in returns 403 with the
+    callback's error code, which /login renders.
+    """
+    user, error_code = dev_service.resolve_google_login(
+        db,
+        email=body.email,
+        display_name=body.display_name,
+        invite_id=body.invite_id,
+        request=request,
+    )
+    if error_code or not user:
+        raise HTTPException(status_code=403, detail=error_code or "no_session")
+
+    return _issue_verified_session(db, request, response, user)
+
+
+@router.post(
+    "/invites",
+    response_model=DevInviteRead,
+    dependencies=[Depends(_verify_dev_secret), Depends(require_csrf_header)],
+)
+def create_invite(
+    body: DevInviteCreate,
+    request: Request,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[UserSession, "fastapi_param"] = Depends(
+        require_permission(POLICIES["team"].default)
+    ),
+) -> DevInviteRead:
+    """
+    Create an invite in the caller's organization without queuing its email.
+
+    POST /settings/invites needs a platform sender, which local stacks do not have.
+    """
+    try:
+        invite = dev_service.create_invite_without_email(
+            db,
+            org_id=session.org_id,
+            invited_by_user_id=session.user_id,
+            email=body.email,
+            role=body.role,
+            expires_at=body.expires_at,
+            request=request,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return DevInviteRead(
+        id=str(invite.id),
+        email=invite.email,
+        role=invite.role,
+        status=invite_service.get_invite_status(invite),
+        expires_at=invite.expires_at.isoformat() if invite.expires_at else None,
+    )
 
 
 @router.get("/cors", dependencies=[Depends(_verify_dev_secret)])
