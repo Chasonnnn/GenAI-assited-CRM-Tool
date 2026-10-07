@@ -130,6 +130,7 @@ def _build_template_response(
             capabilities=capabilities,
             proposed_by_name=template.proposed_by_name,
             is_system_template=template.is_system_template,
+            system_key=template.system_key,
             created_at=template.created_at,
             updated_at=template.updated_at,
         )

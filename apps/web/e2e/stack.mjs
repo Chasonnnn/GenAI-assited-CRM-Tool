@@ -71,6 +71,12 @@ const apiEnv = {
     API_BASE_URL: `http://localhost:${apiPort}`,
     FRONTEND_URL: `http://localhost:${webPort}`,
     CORS_ORIGINS: `http://localhost:${webPort}`,
+    // The seeded developer opens the ops console; outside production the allowlist alone
+    // grants platform access.
+    PLATFORM_ADMIN_EMAILS: "developer@test.com",
+    // Every request comes from 127.0.0.1, so the production limit of 5 per minute on the
+    // invite and login endpoints would fail a run that opens several invite pages.
+    RATE_LIMIT_AUTH: "60",
 }
 
 function runOrExit(label, args, env = apiEnv) {

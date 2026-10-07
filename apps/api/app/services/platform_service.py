@@ -225,9 +225,10 @@ def list_organizations(
             | (Organization.slug.ilike(search_term, escape="\\"))
         )
 
-    # Filter by subscription status if specified
+    # Filter by subscription status if specified. An org without a subscription row is
+    # listed as active below, so the filter treats it the same way.
     if status:
-        query = query.filter(OrganizationSubscription.status == status)
+        query = query.filter(func.coalesce(OrganizationSubscription.status, "active") == status)
 
     total = query.with_entities(func.count(func.distinct(Organization.id))).scalar() or 0
     rows = query.order_by(Organization.created_at.desc()).offset(offset).limit(limit).all()

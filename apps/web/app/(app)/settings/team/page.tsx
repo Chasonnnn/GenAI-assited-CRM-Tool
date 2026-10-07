@@ -39,6 +39,7 @@ import {
 import { useInvites, useCreateInvite, useResendInvite, useRevokeInvite } from "@/lib/hooks/use-invites"
 import { useEffectivePermissions, useMembers, useRemoveMember } from "@/lib/hooks/use-permissions"
 import { toast } from "@/components/ui/toast"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useAuth } from "@/lib/auth-context"
 import { Checkbox } from "@/components/ui/checkbox"
 import { formatRelativeTime } from "@/lib/formatters"
@@ -159,17 +160,12 @@ function MembersTab({ includeInactive, v2, canManage, canAssignDeveloper }: { in
         `${member.display_name ?? ""} ${member.email}`.toLowerCase().includes(search.trim().toLowerCase())
     )
 
-    const handleRemove = async (memberId: string, email: string) => {
-        if (!confirm(`Remove ${email} from the organization? This cannot be undone.`)) return
+    const [removeTarget, setRemoveTarget] = useState<{ id: string; email: string } | null>(null)
 
-        try {
-            await removeMember.mutateAsync(memberId)
-            toast.success("Member removed")
-        } catch (error) {
-            toast.error("Failed to remove member", {
-                description: error instanceof Error ? error.message : "Unknown error",
-            })
-        }
+    const handleRemove = async () => {
+        if (!removeTarget) return
+        await removeMember.mutateAsync(removeTarget.id)
+        toast.success("Member removed")
     }
 
     const toggleSelect = (id: string) => {
@@ -317,7 +313,7 @@ function MembersTab({ includeInactive, v2, canManage, canAssignDeveloper }: { in
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() => handleRemove(member.id, member.email)}
+                                                    onClick={() => setRemoveTarget({ id: member.id, email: member.email })}
                                                     disabled={removeMember.isPending}
                                                     className="text-destructive hover:text-destructive"
                                                     aria-label={`Remove ${member.email}`}
@@ -336,6 +332,15 @@ function MembersTab({ includeInactive, v2, canManage, canAssignDeveloper }: { in
                 {visibleMembers.length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No matching people.</TableCell></TableRow>}
                 </TableBody>
             </Table>
+            <ConfirmDialog
+                open={removeTarget !== null}
+                onOpenChange={(open) => !open && setRemoveTarget(null)}
+                title={removeTarget ? `Remove ${removeTarget.email}?` : "Remove member?"}
+                description="They lose access to the organization. This can't be undone."
+                confirmLabel="Remove"
+                errorFallback="Couldn't remove member."
+                onConfirm={handleRemove}
+            />
         </div>
     )
 }
@@ -356,20 +361,27 @@ function InvitationsTab() {
         }
     }
 
-    const handleRevoke = async (inviteId: string) => {
-        if (!confirm("Revoke this invitation?")) return
+    const [revokeTarget, setRevokeTarget] = useState<{ id: string; email: string } | null>(null)
 
-        try {
-            await revokeInvite.mutateAsync(inviteId)
-            toast.success("Invitation revoked")
-        } catch (error) {
-            toast.error("Failed to revoke", {
-                description: error instanceof Error ? error.message : "Unknown error",
-            })
-        }
+    const handleRevoke = async () => {
+        if (!revokeTarget) return
+        await revokeInvite.mutateAsync(revokeTarget.id)
+        toast.success("Invitation revoked")
     }
 
     const actionableInvites = data?.invites.filter((inv) => ACTIONABLE_INVITE_STATUSES.has(inv.status)) || []
+    // Rendered on the empty state too, so revoking the last invitation does not unmount it mid-close.
+    const revokeDialog = (
+        <ConfirmDialog
+            open={revokeTarget !== null}
+            onOpenChange={(open) => !open && setRevokeTarget(null)}
+            title={revokeTarget ? `Revoke the invitation for ${revokeTarget.email}?` : "Revoke invitation?"}
+            description="The invitation link stops working."
+            confirmLabel="Revoke"
+            errorFallback="Couldn't revoke invitation."
+            onConfirm={handleRevoke}
+        />
+    )
 
     if (isLoading) {
         return (
@@ -383,63 +395,67 @@ function InvitationsTab() {
         return (
             <div className="text-center py-8 text-muted-foreground">
                 No actionable invitations
+                {revokeDialog}
             </div>
         )
     }
 
     return (
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead className="text-center">Email</TableHead>
-                    <TableHead className="text-center">Role</TableHead>
-                    <TableHead className="text-center">Expires</TableHead>
-                    <TableHead className="text-center">Resends</TableHead>
-                    <TableHead className="text-center">Actions</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                {actionableInvites.map((invite) => (
-                    <TableRow key={invite.id}>
-                        <TableCell className="font-medium text-center">{invite.email}</TableCell>
-                        <TableCell className="text-center">
-                            <Badge className={ROLE_COLORS[invite.role] || "bg-gray-100"}>
-                                {ROLE_LABELS[invite.role] || invite.role}
-                            </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-center">
-                            {invite.expires_at
-                                ? formatRelativeTime(invite.expires_at, "Never")
-                                : "Never"}
-                        </TableCell>
-                        <TableCell className="text-center">{invite.resend_count}/3</TableCell>
-                        <TableCell className="text-center">
-                            <div className="flex items-center justify-center gap-2">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleResend(invite.id)}
-                                    disabled={!invite.can_resend || resendInvite.isPending}
-                                    aria-label={`Resend invitation to ${invite.email}`}
-                                >
-                                    <RotateCcw className="size-4" aria-hidden="true" />
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRevoke(invite.id)}
-                                    disabled={revokeInvite.isPending}
-                                    className="text-destructive hover:text-destructive"
-                                    aria-label={`Revoke invitation for ${invite.email}`}
-                                >
-                                    <X className="size-4" aria-hidden="true" />
-                                </Button>
-                            </div>
-                        </TableCell>
+        <>
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="text-center">Email</TableHead>
+                        <TableHead className="text-center">Role</TableHead>
+                        <TableHead className="text-center">Expires</TableHead>
+                        <TableHead className="text-center">Resends</TableHead>
+                        <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
-                ))}
-            </TableBody>
-        </Table>
+                </TableHeader>
+                <TableBody>
+                    {actionableInvites.map((invite) => (
+                        <TableRow key={invite.id}>
+                            <TableCell className="font-medium text-center">{invite.email}</TableCell>
+                            <TableCell className="text-center">
+                                <Badge className={ROLE_COLORS[invite.role] || "bg-gray-100"}>
+                                    {ROLE_LABELS[invite.role] || invite.role}
+                                </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-center">
+                                {invite.expires_at
+                                    ? formatRelativeTime(invite.expires_at, "Never")
+                                    : "Never"}
+                            </TableCell>
+                            <TableCell className="text-center">{invite.resend_count}/3</TableCell>
+                            <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleResend(invite.id)}
+                                        disabled={!invite.can_resend || resendInvite.isPending}
+                                        aria-label={`Resend invitation to ${invite.email}`}
+                                    >
+                                        <RotateCcw className="size-4" aria-hidden="true" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setRevokeTarget({ id: invite.id, email: invite.email })}
+                                        disabled={revokeInvite.isPending}
+                                        className="text-destructive hover:text-destructive"
+                                        aria-label={`Revoke invitation for ${invite.email}`}
+                                    >
+                                        <X className="size-4" aria-hidden="true" />
+                                    </Button>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+            {revokeDialog}
+        </>
     )
 }
 

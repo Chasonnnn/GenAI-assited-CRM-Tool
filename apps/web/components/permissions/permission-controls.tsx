@@ -8,9 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { usePipelines } from "@/lib/hooks/use-pipelines"
 import type { RecordModule, RecordScopeRule } from "@/lib/api/record-scopes"
 
-export const ROLE_LABELS: Record<string, string> = {
-    intake_specialist: "Intake Specialist", case_manager: "Case Manager", operations: "Operations", admin: "Admin", developer: "Dev",
-}
+export { ROLE_LABELS } from "@/lib/role-labels"
 export const MODULE_LABELS: Record<RecordModule, string> = { surrogates: "Surrogates", donors: "Donors", intended_parents: "Intended Parents" }
 export const ASSIGNMENT_LABELS = { all: "All records", assigned: "Assigned records", none: "No role access" }
 const APPROVAL_PHASE_LABELS = { all: "All phases", pre_approval: "Before approval", post_approval: "After approval" }

@@ -12,6 +12,7 @@ from app.db.models import (
     Match,
     Membership,
     Organization,
+    OrganizationSubscription,
     SupportSession,
     SystemAlert,
     User,
@@ -270,3 +271,32 @@ def test_platform_alert_pagination_keeps_exact_total_on_full_page(db, test_org):
 
     assert len(items) == 2
     assert total == 3
+
+
+def test_list_organizations_status_filter_matches_the_shown_default_status(db, test_org):
+    """An org without a subscription row is listed as active, so the active filter keeps it."""
+    trial_org = Organization(id=uuid4(), name="Trial Agency", slug=f"trial-{uuid4().hex[:8]}")
+    db.add(trial_org)
+    db.flush()
+    db.add(
+        OrganizationSubscription(
+            organization_id=trial_org.id,
+            plan_key="starter",
+            status="trial",
+            current_period_end=datetime.now(UTC) + timedelta(days=14),
+        )
+    )
+    db.flush()
+
+    listed, _ = platform_service.list_organizations(db)
+    shown_status = {item["id"]: item["subscription_status"] for item in listed}
+    assert shown_status[str(test_org.id)] == "active"
+
+    active, active_total = platform_service.list_organizations(db, status="active")
+    active_ids = {item["id"] for item in active}
+    assert str(test_org.id) in active_ids
+    assert str(trial_org.id) not in active_ids
+    assert active_total == len(active)
+
+    trial, _ = platform_service.list_organizations(db, status="trial")
+    assert {item["id"] for item in trial} == {str(trial_org.id)}

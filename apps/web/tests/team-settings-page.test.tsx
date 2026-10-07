@@ -6,6 +6,9 @@ import TeamSettingsPage from '../app/(app)/settings/team/page'
 const mockUseInvites = vi.fn()
 const mockUseMembers = vi.fn()
 const mockUseEffectivePermissions = vi.fn()
+const mockRevokeInvite = vi.fn()
+const mockRemoveMember = vi.fn()
+const confirmSpy = vi.spyOn(window, 'confirm')
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({
@@ -33,13 +36,13 @@ vi.mock('@/lib/hooks/use-invites', () => ({
     useInvites: () => mockUseInvites(),
     useCreateInvite: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useResendInvite: () => ({ mutateAsync: vi.fn(), isPending: false }),
-    useRevokeInvite: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useRevokeInvite: () => ({ mutateAsync: mockRevokeInvite, isPending: false }),
 }))
 
 vi.mock('@/lib/hooks/use-permissions', () => ({
     useEffectivePermissions: () => mockUseEffectivePermissions(),
     useMembers: (includeInactive?: boolean) => mockUseMembers(includeInactive),
-    useRemoveMember: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useRemoveMember: () => ({ mutateAsync: mockRemoveMember, isPending: false }),
     useBulkUpdateRoles: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
 
@@ -117,6 +120,50 @@ describe('TeamSettingsPage invitations tab', () => {
         expect(screen.getByText('pending@example.com')).toBeInTheDocument()
         expect(screen.getByText('expired@example.com')).toBeInTheDocument()
         expect(screen.queryByText('accepted@example.com')).not.toBeInTheDocument()
+    })
+
+    it('confirms a revoke in a dialog that names the invitee', async () => {
+        mockRevokeInvite.mockResolvedValue(undefined)
+        render(<TeamSettingsPage />)
+        fireEvent.click(screen.getByRole('tab', { name: /invitations/i }))
+        fireEvent.click(screen.getByRole('button', { name: 'Revoke invitation for pending@example.com' }))
+
+        const dialog = await screen.findByRole('alertdialog', { name: 'Revoke the invitation for pending@example.com?' })
+        expect(mockRevokeInvite).not.toHaveBeenCalled()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke' }))
+
+        await waitFor(() => expect(mockRevokeInvite).toHaveBeenCalledWith('inv-pending'))
+        await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+        expect(confirmSpy).not.toHaveBeenCalled()
+    })
+
+    it('keeps the revoke dialog open with the error when the request fails', async () => {
+        mockRevokeInvite.mockRejectedValue(new Error('network down'))
+        render(<TeamSettingsPage />)
+        fireEvent.click(screen.getByRole('tab', { name: /invitations/i }))
+        fireEvent.click(screen.getByRole('button', { name: 'Revoke invitation for expired@example.com' }))
+        const dialog = await screen.findByRole('alertdialog')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke' }))
+
+        expect(await within(dialog).findByText("Couldn't revoke invitation.")).toBeInTheDocument()
+        expect(mockRevokeInvite).toHaveBeenCalledWith('inv-expired')
+    })
+
+    it('confirms removing a member in a dialog that names them', async () => {
+        mockRemoveMember.mockResolvedValue(undefined)
+        mockUseMembers.mockReturnValue({ data: [
+            { id: 'member-self', user_id: 'user-1', email: 'admin@example.test', display_name: 'Test Admin', role: 'admin' },
+            { id: 'member-a', user_id: 'user-a', email: 'taylor@example.test', display_name: 'Taylor Morgan', role: 'case_manager' },
+        ], isLoading: false })
+        render(<TeamSettingsPage />)
+        fireEvent.click(screen.getByRole('button', { name: 'Remove taylor@example.test' }))
+
+        const dialog = await screen.findByRole('alertdialog', { name: 'Remove taylor@example.test?' })
+        expect(mockRemoveMember).not.toHaveBeenCalled()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
+
+        await waitFor(() => expect(mockRemoveMember).toHaveBeenCalledWith('member-a'))
+        expect(confirmSpy).not.toHaveBeenCalled()
     })
 
     it('offers Operations invitations only after policy activation', () => {

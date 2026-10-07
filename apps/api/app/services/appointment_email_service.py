@@ -6,6 +6,7 @@ Provides:
 - Functions to send appointment notifications via the email queue
 """
 
+import itertools
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -26,6 +27,7 @@ from app.db.models import (
     AppointmentType,
     EmailDelivery,
     EmailLog,
+    EmailTemplate,
     Organization,
     User,
 )
@@ -37,19 +39,17 @@ from app.services.appointment_service import log_appointment_email
 # Email Template Definitions
 # =============================================================================
 
-# Template names in the email_templates table
-TEMPLATE_PREFIX = "appointment_"
-
-
-def _get_template_name(email_type: AppointmentEmailType) -> str:
-    """Get the template name for an email type."""
-    return f"{TEMPLATE_PREFIX}{email_type.value}"
+# Each client email falls back to one org template, found by system key so that an admin can
+# rename and edit it in the template library.
+SCHEDULING_TEMPLATE_SYSTEM_KEYS: dict[AppointmentEmailType, str] = {
+    email_type: f"scheduling_{email_type.value}" for email_type in AppointmentEmailType
+}
 
 
 # Default templates (created on first use if not exists)
 DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
     AppointmentEmailType.REQUEST_RECEIVED: {
-        "name": "appointment_request_received",
+        "name": "Booking Request Received",
         "subject": "Appointment Request Received - {{appointment_type}}",
         "body": """<!DOCTYPE html>
 <html>
@@ -90,7 +90,7 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
 </html>""",
     },
     AppointmentEmailType.CONFIRMED: {
-        "name": "appointment_confirmed",
+        "name": "Booking Confirmed",
         "subject": "Appointment Confirmed - {{appointment_type}} on {{scheduled_date}}",
         "body": """<!DOCTYPE html>
 <html>
@@ -136,7 +136,7 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
 </html>""",
     },
     AppointmentEmailType.RESCHEDULED: {
-        "name": "appointment_rescheduled",
+        "name": "Booking Rescheduled",
         "subject": "Appointment Rescheduled - {{appointment_type}}",
         "body": """<!DOCTYPE html>
 <html>
@@ -190,7 +190,7 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
 </html>""",
     },
     AppointmentEmailType.CANCELLED: {
-        "name": "appointment_cancelled",
+        "name": "Booking Cancelled",
         "subject": "Appointment Cancelled - {{appointment_type}}",
         "body": """<!DOCTYPE html>
 <html>
@@ -226,7 +226,7 @@ DEFAULT_TEMPLATES: dict[AppointmentEmailType, dict[str, str]] = {
 </html>""",
     },
     AppointmentEmailType.REMINDER: {
-        "name": "appointment_reminder",
+        "name": "Booking Reminder",
         "subject": "Reminder: {{appointment_type}} Tomorrow at {{scheduled_time}}",
         "body": """<!DOCTYPE html>
 <html>
@@ -392,8 +392,17 @@ def get_or_create_template(
     commit: bool = True,
 ) -> UUID | None:
     """Get or create the template for an appointment email type."""
-    template_name = _get_template_name(email_type)
-    template = email_service.get_template_by_name(db, template_name, org_id)
+    system_key = SCHEDULING_TEMPLATE_SYSTEM_KEYS[email_type]
+    template = db.scalar(
+        select(EmailTemplate)
+        .where(
+            EmailTemplate.organization_id == org_id,
+            EmailTemplate.scope == "org",
+            EmailTemplate.system_key == system_key,
+        )
+        .order_by(EmailTemplate.created_at)
+        .limit(1)
+    )
 
     if template:
         return template.id
@@ -403,13 +412,30 @@ def get_or_create_template(
     if not default:
         return None
 
+    # Org templates may already use the readable name; the system key still identifies this one.
+    taken = set(
+        db.scalars(
+            select(EmailTemplate.name).where(
+                EmailTemplate.organization_id == org_id,
+                EmailTemplate.scope == "org",
+                EmailTemplate.name.startswith(default["name"], autoescape=True),
+            )
+        )
+    )
+    candidates = itertools.chain(
+        (default["name"], f"{default['name']} (Scheduling)"),
+        (f"{default['name']} (Scheduling {n})" for n in itertools.count(2)),
+    )
+    name = next(candidate for candidate in candidates if candidate not in taken)
+
     template = email_service.create_template(
         db=db,
         org_id=org_id,
         user_id=user_id,
-        name=default["name"],
+        name=name,
         subject=default["subject"],
         body=default["body"],
+        system_key=system_key,
         commit=commit,
     )
     return template.id
