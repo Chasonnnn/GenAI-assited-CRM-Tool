@@ -1,11 +1,26 @@
 """Dev-only helpers for local seeding and diagnostics."""
 
+import hashlib
+from datetime import datetime
+from uuid import UUID
+
+from fastapi import Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.security import create_session_token, decode_session_token
 from app.db.enums import AuthProvider, Role
-from app.db.models import AuthIdentity, Membership, Organization, User
-from app.services import org_service
+from app.db.models import AuthIdentity, Membership, Organization, OrgInvite, User
+from app.services import (
+    audit_service,
+    auth_service,
+    invite_service,
+    membership_service,
+    org_service,
+    session_service,
+    user_service,
+)
+from app.services.google_oauth import GoogleUserInfo, validate_email_domain
 
 TEST_ORG_SLUG = "test-org"
 TEST_ORG_NAME = "Test Organization"
@@ -123,3 +138,119 @@ def seed_test_data(db: Session) -> dict:
         "org_slug": TEST_ORG_SLUG,
         "users": users_payload,
     }
+
+
+def create_invite_without_email(
+    db: Session,
+    org_id: UUID,
+    invited_by_user_id: UUID,
+    email: str,
+    role: str,
+    expires_at: datetime | None = None,
+    request: Request | None = None,
+) -> OrgInvite:
+    """
+    Create an invite the way POST /settings/invites does, but queue no email.
+
+    The local e2e stack has no platform sender, so the real endpoint refuses before it
+    creates anything. `expires_at` overrides the default expiry to reach the expired state.
+    """
+    invite = invite_service.create_invite(
+        db=db,
+        org_id=org_id,
+        email=email,
+        role=role,
+        invited_by_user_id=invited_by_user_id,
+    )
+    if expires_at is not None:
+        invite.expires_at = expires_at
+    audit_service.log_user_invited(
+        db=db,
+        org_id=org_id,
+        actor_user_id=invited_by_user_id,
+        invited_email=email,
+        role=role,
+        request=request,
+    )
+    db.commit()
+    db.refresh(invite)
+    return invite
+
+
+def resolve_google_login(
+    db: Session,
+    email: str,
+    display_name: str,
+    invite_id: UUID | None = None,
+    request: Request | None = None,
+) -> tuple[User | None, str | None]:
+    """
+    Resolve a Google sign-in the way the OAuth callback does, without Google.
+
+    The subject is derived from the email, so repeated calls sign in the same identity.
+    Returns the signed-in user, or the callback's error code. The callback's session still
+    needs MFA; it is deleted so the caller can issue an MFA-verified dev session instead.
+    """
+    normalized_email = email.lower().strip()
+    try:
+        validate_email_domain(normalized_email)
+    except ValueError:
+        return None, "domain_not_allowed"
+
+    subject = hashlib.sha256(normalized_email.encode()).hexdigest()[:32]
+    google_user = GoogleUserInfo(
+        sub=f"dev-google-{subject}",
+        email=normalized_email,
+        name=display_name,
+        picture=None,
+        hd=None,
+    )
+    token, error_code = auth_service.resolve_user_and_create_session(
+        db,
+        google_user,
+        request=request,
+        invite_id=invite_id,
+    )
+    if error_code or not token:
+        return None, error_code or "no_session"
+
+    user_id = UUID(str(decode_session_token(token)["sub"]))
+    session_service.delete_session_by_token(db, token)
+    return user_service.get_user_by_id(db, user_id), None
+
+
+def create_verified_session(
+    db: Session, user_id: UUID, request: Request | None = None
+) -> tuple[str, str, str, UUID]:
+    """
+    Record an MFA-verified session for the user's active membership, bypassing OAuth and MFA.
+
+    Returns the token, email, role, and organization id. Raises LookupError for an unknown user
+    and ValueError for a disabled user or one without a membership.
+    """
+    user = user_service.get_user_by_id(db, user_id)
+    if not user:
+        raise LookupError("User not found")
+    if not user.is_active:
+        raise ValueError("User is disabled")
+
+    membership = membership_service.get_membership_by_user_id(db, user.id)
+    if not membership:
+        raise ValueError("User has no membership")
+
+    token = create_session_token(
+        user.id,
+        membership.organization_id,
+        membership.role,
+        user.token_version,
+        mfa_verified=True,
+        mfa_required=False,
+    )
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=membership.organization_id,
+        token=token,
+        request=request,
+    )
+    return token, user.email, membership.role, membership.organization_id

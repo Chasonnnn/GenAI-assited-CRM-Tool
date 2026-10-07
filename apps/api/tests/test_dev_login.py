@@ -84,3 +84,17 @@ async def test_dev_login_as_seeded_developer(client):
     login_payload = login_response.json()
     assert login_payload["role"] == "developer"
     assert login_payload["email"] == "developer@test.com"
+
+
+@pytest.mark.asyncio
+async def test_dev_login_twice_in_the_same_second_creates_two_sessions(client, db, test_user):
+    """Two sign-ins must not mint the same session token, whose hash is unique."""
+    from app.db.models import UserSession
+
+    headers = {"X-Dev-Secret": settings.DEV_SECRET.get_secret_value()}
+    first = await client.post(f"/dev/login-as/{test_user.id}", headers=headers)
+    second = await client.post(f"/dev/login-as/{test_user.id}", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert db.query(UserSession).filter(UserSession.user_id == test_user.id).count() == 2

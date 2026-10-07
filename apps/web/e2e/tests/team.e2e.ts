@@ -9,9 +9,10 @@ test(
     "the people list filters the seeded members and opens one",
     { session: "admin", tags: ["team"] },
     async ({ app, screen, browser }) => {
+        // Other tests add invited members on other domains, so only the seeded rows are counted.
         await app.open("/settings/team")
-        await expect(screen.getByRole("tab", "Members (4)")).toBeVisible({ timeout: 10_000 })
-        await expect(memberRows(screen)).toHaveCount(4)
+        await expect(screen.getByRole("tab", /^Members \(\d+\)$/)).toBeVisible({ timeout: 10_000 })
+        await expect(memberRows(screen)).toHaveCount(4, { timeout: 10_000 })
 
         await screen.getByRole("textbox", "Search people").fill("Case")
         await expect(memberRows(screen)).toHaveCount(1, { timeout: 10_000 })
@@ -51,7 +52,8 @@ test(
         await expect(dialog.getByRole("textbox", "Email address")).toHaveValue(INVITEE)
         await dialog.getByRole("button", "Cancel").tap()
         await expect(dialog).toBeHidden()
-        await expect(screen.getByRole("tab", "Invitations (0)")).toBeVisible()
+        await screen.getByRole("tab", /^Invitations \(\d+\)$/).tap()
+        await expect(screen.getByRole("button", `Revoke invitation for ${INVITEE}`)).toHaveCount(0)
     },
 )
 

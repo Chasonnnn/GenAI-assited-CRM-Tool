@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ShieldCheck, UserPlus, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react"
 import api from "@/lib/api"
 import { isNotFoundError } from "@/lib/error-utils"
+import { getRoleLabel } from "@/lib/role-labels"
 
 interface InviteDetails {
     id: string
@@ -184,7 +185,7 @@ export default function InviteAcceptPageClient() {
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="text-sm text-zinc-500">Role</span>
-                                    <span className="font-semibold text-zinc-900 capitalize">{invite?.role}</span>
+                                    <span className="font-semibold text-zinc-900">{getRoleLabel(invite?.role)}</span>
                                 </div>
                                 {expiryText && (
                                     <div className="flex justify-between items-center">

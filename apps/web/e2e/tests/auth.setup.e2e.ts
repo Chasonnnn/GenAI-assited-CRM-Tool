@@ -6,6 +6,8 @@ import { grantSession, type SeedRole } from "../admin-session"
 const SESSIONS: Array<[string, SeedRole]> = [
     ["admin", "admin"],
     ["case-manager", "case_manager"],
+    // The e2e stack lists the developer as a platform admin, so this session opens /ops.
+    ["ops", "developer"],
 ]
 
 for (const [name, role] of SESSIONS) {

@@ -44,6 +44,7 @@ ENTITY_TYPE = "email_template"
 
 APPOINTMENT_WORKFLOW_TEMPLATE_NAMES = {
     "appointment_requested",
+    "appointment_request_received",
     "appointment_confirmed",
     "appointment_rescheduled",
     "appointment_cancelled",
@@ -363,6 +364,7 @@ def create_template(
     category: str | None = None,
     *,
     body_design: dict | None = None,
+    system_key: str | None = None,
     commit: bool = True,
 ) -> EmailTemplate:
     """Create a new email template with initial version snapshot."""
@@ -383,6 +385,7 @@ def create_template(
         scope=scope,
         owner_user_id=owner_user_id,
         category=category,
+        system_key=system_key,
         current_version=1,
     )
     db.add(template)
@@ -600,10 +603,15 @@ def list_templates_for_user(
         )
 
     if usage_context == "manual":
+        from app.services.appointment_email_service import SCHEDULING_TEMPLATE_SYSTEM_KEYS
+
+        hidden_system_keys = APPOINTMENT_WORKFLOW_TEMPLATE_NAMES | set(
+            SCHEDULING_TEMPLATE_SYSTEM_KEYS.values()
+        )
         query = query.filter(
             or_(
                 EmailTemplate.system_key.is_(None),
-                func.lower(EmailTemplate.system_key).notin_(APPOINTMENT_WORKFLOW_TEMPLATE_NAMES),
+                func.lower(EmailTemplate.system_key).notin_(hidden_system_keys),
             ),
             func.lower(EmailTemplate.name).notin_(APPOINTMENT_WORKFLOW_TEMPLATE_NAMES),
         )
