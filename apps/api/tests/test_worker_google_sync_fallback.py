@@ -641,3 +641,102 @@ def test_maybe_schedule_workflow_approval_expiry_jobs_skips_org_without_due_task
     )
     assert last == now
     assert job is None
+
+
+def _list_orgs_with_concurrently_deleted_org(db, test_org, monkeypatch):
+    """Make list_orgs return test_org first, then an org whose row another session deleted."""
+    import uuid
+
+    from sqlalchemy import delete
+
+    from app.db.models import Organization
+    from app.services import org_service
+
+    deleted_org = Organization(
+        id=uuid.uuid4(),
+        name="Deleted Organization",
+        slug=f"deleted-org-{uuid.uuid4().hex[:8]}",
+    )
+    db.add(deleted_org)
+    db.flush()
+    db.execute(
+        delete(Organization).where(Organization.id == deleted_org.id),
+        execution_options={"synchronize_session": False},
+    )
+    monkeypatch.setattr(org_service, "list_orgs", lambda _db: [test_org, deleted_org])
+
+
+def test_maybe_schedule_workflow_maintenance_jobs_survives_org_deleted_mid_loop(
+    db, test_org, monkeypatch
+):
+    from sqlalchemy import select
+
+    from app import worker
+    from app.db.enums import JobType
+    from app.db.models import AutomationWorkflow, Job
+
+    db.add(
+        AutomationWorkflow(
+            organization_id=test_org.id,
+            name="inactivity workflow",
+            trigger_type="inactivity",
+            trigger_config={},
+            actions=[],
+            is_enabled=True,
+        )
+    )
+    db.commit()
+    _list_orgs_with_concurrently_deleted_org(db, test_org, monkeypatch)
+    now = datetime(2026, 7, 26, 9, 1, 37, tzinfo=UTC)
+    monkeypatch.setattr(worker, "WORKFLOW_MAINTENANCE_FALLBACK_ENABLED", True)
+    monkeypatch.setattr(worker, "WORKFLOW_MAINTENANCE_FALLBACK_INTERVAL_SECONDS", 3600)
+
+    last = worker.maybe_schedule_workflow_maintenance_jobs(db, now=now, last_run_at=None)
+
+    jobs = db.scalars(
+        select(Job).where(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.WORKFLOW_SWEEP.value,
+        )
+    ).all()
+    assert last == now
+    assert [job.payload["sweep_type"] for job in jobs] == ["inactivity"]
+
+
+def test_maybe_schedule_workflow_approval_expiry_jobs_survives_org_deleted_mid_loop(
+    db, test_org, test_user, monkeypatch
+):
+    from sqlalchemy import select
+
+    from app import worker
+    from app.db.enums import JobType, OwnerType, TaskStatus, TaskType
+    from app.db.models import Job, Task
+
+    now = datetime(2026, 7, 26, 9, 3, 37, tzinfo=UTC)
+    db.add(
+        Task(
+            organization_id=test_org.id,
+            created_by_user_id=test_user.id,
+            owner_type=OwnerType.USER.value,
+            owner_id=test_user.id,
+            title="Approve workflow",
+            task_type=TaskType.WORKFLOW_APPROVAL.value,
+            status=TaskStatus.PENDING.value,
+            due_at=now - timedelta(minutes=1),
+        )
+    )
+    db.commit()
+    _list_orgs_with_concurrently_deleted_org(db, test_org, monkeypatch)
+    monkeypatch.setattr(worker, "WORKFLOW_APPROVAL_EXPIRY_FALLBACK_ENABLED", True)
+    monkeypatch.setattr(worker, "WORKFLOW_APPROVAL_EXPIRY_FALLBACK_INTERVAL_SECONDS", 300)
+
+    last = worker.maybe_schedule_workflow_approval_expiry_jobs(db, now=now, last_run_at=None)
+
+    job = db.scalar(
+        select(Job).where(
+            Job.organization_id == test_org.id,
+            Job.job_type == JobType.WORKFLOW_APPROVAL_EXPIRY.value,
+        )
+    )
+    assert last == now
+    assert job is not None
