@@ -380,6 +380,47 @@ def seed_role_defaults(db: Session, org_id: uuid.UUID) -> int:
     return count
 
 
+def seed_role_defaults_bulk(db: Session, org_ids: list[uuid.UUID]) -> int:
+    """
+    Seed role_permissions table with defaults for multiple orgs at once.
+
+    Only creates rows for permissions explicitly in ROLE_DEFAULTS (granted).
+    Missing permissions default to False at runtime.
+
+    Returns count of rows created.
+    """
+    from app.db.models import RolePermission
+
+    existing_rows = (
+        db.query(RolePermission.organization_id, RolePermission.role, RolePermission.permission)
+        .filter(RolePermission.organization_id.in_(org_ids))
+        .all()
+    )
+    existing_keys = {
+        (org_id, role, permission) for org_id, role, permission in existing_rows
+    }
+
+    count = 0
+    for org_id in org_ids:
+        for role, permissions in ROLE_DEFAULTS.items():
+            if role == "developer":
+                continue  # Developer is immutable, no DB rows needed
+
+            for permission in permissions:
+                if (org_id, role, permission) not in existing_keys:
+                    db.add(
+                        RolePermission(
+                            organization_id=org_id,
+                            role=role,
+                            permission=permission,
+                            is_granted=True,
+                        )
+                    )
+                    count += 1
+
+    return count
+
+
 # =============================================================================
 # Member Management
 # =============================================================================
