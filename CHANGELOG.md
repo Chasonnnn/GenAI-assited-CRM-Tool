@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.86](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.85...surrogacy-crm-platform-v0.91.86) (2026-10-07)
+
+
+### Bug Fixes
+
+* batch permission queries and preserve worker sweeps ([#819](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/819)) ([a996377](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a99637772c53596c54897f82de64c1a40ee66684))
+
+
+### Maintenance
+
+* agent environment fixes: local CI gates, review standards, test guards ([#815](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/815)) ([ff6f66d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ff6f66d2cddfab57d9d8cc3ff4dfe8dee5ee7921))
+
 ## [0.91.85](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.84...surrogacy-crm-platform-v0.91.85) (2026-10-06)
 
 
