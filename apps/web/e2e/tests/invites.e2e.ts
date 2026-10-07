@@ -24,6 +24,7 @@ test(
         await expect(screen.getByText("You're Invited")).toBeVisible({ timeout: 15_000 })
         await expect(screen.getByText("Test Admin")).toBeVisible()
         await expect(screen.getByText("Test Organization")).toBeVisible()
+        await expect(screen.getByText("Intake Specialist")).toBeVisible()
         await screen.getByRole("button", "Continue with Google").tap()
         await expect.poll(() => signInStarts.length).toBe(1)
         expect(signInStarts[0]).toContain(`invite_id=${invite.id}`)

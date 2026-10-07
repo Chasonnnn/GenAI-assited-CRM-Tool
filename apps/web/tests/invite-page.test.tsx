@@ -71,6 +71,13 @@ describe('InvitePage', () => {
         )
     })
 
+    it('shows the role label instead of the stored role value', async () => {
+        renderInvitePage()
+
+        expect(await screen.findByText('Intake Specialist')).toBeInTheDocument()
+        expect(screen.queryByText('intake_specialist')).not.toBeInTheDocument()
+    })
+
     it('shows one safe message for a malformed invite id instead of the validation text', async () => {
         const { ApiError } = await import('@/lib/api')
         navigationState.inviteId = 'not-a-uuid'
