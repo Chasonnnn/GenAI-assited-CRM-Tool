@@ -6,9 +6,7 @@ from app.db.models import SystemAlert
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("event", ["ws_send_failed", "ws_event_publish_failed"])
-async def test_gcp_alert_webhook_creates_alert(
-    client, db, test_user, test_org, monkeypatch, event
-):
+async def test_gcp_alert_webhook_creates_alert(client, db, test_user, test_org, monkeypatch, event):
     from app.core.config import settings
 
     settings.INTERNAL_SECRET = "test-internal-secret"

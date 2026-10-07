@@ -496,7 +496,9 @@ def seed_database(metadata_path: Path) -> dict[str, str]:
             )
         intended_parent = (
             db.query(IntendedParent)
-            .filter_by(organization_id=org_id, email_hash=hash_email("qa-intended-parent@example.com"))
+            .filter_by(
+                organization_id=org_id, email_hash=hash_email("qa-intended-parent@example.com")
+            )
             .one_or_none()
         )
         if intended_parent is None:

@@ -456,8 +456,7 @@ async def test_platform_system_email_campaign_bulk_loads_organizations_once(
     recipient_selects = [
         statement
         for statement in statements
-        if statement.startswith("select")
-        and "from users join memberships" in statement
+        if statement.startswith("select") and "from users join memberships" in statement
     ]
     assert len(recipient_selects) == 1
     assert result["recipients"] == 4

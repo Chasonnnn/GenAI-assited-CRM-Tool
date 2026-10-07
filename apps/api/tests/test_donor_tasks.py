@@ -137,10 +137,7 @@ def test_manual_synced_generic_task_delete_preserves_best_effort_google_delete(
     assert db.get(Task, task_id) is None
     assert direct_deletes == [task_id]
     assert (
-        db.query(Job)
-        .filter(Job.job_type == JobType.GOOGLE_TASK_REMOTE_DELETE.value)
-        .count()
-        == 0
+        db.query(Job).filter(Job.job_type == JobType.GOOGLE_TASK_REMOTE_DELETE.value).count() == 0
     )
 
 
@@ -179,9 +176,7 @@ def test_donor_task_reassignment_tombstones_old_owner_before_new_sync(
     monkeypatch.setattr(
         task_service,
         "_sync_task_to_google_best_effort",
-        lambda _db, updated: sync_snapshots.append(
-            (updated.owner_id, updated.google_task_id)
-        ),
+        lambda _db, updated: sync_snapshots.append((updated.owner_id, updated.google_task_id)),
     )
 
     updated = task_service.update_task(
@@ -195,9 +190,7 @@ def test_donor_task_reassignment_tombstones_old_owner_before_new_sync(
     assert updated.google_task_id is None
     assert sync_snapshots == [(new_owner.id, None)]
     cleanup_job = (
-        db.query(Job)
-        .filter(Job.job_type == JobType.GOOGLE_TASK_REMOTE_DELETE.value)
-        .one()
+        db.query(Job).filter(Job.job_type == JobType.GOOGLE_TASK_REMOTE_DELETE.value).one()
     )
     assert cleanup_job.payload["user_id"] == str(test_auth.user.id)
     assert cleanup_job.payload["google_task_id"] == "old-owner-remote"
@@ -244,9 +237,7 @@ async def test_donor_reassignment_defers_new_owner_remote_until_old_cleanup_fini
         actor_user_id=test_auth.user.id,
     )
     cleanup_job = (
-        db.query(Job)
-        .filter(Job.job_type == JobType.GOOGLE_TASK_REMOTE_DELETE.value)
-        .one()
+        db.query(Job).filter(Job.job_type == JobType.GOOGLE_TASK_REMOTE_DELETE.value).one()
     )
 
     monkeypatch.setattr(
@@ -270,9 +261,7 @@ async def test_donor_reassignment_defers_new_owner_remote_until_old_cleanup_fini
 
     assert remote_creates == []
     recovery_job = (
-        db.query(Job)
-        .filter(Job.job_type == JobType.GOOGLE_TASK_CREATION_RECONCILE.value)
-        .one()
+        db.query(Job).filter(Job.job_type == JobType.GOOGLE_TASK_CREATION_RECONCILE.value).one()
     )
     assert recovery_job.payload["user_id"] == str(new_owner.id)
 
@@ -366,14 +355,10 @@ async def test_donor_reassignment_waits_for_prior_owner_uncertain_creation(
     assert remote_creates == []
 
     recovery_jobs = (
-        db.query(Job)
-        .filter(Job.job_type == JobType.GOOGLE_TASK_CREATION_RECONCILE.value)
-        .all()
+        db.query(Job).filter(Job.job_type == JobType.GOOGLE_TASK_CREATION_RECONCILE.value).all()
     )
     old_recovery = next(job for job in recovery_jobs if job.id == old_recovery_id)
-    new_recovery = next(
-        job for job in recovery_jobs if job.payload["user_id"] == str(new_owner.id)
-    )
+    new_recovery = next(job for job in recovery_jobs if job.payload["user_id"] == str(new_owner.id))
     old_recovery.status = JobStatus.RUNNING.value
     db.commit()
 
@@ -527,6 +512,7 @@ def test_compensation_double_failure_keeps_creation_recovery_outbox(
         "enqueue_remote_deletion",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("outbox unavailable")),
     )
+
     def fail_delete(coro, *_args, **_kwargs):
         coro.close()
         raise RuntimeError("delete unavailable")
@@ -915,9 +901,7 @@ def test_donor_google_post_commit_failure_tombstones_and_compensates(
 
 
 @pytest.mark.asyncio
-async def test_create_and_filter_donor_task_hydrates_donor_metadata(
-    authed_client, db, test_auth
-):
+async def test_create_and_filter_donor_task_hydrates_donor_metadata(authed_client, db, test_auth):
     donor = _create_donor(db, org_id=test_auth.org.id, donor_type="egg")
 
     created = await authed_client.post(
@@ -1033,9 +1017,7 @@ async def test_donor_tasks_fail_closed_without_donor_view_permission(
 
     attention = await authed_client.get("/dashboard/attention")
     assert attention.status_code == 200, attention.text
-    assert str(donor_task.id) not in {
-        item["id"] for item in attention.json()["overdue_tasks"]
-    }
+    assert str(donor_task.id) not in {item["id"] for item in attention.json()["overdue_tasks"]}
     assert attention.json()["overdue_count"] == 0
 
 

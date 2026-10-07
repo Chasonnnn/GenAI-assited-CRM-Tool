@@ -207,9 +207,7 @@ async def test_meta_donor_form_reads_require_view_and_list_filters_donor_forms(
 
     async with _client_for(db, test_org.id, no_donor_access) as client:
         listed = await client.get("/integrations/meta/forms")
-        donor_preview = await client.get(
-            f"/integrations/meta/forms/{donor_form.id}/mapping"
-        )
+        donor_preview = await client.get(f"/integrations/meta/forms/{donor_form.id}/mapping")
         donor_leads = await client.get(
             f"/integrations/meta/forms/{donor_form.id}/unconverted-leads"
         )
@@ -229,9 +227,7 @@ async def test_meta_donor_form_reads_require_view_and_list_filters_donor_forms(
 
     async with _client_for(db, test_org.id, donor_reader) as client:
         listed = await client.get("/integrations/meta/forms")
-        donor_preview = await client.get(
-            f"/integrations/meta/forms/{donor_form.id}/mapping"
-        )
+        donor_preview = await client.get(f"/integrations/meta/forms/{donor_form.id}/mapping")
         donor_leads = await client.get(
             f"/integrations/meta/forms/{donor_form.id}/unconverted-leads"
         )

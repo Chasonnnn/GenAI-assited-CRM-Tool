@@ -384,9 +384,7 @@ async def test_uncertain_donor_post_reconciles_marker_without_replaying(monkeypa
                 "items": [
                     {
                         "id": "accepted-after-timeout",
-                        "notes": (
-                            f"[Surrogacy Force task ID: {task.id}]"
-                        ),
+                        "notes": (f"[Surrogacy Force task ID: {task.id}]"),
                         "updated": "2026-08-29T12:00:00Z",
                     }
                 ]
@@ -515,9 +513,7 @@ async def test_sync_google_tasks_marks_scope_missing_after_403(db, test_auth, mo
 
 
 @pytest.mark.asyncio
-async def test_correlated_donor_tasks_are_locked_in_one_scoped_batch(
-    db, test_auth, monkeypatch
-):
+async def test_correlated_donor_tasks_are_locked_in_one_scoped_batch(db, test_auth, monkeypatch):
     def donor_task(*, org_id, owner_id, number, archived=False):
         pipeline = pipeline_service.get_or_create_default_pipeline(
             db, org_id, entity_type="egg_donor"
@@ -559,21 +555,15 @@ async def test_correlated_donor_tasks_are_locked_in_one_scoped_batch(
         )
         for number in ("D81001", "D81002")
     ]
-    wrong_owner = donor_task(
-        org_id=test_auth.org.id, owner_id=uuid4(), number="D81003"
-    )
+    wrong_owner = donor_task(org_id=test_auth.org.id, owner_id=uuid4(), number="D81003")
     archived = donor_task(
         org_id=test_auth.org.id,
         owner_id=test_auth.user.id,
         number="D81004",
         archived=True,
     )
-    cross_org = donor_task(
-        org_id=other_org.id, owner_id=test_auth.user.id, number="D81005"
-    )
-    blocked_exact = donor_task(
-        org_id=test_auth.org.id, owner_id=test_auth.user.id, number="D81006"
-    )
+    cross_org = donor_task(org_id=other_org.id, owner_id=test_auth.user.id, number="D81005")
+    blocked_exact = donor_task(org_id=test_auth.org.id, owner_id=test_auth.user.id, number="D81006")
     blocked_default = donor_task(
         org_id=test_auth.org.id, owner_id=test_auth.user.id, number="D81007"
     )
@@ -615,9 +605,7 @@ async def test_correlated_donor_tasks_are_locked_in_one_scoped_batch(
     async def tasks(_token, _list_id):
         return remotes
 
-    monkeypatch.setattr(
-        google_tasks_sync_service.oauth_service, "get_access_token_async", token
-    )
+    monkeypatch.setattr(google_tasks_sync_service.oauth_service, "get_access_token_async", token)
     monkeypatch.setattr(google_tasks_sync_service, "_list_google_task_lists", lists)
     monkeypatch.setattr(google_tasks_sync_service, "_list_google_tasks", tasks)
     monkeypatch.setattr(task_service, "user_can_view_donors", lambda *_args: True)

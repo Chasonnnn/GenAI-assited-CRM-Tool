@@ -65,7 +65,7 @@ def resolve_effective_template_subject_type(
     if context_key and form_id:
         try:
             parsed_form_id = UUID(str(form_id))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             parsed_form_id = None
         form_kind = None
         if parsed_form_id is not None:
@@ -122,9 +122,7 @@ def _resolve_unbound_template_subject_type(
     if subject_type is None:
         if trigger_type in DONOR_ONLY_TRIGGER_TYPES:
             return workflow_service.DONOR_PERMISSION_CONTEXT
-        subject_type = workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES.get(
-            trigger_type, "surrogate"
-        )
+        subject_type = workflow_service.LEGACY_TRIGGER_SUBJECT_TYPES.get(trigger_type, "surrogate")
     return workflow_service.resolve_unbound_workflow_subject_type(
         subject_type=subject_type,
         trigger_type=trigger_type,
@@ -169,13 +167,11 @@ def get_templates_effective_subject_types(
         if context_key and trigger_config.get("form_id"):
             try:
                 parsed_form_id = UUID(str(trigger_config["form_id"]))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 pass
             else:
                 referenced_form_ids.add(parsed_form_id)
-        prepared.append(
-            (template, resolution_org_id, trigger_config, context_key, parsed_form_id)
-        )
+        prepared.append((template, resolution_org_id, trigger_config, context_key, parsed_form_id))
 
     form_rows = (
         db.query(Form.id, Form.organization_id, Form.lead_kind)
@@ -188,8 +184,7 @@ def get_templates_effective_subject_types(
         else []
     )
     form_kinds = {
-        (organization_id, form_id): lead_kind
-        for form_id, organization_id, lead_kind in form_rows
+        (organization_id, form_id): lead_kind for form_id, organization_id, lead_kind in form_rows
     }
     effective_subjects = {}
     for template, resolution_org_id, trigger_config, context_key, form_id in prepared:

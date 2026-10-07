@@ -50,8 +50,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         "ck_messaging_consent_state_provider_sync_status",
         "messaging_consent_states",
-        "provider_sync_status IN "
-        "('not_required', 'pending', 'synced', 'failed', 'unavailable')",
+        "provider_sync_status IN ('not_required', 'pending', 'synced', 'failed', 'unavailable')",
     )
 
 

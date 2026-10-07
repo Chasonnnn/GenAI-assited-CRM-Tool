@@ -237,9 +237,7 @@ def enqueue_donor_task_remote_deletions(
                 user_id=task.owner_id,
                 source_task_id=task.id,
                 google_task_id=task.google_task_id,
-                google_task_list_id=(
-                    task.google_task_list_id or GOOGLE_DEFAULT_TASKLIST_ID
-                ),
+                google_task_list_id=(task.google_task_list_id or GOOGLE_DEFAULT_TASKLIST_ID),
             )
         )
     return jobs
@@ -387,7 +385,7 @@ def reactivate_creation_recovery_after_cleanup(db: Session, job: Job) -> None:
         return
     try:
         source_task_id = UUID(str((job.payload or {}).get("source_task_id")))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return
     if has_unresolved_cleanup_for_source_task(
         db,
@@ -478,7 +476,7 @@ def list_tombstoned_remote_keys(
                 payload.get("google_task_list_id"),
                 field="google_task_list_id",
             )
-        except (AttributeError, ValueError):
+        except AttributeError, ValueError:
             continue
         keys.add((google_task_list_id, google_task_id))
     return keys

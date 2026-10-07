@@ -338,9 +338,7 @@ def test_process_occurrence_stitch_links_by_existing_gmail_thread(db, test_org, 
     )
 
 
-def test_process_occurrence_stitch_bulk_resolves_reply_tokens_in_order(
-    db, test_org, monkeypatch
-):
+def test_process_occurrence_stitch_bulk_resolves_reply_tokens_in_order(db, test_org, monkeypatch):
     from app.db.enums import (
         EmailDirection,
         EmailOccurrenceState,

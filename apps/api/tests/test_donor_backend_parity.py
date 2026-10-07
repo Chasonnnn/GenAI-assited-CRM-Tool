@@ -149,10 +149,7 @@ def test_donor_archive_and_restore_append_lifecycle_history(db, test_org, test_u
 
     history = donor_service.get_status_history(db, test_org.id, donor.id)
     assert [item.reason for item in history[:2]] == ["Donor restored", "Donor archived"]
-    assert all(
-        item.old_stage_id == item.new_stage_id == restored.stage_id
-        for item in history[:2]
-    )
+    assert all(item.old_stage_id == item.new_stage_id == restored.stage_id for item in history[:2])
     assert all(item.old_status == item.new_status == restored.stage_key for item in history[:2])
 
 
@@ -317,9 +314,7 @@ def test_donor_export_never_resolves_foreign_tenant_owner(
 
     rows = list(
         csv.DictReader(
-            io.StringIO(
-                "".join(admin_export_service.stream_donors_csv(db, test_org.id))
-            )
+            io.StringIO("".join(admin_export_service.stream_donors_csv(db, test_org.id)))
         )
     )
 

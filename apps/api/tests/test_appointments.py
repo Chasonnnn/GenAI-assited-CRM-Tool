@@ -638,9 +638,7 @@ async def test_manage_endpoint_returns_public_appointment_view(
     assert data["client_email"] == "manage@example.com"
     assert data["manage_actions"]["can_cancel"] is False
     assert data["manage_actions"]["can_reschedule"] is (
-        data["scheduling"]["capabilities"]["can_reschedule"]
-        if scheduling_v2_enabled
-        else True
+        data["scheduling"]["capabilities"]["can_reschedule"] if scheduling_v2_enabled else True
     )
     cancel_response = await client.get(
         f"/book/self-service/{test_org.id}/manage/{appt.cancel_token}"
@@ -649,9 +647,7 @@ async def test_manage_endpoint_returns_public_appointment_view(
     cancel_data = cancel_response.json()
     assert cancel_data["manage_actions"]["can_reschedule"] is False
     assert cancel_data["manage_actions"]["can_cancel"] is (
-        cancel_data["scheduling"]["capabilities"]["can_cancel"]
-        if scheduling_v2_enabled
-        else True
+        cancel_data["scheduling"]["capabilities"]["can_cancel"] if scheduling_v2_enabled else True
     )
     from app.routers.booking import _appointment_to_public_read
 
@@ -778,20 +774,34 @@ async def test_manage_cancel_by_token(
 @pytest.mark.parametrize("scheduling_v2_enabled", [False, True])
 @pytest.mark.asyncio
 async def test_manage_mutations_reject_opposite_purpose_token(
-    client, db, test_org, test_user, appointment_type, monkeypatch, scheduling_v2_enabled,
+    client,
+    db,
+    test_org,
+    test_user,
+    appointment_type,
+    monkeypatch,
+    scheduling_v2_enabled,
 ):
     monkeypatch.setattr(settings, "SCHEDULING_V2_ENABLED", scheduling_v2_enabled)
     scheduled_start = datetime.combine(
         _next_weekday(0), time(10, 0), tzinfo=ZoneInfo("America/New_York")
     ).astimezone(UTC)
     appt = Appointment(
-        id=uuid4(), organization_id=test_org.id, user_id=test_user.id,
-        appointment_type_id=appointment_type.id, client_name="Manage Purpose",
-        client_email="purpose@example.com", client_phone="555-000-0100",
-        client_timezone="America/New_York", scheduled_start=scheduled_start,
-        scheduled_end=scheduled_start + timedelta(minutes=30), duration_minutes=30,
-        buffer_before_minutes=0, buffer_after_minutes=0,
-        meeting_mode=appointment_type.meeting_mode, status=AppointmentStatus.CONFIRMED.value,
+        id=uuid4(),
+        organization_id=test_org.id,
+        user_id=test_user.id,
+        appointment_type_id=appointment_type.id,
+        client_name="Manage Purpose",
+        client_email="purpose@example.com",
+        client_phone="555-000-0100",
+        client_timezone="America/New_York",
+        scheduled_start=scheduled_start,
+        scheduled_end=scheduled_start + timedelta(minutes=30),
+        duration_minutes=30,
+        buffer_before_minutes=0,
+        buffer_after_minutes=0,
+        meeting_mode=appointment_type.meeting_mode,
+        status=AppointmentStatus.CONFIRMED.value,
         reschedule_token=f"reschedule-{uuid4().hex}",
         cancel_token=f"cancel-{uuid4().hex}",
         reschedule_token_expires_at=scheduled_start + timedelta(days=30),

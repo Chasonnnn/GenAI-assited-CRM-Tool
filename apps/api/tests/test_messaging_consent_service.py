@@ -77,9 +77,7 @@ def test_affirmative_opt_in_requires_complete_evidence(db, test_org) -> None:
         _record_opt_in(db, test_org, disclosure_text="  ")
 
 
-def test_affirmative_opt_in_grants_only_selected_purpose_and_is_idempotent(
-    db, test_org
-) -> None:
+def test_affirmative_opt_in_grants_only_selected_purpose_and_is_idempotent(db, test_org) -> None:
     first = _record_opt_in(db, test_org)
     replay = _record_opt_in(db, test_org)
 
@@ -297,14 +295,22 @@ def test_contact_phone_and_instruction_are_encrypted_at_rest(db, test_org) -> No
     )
     db.expire_all()
 
-    contact_raw = db.connection().exec_driver_sql(
-        "SELECT phone_e164 FROM messaging_contacts WHERE id = %s",
-        (result.contact_id,),
-    ).scalar_one()
-    instruction_raw = db.connection().exec_driver_sql(
-        "SELECT instruction_text FROM messaging_consent_evidence WHERE id = %s",
-        (result.evidence_id,),
-    ).scalar_one()
+    contact_raw = (
+        db.connection()
+        .exec_driver_sql(
+            "SELECT phone_e164 FROM messaging_contacts WHERE id = %s",
+            (result.contact_id,),
+        )
+        .scalar_one()
+    )
+    instruction_raw = (
+        db.connection()
+        .exec_driver_sql(
+            "SELECT instruction_text FROM messaging_consent_evidence WHERE id = %s",
+            (result.evidence_id,),
+        )
+        .scalar_one()
+    )
 
     assert "+14155550110" not in contact_raw
     assert "Please stop texting me" not in instruction_raw
