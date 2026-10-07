@@ -42,6 +42,8 @@ export default tseslint.config(
       'unused-imports/no-unused-imports': 'error',
       'unused-imports/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'error',
+      // Warn-only while existing oversized files are split; tighten to 'error' when none remain.
+      'max-lines': ['warn', { max: 1500 }],
     },
   },
   // Type-aware promise safety — applied only to in-project source files.
