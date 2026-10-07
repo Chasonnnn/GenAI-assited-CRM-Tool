@@ -178,6 +178,12 @@ def _area_code_state(phone_e164: str | None) -> str | None:
     return _STATE_CODES_BY_NAME.get(description.casefold())
 
 
+def florida_rules_apply(*, state: str | None, phone_e164: str | None) -> bool:
+    """Florida law covers Florida addresses, Florida area codes, and unknown addresses."""
+    normalized_state = (state or "").strip().upper()
+    return normalized_state in {"", "FL"} or _area_code_state(phone_e164) == "FL"
+
+
 def _applicable_windows(state: str | None, phone_e164: str | None) -> list[_Window]:
     """Windows of the address state and of the area-code state, which some laws presume."""
     normalized_state = (state or "").strip().upper() or _UNKNOWN_STATE

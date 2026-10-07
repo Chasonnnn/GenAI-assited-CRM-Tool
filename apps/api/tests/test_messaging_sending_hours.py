@@ -151,3 +151,18 @@ def test_unknown_timezone_waits_for_hours_open_in_every_us_zone() -> None:
     assert closed.allowed is False
     assert closed.defer_until == datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
     assert open_everywhere.allowed is True
+
+
+@pytest.mark.parametrize(
+    ("state", "phone_e164", "applies"),
+    [
+        ("FL", "+14155550100", True),
+        ("CA", "+13055550100", True),
+        (None, "+14155550100", True),
+        ("CA", "+14155550100", False),
+    ],
+)
+def test_florida_rules_follow_address_or_area_code(state, phone_e164, applies) -> None:
+    from app.services.messaging_sending_hours import florida_rules_apply
+
+    assert florida_rules_apply(state=state, phone_e164=phone_e164) is applies
