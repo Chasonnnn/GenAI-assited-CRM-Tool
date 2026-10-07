@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from app.main import app
@@ -25,8 +26,11 @@ def _build_contract() -> dict[str, dict[str, list[str]]]:
 
 def test_openapi_contract_snapshot_matches() -> None:
     fixture = Path(__file__).resolve().parent / "fixtures" / "openapi_contract_snapshot.json"
-    expected = json.loads(fixture.read_text(encoding="utf-8"))
     actual = _build_contract()
+    # Regenerate after an intended contract change: UPDATE_OPENAPI_SNAPSHOT=1 pytest <this file>
+    if os.environ.get("UPDATE_OPENAPI_SNAPSHOT") == "1":
+        fixture.write_text(json.dumps(actual, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    expected = json.loads(fixture.read_text(encoding="utf-8"))
     assert actual == expected
 
 

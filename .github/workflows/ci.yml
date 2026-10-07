@@ -255,18 +255,9 @@ jobs:
         working-directory: apps/api
         run: uv sync --frozen --extra test
 
-      - name: Run FastAPI convention and contract gates
+      - name: Run FastAPI, Alembic head, and Ruff gates
         working-directory: apps/api
-        run: |
-          PYTHONPATH=. uv run -m pytest -v --tb=short \
-            tests/test_fastapi_conventions_signatures.py \
-            tests/test_fastapi_conventions_ellipsis.py \
-            tests/test_fastapi_conventions_response_contracts.py \
-            tests/test_fastapi_conventions_router_mounts.py \
-            tests/test_fastapi_conventions_async_sync.py \
-            tests/test_fastapi_openapi_contract.py \
-            tests/test_router_model_imports.py \
-            tests/test_router_service_boundaries.py
+        run: scripts/ci_gates.sh
 
   ticketing-launch-gate:
     name: Ticketing Launch Gate

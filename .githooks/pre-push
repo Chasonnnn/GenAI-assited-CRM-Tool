@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Enable with: git config core.hooksPath .githooks
+set -euo pipefail
+
+exec "$(git rev-parse --show-toplevel)/apps/api/scripts/ci_gates.sh"

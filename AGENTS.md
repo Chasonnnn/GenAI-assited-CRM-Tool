@@ -67,6 +67,8 @@ Run Ruff for changed Python surfaces. Add denied and cross-organization tests fo
 
 For UI changes, verify the rendered states that changed, including loading, empty, error, and populated states when applicable.
 
+Run `apps/api/scripts/ci_gates.sh` for the database-free backend gates (FastAPI conventions, one Alembic head, Ruff). Run `git config core.hooksPath .githooks` once per checkout so pre-push runs it.
+
 ## Commands and routing
 
 Use repo-pinned runtimes in `mise.toml` and `mise.lock`, plus existing package scripts. Inspect manifests before adding commands.
