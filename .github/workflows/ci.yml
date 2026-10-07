@@ -7,6 +7,7 @@ on:
       - '.agents/**'
       - 'apps/**'
       - 'cloudbuild/**'
+      - 'docs/adr/**'
       - 'infra/terraform/**'
       - 'scripts/**'
       - 'pyproject.toml'
@@ -26,6 +27,7 @@ on:
       - '.agents/**'
       - 'apps/**'
       - 'cloudbuild/**'
+      - 'docs/adr/**'
       - 'infra/terraform/**'
       - 'scripts/**'
       - 'pyproject.toml'
@@ -460,6 +462,9 @@ jobs:
     
     steps:
       - uses: actions/checkout@v6
+
+      - name: Check ADR numbers are unique
+        run: scripts/check_adr_numbers.sh
       
       - name: Set up Python
         uses: actions/setup-python@v6
