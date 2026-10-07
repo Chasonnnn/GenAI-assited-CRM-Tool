@@ -11,7 +11,7 @@ import {
 
 /**
  * Compile the editor document to the stored send HTML. A document that is only
- * one HTML block saves that HTML unchanged and stores no design (ADR 0006).
+ * one HTML block saves that HTML unchanged and stores no design (ADR 0010).
  */
 export async function compileEmailDesign(editor: Editor): Promise<EmailBodyValue> {
     const design = editor.getJSON() as EmailBodyDesign

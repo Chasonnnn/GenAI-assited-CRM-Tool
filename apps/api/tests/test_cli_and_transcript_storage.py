@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
@@ -266,38 +265,23 @@ def test_cli_deactivate_meta_page(monkeypatch, db, _cli_db):
     assert mapping.is_active is False
 
 
-def test_cli_backfill_permissions(monkeypatch, db, _cli_db):
-    acme = _create_org(db, slug="acme")
-    beta = _create_org(db, slug="beta")
-    db.commit()
-
-    created: list[uuid.UUID] = []
-
-    def _seed_role_defaults(session, org_id):
-        created.append(org_id)
-        return 3
-
-    from app.services import permission_service
-
-    monkeypatch.setattr(permission_service, "seed_role_defaults", _seed_role_defaults)
-    _cli_db.backfill_permissions.callback(dry_run=False)
-    assert acme.id in created
-    assert beta.id in created
-
-
-def test_cli_backfill_permissions_dry_run_bulk_loads_existing_permissions(db, _cli_db, _echo_log):
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_cli_backfill_permissions_bulk_loads_and_preserves_existing_permissions(
+    db, _cli_db, _echo_log, dry_run
+):
     from app.core.permissions import ROLE_DEFAULTS
     from app.db.models import RolePermission
 
     acme = _create_org(db, slug="acme")
-    _create_org(db, slug="beta")
+    beta = _create_org(db, slug="beta")
+    acme_id, beta_id = acme.id, beta.id
     existing_permission = next(iter(ROLE_DEFAULTS["admin"]))
     db.add(
         RolePermission(
             organization_id=acme.id,
             role="admin",
             permission=existing_permission,
-            is_granted=True,
+            is_granted=False,
         )
     )
     db.commit()
@@ -312,7 +296,7 @@ def test_cli_backfill_permissions_dry_run_bulk_loads_existing_permissions(db, _c
     engine = db.get_bind()
     sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
     try:
-        _cli_db.backfill_permissions.callback(dry_run=True)
+        _cli_db.backfill_permissions.callback(dry_run=dry_run)
     finally:
         sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
 
@@ -320,8 +304,27 @@ def test_cli_backfill_permissions_dry_run_bulk_loads_existing_permissions(db, _c
         len(permissions) for role, permissions in ROLE_DEFAULTS.items() if role != "developer"
     )
     assert len(permission_selects) == 1
-    assert f"  acme: would create {expected_per_org - 1} permissions" in _echo_log
-    assert f"  beta: would create {expected_per_org} permissions" in _echo_log
+    verb = "would create" if dry_run else "created"
+    assert f"  acme: {verb} {expected_per_org - 1} permissions" in _echo_log
+    assert f"  beta: {verb} {expected_per_org} permissions" in _echo_log
+    assert f"[OK] {verb.capitalize()} {2 * expected_per_org - 1} total permission(s)" in _echo_log
+    denied = (
+        db.query(RolePermission)
+        .filter_by(organization_id=acme_id, role="admin", permission=existing_permission)
+        .one()
+    )
+    assert denied.is_granted is False
+    assert db.query(RolePermission).filter_by(organization_id=acme_id).count() == (
+        1 if dry_run else expected_per_org
+    )
+    assert db.query(RolePermission).filter_by(organization_id=beta_id).count() == (
+        0 if dry_run else expected_per_org
+    )
+    assert db.query(RolePermission).filter_by(role="developer").count() == 0
+    if not dry_run:
+        _echo_log.clear()
+        _cli_db.backfill_permissions.callback(dry_run=False)
+        assert "[OK] All permissions already up to date" in _echo_log
 
 
 def _create_orphaned_matched_records(db, *, org: Organization, user: User):

@@ -1,4 +1,4 @@
-"""React Email editor documents stored beside template bodies (ADR 0006)."""
+"""React Email editor documents stored beside template bodies (ADR 0010)."""
 
 from __future__ import annotations
 
@@ -132,7 +132,7 @@ async def test_invalid_design_updates_are_rejected(authed_client, db, test_org, 
 async def test_legacy_template_publishes_a_design_through_a_draft(
     authed_client, db, test_org, test_user
 ):
-    # Legacy rows have no design and history recorded before ADR 0006.
+    # Legacy rows have no design and history recorded before ADR 0010.
     template = email_service.create_template(
         db,
         org_id=test_org.id,
