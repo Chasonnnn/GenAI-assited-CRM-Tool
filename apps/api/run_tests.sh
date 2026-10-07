@@ -13,6 +13,19 @@ if [[ ! "$PGPORT" =~ ^[0-9]+$ ]]; then
     exit 2
 fi
 
+# Hosts without PostgreSQL client binaries run them inside the compose db container.
+if ! command -v createdb >/dev/null 2>&1; then
+    pg_container="${TEST_DB_CONTAINER:-crm_db}"
+    pg_in_container() {
+        local tool="$1"
+        shift
+        docker exec -i -e PGPASSWORD=postgres "$pg_container" "$tool" -h 127.0.0.1 -U postgres "$@"
+    }
+    createdb() { pg_in_container createdb "$@"; }
+    dropdb() { pg_in_container dropdb "$@"; }
+    psql() { pg_in_container psql "$@"; }
+fi
+
 mise exec -- uv sync --frozen --extra test --no-install-project
 
 database="crm_test_$(date +%s)_$$"
