@@ -289,11 +289,7 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
         if (smsConsentError) {
             dispatch({ type: "smsConsentValidationFailed" })
             postEmbedMessageToParent(parentOrigin, { type: "sf:form:error", reason: "validation" })
-            if (smsPhoneField) {
-                document.getElementById(smsPhoneField.key)?.focus()
-            } else {
-                smsConsentCheckboxRef.current?.focus()
-            }
+            smsConsentCheckboxRef.current?.focus()
             return
         }
         const validationError = validate()
@@ -398,20 +394,18 @@ function EmbedFormSession({ slug, parentOrigin }: { slug: string; parentOrigin: 
 
                     <div className="space-y-3.5">
                         {renderableFields.map((field) => (
-                            <React.Fragment key={field.key}>
-                                <PublicFormFieldRenderer
-                                    field={field}
-                                    value={answers[field.key]}
-                                    updateField={updateField}
-                                    datePickerOpen={datePickerOpen}
-                                    setDatePickerOpen={setDatePickerOpen}
-                                    density="compact"
-                                />
-                                {field.key === smsPhoneField?.key ? smsConsent : null}
-                            </React.Fragment>
+                            <PublicFormFieldRenderer
+                                key={field.key}
+                                field={field}
+                                value={answers[field.key]}
+                                updateField={updateField}
+                                datePickerOpen={datePickerOpen}
+                                setDatePickerOpen={setDatePickerOpen}
+                                density="compact"
+                            />
                         ))}
 
-                        {smsPhoneField ? null : smsConsent}
+                        {smsConsent}
 
                         {formConfig.form_schema.privacy_notice?.trim() ? (
                             <p className="rounded-md bg-neutral-50 px-3 py-2 text-[12px] leading-5 text-neutral-500">
