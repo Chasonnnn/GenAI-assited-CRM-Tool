@@ -369,37 +369,38 @@ def dispatch_claimed_delivery(
         select(TwilioSettings).where(TwilioSettings.organization_id == organization_id)
     ).scalar_one()
 
-    state, postal_code, known_timezone = _recipient_location(db, contact)
-    timezone_evidence = messaging_sending_hours.resolve_recipient_timezone(
-        phone_e164=contact.phone_e164,
-        state=state,
-        postal_code=postal_code,
-        known_timezone=known_timezone,
-    )
-    if timezone_evidence.timezone_name is None:
-        _defer(
-            db,
-            delivery,
-            run_at=now + timedelta(days=1),
-            error_type="recipient_location_ambiguous",
-            reason="Recipient timezone requires location review",
+    # Quiet hours bind solicitations only; transactional messages send at any hour.
+    if delivery.purpose == "promotional":
+        state, postal_code, known_timezone = _recipient_location(db, contact)
+        timezone_evidence = messaging_sending_hours.resolve_recipient_timezone(
+            phone_e164=contact.phone_e164,
+            state=state,
+            postal_code=postal_code,
+            known_timezone=known_timezone,
         )
-        return "deferred_location_ambiguous"
-    window = messaging_sending_hours.evaluate_sending_window(
-        now=now,
-        timezone_name=timezone_evidence.timezone_name,
-        state=state,
-    )
-    if not window.allowed:
-        assert window.defer_until is not None
-        _defer(
-            db,
-            delivery,
-            run_at=window.defer_until,
-            error_type="outside_sending_hours",
-            reason=window.reason or "Outside recipient sending hours",
-        )
-        return "deferred_sending_hours"
+        if timezone_evidence.timezone_name is None:
+            window = messaging_sending_hours.evaluate_sending_window_in_every_us_timezone(
+                now=now,
+                state=state,
+                phone_e164=contact.phone_e164,
+            )
+        else:
+            window = messaging_sending_hours.evaluate_sending_window(
+                now=now,
+                timezone_name=timezone_evidence.timezone_name,
+                state=state,
+                phone_e164=contact.phone_e164,
+            )
+        if not window.allowed:
+            assert window.defer_until is not None
+            _defer(
+                db,
+                delivery,
+                run_at=window.defer_until,
+                error_type="outside_sending_hours",
+                reason=window.reason or "Outside recipient sending hours",
+            )
+            return "deferred_sending_hours"
 
     from app.services import twilio_readiness_service
 

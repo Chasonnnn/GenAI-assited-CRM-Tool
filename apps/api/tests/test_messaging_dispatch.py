@@ -27,6 +27,7 @@ def _ready_claim(
     phi_enabled=False,
     fully_ready=True,
     toll_free=False,
+    purpose="operational",
 ):
     from app.core.encryption import hash_phone
     from app.services import (
@@ -43,7 +44,7 @@ def _ready_claim(
     settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential(API_KEY_SID)
     settings.api_secret_encrypted = twilio_settings_service.encrypt_credential(API_SECRET)
     settings.auth_token_encrypted = twilio_settings_service.encrypt_credential("auth-token")
-    route = next(item for item in settings.routes if item.purpose == "operational")
+    route = next(item for item in settings.routes if item.purpose == purpose)
     route.enabled = True
     route.messaging_service_sid_encrypted = twilio_settings_service.encrypt_credential(SERVICE_SID)
     route.sender_phone_encrypted = twilio_settings_service.encrypt_credential(SENDER)
@@ -102,9 +103,9 @@ def _ready_claim(
         db,
         organization_id=test_org.id,
         phone=CONTACT,
-        purpose="operational",
+        purpose=purpose,
         affirmative=True,
-        disclosure_text="Operational SMS disclosure",
+        disclosure_text=f"{purpose.title()} SMS disclosure",
         source="website",
         source_reference="dispatch-lead-1",
         occurred_at=datetime(2026, 7, 31, 12, 0, tzinfo=UTC),
@@ -115,7 +116,7 @@ def _ready_claim(
         db,
         organization_id=test_org.id,
         contact_id=consent.contact_id,
-        purpose="operational",
+        purpose=purpose,
         body="EWI operational enrollment. Frequency varies. Msg & data rates apply. HELP. STOP.",
         idempotency_key="dispatch-occurrence-1",
         source_type="workflow",
@@ -549,11 +550,13 @@ def test_21610_adds_local_global_suppression(db, test_org, monkeypatch) -> None:
     assert suppression.reason == "global_opt_out"
 
 
-def test_ambiguous_timezone_defers_without_provider_io(db, test_org, monkeypatch) -> None:
+def test_promotional_with_unknown_timezone_waits_for_hours_open_everywhere(
+    db, test_org, monkeypatch
+) -> None:
     from app.services import messaging_dispatch_service
     from app.services.messaging_sending_hours import RecipientTimezone
 
-    delivery = _ready_claim(db, test_org, monkeypatch)
+    delivery = _ready_claim(db, test_org, monkeypatch, purpose="promotional")
     monkeypatch.setattr(
         messaging_dispatch_service.messaging_sending_hours,
         "resolve_recipient_timezone",
@@ -565,19 +568,64 @@ def test_ambiguous_timezone_defers_without_provider_io(db, test_org, monkeypatch
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("provider I/O not allowed")),
     )
 
+    # 22:00 EDT on Friday is closed on the East Coast.
     result = messaging_dispatch_service.dispatch_claimed_delivery(
         db,
         organization_id=test_org.id,
         delivery_id=delivery.id,
         lease_token=delivery.lease_token,
         lease_generation=delivery.lease_generation,
-        now=datetime(2026, 7, 31, 18, 0, tzinfo=UTC),
+        now=datetime(2026, 8, 1, 2, 0, tzinfo=UTC),
     )
 
-    assert result == "deferred_location_ambiguous"
+    assert result == "deferred_sending_hours"
     db.refresh(delivery)
     assert delivery.status == "retry_scheduled"
-    assert delivery.last_error_type == "recipient_location_ambiguous"
+    assert delivery.last_error_type == "outside_sending_hours"
+    # Hours open in every US zone and every state: 09:00 HST.
+    assert delivery.run_at == datetime(2026, 8, 1, 19, 0, tzinfo=UTC)
+
+
+def test_operational_dispatch_ignores_quiet_hours(db, test_org, monkeypatch) -> None:
+    from app.services import messaging_dispatch_service, twilio_transport
+
+    delivery = _ready_claim(db, test_org, monkeypatch)
+    for name in (
+        "resolve_recipient_timezone",
+        "evaluate_sending_window",
+        "evaluate_sending_window_in_every_us_timezone",
+    ):
+        monkeypatch.setattr(
+            messaging_dispatch_service.messaging_sending_hours,
+            name,
+            lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("Transactional messages have no sending window")
+            ),
+        )
+    sent = []
+    monkeypatch.setattr(
+        messaging_dispatch_service.twilio_transport,
+        "send_message",
+        lambda **kwargs: (
+            sent.append(kwargs)
+            or twilio_transport.TwilioSendResult(
+                success=True, message_sid="SM" + "1" * 32, initial_status="queued"
+            )
+        ),
+    )
+
+    # 03:00 EDT.
+    result = messaging_dispatch_service.dispatch_claimed_delivery(
+        db,
+        organization_id=test_org.id,
+        delivery_id=delivery.id,
+        lease_token=delivery.lease_token,
+        lease_generation=delivery.lease_generation,
+        now=datetime(2026, 8, 1, 7, 0, tzinfo=UTC),
+    )
+
+    assert result == "submitted"
+    assert len(sent) == 1
 
 
 def test_concurrent_first_account_admission_initialization_is_atomic(
