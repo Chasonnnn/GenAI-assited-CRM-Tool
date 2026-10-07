@@ -1,7 +1,8 @@
 import { test } from "@e2e-dev/web"
 import { expect, type Screen } from "e2e"
 
-// The seeder creates these organization templates for every org.
+// The seeder creates these organization templates for every org. Other tests add more: the
+// first appointment email of each kind creates an `appointment_*` template.
 const SEEDED_ORG_TEMPLATES = 17
 const TEMPLATE = { name: "E2E welcome note", subject: "Welcome to the agency" }
 
@@ -13,13 +14,16 @@ test(
     async ({ app, screen }) => {
         await app.open("/automation/email-templates")
         await screen.getByRole("tab", /^Organization/).tap()
-        await expect(templateCards(screen)).toHaveCount(SEEDED_ORG_TEMPLATES, { timeout: 10_000 })
-        await expect(screen.getByRole("heading", "Welcome New Lead")).toBeVisible()
+        await expect(screen.getByRole("heading", "Welcome New Lead")).toBeVisible({ timeout: 10_000 })
+        await expect.poll(() => templateCards(screen).count()).toBeGreaterThanOrEqual(SEEDED_ORG_TEMPLATES)
 
         await screen.getByRole("searchbox", "Search templates").fill("Appointment")
-        await expect(templateCards(screen)).toHaveCount(2, { timeout: 10_000 })
+        await expect(screen.getByRole("heading", "Welcome New Lead")).toBeHidden({ timeout: 10_000 })
         await expect(screen.getByRole("heading", "Appointment Confirmed")).toBeVisible()
         await expect(screen.getByRole("heading", "Appointment Reminder (24h)")).toBeVisible()
+        // Every remaining card is an appointment template.
+        const matches = await templateCards(screen).count()
+        await expect(screen.getByRole("heading", /appointment/i)).toHaveCount(matches)
 
         await screen.getByRole("searchbox", "Search templates").fill("no such template")
         await expect(screen.getByRole("heading", "No matching templates")).toBeVisible({ timeout: 10_000 })
@@ -32,6 +36,8 @@ test(
     async ({ app, screen, browser }) => {
         await app.open("/automation/email-templates")
         await screen.getByRole("tab", /^Organization/).tap()
+        await expect(screen.getByRole("heading", "Welcome New Lead")).toBeVisible({ timeout: 10_000 })
+        const templatesBefore = await templateCards(screen).count()
         await screen.getByRole("button", "Create Org Template").tap()
         await expect(browser).toHaveURL(/\/automation\/email-templates\/org\/new/, { timeout: 10_000 })
         await expect(screen.getByRole("heading", "New email template")).toBeVisible({ timeout: 10_000 })
@@ -48,6 +54,6 @@ test(
         await screen.getByRole("button", "Back to email templates").tap()
         await screen.getByRole("tab", /^Organization/).tap()
         await expect(screen.getByRole("heading", `Resume ${TEMPLATE.name}`)).toBeVisible({ timeout: 10_000 })
-        await expect(templateCards(screen)).toHaveCount(SEEDED_ORG_TEMPLATES + 1, { timeout: 10_000 })
+        await expect(templateCards(screen)).toHaveCount(templatesBefore + 1, { timeout: 10_000 })
     },
 )
