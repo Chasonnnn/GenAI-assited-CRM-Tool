@@ -641,3 +641,75 @@ def test_maybe_schedule_workflow_approval_expiry_jobs_skips_org_without_due_task
     )
     assert last == now
     assert job is None
+
+
+@pytest.mark.parametrize("approval_expiry", [False, True])
+def test_workflow_fallback_continues_past_an_expired_deleted_organization(
+    db, test_org, test_user, monkeypatch, approval_expiry
+):
+    from uuid import uuid4
+
+    from sqlalchemy import delete, select
+
+    from app import worker
+    from app.db.enums import JobType, OwnerType, TaskStatus, TaskType
+    from app.db.models import AutomationWorkflow, Job, Organization, Task
+    from app.services import org_service
+
+    deleted = Organization(id=uuid4(), name="Deleted", slug=f"deleted-{uuid4()}")
+    later = Organization(id=uuid4(), name="Later", slug=f"later-{uuid4()}")
+    db.add_all([deleted, later])
+    db.flush()
+    orgs = [test_org, deleted, later]
+    live_ids = {test_org.id, later.id}
+    now = datetime(2026, 7, 26, 9, 3, 37, tzinfo=UTC)
+    for org_id in live_ids:
+        if approval_expiry:
+            db.add(
+                Task(
+                    organization_id=org_id,
+                    created_by_user_id=test_user.id,
+                    owner_type=OwnerType.USER.value,
+                    owner_id=test_user.id,
+                    title="Approve workflow",
+                    task_type=TaskType.WORKFLOW_APPROVAL.value,
+                    status=TaskStatus.PENDING.value,
+                    due_at=now - timedelta(minutes=1),
+                )
+            )
+        else:
+            db.add(
+                AutomationWorkflow(
+                    organization_id=org_id,
+                    name="inactivity workflow",
+                    trigger_type="inactivity",
+                    trigger_config={},
+                    actions=[],
+                    is_enabled=True,
+                )
+            )
+    db.flush()
+    # Keep a loaded ORM row stale, as when another session deletes it after discovery.
+    db.execute(
+        delete(Organization).where(Organization.id == deleted.id),
+        execution_options={"synchronize_session": False},
+    )
+    monkeypatch.setattr(org_service, "list_orgs", lambda _db: orgs)
+    flag = "WORKFLOW_APPROVAL_EXPIRY" if approval_expiry else "WORKFLOW_MAINTENANCE"
+    monkeypatch.setattr(worker, f"{flag}_FALLBACK_ENABLED", True)
+    schedule = (
+        worker.maybe_schedule_workflow_approval_expiry_jobs
+        if approval_expiry
+        else worker.maybe_schedule_workflow_maintenance_jobs
+    )
+    job_type = JobType.WORKFLOW_APPROVAL_EXPIRY if approval_expiry else JobType.WORKFLOW_SWEEP
+
+    assert schedule(db, now=now, last_run_at=None) == now
+
+    jobs = db.scalars(select(Job).where(Job.job_type == job_type.value)).all()
+    assert {job.organization_id for job in jobs} == live_ids
+    assert len(jobs) == 2
+    for job in jobs:
+        assert job.payload["org_id"] == str(job.organization_id)
+        if not approval_expiry:
+            assert job.payload["sweep_type"] == "inactivity"
