@@ -393,8 +393,9 @@ cd apps/api
 ./run_tests.sh tests/test_analytics.py -x   # Focused loop; forwards pytest arguments
 ```
 
-Requires mise and PostgreSQL client tools, plus a running local cluster (Docker
-Compose or the orb command above). The helper uses `127.0.0.1:5432` with the local
+Requires mise and a running local cluster (Docker Compose or the orb command above).
+Without host PostgreSQL client tools, the helper runs them in the `crm_db` container
+(override with `TEST_DB_CONTAINER`). The helper uses `127.0.0.1:5432` with the local
 `postgres` credentials, ignoring inherited `DATABASE_URL` and libpq service settings.
 Set `TEST_DATABASE_PORT` for a different local port. Each invocation gets a unique
 database, including concurrent worktrees; normal exit, test failure, and handled

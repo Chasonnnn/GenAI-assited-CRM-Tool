@@ -226,10 +226,14 @@ async def test_import_rejects_cross_organization_entity_link(
         "INSERT INTO organizations (id, name, slug) VALUES (%s, %s, %s)",
         (other_org_id, "Other Messaging Org", f"other-messaging-{uuid.uuid4().hex[:8]}"),
     )
-    other_meta_lead_id = db.connection().exec_driver_sql(
-        "INSERT INTO meta_leads (organization_id, meta_lead_id) VALUES (%s, %s) RETURNING id",
-        (other_org_id, f"meta-{uuid.uuid4().hex}"),
-    ).scalar_one()
+    other_meta_lead_id = (
+        db.connection()
+        .exec_driver_sql(
+            "INSERT INTO meta_leads (organization_id, meta_lead_id) VALUES (%s, %s) RETURNING id",
+            (other_org_id, f"meta-{uuid.uuid4().hex}"),
+        )
+        .scalar_one()
+    )
 
     response = await authed_client.post(
         "/messaging/consents/import",

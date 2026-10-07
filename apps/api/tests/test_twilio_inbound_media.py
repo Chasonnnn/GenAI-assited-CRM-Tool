@@ -49,21 +49,15 @@ def _persist_inbound_event(db, test_org, *, num_media="1", content_type="image/g
 
     settings = twilio_settings_service.get_or_create_settings(db, test_org.id)
     settings.enabled = True
-    settings.account_sid_encrypted = twilio_settings_service.encrypt_credential(
-        "AC" + "1" * 32
-    )
-    settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential(
-        "SK" + "2" * 32
-    )
+    settings.account_sid_encrypted = twilio_settings_service.encrypt_credential("AC" + "1" * 32)
+    settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential("SK" + "2" * 32)
     settings.api_secret_encrypted = twilio_settings_service.encrypt_credential("restricted")
     route = next(item for item in settings.routes if item.purpose == "operational")
     route.enabled = True
     route.messaging_service_sid_encrypted = twilio_settings_service.encrypt_credential(
         "MG" + "3" * 32
     )
-    route.sender_phone_encrypted = twilio_settings_service.encrypt_credential(
-        "+14155550199"
-    )
+    route.sender_phone_encrypted = twilio_settings_service.encrypt_credential("+14155550199")
     route.sender_phone_hash = hash_phone("+14155550199")
     route.sender_phone_last4 = "0199"
     contact = MessagingContact(
@@ -162,8 +156,7 @@ async def test_inbound_mms_downloads_with_restricted_key_persists_then_deletes_p
         twilio_transport,
         "delete_inbound_media",
         lambda **kwargs: (
-            calls.append("delete")
-            or twilio_transport.TwilioMediaDeleteResult(success=True)
+            calls.append("delete") or twilio_transport.TwilioMediaDeleteResult(success=True)
         ),
     )
 

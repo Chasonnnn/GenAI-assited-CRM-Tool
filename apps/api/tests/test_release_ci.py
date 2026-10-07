@@ -150,6 +150,7 @@ def test_ci_uses_safe_path_filters_and_cancels_stale_runs() -> None:
         ".agents/**",
         "apps/**",
         "cloudbuild/**",
+        "docs/adr/**",
         "infra/terraform/**",
         "scripts/**",
         "pyproject.toml",

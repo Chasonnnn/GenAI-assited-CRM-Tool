@@ -42,6 +42,34 @@ export default tseslint.config(
       'unused-imports/no-unused-imports': 'error',
       'unused-imports/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'error',
+      // Warn-only while existing oversized files are split; tighten to 'error' when none remain.
+      'max-lines': ['warn', { max: 1500 }],
+    },
+  },
+  // Files already over the limit when the rule landed. Remove each entry once its file is split.
+  {
+    files: [
+      'app/(app)/automation/campaigns/[[]id]/page.client.tsx',
+      'app/(app)/automation/campaigns/page.tsx',
+      'app/(app)/automation/email-templates/page.tsx',
+      'app/(app)/settings/integrations/page.tsx',
+      'app/(app)/settings/integrations/zapier-webhook-section.tsx',
+      'app/(app)/settings/page.tsx',
+      'app/(app)/surrogates/page.client.tsx',
+      'app/intake/[[]slug]/page.client.tsx',
+      'app/ops/templates/workflows/[[]id]/page.client.tsx',
+      'components/forms/builder/AutomationFormSubmissionsPanel.tsx',
+      'components/import/CSVUpload.tsx',
+      'components/surrogates/SurrogateApplicationTab.tsx',
+      'tests/appointments-google-meet.test.tsx',
+      'tests/forms-shared-intake.test.tsx',
+      'tests/integrations-page.test.tsx',
+      'tests/pipelines-settings-page.test.tsx',
+      'tests/surrogate-detail.test.tsx',
+      'tests/workflow-editor-page.test.tsx',
+    ],
+    rules: {
+      'max-lines': 'off',
     },
   },
   // Type-aware promise safety — applied only to in-project source files.

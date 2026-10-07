@@ -23,7 +23,7 @@ describe("UI description policy", () => {
         expect(readWebSource("components/import/CSVUpload.tsx")).toContain(
             "Rows with validation errors will be skipped and logged.",
         )
-        expect(readWebSource("app/(app)/settings/integrations/page.tsx")).toContain(
+        expect(readWebSource("app/(app)/settings/integrations/ai-configuration-section.tsx")).toContain(
             "An admin must accept the AI data processing consent before enabling AI features.",
         )
         expect(readWebSource("app/login/LoginPageClient.tsx")).toContain(

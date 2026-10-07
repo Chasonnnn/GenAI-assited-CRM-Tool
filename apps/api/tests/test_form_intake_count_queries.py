@@ -10,9 +10,7 @@ from app.services import form_intake_service
 
 
 def _compiled_sql(statement) -> str:
-    return " ".join(
-        str(statement.compile(dialect=postgresql.dialect())).lower().split()
-    )
+    return " ".join(str(statement.compile(dialect=postgresql.dialect())).lower().split())
 
 
 def test_published_version_count_uses_direct_aggregate(monkeypatch):
@@ -79,6 +77,5 @@ def test_promoted_lead_count_uses_direct_aggregate():
     assert returned_surrogate is surrogate
     assert linked_count == 4
     assert statement.whereclause.compare(
-        (FormSubmission.intake_lead_id == lead.id)
-        & (FormSubmission.surrogate_id == surrogate.id)
+        (FormSubmission.intake_lead_id == lead.id) & (FormSubmission.surrogate_id == surrogate.id)
     )

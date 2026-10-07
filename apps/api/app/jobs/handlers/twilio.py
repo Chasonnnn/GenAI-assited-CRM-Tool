@@ -105,9 +105,7 @@ async def process_twilio_consent_sync(db, job) -> None:
         return
 
     settings = db.execute(
-        select(TwilioSettings).where(
-            TwilioSettings.organization_id == job.organization_id
-        )
+        select(TwilioSettings).where(TwilioSettings.organization_id == job.organization_id)
     ).scalar_one_or_none()
     route = db.execute(
         select(TwilioRoute).where(
@@ -118,9 +116,7 @@ async def process_twilio_consent_sync(db, job) -> None:
 
     route_evidence = route.capability_evidence or {} if route is not None else {}
     provider_evidence = (
-        route_evidence.get("provider")
-        if isinstance(route_evidence.get("provider"), dict)
-        else {}
+        route_evidence.get("provider") if isinstance(route_evidence.get("provider"), dict) else {}
     )
     sender_type = str(
         provider_evidence.get("sender_type") or route_evidence.get("sender_type") or ""
@@ -146,15 +142,9 @@ async def process_twilio_consent_sync(db, job) -> None:
     from app.services import twilio_settings_service, twilio_transport
 
     credentials = twilio_transport.TwilioCredentials(
-        account_sid=twilio_settings_service.decrypt_credential(
-            settings.account_sid_encrypted
-        ),
-        api_key_sid=twilio_settings_service.decrypt_credential(
-            settings.api_key_sid_encrypted
-        ),
-        api_secret=twilio_settings_service.decrypt_credential(
-            settings.api_secret_encrypted
-        ),
+        account_sid=twilio_settings_service.decrypt_credential(settings.account_sid_encrypted),
+        api_key_sid=twilio_settings_service.decrypt_credential(settings.api_key_sid_encrypted),
+        api_secret=twilio_settings_service.decrypt_credential(settings.api_secret_encrypted),
     )
     result = twilio_transport.upsert_route_consent(
         credentials=credentials,
@@ -162,9 +152,7 @@ async def process_twilio_consent_sync(db, job) -> None:
         messaging_service_sid=twilio_settings_service.decrypt_credential(
             route.messaging_service_sid_encrypted
         ),
-        sender_phone=twilio_settings_service.decrypt_credential(
-            route.sender_phone_encrypted
-        ),
+        sender_phone=twilio_settings_service.decrypt_credential(route.sender_phone_encrypted),
         status=payload["status"],
         source=_consent_source(evidence.source, payload["status"]),
         date_of_consent=evidence.occurred_at,

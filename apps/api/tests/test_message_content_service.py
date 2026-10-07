@@ -92,9 +92,11 @@ def test_duplicate_media_bytes_return_same_asset_and_create_one_scan_job(db, tes
     )
 
     assert assets[0].id == assets[1].id
-    jobs = db.execute(
-        select(Job).where(Job.job_type == JobType.MESSAGE_MEDIA_SCAN.value)
-    ).scalars().all()
+    jobs = (
+        db.execute(select(Job).where(Job.job_type == JobType.MESSAGE_MEDIA_SCAN.value))
+        .scalars()
+        .all()
+    )
     assert len(jobs) == 1
     assert jobs[0].payload == {"media_asset_id": str(assets[0].id)}
 
@@ -125,11 +127,15 @@ def test_same_media_checksum_remains_separate_across_organizations(db, test_org)
 
     assert first.id != second.id
     assert first.checksum_sha256 == second.checksum_sha256
-    asset_ids = db.execute(
-        select(MessageMediaAsset.id).where(
-            MessageMediaAsset.checksum_sha256 == first.checksum_sha256
+    asset_ids = (
+        db.execute(
+            select(MessageMediaAsset.id).where(
+                MessageMediaAsset.checksum_sha256 == first.checksum_sha256
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert set(asset_ids) == {first.id, second.id}
     assert first.organization_id == test_org.id
     assert second.organization_id == other_org.id

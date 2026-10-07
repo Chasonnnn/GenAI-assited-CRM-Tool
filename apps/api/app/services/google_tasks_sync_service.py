@@ -751,9 +751,7 @@ def _should_sync_task_to_google(task: Task) -> bool:
 
 
 def _creation_recovery_idempotency_key(task: Task) -> str:
-    return (
-        f"google-task-create-reconcile:{task.organization_id}:{task.id}:{task.owner_id}"
-    )
+    return f"google-task-create-reconcile:{task.organization_id}:{task.id}:{task.owner_id}"
 
 
 def _ensure_donor_creation_recovery_job(db: Session, task: Task) -> UUID:
@@ -1280,8 +1278,7 @@ async def _sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_i
         if google_task_list_id == GOOGLE_DEFAULT_TASKLIST_ID
     }
     needs_default_alias_resolution = bool(blocked_default_list_task_ids) or any(
-        task.google_task_list_id in (None, GOOGLE_DEFAULT_TASKLIST_ID)
-        for task in existing_tasks
+        task.google_task_list_id in (None, GOOGLE_DEFAULT_TASKLIST_ID) for task in existing_tasks
     )
     concrete_default_task_list_id: str | None = None
     if needs_default_alias_resolution:
@@ -1295,10 +1292,7 @@ async def _sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_i
 
     def canonical_task_list_id(task_list_id: str | None) -> str:
         resolved = task_list_id or GOOGLE_DEFAULT_TASKLIST_ID
-        if (
-            resolved == GOOGLE_DEFAULT_TASKLIST_ID
-            and concrete_default_task_list_id is not None
-        ):
+        if resolved == GOOGLE_DEFAULT_TASKLIST_ID and concrete_default_task_list_id is not None:
             return concrete_default_task_list_id
         return resolved
 
@@ -1314,14 +1308,12 @@ async def _sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_i
             if incumbent is not None and incumbent.id != local_task.id:
                 incumbent_priority = (
                     incumbent.donor_id is not None,
-                    incumbent.google_task_list_id
-                    not in (None, GOOGLE_DEFAULT_TASKLIST_ID),
+                    incumbent.google_task_list_id not in (None, GOOGLE_DEFAULT_TASKLIST_ID),
                     str(incumbent.id),
                 )
                 candidate_priority = (
                     local_task.donor_id is not None,
-                    local_task.google_task_list_id
-                    not in (None, GOOGLE_DEFAULT_TASKLIST_ID),
+                    local_task.google_task_list_id not in (None, GOOGLE_DEFAULT_TASKLIST_ID),
                     str(local_task.id),
                 )
                 winner, duplicate = (
@@ -1363,11 +1355,7 @@ async def _sync_google_tasks_for_user_async(db: Session, *, user_id: UUID, org_i
                 and bool(google_task_id)
                 and (task_list_id, google_task_id) not in blocked_google_task_keys
                 and google_task_id not in blocked_default_list_task_ids
-                and (
-                    correlation_id := _google_task_correlation_id(
-                        google_task.get("notes")
-                    )
-                )
+                and (correlation_id := _google_task_correlation_id(google_task.get("notes")))
                 is not None
             }
             if correlation_ids:

@@ -77,16 +77,11 @@ def list_templates(
     effective_subjects = (
         {}
         if can_view_donor
-        else template_service.get_templates_effective_subject_types(
-            db, session.org_id, templates
-        )
+        else template_service.get_templates_effective_subject_types(db, session.org_id, templates)
     )
     result = []
     for t in templates:
-        if (
-            not can_view_donor
-            and effective_subjects[t.id] in workflow_access.DONOR_SUBJECT_TYPES
-        ):
+        if not can_view_donor and effective_subjects[t.id] in workflow_access.DONOR_SUBJECT_TYPES:
             continue
         item = TemplateListItem.model_validate(t)
         result.append(item)
@@ -280,11 +275,7 @@ def delete_template(
 ) -> object:
     """Delete an org-specific template (cannot delete global templates)."""
     template = template_service.get_template(db, template_id, session.org_id)
-    if (
-        template is None
-        or template.is_global
-        or template.organization_id != session.org_id
-    ):
+    if template is None or template.is_global or template.organization_id != session.org_id:
         raise HTTPException(
             status_code=404,
             detail="Template not found or cannot delete global template",

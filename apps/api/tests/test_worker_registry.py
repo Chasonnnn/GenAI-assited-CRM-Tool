@@ -225,10 +225,7 @@ async def test_google_task_remote_delete_failure_retries_without_dropping_tombst
     from app.db.models import Job
     from app.services import google_tasks_cleanup_service, google_tasks_sync_service, job_service
 
-    assert (
-        JobType.GOOGLE_TASK_REMOTE_DELETE.value
-        in worker.WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES
-    )
+    assert JobType.GOOGLE_TASK_REMOTE_DELETE.value in worker.WORKER_STALE_CLAIM_RETRY_SAFE_JOB_TYPES
 
     job = Job(
         organization_id=test_auth.org.id,

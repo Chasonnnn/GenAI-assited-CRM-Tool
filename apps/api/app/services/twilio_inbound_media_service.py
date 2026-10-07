@@ -133,9 +133,9 @@ def _persist_media(
     if existing_link is not None:
         return existing_link
 
-    actual_content_type = (downloaded.content_type or "application/octet-stream").split(
-        ";", 1
-    )[0].strip().lower()
+    actual_content_type = (
+        (downloaded.content_type or "application/octet-stream").split(";", 1)[0].strip().lower()
+    )
     content = downloaded.content or b""
     quarantine_reason: str | None = None
     if claimed_content_type not in SUPPORTED_INBOUND_MIME:
@@ -245,22 +245,19 @@ def process_inbound_media_event(
         return
 
     credentials = twilio_transport.TwilioCredentials(
-        account_sid=twilio_settings_service.decrypt_credential(
-            settings.account_sid_encrypted
-        ),
-        api_key_sid=twilio_settings_service.decrypt_credential(
-            settings.api_key_sid_encrypted
-        ),
-        api_secret=twilio_settings_service.decrypt_credential(
-            settings.api_secret_encrypted
-        ),
+        account_sid=twilio_settings_service.decrypt_credential(settings.account_sid_encrypted),
+        api_key_sid=twilio_settings_service.decrypt_credential(settings.api_key_sid_encrypted),
+        api_secret=twilio_settings_service.decrypt_credential(settings.api_secret_encrypted),
     )
     remaining_bytes = MAX_INBOUND_MEDIA_TOTAL_BYTES
     for position in range(media_count):
         media_url = fields.get(f"MediaUrl{position}", "")
-        claimed_content_type = fields.get(
-            f"MediaContentType{position}", "application/octet-stream"
-        ).split(";", 1)[0].strip().lower()
+        claimed_content_type = (
+            fields.get(f"MediaContentType{position}", "application/octet-stream")
+            .split(";", 1)[0]
+            .strip()
+            .lower()
+        )
         try:
             account_sid, message_sid, media_sid = twilio_transport.parse_inbound_media_url(
                 media_url

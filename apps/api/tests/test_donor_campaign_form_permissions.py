@@ -383,9 +383,7 @@ async def test_donor_campaign_mutations_require_donor_edit_and_list_filters_revo
             json={"send_now": True},
         )
         cancelled = await client.post(f"/campaigns/{campaign.id}/cancel")
-        retried = await client.post(
-            f"/campaigns/{campaign.id}/runs/{run.id}/retry-failed"
-        )
+        retried = await client.post(f"/campaigns/{campaign.id}/runs/{run.id}/retry-failed")
 
     assert {item["id"] for item in visible.json()} == {
         str(campaign.id),

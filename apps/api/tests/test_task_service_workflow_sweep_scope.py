@@ -161,9 +161,7 @@ def test_workflow_task_sweeps_include_org_scoped_donor_tasks(
             datetime(2026, 7, 25, 23, 59, tzinfo=UTC),
         )
     )
-    overdue_tasks = list(
-        task_service.iter_overdue_tasks(db, test_org.id, date(2026, 7, 26))
-    )
+    overdue_tasks = list(task_service.iter_overdue_tasks(db, test_org.id, date(2026, 7, 26)))
 
     assert task.id in {item.id for item in due_tasks}
     assert task.id in {item.id for item in overdue_tasks}

@@ -693,7 +693,9 @@ async def connect_assets(
                 await meta_oauth_service.subscribe_page_to_leadgen(page_token, page_id)
             except Exception as exc:
                 logger.warning(
-                    "Webhook subscription failed page=%s error_class=%s", page_id, type(exc).__name__
+                    "Webhook subscription failed page=%s error_class=%s",
+                    page_id,
+                    type(exc).__name__,
                 )
                 # Continue - page still linked, webhook can be retried
 

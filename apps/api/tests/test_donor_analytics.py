@@ -141,12 +141,8 @@ async def test_donor_reports_require_both_report_and_donor_permissions(db, test_
 
 
 @pytest.mark.asyncio
-async def test_dashboard_routes_require_dashboard_permission_before_donor_payloads(
-    db, test_org
-):
-    pipeline_service.get_or_create_default_pipeline(
-        db, test_org.id, entity_type="egg_donor"
-    )
+async def test_dashboard_routes_require_dashboard_permission_before_donor_payloads(db, test_org):
+    pipeline_service.get_or_create_default_pipeline(db, test_org.id, entity_type="egg_donor")
     async with _client_for(
         db,
         test_org,
@@ -164,9 +160,7 @@ async def test_attention_hides_stuck_donors_without_donor_permission(db, test_or
     pipeline = pipeline_service.get_or_create_default_pipeline(
         db, test_org.id, entity_type="egg_donor"
     )
-    active_stage = next(
-        stage for stage in pipeline.stages if stage.stage_key == "contacted"
-    )
+    active_stage = next(stage for stage in pipeline.stages if stage.stage_key == "contacted")
     _create_donor(
         db,
         test_org.id,
@@ -191,9 +185,7 @@ async def test_attention_hides_stuck_donors_without_donor_permission(db, test_or
 
 
 @pytest.mark.asyncio
-async def test_donor_by_status_includes_zero_stages_and_excludes_archived_by_default(
-    db, test_org
-):
+async def test_donor_by_status_includes_zero_stages_and_excludes_archived_by_default(db, test_org):
     pipeline = pipeline_service.get_or_create_default_pipeline(
         db, test_org.id, entity_type="egg_donor"
     )
@@ -218,9 +210,7 @@ async def test_donor_by_status_includes_zero_stages_and_excludes_archived_by_def
     )
 
     async with _client_for(db, test_org) as (client, _user):
-        response = await client.get(
-            "/analytics/donors/by-status", params={"donor_type": "egg"}
-        )
+        response = await client.get("/analytics/donors/by-status", params={"donor_type": "egg"})
         assert response.status_code == 200, response.text
         rows = response.json()
         assert len(rows) == len([stage for stage in pipeline.stages if stage.is_active])
@@ -233,9 +223,9 @@ async def test_donor_by_status_includes_zero_stages_and_excludes_archived_by_def
         )
         assert with_archived.status_code == 200, with_archived.text
         assert (
-            next(
-                row for row in with_archived.json() if row["stage_id"] == str(new_stage.id)
-            )["count"]
+            next(row for row in with_archived.json() if row["stage_id"] == str(new_stage.id))[
+                "count"
+            ]
             == 2
         )
 
@@ -309,9 +299,7 @@ async def test_donor_dashboard_owner_filter_and_permission_are_enforced(db, test
         role=Role.ADMIN,
         revokes=("view_donors",),
     ) as (client, _user):
-        denied = await client.get(
-            "/dashboard/donors/by-status", params={"donor_type": "sperm"}
-        )
+        denied = await client.get("/dashboard/donors/by-status", params={"donor_type": "sperm"})
         assert denied.status_code == 403
 
 
@@ -356,9 +344,7 @@ async def test_donor_trend_honors_local_timezone_date_boundary_and_filters(db, t
 
 
 @pytest.mark.asyncio
-async def test_donor_qualification_uses_eligible_stages_or_history_not_stage_order(
-    db, test_org
-):
+async def test_donor_qualification_uses_eligible_stages_or_history_not_stage_order(db, test_org):
     pipeline = pipeline_service.get_or_create_default_pipeline(
         db, test_org.id, entity_type="egg_donor"
     )
@@ -424,9 +410,7 @@ async def test_donor_qualification_uses_eligible_stages_or_history_not_stage_ord
     db.flush()
 
     async with _client_for(db, test_org) as (client, _user):
-        response = await client.get(
-            "/analytics/donors/summary", params={"donor_type": "egg"}
-        )
+        response = await client.get("/analytics/donors/summary", params={"donor_type": "egg"})
 
     assert response.status_code == 200, response.text
     data = response.json()
@@ -478,9 +462,7 @@ async def test_donor_lifecycle_history_does_not_inflate_time_to_qualification(
     donor_service.restore_donor(db, donor, test_user.id)
 
     async with _client_for(db, test_org) as (client, _user):
-        response = await client.get(
-            "/analytics/donors/summary", params={"donor_type": "egg"}
-        )
+        response = await client.get("/analytics/donors/summary", params={"donor_type": "egg"})
 
     assert response.status_code == 200, response.text
     assert response.json()["avg_time_to_qualification_hours"] == 2.0
@@ -567,9 +549,7 @@ async def test_attention_includes_only_active_stuck_donors(db, test_org):
 
 
 @pytest.mark.asyncio
-async def test_attention_rejects_cross_org_and_cross_subtype_donor_stage_joins(
-    db, test_org
-):
+async def test_attention_rejects_cross_org_and_cross_subtype_donor_stage_joins(db, test_org):
     egg_pipeline = pipeline_service.get_or_create_default_pipeline(
         db, test_org.id, entity_type="egg_donor"
     )
@@ -589,15 +569,9 @@ async def test_attention_rejects_cross_org_and_cross_subtype_donor_stage_joins(
     )
     now = datetime.now(UTC)
     old = now - timedelta(days=100)
-    valid_stage = next(
-        stage for stage in egg_pipeline.stages if stage.stage_key == "contacted"
-    )
-    sperm_stage = next(
-        stage for stage in sperm_pipeline.stages if stage.stage_key == "contacted"
-    )
-    other_stage = next(
-        stage for stage in other_pipeline.stages if stage.stage_key == "contacted"
-    )
+    valid_stage = next(stage for stage in egg_pipeline.stages if stage.stage_key == "contacted")
+    sperm_stage = next(stage for stage in sperm_pipeline.stages if stage.stage_key == "contacted")
+    other_stage = next(stage for stage in other_pipeline.stages if stage.stage_key == "contacted")
     valid = _create_donor(
         db,
         test_org.id,

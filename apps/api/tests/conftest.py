@@ -51,6 +51,16 @@ os.environ.setdefault("WIF_OIDC_KEY_ID", "test-wif-key")
 # =============================================================================
 
 
+def pytest_collection_modifyitems(config, items):
+    from tests.support.param_ids import oversized_param_ids
+
+    offenders = oversized_param_ids(items)
+    if offenders:
+        raise pytest.UsageError(
+            "Give large bytes/str parameters explicit short ids= values:\n" + "\n".join(offenders)
+        )
+
+
 # =============================================================================
 # Database Fixtures
 # =============================================================================

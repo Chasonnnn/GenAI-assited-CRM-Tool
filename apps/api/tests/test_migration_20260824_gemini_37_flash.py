@@ -5,9 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 API_ROOT = Path(__file__).resolve().parents[1]
-MIGRATION_PATH = (
-    API_ROOT / "alembic" / "versions" / "20260824_1200_upgrade_gemini_37_flash.py"
-)
+MIGRATION_PATH = API_ROOT / "alembic" / "versions" / "20260824_1200_upgrade_gemini_37_flash.py"
 
 
 def _load_migration_module():
