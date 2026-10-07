@@ -486,6 +486,7 @@ jobs:
         run: |
           uv sync --frozen --extra test
           uv run ruff check .
+          uv run ruff format --check .
 
       - name: Set up Node
         uses: actions/setup-node@v6
