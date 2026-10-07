@@ -42,6 +42,7 @@ apps/web/.vitest/
 cookies.txt
 /docs/*
 !/docs/adr/
+!/docs/review-standards.md
 apps/api/.attachments/
 report_json.json
 report_md.md

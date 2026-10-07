@@ -29,23 +29,12 @@ Use a cheap prototype or artifact when the user can recognize the right answer m
 
 Do not introduce warnings, test failures, security regressions, or obvious performance regressions. Report unrelated pre-existing issues; fix them only when requested, blocking verification, or inseparable from the change.
 
-This is an internal product: do not preserve legacy behavior by default. Before a breaking API, data, or workflow change, surface its impact and migration/reset plan. Match completeness to the requested artifact. Production features include relevant loading, error, validation, and polish; prototypes must be isolated and clearly labeled. Preserve existing semantic and keyboard behavior; treat broader accessibility work as separate scope unless requested.
+Review severity, the bot-review stop rule, and the backend/frontend judgement calls: `docs/review-standards.md`.
 
-## Architecture and local gotchas
+## Local gotchas
 
-- Keep FastAPI routers focused on transport and dependency wiring. Services own use-case logic and transaction boundaries. Domain writes and their audit/activity records must commit or roll back atomically; do not split transaction control across layers without a documented reason. Preserve timezone-aware UTC and existing Pydantic v2 / SQLAlchemy 2.0 idioms.
-- Every router response goes through a declared Pydantic response schema; never expose ORM objects or fields outside that schema. Validate and convert data at each boundary; do not share mutable state across layers.
-- External calls have timeouts and bounded retries. Handle races, cancellation, and idempotency explicitly. Never swallow exceptions or hide failures behind unbounded retries.
-- TanStack Query owns server state; Zustand owns UI-only state. Do not mirror query data into a store.
-- Extend the customized shadcn/Base UI primitives; do not replace the component system in a focused feature change.
-- Shared Base UI `SelectValue` may expose a stored id, enum, slug, or sentinel. Map it through one label helper everywhere it appears—triggers, chips, badges, summaries, cells, and empty/default states. When one filter leaks a raw value, audit siblings in the feature area and test the trigger plus related labels.
-- UI descriptions: Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. Prefer one concise, self-explanatory heading or label. Only add supporting copy when the user explicitly asks for it or when it is necessary to prevent misunderstanding or error, and never use it to restate the heading.
-- Pipeline stages are configurable. Treat `apps/api/app/core/stage_definitions.py` and pipeline services as the source of truth; keep generated frontend constants synchronized. Trace API, automation, analytics, and frontend consumers when stage semantics change.
-- When backend stage or surrogate contracts change, run the existing generators and include synchronized frontend outputs in the same logical change. Do not hand-edit generated contracts such as `apps/web/lib/constants/stages.generated.ts`.
-- Prefer nearby production code and behavior tests as references. Match local naming, comment density, transaction ownership, errors, and composition.
-- Before adding a dependency, check the manifests under `apps/` and the installed library's docs and types; do not assume a library lacks a feature. When duplicating code on purpose, comment why.
-- Record non-obvious decisions, compatibility constraints, and temporary workarounds with their reason and removal condition. Architecture decisions go in `docs/adr/`. Every TODO links to a tracked issue.
-- For visual work, match established component composition, loading/error states, and responsive behavior in neighboring pages. Use a standalone HTML prototype when user taste or layout direction is the main unknown.
+- Pipeline stages are configurable. `apps/api/app/core/stage_definitions.py` and the pipeline services are the source of truth; trace API, automation, analytics, and frontend consumers when stage semantics change.
+- When backend stage or surrogate contracts change, run the existing generators and commit the synchronized frontend outputs in the same change. Do not hand-edit generated files such as `apps/web/lib/constants/stages.generated.ts`.
 
 ## Migrations
 
