@@ -8,7 +8,7 @@ import type { TemplateVariableRead } from '@/lib/types/template-variable'
 // Types
 export type EmailTemplateScope = 'org' | 'personal'
 
-/** React Email editor document stored beside `body`; `body` stays the send artifact (ADR 0006). */
+/** React Email editor document stored beside `body`; `body` stays the send artifact (ADR 0010). */
 export type EmailBodyDesign = { type: 'doc'; content?: unknown[] } & Record<string, unknown>
 
 export type EmailPreviewVariableMode = 'sample' | 'names' | 'record'

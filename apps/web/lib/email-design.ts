@@ -1,5 +1,5 @@
 /**
- * React Email editor documents stored beside template HTML (ADR 0006).
+ * React Email editor documents stored beside template HTML (ADR 0010).
  *
  * `body` stays the send artifact. A body without a design opens as one HTML
  * block; while the document is still only that block, saving writes the block's

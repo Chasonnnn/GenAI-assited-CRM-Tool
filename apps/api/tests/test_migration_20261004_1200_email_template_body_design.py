@@ -1,4 +1,4 @@
-"""Upgrade rehearsal for the email template ``body_design`` columns (ADR 0006)."""
+"""Upgrade rehearsal for the email template ``body_design`` columns (ADR 0010)."""
 
 import uuid
 from pathlib import Path

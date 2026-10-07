@@ -1,7 +1,7 @@
 """Store the React Email editor document next to email template bodies.
 
 ``body`` stays the HTML that every send, snapshot, and campaign reads. The new
-``body_design`` columns hold the editor document (ADR 0006). Existing rows keep
+``body_design`` columns hold the editor document (ADR 0010). Existing rows keep
 NULL and open in the editor as one Custom HTML node, so no body is rewritten.
 
 Revision ID: 20261004_1200_email_template_body_design

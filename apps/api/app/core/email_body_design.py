@@ -1,6 +1,6 @@
 """Validation for React Email editor documents stored beside template bodies.
 
-``body_design`` is the editor's TipTap JSON document (ADR 0006). The server
+``body_design`` is the editor's TipTap JSON document (ADR 0010). The server
 never renders it; ``body`` HTML stays the send artifact. The checks here keep
 the column to a bounded editor document so it cannot carry arbitrary payloads.
 """

@@ -19,7 +19,7 @@ V2 activation readiness for the target organization has not been established. No
 - Included surrogate creator changes in the migration preview digest so a prior preview becomes stale when a creator changes.
 - Kept donor and intended-parent behavior unchanged. No schema migration or historical creator backfill is required.
 
-[Policy decision](../../docs/adr/0008-case-manager-created-surrogate-access.md).
+[Policy decision](../../docs/adr/0012-case-manager-created-surrogate-access.md).
 
 ## Verification
 
