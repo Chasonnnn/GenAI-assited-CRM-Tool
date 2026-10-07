@@ -6,6 +6,7 @@ Provides:
 - Functions to send appointment notifications via the email queue
 """
 
+import itertools
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -411,10 +412,21 @@ def get_or_create_template(
     if not default:
         return None
 
-    # An org template may already use the readable name; the system key still identifies this one.
-    name = default["name"]
-    if email_service.get_template_by_name(db, name, org_id) is not None:
-        name = f"{name} (Scheduling)"
+    # Org templates may already use the readable name; the system key still identifies this one.
+    taken = set(
+        db.scalars(
+            select(EmailTemplate.name).where(
+                EmailTemplate.organization_id == org_id,
+                EmailTemplate.scope == "org",
+                EmailTemplate.name.startswith(default["name"], autoescape=True),
+            )
+        )
+    )
+    candidates = itertools.chain(
+        (default["name"], f"{default['name']} (Scheduling)"),
+        (f"{default['name']} (Scheduling {n})" for n in itertools.count(2)),
+    )
+    name = next(candidate for candidate in candidates if candidate not in taken)
 
     template = email_service.create_template(
         db=db,

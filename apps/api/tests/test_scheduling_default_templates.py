@@ -64,6 +64,42 @@ def test_an_org_template_with_the_readable_name_is_left_alone(db, test_org, test
     assert own.system_key is None
 
 
+def test_the_fallback_name_skips_names_the_org_already_uses(db, test_org, test_user):
+    for name in ("Booking Cancelled", "Booking Cancelled (Scheduling)"):
+        email_service.create_template(
+            db=db,
+            org_id=test_org.id,
+            user_id=test_user.id,
+            name=name,
+            subject="Our own cancellation note",
+            body="<p>See you another time.</p>",
+        )
+
+    default_id = appointment_email_service.get_or_create_template(
+        db, test_org.id, test_user.id, AppointmentEmailType.CANCELLED
+    )
+
+    assert db.get(EmailTemplate, default_id).name == "Booking Cancelled (Scheduling 2)"
+
+
+def test_a_personal_template_does_not_take_the_readable_name(db, test_org, test_user):
+    email_service.create_template(
+        db=db,
+        org_id=test_org.id,
+        user_id=test_user.id,
+        name="Booking Cancelled",
+        subject="My own cancellation note",
+        body="<p>See you another time.</p>",
+        scope="personal",
+    )
+
+    default_id = appointment_email_service.get_or_create_template(
+        db, test_org.id, test_user.id, AppointmentEmailType.CANCELLED
+    )
+
+    assert db.get(EmailTemplate, default_id).name == "Booking Cancelled"
+
+
 def test_default_templates_stay_per_org(db, test_org, test_user):
     from app.db.models import Organization
 
