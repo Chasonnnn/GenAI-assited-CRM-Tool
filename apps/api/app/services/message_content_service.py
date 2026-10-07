@@ -51,7 +51,11 @@ _VALID_SCAN_RESULTS = frozenset({"clean", "quarantined", "rejected"})
 _WORD_HELP = re.compile(r"\bHELP\b", re.IGNORECASE)
 _WORD_STOP = re.compile(r"\bSTOP\b", re.IGNORECASE)
 _MESSAGE_DATA_RATE = re.compile(
-    r"\b(?:message(?:s)?\s+and\s+data|msg\s*&\s*data)\s+rates?\s+may\s+apply\b",
+    r"\b(?:message|msg)s?\s*(?:and|&)\s*data\s+rates?\s+may\s+apply\b",
+    re.IGNORECASE,
+)
+_FREQUENCY_DISCLOSURE = re.compile(
+    r"\bfreq(?:uency)?\b|\b\d+\s*(?:msgs?|messages?)\s*(?:/|per\b)\s*(?:day|week|month|year)\b",
     re.IGNORECASE,
 )
 
@@ -329,21 +333,26 @@ def _validate_enrollment_disclosure(
 ) -> None:
     if not template.is_enrollment_confirmation:
         return
+    # CTIA 5.1.2.1 confirmation content, plus the brand Twilio requires in campaign samples.
     body = template.body
     normalized_body = _normalized_spaces(body)
+
+    def contains_setting(value: str | None) -> bool:
+        normalized = _normalized_spaces(value or "")
+        return bool(normalized) and normalized in normalized_body
+
+    legal_brand = settings.legal_messaging_brand if settings else None
+    expected_frequency = settings.expected_frequency if settings else None
+    support_contact = settings.support_contact if settings else None
     missing: list[str] = []
-    legal_brand = settings.legal_messaging_brand.strip() if settings else ""
-    expected_frequency = settings.expected_frequency.strip() if settings else ""
-    if not legal_brand or _normalized_spaces(legal_brand) not in normalized_body:
+    if not contains_setting(legal_brand):
         missing.append("configured legal brand")
-    if template.purpose.casefold() not in normalized_body:
-        missing.append("program/purpose")
-    if not expected_frequency or _normalized_spaces(expected_frequency) not in normalized_body:
-        missing.append("configured expected frequency")
+    if not (contains_setting(expected_frequency) or _FREQUENCY_DISCLOSURE.search(body)):
+        missing.append("message frequency")
     if not _MESSAGE_DATA_RATE.search(body):
         missing.append("message/data rate language")
-    if not _WORD_HELP.search(body):
-        missing.append("HELP")
+    if not (_WORD_HELP.search(body) or contains_setting(support_contact)):
+        missing.append("HELP or support contact")
     if not _WORD_STOP.search(body):
         missing.append("STOP")
     if missing:
