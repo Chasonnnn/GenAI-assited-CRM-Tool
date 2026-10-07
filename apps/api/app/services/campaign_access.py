@@ -15,28 +15,6 @@ def get_policy_execution_snapshot(db, org_id) -> list[dict]:
         .order_by(Campaign.id)
         .all()
     )
-
-    if not rows:
-        return []
-
-    campaign_ids = [row.id for row in rows]
-
-    # Vectorize CampaignRun lookup to avoid N+1 queries
-    runs = (
-        db.query(CampaignRun)
-        .filter(
-            CampaignRun.organization_id == org_id,
-            CampaignRun.campaign_id.in_(campaign_ids),
-            CampaignRun.status == "running",
-        )
-        .order_by(CampaignRun.id)
-        .all()
-    )
-
-    runs_by_campaign = {c_id: [] for c_id in campaign_ids}
-    for run in runs:
-        runs_by_campaign[run.campaign_id].append({"id": str(run.id), "status": run.status})
-
     return [
         {
             "item_type": "campaign",
@@ -46,7 +24,17 @@ def get_policy_execution_snapshot(db, org_id) -> list[dict]:
             "scope": row.scope,
             "updated_at": row.updated_at.isoformat(),
             "scheduled_at": row.scheduled_at.isoformat() if row.scheduled_at else None,
-            "runs": runs_by_campaign[row.id],
+            "runs": [
+                {"id": str(run.id), "status": run.status}
+                for run in db.query(CampaignRun)
+                .filter(
+                    CampaignRun.organization_id == org_id,
+                    CampaignRun.campaign_id == row.id,
+                    CampaignRun.status == "running",
+                )
+                .order_by(CampaignRun.id)
+                .all()
+            ],
         }
         for row in rows
     ]
