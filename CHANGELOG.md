@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.85](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.84...surrogacy-crm-platform-v0.91.85) (2026-10-06)
+
+
+### Features
+
+* share approved surrogates, retain intake access, and record permission migration review ([#810](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/810)) ([13f5e48](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/13f5e485894602de217454aeaa9257dea2fda65b))
+
+
+### Bug Fixes
+
+* log contact without changing the stage, and allow it in Reschedule Needed ([#808](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/808)) ([849ae4a](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/849ae4acdf4f2f8521ebe85bbc43c3726a215601))
+* refresh Twilio readiness evidence from the worker before it expires ([#804](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/804)) ([43ee38d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/43ee38d5455764eb0e4d2f580d0abd8661a417ee))
+
 ## [0.91.84](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.83...surrogacy-crm-platform-v0.91.84) (2026-10-06)
 
 
