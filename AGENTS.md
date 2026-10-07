@@ -64,7 +64,8 @@ Use repo-pinned runtimes in `mise.toml` and `mise.lock`, plus existing package s
 
 - Backend verification: start local PostgreSQL only when needed, then use `apps/api/run_tests.sh <pytest args>` from the repo root. It selects pinned runtimes and creates, migrates, and drops a unique local database per invocation. Omit arguments for the full serial suite. Use direct `mise exec -- uv run -m pytest` only against an explicitly configured, migrated disposable database; never inherited shared data. See README for setup and `.github/workflows/ci.yml` for the parallel-safe test split.
 - Frontend validation: focused Vitest files while iterating; `cd apps/web && mise exec -- pnpm run check` runs type checking, lint, and the test suite. `test:all` aliases the same test command and adds no coverage after `check`.
-- Browser end-to-end tests (local pilot, not in CI): `cd apps/web && mise exec -- pnpm run test:e2e`; see `apps/web/README.md`. Before writing or changing one, read `mise exec -- pnpm exec e2e guide` and its `writing-tests` topic. The `e2e` MCP server in `.mcp.json` opens a live session on the disposable stack for checking locators.
+- Browser end-to-end tests (local pilot, not in CI): `cd apps/web && mise exec -- pnpm run test:e2e`; see `apps/web/README.md`. Before writing or changing one, read `mise exec -- pnpm exec e2e guide` and its `writing-tests` topic.
+- Code map: `CODEMAP.md`. Domain terms: `CONTEXT.md`.
 - Runtime versions: `mise.toml`; dependencies: manifests under `apps/`.
 - Environment contract: `apps/api/.env.example`; never put secrets in `NEXT_PUBLIC_*`.
 - Release policy: `release-please-config.json` and release CI tests; do not edit versions manually unless that workflow requires it.
