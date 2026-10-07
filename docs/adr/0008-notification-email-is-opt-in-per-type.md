@@ -12,7 +12,7 @@ The email renders the `staff_notification` platform system template. Its From ad
 
 ## Daily digest
 
-`email_daily_digest` is a separate opt-in, also default false. It is not mapped from a notification type. Once per day, between 08:00 and 12:00 in the organization's time zone, the worker queues one `notification_digest` job per organization with opted-in members (idempotency key `notification-digest:{org_id}:{local_date}`). The job queues one email per opted-in member that lists their open action items (ADR 0006) and their unread updates from the last 24 hours, at most 10 of each. A member with neither gets no email. The email reuses the `staff_notification` template, its idempotency key is `notification-digest:{org_id}:{user_id}:{local_date}`, and the outbox re-checks membership, the toggle, and the address before sending. `NOTIFICATION_DIGEST_ENABLED=false` stops the scheduling.
+`email_daily_digest` is a separate opt-in, also default false. It is not mapped from a notification type. Once per day, between 08:00 and 12:00 in the organization's time zone, the worker queues one `notification_digest` job per organization with opted-in members (idempotency key `notification-digest:{org_id}:{local_date}`). The job queues one email per opted-in member that lists their open action items (ADR 0009) and their unread updates from the last 24 hours, at most 10 of each. A member with neither gets no email. The email reuses the `staff_notification` template, its idempotency key is `notification-digest:{org_id}:{user_id}:{local_date}`, and the outbox re-checks membership, the toggle, and the address before sending. `NOTIFICATION_DIGEST_ENABLED=false` stops the scheduling.
 
 ## Considered Options
 

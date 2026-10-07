@@ -270,7 +270,7 @@ def _template_payload(template: EmailTemplate) -> dict:
     """Extract versionable payload from template.
 
     ``body_design`` is only recorded when present, so payloads of templates
-    without an editor document keep the shape recorded before ADR 0006.
+    without an editor document keep the shape recorded before ADR 0010.
     """
     payload = {
         "name": template.name,
