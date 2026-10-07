@@ -71,7 +71,9 @@ def classify_consent_instruction(message_text: str) -> ConsentInstruction:
         return "global_opt_out"
     if any(phrase in normalized for phrase in GLOBAL_REVOCATION_PHRASES):
         return "global_opt_out"
-    has_promotional_term = any(term in normalized for term in PROMOTIONAL_TERMS)
+    # Whole words only, so "ad" does not match inside "already" or "address".
+    padded = f" {normalized} "
+    has_promotional_term = any(f" {term} " in padded for term in PROMOTIONAL_TERMS)
     has_revocation_signal = any(signal in normalized for signal in REVOCATION_SIGNALS)
     if has_promotional_term and has_revocation_signal:
         return "promotional_opt_out"
