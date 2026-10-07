@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models.messaging import (
+    MessagingConsentEvidence,
     MessagingConsentState,
     MessagingContact,
     MessagingGlobalSuppression,
@@ -418,7 +419,17 @@ def materialize_delivery(
             MessageDelivery.status.notin_(("failed", "cancelled")),
         )
     ).scalar_one_or_none()
-    if prior_confirmation is None and not is_enrollment_confirmation:
+    # A START/UNSTOP keyword restore was already confirmed by Twilio's opt-in reply.
+    keyword_restore = (
+        db.execute(
+            select(MessagingConsentEvidence.action).where(
+                MessagingConsentEvidence.organization_id == organization_id,
+                MessagingConsentEvidence.id == state.latest_evidence_id,
+            )
+        ).scalar_one_or_none()
+        == "restore"
+    )
+    if prior_confirmation is None and not keyword_restore and not is_enrollment_confirmation:
         raise MessagingEnrollmentRequired(
             "The first message in this consent epoch must be an enrollment confirmation"
         )
