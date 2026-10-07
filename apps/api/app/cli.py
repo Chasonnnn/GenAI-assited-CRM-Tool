@@ -415,7 +415,7 @@ def backfill_permissions(dry_run: bool):
             click.echo()
 
         existing_permission_keys: set[tuple[UUID, str, str]] = set()
-        if orgs:
+        if dry_run and orgs:
             from app.db.models import RolePermission
 
             existing_permission_keys = {
@@ -430,8 +430,8 @@ def backfill_permissions(dry_run: bool):
             }
 
         total_created = 0
-        if dry_run:
-            for org in orgs:
+        for org in orgs:
+            if dry_run:
                 # Count what would be created
                 count = 0
                 for role, permissions in ROLE_DEFAULTS.items():
@@ -443,12 +443,11 @@ def backfill_permissions(dry_run: bool):
                 if count > 0:
                     click.echo(f"  {org.slug}: would create {count} permissions")
                     total_created += count
-        else:
-            org_ids = [org.id for org in orgs]
-            if org_ids:
-                total_created = permission_service.seed_role_defaults_bulk(db, org_ids)
-                if total_created > 0:
-                    click.echo(f"  Bulk created {total_created} permissions across {len(orgs)} organizations")
+            else:
+                created = permission_service.seed_role_defaults(db, org.id)
+                if created > 0:
+                    click.echo(f"  {org.slug}: created {created} permissions")
+                    total_created += created
 
         if not dry_run:
             db.commit()

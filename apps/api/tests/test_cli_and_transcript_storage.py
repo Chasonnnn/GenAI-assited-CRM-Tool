@@ -273,13 +273,13 @@ def test_cli_backfill_permissions(monkeypatch, db, _cli_db):
 
     created: list[uuid.UUID] = []
 
-    def _seed_role_defaults_bulk(session, org_ids):
-        created.extend(org_ids)
-        return 6
+    def _seed_role_defaults(session, org_id):
+        created.append(org_id)
+        return 3
 
     from app.services import permission_service
 
-    monkeypatch.setattr(permission_service, "seed_role_defaults_bulk", _seed_role_defaults_bulk)
+    monkeypatch.setattr(permission_service, "seed_role_defaults", _seed_role_defaults)
     _cli_db.backfill_permissions.callback(dry_run=False)
     assert acme.id in created
     assert beta.id in created
