@@ -85,8 +85,8 @@ test(
         const revoked = await createInvite(browser, { email: revokedEmail, role: "case_manager" })
         await app.open("/settings/team")
         await screen.getByRole("tab", /^Invitations \(\d+\)$/).tap()
-        await browser.onDialog("accept")
         await screen.getByRole("button", `Revoke invitation for ${revokedEmail}`).tap()
+        await screen.getByRole("alertdialog", `Revoke the invitation for ${revokedEmail}?`).getByRole("button", "Revoke").tap()
         await expect(screen.getByText("Invitation revoked")).toBeVisible({ timeout: 10_000 })
         await expect(screen.getByRole("button", `Revoke invitation for ${revokedEmail}`)).toHaveCount(0)
 
