@@ -106,6 +106,7 @@ class EmailTemplateListItem(BaseModel):
     proposed_by_name: str | None = None
     capabilities: dict[str, bool] | None = None
     is_system_template: bool = False
+    system_key: str | None = None
     created_at: datetime
     updated_at: datetime
 

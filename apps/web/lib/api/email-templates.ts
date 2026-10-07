@@ -69,6 +69,7 @@ export interface EmailTemplateListItem {
     proposed_by_name?: string | null
     capabilities?: EmailTemplateCapabilities | null
     is_system_template: boolean
+    system_key?: string | null
     created_at: string
     updated_at: string
 }

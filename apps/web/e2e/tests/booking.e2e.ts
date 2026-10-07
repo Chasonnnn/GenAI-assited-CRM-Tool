@@ -109,6 +109,12 @@ test(
         await expect(screen.getByRole("button").filter({ hasText: CLIENT.name }).first()).toContainText("Confirmed", {
             timeout: 10_000,
         })
+
+        // The request created its default client email template, which the library lists by name.
+        await app.open("/automation/email-templates")
+        await screen.getByRole("tab", /^Organization/).tap()
+        await expect(screen.getByRole("heading", /Booking Request Received$/)).toBeVisible({ timeout: 10_000 })
+        await expect(screen.getByRole("heading", /appointment_request_received/)).toHaveCount(0)
     },
 )
 

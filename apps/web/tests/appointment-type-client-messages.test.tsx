@@ -37,7 +37,7 @@ vi.mock("@/lib/hooks/use-email-templates", () => ({
     useEmailTemplates: () => ({
         data: [
             { id: "tpl-consult", name: "Consult Confirmed" },
-            { id: "tpl-default", name: "appointment_confirmed" },
+            { id: "tpl-default", name: "Booking Confirmed", system_key: "scheduling_confirmed" },
         ],
         isLoading: false,
     }),
@@ -131,6 +131,15 @@ describe("Appointment type client messages and workflows", () => {
                 "Google Calendar events use Google invites instead of Confirmed, Rescheduled, and Cancelled.",
             ),
         ).toBeInTheDocument()
+    })
+
+    it("offers the org templates but not scheduling's own default templates", async () => {
+        const dialog = openEditDialog()
+        fireEvent.click(within(dialog).getByRole("combobox", { name: "Confirmed template" }))
+
+        expect(await screen.findByRole("option", { name: "Consult Confirmed" })).toBeInTheDocument()
+        expect(screen.getByRole("option", { name: "Default template" })).toBeInTheDocument()
+        expect(screen.queryByRole("option", { name: "Booking Confirmed" })).not.toBeInTheDocument()
     })
 
     it("saves switch changes with the rest of the type", async () => {

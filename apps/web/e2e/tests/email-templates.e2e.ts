@@ -2,7 +2,7 @@ import { test } from "@e2e-dev/web"
 import { expect, type Screen } from "e2e"
 
 // The seeder creates these organization templates for every org. Other tests add more: the
-// first appointment email of each kind creates an `appointment_*` template.
+// first booking email of each kind creates its default template, such as "Booking Confirmed".
 const SEEDED_ORG_TEMPLATES = 17
 const TEMPLATE = { name: "E2E welcome note", subject: "Welcome to the agency" }
 
@@ -21,9 +21,6 @@ test(
         await expect(screen.getByRole("heading", "Welcome New Lead")).toBeHidden({ timeout: 10_000 })
         await expect(screen.getByRole("heading", "Appointment Confirmed")).toBeVisible()
         await expect(screen.getByRole("heading", "Appointment Reminder (24h)")).toBeVisible()
-        // Every remaining card is an appointment template.
-        const matches = await templateCards(screen).count()
-        await expect(screen.getByRole("heading", /appointment/i)).toHaveCount(matches)
 
         await screen.getByRole("searchbox", "Search templates").fill("no such template")
         await expect(screen.getByRole("heading", "No matching templates")).toBeVisible({ timeout: 10_000 })

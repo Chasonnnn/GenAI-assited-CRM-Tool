@@ -29,13 +29,14 @@ const CLIENT_MESSAGE_ROWS: { key: AppointmentClientMessageKey; label: string }[]
 
 const REMINDER_HOUR_OPTIONS = [1, 2, 4, 12, 24, 48, 72]
 
-// The org-wide templates scheduling falls back to; the null template choice stands for them.
-const DEFAULT_APPOINTMENT_TEMPLATE_NAMES = new Set([
-    "appointment_request_received",
-    "appointment_confirmed",
-    "appointment_reminder",
-    "appointment_rescheduled",
-    "appointment_cancelled",
+// The org-wide templates scheduling falls back to, by system key; the null template choice stands
+// for them.
+const DEFAULT_APPOINTMENT_TEMPLATE_KEYS = new Set([
+    "scheduling_request_received",
+    "scheduling_confirmed",
+    "scheduling_reminder",
+    "scheduling_rescheduled",
+    "scheduling_cancelled",
 ])
 
 const DEFAULT_TEMPLATE_VALUE = "default"
@@ -65,7 +66,7 @@ export function AppointmentClientMessagesFields({
 }) {
     const templatesQuery = useEmailTemplates()
     const templates = (templatesQuery.data ?? []).filter(
-        (template) => !DEFAULT_APPOINTMENT_TEMPLATE_NAMES.has(template.name),
+        (template) => !template.system_key || !DEFAULT_APPOINTMENT_TEMPLATE_KEYS.has(template.system_key),
     )
     const templateLabel = (value: string | null) => {
         if (!value || value === DEFAULT_TEMPLATE_VALUE) return "Default template"
