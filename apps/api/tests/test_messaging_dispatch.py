@@ -226,7 +226,7 @@ def test_dispatch_refuses_route_that_readiness_reports_blocked(
     assert result == "deferred_route_not_ready"
 
 
-def test_dispatch_refuses_inactive_twilio_account(
+def test_dispatch_defers_when_inbound_replies_miss_this_app(
     db,
     test_org,
     monkeypatch,
@@ -240,7 +240,7 @@ def test_dispatch_refuses_inactive_twilio_account(
         **route.capability_evidence,
         "provider": {
             **route.capability_evidence["provider"],
-            "account_active": False,
+            "inbound_webhook_matches": False,
         },
     }
     db.commit()
@@ -249,7 +249,7 @@ def test_dispatch_refuses_inactive_twilio_account(
         messaging_dispatch_service.twilio_transport,
         "send_message",
         lambda **_kwargs: (_ for _ in ()).throw(
-            AssertionError("An inactive Twilio account must not reach provider I/O")
+            AssertionError("A route whose opt-out replies miss this app must not send")
         ),
     )
 

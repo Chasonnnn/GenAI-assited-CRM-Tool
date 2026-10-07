@@ -99,15 +99,13 @@ def test_toll_free_requires_approved_verification(toll_free_settings, status):
     ]
 
 
-@pytest.mark.parametrize("fence", ["age", "version"])
-def test_toll_free_approval_requires_fresh_version_matched_evidence(toll_free_settings, fence):
+@pytest.mark.parametrize("fence", ["missing", "version"])
+def test_toll_free_approval_requires_version_matched_evidence(toll_free_settings, fence):
     from app.services.twilio_readiness_service import route_send_blockers
 
     route = _route_by_purpose(toll_free_settings, "operational")
-    if fence == "age":
-        route.capability_evidence["provider"]["checked_at"] = (
-            datetime.now(UTC) - timedelta(hours=25)
-        ).isoformat()
+    if fence == "missing":
+        route.capability_evidence["provider"]["checked_at"] = None
     else:
         route.capability_evidence["provider"]["settings_version"] = 0
     assert "operational_provider_evidence_stale" in dict(
@@ -115,11 +113,53 @@ def test_toll_free_approval_requires_fresh_version_matched_evidence(toll_free_se
     )
 
 
+def test_old_version_matched_evidence_still_allows_sending(toll_free_settings):
+    from app.services.twilio_readiness_service import route_send_blockers
+
+    route = _route_by_purpose(toll_free_settings, "operational")
+    route.capability_evidence["provider"]["checked_at"] = (
+        datetime.now(UTC) - timedelta(days=30)
+    ).isoformat()
+    assert route_send_blockers(toll_free_settings, route) == []
+
+
+@pytest.mark.parametrize(
+    "target,field,value",
+    [
+        ("route", "advanced_opt_out_status", "unconfigured"),
+        ("route", "consent_management_status", "unavailable"),
+        ("settings", "counsel_approved_at", None),
+        ("provider", "account_active", False),
+        ("provider", "service_verified", False),
+        ("provider", "sender_in_pool", False),
+        ("provider", "sms", False),
+        ("provider", "status_callback_matches", False),
+    ],
+)
+def test_checks_twilio_enforces_itself_do_not_block_sending(
+    toll_free_settings, target, field, value
+):
+    from app.services.twilio_readiness_service import route_send_blockers
+
+    route = _route_by_purpose(toll_free_settings, "operational")
+    route.capability_evidence["provider"]["sender_type"] = "10dlc"
+    route.capability_evidence["provider"]["a2p_status"] = "VERIFIED"
+    if target == "provider":
+        route.capability_evidence["provider"][field] = value
+    else:
+        setattr(route if target == "route" else toll_free_settings, field, value)
+    assert route_send_blockers(toll_free_settings, route) == []
+
+
 @pytest.mark.parametrize(
     "target,field,value,code",
     [
-        ("route", "advanced_opt_out_status", "enabled", "operational_advanced_opt_out_unverified"),
-        ("settings", "counsel_approved_at", None, "counsel_approval_missing"),
+        (
+            "provider",
+            "inbound_webhook_matches",
+            False,
+            "operational_inbound_webhook_matches_unverified",
+        ),
         ("settings", "sms_terms_url", None, "public_legal_urls_missing"),
         (
             "env",
@@ -137,19 +177,20 @@ def test_toll_free_keeps_other_send_gates(
     route = _route_by_purpose(toll_free_settings, "operational")
     if target == "env":
         monkeypatch.setenv(field, value)
+    elif target == "provider":
+        route.capability_evidence["provider"][field] = value
     else:
-        setattr(route if target == "route" else toll_free_settings, field, value)
+        setattr(toll_free_settings, field, value)
     assert code in dict(route_send_blockers(toll_free_settings, route))
 
 
-def test_10dlc_still_requires_a2p_and_consent_api(toll_free_settings):
+def test_10dlc_requires_a_verified_a2p_campaign(toll_free_settings):
     from app.services.twilio_readiness_service import route_send_blockers
 
     route = _route_by_purpose(toll_free_settings, "operational")
     route.capability_evidence["provider"]["sender_type"] = "10dlc"
     assert set(dict(route_send_blockers(toll_free_settings, route))) == {
         "operational_a2p_unverified",
-        "operational_consent_api_unavailable",
     }
 
 
@@ -382,8 +423,8 @@ def test_overall_readiness_includes_configured_route_status(
     route.messaging_service_sid_encrypted = operational.messaging_service_sid_encrypted
     route.sender_phone_encrypted = operational.sender_phone_encrypted
     route.capability_evidence = deepcopy(operational.capability_evidence)
+    route.capability_evidence["provider"]["inbound_webhook_matches"] = False
     settings.promotional_disclosure = "Promotional disclosure"
-    route.advanced_opt_out_status = "enabled"
     db.commit()
     # A blocked route must still block overall readiness if summary issues are omitted.
     monkeypatch.setattr(twilio_readiness_service, "_append_issue", lambda *_args, **_kwargs: None)
@@ -1001,10 +1042,7 @@ async def test_readiness_worker_persists_sanitized_provider_snapshot(
         "operational_disclosure_missing",
         "promotional_disclosure_missing",
         "public_legal_urls_missing",
-        "counsel_approval_missing",
         "messaging_dispatch_worker_disabled",
-        "operational_consent_api_unavailable",
-        "promotional_consent_api_unavailable",
     }.issubset({issue["code"] for issue in payload["issues"]})
 
     settings.legal_messaging_brand = "Example Agency"
@@ -1014,9 +1052,7 @@ async def test_readiness_worker_persists_sanitized_provider_snapshot(
     settings.privacy_policy_url = "https://example.org/privacy"
     settings.support_contact = "help@example.org"
     settings.expected_frequency = "Message frequency varies"
-    settings.counsel_approved_at = datetime.now(UTC)
     for route in settings.routes:
-        route.consent_management_status = "available"
         route.capability_evidence = {
             **(route.capability_evidence or {}),
             "sender_type": "10dlc",
@@ -1119,18 +1155,12 @@ def test_readiness_gates_mirror_toll_free_blockers(toll_free_settings):
         "messaging_enabled",
         "connection",
         "consent_record",
-        "counsel_approval",
         "dispatch_worker",
         "operational_route",
         "operational_sender_registration",
-        "operational_advanced_opt_out",
-        "operational_consent_api",
-        "operational_provider_evidence",
+        "operational_inbound_webhook",
     ]
-    assert gates["operational_consent_api"].status == "skipped"
-    assert all(
-        gate.status == "pass" for key, gate in gates.items() if key != "operational_consent_api"
-    )
+    assert all(gate.status == "pass" for gate in gates.values())
     assert gates["operational_sender_registration"].label == "Toll-free verification"
     assert gates["operational_route"].detail == "+1•••0199 · toll-free"
     assert gates["connection"].detail == "Account AC11...1111 is active."
@@ -1148,7 +1178,7 @@ def test_readiness_gates_flag_unapproved_toll_free(toll_free_settings, status):
 
     assert gates["operational_sender_registration"].status == "fail"
     assert "TWILIO_APPROVED" in str(gates["operational_sender_registration"].detail)
-    assert gates["operational_provider_evidence"].status == "pass"
+    assert gates["operational_inbound_webhook"].status == "pass"
 
 
 def test_readiness_gates_pend_until_evidence_matches_the_settings_version(toll_free_settings):
@@ -1159,8 +1189,7 @@ def test_readiness_gates_pend_until_evidence_matches_the_settings_version(toll_f
 
     assert gates["connection"].status == "pending"
     assert gates["operational_sender_registration"].status == "pending"
-    assert gates["operational_provider_evidence"].status == "pending"
-    assert gates["operational_advanced_opt_out"].status == "pass"
+    assert gates["operational_inbound_webhook"].status == "pending"
 
 
 def test_readiness_gates_flag_disabled_dispatch_worker(toll_free_settings, monkeypatch):
@@ -1172,7 +1201,7 @@ def test_readiness_gates_flag_disabled_dispatch_worker(toll_free_settings, monke
     assert gates["dispatch_worker"].detail == "The messaging dispatch worker is disabled."
 
 
-def test_readiness_gates_use_a2p_and_consent_api_for_10dlc(toll_free_settings):
+def test_readiness_gates_use_a2p_for_10dlc(toll_free_settings):
     route = _route_by_purpose(toll_free_settings, "operational")
     provider = route.capability_evidence["provider"]
     provider.update(
@@ -1184,7 +1213,17 @@ def test_readiness_gates_use_a2p_and_consent_api_for_10dlc(toll_free_settings):
 
     assert gates["operational_sender_registration"].label == "A2P campaign"
     assert gates["operational_sender_registration"].status == "pass"
-    assert gates["operational_consent_api"].status == "fail"
+    assert "operational_consent_api" not in gates
+
+
+def test_readiness_gates_flag_inbound_webhook_mismatch(toll_free_settings):
+    route = _route_by_purpose(toll_free_settings, "operational")
+    route.capability_evidence["provider"]["inbound_webhook_matches"] = False
+
+    gates = _operational_gates(toll_free_settings)
+
+    assert gates["operational_inbound_webhook"].status == "fail"
+    assert "inbound webhook" in str(gates["operational_inbound_webhook"].detail)
 
 
 def test_readiness_gates_include_an_enabled_but_unconfigured_promotional_route(toll_free_settings):

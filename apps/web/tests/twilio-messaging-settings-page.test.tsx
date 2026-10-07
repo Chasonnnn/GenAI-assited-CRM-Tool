@@ -116,13 +116,10 @@ const gates: TwilioReadinessGate[] = [
     { key: "messaging_enabled", label: "Organization messaging", status: "pass", detail: null, route: null },
     { key: "connection", label: "Connection", status: "pass", detail: "Account AC•••8899 is active.", route: null },
     { key: "consent_record", label: "Consent record", status: "pass", detail: "Surrogacy Force", route: null },
-    { key: "counsel_approval", label: "Counsel approval", status: "pass", detail: "Recorded 2026-07-30", route: null },
     { key: "dispatch_worker", label: "Dispatch worker", status: "fail", detail: "The messaging dispatch worker is disabled.", route: null },
     { key: "operational_route", label: "Operational route", status: "pass", detail: "+1•••0101 · toll-free", route: "operational" },
     { key: "operational_sender_registration", label: "Toll-free verification", status: "pass", detail: "Approved by Twilio.", route: "operational" },
-    { key: "operational_advanced_opt_out", label: "Advanced Opt-Out", status: "pass", detail: "Proven by a signed Twilio opt-out webhook.", route: "operational" },
-    { key: "operational_consent_api", label: "Consent API", status: "skipped", detail: "Not required for toll-free senders.", route: "operational" },
-    { key: "operational_provider_evidence", label: "Provider evidence", status: "pending", detail: "Run a readiness check for the current settings.", route: "operational" },
+    { key: "operational_inbound_webhook", label: "Inbound replies", status: "pending", detail: "Run a readiness check for the current settings.", route: "operational" },
 ]
 
 const readiness: TwilioReadiness = {
@@ -294,11 +291,11 @@ describe("Messaging integration settings page", () => {
         const list = screen.getByRole("list", { name: "Launch gates" })
         const rows = within(list).getAllByRole("listitem")
         expect(rows).toHaveLength(gates.length)
-        expect(within(rows[4]!).getByText("Dispatch worker")).toBeInTheDocument()
-        expect(within(rows[4]!).getByText("The messaging dispatch worker is disabled.")).toBeInTheDocument()
-        expect(within(rows[4]!).getByText("Blocked")).toBeInTheDocument()
-        expect(within(rows[8]!).getByText("Not required")).toBeInTheDocument()
-        expect(within(rows[9]!).getByText("Check required")).toBeInTheDocument()
+        expect(within(rows[3]!).getByText("Dispatch worker")).toBeInTheDocument()
+        expect(within(rows[3]!).getByText("The messaging dispatch worker is disabled.")).toBeInTheDocument()
+        expect(within(rows[3]!).getByText("Blocked")).toBeInTheDocument()
+        expect(within(rows[6]!).getByText("Inbound replies")).toBeInTheDocument()
+        expect(within(rows[6]!).getByText("Check required")).toBeInTheDocument()
         expect(screen.getByRole("status", { name: "Last readiness check" })).toHaveTextContent("Settings changed since the last check")
 
         const local = screen.getByRole("region", { name: "Local delivery operations" })
@@ -350,8 +347,10 @@ describe("Messaging integration settings page", () => {
         expect(within(route).getByText("Toll-free verification")).toBeInTheDocument()
         expect(within(route).getByText("Toll-free")).toBeInTheDocument()
         expect(within(route).queryByText(/A2P/)).toBeNull()
-        const consentApi = within(route).getByText("Consent API").closest("div")
-        expect(within(consentApi!).getByText("Not required")).toBeInTheDocument()
+        const inbound = within(route).getByText("Inbound replies").closest("div")
+        expect(within(inbound!).getByText("Check required")).toBeInTheDocument()
+        expect(within(route).queryByText("Consent API")).toBeNull()
+        expect(within(route).queryByText("Advanced Opt-Out")).toBeNull()
         expect(within(route).getByText("SMS evidenced")).toBeInTheDocument()
         expect(within(route).getByText("Sender pool verified")).toBeInTheDocument()
     })

@@ -407,7 +407,6 @@ def dispatch_claimed_delivery(
         settings,
         route,
         requires_mms=bool(delivery.message.media_links),
-        now=now,
     )
     if route_blockers:
         _defer(

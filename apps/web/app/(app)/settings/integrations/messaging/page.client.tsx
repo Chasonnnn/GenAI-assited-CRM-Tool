@@ -596,8 +596,7 @@ function RouteCard({
     const configured = Boolean(settings.messaging_service_sid_masked && settings.sender_phone_masked)
     const gateFor = (suffix: string) => gates.find((gate) => gate.key === `${purpose}_${suffix}`) ?? null
     const registration = gateFor("sender_registration")
-    const optOut = gateFor("advanced_opt_out")
-    const consentApi = gateFor("consent_api")
+    const inbound = gateFor("inbound_webhook")
     const providerEvidence = (settings.capability_evidence?.provider ?? {}) as Record<string, unknown>
     const senderTypeLabel = readiness?.sender_type ? SENDER_TYPE_LABELS[readiness.sender_type] : undefined
 
@@ -670,20 +669,11 @@ function RouteCard({
                                 friendlyStatus(settings.a2p_status)
                             )}
                         </SummaryItem>
-                        <SummaryItem label="Advanced Opt-Out">
-                            {optOut ? (
-                                <StatusBadge status={optOut.status} label={GATE_LABELS[optOut.status]} />
-                            ) : (
-                                friendlyStatus(settings.advanced_opt_out_status)
-                            )}
-                        </SummaryItem>
-                        <SummaryItem label="Consent API">
-                            {consentApi ? (
-                                <StatusBadge status={consentApi.status} label={GATE_LABELS[consentApi.status]} />
-                            ) : (
-                                friendlyStatus(settings.consent_management_status)
-                            )}
-                        </SummaryItem>
+                        {inbound ? (
+                            <SummaryItem label={inbound.label}>
+                                <StatusBadge status={inbound.status} label={GATE_LABELS[inbound.status]} />
+                            </SummaryItem>
+                        ) : null}
                         <SummaryItem label="Evidence">
                             <Badge variant="secondary">SMS {providerEvidence.sms === true ? "evidenced" : "not evidenced"}</Badge>
                             <Badge variant="secondary">MMS {providerEvidence.mms === true ? "evidenced" : "not evidenced"}</Badge>

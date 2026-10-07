@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 from sqlalchemy import func, select
@@ -29,8 +29,6 @@ from app.schemas.twilio import (
     TwilioRouteReadiness,
 )
 from app.services import twilio_provider_service, twilio_settings_service
-
-PROVIDER_EVIDENCE_MAX_AGE = timedelta(hours=24)
 
 
 def _enabled_env(name: str) -> bool:
@@ -101,10 +99,6 @@ def _organization_blockers(settings: TwilioSettings, purpose: str) -> list[tuple
         blockers.append(("support_contact_missing", "A messaging support contact is required."))
     if not settings.expected_frequency:
         blockers.append(("expected_frequency_missing", "Expected message frequency is required."))
-    if settings.counsel_approved_at is None:
-        blockers.append(
-            ("counsel_approval_missing", "Counsel approval must be recorded before activation.")
-        )
     if not _enabled_env("MESSAGING_DELIVERY_DISPATCH_ENABLED"):
         blockers.append(
             ("messaging_dispatch_worker_disabled", "The messaging dispatch worker is disabled.")
@@ -117,10 +111,8 @@ def route_send_blockers(
     route,
     *,
     requires_mms: bool = False,
-    now: datetime | None = None,
 ) -> list[tuple[str, str]]:
     """Return the authoritative no-send reasons for one purpose-bound route."""
-    now = now or datetime.now(UTC)
     blockers: list[tuple[str, str]] = []
 
     def block(code: str, message: str) -> None:
@@ -141,51 +133,26 @@ def route_send_blockers(
     for code, message in organization.items():
         if code not in {"twilio_disabled", "twilio_credentials_missing"}:
             block(code, message)
-    if route.advanced_opt_out_status != "verified":
-        block(
-            f"{route.purpose}_advanced_opt_out_unverified",
-            "Advanced Opt-Out has not been proven by a signed Twilio OptOutType webhook.",
-        )
+    # Twilio and the carriers enforce STOP/HELP replies, sender setup, and account state on
+    # every send. Only carrier registration and inbound reply routing gate here; inbound
+    # routing stays because natural-language opt-outs reach only this app.
     evidence = route.capability_evidence or {}
     provider = evidence.get("provider") if isinstance(evidence.get("provider"), dict) else {}
     toll_free = provider.get("sender_type") == "toll_free"
-    # Carriers enforce toll-free STOP; SMS START/UNSTOP re-opt is handled locally.
-    # Remove this exemption when the platform adopts Consent API toll-free re-opt
-    # (supported by Twilio since 2026-08-12).
-    if not toll_free and route.consent_management_status != "available":
-        block(
-            f"{route.purpose}_consent_api_unavailable",
-            "Consent Management API access has not been proven by a successful synchronized upsert.",
-        )
-
-    checked_at = provider.get("checked_at")
-    try:
-        checked = datetime.fromisoformat(str(checked_at)) if checked_at else None
-        if checked is not None and checked.tzinfo is None:
-            checked = checked.replace(tzinfo=UTC)
-    except ValueError:
-        checked = None
     if (
-        checked is None
-        or now - checked.astimezone(UTC) > PROVIDER_EVIDENCE_MAX_AGE
+        not provider.get("checked_at")
         or provider.get("settings_version") != settings.current_version
     ):
         block(
             f"{route.purpose}_provider_evidence_stale",
-            "A fresh, version-matched Twilio readiness check is required.",
+            "A Twilio readiness check for the current settings is required.",
         )
     else:
-        required_provider_facts = {
-            "account_active": "The Twilio account is not active.",
-            "service_verified": "Messaging Service could not be verified.",
-            "sender_in_pool": "The exact sender is not in the Messaging Service sender pool.",
-            "sms": "The exact sender is not SMS capable.",
-            "inbound_webhook_matches": "The Messaging Service inbound webhook does not match.",
-            "status_callback_matches": "The Messaging Service status callback does not match.",
-        }
-        for fact, message in required_provider_facts.items():
-            if provider.get(fact) is not True:
-                block(f"{route.purpose}_{fact}_unverified", message)
+        if provider.get("inbound_webhook_matches") is not True:
+            block(
+                f"{route.purpose}_inbound_webhook_matches_unverified",
+                "The Messaging Service inbound webhook does not match.",
+            )
         if toll_free:
             if provider.get("toll_free_verification_status") != "TWILIO_APPROVED":
                 block(
@@ -212,14 +179,6 @@ def route_send_blockers(
     return blockers
 
 
-_PROVIDER_FACTS = (
-    "account_active",
-    "service_verified",
-    "sender_in_pool",
-    "sms",
-    "inbound_webhook_matches",
-    "status_callback_matches",
-)
 _CONSENT_RECORD_CODES = {
     "legal_messaging_brand_missing",
     "operational_disclosure_missing",
@@ -283,20 +242,6 @@ def build_readiness_gates(
             "Consent record",
             "fail" if record_failures else "pass",
             record_failures[0] if record_failures else settings.legal_messaging_brand,
-        )
-    )
-    counsel = organization.get("counsel_approval_missing")
-    gates.append(
-        _gate(
-            "counsel_approval",
-            "Counsel approval",
-            "fail" if counsel else "pass",
-            counsel
-            or (
-                f"Recorded {settings.counsel_approved_at:%Y-%m-%d}"
-                if settings.counsel_approved_at
-                else None
-            ),
         )
     )
     dispatch = organization.get("messaging_dispatch_worker_disabled")
@@ -374,37 +319,14 @@ def build_readiness_gates(
         gates.append(
             _gate(f"{purpose}_sender_registration", registration_label, *registration, purpose)
         )
-        opt_out = codes.get(f"{purpose}_advanced_opt_out_unverified")
-        gates.append(
-            _gate(
-                f"{purpose}_advanced_opt_out",
-                "Advanced Opt-Out",
-                "fail" if opt_out else "pass",
-                opt_out or "Proven by a signed Twilio opt-out webhook.",
-                purpose,
-            )
-        )
-        if sender_type == "toll_free":
-            consent_api = ("skipped", "Not required for toll-free senders.")
-        elif codes.get(f"{purpose}_consent_api_unavailable"):
-            consent_api = ("fail", codes[f"{purpose}_consent_api_unavailable"])
-        else:
-            consent_api = ("pass", "Synchronized consent upsert succeeded.")
-        gates.append(_gate(f"{purpose}_consent_api", "Consent API", *consent_api, purpose))
-        fact_failures = [
-            codes[f"{purpose}_{fact}_unverified"]
-            for fact in _PROVIDER_FACTS
-            if f"{purpose}_{fact}_unverified" in codes
-        ]
+        inbound = codes.get(f"{purpose}_inbound_webhook_matches_unverified")
         if stale:
-            evidence_gate = ("pending", "Run a readiness check for the current settings.")
-        elif fact_failures:
-            evidence_gate = ("fail", fact_failures[0])
+            inbound_gate = ("pending", "Run a readiness check for the current settings.")
+        elif inbound:
+            inbound_gate = ("fail", inbound)
         else:
-            evidence_gate = ("pass", "Account, sender pool, and webhooks verified.")
-        gates.append(
-            _gate(f"{purpose}_provider_evidence", "Provider evidence", *evidence_gate, purpose)
-        )
+            inbound_gate = ("pass", "Replies and opt-outs reach this app.")
+        gates.append(_gate(f"{purpose}_inbound_webhook", "Inbound replies", *inbound_gate, purpose))
     return gates
 
 
