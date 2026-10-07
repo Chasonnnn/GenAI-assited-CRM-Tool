@@ -8,13 +8,14 @@ from fastapi import Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.security import decode_session_token
+from app.core.security import create_session_token, decode_session_token
 from app.db.enums import AuthProvider, Role
 from app.db.models import AuthIdentity, Membership, Organization, OrgInvite, User
 from app.services import (
     audit_service,
     auth_service,
     invite_service,
+    membership_service,
     org_service,
     session_service,
     user_service,
@@ -216,3 +217,40 @@ def resolve_google_login(
     user_id = UUID(str(decode_session_token(token)["sub"]))
     session_service.delete_session_by_token(db, token)
     return user_service.get_user_by_id(db, user_id), None
+
+
+def create_verified_session(
+    db: Session, user_id: UUID, request: Request | None = None
+) -> tuple[str, str, str, UUID]:
+    """
+    Record an MFA-verified session for the user's active membership, bypassing OAuth and MFA.
+
+    Returns the token, email, role, and organization id. Raises LookupError for an unknown user
+    and ValueError for a disabled user or one without a membership.
+    """
+    user = user_service.get_user_by_id(db, user_id)
+    if not user:
+        raise LookupError("User not found")
+    if not user.is_active:
+        raise ValueError("User is disabled")
+
+    membership = membership_service.get_membership_by_user_id(db, user.id)
+    if not membership:
+        raise ValueError("User has no membership")
+
+    token = create_session_token(
+        user.id,
+        membership.organization_id,
+        membership.role,
+        user.token_version,
+        mfa_verified=True,
+        mfa_required=False,
+    )
+    session_service.create_session(
+        db=db,
+        user_id=user.id,
+        org_id=membership.organization_id,
+        token=token,
+        request=request,
+    )
+    return token, user.email, membership.role, membership.organization_id

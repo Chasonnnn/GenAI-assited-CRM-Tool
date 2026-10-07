@@ -11,19 +11,15 @@ from app.core.config import settings
 from app.core.csrf import set_csrf_cookie
 from app.core.deps import COOKIE_NAME, get_db, require_csrf_header, require_permission
 from app.core.policies import POLICIES
-from app.core.security import create_session_token, verify_secret
-from app.db.models import User
+from app.core.security import verify_secret
 from app.schemas.auth import UserSession
 from app.schemas.dev import DevGoogleLoginRequest, DevInviteCreate, DevInviteRead, DevLoginResponse
 from app.services import (
     dev_service,
     invite_service,
-    membership_service,
     meta_lead_service,
     meta_page_service,
     org_service,
-    session_service,
-    user_service,
 )
 
 router = APIRouter(prefix="/dev", tags=["dev"])
@@ -56,32 +52,15 @@ def seed_test_data(db: Annotated[Session, "fastapi_param"] = Depends(get_db)) ->
 
 
 def _issue_verified_session(
-    db: Session, request: Request, response: Response, user: User
+    db: Session, request: Request, response: Response, user_id: UUID
 ) -> DevLoginResponse:
     """Set an MFA-verified session cookie for the user's active membership."""
-    if not user.is_active:
-        raise HTTPException(status_code=400, detail="User is disabled")
-
-    membership = membership_service.get_membership_by_user_id(db, user.id)
-    if not membership:
-        raise HTTPException(status_code=400, detail="User has no membership")
-
-    token = create_session_token(
-        user.id,
-        membership.organization_id,
-        membership.role,
-        user.token_version,
-        mfa_verified=True,
-        mfa_required=False,
-    )
-
-    session_service.create_session(
-        db=db,
-        user_id=user.id,
-        org_id=membership.organization_id,
-        token=token,
-        request=request,
-    )
+    try:
+        token, email, role, org_id = dev_service.create_verified_session(db, user_id, request)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     response.set_cookie(
         key=COOKIE_NAME,
@@ -97,10 +76,10 @@ def _issue_verified_session(
 
     return DevLoginResponse(
         status="logged_in",
-        user_id=str(user.id),
-        email=user.email,
-        role=membership.role,
-        org_id=str(membership.organization_id),
+        user_id=str(user_id),
+        email=email,
+        role=role,
+        org_id=str(org_id),
     )
 
 
@@ -121,11 +100,7 @@ def login_as(
     Requires X-Dev-Secret header matching DEV_SECRET env var.
     Useful for testing role-based access without real OAuth flow.
     """
-    user = user_service.get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return _issue_verified_session(db, request, response, user)
+    return _issue_verified_session(db, request, response, user_id)
 
 
 @router.post(
@@ -156,7 +131,7 @@ def google_login(
     if error_code or not user:
         raise HTTPException(status_code=403, detail=error_code or "no_session")
 
-    return _issue_verified_session(db, request, response, user)
+    return _issue_verified_session(db, request, response, user.id)
 
 
 @router.post(
