@@ -203,7 +203,8 @@ def test_case_campaign_explicit_stage_ids_are_tenant_scoped(db, test_org):
     assert result["stage_keys"] == ["alternate", "local"]
 
 
-def test_permission_seed_is_bounded_idempotent_and_preserves_denials(db, test_org):
+@pytest.mark.parametrize("bulk", [False, True])
+def test_permission_seed_is_bounded_idempotent_and_preserves_denials(db, test_org, bulk):
     role, permissions = next((r, p) for r, p in ROLE_DEFAULTS.items() if r != "developer")
     permission = next(iter(permissions))
     denied = RolePermission(
@@ -217,13 +218,20 @@ def test_permission_seed_is_bounded_idempotent_and_preserves_denials(db, test_or
     )
     db.add(other)
     db.flush()
+    org_id = test_org.id
+
+    def seed():
+        if bulk:
+            return permission_service.seed_role_defaults_bulk(db, [org_id, org_id])[org_id]
+        return permission_service.seed_role_defaults(db, org_id)
+
     expected = sum(len(p) for r, p in ROLE_DEFAULTS.items() if r != "developer") - 1
     with _selects(db) as statements:
-        assert permission_service.seed_role_defaults(db, test_org.id) == expected
+        assert seed() == expected
     assert len(statements) == 1
     db.flush()
     with _selects(db) as statements:
-        assert permission_service.seed_role_defaults(db, test_org.id) == 0
+        assert seed() == 0
     assert len(statements) == 1
     db.flush()
     db.refresh(denied)

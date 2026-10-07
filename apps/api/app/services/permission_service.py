@@ -345,39 +345,50 @@ def set_role_default(
 
 
 def seed_role_defaults(db: Session, org_id: uuid.UUID) -> int:
+    """Seed missing role defaults for one organization without changing existing grants."""
+    return seed_role_defaults_bulk(db, [org_id])[org_id]
+
+
+def seed_role_defaults_bulk(
+    db: Session, org_ids: list[uuid.UUID], *, dry_run: bool = False
+) -> dict[uuid.UUID, int]:
     """
-    Seed role_permissions table with defaults for a new org.
+    Seed missing defaults for explicitly selected organizations in one read.
 
     Only creates rows for permissions explicitly in ROLE_DEFAULTS (granted).
-    Missing permissions default to False at runtime.
-
-    Returns count of rows created.
+    Existing grants and denials remain unchanged. The caller owns the transaction.
+    Returns per-organization counts; dry runs count without adding rows.
     """
     from app.db.models import RolePermission
 
+    counts = dict.fromkeys(org_ids, 0)
+    if not counts:
+        return counts
     existing = set(
-        db.query(RolePermission.role, RolePermission.permission)
-        .filter(RolePermission.organization_id == org_id)
+        db.query(RolePermission.organization_id, RolePermission.role, RolePermission.permission)
+        .filter(RolePermission.organization_id.in_(counts))
         .all()
     )
-    count = 0
-    for role, permissions in ROLE_DEFAULTS.items():
-        if role == "developer":
-            continue  # Developer is immutable, no DB rows needed
+    for org_id in counts:
+        for role, permissions in ROLE_DEFAULTS.items():
+            if role == "developer":
+                continue  # Developer is immutable, no DB rows needed
 
-        for permission in permissions:
-            if (role, permission) not in existing:
-                db.add(
-                    RolePermission(
-                        organization_id=org_id,
-                        role=role,
-                        permission=permission,
-                        is_granted=True,
+            for permission in permissions:
+                if (org_id, role, permission) in existing:
+                    continue
+                if not dry_run:
+                    db.add(
+                        RolePermission(
+                            organization_id=org_id,
+                            role=role,
+                            permission=permission,
+                            is_granted=True,
+                        )
                     )
-                )
-                count += 1
+                counts[org_id] += 1
 
-    return count
+    return counts
 
 
 # =============================================================================
