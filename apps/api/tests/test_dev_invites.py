@@ -221,23 +221,24 @@ async def test_dev_google_login_accepts_the_invite_with_a_verified_session(clien
 
 
 @pytest.mark.asyncio
-async def test_dev_google_login_signs_in_the_same_identity_again(db, test_org):
-    # The service is called directly: two HTTP sign-ins within one second mint the same
-    # session JWT, which the session table rejects as a duplicate.
-    from app.services import dev_service
-
+async def test_dev_google_login_signs_in_the_same_identity_again(client, db, test_org):
     invite = _pending_invite(db, test_org, "repeat@example.com")
-    first, first_error = dev_service.resolve_google_login(
-        db, email="repeat@example.com", display_name="Repeat", invite_id=invite.id
+    first = await client.post(
+        "/dev/google-login",
+        headers=_dev_headers(),
+        json={"email": "repeat@example.com", "invite_id": str(invite.id)},
     )
-    second, second_error = dev_service.resolve_google_login(
-        db, email="Repeat@Example.com", display_name="Repeat"
+    second = await client.post(
+        "/dev/google-login",
+        headers=_dev_headers(),
+        json={"email": "Repeat@Example.com"},
     )
 
-    assert first_error is None
-    assert second_error is None
-    assert second.id == first.id
-    assert db.query(UserSession).filter(UserSession.user_id == first.id).count() == 0
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["user_id"] == first.json()["user_id"]
+    user_id = uuid.UUID(first.json()["user_id"])
+    assert db.query(UserSession).filter(UserSession.user_id == user_id).count() == 2
 
 
 @pytest.mark.asyncio

@@ -52,6 +52,9 @@ def create_session_token(
         "token_version": token_version,
         "mfa_verified": mfa_verified,
         "mfa_required": mfa_required,
+        # Two sign-ins within one second would otherwise sign the same payload, and the
+        # session table stores each token's hash under a unique constraint.
+        "jti": secrets.token_urlsafe(16),
         "iat": datetime.now(UTC),
         "exp": datetime.now(UTC) + timedelta(hours=settings.JWT_EXPIRES_HOURS),
     }
@@ -84,6 +87,7 @@ def create_support_session_token(
         "support": True,
         "support_session_id": str(support_session_id),
         "support_mode": mode,
+        "jti": secrets.token_urlsafe(16),
         "iat": datetime.now(UTC),
         "exp": datetime.now(UTC) + timedelta(minutes=ttl_minutes),
     }

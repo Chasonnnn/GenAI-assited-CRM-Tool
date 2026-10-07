@@ -83,8 +83,6 @@ export async function grantGoogleSession(
 /**
  * Creates an invitation from the admin session the browser holds, without sending its email:
  * the local stack has no platform sender, so the settings endpoint refuses every invitation.
- * It reuses that session because a second dev login within the same second mints the same
- * session token, which the API rejects as a duplicate.
  */
 export async function createInvite(
     browser: Browser,
