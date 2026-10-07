@@ -32,7 +32,7 @@ These tests run locally only; CI does not run them. They live in `e2e/tests/` an
 ```bash
 # Requires the compose database and a synced API virtualenv
 docker compose up -d db
-(cd ../api && uv sync)
+(cd ../api && uv sync --extra test)   # without the extra, uv removes pytest and Ruff
 
 pnpm run test:e2e               # all tests
 pnpm run test:e2e --tag forms   # one flow
@@ -42,6 +42,8 @@ E2E_RESEED=1 pnpm run test:e2e  # rebuild the seeded template first
 Each run starts its own stack: a fresh `crm_e2e` database, the API on `:8100`, and the web app on `:3100`.
 The API loads no `.env`, so it holds no provider credentials and cannot send email or SMS.
 Its encryption and hash keys are fixed test values that protect only the generated mock data.
+It lists `developer@test.com` in `PLATFORM_ADMIN_EMAILS` for the ops console, and it raises the
+login and invite rate limit to 60 per minute because every request comes from `127.0.0.1`.
 
 `crm_e2e` is a clone of `crm_e2e_template`, which holds the mock data from `seed_mock_data.py`:
 5,000 surrogates, 100 intended parents, and 300 matches by default (`E2E_SEED_SURROGATES`,
@@ -50,7 +52,14 @@ two minutes; later runs clone it in seconds. The template rebuilds itself when t
 seeder, or the seed sizes change, or on `E2E_RESEED=1`. Drop it to free space:
 `docker compose exec db dropdb -U postgres crm_e2e_template`.
 
-Tests sign in with the saved sessions from `e2e/tests/auth.setup.e2e.ts` (`admin`, `case-manager`).
+Tests sign in with the saved sessions from `e2e/tests/auth.setup.e2e.ts` (`admin`, `case-manager`,
+and `ops` for the platform admin). Flows that depend on email use local substitutes:
+
+- `createInvite` in `e2e/admin-session.ts` calls `POST /dev/invites`, which creates an invite without its email.
+- `grantGoogleSession` calls `POST /dev/google-login`, which resolves a Google sign-in for an email the way the
+  OAuth callback does. It accepts a matching invite.
+- `queryDatabase` in `e2e/database.ts` reads `crm_e2e`, for example the self-service appointment tokens.
+
 A failed run writes the screen at failure and a trace under `.e2e/`.
 Stop a running `pnpm dev` first: Next.js allows one dev server per project.
 
