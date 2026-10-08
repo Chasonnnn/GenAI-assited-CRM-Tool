@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { PermissionDeniedState } from "@/components/error-state"
+import { TestPhonesCard } from "@/components/messaging/test-phones-card"
 import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -44,6 +45,7 @@ import type {
     TwilioSettings,
     TwilioSettingsUpdate,
 } from "@/lib/api/twilio"
+import { useMessagingAccess } from "@/lib/hooks/use-messaging-templates"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import {
     readinessPollInterval,
@@ -1148,6 +1150,7 @@ export default function MessagingIntegrationPageClient() {
         isDeveloper ||
         (permissionsQuery.data?.permissions ?? []).includes("manage_integrations")
     const [awaitingCheckSince, setAwaitingCheckSince] = useState<string | null>(null)
+    const messagingAccess = useMessagingAccess()
     const settingsQuery = useTwilioSettings(Boolean(user && canManageIntegrations))
     const readinessQuery = useTwilioReadiness(Boolean(user && canManageIntegrations), awaitingCheckSince)
     const queueCheck = useQueueTwilioReadinessCheck()
@@ -1247,6 +1250,8 @@ export default function MessagingIntegrationPageClient() {
                         onSaved={() => setAwaitingCheckSince(null)}
                     />
                 ) : null}
+
+                {settingsQuery.data && messagingAccess.allowed ? <TestPhonesCard /> : null}
             </main>
         </div>
     )
