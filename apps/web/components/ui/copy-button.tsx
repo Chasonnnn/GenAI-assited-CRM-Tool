@@ -68,6 +68,7 @@ function CopyButton({
   return (
     <>
       <Button
+        aria-label={props["aria-label"] || (children ? undefined : "Copy to clipboard")}
         {...props}
         size={size}
         className={cn(STACKED_ICON_PADDING[size ?? "default"], className)}
