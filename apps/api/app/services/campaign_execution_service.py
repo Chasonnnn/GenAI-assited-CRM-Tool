@@ -121,7 +121,7 @@ def _execute_messaging_campaign_run(
     campaign: Campaign,
     run: CampaignRun,
 ) -> dict:
-    from app.services import email_service, messaging_delivery_service
+    from app.services import message_content_service, messaging_delivery_service
 
     campaign_audience.ensure_supported_campaign_channel(campaign.channel, campaign.recipient_type)
     if run.status == "completed":
@@ -250,7 +250,7 @@ def _execute_messaging_campaign_run(
                 campaign.recipient_type,
                 entity,
             )
-            _subject, body = email_service.render_template("", template.body, variables)
+            body = message_content_service.render_message_body(template.body, variables)
             try:
                 delivery = messaging_delivery_service.materialize_delivery(
                     db,

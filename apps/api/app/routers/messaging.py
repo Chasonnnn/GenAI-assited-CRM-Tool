@@ -36,10 +36,19 @@ from app.schemas.messaging import (
     MessagingMediaAssetResponse,
     MessagingMediaScanStatus,
     MessagingPurpose,
+    MessagingSmsVariableResponse,
     MessagingTemplateCreateRequest,
+    MessagingTemplateDraftUpdateRequest,
     MessagingTemplateNextVersionRequest,
     MessagingTemplateResponse,
     MessagingTemplateStatus,
+    MessagingTemplateUsageResponse,
+    MessagingTemplateUseResponse,
+    MessagingTestPhoneCreateRequest,
+    MessagingTestPhoneResponse,
+    MessagingTestPhoneVerifyRequest,
+    MessagingTestSendRequest,
+    MessagingTestSendResponse,
 )
 from app.services import (
     admin_export_service,
@@ -48,6 +57,7 @@ from app.services import (
     job_service,
     message_content_service,
     messaging_consent_service,
+    messaging_test_send_service,
 )
 
 router = APIRouter(
@@ -123,7 +133,11 @@ def _raise_http_error(exc: ValueError) -> None:
 def _raise_content_http_error(exc: Exception) -> None:
     if isinstance(
         exc,
-        (message_content_service.TemplateNotFound, message_content_service.MessagingMediaNotFound),
+        (
+            message_content_service.TemplateNotFound,
+            message_content_service.MessagingMediaNotFound,
+            messaging_test_send_service.TestPhoneNotFound,
+        ),
     ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     if isinstance(
@@ -379,6 +393,39 @@ def list_messaging_templates(
     return [MessagingTemplateResponse.model_validate(template) for template in templates]
 
 
+@router.get("/templates/usage", response_model=list[MessagingTemplateUsageResponse])
+def list_messaging_template_usage(
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(require_permission(P.INTEGRATIONS_MANAGE))],
+) -> list[MessagingTemplateUsageResponse]:
+    """List the workflows and unsent campaigns that use each template family."""
+    usage = message_content_service.template_usage(db, session.org_id)
+    return [
+        MessagingTemplateUsageResponse(
+            template_key=template_key,
+            uses=[
+                MessagingTemplateUseResponse(kind=use.kind, id=use.id, name=use.name)
+                for use in uses
+            ],
+        )
+        for template_key, uses in usage.items()
+    ]
+
+
+@router.get("/template-variables", response_model=list[MessagingSmsVariableResponse])
+def list_messaging_template_variables(
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(require_permission(P.INTEGRATIONS_MANAGE))],
+) -> list[MessagingSmsVariableResponse]:
+    """List the variables a text template can use, with their sample values."""
+    return [
+        MessagingSmsVariableResponse(
+            name=variable.name, description=variable.description, sample=variable.sample
+        )
+        for variable in messaging_test_send_service.list_sms_variables(db, session.org_id)
+    ]
+
+
 @router.get("/templates/{template_id}", response_model=MessagingTemplateResponse)
 def get_messaging_template(
     template_id: UUID,
@@ -413,6 +460,195 @@ def publish_messaging_template(
         _raise_content_http_error(exc)
         raise AssertionError("unreachable") from exc
     return MessagingTemplateResponse.model_validate(template)
+
+
+@router.patch(
+    "/templates/{template_id}",
+    response_model=MessagingTemplateResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def update_messaging_template_draft(
+    template_id: UUID,
+    request: MessagingTemplateDraftUpdateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(require_permission(P.INTEGRATIONS_MANAGE))],
+) -> MessagingTemplateResponse:
+    """Edit a draft version in place."""
+    try:
+        template = message_content_service.update_template_draft(
+            db,
+            organization_id=session.org_id,
+            template_id=template_id,
+            **request.model_dump(),
+        )
+    except (ValueError, RuntimeError) as exc:
+        _raise_content_http_error(exc)
+        raise AssertionError("unreachable") from exc
+    return MessagingTemplateResponse.model_validate(template)
+
+
+@router.post(
+    "/templates/{template_id}/test-sends",
+    response_model=MessagingTestSendResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf_header)],
+)
+def send_messaging_template_test(
+    template_id: UUID,
+    request: MessagingTestSendRequest,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(require_permission(P.INTEGRATIONS_MANAGE))],
+) -> MessagingTestSendResponse:
+    """Text one template version, filled with sample values, to a verified test phone."""
+    try:
+        test_send = messaging_test_send_service.send_template_test(
+            db,
+            organization_id=session.org_id,
+            user_id=session.user_id,
+            template_id=template_id,
+            test_phone_id=request.test_phone_id,
+        )
+    except (ValueError, RuntimeError) as exc:
+        _raise_content_http_error(exc)
+        raise AssertionError("unreachable") from exc
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.MESSAGING_TEST_SENT,
+        actor_user_id=session.user_id,
+        target_type="message_template",
+        target_id=template_id,
+        details={"test_phone_id": str(request.test_phone_id)},
+    )
+    db.commit()
+    return MessagingTestSendResponse(id=test_send.id, provider_status=test_send.provider_status)
+
+
+def _test_phone_response(
+    view: messaging_test_send_service.TestPhoneView,
+) -> MessagingTestPhoneResponse:
+    phone = view.phone
+    return MessagingTestPhoneResponse(
+        id=phone.id,
+        label=phone.label,
+        phone_last4=phone.phone_last4,
+        verified_at=phone.verified_at,
+        code_expires_at=phone.code_expires_at,
+        stopped_purposes=sorted(view.stopped_purposes),
+        created_by_name=view.created_by_name,
+        created_at=phone.created_at,
+    )
+
+
+@router.get("/test-phones", response_model=list[MessagingTestPhoneResponse])
+def list_messaging_test_phones(
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(require_permission(P.INTEGRATIONS_MANAGE))],
+) -> list[MessagingTestPhoneResponse]:
+    """List the organization's test phones."""
+    return [
+        _test_phone_response(view)
+        for view in messaging_test_send_service.list_test_phones(db, session.org_id)
+    ]
+
+
+@router.post(
+    "/test-phones",
+    response_model=MessagingTestPhoneResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf_header)],
+)
+def add_messaging_test_phone(
+    request: MessagingTestPhoneCreateRequest,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(require_permission(P.INTEGRATIONS_MANAGE))],
+) -> MessagingTestPhoneResponse:
+    """Add a test phone, or send a new code to an unverified one."""
+    try:
+        view = messaging_test_send_service.add_test_phone(
+            db,
+            organization_id=session.org_id,
+            user_id=session.user_id,
+            label=request.label,
+            phone=request.phone,
+        )
+    except (ValueError, RuntimeError) as exc:
+        _raise_content_http_error(exc)
+        raise AssertionError("unreachable") from exc
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.MESSAGING_TEST_PHONE_ADDED,
+        actor_user_id=session.user_id,
+        target_type="messaging_test_phone",
+        target_id=view.phone.id,
+    )
+    db.commit()
+    return _test_phone_response(view)
+
+
+@router.post(
+    "/test-phones/{test_phone_id}/verify",
+    response_model=MessagingTestPhoneResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def verify_messaging_test_phone(
+    test_phone_id: UUID,
+    request: MessagingTestPhoneVerifyRequest,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(require_permission(P.INTEGRATIONS_MANAGE))],
+) -> MessagingTestPhoneResponse:
+    """Verify a test phone with the code texted to it."""
+    try:
+        view = messaging_test_send_service.verify_test_phone(
+            db,
+            organization_id=session.org_id,
+            test_phone_id=test_phone_id,
+            code=request.code,
+        )
+    except (ValueError, RuntimeError) as exc:
+        _raise_content_http_error(exc)
+        raise AssertionError("unreachable") from exc
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.MESSAGING_TEST_PHONE_VERIFIED,
+        actor_user_id=session.user_id,
+        target_type="messaging_test_phone",
+        target_id=test_phone_id,
+    )
+    db.commit()
+    return _test_phone_response(view)
+
+
+@router.delete(
+    "/test-phones/{test_phone_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf_header)],
+)
+def remove_messaging_test_phone(
+    test_phone_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    session: Annotated[UserSession, Depends(require_permission(P.INTEGRATIONS_MANAGE))],
+) -> Response:
+    """Remove a test phone."""
+    try:
+        messaging_test_send_service.remove_test_phone(
+            db, organization_id=session.org_id, test_phone_id=test_phone_id
+        )
+    except (ValueError, RuntimeError) as exc:
+        _raise_content_http_error(exc)
+        raise AssertionError("unreachable") from exc
+    audit_service.log_event(
+        db=db,
+        org_id=session.org_id,
+        event_type=AuditEventType.MESSAGING_TEST_PHONE_REMOVED,
+        actor_user_id=session.user_id,
+        target_type="messaging_test_phone",
+        target_id=test_phone_id,
+    )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

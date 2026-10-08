@@ -17,7 +17,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings as app_settings
 from app.db.enums import JobType
-from app.db.models import Job, MessageMediaAsset, MessageTemplate, TwilioSettings
+from app.db.models import (
+    AutomationWorkflow,
+    Campaign,
+    Job,
+    MessageMediaAsset,
+    MessageTemplate,
+    TwilioSettings,
+)
 from app.services import attachment_service, job_service
 
 MessagingPurpose = Literal["operational", "promotional"]
@@ -182,6 +189,13 @@ def _require_phi_gate_for_classification(
         require_phi_gate(db, organization_id)
 
 
+def render_message_body(body: str, variables: dict[str, str]) -> str:
+    """Fill {{variable}} tokens with plain text; a text message has no HTML to escape."""
+    from app.services.template_variable_catalog import VARIABLE_PATTERN
+
+    return VARIABLE_PATTERN.sub(lambda match: str(variables.get(match.group(1)) or ""), body)
+
+
 def _body_hash(body: str) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
@@ -287,6 +301,50 @@ def create_next_template_version(
     db.commit()
     db.refresh(template)
     return template
+
+
+def update_template_draft(
+    db: Session,
+    *,
+    organization_id: uuid.UUID,
+    template_id: uuid.UUID,
+    name: str | None = None,
+    body: str | None = None,
+    is_enrollment_confirmation: bool | None = None,
+    content_classification: ContentClassification | None = None,
+) -> MessageTemplate:
+    """Edit the latest draft in place; only published versions are immutable."""
+    target = db.execute(
+        select(MessageTemplate)
+        .where(
+            MessageTemplate.organization_id == organization_id,
+            MessageTemplate.id == template_id,
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if target is None:
+        raise TemplateNotFound("Messaging template was not found")
+    if target.status != "draft":
+        raise TemplateStateConflict("Only a draft template version can be edited")
+    next_classification = (
+        target.content_classification if content_classification is None else content_classification
+    )
+    normalized_name, normalized_body = _validate_template_fields(
+        name=target.name if name is None else name,
+        purpose=target.purpose,
+        body=target.body if body is None else body,
+        content_classification=next_classification,
+    )
+    _require_phi_gate_for_classification(db, organization_id, next_classification)
+    target.name = normalized_name
+    target.body = normalized_body
+    target.content_hash = _body_hash(normalized_body)
+    target.content_classification = next_classification
+    if is_enrollment_confirmation is not None:
+        target.is_enrollment_confirmation = is_enrollment_confirmation
+    db.commit()
+    db.refresh(target)
+    return target
 
 
 def get_template(
@@ -404,9 +462,110 @@ def publish_template(
             version.status = "retired"
     target.status = "published"
     target.published_at = now
+    _point_workflows_at(
+        db,
+        organization_id=organization_id,
+        family_ids={version.id for version in family},
+        live_id=target.id,
+    )
     db.commit()
     db.refresh(target)
     return target
+
+
+def _referenced_ids(value: object) -> set[str]:
+    """Template version ids that workflow actions name, at any depth."""
+    found: set[str] = set()
+    if isinstance(value, dict):
+        if value.get("message_template_version_id") is not None:
+            found.add(str(value["message_template_version_id"]))
+        for child in value.values():
+            found |= _referenced_ids(child)
+    elif isinstance(value, list):
+        for child in value:
+            found |= _referenced_ids(child)
+    return found
+
+
+def _repointed(value: object, ids: set[str], live_id: str) -> object:
+    if isinstance(value, dict):
+        return {
+            key: (
+                live_id
+                if key == "message_template_version_id" and str(child) in ids
+                else _repointed(child, ids, live_id)
+            )
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_repointed(child, ids, live_id) for child in value]
+    return value
+
+
+def _point_workflows_at(
+    db: Session,
+    *,
+    organization_id: uuid.UUID,
+    family_ids: set[uuid.UUID],
+    live_id: uuid.UUID,
+) -> None:
+    """Workflows send a template's live version, so they follow each publish."""
+    ids = {str(version_id) for version_id in family_ids}
+    workflows = db.execute(
+        select(AutomationWorkflow)
+        .where(AutomationWorkflow.organization_id == organization_id)
+        .with_for_update()
+    ).scalars()
+    for workflow in workflows:
+        if _referenced_ids(workflow.actions) & ids:
+            workflow.actions = _repointed(workflow.actions, ids, str(live_id))
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateUse:
+    kind: Literal["workflow", "campaign"]
+    id: uuid.UUID
+    name: str
+
+
+def template_usage(db: Session, organization_id: uuid.UUID) -> dict[uuid.UUID, list[TemplateUse]]:
+    """Workflows, and campaigns not yet sent, that use each template family."""
+    family_by_id = {
+        str(version_id): template_key
+        for version_id, template_key in db.execute(
+            select(MessageTemplate.id, MessageTemplate.template_key).where(
+                MessageTemplate.organization_id == organization_id
+            )
+        )
+    }
+    usage: dict[uuid.UUID, list[TemplateUse]] = {}
+    workflows = db.execute(
+        select(AutomationWorkflow)
+        .where(AutomationWorkflow.organization_id == organization_id)
+        .order_by(AutomationWorkflow.name)
+    ).scalars()
+    for workflow in workflows:
+        keys = {
+            family_by_id[version_id]
+            for version_id in _referenced_ids(workflow.actions)
+            if version_id in family_by_id
+        }
+        for key in keys:
+            usage.setdefault(key, []).append(TemplateUse("workflow", workflow.id, workflow.name))
+    campaigns = db.execute(
+        select(Campaign)
+        .where(
+            Campaign.organization_id == organization_id,
+            Campaign.message_template_version_id.is_not(None),
+            Campaign.status.in_(("draft", "scheduled", "sending")),
+        )
+        .order_by(Campaign.name)
+    ).scalars()
+    for campaign in campaigns:
+        key = family_by_id.get(str(campaign.message_template_version_id))
+        if key is not None:
+            usage.setdefault(key, []).append(TemplateUse("campaign", campaign.id, campaign.name))
+    return usage
 
 
 def _normalize_media_type(content_type: str) -> str:

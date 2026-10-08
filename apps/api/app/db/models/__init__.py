@@ -102,6 +102,8 @@ from app.db.models.messaging import (
     MessagingConsentState,
     MessagingContact,
     MessagingGlobalSuppression,
+    MessagingTestPhone,
+    MessagingTestSend,
     TwilioRoute,
     TwilioSettings,
 )
@@ -349,6 +351,8 @@ __all__ = [
     "MessagingConsentState",
     "MessagingContact",
     "MessagingGlobalSuppression",
+    "MessagingTestPhone",
+    "MessagingTestSend",
     "MessagingConversation",
     "MessagingMessage",
     "MessageDelivery",

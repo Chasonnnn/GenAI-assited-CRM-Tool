@@ -25,6 +25,7 @@ from app.services import (
     job_service,
     messaging_consent_service,
     messaging_delivery_service,
+    messaging_test_send_service,
     twilio_settings_service,
 )
 from app.services.messaging_opt_out_classifier import classify_consent_instruction
@@ -354,7 +355,14 @@ async def handle_status(
         route_id=route.id,
         provider_message_sid=message_sid,
     )
-    if replayed == 0:
+    if replayed == 0 and not messaging_test_send_service.record_status(
+        db,
+        organization_id=route.organization_id,
+        route_id=route.id,
+        provider_message_sid=message_sid,
+        provider_status=status,
+        error_code=error_code or None,
+    ):
         messaging_delivery_service.ensure_orphan_status_case(
             db,
             event=event,

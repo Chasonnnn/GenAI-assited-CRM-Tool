@@ -2781,6 +2781,11 @@
       "422"
     ]
   },
+  "/messaging/template-variables": {
+    "GET": [
+      "200"
+    ]
+  },
   "/messaging/templates": {
     "GET": [
       "200",
@@ -2791,8 +2796,17 @@
       "422"
     ]
   },
+  "/messaging/templates/usage": {
+    "GET": [
+      "200"
+    ]
+  },
   "/messaging/templates/{template_id}": {
     "GET": [
+      "200",
+      "422"
+    ],
+    "PATCH": [
       "200",
       "422"
     ]
@@ -2803,9 +2817,36 @@
       "422"
     ]
   },
+  "/messaging/templates/{template_id}/test-sends": {
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
   "/messaging/templates/{template_key}/versions": {
     "POST": [
       "201",
+      "422"
+    ]
+  },
+  "/messaging/test-phones": {
+    "GET": [
+      "200"
+    ],
+    "POST": [
+      "201",
+      "422"
+    ]
+  },
+  "/messaging/test-phones/{test_phone_id}": {
+    "DELETE": [
+      "204",
+      "422"
+    ]
+  },
+  "/messaging/test-phones/{test_phone_id}/verify": {
+    "POST": [
+      "200",
       "422"
     ]
   },
