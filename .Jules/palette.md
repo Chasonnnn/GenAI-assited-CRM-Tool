@@ -9,3 +9,7 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+
+## 2024-10-08 - Added Default ARIA Label to Shared UI Components
+**Learning:** Reusable, composable components (like `CopyButton` which extends `Button`) that often render as icon-only UI are common sources of missing accessibility labels if not enforced at the prop level. Providing an intelligent default `aria-label` inside the shared component itself (falling back when `children` are empty) ensures a baseline of accessibility across the entire application without requiring manual prop passing at every call site.
+**Action:** When auditing or building shared UI components that can render in visually minimal states (e.g., icon-only buttons, generic triggers), proactively implement sensible fallback `aria-label` logic at the component definition level rather than relying solely on developers to provide them at instantiation.
