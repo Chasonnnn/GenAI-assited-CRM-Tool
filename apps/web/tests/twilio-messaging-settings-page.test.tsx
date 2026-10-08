@@ -308,6 +308,13 @@ describe("Messaging integration settings page", () => {
         expect(within(issues).getByText("The last no-send Twilio provider check failed.")).toBeInTheDocument()
     })
 
+    it("summarizes compliance without a counsel approval date, which sending does not need", () => {
+        render(<MessagingIntegrationPageClient />)
+
+        expect(screen.getByText("Compliance approval")).toBeInTheDocument()
+        expect(screen.queryByText("Counsel approval")).not.toBeInTheDocument()
+    })
+
     it("queues a readiness check from the header and polls until fresh evidence arrives", async () => {
         render(<MessagingIntegrationPageClient />)
 

@@ -822,9 +822,8 @@ function ComplianceControlsCard({
                 <CardTitle className="text-lg">Compliance</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-                <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <SummaryItem label="Twilio edition" className="rounded-lg border p-3">{friendlyStatus(settings.twilio_edition)}</SummaryItem>
-                    <SummaryItem label="Counsel approval" className="rounded-lg border p-3">{formatDateOnly(settings.counsel_approved_at) ?? <EmptyValue label="Not recorded" />}</SummaryItem>
                     <SummaryItem label="Compliance approval" className="rounded-lg border p-3">{formatDateOnly(settings.compliance_approved_at) ?? <EmptyValue label="Not recorded" />}</SummaryItem>
                     <SummaryItem label="BAA verification" className="rounded-lg border p-3">{formatDateOnly(settings.baa_verified_at) ?? <EmptyValue label="Not recorded" />}</SummaryItem>
                 </dl>
