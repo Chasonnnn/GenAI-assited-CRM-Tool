@@ -115,7 +115,6 @@ from app.db.models.messaging_delivery import (
     MessageWebhookEvent,
     MessagingConversation,
     MessagingMessage,
-    MessagingProviderAdmission,
 )
 from app.db.models.meta import (
     MetaAd,
@@ -352,7 +351,6 @@ __all__ = [
     "MessagingGlobalSuppression",
     "MessagingConversation",
     "MessagingMessage",
-    "MessagingProviderAdmission",
     "MessageDelivery",
     "MessageDeliveryAttempt",
     "MessageMediaAsset",
