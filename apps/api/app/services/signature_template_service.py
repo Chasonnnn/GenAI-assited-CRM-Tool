@@ -135,11 +135,10 @@ def _get_base_data(org: Organization, user: User) -> dict:
     effective_phone = getattr(user, "signature_phone", None) or getattr(user, "phone", None)
     effective_photo = getattr(user, "signature_photo_url", None) or user.avatar_url
     signed_photo = media_service.get_signed_media_url(effective_photo)
-    signed_logo = media_service.get_signed_media_url(org.signature_logo_url)
 
     return {
         # Org branding (all HTML-escaped)
-        "logo_url": escape_text(signed_logo),
+        "logo_url": escape_text(media_service.email_logo_url(org)),
         "primary_color": primary_color,
         "company_name": escape_text(org.signature_company_name or org.name),
         "address": escape_text(org.signature_address),
@@ -171,7 +170,7 @@ def _get_sample_data(org: Organization) -> dict:
 
     return {
         # Org branding (all HTML-escaped)
-        "logo_url": escape_text(media_service.get_signed_media_url(org.signature_logo_url)),
+        "logo_url": escape_text(media_service.email_logo_url(org)),
         "primary_color": primary_color,
         "company_name": escape_text(org.signature_company_name or org.name),
         "address": escape_text(org.signature_address),

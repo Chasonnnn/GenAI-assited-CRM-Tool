@@ -36,9 +36,7 @@ def build_sample_variables(
 ) -> dict[str, str]:
     org = db.get(Organization, org_id) if org_id else None
     org_name = org.name if org else ""
-    org_logo_url = (
-        media_service.get_signed_media_url(org.signature_logo_url) if org else None
-    ) or ""
+    org_logo_url = media_service.email_logo_url(org)
 
     sample_unsubscribe_url = ""
     form_link = ""

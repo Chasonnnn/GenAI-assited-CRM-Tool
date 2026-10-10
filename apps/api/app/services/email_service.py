@@ -1208,7 +1208,7 @@ def _build_record_contact_template_variables(
     from app.db.models import Membership, Queue, User
     from app.services import media_service
 
-    org_logo_url = media_service.get_signed_media_url(org.signature_logo_url) if org else None
+    org_logo_url = media_service.email_logo_url(org)
 
     owner_name = ""
     if record.owner_type == OwnerType.USER.value and record.owner_id:
@@ -1257,7 +1257,7 @@ def _build_record_contact_template_variables(
         "state": record.state or "",
         "owner_name": owner_name,
         "org_name": org.name if org else "",
-        "org_logo_url": org_logo_url or "",
+        "org_logo_url": org_logo_url,
         "unsubscribe_url": unsubscribe_url,
     }
 
