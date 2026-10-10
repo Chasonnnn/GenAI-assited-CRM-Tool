@@ -463,8 +463,7 @@ def activate(
     if changes.revoke_resolutions:
         revoke_ids = [res.override_id for res in changes.revoke_resolutions]
         db.execute(
-            delete(UserPermissionOverride)
-            .where(
+            delete(UserPermissionOverride).where(
                 UserPermissionOverride.organization_id == org_id,
                 UserPermissionOverride.id.in_(revoke_ids),
                 UserPermissionOverride.override_type == "revoke",
