@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
+from app.core.email_layout import EmailLayout, InvalidEmailLayoutError, dump_layout, parse_layout
 from app.db.models import EmailTemplate
 
 
@@ -23,6 +24,8 @@ class EmailTemplateSnapshot:
     scope: str | None = None
     owner_user_id: UUID | None = None
     system_key: str | None = None
+    # None means the scope default; snapshots taken before layouts existed have none.
+    layout: EmailLayout | None = None
 
 
 def format_from_address(address: str | None, name: str | None) -> str | None:
@@ -51,6 +54,7 @@ def build_snapshot(
         "subject": template.subject,
         "body": template.body,
         "from_email": effective_from_email,
+        "layout": dump_layout(parse_layout(template.layout)),
     }
     if include_scope:
         payload["scope"] = template.scope
@@ -104,6 +108,11 @@ def parse_snapshot(payload: object, *, require_scope: bool = False) -> EmailTemp
     if scope == "personal" and owner_user_id is None:
         raise EmailTemplateSnapshotError("Email template snapshot is invalid")
 
+    try:
+        layout = parse_layout(payload.get("layout"))
+    except InvalidEmailLayoutError as exc:
+        raise EmailTemplateSnapshotError("Email template snapshot is invalid") from exc
+
     return EmailTemplateSnapshot(
         organization_id=organization_id,
         template_id=template_id,
@@ -114,4 +123,5 @@ def parse_snapshot(payload: object, *, require_scope: bool = False) -> EmailTemp
         scope=scope,
         owner_user_id=owner_user_id,
         system_key=system_key,
+        layout=layout,
     )

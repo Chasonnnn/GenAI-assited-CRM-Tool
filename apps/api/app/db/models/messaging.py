@@ -372,3 +372,83 @@ class MessagingGlobalSuppression(Base):
     latest_evidence: Mapped[MessagingConsentEvidence | None] = relationship(
         foreign_keys=[latest_evidence_id]
     )
+
+
+class MessagingTestPhone(Base):
+    """A staff phone that proved ownership with a code and may receive test texts."""
+
+    __tablename__ = "messaging_test_phones"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "phone_hash", name="uq_messaging_test_phones_org_phone"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    label: Mapped[str] = mapped_column(String(80), nullable=False)
+    phone_e164: Mapped[str] = mapped_column(EncryptedString, nullable=False)
+    phone_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    phone_last4: Mapped[str] = mapped_column(String(4), nullable=False)
+    code_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    code_expires_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
+    code_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    verified_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+class MessagingTestSend(Base):
+    """One text sent outside the outbox: a test-phone code or a template test."""
+
+    __tablename__ = "messaging_test_sends"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('verification_code', 'template_test')", name="ck_messaging_test_sends_kind"
+        ),
+        Index("idx_messaging_test_sends_route_sid", "route_id", "provider_message_sid"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    route_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("twilio_routes.id", ondelete="CASCADE"), nullable=False
+    )
+    test_phone_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("messaging_test_phones.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("message_templates.id", ondelete="SET NULL"), nullable=True
+    )
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider_message_sid: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    provider_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    sent_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )

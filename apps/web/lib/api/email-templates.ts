@@ -13,10 +13,38 @@ export type EmailBodyDesign = { type: 'doc'; content?: unknown[] } & Record<stri
 
 export type EmailPreviewVariableMode = 'sample' | 'names' | 'record'
 
+export type EmailLayoutKind = 'plain' | 'card' | 'letterhead'
+
+/** The frame sends draw around the body; a template with no layout uses its scope default. */
+export interface EmailLayout {
+    kind: EmailLayoutKind
+    show_logo: boolean
+    logo_position: 'left' | 'center'
+    /** Null follows the org signature color. */
+    accent_color: string | null
+    page_background: string
+}
+
+export interface EmailLayoutFrameRequest {
+    scope: EmailTemplateScope
+    layout: EmailLayout | null
+}
+
+/** What a layout draws around the body in the editor canvas. */
+export interface EmailLayoutFrame {
+    layout: EmailLayout
+    logo_url: string | null
+    logo_alt: string
+    accent_color: string
+    signature_html: string
+    footer_html: string
+}
+
 export interface EmailTemplatePreviewRequest {
     subject: string
     body: string
     scope: EmailTemplateScope
+    layout?: EmailLayout | null
     variable_mode: EmailPreviewVariableMode
     surrogate_id?: string | null
 }
@@ -43,6 +71,7 @@ export interface EmailTemplate {
     from_email: string | null
     body: string
     body_design?: EmailBodyDesign | null
+    layout?: EmailLayout | null
     is_active: boolean
     scope: EmailTemplateScope
     owner_user_id: string | null
@@ -80,6 +109,7 @@ export interface EmailTemplateCreate {
     from_email?: string | null
     body: string
     body_design?: EmailBodyDesign | null
+    layout?: EmailLayout | null
     scope?: EmailTemplateScope
 }
 
@@ -111,6 +141,7 @@ export interface EmailTemplateUpdate {
     from_email?: string | null
     body?: string
     body_design?: EmailBodyDesign | null
+    layout?: EmailLayout | null
     is_active?: boolean
     expected_version?: number
 }
@@ -204,6 +235,10 @@ export async function previewEmailTemplate(
     payload: EmailTemplatePreviewRequest
 ): Promise<EmailTemplatePreview> {
     return api.post<EmailTemplatePreview>('/email-templates/preview', payload)
+}
+
+export async function getEmailLayoutFrame(payload: EmailLayoutFrameRequest): Promise<EmailLayoutFrame> {
+    return api.post<EmailLayoutFrame>('/email-templates/layout-frame', payload)
 }
 
 export async function sendTestEmailTemplate(

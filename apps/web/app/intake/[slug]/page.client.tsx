@@ -1110,7 +1110,6 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
         .filter(({ fieldGroups }) => fieldGroups.standardFields.length + fieldGroups.fileFields.length > 0)
     const messagingConsent = formConfig?.messaging_consent
     const smsSelection = { operational: smsOperational, promotional: smsPromotional }
-    const hasSmsConsentOptions = Boolean(messagingConsent?.operational || messagingConsent?.promotional)
     const smsPhoneField = resolveSmsConsentPhoneField(
         messagingConsent,
         visibleSections.flatMap((section) => section.fieldGroups.standardFields),
@@ -1177,11 +1176,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
             return
         }
         if (smsConsentError) {
-            if (smsPhoneField) {
-                document.getElementById(smsPhoneField.key)?.focus()
-            } else {
-                smsConsentCheckboxRef.current?.focus()
-            }
+            smsConsentCheckboxRef.current?.focus()
             return
         }
 
@@ -1541,9 +1536,6 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                                 >
                                                     {renderFieldInput(field)}
                                                 </div>
-                                                {field.key === smsPhoneField?.key && hasSmsConsentOptions ? (
-                                                    <div className="sm:col-span-2">{smsConsent}</div>
-                                                ) : null}
                                             </React.Fragment>
                                         ))}
                                         {section.fieldGroups.fileFields.map((field) => {
@@ -1606,7 +1598,7 @@ function usePublicApplicationFormView({ slug }: PublicApplicationFormProps) {
                                     </label>
                                 </div>
 
-                                {smsPhoneField ? null : smsConsent}
+                                {smsConsent}
 
                                 <PrivacyNotice text={privacyNotice ?? null} />
 

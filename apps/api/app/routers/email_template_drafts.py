@@ -90,6 +90,7 @@ def _build_draft_response(draft: Any) -> EmailTemplateDraftRead:
         from_email=draft.from_email,
         body=draft.body,
         body_design=draft.body_design,
+        layout=draft.layout,
         is_active=draft.is_active,
         category=draft.category,
         base_version=draft.base_version,
@@ -114,6 +115,7 @@ def _build_template_response(template: Any) -> EmailTemplateRead:
         from_email=template.from_email,
         body=template.body,
         body_design=template.body_design,
+        layout=template.layout,
         is_active=template.is_active,
         scope=template.scope,
         owner_user_id=template.owner_user_id,
@@ -186,6 +188,7 @@ def create_email_template_draft(
             from_email=data.from_email,
             body=data.body,
             body_design=data.body_design,
+            layout=data.layout,
             scope=data.scope,
         )
     except ValueError as exc:
@@ -285,6 +288,8 @@ def update_email_template_draft(
         kwargs["from_email"] = data.from_email
     if "body_design" in data.model_fields_set:
         kwargs["body_design"] = data.body_design
+    if "layout" in data.model_fields_set:
+        kwargs["layout"] = data.layout
     try:
         updated = email_template_draft_service.update_draft(**kwargs)
     except email_template_draft_service.DraftRevisionConflictError as exc:

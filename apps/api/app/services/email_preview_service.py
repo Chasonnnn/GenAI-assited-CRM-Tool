@@ -12,6 +12,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.email_layout import EmailLayout, default_layout
 from app.db.models import Organization, Surrogate
 from app.services import (
     email_composition_service,
@@ -105,6 +106,7 @@ def preview_org_template(
     body: str,
     scope: TemplateScope,
     variable_mode: VariableMode,
+    layout: EmailLayout | None = None,
     surrogate: Surrogate | None = None,
 ) -> EmailPreview:
     """Preview org or personal template content with signature and unsubscribe footer."""
@@ -140,6 +142,7 @@ def preview_org_template(
         recipient_email=PREVIEW_RECIPIENT,
         rendered_body_html=rendered_body,
         scope=scope,
+        layout=layout,
         sender_user_id=actor_user_id,
         portal_base_url=org_service.get_org_portal_base_url(org),
         unsubscribe_url=PREVIEW_UNSUBSCRIBE_URL,
@@ -148,6 +151,25 @@ def preview_org_template(
         subject=rendered_subject,
         html=wrap_preview_document(html),
         unresolved_variables=unresolved,
+    )
+
+
+def layout_frame(
+    db: Session,
+    *,
+    org_id: UUID,
+    actor_user_id: UUID,
+    scope: TemplateScope,
+    layout: EmailLayout | None,
+) -> email_composition_service.LayoutFrame:
+    """The frame a template layout draws, with the actor as the personal sender."""
+    return email_composition_service.build_layout_frame(
+        db,
+        org_id=org_id,
+        scope=scope,
+        layout=layout or default_layout(scope),
+        sender_user_id=actor_user_id,
+        unsubscribe_url=PREVIEW_UNSUBSCRIBE_URL,
     )
 
 

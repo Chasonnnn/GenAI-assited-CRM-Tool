@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from threading import Barrier, Lock, Thread
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -27,6 +26,7 @@ def _ready_claim(
     phi_enabled=False,
     fully_ready=True,
     toll_free=False,
+    purpose="operational",
 ):
     from app.core.encryption import hash_phone
     from app.services import (
@@ -43,7 +43,7 @@ def _ready_claim(
     settings.api_key_sid_encrypted = twilio_settings_service.encrypt_credential(API_KEY_SID)
     settings.api_secret_encrypted = twilio_settings_service.encrypt_credential(API_SECRET)
     settings.auth_token_encrypted = twilio_settings_service.encrypt_credential("auth-token")
-    route = next(item for item in settings.routes if item.purpose == "operational")
+    route = next(item for item in settings.routes if item.purpose == purpose)
     route.enabled = True
     route.messaging_service_sid_encrypted = twilio_settings_service.encrypt_credential(SERVICE_SID)
     route.sender_phone_encrypted = twilio_settings_service.encrypt_credential(SENDER)
@@ -102,9 +102,9 @@ def _ready_claim(
         db,
         organization_id=test_org.id,
         phone=CONTACT,
-        purpose="operational",
+        purpose=purpose,
         affirmative=True,
-        disclosure_text="Operational SMS disclosure",
+        disclosure_text=f"{purpose.title()} SMS disclosure",
         source="website",
         source_reference="dispatch-lead-1",
         occurred_at=datetime(2026, 7, 31, 12, 0, tzinfo=UTC),
@@ -115,7 +115,7 @@ def _ready_claim(
         db,
         organization_id=test_org.id,
         contact_id=consent.contact_id,
-        purpose="operational",
+        purpose=purpose,
         body="EWI operational enrollment. Frequency varies. Msg & data rates apply. HELP. STOP.",
         idempotency_key="dispatch-occurrence-1",
         source_type="workflow",
@@ -226,7 +226,7 @@ def test_dispatch_refuses_route_that_readiness_reports_blocked(
     assert result == "deferred_route_not_ready"
 
 
-def test_dispatch_refuses_inactive_twilio_account(
+def test_dispatch_defers_when_inbound_replies_miss_this_app(
     db,
     test_org,
     monkeypatch,
@@ -240,7 +240,7 @@ def test_dispatch_refuses_inactive_twilio_account(
         **route.capability_evidence,
         "provider": {
             **route.capability_evidence["provider"],
-            "account_active": False,
+            "inbound_webhook_matches": False,
         },
     }
     db.commit()
@@ -249,7 +249,7 @@ def test_dispatch_refuses_inactive_twilio_account(
         messaging_dispatch_service.twilio_transport,
         "send_message",
         lambda **_kwargs: (_ for _ in ()).throw(
-            AssertionError("An inactive Twilio account must not reach provider I/O")
+            AssertionError("A route whose opt-out replies miss this app must not send")
         ),
     )
 
@@ -549,11 +549,13 @@ def test_21610_adds_local_global_suppression(db, test_org, monkeypatch) -> None:
     assert suppression.reason == "global_opt_out"
 
 
-def test_ambiguous_timezone_defers_without_provider_io(db, test_org, monkeypatch) -> None:
+def test_promotional_with_unknown_timezone_waits_for_hours_open_everywhere(
+    db, test_org, monkeypatch
+) -> None:
     from app.services import messaging_dispatch_service
     from app.services.messaging_sending_hours import RecipientTimezone
 
-    delivery = _ready_claim(db, test_org, monkeypatch)
+    delivery = _ready_claim(db, test_org, monkeypatch, purpose="promotional")
     monkeypatch.setattr(
         messaging_dispatch_service.messaging_sending_hours,
         "resolve_recipient_timezone",
@@ -565,82 +567,178 @@ def test_ambiguous_timezone_defers_without_provider_io(db, test_org, monkeypatch
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("provider I/O not allowed")),
     )
 
+    # 22:00 EDT on Friday is closed on the East Coast.
     result = messaging_dispatch_service.dispatch_claimed_delivery(
         db,
         organization_id=test_org.id,
         delivery_id=delivery.id,
         lease_token=delivery.lease_token,
         lease_generation=delivery.lease_generation,
-        now=datetime(2026, 7, 31, 18, 0, tzinfo=UTC),
+        now=datetime(2026, 8, 1, 2, 0, tzinfo=UTC),
     )
 
-    assert result == "deferred_location_ambiguous"
+    assert result == "deferred_sending_hours"
     db.refresh(delivery)
     assert delivery.status == "retry_scheduled"
-    assert delivery.last_error_type == "recipient_location_ambiguous"
+    assert delivery.last_error_type == "outside_sending_hours"
+    # Hours open in every US zone and every state: 09:00 HST.
+    assert delivery.run_at == datetime(2026, 8, 1, 19, 0, tzinfo=UTC)
 
 
-def test_concurrent_first_account_admission_initialization_is_atomic(
-    db_engine,
-) -> None:
-    import pytest
+def test_operational_dispatch_ignores_quiet_hours(db, test_org, monkeypatch) -> None:
+    from app.services import messaging_dispatch_service, twilio_transport
 
-    from app.core.encryption import hash_pii
-    from app.db.models import MessagingProviderAdmission, TwilioRoute
-    from app.db.session import SessionLocal
-    from app.services import messaging_dispatch_service
-
-    if db_engine.dialect.name != "postgresql":
-        pytest.skip("Concurrent messaging admission requires PostgreSQL")
-
-    route = TwilioRoute(
-        purpose="operational",
-        capability_evidence={"messages_per_second": 10},
-    )
-    account_sid = f"AC{uuid4().hex}"
-    fixed_now = datetime.now(UTC).replace(microsecond=0)
-    barrier = Barrier(2)
-    result_lock = Lock()
-    results: list[datetime | None] = []
-    errors: list[Exception] = []
-
-    def reserve_once() -> None:
-        session = SessionLocal(bind=db_engine)
-        try:
-            barrier.wait(timeout=10)
-            reserved = messaging_dispatch_service._reserve_account_slot(
-                session,
-                account_sid=account_sid,
-                route=route,
-                now=fixed_now,
+    delivery = _ready_claim(db, test_org, monkeypatch)
+    for name in (
+        "resolve_recipient_timezone",
+        "evaluate_sending_window",
+        "evaluate_sending_window_in_every_us_timezone",
+    ):
+        monkeypatch.setattr(
+            messaging_dispatch_service.messaging_sending_hours,
+            name,
+            lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("Transactional messages have no sending window")
+            ),
+        )
+    sent = []
+    monkeypatch.setattr(
+        messaging_dispatch_service.twilio_transport,
+        "send_message",
+        lambda **kwargs: (
+            sent.append(kwargs)
+            or twilio_transport.TwilioSendResult(
+                success=True, message_sid="SM" + "1" * 32, initial_status="queued"
             )
-            session.commit()
-            with result_lock:
-                results.append(reserved)
-        except Exception as exc:
-            session.rollback()
-            with result_lock:
-                errors.append(exc)
-        finally:
-            session.close()
+        ),
+    )
 
-    threads = [Thread(target=reserve_once) for _ in range(2)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=15)
+    # 03:00 EDT.
+    result = messaging_dispatch_service.dispatch_claimed_delivery(
+        db,
+        organization_id=test_org.id,
+        delivery_id=delivery.id,
+        lease_token=delivery.lease_token,
+        lease_generation=delivery.lease_generation,
+        now=datetime(2026, 8, 1, 7, 0, tzinfo=UTC),
+    )
 
-    assert all(not thread.is_alive() for thread in threads)
-    assert errors == []
-    assert results.count(None) == 1
-    assert [value for value in results if value is not None] == [
-        fixed_now + timedelta(milliseconds=100)
-    ]
+    assert result == "submitted"
+    assert len(sent) == 1
 
-    account_hash = hash_pii(account_sid, purpose="twilio-admission")
-    cleanup = SessionLocal(bind=db_engine)
-    try:
-        cleanup.query(MessagingProviderAdmission).filter_by(account_sid_hash=account_hash).delete()
-        cleanup.commit()
-    finally:
-        cleanup.close()
+
+def _record_prior_promotional_sends(db, test_org, contact_id, started_times) -> None:
+    from app.db.models.messaging_delivery import MessageDeliveryAttempt
+    from app.services import messaging_delivery_service
+
+    for index, started_at in enumerate(started_times):
+        prior = messaging_delivery_service.materialize_delivery(
+            db,
+            organization_id=test_org.id,
+            contact_id=contact_id,
+            purpose="promotional",
+            body=f"EWI Surrogacy info session {index}. Reply STOP to opt out.",
+            idempotency_key=f"florida-cap-{index}",
+            source_type="workflow",
+            source_id=None,
+            template_version_id=None,
+            media_asset_ids=[],
+            is_enrollment_confirmation=False,
+        )
+        db.add(
+            MessageDeliveryAttempt(
+                organization_id=test_org.id,
+                delivery_id=prior.id,
+                attempt_number=1,
+                lease_token=uuid4(),
+                lease_generation=1,
+                started_at=started_at,
+                completed_at=started_at,
+                outcome="succeeded",
+            )
+        )
+    db.commit()
+
+
+@pytest.mark.parametrize(("prior_sends", "deferred"), [(2, False), (3, True)])
+def test_florida_allows_three_promotional_texts_on_one_subject_per_day(
+    db, test_org, monkeypatch, prior_sends, deferred
+) -> None:
+    from app.services import messaging_dispatch_service, twilio_transport
+
+    delivery = _ready_claim(db, test_org, monkeypatch, purpose="promotional")
+    now = datetime(2026, 7, 31, 18, 0, tzinfo=UTC)
+    _record_prior_promotional_sends(
+        db,
+        test_org,
+        delivery.contact_id,
+        [now - timedelta(hours=hours) for hours in (23, 10, 1)][-prior_sends:],
+    )
+    _allow_sending_hours(monkeypatch)
+    sent = []
+    monkeypatch.setattr(
+        messaging_dispatch_service.twilio_transport,
+        "send_message",
+        lambda **kwargs: (
+            sent.append(kwargs)
+            or twilio_transport.TwilioSendResult(
+                success=True, message_sid="SM" + "1" * 32, initial_status="queued"
+            )
+        ),
+    )
+
+    # The contact has no address, so Florida's rule applies.
+    result = messaging_dispatch_service.dispatch_claimed_delivery(
+        db,
+        organization_id=test_org.id,
+        delivery_id=delivery.id,
+        lease_token=delivery.lease_token,
+        lease_generation=delivery.lease_generation,
+        now=now,
+    )
+
+    if deferred:
+        assert result == "deferred_florida_daily_limit"
+        assert sent == []
+        db.refresh(delivery)
+        assert delivery.last_error_type == "florida_daily_limit"
+        # The oldest of the three leaves the 24-hour window first.
+        assert delivery.run_at == now + timedelta(hours=1)
+    else:
+        assert result == "submitted"
+        assert len(sent) == 1
+
+
+def test_florida_cap_lets_three_of_four_concurrent_claims_send(db, test_org, monkeypatch) -> None:
+    """Claimed siblings still in progress count only when they were claimed first."""
+    from app.services import messaging_delivery_service, messaging_dispatch_service
+
+    first = _ready_claim(db, test_org, monkeypatch, purpose="promotional")
+    for index in range(3):
+        messaging_delivery_service.materialize_delivery(
+            db,
+            organization_id=test_org.id,
+            contact_id=first.contact_id,
+            purpose="promotional",
+            body=f"EWI Surrogacy info session {index}. Reply STOP to opt out.",
+            idempotency_key=f"florida-batch-{index}",
+            source_type="workflow",
+            source_id=None,
+            template_version_id=None,
+            media_asset_ids=[],
+            is_enrollment_confirmation=False,
+        )
+    # One batch claims the other three; every claim is in progress before any sends.
+    batch = messaging_delivery_service.claim_due_deliveries(db, worker_id="test-worker", limit=3)
+    assert len(batch) == 3
+
+    now = datetime(2026, 7, 31, 18, 0, tzinfo=UTC)
+    opens_at = {
+        delivery.id: messaging_dispatch_service._florida_subject_cap_opens_at(db, delivery, now=now)
+        for delivery in [first, *batch]
+    }
+
+    blocked = [delivery_id for delivery_id, value in opens_at.items() if value is not None]
+    # The first claim and the batch's two lowest ids send; the last by id waits a day.
+    assert blocked == [max(item.id for item in batch)]
+    assert opens_at[blocked[0]] > now + timedelta(hours=23)

@@ -4,7 +4,8 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
+from sqlalchemy.orm.attributes import set_committed_value
 
 from alembic import command
 from app.db.models import EmailTemplate
@@ -64,7 +65,9 @@ def _insert_version(connection, org_id, template_id, payload_encrypted, checksum
 
 def _assert_history_matches(connection, template_id, version):
     with Session(bind=connection) as session:
-        template = session.get(EmailTemplate, template_id)
+        # Columns added after this revision do not exist yet; they read as their NULL default.
+        template = session.get(EmailTemplate, template_id, options=[defer(EmailTemplate.layout)])
+        set_committed_value(template, "layout", None)
         assert template.current_version == version
         # Raises when the live content does not match the current version snapshot.
         email_service.ensure_template_current_version_snapshot(session, template)

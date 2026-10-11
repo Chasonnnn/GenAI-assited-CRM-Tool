@@ -409,28 +409,6 @@ class MessageDeliveryAttempt(Base):
     delivery: Mapped[MessageDelivery] = relationship(back_populates="attempts")
 
 
-class MessagingProviderAdmission(Base):
-    """One account-level next-request slot for rate admission."""
-
-    __tablename__ = "messaging_provider_admission"
-    __table_args__ = (
-        UniqueConstraint("account_sid_hash", name="uq_messaging_provider_admission_account"),
-        Index("idx_messaging_provider_next_slot", "next_slot_at"),
-    )
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
-    )
-    account_sid_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    next_slot_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
-    )
-
-
 class MessageWebhookEvent(Base):
     """Append-only verified Twilio webhook input with encrypted original fields."""
 

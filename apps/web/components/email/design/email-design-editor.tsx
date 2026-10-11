@@ -79,8 +79,14 @@ type EmailDesignEditorProps = {
     onFocus?: () => void
     /** Fields shown above the email sheet. */
     fields?: ReactNode
+    /** Draws the canvas around the editable body in place of `fields` and the plain sheet. */
+    canvas?: (body: ReactNode) => ReactNode
+    /** Shown at the top of the inspector column. */
+    panel?: ReactNode
     /** Shown in the inspector column under the document styles. */
     settings?: ReactNode
+    /** False hides the document Body and Container styles, for layouts that draw their own frame. */
+    documentStyles?: boolean
     invalid?: boolean
     error?: ReactNode
     className?: string
@@ -145,7 +151,21 @@ function insertTextAtSelection(editor: Editor, text: string) {
 
 export const EmailDesignEditor = forwardRef<EmailDesignEditorHandle, EmailDesignEditorProps>(
     function EmailDesignEditor(
-        { initialValue, onChange, variables, onSelectVariable, onFocus, fields, settings, invalid, error, className },
+        {
+            initialValue,
+            onChange,
+            variables,
+            onSelectVariable,
+            onFocus,
+            fields,
+            canvas,
+            panel,
+            settings,
+            documentStyles = true,
+            invalid,
+            error,
+            className,
+        },
         ref,
     ) {
         const [htmlDialog, setHtmlDialog] = useState<HtmlDialogState | null>(null)
@@ -352,25 +372,39 @@ export const EmailDesignEditor = forwardRef<EmailDesignEditorHandle, EmailDesign
                     </aside>
 
                     <div className="min-h-0 min-w-0 overflow-y-auto bg-muted/40 px-4 py-6 sm:px-6">
-                        <div className="mx-auto flex w-full max-w-[600px] flex-col gap-4">
-                            {fields}
-                            <div
-                                className={cn(
-                                    "email-design-sheet overflow-x-auto rounded-sm border bg-white py-4 text-black shadow-xs",
-                                    invalid ? "border-destructive" : "border-border",
-                                )}
-                            >
-                                <EditorContent editor={editor} />
+                        {canvas ? (
+                            canvas(
+                                <div
+                                    className={cn(
+                                        "email-design-sheet email-design-sheet--framed overflow-x-auto text-black",
+                                        invalid && "rounded-sm ring-1 ring-destructive",
+                                    )}
+                                >
+                                    <EditorContent editor={editor} />
+                                </div>,
+                            )
+                        ) : (
+                            <div className="mx-auto flex w-full max-w-[600px] flex-col gap-4">
+                                {fields}
+                                <div
+                                    className={cn(
+                                        "email-design-sheet overflow-x-auto rounded-sm border bg-white py-4 text-black shadow-xs",
+                                        invalid ? "border-destructive" : "border-border",
+                                    )}
+                                >
+                                    <EditorContent editor={editor} />
+                                </div>
+                                {error}
                             </div>
-                            {error}
-                        </div>
+                        )}
                     </div>
 
                     <div className="flex min-h-0 flex-col overflow-y-auto border-t border-border bg-card lg:border-t-0 lg:border-l">
+                        {panel}
                         {editor ? (
                             <Inspector.Root aria-label="Block properties" className="p-3 text-sm">
                                 <Inspector.Breadcrumb />
-                                <Inspector.Document />
+                                {documentStyles ? <Inspector.Document /> : null}
                                 <Inspector.Node />
                                 <Inspector.Text />
                             </Inspector.Root>

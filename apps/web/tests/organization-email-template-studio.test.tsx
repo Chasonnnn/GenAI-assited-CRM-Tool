@@ -1,11 +1,34 @@
 import { emailDesignEditorMock } from "./fixtures/email-design-editor-mock"
 import * as React from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render as renderWithoutQueries, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import OrganizationEmailTemplateStudio from "@/components/email/organization-email-template-studio"
 import { ApiError } from "@/lib/api"
+
+// The studio queries the layout frame and checks, so every render gets its own query client.
+function render(ui: React.ReactElement) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return renderWithoutQueries(ui, {
+        wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+    })
+}
+
+const LAYOUT_FRAME = {
+    layout: {
+        kind: "card",
+        show_logo: true,
+        logo_position: "center",
+        accent_color: null,
+        page_background: "#f4f4f5",
+    },
+    logo_url: "https://api.example.com/forms/public/org-1/signature-logo?v=abc",
+    logo_alt: "EWI Family Global",
+    accent_color: "#b8335f",
+    signature_html: "<p>EWI Family Global</p>",
+    footer_html: '<p>If you no longer wish to receive these emails, <a href="#unsubscribe">Unsubscribe</a>.</p>',
+}
 
 const mocks = vi.hoisted(() => ({
     push: vi.fn(),
@@ -18,6 +41,7 @@ const mocks = vi.hoisted(() => ({
     restoreDraftVersion: vi.fn(),
     sendTestDraft: vi.fn(),
     preview: vi.fn(),
+    layoutFrame: vi.fn(),
     draftListParams: vi.fn(),
     refetchDrafts: vi.fn(),
     refetchPublished: vi.fn(),
@@ -77,6 +101,7 @@ vi.mock("@/components/email/design/email-design-editor", () => import("./fixture
 vi.mock("@/lib/api/email-templates", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/api/email-templates")>()),
     previewEmailTemplate: mocks.preview,
+    getEmailLayoutFrame: mocks.layoutFrame,
 }))
 
 vi.mock("@/lib/hooks/use-email-templates", () => ({
@@ -231,6 +256,15 @@ describe("OrganizationEmailTemplateStudio", () => {
         mocks.sendTestDraft.mockReset()
         emailDesignEditorMock.reset()
         mocks.preview.mockReset()
+        mocks.preview.mockResolvedValue({
+            subject: "Original subject",
+            html: "<!doctype html><html><body><p>Hi</p><a href=\"#unsubscribe\">Unsubscribe</a></body></html>",
+            unresolved_variables: [],
+        })
+        mocks.layoutFrame.mockReset()
+        mocks.layoutFrame.mockImplementation(({ layout }: { layout: Record<string, unknown> }) =>
+            Promise.resolve({ ...LAYOUT_FRAME, layout }),
+        )
         mocks.draftListParams.mockReset()
         mocks.refetchDrafts.mockReset()
         mocks.refetchPublished.mockReset()
@@ -535,6 +569,99 @@ describe("OrganizationEmailTemplateStudio", () => {
         expect(mocks.push).toHaveBeenCalledWith("/automation/email-templates")
     })
 
+    it("draws the whole email in the Edit tab, with no separate Preview tab", async () => {
+        mocks.state.draft = { ...draftFromPublished, body: "<p>Welcome</p>" }
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Edit", "HTML"])
+        expect(screen.getByLabelText("From")).toHaveValue(publishedTemplate.from_email)
+        expect(screen.getByText("Recipient")).toBeInTheDocument()
+        expect(screen.getByLabelText("Subject")).toHaveValue("Original subject")
+        // Org templates default to Card: the server frame gives the logo, signature, and footer.
+        await waitFor(() => {
+            expect(mocks.layoutFrame).toHaveBeenCalledWith({
+                scope: "org",
+                layout: expect.objectContaining({ kind: "card", show_logo: true }),
+            })
+        })
+        expect(await screen.findByRole("img", { name: "EWI Family Global" })).toBeInTheDocument()
+        expect(screen.getByTitle("Signature and unsubscribe footer")).toBeInTheDocument()
+        expect(screen.getByRole("radio", { name: /Card/ })).toBeChecked()
+        expect(emailDesignEditorMock.render).toHaveBeenLastCalledWith(
+            expect.objectContaining({ documentStyles: false }),
+        )
+    })
+
+    it("defaults personal templates to Plain with the sender's own address", async () => {
+        mocks.state.publishedTemplate = { ...publishedTemplate, scope: "personal" }
+        mocks.state.draft = { ...draftFromPublished, scope: "personal", body: "<p>Hi</p>" }
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" scope="personal" />)
+
+        expect(screen.getByText("owner@example.com")).toBeInTheDocument()
+        expect(screen.getByRole("radio", { name: /Plain/ })).toBeChecked()
+        await waitFor(() => {
+            expect(mocks.layoutFrame).toHaveBeenCalledWith({
+                scope: "personal",
+                layout: expect.objectContaining({ kind: "plain" }),
+            })
+        })
+        expect(emailDesignEditorMock.render).toHaveBeenLastCalledWith(
+            expect.objectContaining({ documentStyles: true }),
+        )
+    })
+
+    it("saves a layout change with the draft", async () => {
+        mocks.state.draft = { ...draftFromPublished, body: "<p>Welcome</p>" }
+        mocks.updateDraft.mockResolvedValue({ ...draftFromPublished, revision: 2 })
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+        fireEvent.click(screen.getByRole("radio", { name: /Letterhead/ }))
+        fireEvent.click(screen.getByRole("radio", { name: "Left" }))
+        fireEvent.click(screen.getByRole("button", { name: "Save draft" }))
+
+        await waitFor(() => {
+            expect(mocks.updateDraft).toHaveBeenCalledWith({
+                id: "draft-1",
+                data: {
+                    expected_revision: 1,
+                    layout: {
+                        kind: "letterhead",
+                        show_logo: true,
+                        logo_position: "left",
+                        accent_color: null,
+                        page_background: "#f4f4f5",
+                    },
+                },
+            })
+        })
+    })
+
+    it("keeps the body's own logo placement in the canvas", async () => {
+        mocks.state.draft = { ...draftFromPublished, body: '<img src="{{org_logo_url}}"><p>Hi</p>' }
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+
+        await waitFor(() => {
+            expect(mocks.layoutFrame).toHaveBeenCalledWith({
+                scope: "org",
+                layout: expect.objectContaining({ kind: "card", show_logo: false }),
+            })
+        })
+    })
+
+    it("offers a retry when the signature frame fails to load", async () => {
+        mocks.state.draft = { ...draftFromPublished, body: "<p>Welcome</p>" }
+        mocks.layoutFrame.mockRejectedValueOnce(new Error("down"))
+
+        render(<OrganizationEmailTemplateStudio templateId="template-1" />)
+
+        expect(await screen.findByText("Signature could not load.")).toBeInTheDocument()
+        fireEvent.click(screen.getByRole("button", { name: "Retry" }))
+        expect(await screen.findByTitle("Signature and unsubscribe footer")).toBeInTheDocument()
+    })
+
     it("opens a legacy body in the block editor without marking it changed", () => {
         mocks.state.draft = draftFromPublished
 
@@ -598,7 +725,7 @@ describe("OrganizationEmailTemplateStudio", () => {
     })
 
     it.each(["org", "personal"] as const)(
-        "previews unsaved %s content through the server composition",
+        "checks unsaved %s content through the server composition with variable names",
         async (scope) => {
             mocks.state.publishedTemplate = {
                 ...publishedTemplate,
@@ -613,54 +740,26 @@ describe("OrganizationEmailTemplateStudio", () => {
                 body: "<p>Welcome {{mystery}}</p>",
             }
             mocks.preview.mockResolvedValue({
-                subject: "Hello Jordan",
-                html: "<!doctype html><html><body><p>Welcome TEST_MYSTERY</p></body></html>",
+                subject: "Hello {{first_name}}",
+                html: "<!doctype html><html><body><p>Welcome {{mystery}}</p></body></html>",
                 unresolved_variables: ["mystery"],
             })
 
-            render(
-                <QueryClientProvider client={new QueryClient()}>
-                    <OrganizationEmailTemplateStudio templateId="template-1" scope={scope} />
-                </QueryClientProvider>,
-            )
-            fireEvent.click(screen.getByRole("tab", { name: "Preview" }))
+            render(<OrganizationEmailTemplateStudio templateId="template-1" scope={scope} />)
 
             await waitFor(() => {
                 expect(mocks.preview).toHaveBeenCalledWith({
                     subject: "Hello {{first_name}}",
                     body: "<p>Welcome {{mystery}}</p>",
+                    layout: null,
                     scope,
-                    variable_mode: "sample",
-                    surrogate_id: null,
+                    variable_mode: "names",
                 })
             })
-            expect(await screen.findByTitle("Desktop email preview")).toBeInTheDocument()
-            expect(screen.getByTitle("Mobile email preview")).toBeInTheDocument()
-            expect(screen.getAllByText("Hello Jordan")).toHaveLength(2)
-            expect(screen.getByText("Unknown: mystery")).toBeInTheDocument()
+            expect(await screen.findByText("Unknown: mystery")).toBeInTheDocument()
+            expect(screen.getByText("1 KB")).toBeInTheDocument()
         },
     )
-
-    it("offers record previews only to roles that can view surrogates", () => {
-        mocks.state.draft = draftFromPublished
-        const view = render(
-            <QueryClientProvider client={new QueryClient()}>
-                <OrganizationEmailTemplateStudio templateId="template-1" />
-            </QueryClientProvider>,
-        )
-        fireEvent.click(screen.getByRole("tab", { name: "Preview" }))
-        expect(screen.queryByRole("button", { name: "Record" })).not.toBeInTheDocument()
-        expect(screen.getByRole("button", { name: "Variable names" })).toBeInTheDocument()
-
-        mocks.state.permissions = ["manage_email_templates", "view_surrogates"]
-        view.rerender(
-            <QueryClientProvider client={new QueryClient()}>
-                <OrganizationEmailTemplateStudio templateId="template-1" />
-            </QueryClientProvider>,
-        )
-        fireEvent.click(screen.getByRole("button", { name: "Record" }))
-        expect(screen.getByRole("button", { name: "Choose a record" })).toBeInTheDocument()
-    })
 
     it("shows the stored send HTML", () => {
         mocks.state.draft = draftFromPublished

@@ -606,6 +606,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
     const canViewCompliance = isDeveloper || permissionSet.has("manage_compliance")
     const canViewAudit = isDeveloper || permissionSet.has("view_audit_log")
     const canViewIntegrations = isDeveloper || permissionSet.has("manage_integrations")
+    const canManageMessaging =
+        isDeveloper || (user?.role === "admin" && permissionSet.has("manage_integrations"))
     const canAccessPersonalIntegrations =
         user?.role === "intake_specialist" || user?.role === "case_manager"
     const canAccessIntegrations = canViewIntegrations || canAccessPersonalIntegrations
@@ -723,6 +725,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
         ...(!isNewPolicy || permissionSet.has("manage_automation") ? [{ title: "Workflows", url: "/automation", tab: null }] : []),
         ...(!isNewPolicy || permissionSet.has("view_campaigns") ? [{ title: "Campaigns", url: "/automation/campaigns" }] : []),
         ...(!isNewPolicy || permissionSet.has("view_email_templates") ? [{ title: "Email Templates", url: "/automation/email-templates" }] : []),
+        // The messaging APIs require an admin or developer with manage_integrations.
+        ...(canManageMessaging ? [{ title: "Message Templates", url: "/automation/message-templates" }] : []),
         // The forms API requires manage_forms under both policy versions.
         ...(canViewFormBuilder ? [{ title: "Form Builder", url: "/automation/forms" }] : []),
         ...(isNewPolicy && permissionSet.has("view_form_submissions") ? [{ title: "Form Submissions", url: "/automation/form-submissions" }] : []),

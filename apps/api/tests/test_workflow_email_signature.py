@@ -151,6 +151,72 @@ async def test_workflow_email_appends_personal_signature_for_personal_scope(
 
 
 @pytest.mark.asyncio
+async def test_personal_workflow_sends_an_org_template_in_the_org_default_layout(
+    db, test_org, test_user, monkeypatch
+):
+    """The template's scope picks the default layout; the workflow's picks the signature."""
+    from app.db.enums import JobType
+    from app.db.models import EmailLog, EmailTemplate, Job
+    from app.services import resend_transport, workflow_email_provider
+    from app.worker import process_workflow_email
+
+    template = EmailTemplate(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        name="Shared welcome",
+        subject="Hello",
+        body="<p>Body</p>",
+        scope="org",
+        owner_user_id=None,
+        is_active=True,
+    )
+    db.add(template)
+    db.commit()
+
+    monkeypatch.setattr(
+        workflow_email_provider,
+        "resolve_workflow_email_provider",
+        lambda **kwargs: (
+            "resend",
+            {"api_key_encrypted": "fake", "from_email": "no-reply@test.com"},
+        ),
+    )
+
+    async def fail_provider_io(**_kwargs):
+        raise AssertionError("workflow handler must only enqueue Resend email")
+
+    monkeypatch.setattr(resend_transport, "send_email", fail_provider_io)
+
+    job = Job(
+        id=uuid.uuid4(),
+        organization_id=test_org.id,
+        job_type=JobType.WORKFLOW_EMAIL.value,
+        payload={
+            "template_id": str(template.id),
+            "recipient_email": "recipient@test.com",
+            "variables": {},
+            "workflow_scope": "personal",
+            "workflow_owner_id": str(test_user.id),
+        },
+    )
+    db.add(job)
+    db.commit()
+
+    await process_workflow_email(db, job)
+
+    body = (
+        db.query(EmailLog)
+        .filter(EmailLog.organization_id == test_org.id)
+        .order_by(EmailLog.created_at.desc())
+        .first()
+        .body
+    )
+    assert 'bgcolor="#f4f4f5"' in body
+    assert test_user.display_name in body
+
+
+@pytest.mark.asyncio
 async def test_workflow_email_logs_surrogate_activity_and_audit_after_success_with_system_actor_fallback(
     db, test_org, test_user, monkeypatch
 ):

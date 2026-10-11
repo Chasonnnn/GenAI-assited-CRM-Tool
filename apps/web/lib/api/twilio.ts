@@ -202,6 +202,54 @@ export interface MessagingTemplateVersion {
     status: "draft" | "published" | "retired"
     is_enrollment_confirmation: boolean
     content_classification: "no_phi" | "phi"
+    published_at: string | null
+    created_at: string
+}
+
+export interface MessagingTemplateCreate {
+    name: string
+    purpose: TwilioMessagingPurpose
+    body: string
+    is_enrollment_confirmation: boolean
+}
+
+export interface MessagingTemplateDraftUpdate {
+    name?: string
+    body?: string
+    is_enrollment_confirmation?: boolean
+}
+
+export interface MessagingTemplateUse {
+    kind: "workflow" | "campaign"
+    id: string
+    name: string
+}
+
+export interface MessagingTemplateUsage {
+    template_key: string
+    uses: MessagingTemplateUse[]
+}
+
+export interface MessagingSmsVariable {
+    name: string
+    description: string
+    sample: string
+}
+
+export interface MessagingTestPhone {
+    id: string
+    label: string
+    phone_last4: string
+    verified_at: string | null
+    code_expires_at: string | null
+    stopped_purposes: TwilioMessagingPurpose[]
+    created_by_name: string | null
+    created_at: string
+}
+
+export interface MessagingTestSend {
+    id: string
+    provider_status: string | null
 }
 
 export function getTwilioSettings(): Promise<TwilioSettings> {
@@ -238,4 +286,70 @@ export function listMessagingTemplates(params?: {
     if (params?.status) query.set("status", params.status)
     const suffix = query.size ? `?${query.toString()}` : ""
     return api.get<MessagingTemplateVersion[]>(`/messaging/templates${suffix}`)
+}
+
+export function createMessagingTemplate(
+    template: MessagingTemplateCreate,
+): Promise<MessagingTemplateVersion> {
+    return api.post<MessagingTemplateVersion>("/messaging/templates", template)
+}
+
+/** Edit a draft version in place. */
+export function updateMessagingTemplateDraft(
+    templateId: string,
+    update: MessagingTemplateDraftUpdate,
+): Promise<MessagingTemplateVersion> {
+    return api.patch<MessagingTemplateVersion>(`/messaging/templates/${templateId}`, update)
+}
+
+/** Start the next draft version from the latest version of a template. */
+export function createMessagingTemplateVersion(
+    templateKey: string,
+    update: MessagingTemplateDraftUpdate,
+): Promise<MessagingTemplateVersion> {
+    return api.post<MessagingTemplateVersion>(`/messaging/templates/${templateKey}/versions`, update)
+}
+
+export function publishMessagingTemplate(templateId: string): Promise<MessagingTemplateVersion> {
+    return api.post<MessagingTemplateVersion>(`/messaging/templates/${templateId}/publish`)
+}
+
+export function listMessagingTemplateUsage(): Promise<MessagingTemplateUsage[]> {
+    return api.get<MessagingTemplateUsage[]>("/messaging/templates/usage")
+}
+
+export function listMessagingSmsVariables(): Promise<MessagingSmsVariable[]> {
+    return api.get<MessagingSmsVariable[]>("/messaging/template-variables")
+}
+
+export function sendMessagingTemplateTest(
+    templateId: string,
+    testPhoneId: string,
+): Promise<MessagingTestSend> {
+    return api.post<MessagingTestSend>(`/messaging/templates/${templateId}/test-sends`, {
+        test_phone_id: testPhoneId,
+    })
+}
+
+export function listMessagingTestPhones(): Promise<MessagingTestPhone[]> {
+    return api.get<MessagingTestPhone[]>("/messaging/test-phones")
+}
+
+/** Add a test phone, or text a new code to one that is not verified yet. */
+export function addMessagingTestPhone(request: {
+    label: string
+    phone: string
+}): Promise<MessagingTestPhone> {
+    return api.post<MessagingTestPhone>("/messaging/test-phones", request)
+}
+
+export function verifyMessagingTestPhone(
+    testPhoneId: string,
+    code: string,
+): Promise<MessagingTestPhone> {
+    return api.post<MessagingTestPhone>(`/messaging/test-phones/${testPhoneId}/verify`, { code })
+}
+
+export function removeMessagingTestPhone(testPhoneId: string): Promise<void> {
+    return api.delete<void>(`/messaging/test-phones/${testPhoneId}`)
 }

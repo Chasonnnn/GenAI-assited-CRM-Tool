@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import DOMPurify from "dompurify"
 
+import { EMAIL_BODY_STYLE } from "@/lib/email-design"
 import { cn } from "@/lib/utils"
 
 const PREVIEW_CSP =
@@ -12,13 +13,13 @@ function isDocument(html: string) {
     return /^\s*(<!doctype|<html[\s>])/i.test(html)
 }
 
-/** Sanitized email HTML in a script-free iframe document. */
+/** Sanitized email HTML in a script-free iframe document; fragments get the sent body style. */
 export function buildEmailFrameDocument(html: string): string {
     if (isDocument(html)) {
         return DOMPurify.sanitize(html, { WHOLE_DOCUMENT: true, FORBID_TAGS: ["form"] })
     }
     const body = DOMPurify.sanitize(html, { FORBID_TAGS: ["form"] })
-    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0">${body}</body></html>`
+    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PREVIEW_CSP}"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;${EMAIL_BODY_STYLE}">${body}</body></html>`
 }
 
 type EmailHtmlFrameProps = {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 
 vi.unmock('@tanstack/react-query')
 
@@ -66,7 +66,8 @@ describe('useCancelAppointment', () => {
         await act(async () => {
             await result.current.mutateAsync({ appointmentId: 'appt-123' })
         })
-        expect(result.current.data?.status).toBe('cancelled')
+        // React Query publishes mutation state on a later tick, outside act().
+        await waitFor(() => expect(result.current.data?.status).toBe('cancelled'))
         expect(toastErrorMock).toHaveBeenCalledTimes(1)
     })
 })

@@ -930,7 +930,7 @@ describe('Shared Intake Public Page', () => {
         })
     })
 
-    describe('SMS consent next to the phone field', () => {
+    describe('SMS consent in the review section', () => {
         const fullNameField = { key: 'full_name', label: 'Full Name', type: 'text', required: true }
         const homePhoneField = { key: 'phone', label: 'Home Phone', type: 'phone', required: false }
         const mobilePhoneField = { key: 'mobile_number', label: 'Mobile Phone', type: 'phone', required: false }
@@ -977,16 +977,21 @@ describe('Shared Intake Public Page', () => {
             fireEvent.click(screen.getByRole('button', { name: 'Submit Application' }))
         }
 
-        it('renders the SMS consent on the phone step directly after the mapped phone field', async () => {
+        it('renders the SMS consent in the review section after the accuracy agreement', async () => {
             getSharedPublicForm.mockResolvedValue(smsIntakeForm)
             render(<PublicIntakeFormClient slug="event-abc" />)
 
             const phoneInput = await screen.findByLabelText('Mobile Phone')
             const smsCheckbox = getSmsCheckbox()
-            expect(isBefore(screen.getByLabelText('Home Phone'), phoneInput)).toBe(true)
+            expect(screen.getByRole('region', { name: 'Review & submit' })).toContainElement(smsCheckbox)
+            expect(screen.getByRole('region', { name: 'Contact' })).not.toContainElement(smsCheckbox)
             expect(isBefore(phoneInput, smsCheckbox)).toBe(true)
-            expect(isBefore(smsCheckbox, screen.getByLabelText(/email/i))).toBe(true)
+            expect(isBefore(screen.getByLabelText(/email/i), smsCheckbox)).toBe(true)
+            expect(
+                isBefore(screen.getByRole('checkbox', { name: /information provided is accurate/i }), smsCheckbox),
+            ).toBe(true)
             expect(isBefore(smsCheckbox, screen.getByText(/you consent to intake screening/i))).toBe(true)
+            expect(screen.getAllByRole('checkbox', { name: /application and appointment texts/i })).toHaveLength(1)
             expect(smsCheckbox).not.toBeChecked()
 
             expect(screen.getByText(/application and appointment texts/i)).toHaveClass('text-sm', 'text-neutral-700')
@@ -997,28 +1002,6 @@ describe('Shared Intake Public Page', () => {
             expect(privacyLinks[0]).toHaveAttribute('href', 'https://example.com/privacy')
             expect(privacyLinks[0]).toHaveAttribute('target', '_blank')
             expect(screen.queryByRole('link', { name: 'SMS Terms' })).not.toBeInTheDocument()
-        })
-
-        it('renders the SMS consent after the phone field in a later section', async () => {
-            getSharedPublicForm.mockResolvedValue({
-                ...smsIntakeForm,
-                form_schema: {
-                    ...smsIntakeForm.form_schema,
-                    pages: [
-                        { title: 'About You', fields: [fullNameField] },
-                        { title: 'Contact', fields: [mobilePhoneField, emailField] },
-                    ],
-                },
-            })
-            render(<PublicIntakeFormClient slug="event-abc" />)
-
-            const phoneInput = await screen.findByLabelText('Mobile Phone')
-            const smsCheckbox = getSmsCheckbox()
-            expect(screen.getByRole('region', { name: 'About You' })).not.toContainElement(smsCheckbox)
-            expect(screen.getByRole('region', { name: 'Contact' })).toContainElement(smsCheckbox)
-            expect(isBefore(phoneInput, smsCheckbox)).toBe(true)
-            expect(isBefore(smsCheckbox, screen.getByLabelText(/email/i))).toBe(true)
-            expect(screen.getAllByRole('checkbox', { name: /application and appointment texts/i })).toHaveLength(1)
         })
 
         it('submits with SMS unchecked and no phone number', async () => {
@@ -1044,7 +1027,7 @@ describe('Shared Intake Public Page', () => {
             })
         })
 
-        it('shows an inline message and focuses the phone when SMS is checked without a phone number', async () => {
+        it('shows an inline message on the SMS consent when SMS is checked without a phone number', async () => {
             getSharedPublicForm.mockResolvedValue(smsIntakeForm)
             render(<PublicIntakeFormClient slug="event-abc" />)
             await screen.findByLabelText('Mobile Phone')
@@ -1058,7 +1041,7 @@ describe('Shared Intake Public Page', () => {
             expect(message).toHaveAttribute('role', 'alert')
             expect(smsCheckbox).toHaveAttribute('aria-invalid', 'true')
             expect(smsCheckbox).toHaveAccessibleDescription(message.textContent ?? '')
-            expect(screen.getByLabelText('Mobile Phone')).toHaveFocus()
+            expect(smsCheckbox).toHaveFocus()
             expect(toast.error).not.toHaveBeenCalled()
             expect(submitSharedPublicForm).not.toHaveBeenCalled()
             expect(screen.getByRole('link', { name: 'Contact, Needs attention' })).toBeInTheDocument()
@@ -1133,7 +1116,7 @@ describe('Shared Intake Public Page', () => {
             })
         })
 
-        it('moves checked SMS to the review section when conditional logic hides the phone field', async () => {
+        it('blocks checked SMS when conditional logic hides the phone field', async () => {
             getSharedPublicForm.mockResolvedValue({
                 ...smsIntakeForm,
                 form_schema: {
@@ -1197,7 +1180,7 @@ describe('Shared Intake Public Page', () => {
             })
         })
 
-        it('focuses the phone revealed by a later answer after SMS was checked in the review section', async () => {
+        it('blocks checked SMS when a later answer reveals an empty phone field', async () => {
             getSharedPublicForm.mockResolvedValue({
                 ...smsIntakeForm,
                 form_schema: {
@@ -1232,14 +1215,14 @@ describe('Shared Intake Public Page', () => {
             fireEvent.change(screen.getByLabelText('Contact Preference'), { target: { value: 'Text' } })
 
             const smsCheckbox = getSmsCheckbox()
-            expect(screen.getByRole('region', { name: 'Contact' })).toContainElement(smsCheckbox)
+            expect(screen.getByRole('region', { name: 'Review & submit' })).toContainElement(smsCheckbox)
             expect(smsCheckbox).toBeChecked()
             submitReviewStep()
 
             const message = await screen.findByText('Enter your phone number to receive text messages.')
             expect(message).toHaveAttribute('role', 'alert')
             expect(getSmsCheckbox()).toHaveAttribute('aria-invalid', 'true')
-            expect(screen.getByLabelText('Mobile Phone')).toHaveFocus()
+            expect(getSmsCheckbox()).toHaveFocus()
             expect(submitSharedPublicForm).not.toHaveBeenCalled()
         })
 

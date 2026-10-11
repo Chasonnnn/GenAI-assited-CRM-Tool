@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+from typing import TYPE_CHECKING
+
 from app.core.config import settings
 from app.services import attachment_service, storage_url_service
+
+if TYPE_CHECKING:
+    from app.db.models import Organization
 
 MEDIA_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24  # 24 hours
 LOCAL_LOGO_URL_PREFIX = "/settings/organization/signature/logo/local/"
@@ -43,3 +49,16 @@ def get_signed_media_url(url: str | None, expires_in_seconds: int | None = None)
     expires_in = expires_in_seconds or MEDIA_SIGNED_URL_TTL_SECONDS
     signed_url = attachment_service.generate_signed_url(storage_key, expires_in)
     return signed_url or None
+
+
+def email_logo_url(org: Organization | None) -> str:
+    """Return a logo URL for sent email that never expires.
+
+    A presigned storage URL expires after a day, and mail clients load images when the
+    recipient opens the message. The public route signs a fresh URL on each request.
+    The version changes when the logo changes, so image proxies do not serve a stale copy.
+    """
+    if not org or not org.signature_logo_url:
+        return ""
+    version = hashlib.sha256(org.signature_logo_url.encode()).hexdigest()[:12]
+    return _prefix_api_base(f"/forms/public/{org.id}/signature-logo?v={version}")

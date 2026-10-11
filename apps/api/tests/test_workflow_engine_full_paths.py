@@ -890,6 +890,7 @@ def test_action_family_helpers(monkeypatch):
         owner_user_id=None,
         system_key=None,
         is_active=True,
+        layout=None,
     )
 
     class _TemplateQuery:

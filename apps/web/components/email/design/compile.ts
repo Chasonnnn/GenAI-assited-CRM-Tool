@@ -4,6 +4,7 @@ import { composeReactEmail, isDocumentVisuallyEmpty } from "@react-email/editor/
 import { createEmailDesignExtensions } from "@/components/email/design/extensions"
 import type { EmailBodyDesign } from "@/lib/api/email-templates"
 import {
+    EMAIL_BODY_STYLE,
     extractEmailBodyFragment,
     soleHtmlBlock,
     type EmailBodyValue,
@@ -35,7 +36,7 @@ function containerChildren(design: JSONContent): JSONContent[] {
     )
 }
 
-/** Keep browser defaults explicit so the editor theme does not restyle imported HTML. */
+/** Keep the sent text style explicit so the editor theme does not restyle imported HTML. */
 function prepareHtmlForConversion(html: string) {
     const document = new DOMParser().parseFromString(html, "text/html")
     const warnings: string[] = []
@@ -90,7 +91,7 @@ function prepareHtmlForConversion(html: string) {
         if (href) img.setAttribute("href", href)
     }
     const wrapper = document.createElement("div")
-    wrapper.setAttribute("style", `font-family:Times New Roman,serif;font-size:16px;line-height:normal;color:#000000;${document.body.getAttribute("style") ?? ""}`)
+    wrapper.setAttribute("style", `${EMAIL_BODY_STYLE}${document.body.getAttribute("style") ?? ""}`)
     wrapper.append(...Array.from(document.body.childNodes))
     return { html: wrapper.outerHTML, warnings, hasImages: wrapper.querySelector("img") !== null }
 }

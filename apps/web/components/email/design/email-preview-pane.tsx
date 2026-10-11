@@ -44,7 +44,7 @@ const VIEWPORT_LABELS: Record<Viewport, string> = {
 }
 
 // Gmail clips messages larger than this and hides the rest behind a link.
-const GMAIL_CLIP_BYTES = 102 * 1024
+export const GMAIL_CLIP_BYTES = 102 * 1024
 
 type EmailPreviewPaneProps = {
     subject: string
@@ -59,7 +59,7 @@ function isSafeLink(href: string) {
     return /^(https:|mailto:|tel:|#|\{\{)/i.test(href.trim())
 }
 
-function previewChecks(preview: EmailTemplatePreview) {
+export function previewChecks(preview: EmailTemplatePreview) {
     const parsed = new DOMParser().parseFromString(preview.html, "text/html")
     const hrefs = Array.from(parsed.querySelectorAll("a[href]"), (link) => link.getAttribute("href") ?? "")
     return {

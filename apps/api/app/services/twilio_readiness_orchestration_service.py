@@ -13,9 +13,8 @@ from app.db.enums import JobScope, JobStatus, JobType
 from app.db.models import Job, Organization, TwilioRoute, TwilioSettings
 from app.services import job_service, twilio_readiness_service, twilio_settings_service
 
-# Half the send gate: one missed hourly pass still leaves a full refresh window
-# before dispatch starts deferring sends as `<purpose>_provider_evidence_stale`.
-REFRESH_EVIDENCE_AFTER = twilio_readiness_service.PROVIDER_EVIDENCE_MAX_AGE / 2
+# Keeps carrier registration status current; sends use the latest evidence at any age.
+REFRESH_EVIDENCE_AFTER = timedelta(hours=12)
 # A probe that failed is retried, but a broken tenant is never probed more often than this.
 FAILED_PROBE_RETRY_AFTER = timedelta(hours=1)
 # Probes run sequentially on the shared job queue; the rest wait for the next pass.

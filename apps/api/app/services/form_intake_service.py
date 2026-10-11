@@ -141,7 +141,7 @@ def get_messaging_consent_options(
     schema: FormSchema,
     mapping_snapshot: list[dict[str, Any]],
 ) -> MessagingConsentOptionsRead:
-    """Return only counsel-approved disclosures suitable for public checkboxes."""
+    """Return the configured disclosures with the legal details a public checkbox needs."""
     from app.db.models.messaging import TwilioSettings
 
     phone_field_key = resolve_phone_field_key(
@@ -156,7 +156,6 @@ def get_messaging_consent_options(
     )
     common_values = (
         messaging_settings
-        and messaging_settings.counsel_approved_at
         and (messaging_settings.legal_messaging_brand or "").strip()
         and (messaging_settings.sms_terms_url or "").strip()
         and (messaging_settings.privacy_policy_url or "").strip()

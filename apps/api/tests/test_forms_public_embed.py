@@ -884,12 +884,11 @@ async def test_public_sms_options_ignore_client_organization_id(
                     "privacy_policy_url",
                     "support_contact",
                     "expected_frequency",
-                    "counsel_approved_at",
                 )
             },
         )
     )
-    approved.counsel_approved_at = None
+    approved.legal_messaging_brand = None
     db.commit()
 
     response = await authed_client.get(

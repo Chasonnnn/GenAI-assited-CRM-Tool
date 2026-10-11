@@ -45,3 +45,8 @@
     font-size: 0.85em;
     padding: 0.05em 0.3em;
 }
+
+/* In a layout canvas the body sits inside the email frame, so it needs less empty height. */
+.email-design-sheet--framed .tiptap {
+    min-height: 8rem;
+}
