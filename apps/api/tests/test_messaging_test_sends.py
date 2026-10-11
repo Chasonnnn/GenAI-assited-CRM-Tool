@@ -29,6 +29,7 @@ from app.services import (
     twilio_readiness_service,
     twilio_settings_service,
     twilio_transport,
+    workflow_execution_authority,
 )
 from tests.test_messaging_content_api import _authed_client_for_role
 
@@ -527,6 +528,14 @@ async def test_publishing_moves_workflows_to_the_new_version_and_usage_lists_the
     )
     db.add_all([workflow, unrelated, promo])
     db.flush()
+    # An authorized org workflow keeps its grant when publishing repoints it.
+    workflow.execution_authority = {
+        "version": 2,
+        "organization_id": str(test_org.id),
+        "configuration_digest": workflow_execution_authority.configuration_digest(workflow),
+        "permissions": ["manage_automation", "send_sms"],
+        "authorized_by_user_id": str(test_user.id),
+    }
     db.add(
         Campaign(
             organization_id=test_org.id,
@@ -551,6 +560,8 @@ async def test_publishing_moves_workflows_to_the_new_version_and_usage_lists_the
 
     db.refresh(workflow)
     assert workflow.actions[0]["message_template_version_id"] == second["id"]
+    assert workflow_execution_authority.grant_is_current(workflow)
+    assert workflow.execution_authority["authorized_by_user_id"] == str(test_user.id)
     usage = {
         item["template_key"]: item["uses"]
         for item in (await authed_client.get("/messaging/templates/usage")).json()

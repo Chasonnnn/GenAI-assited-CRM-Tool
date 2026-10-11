@@ -509,7 +509,13 @@ def _point_workflows_at(
     family_ids: set[uuid.UUID],
     live_id: uuid.UUID,
 ) -> None:
-    """Workflows send a template's live version, so they follow each publish."""
+    """Workflows send a template's live version, so they follow each publish.
+
+    A new version of the same family needs no new rights, so a current execution grant
+    is renewed for the repointed actions instead of going stale and skipping the workflow.
+    """
+    from app.services import workflow_execution_authority
+
     ids = {str(version_id) for version_id in family_ids}
     workflows = db.execute(
         select(AutomationWorkflow)
@@ -518,7 +524,15 @@ def _point_workflows_at(
     ).scalars()
     for workflow in workflows:
         if _referenced_ids(workflow.actions) & ids:
+            grant_was_current = workflow_execution_authority.grant_is_current(workflow)
             workflow.actions = _repointed(workflow.actions, ids, str(live_id))
+            if grant_was_current:
+                workflow.execution_authority = {
+                    **workflow.execution_authority,
+                    "configuration_digest": workflow_execution_authority.configuration_digest(
+                        workflow
+                    ),
+                }
 
 
 @dataclass(frozen=True, slots=True)
