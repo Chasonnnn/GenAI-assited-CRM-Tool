@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.86](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.85...surrogacy-crm-platform-v0.91.86) (2026-10-11)
+
+
+### Features
+
+* email template layouts with an as-sent editor, and the Message Templates library ([#823](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/823)) ([7568350](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/7568350587fc2482c6b3c28cee3031efa449f043))
+
+
+### Bug Fixes
+
+* batch permission queries and preserve worker sweeps ([#819](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/819)) ([a996377](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/a99637772c53596c54897f82de64c1a40ee66684))
+* batch permission revokes and label workflow conditions ([#826](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/826)) ([dc1c125](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/dc1c1255d57b6bacdc715c13ad119b9a60ee001c))
+
+
+### Maintenance
+
+* agent environment fixes: local CI gates, review standards, test guards ([#815](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/815)) ([ff6f66d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/ff6f66d2cddfab57d9d8cc3ff4dfe8dee5ee7921))
+
 ## [0.91.85](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.84...surrogacy-crm-platform-v0.91.85) (2026-10-06)
 
 
