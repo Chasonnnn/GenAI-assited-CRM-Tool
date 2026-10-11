@@ -205,7 +205,7 @@ function WorkflowActionFields({
                         value={typeof action.template_id === "string" ? action.template_id : ""}
                         onValueChange={(value) => value && updateAction(index, { template_id: value })}
                     >
-                        <SelectTrigger id={fieldId("email-template")} className="w-full">
+                        <SelectTrigger id={fieldId("email-template")} aria-label="Email template" className="w-full">
                             <SelectValue placeholder="Select email template">
                                 {(value: string | null) => {
                                     if (!value) return "Select email template"
@@ -246,7 +246,7 @@ function WorkflowActionFields({
                             updateAction(index, { recipients: value, ...targets })
                         }}
                     >
-                        <SelectTrigger id={fieldId("email-recipient")} className="w-full">
+                        <SelectTrigger id={fieldId("email-recipient")} aria-label="Recipient" className="w-full">
                             <SelectValue placeholder="Select recipient">
                                 {(value: string | null) => {
                                     if (!value) return "Select recipient"
@@ -272,7 +272,7 @@ function WorkflowActionFields({
                             value={getEmailRecipientUserId(action)}
                             onValueChange={(value) => updateAction(index, { recipients: value ? [value] : [] })}
                         >
-                            <SelectTrigger id={fieldId("email-user")} className="w-full">
+                            <SelectTrigger id={fieldId("email-user")} aria-label="User" className="w-full">
                                 <SelectValue placeholder="Select user">
                                     {(value: string | null) => {
                                         if (!value) return "Select user"
@@ -297,7 +297,7 @@ function WorkflowActionFields({
                             value={typeof action.recipient_queue_id === "string" ? action.recipient_queue_id : ""}
                             onValueChange={(value) => value && updateAction(index, { recipient_queue_id: value })}
                         >
-                            <SelectTrigger id={fieldId("email-queue")} className="w-full">
+                            <SelectTrigger id={fieldId("email-queue")} aria-label="Queue" className="w-full">
                                 <SelectValue placeholder="Select queue">
                                     {(value: string | null) => {
                                         if (!value) return "Select queue"
@@ -321,7 +321,7 @@ function WorkflowActionFields({
                             value={typeof action.recipient_role === "string" ? action.recipient_role : ""}
                             onValueChange={(value) => value && updateAction(index, { recipient_role: value })}
                         >
-                            <SelectTrigger id={fieldId("email-role")} className="w-full">
+                            <SelectTrigger id={fieldId("email-role")} aria-label="Role" className="w-full">
                                 <SelectValue placeholder="Select role">
                                     {(value: string | null) => {
                                         if (!value) return "Select role"
@@ -451,7 +451,7 @@ function WorkflowActionFields({
                         value={typeof action.assignee === "string" ? action.assignee : "owner"}
                         onValueChange={(value) => value && updateAction(index, { assignee: value })}
                     >
-                        <SelectTrigger id={fieldId("task-assignee")} className="w-full">
+                        <SelectTrigger id={fieldId("task-assignee")} aria-label="Task assignee" className="w-full">
                             <SelectValue placeholder="Assignee" />
                         </SelectTrigger>
                         <SelectContent>
@@ -509,7 +509,7 @@ function WorkflowActionFields({
                             updateAction(index, { recipients: [value] })
                         }}
                     >
-                        <SelectTrigger id={fieldId("notification-recipients")} className="w-full">
+                        <SelectTrigger id={fieldId("notification-recipients")} aria-label="Notification recipients" className="w-full">
                             <SelectValue placeholder="Recipients">
                                 {(value: string | null) => {
                                     if (!value) return "Recipients"
@@ -625,7 +625,7 @@ function WorkflowActionFields({
                                 value={typeof action.value === "boolean" ? String(action.value) : ""}
                                 onValueChange={(value) => updateAction(index, { value: value === "true" })}
                             >
-                                <SelectTrigger id={fieldId("update-value")} className="w-full">
+                                <SelectTrigger id={fieldId("update-value")} aria-label={`Priority value ${index + 1}`} className="w-full">
                                     <SelectValue placeholder="Select priority" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -655,7 +655,7 @@ function WorkflowActionFields({
                                 value={typeof action.value === "string" ? action.value : ""}
                                 onValueChange={(value) => value && updateAction(index, { value })}
                             >
-                                <SelectTrigger id={fieldId("update-value")} className="w-full">
+                                <SelectTrigger id={fieldId("update-value")} aria-label={`Contact status value ${index + 1}`} className="w-full">
                                     <SelectValue placeholder="Select contact status" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -671,7 +671,7 @@ function WorkflowActionFields({
                                 value={typeof action.value === "string" ? action.value : ""}
                                 onValueChange={(value) => value && updateAction(index, { value })}
                             >
-                                <SelectTrigger id={fieldId("update-value")} className="w-full">
+                                <SelectTrigger id={fieldId("update-value")} aria-label={`Owner type value ${index + 1}`} className="w-full">
                                     <SelectValue placeholder="Select owner type" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -684,7 +684,7 @@ function WorkflowActionFields({
                                 value={typeof action.value === "string" ? action.value : ""}
                                 onValueChange={(value) => value && updateAction(index, { value })}
                             >
-                                <SelectTrigger id={fieldId("update-value")} className="w-full">
+                                <SelectTrigger id={fieldId("update-value")} aria-label={`Owner value ${index + 1}`} className="w-full">
                                     <SelectValue placeholder="Select owner" />
                                 </SelectTrigger>
                                 <SelectContent>

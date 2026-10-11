@@ -485,6 +485,7 @@ export function ConditionValueInput({
                 value=""
                 disabled
                 placeholder="No value needed"
+                aria-label="Condition value"
             />
         )
     }
@@ -506,6 +507,7 @@ export function ConditionValueInput({
                 className="flex-1"
                 value={typeof condition.value === "number" ? condition.value : ""}
                 onChange={(event) => onChange(Number(event.target.value))}
+                aria-label="Condition value"
             />
         )
     }
@@ -517,6 +519,7 @@ export function ConditionValueInput({
                 className="flex-1"
                 value={typeof condition.value === "string" ? condition.value : ""}
                 onChange={(event) => onChange(event.target.value)}
+                aria-label="Condition value"
             />
         )
     }
@@ -574,6 +577,7 @@ export function ConditionValueInput({
             className="flex-1"
             value={inputValue}
             onChange={(event) => onChange(event.target.value)}
+            aria-label="Condition value"
         />
     )
 }
