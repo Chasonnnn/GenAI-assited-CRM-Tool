@@ -1502,6 +1502,7 @@ function WorkflowTemplateConditionRow({
                         </SelectContent>
                     </Select>
                     <ConditionValueInput
+                        ariaLabel={`Condition ${index + 1} value`}
                         condition={condition}
                         options={getConditionOptions(condition.field)}
                         onChange={(value) => updateCondition(index, { value })}

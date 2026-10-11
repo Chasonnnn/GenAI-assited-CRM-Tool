@@ -12,6 +12,7 @@ import json
 from datetime import UTC, datetime
 from uuid import UUID
 
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.core.permission_resolution import MATCH_ACTION_PERMISSIONS, resolve_effective_permissions
@@ -458,17 +459,23 @@ def activate(
                 if item_type == "workflow":
                     completions.extend(ended)
     _apply_role_changes(db, org_id, reviewed.role_permissions)
-    for resolution in changes.revoke_resolutions:
-        row = (
-            db.query(UserPermissionOverride)
-            .filter(
-                UserPermissionOverride.organization_id == org_id,
-                UserPermissionOverride.id == resolution.override_id,
-                UserPermissionOverride.override_type == "revoke",
+    if changes.revoke_resolutions:
+        revoke_ids = {resolution.override_id for resolution in changes.revoke_resolutions}
+        deleted_ids = set(
+            db.scalars(
+                delete(UserPermissionOverride)
+                .where(
+                    UserPermissionOverride.organization_id == org_id,
+                    UserPermissionOverride.id.in_(revoke_ids),
+                    UserPermissionOverride.override_type == "revoke",
+                )
+                .returning(UserPermissionOverride.id)
             )
-            .one()
         )
-        db.delete(row)
+        if deleted_ids != revoke_ids:
+            raise PermissionPolicyConflict(
+                "Permissions changed; review a fresh preview before activation"
+            )
     db.flush()
     legacy_grants = (
         db.query(UserPermissionOverride)

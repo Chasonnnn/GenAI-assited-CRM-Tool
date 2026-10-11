@@ -306,6 +306,124 @@ def test_explicit_revoke_removal_displays_access_gain(db, test_org, test_user, r
     assert db.get(UserPermissionOverride, revoke.id) is None
 
 
+def test_activation_batches_revoke_removal_and_preserves_grants_and_other_tenants(
+    db, test_org, test_user, ready_review
+):
+    from sqlalchemy import event
+
+    members = [add_member(db, test_org.id)[0] for _ in range(4)]
+    revokes = [
+        UserPermissionOverride(
+            organization_id=test_org.id,
+            user_id=member.id,
+            permission="edit_surrogates",
+            override_type="revoke",
+        )
+        for member in members
+    ]
+    other_org = Organization(name="Other revoke tenant", slug=f"revoke-{uuid.uuid4().hex}")
+    db.add(other_org)
+    db.flush()
+    grant = UserPermissionOverride(
+        organization_id=test_org.id,
+        user_id=members[0].id,
+        permission="view_reports",
+        override_type="grant",
+    )
+    other_revoke = UserPermissionOverride(
+        organization_id=other_org.id,
+        user_id=members[0].id,
+        permission="edit_surrogates",
+        override_type="revoke",
+    )
+    db.add_all([*revokes, grant, other_revoke])
+    db.flush()
+    changes = PermissionPolicyChanges(
+        revoke_resolutions=[
+            RevokeResolution(override_id=row.id, action="remove") for row in revokes
+        ]
+    )
+    reviewed = policy_service.preview(db, test_org.id, changes)
+    statements = []
+
+    def record_statement(_conn, _cursor, statement, _parameters, _context, _many):
+        if "FROM user_permission_overrides" in statement:
+            statements.append(statement)
+
+    connection = db.connection()
+    event.listen(connection, "before_cursor_execute", record_statement)
+    try:
+        result = policy_service.activate(db, test_org.id, test_user.id, changes, reviewed.digest)
+    finally:
+        event.remove(connection, "before_cursor_execute", record_statement)
+
+    assert result.version == 2
+    reads = [sql for sql in statements if sql.lstrip().upper().startswith("SELECT")]
+    deletes = [sql for sql in statements if sql.lstrip().upper().startswith("DELETE")]
+    assert len(reads) <= 2  # Internal preview and legacy grants, regardless of revoke count.
+    assert len(deletes) == 1
+    for revoke in revokes:
+        assert db.get(UserPermissionOverride, revoke.id) is None
+    db.refresh(grant)
+    db.refresh(other_revoke)
+    assert grant.override_type == "grant"
+    assert other_revoke.override_type == "revoke"
+
+
+@pytest.mark.parametrize("change", ["delete", "grant"])
+def test_activation_rejects_revoke_changed_after_internal_review(
+    db, test_org, test_user, ready_review, monkeypatch, change
+):
+    member, _ = add_member(db, test_org.id)
+    revoke = UserPermissionOverride(
+        organization_id=test_org.id,
+        user_id=member.id,
+        permission="edit_surrogates",
+        override_type="revoke",
+    )
+    remaining_revoke = UserPermissionOverride(
+        organization_id=test_org.id,
+        user_id=member.id,
+        permission="view_reports",
+        override_type="revoke",
+    )
+    db.add_all([revoke, remaining_revoke])
+    db.flush()
+    changes = PermissionPolicyChanges(
+        revoke_resolutions=[
+            RevokeResolution(override_id=revoke.id, action="deny_for_role"),
+            RevokeResolution(override_id=remaining_revoke.id, action="remove"),
+        ]
+    )
+    reviewed = policy_service.preview(db, test_org.id, changes)
+    original_apply = policy_service._apply_role_changes
+
+    def change_revoke_after_review(db, org_id, roles):
+        original_apply(db, org_id, roles)
+        if change == "delete":
+            db.delete(revoke)
+        else:
+            revoke.override_type = "grant"
+        db.flush()
+
+    monkeypatch.setattr(policy_service, "_apply_role_changes", change_revoke_after_review)
+    with (
+        pytest.raises(policy_service.PermissionPolicyConflict, match="fresh preview"),
+        db.begin_nested(),
+    ):
+        policy_service.activate(db, test_org.id, test_user.id, changes, reviewed.digest)
+
+    assert policy_service.get_version(db, test_org.id) == 1
+    assert db.get(UserPermissionOverride, revoke.id).override_type == "revoke"
+    assert db.get(UserPermissionOverride, remaining_revoke.id).override_type == "revoke"
+    assert not db.query(RolePermission).filter_by(organization_id=test_org.id).count()
+    assert (
+        not db.query(AuditLog)
+        .filter_by(organization_id=test_org.id, target_type="permission_policy")
+        .count()
+    )
+
+
 @pytest.mark.parametrize("changed", ["role", "member", "scope", "execution", "pool", "owner"])
 def test_activation_rejects_state_changed_after_preview(
     db, test_org, test_user, ready_review, monkeypatch, changed
