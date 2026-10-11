@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -242,8 +242,20 @@ def _florida_subject_cap_opens_at(
 
     The Florida Telephone Solicitation Act (Fla. Stat. 501.059) allows 3 sales texts on
     the same subject per 24 hours. One template family is one subject.
+
+    A sibling attempt still in progress counts only when it was claimed before this one
+    (claim time, then delivery id), so a batch claimed together sends its first three
+    instead of every delivery seeing the others and deferring.
     """
     window_start = now - timedelta(hours=24)
+    current = _current_attempt(db, delivery)
+    claimed_first = or_(
+        MessageDeliveryAttempt.started_at < current.started_at,
+        and_(
+            MessageDeliveryAttempt.started_at == current.started_at,
+            MessageDeliveryAttempt.delivery_id < delivery.id,
+        ),
+    )
     sent = (
         select(MessageDeliveryAttempt.started_at)
         .join(
@@ -256,7 +268,10 @@ def _florida_subject_cap_opens_at(
             MessageDelivery.contact_id == delivery.contact_id,
             MessageDelivery.purpose == "promotional",
             MessageDelivery.id != delivery.id,
-            MessageDeliveryAttempt.outcome.in_(("succeeded", "in_progress", "ambiguous")),
+            or_(
+                MessageDeliveryAttempt.outcome.in_(("succeeded", "ambiguous")),
+                and_(MessageDeliveryAttempt.outcome == "in_progress", claimed_first),
+            ),
             MessageDeliveryAttempt.started_at > window_start,
         )
     )

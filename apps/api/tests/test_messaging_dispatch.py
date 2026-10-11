@@ -707,3 +707,38 @@ def test_florida_allows_three_promotional_texts_on_one_subject_per_day(
     else:
         assert result == "submitted"
         assert len(sent) == 1
+
+
+def test_florida_cap_lets_three_of_four_concurrent_claims_send(db, test_org, monkeypatch) -> None:
+    """Claimed siblings still in progress count only when they were claimed first."""
+    from app.services import messaging_delivery_service, messaging_dispatch_service
+
+    first = _ready_claim(db, test_org, monkeypatch, purpose="promotional")
+    for index in range(3):
+        messaging_delivery_service.materialize_delivery(
+            db,
+            organization_id=test_org.id,
+            contact_id=first.contact_id,
+            purpose="promotional",
+            body=f"EWI Surrogacy info session {index}. Reply STOP to opt out.",
+            idempotency_key=f"florida-batch-{index}",
+            source_type="workflow",
+            source_id=None,
+            template_version_id=None,
+            media_asset_ids=[],
+            is_enrollment_confirmation=False,
+        )
+    # One batch claims the other three; every claim is in progress before any sends.
+    batch = messaging_delivery_service.claim_due_deliveries(db, worker_id="test-worker", limit=3)
+    assert len(batch) == 3
+
+    now = datetime(2026, 7, 31, 18, 0, tzinfo=UTC)
+    opens_at = {
+        delivery.id: messaging_dispatch_service._florida_subject_cap_opens_at(db, delivery, now=now)
+        for delivery in [first, *batch]
+    }
+
+    blocked = [delivery_id for delivery_id, value in opens_at.items() if value is not None]
+    # The first claim and the batch's two lowest ids send; the last by id waits a day.
+    assert blocked == [max(item.id for item in batch)]
+    assert opens_at[blocked[0]] > now + timedelta(hours=23)
