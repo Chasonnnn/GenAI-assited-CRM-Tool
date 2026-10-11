@@ -506,3 +506,57 @@ def test_text_bodies_are_not_html_escaped():
         )
         == "Hi Ana & O'Brien from <EWI>"
     )
+
+
+async def test_test_phone_changes_wait_for_the_routers_audit_commit(
+    authed_client, db, test_org, test_user, sent, monkeypatch
+):
+    """Successful service calls leave the commit to the router, which writes the audit first."""
+    _ready_route(db, test_org.id)
+    template = await _draft(authed_client)
+    commits: list[str] = []
+    real_commit = db.commit
+
+    def service_call(name, call):
+        # A commit flushes; the stand-in records the call and keeps that effect.
+        monkeypatch.setattr(db, "commit", lambda: commits.append(name) or db.flush())
+        try:
+            return call()
+        finally:
+            monkeypatch.setattr(db, "commit", real_commit)
+            real_commit()
+
+    added = service_call(
+        "add",
+        lambda: messaging_test_send_service.add_test_phone(
+            db, organization_id=test_org.id, user_id=test_user.id, label="Desk", phone=TEST_PHONE
+        ),
+    )
+    phone_id = added.phone.id
+    service_call(
+        "verify",
+        lambda: messaging_test_send_service.verify_test_phone(
+            db, organization_id=test_org.id, test_phone_id=phone_id, code=_code_from(sent[-1])
+        ),
+    )
+    service_call(
+        "send",
+        lambda: messaging_test_send_service.send_template_test(
+            db,
+            organization_id=test_org.id,
+            user_id=test_user.id,
+            template_id=uuid.UUID(template["id"]),
+            test_phone_id=phone_id,
+        ),
+    )
+    service_call(
+        "remove",
+        lambda: messaging_test_send_service.remove_test_phone(
+            db, organization_id=test_org.id, test_phone_id=phone_id
+        ),
+    )
+
+    assert commits == []
+    assert db.get(MessagingTestPhone, phone_id) is None
+    kinds = sorted(db.execute(select(MessagingTestSend.kind)).scalars())
+    assert kinds == ["template_test", "verification_code"]

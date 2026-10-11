@@ -3,6 +3,9 @@
 A test text goes only to a phone whose holder entered the code it received, so it needs no
 recipient consent record, quiet hours, or opt-in confirmation first. A STOP from that phone
 still blocks it, as it blocks every other text.
+
+Successful changes are flushed, not committed: the router commits them together with their
+audit event. Failures that must persist (a wrong code try, a text Twilio rejected) commit here.
 """
 
 from __future__ import annotations
@@ -326,7 +329,7 @@ def add_test_phone(
         template_id=None,
         sent_by_user_id=user_id,
     )
-    db.commit()
+    db.flush()
     db.refresh(test_phone)
     return _view(db, test_phone)
 
@@ -357,14 +360,14 @@ def verify_test_phone(
     test_phone.verified_at = now
     test_phone.code_hash = None
     test_phone.code_expires_at = None
-    db.commit()
+    db.flush()
     db.refresh(test_phone)
     return _view(db, test_phone)
 
 
 def remove_test_phone(db: Session, *, organization_id: uuid.UUID, test_phone_id: uuid.UUID) -> None:
     db.delete(_get_phone(db, organization_id, test_phone_id))
-    db.commit()
+    db.flush()
 
 
 def send_template_test(
@@ -408,7 +411,6 @@ def send_template_test(
         template_id=template.id,
         sent_by_user_id=user_id,
     )
-    db.commit()
     db.refresh(test_send)
     return test_send
 
