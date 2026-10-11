@@ -1,5 +1,5 @@
 import { createRef } from "react"
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeAll, describe, expect, it, vi } from "vitest"
 
 import {
@@ -36,6 +36,38 @@ async function settle() {
 }
 
 describe("EmailDesignEditor", () => {
+    it("draws the body inside a given canvas and shows the panel in the inspector column", async () => {
+        render(
+            <EmailDesignEditor
+                initialValue={{ body: "<p>Hi</p>", bodyDesign: DESIGN }}
+                onChange={vi.fn()}
+                variables={[]}
+                fields={<p>Fields</p>}
+                canvas={(body) => <section aria-label="Email canvas">{body}</section>}
+                panel={<p>Layout panel</p>}
+            />,
+        )
+
+        const canvas = screen.getByRole("region", { name: "Email canvas" })
+        expect(await within(canvas).findByText("{{first_name}}")).toBeInTheDocument()
+        expect(screen.getByText("Layout panel")).toBeInTheDocument()
+        expect(screen.queryByText("Fields")).not.toBeInTheDocument()
+    })
+
+    it("shows the fields above a plain sheet without a canvas", async () => {
+        render(
+            <EmailDesignEditor
+                initialValue={{ body: "<p>Hi</p>", bodyDesign: DESIGN }}
+                onChange={vi.fn()}
+                variables={[]}
+                fields={<p>Fields</p>}
+            />,
+        )
+
+        expect(await screen.findByText("{{first_name}}")).toBeInTheDocument()
+        expect(screen.getByText("Fields")).toBeInTheDocument()
+    })
+
     it("opens a legacy body as an HTML block without reporting a change", async () => {
         const { onChange } = renderEditor({ body: "<p>Legacy {{first_name}}</p>", bodyDesign: null })
 
@@ -110,7 +142,8 @@ describe("EmailDesignEditor", () => {
         expect(greeting?.style.fontSize).toBe("inherit")
         expect(greeting?.style.lineHeight).toBe("inherit")
         expect(greeting?.style.paddingTop).toBe("0px")
-        expect(greeting?.parentElement?.style.fontFamily).toContain("Times New Roman")
+        expect(greeting?.parentElement?.style.fontFamily).toContain("sans-serif")
+        expect(greeting?.parentElement?.style.lineHeight).toBe("24px")
         expect(previewDoc.querySelector('a[href="https://example.com/form"]')?.textContent).toBe("Application")
         expect(Array.from(previewDoc.querySelectorAll("p")).find((p) => p.textContent?.startsWith("Follow up"))?.getAttribute("style")).toContain("margin-top:24px")
 

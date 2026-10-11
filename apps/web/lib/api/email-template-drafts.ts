@@ -7,6 +7,7 @@
 import api from '../api'
 import type {
     EmailBodyDesign,
+    EmailLayout,
     EmailTemplate,
     EmailTemplateTestSendRequest,
     EmailTemplateTestSendResponse,
@@ -28,6 +29,7 @@ export interface EmailTemplateDraft {
     from_email: string | null
     body: string
     body_design?: EmailBodyDesign | null
+    layout?: EmailLayout | null
     is_active: boolean
     category: string | null
     base_version: number
@@ -46,6 +48,7 @@ export interface EmailTemplateDraftCreate {
     from_email?: string | null
     body: string
     body_design?: EmailBodyDesign | null
+    layout?: EmailLayout | null
     scope?: EmailTemplateDraftScope
 }
 
@@ -55,6 +58,7 @@ export interface EmailTemplateDraftUpdate {
     from_email?: string | null
     body?: string
     body_design?: EmailBodyDesign | null
+    layout?: EmailLayout | null
     is_active?: boolean
     expected_revision: number
 }
