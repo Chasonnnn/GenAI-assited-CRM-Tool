@@ -242,8 +242,8 @@ def test_first_message_in_consent_epoch_requires_enrollment_confirmation(db, tes
         )
 
 
-def test_start_keyword_restore_counts_as_the_enrollment_confirmation(db, test_org) -> None:
-    from app.services import messaging_consent_service, messaging_delivery_service
+def _stop_then_restore(db, test_org, *, source, evidence_metadata, recorded_by_user_id=None):
+    from app.services import messaging_consent_service
 
     consent = _consented_contact(db, test_org)
     messaging_consent_service.record_global_stop(
@@ -263,17 +263,23 @@ def test_start_keyword_restore_counts_as_the_enrollment_confirmation(db, test_or
         phone="+14155550110",
         purpose="operational",
         instruction_text="START",
-        source="twilio_inbound",
+        source=source,
         source_reference="SM-start-restore",
         occurred_at=datetime(2026, 7, 31, 12, 2, tzinfo=UTC),
         idempotency_key="SM-start-restore",
-        evidence_metadata={},
+        evidence_metadata=evidence_metadata,
+        recorded_by_user_id=recorded_by_user_id,
     )
+    return consent
 
-    delivery = messaging_delivery_service.materialize_delivery(
+
+def _ordinary_delivery(db, test_org, contact_id):
+    from app.services import messaging_delivery_service
+
+    return messaging_delivery_service.materialize_delivery(
         db,
         organization_id=test_org.id,
-        contact_id=consent.contact_id,
+        contact_id=contact_id,
         purpose="operational",
         body="We received your application.",
         idempotency_key="workflow:application-received:after-start",
@@ -284,7 +290,46 @@ def test_start_keyword_restore_counts_as_the_enrollment_confirmation(db, test_or
         is_enrollment_confirmation=False,
     )
 
+
+def test_start_keyword_restore_counts_as_the_enrollment_confirmation(db, test_org) -> None:
+    # The signed webhook records Twilio's START with its Advanced Opt-Out type.
+    consent = _stop_then_restore(
+        db,
+        test_org,
+        source="twilio_inbound",
+        evidence_metadata={"route_purpose": "operational", "advanced_opt_out_type": "START"},
+    )
+
+    delivery = _ordinary_delivery(db, test_org, consent.contact_id)
+
     assert delivery.is_enrollment_confirmation is False
+
+
+@pytest.mark.parametrize(
+    ("source", "evidence_metadata", "staff_recorded"),
+    [
+        # Staff-recorded START: no Twilio confirmation reply went out.
+        ("twilio_inbound", {"advanced_opt_out_type": "START"}, True),
+        ("phone_call", {"advanced_opt_out_type": "START"}, False),
+        # An inbound restore Twilio did not flag as START gets no Twilio reply.
+        ("twilio_inbound", {"advanced_opt_out_type": None}, False),
+    ],
+)
+def test_restore_without_twilio_start_reply_still_needs_a_confirmation(
+    db, test_org, test_user, source, evidence_metadata, staff_recorded
+) -> None:
+    from app.services import messaging_delivery_service
+
+    consent = _stop_then_restore(
+        db,
+        test_org,
+        source=source,
+        evidence_metadata=evidence_metadata,
+        recorded_by_user_id=test_user.id if staff_recorded else None,
+    )
+
+    with pytest.raises(messaging_delivery_service.MessagingEnrollmentRequired):
+        _ordinary_delivery(db, test_org, consent.contact_id)
 
 
 def test_atomic_pre_send_recheck_blocks_delivery_after_stop(db, test_org) -> None:

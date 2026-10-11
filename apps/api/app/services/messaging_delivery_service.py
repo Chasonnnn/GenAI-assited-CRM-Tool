@@ -419,15 +419,21 @@ def materialize_delivery(
             MessageDelivery.status.notin_(("failed", "cancelled")),
         )
     ).scalar_one_or_none()
-    # A START/UNSTOP keyword restore was already confirmed by Twilio's opt-in reply.
+    # Twilio's Advanced Opt-Out answers a START with its opt-in confirmation reply. Only
+    # the signed webhook's record of that keyword counts, not a staff-recorded restore.
     keyword_restore = (
         db.execute(
-            select(MessagingConsentEvidence.action).where(
+            select(MessagingConsentEvidence.id).where(
                 MessagingConsentEvidence.organization_id == organization_id,
                 MessagingConsentEvidence.id == state.latest_evidence_id,
+                MessagingConsentEvidence.action == "restore",
+                MessagingConsentEvidence.source == "twilio_inbound",
+                MessagingConsentEvidence.recorded_by_user_id.is_(None),
+                MessagingConsentEvidence.evidence_metadata["advanced_opt_out_type"].astext
+                == "START",
             )
         ).scalar_one_or_none()
-        == "restore"
+        is not None
     )
     if prior_confirmation is None and not keyword_restore and not is_enrollment_confirmation:
         raise MessagingEnrollmentRequired(
