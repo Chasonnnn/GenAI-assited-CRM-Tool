@@ -169,15 +169,16 @@ def _get_sample_data(org: Organization) -> dict:
     org_social_links = _parse_org_social_links(org.signature_social_links)
 
     return {
-        # Org branding (all HTML-escaped)
-        "logo_url": escape_text(media_service.email_logo_url(org)),
+        # Org branding; _render_from_data escapes it through _get_base_data.
+        "org_id": org.id,
+        "logo_url": org.signature_logo_url,
         "primary_color": primary_color,
-        "company_name": escape_text(org.signature_company_name or org.name),
-        "address": escape_text(org.signature_address),
-        "org_phone": escape_text(org.signature_phone),
-        "website": validate_url(org.signature_website),
+        "company_name": org.signature_company_name or org.name,
+        "address": org.signature_address,
+        "org_phone": org.signature_phone,
+        "website": org.signature_website,
         "org_social_links": org_social_links,
-        "disclaimer": escape_text(org.signature_disclaimer),
+        "disclaimer": org.signature_disclaimer,
         # Sample user profile (not real admin data) - same keys as _get_base_data()
         "name": "Jane Doe",
         "email": "jane.doe@example.com",
@@ -200,6 +201,7 @@ def _get_org_only_data(org: Organization) -> dict:
     Uses raw org values so renderers can apply consistent escaping/validation.
     """
     return {
+        "org_id": org.id,
         "logo_url": org.signature_logo_url,
         "primary_color": org.signature_primary_color,
         "company_name": org.signature_company_name or org.name,
@@ -685,6 +687,7 @@ def _render_from_data(data: dict, template: str) -> str:
     # Create a mock object that provides the data dict as attributes
     class MockOrg:
         def __init__(self, d: dict):
+            self.id = d.get("org_id")
             self.signature_logo_url = d.get("logo_url")
             self.signature_primary_color = d.get("primary_color")
             self.signature_company_name = d.get("company_name")

@@ -74,3 +74,20 @@ def test_signature_html_uses_the_stable_logo_url(db, s3_logo, test_user):
     html = signature_template_service.render_signature_html(db, s3_logo.id, test_user.id)
 
     assert f'src="{_stable_url(s3_logo)}' in html
+
+
+@pytest.mark.parametrize(
+    "render",
+    [
+        signature_template_service.render_org_signature_html,
+        signature_template_service.render_signature_preview,
+    ],
+)
+def test_org_signature_and_preview_use_the_stable_logo_url(db, s3_logo, render):
+    s3_logo.signature_company_name = "Smith & Co"
+    db.commit()
+
+    html = render(db, s3_logo.id)
+
+    assert f'src="{_stable_url(s3_logo)}' in html
+    assert "Smith &amp; Co" in html and "&amp;amp;" not in html
