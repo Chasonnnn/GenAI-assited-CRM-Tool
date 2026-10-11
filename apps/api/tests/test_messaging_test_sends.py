@@ -17,6 +17,7 @@ from app.db.models import (
     Campaign,
     MessageReconciliationCase,
     MessageTemplate,
+    MessageWebhookEvent,
     MessagingTestPhone,
     MessagingTestSend,
     Organization,
@@ -25,6 +26,7 @@ from app.services import (
     message_content_service,
     messaging_consent_service,
     messaging_test_send_service,
+    twilio_readiness_service,
     twilio_settings_service,
     twilio_transport,
 )
@@ -338,30 +340,22 @@ def test_status_callbacks_update_a_test_text_without_moving_back(db, test_org, t
     db.add(record)
     db.commit()
 
-    def apply(status):
-        return messaging_test_send_service.record_status(
-            db,
+    def event(status, sid=MESSAGE_SID):
+        return MessageWebhookEvent(
             organization_id=test_org.id,
             route_id=route.id,
-            provider_message_sid=MESSAGE_SID,
+            provider_message_sid=sid,
             provider_status=status,
-            error_code=None,
         )
 
-    assert apply("delivered") is True
-    assert apply("sent") is True
+    delivered = event("delivered")
+    assert messaging_test_send_service.record_status(db, event=delivered, error_code=None)
+    assert messaging_test_send_service.record_status(db, event=event("sent"), error_code=None)
     assert record.provider_status == "delivered"
-    assert (
-        messaging_test_send_service.record_status(
-            db,
-            organization_id=test_org.id,
-            route_id=route.id,
-            provider_message_sid="SM" + "9" * 32,
-            provider_status="delivered",
-            error_code=None,
-        )
-        is False
-    )
+    assert delivered.processed_at is not None
+    other = event("delivered", sid="SM" + "9" * 32)
+    assert messaging_test_send_service.record_status(db, event=other, error_code=None) is False
+    assert other.processed_at is None
 
 
 async def test_status_webhook_for_a_test_text_opens_no_reconciliation_case(
@@ -396,6 +390,84 @@ async def test_status_webhook_for_a_test_text_opens_no_reconciliation_case(
     record = db.execute(select(MessagingTestSend)).scalars().one()
     assert record.provider_status == "delivered"
     assert db.execute(select(MessageReconciliationCase)).scalars().all() == []
+    # A handled callback leaves messaging readiness clean.
+    assert db.execute(select(MessageWebhookEvent.processed_at)).scalar_one() is not None
+    readiness = twilio_readiness_service._local_reconciliation_readiness(db, test_org.id)
+    assert readiness.unresolved_event_count == 0
+
+
+async def test_a_callback_that_beats_the_test_text_commit_is_replayed(
+    authed_client, db, test_org, monkeypatch, sent
+):
+    from app.services.webhooks import twilio as twilio_webhooks
+
+    route = _ready_route(db, test_org.id)
+    first_sid = f"{MESSAGE_SID[:-2]}01"
+
+    async def accept(request, *, route, suffix):
+        return FormData(
+            {"AccountSid": ACCOUNT_SID, "MessageSid": first_sid, "MessageStatus": "delivered"}
+        )
+
+    monkeypatch.setattr(twilio_webhooks, "_validated_form", accept)
+    monkeypatch.setattr(twilio_webhooks, "_assert_tenant_binding", lambda *args, **kwargs: None)
+    # Twilio's callback lands before the request that sent the code commits.
+    early = await authed_client.post(f"/webhooks/twilio/{route.webhook_id}/status")
+    assert early.status_code == 200, early.text
+    case = db.execute(select(MessageReconciliationCase)).scalars().one()
+    assert case.status == "action_required"
+
+    added = await authed_client.post(
+        "/messaging/test-phones", json={"label": "My phone", "phone": TEST_PHONE}
+    )
+
+    assert added.status_code == 201, added.text
+    db.expire_all()
+    record = db.execute(select(MessagingTestSend)).scalars().one()
+    assert record.provider_message_sid == first_sid
+    assert record.provider_status == "delivered"
+    assert db.execute(select(MessageWebhookEvent.processed_at)).scalar_one() is not None
+    case = db.execute(select(MessageReconciliationCase)).scalars().one()
+    assert case.status == "resolved"
+    assert case.resolution_code == "status_callback_replayed"
+
+
+@pytest.mark.parametrize(("stop", "sends"), [("global", False), ("promotional", True)])
+async def test_verification_codes_honor_a_stop_from_the_phone(
+    authed_client, db, test_org, sent, stop, sends
+):
+    _ready_route(db, test_org.id)
+    record = (
+        messaging_consent_service.record_global_stop
+        if stop == "global"
+        else messaging_consent_service.record_promotional_opt_out
+    )
+    record(
+        db,
+        organization_id=test_org.id,
+        phone=TEST_PHONE,
+        source="twilio_inbound",
+        source_reference="SM-test-phone-stop",
+        occurred_at=datetime.now(UTC),
+        idempotency_key="SM-test-phone-stop",
+        instruction_text="STOP" if stop == "global" else "STOP promotions",
+        evidence_metadata={},
+    )
+
+    added = await authed_client.post(
+        "/messaging/test-phones", json={"label": "My phone", "phone": TEST_PHONE}
+    )
+
+    if sends:
+        # A promotional opt-out leaves the operational route for the code.
+        assert added.status_code == 201, added.text
+        assert len(sent) == 1
+    else:
+        assert added.status_code == 400
+        assert (
+            added.json()["detail"] == "This phone replied STOP. Reply START from it to send again."
+        )
+        assert sent == []
 
 
 async def test_a_draft_is_edited_in_place_and_a_published_version_is_not(authed_client):

@@ -521,6 +521,8 @@ def send_messaging_template_test(
         details={"test_phone_id": str(request.test_phone_id)},
     )
     db.commit()
+    messaging_test_send_service.replay_early_status_events(db, session.org_id)
+    db.commit()
     return MessagingTestSendResponse(id=test_send.id, provider_status=test_send.provider_status)
 
 
@@ -583,6 +585,8 @@ def add_messaging_test_phone(
         target_type="messaging_test_phone",
         target_id=view.phone.id,
     )
+    db.commit()
+    messaging_test_send_service.replay_early_status_events(db, session.org_id)
     db.commit()
     return _test_phone_response(view)
 

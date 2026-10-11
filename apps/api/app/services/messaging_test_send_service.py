@@ -11,6 +11,7 @@ audit event. Failures that must persist (a wrong code try, a text Twilio rejecte
 from __future__ import annotations
 
 import hmac
+import json
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.encryption import hash_phone, hash_pii
 from app.db.models import (
     MessageTemplate,
+    MessageWebhookEvent,
     MessagingConsentState,
     MessagingContact,
     MessagingGlobalSuppression,
@@ -34,6 +36,7 @@ from app.db.models import (
 )
 from app.services import (
     message_content_service,
+    messaging_delivery_service,
     twilio_readiness_service,
     twilio_settings_service,
     twilio_transport,
@@ -283,9 +286,14 @@ def add_test_phone(
     if not phone_e164:
         raise MessagingTestError("Enter a valid phone number")
     settings = _settings(db, organization_id)
-    route = _ready_route(db, settings, ("operational", "promotional"))
-
     phone_digest = hash_phone(phone_e164)
+    # A STOP binds verification codes too; use a purpose the phone has not stopped.
+    stopped = _stopped_purposes(db, organization_id, phone_digest)
+    purposes = tuple(item for item in ("operational", "promotional") if item not in stopped)
+    if not purposes:
+        raise MessagingTestError("This phone replied STOP. Reply START from it to send again.")
+    route = _ready_route(db, settings, purposes)
+
     test_phone = db.execute(
         select(MessagingTestPhone)
         .where(
@@ -415,28 +423,77 @@ def send_template_test(
     return test_send
 
 
-def record_status(
-    db: Session,
-    *,
-    organization_id: uuid.UUID,
-    route_id: uuid.UUID,
-    provider_message_sid: str,
-    provider_status: str,
-    error_code: str | None,
-) -> bool:
-    """Apply a Twilio status callback to a test text; False when the SID is not one."""
-    test_send = db.execute(
-        select(MessagingTestSend).where(
-            MessagingTestSend.organization_id == organization_id,
-            MessagingTestSend.route_id == route_id,
-            MessagingTestSend.provider_message_sid == provider_message_sid,
-        )
-    ).scalar_one_or_none()
-    if test_send is None:
-        return False
+def _apply_status(
+    test_send: MessagingTestSend, provider_status: str, error_code: str | None
+) -> None:
     # Callbacks can arrive out of order; never move back from a later status.
     if _STATUS_RANK.get(provider_status, 0) >= _STATUS_RANK.get(test_send.provider_status or "", 0):
         test_send.provider_status = provider_status[:30]
         test_send.error_code = error_code[:40] if error_code else None
         test_send.updated_at = datetime.now(UTC)
+
+
+def record_status(
+    db: Session,
+    *,
+    event: MessageWebhookEvent,
+    error_code: str | None,
+) -> bool:
+    """Apply a Twilio status callback to a test text; False when the SID is not one."""
+    test_send = db.execute(
+        select(MessagingTestSend).where(
+            MessagingTestSend.organization_id == event.organization_id,
+            MessagingTestSend.route_id == event.route_id,
+            MessagingTestSend.provider_message_sid == event.provider_message_sid,
+        )
+    ).scalar_one_or_none()
+    if test_send is None:
+        return False
+    _apply_status(test_send, event.provider_status or "", error_code)
+    event.processed_at = datetime.now(UTC)
     return True
+
+
+def _event_error_code(event: MessageWebhookEvent) -> str | None:
+    try:
+        fields = dict(json.loads(event.raw_fields or "[]"))
+    except TypeError, ValueError:
+        return None
+    return str(fields.get("ErrorCode") or "") or None
+
+
+def replay_early_status_events(db: Session, organization_id: uuid.UUID) -> int:
+    """Apply callbacks that arrived before their test text was committed.
+
+    Twilio can post a status before the request that sent the text commits, so that
+    callback finds no test text and opens an orphan case. Call this after the commit.
+    """
+    events = list(
+        db.scalars(
+            select(MessageWebhookEvent)
+            .join(
+                MessagingTestSend,
+                (MessagingTestSend.organization_id == MessageWebhookEvent.organization_id)
+                & (MessagingTestSend.route_id == MessageWebhookEvent.route_id)
+                & (
+                    MessagingTestSend.provider_message_sid
+                    == MessageWebhookEvent.provider_message_sid
+                ),
+            )
+            .where(
+                MessageWebhookEvent.organization_id == organization_id,
+                MessageWebhookEvent.event_type == "status",
+                MessageWebhookEvent.processed_at.is_(None),
+            )
+            .order_by(MessageWebhookEvent.received_at, MessageWebhookEvent.id)
+            .with_for_update(of=MessageWebhookEvent)
+        )
+    )
+    now = datetime.now(UTC)
+    for event in events:
+        record_status(db, event=event, error_code=_event_error_code(event))
+        messaging_delivery_service.resolve_orphan_status_cases(
+            db, event=event, delivery_id=None, resolved_at=now
+        )
+    db.flush()
+    return len(events)

@@ -144,13 +144,14 @@ def ensure_orphan_status_case(
     return case
 
 
-def _resolve_orphan_status_cases(
+def resolve_orphan_status_cases(
     db: Session,
     *,
     event: MessageWebhookEvent,
-    delivery: MessageDelivery,
+    delivery_id: UUID | None,
     resolved_at: datetime,
 ) -> None:
+    """Resolve the orphan cases of a replayed status event; test texts pass no delivery."""
     cases = list(
         db.scalars(
             select(MessageReconciliationCase)
@@ -163,9 +164,9 @@ def _resolve_orphan_status_cases(
         )
     )
     for case in cases:
-        if case.delivery_id not in {None, delivery.id}:
+        if case.delivery_id not in {None, delivery_id}:
             continue
-        case.delivery_id = delivery.id
+        case.delivery_id = delivery_id
         if case.status != "resolved":
             case.status = "resolved"
             case.resolved_at = resolved_at
@@ -219,10 +220,10 @@ def _apply_status_event(
             delivery.status = "submitted"
         delivery.updated_at = processed_at
     event.processed_at = processed_at
-    _resolve_orphan_status_cases(
+    resolve_orphan_status_cases(
         db,
         event=event,
-        delivery=delivery,
+        delivery_id=delivery.id,
         resolved_at=processed_at,
     )
 

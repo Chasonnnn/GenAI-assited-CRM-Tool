@@ -357,10 +357,7 @@ async def handle_status(
     )
     if replayed == 0 and not messaging_test_send_service.record_status(
         db,
-        organization_id=route.organization_id,
-        route_id=route.id,
-        provider_message_sid=message_sid,
-        provider_status=status,
+        event=event,
         error_code=error_code or None,
     ):
         messaging_delivery_service.ensure_orphan_status_case(
