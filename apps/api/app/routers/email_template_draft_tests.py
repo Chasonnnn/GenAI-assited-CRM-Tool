@@ -86,6 +86,7 @@ async def send_email_template_draft_test(
         subject_template=draft.subject,
         body_template=draft.body,
         template_from_email=draft.from_email,
+        template_layout=draft.layout,
         template_id=draft.template_id,
         to_email=str(body.to_email),
         variables=body.variables,

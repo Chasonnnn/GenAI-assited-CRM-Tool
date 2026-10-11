@@ -1362,6 +1362,12 @@
       "422"
     ]
   },
+  "/email-templates/layout-frame": {
+    "POST": [
+      "200",
+      "422"
+    ]
+  },
   "/email-templates/library": {
     "GET": [
       "200"

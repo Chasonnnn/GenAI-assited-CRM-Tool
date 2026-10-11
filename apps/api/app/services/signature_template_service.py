@@ -88,10 +88,24 @@ def _parse_org_social_links(links: list[dict] | None) -> list[dict]:
     return parsed
 
 
+class _OrgWithoutLogo:
+    """Reads through to the org but hides its logo."""
+
+    signature_logo_url = None
+
+    def __init__(self, org: Organization):
+        self._org = org
+
+    def __getattr__(self, name: str):
+        return getattr(self._org, name)
+
+
 def render_signature_html(
     db: Session,
     org_id: uuid.UUID,
     user_id: uuid.UUID,
+    *,
+    include_logo: bool = True,
 ) -> str:
     """
     Render email-safe HTML signature.
@@ -103,6 +117,7 @@ def render_signature_html(
         db: Database session
         org_id: Organization ID
         user_id: User ID
+        include_logo: False leaves the logo out when the email layout already shows it
 
     Returns:
         HTML string with inline styles, table layout (email-safe)
@@ -117,7 +132,7 @@ def render_signature_html(
 
     # Get rendering function
     renderer = TEMPLATE_RENDERERS.get(template, _render_classic)
-    return renderer(org, user)
+    return renderer(org if include_logo else _OrgWithoutLogo(org), user)
 
 
 def _get_base_data(org: Organization, user: User) -> dict:
@@ -665,8 +680,13 @@ def render_org_signature_html(
     db: Session,
     org_id: uuid.UUID,
     template_override: str | None = None,
+    *,
+    include_logo: bool = True,
 ) -> str:
-    """Render org-only signature HTML (no user-specific fields)."""
+    """Render org-only signature HTML (no user-specific fields).
+
+    ``include_logo=False`` leaves the logo out when the email layout already shows it.
+    """
     org = org_service.get_org_by_id(db, org_id)
 
     if not org:
@@ -674,6 +694,8 @@ def render_org_signature_html(
 
     template = template_override or org.signature_template or DEFAULT_TEMPLATE
     data = _get_org_only_data(org)
+    if not include_logo:
+        data["logo_url"] = None
     return _render_from_data(data, template)
 
 

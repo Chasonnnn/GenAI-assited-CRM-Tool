@@ -98,6 +98,10 @@ class EmailTemplate(Base):
             "body_design IS NULL OR jsonb_typeof(body_design) = 'object'",
             name="ck_email_templates_body_design_object",
         ),
+        CheckConstraint(
+            "layout IS NULL OR jsonb_typeof(layout) = 'object'",
+            name="ck_email_templates_layout_object",
+        ),
         Index("idx_email_templates_scope", "organization_id", "scope", "owner_user_id"),
     )
 
@@ -120,6 +124,8 @@ class EmailTemplate(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     # React Email editor document; ``body`` stays the send artifact (ADR 0010).
     body_design: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    # Email layout settings; NULL means the scope default (app.core.email_layout).
+    layout: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"), nullable=False)
 
     # Scope: 'org' (shared) or 'personal' (user-owned)
@@ -196,6 +202,10 @@ class EmailTemplateDraft(Base):
             "body_design IS NULL OR jsonb_typeof(body_design) = 'object'",
             name="ck_email_template_drafts_body_design_object",
         ),
+        CheckConstraint(
+            "layout IS NULL OR jsonb_typeof(layout) = 'object'",
+            name="ck_email_template_drafts_layout_object",
+        ),
         Index(
             "idx_email_template_drafts_org_updated",
             "organization_id",
@@ -244,6 +254,8 @@ class EmailTemplateDraft(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     # React Email editor document; ``body`` stays the send artifact (ADR 0010).
     body_design: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    # Email layout settings; NULL means the scope default (app.core.email_layout).
+    layout: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("TRUE"))
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)
 

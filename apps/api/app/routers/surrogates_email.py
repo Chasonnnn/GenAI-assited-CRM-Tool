@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_session, get_db, require_csrf_header, require_permission
+from app.core.email_layout import resolve_layout
 from app.core.policies import POLICIES
 from app.core.surrogate_access import check_surrogate_access
 from app.schemas.auth import UserSession
@@ -160,6 +161,8 @@ async def send_surrogate_email(
         recipient_email=surrogate.email,
         rendered_body_html=body,
         scope="personal",
+        # The template's own scope picks the default layout; the signature is the sender's.
+        layout=resolve_layout(template.layout, template.scope),
         sender_user_id=session.user_id,
         portal_base_url=portal_base_url,
     )

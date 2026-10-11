@@ -492,6 +492,7 @@ def execute_campaign_run(
                 recipient_email=email,
                 rendered_body_html=body,
                 scope="org",
+                layout=template.layout,
                 portal_base_url=portal_base_url,
             )
             donor_launch_snapshot = None
@@ -800,6 +801,7 @@ def retry_failed_campaign_run(
                 recipient_email=email,
                 rendered_body_html=body,
                 scope="org",
+                layout=template.layout,
                 portal_base_url=portal_base_url,
             )
             if campaign.recipient_type in campaign_audience.DONOR_RECIPIENT_TYPES:

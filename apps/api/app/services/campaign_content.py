@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.email_layout import parse_layout
 from app.db.models import (
     Campaign,
     CampaignRun,
@@ -132,4 +133,5 @@ def load_campaign_run_template(
         subject=template.subject,
         body=template.body,
         from_email=template.from_email,
+        layout=parse_layout(template.layout),
     )

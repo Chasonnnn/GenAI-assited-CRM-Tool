@@ -18,6 +18,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.email_body_design import validate_body_design
+from app.core.email_layout import dump_layout, parse_layout
 from app.db.enums import EmailStatus
 from app.db.models import (
     Attachment,
@@ -270,8 +271,8 @@ def normalize_template_from_email(value: str | None) -> str | None:
 def _template_payload(template: EmailTemplate) -> dict:
     """Extract versionable payload from template.
 
-    ``body_design`` is only recorded when present, so payloads of templates
-    without an editor document keep the shape recorded before ADR 0010.
+    ``body_design`` and ``layout`` are only recorded when present, so payloads of
+    templates without them keep the shape recorded before they existed.
     """
     payload = {
         "name": template.name,
@@ -282,6 +283,8 @@ def _template_payload(template: EmailTemplate) -> dict:
     }
     if template.body_design is not None:
         payload["body_design"] = template.body_design
+    if template.layout is not None:
+        payload["layout"] = template.layout
     return payload
 
 
@@ -364,6 +367,7 @@ def create_template(
     category: str | None = None,
     *,
     body_design: dict | None = None,
+    layout: object = None,
     system_key: str | None = None,
     commit: bool = True,
 ) -> EmailTemplate:
@@ -381,6 +385,7 @@ def create_template(
         from_email=_normalize_from_email(from_email),
         body=clean_body,
         body_design=validate_body_design(body_design),
+        layout=dump_layout(parse_layout(layout)),
         is_active=True,
         scope=scope,
         owner_user_id=owner_user_id,
@@ -423,6 +428,7 @@ def update_template(
     comment: str | None = None,
     *,
     body_design: dict | None | object = _UNSET,
+    layout: object = _UNSET,
     commit: bool = True,
 ) -> EmailTemplate:
     """
@@ -451,6 +457,8 @@ def update_template(
     if body is not None:
         template.body = sanitize_template_html(body)
         template.body_design = None if body_design is _UNSET else validate_body_design(body_design)
+    if layout is not _UNSET:
+        template.layout = dump_layout(parse_layout(layout))
     if is_active is not None:
         template.is_active = is_active
 
@@ -524,6 +532,8 @@ def rollback_template(
     if "body" in payload:
         template.body = sanitize_template_html(payload.get("body") or "")
         template.body_design = payload.get("body_design")
+    # Versions recorded before layouts existed use the scope default.
+    template.layout = payload.get("layout")
     template.is_active = payload.get("is_active", template.is_active)
     template.current_version = new_version.version
     template.updated_at = datetime.now(UTC)
@@ -748,6 +758,7 @@ def copy_template_to_personal(
         from_email=source.from_email,
         body=source.body,
         body_design=source.body_design,
+        layout=source.layout,
         is_active=True,
         scope="personal",
         owner_user_id=user_id,
@@ -833,6 +844,7 @@ def share_template_with_org(
         from_email=source.from_email,
         body=source.body,
         body_design=source.body_design,
+        layout=source.layout,
         is_active=True,
         scope="org",
         owner_user_id=None,  # Org templates have no owner
@@ -1816,6 +1828,7 @@ def send_from_template(
             "Invites and other platform templates must be sent via the platform/system sender."
         )
 
+    from app.core.email_layout import parse_layout
     from app.services import email_composition_service
 
     cleaned_body_template = email_composition_service.strip_legacy_unsubscribe_placeholders(
@@ -1838,6 +1851,7 @@ def send_from_template(
         recipient_email=recipient_email,
         rendered_body_html=body,
         scope="personal" if template.scope == "personal" else "org",
+        layout=parse_layout(template.layout),
         sender_user_id=signature_user_id,
         portal_base_url=portal_base_url,
     )

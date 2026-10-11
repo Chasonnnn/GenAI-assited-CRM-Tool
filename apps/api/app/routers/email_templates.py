@@ -16,6 +16,8 @@ from app.core.deps import (
 from app.core.policies import POLICIES
 from app.db.enums import Role
 from app.schemas.email import (
+    EmailLayoutFrameRequest,
+    EmailLayoutFrameResponse,
     EmailLogRead,
     EmailSendRequest,
     EmailTemplateCopyRequest,
@@ -102,6 +104,7 @@ def _build_template_response(
             from_email=template.from_email,
             body=template.body,
             body_design=template.body_design,
+            layout=template.layout,
             is_active=template.is_active,
             scope=template.scope,
             owner_user_id=template.owner_user_id,
@@ -266,6 +269,7 @@ def create_template(
             from_email=data.from_email,
             body=data.body,
             body_design=data.body_design,
+            layout=data.layout,
             scope=data.scope,
         )
     except ValueError as exc:
@@ -414,6 +418,8 @@ def update_template(
             kwargs["from_email"] = data.from_email
         if "body_design" in data.model_fields_set:
             kwargs["body_design"] = data.body_design
+        if "layout" in data.model_fields_set:
+            kwargs["layout"] = data.layout
 
         updated = email_service.update_template(**kwargs)
     except version_service.VersionConflictError as e:
@@ -623,6 +629,7 @@ def preview_template(
         subject=body.subject,
         body=body.body,
         scope=body.scope,
+        layout=body.layout,
         variable_mode=body.variable_mode,
         surrogate=surrogate,
     )
@@ -630,6 +637,36 @@ def preview_template(
         subject=preview.subject,
         html=preview.html,
         unresolved_variables=preview.unresolved_variables,
+    )
+
+
+@router.post(
+    "/layout-frame",
+    response_model=EmailLayoutFrameResponse,
+    dependencies=[Depends(require_csrf_header)],
+)
+def get_layout_frame(
+    body: EmailLayoutFrameRequest,
+    db: Annotated[Session, "fastapi_param"] = Depends(get_db),
+    session: Annotated[object, "fastapi_param"] = Depends(get_current_session),
+) -> EmailLayoutFrameResponse:
+    """Resolve the logo, signature, and footer a layout draws around the editor canvas."""
+    from app.services import email_preview_service
+
+    frame = email_preview_service.layout_frame(
+        db,
+        org_id=session.org_id,
+        actor_user_id=session.user_id,
+        scope=body.scope,
+        layout=body.layout,
+    )
+    return EmailLayoutFrameResponse(
+        layout=frame.layout,
+        logo_url=frame.logo.url if frame.logo else None,
+        logo_alt=frame.logo.alt if frame.logo else "",
+        accent_color=frame.accent_color,
+        signature_html=frame.signature_html,
+        footer_html=frame.footer_html,
     )
 
 
@@ -707,6 +744,7 @@ async def send_test_email(
         subject_template=template.subject,
         body_template=template.body,
         template_from_email=template.from_email,
+        template_layout=template.layout,
         template_id=template.id,
         to_email=str(body.to_email),
         variables=body.variables,
