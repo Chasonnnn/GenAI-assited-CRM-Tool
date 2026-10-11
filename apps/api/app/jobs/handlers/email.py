@@ -149,7 +149,7 @@ async def process_workflow_email(db, job) -> None:
     if not template_id or not recipient_email:
         raise Exception("Missing template_id or recipient_email in workflow email job")
 
-    from app.core.email_layout import parse_layout
+    from app.core.email_layout import parse_layout, resolve_layout
     from app.services.email_template_snapshot import (
         EmailTemplateSnapshot,
         build_snapshot,
@@ -258,7 +258,8 @@ async def process_workflow_email(db, job) -> None:
         recipient_email=recipient_email,
         rendered_body_html=body,
         scope="personal" if workflow_scope == "personal" else "org",
-        layout=template_snapshot.layout,
+        # The template's own scope picks the default layout; the workflow's picks the signature.
+        layout=resolve_layout(template_snapshot.layout, template_snapshot.scope or workflow_scope),
         sender_user_id=UUID(workflow_owner_id)
         if workflow_scope == "personal" and workflow_owner_id
         else None,
