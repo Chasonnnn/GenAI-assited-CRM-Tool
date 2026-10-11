@@ -195,7 +195,11 @@ def get_org_signature_logo(
     if not signed_url:
         raise HTTPException(status_code=404, detail="Logo not found")
 
-    return RedirectResponse(signed_url, status_code=307)
+    # Sent emails load the logo through mail image proxies. The signed URL is valid for a
+    # day, so proxies can reuse this redirect for an hour instead of asking again.
+    return RedirectResponse(
+        signed_url, status_code=307, headers={"Cache-Control": "public, max-age=3600"}
+    )
 
 
 @router.get("/intake/{slug}", response_model=FormIntakePublicRead)

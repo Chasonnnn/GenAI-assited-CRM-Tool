@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.core.email_body_design import validate_body_design
+from app.core.email_layout import EmailLayout
 
 # =============================================================================
 # Email Templates
@@ -36,6 +37,7 @@ class EmailTemplateCreate(BaseModel):
     )
     body: str = Field(min_length=1, max_length=50000)
     body_design: EmailBodyDesign | None = None
+    layout: EmailLayout | None = None
     scope: EmailTemplateScope = Field(
         default="org",
         description="Template scope: 'org' for shared templates, 'personal' for user-owned",
@@ -54,6 +56,7 @@ class EmailTemplateUpdate(BaseModel):
     )
     body: str | None = Field(None, min_length=1, max_length=50000)
     body_design: EmailBodyDesign | None = None
+    layout: EmailLayout | None = None
     is_active: bool | None = None
     expected_version: int | None = Field(None, description="Required for optimistic locking")
 
@@ -76,6 +79,7 @@ class EmailTemplateRead(BaseModel):
     from_email: str | None
     body: str
     body_design: dict[str, Any] | None = None
+    layout: dict[str, Any] | None = None
     is_active: bool
     scope: str = "org"
     owner_user_id: UUID | None = None
@@ -181,6 +185,7 @@ class EmailTemplatePreviewRequest(BaseModel):
     subject: str = Field(default="", max_length=200)
     body: str = Field(default="", max_length=50000)
     scope: EmailTemplateScope = "org"
+    layout: EmailLayout | None = None
     variable_mode: Literal["sample", "names", "record"] = "sample"
     surrogate_id: UUID | None = None
 
@@ -189,6 +194,24 @@ class EmailTemplatePreviewRequest(BaseModel):
         if self.variable_mode == "record" and self.surrogate_id is None:
             raise ValueError("surrogate_id is required for record previews")
         return self
+
+
+class EmailLayoutFrameRequest(BaseModel):
+    """A template scope and layout to resolve for the editor canvas."""
+
+    scope: EmailTemplateScope = "org"
+    layout: EmailLayout | None = None
+
+
+class EmailLayoutFrameResponse(BaseModel):
+    """What a layout draws around the body; the canvas puts the editor in between."""
+
+    layout: EmailLayout
+    logo_url: str | None
+    logo_alt: str
+    accent_color: str
+    signature_html: str
+    footer_html: str
 
 
 class PlatformEmailTemplatePreviewRequest(BaseModel):

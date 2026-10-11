@@ -103,6 +103,67 @@ class MessagingTemplateResponse(BaseModel):
     created_at: datetime
 
 
+class MessagingTemplateDraftUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    body: str | None = Field(default=None, min_length=1, max_length=1600)
+    is_enrollment_confirmation: bool | None = None
+    content_classification: MessagingContentClassification | None = None
+
+
+class MessagingTemplateUseResponse(BaseModel):
+    kind: Literal["workflow", "campaign"]
+    id: UUID
+    name: str
+
+
+class MessagingTemplateUsageResponse(BaseModel):
+    template_key: UUID
+    uses: list[MessagingTemplateUseResponse]
+
+
+class MessagingSmsVariableResponse(BaseModel):
+    name: str
+    description: str
+    sample: str
+
+
+class MessagingTestPhoneCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(min_length=1, max_length=80)
+    phone: str = Field(min_length=1, max_length=40)
+
+
+class MessagingTestPhoneVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(pattern=r"^\s*\d{6}\s*$")
+
+
+class MessagingTestPhoneResponse(BaseModel):
+    id: UUID
+    label: str
+    phone_last4: str
+    verified_at: datetime | None
+    code_expires_at: datetime | None
+    stopped_purposes: list[MessagingPurpose]
+    created_by_name: str | None
+    created_at: datetime
+
+
+class MessagingTestSendRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    test_phone_id: UUID
+
+
+class MessagingTestSendResponse(BaseModel):
+    id: UUID
+    provider_status: str | None
+
+
 class MessagingMediaAssetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -88,10 +88,24 @@ def _parse_org_social_links(links: list[dict] | None) -> list[dict]:
     return parsed
 
 
+class _OrgWithoutLogo:
+    """Reads through to the org but hides its logo."""
+
+    signature_logo_url = None
+
+    def __init__(self, org: Organization):
+        self._org = org
+
+    def __getattr__(self, name: str):
+        return getattr(self._org, name)
+
+
 def render_signature_html(
     db: Session,
     org_id: uuid.UUID,
     user_id: uuid.UUID,
+    *,
+    include_logo: bool = True,
 ) -> str:
     """
     Render email-safe HTML signature.
@@ -103,6 +117,7 @@ def render_signature_html(
         db: Database session
         org_id: Organization ID
         user_id: User ID
+        include_logo: False leaves the logo out when the email layout already shows it
 
     Returns:
         HTML string with inline styles, table layout (email-safe)
@@ -117,7 +132,7 @@ def render_signature_html(
 
     # Get rendering function
     renderer = TEMPLATE_RENDERERS.get(template, _render_classic)
-    return renderer(org, user)
+    return renderer(org if include_logo else _OrgWithoutLogo(org), user)
 
 
 def _get_base_data(org: Organization, user: User) -> dict:
@@ -135,11 +150,10 @@ def _get_base_data(org: Organization, user: User) -> dict:
     effective_phone = getattr(user, "signature_phone", None) or getattr(user, "phone", None)
     effective_photo = getattr(user, "signature_photo_url", None) or user.avatar_url
     signed_photo = media_service.get_signed_media_url(effective_photo)
-    signed_logo = media_service.get_signed_media_url(org.signature_logo_url)
 
     return {
         # Org branding (all HTML-escaped)
-        "logo_url": escape_text(signed_logo),
+        "logo_url": escape_text(media_service.email_logo_url(org)),
         "primary_color": primary_color,
         "company_name": escape_text(org.signature_company_name or org.name),
         "address": escape_text(org.signature_address),
@@ -170,15 +184,16 @@ def _get_sample_data(org: Organization) -> dict:
     org_social_links = _parse_org_social_links(org.signature_social_links)
 
     return {
-        # Org branding (all HTML-escaped)
-        "logo_url": escape_text(media_service.get_signed_media_url(org.signature_logo_url)),
+        # Org branding; _render_from_data escapes it through _get_base_data.
+        "org_id": org.id,
+        "logo_url": org.signature_logo_url,
         "primary_color": primary_color,
-        "company_name": escape_text(org.signature_company_name or org.name),
-        "address": escape_text(org.signature_address),
-        "org_phone": escape_text(org.signature_phone),
-        "website": validate_url(org.signature_website),
+        "company_name": org.signature_company_name or org.name,
+        "address": org.signature_address,
+        "org_phone": org.signature_phone,
+        "website": org.signature_website,
         "org_social_links": org_social_links,
-        "disclaimer": escape_text(org.signature_disclaimer),
+        "disclaimer": org.signature_disclaimer,
         # Sample user profile (not real admin data) - same keys as _get_base_data()
         "name": "Jane Doe",
         "email": "jane.doe@example.com",
@@ -201,6 +216,7 @@ def _get_org_only_data(org: Organization) -> dict:
     Uses raw org values so renderers can apply consistent escaping/validation.
     """
     return {
+        "org_id": org.id,
         "logo_url": org.signature_logo_url,
         "primary_color": org.signature_primary_color,
         "company_name": org.signature_company_name or org.name,
@@ -664,8 +680,13 @@ def render_org_signature_html(
     db: Session,
     org_id: uuid.UUID,
     template_override: str | None = None,
+    *,
+    include_logo: bool = True,
 ) -> str:
-    """Render org-only signature HTML (no user-specific fields)."""
+    """Render org-only signature HTML (no user-specific fields).
+
+    ``include_logo=False`` leaves the logo out when the email layout already shows it.
+    """
     org = org_service.get_org_by_id(db, org_id)
 
     if not org:
@@ -673,6 +694,8 @@ def render_org_signature_html(
 
     template = template_override or org.signature_template or DEFAULT_TEMPLATE
     data = _get_org_only_data(org)
+    if not include_logo:
+        data["logo_url"] = None
     return _render_from_data(data, template)
 
 
@@ -686,6 +709,7 @@ def _render_from_data(data: dict, template: str) -> str:
     # Create a mock object that provides the data dict as attributes
     class MockOrg:
         def __init__(self, d: dict):
+            self.id = d.get("org_id")
             self.signature_logo_url = d.get("logo_url")
             self.signature_primary_color = d.get("primary_color")
             self.signature_company_name = d.get("company_name")

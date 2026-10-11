@@ -593,6 +593,19 @@ describe("AppSidebar permission visibility", () => {
         expect(screen.queryByRole("link", { name: "Donors (beta)" })).not.toBeInTheDocument()
     })
 
+    it("shows Message Templates only to admins and developers who manage integrations", () => {
+        mockNavigationState.pathname = "/automation/message-templates"
+        mockUseAuth.mockReturnValue({ user: { user_id: "admin", role: "admin", display_name: "Admin", ai_enabled: false } })
+        mockUseEffectivePermissions.mockReturnValue({ data: { policy_version: 2, permissions: ["manage_integrations"] } })
+        const { unmount } = render(<AppSidebar><div>content</div></AppSidebar>)
+        expect(screen.getByRole("link", { name: "Message Templates" })).toHaveAttribute("href", "/automation/message-templates")
+        unmount()
+
+        mockUseAuth.mockReturnValue({ user: { user_id: "manager", role: "case_manager", display_name: "Manager", ai_enabled: false } })
+        render(<AppSidebar><div>content</div></AppSidebar>)
+        expect(screen.queryByRole("link", { name: "Message Templates" })).not.toBeInTheDocument()
+    })
+
     it("shows org executions only when version 2 grants both workflow permissions", () => {
         mockNavigationState.pathname = "/automation"
         mockUseAuth.mockReturnValue({ user: { user_id: "author", role: "case_manager", display_name: "Author", ai_enabled: false } })

@@ -5,9 +5,13 @@ import { compileEmailDesign, convertHtmlToDesign } from "@/components/email/desi
 import { createEmailDesignExtensions } from "@/components/email/design/extensions"
 import type { EmailBodyDesign } from "@/lib/api/email-templates"
 import {
+    defaultEmailLayout,
     extractEmailBodyFragment,
     initialEmailDesign,
+    isFullEmailDocument,
     legacyEmailDesign,
+    placesOrgLogo,
+    resolveEmailLayout,
     soleHtmlBlock,
 } from "@/lib/email-design"
 
@@ -180,5 +184,35 @@ describe("helpers", () => {
 
         const tokens = editor.view.dom.querySelectorAll(".email-variable-token")
         expect(Array.from(tokens, (token) => token.textContent)).toEqual(["{{ first_name }}"])
+    })
+})
+
+describe("email layouts", () => {
+    it("defaults org templates to Card and personal templates to Plain", () => {
+        expect(defaultEmailLayout("org")).toMatchObject({ kind: "card", show_logo: true, logo_position: "center" })
+        expect(defaultEmailLayout("personal").kind).toBe("plain")
+        expect(resolveEmailLayout(null, "org").kind).toBe("card")
+        const letterhead = { ...defaultEmailLayout("org"), kind: "letterhead" as const, accent_color: "#0f766e" }
+        expect(resolveEmailLayout(letterhead, "org")).toBe(letterhead)
+    })
+
+    it("finds bodies that place the logo or control their own frame", () => {
+        expect(placesOrgLogo('<img src="{{ org_logo_url }}"><p>Hi</p>')).toBe(true)
+        expect(placesOrgLogo("<p>Hi</p>")).toBe(false)
+        expect(isFullEmailDocument("<html><body><p>Hi</p></body></html>")).toBe(true)
+        expect(isFullEmailDocument("<!DOCTYPE html><p>Hi</p>")).toBe(true)
+        expect(isFullEmailDocument("<p>Hi</p>")).toBe(false)
+    })
+})
+
+describe("buildEmailFrameDocument", () => {
+    it("renders fragments in the sent body style and leaves full documents alone", async () => {
+        const { buildEmailFrameDocument } = await import("@/components/email/design/email-html-frame")
+        const fragment = new DOMParser().parseFromString(buildEmailFrameDocument("<p>Hi</p>"), "text/html")
+        expect(fragment.body.style.fontFamily).toContain("sans-serif")
+        expect(fragment.body.style.lineHeight).toBe("24px")
+
+        const document = buildEmailFrameDocument('<!doctype html><html><body style="margin:0"><p>Hi</p></body></html>')
+        expect(document).not.toContain("sans-serif")
     })
 })

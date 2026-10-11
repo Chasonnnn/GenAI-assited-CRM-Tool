@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import type { Route } from "next"
 import { useRouter } from "next/navigation"
 import { ArrowLeftIcon, HistoryIcon } from "lucide-react"
@@ -11,7 +12,12 @@ import {
     type EmailDesignEditorHandle,
 } from "@/components/email/design/email-design-editor"
 import { EmailHtmlSource } from "@/components/email/design/email-html-source"
-import { EmailPreviewPane } from "@/components/email/design/email-preview-pane"
+import {
+    EmailLayoutCanvas,
+    EmailLayoutSettings,
+    type EmailCanvasViewport,
+} from "@/components/email/design/email-layout-canvas"
+import { GMAIL_CLIP_BYTES, previewChecks } from "@/components/email/design/email-preview-pane"
 import { SendTestEmailDialog } from "@/components/email/SendTestEmailDialog"
 import {
     LoadErrorState,
@@ -37,6 +43,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { FieldError, ValidatedField } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { SegmentedControl, SegmentedControlItem } from "@/components/ui/segmented-control"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from "@/lib/auth-context"
@@ -47,11 +54,14 @@ import type {
     EmailTemplateDraftUpdate,
 } from "@/lib/api/email-template-drafts"
 import {
+    getEmailLayoutFrame,
     previewEmailTemplate,
     type EmailBodyDesign,
+    type EmailLayout,
     type EmailTemplate,
 } from "@/lib/api/email-templates"
 import { ApiError } from "@/lib/api"
+import { isFullEmailDocument, placesOrgLogo, resolveEmailLayout } from "@/lib/email-design"
 import { extractEmailTemplateVariables } from "@/lib/email-template-preview"
 import { useFormValidation } from "@/lib/forms/use-form-validation"
 import {
@@ -70,6 +80,7 @@ import {
     useEmailTemplateVersions,
     useEmailTemplateVariables,
 } from "@/lib/hooks/use-email-templates"
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value"
 import type { TemplateVariableRead } from "@/lib/types/template-variable"
 
 type OrganizationEmailTemplateStudioProps = {
@@ -83,12 +94,13 @@ type EditorFields = {
     from_email: string | null
     body: string
     body_design: EmailBodyDesign | null
+    layout: EmailLayout | null
     is_active: boolean
 }
 
 type ActiveEditorField = "subject" | "body"
 
-type StudioView = "edit" | "preview" | "html"
+type StudioView = "edit" | "html"
 
 const TEMPLATE_NOT_FOUND = {
     title: "Template not found",
@@ -105,12 +117,13 @@ function fieldsFromTemplate(
         from_email: value?.from_email ?? null,
         body: value?.body ?? "",
         body_design: value?.body_design ?? null,
+        layout: value?.layout ?? null,
         is_active: value?.is_active ?? true,
     }
 }
 
 function fieldEquals<K extends keyof EditorFields>(field: K, a: EditorFields, b: EditorFields) {
-    if (field === "body_design") return JSON.stringify(a.body_design) === JSON.stringify(b.body_design)
+    if (field === "body_design" || field === "layout") return JSON.stringify(a[field]) === JSON.stringify(b[field])
     return a[field] === b[field]
 }
 
@@ -129,6 +142,7 @@ function buildChangedFields(
         changed.body = current.body
         changed.body_design = current.body_design
     }
+    if (!fieldEquals("layout", current, baseline)) changed.layout = current.layout
     if (current.is_active !== baseline.is_active) {
         changed.is_active = current.is_active
     }
@@ -395,13 +409,13 @@ function OrganizationEmailTemplateEditor({
     const publishDraft = usePublishEmailTemplateDraft()
     const restoreDraftVersion = useRestoreEmailTemplateDraftVersion()
     const sendTestDraft = useSendTestEmailTemplateDraft()
-    const canPreviewRecords = Boolean(access?.permissions.includes("view_surrogates"))
 
     const initialFields = fieldsFromTemplate(initialDraft ?? publishedTemplate)
     const [fields, setFields] = useState<EditorFields>(initialFields)
     const [savedFields, setSavedFields] = useState<EditorFields>(initialFields)
     const [draft, setDraft] = useState<EmailTemplateDraft | null>(initialDraft)
     const [view, setView] = useState<StudioView>("edit")
+    const [viewport, setViewport] = useState<EmailCanvasViewport>("desktop")
     // Remounts the block editor when the stored body is replaced (save, restore).
     const [editorGeneration, setEditorGeneration] = useState(0)
     const [isSaving, setIsSaving] = useState(false)
@@ -454,6 +468,39 @@ function OrganizationEmailTemplateEditor({
         publishedTemplate?.id ?? null,
         historyOpen,
     )
+
+    // A full HTML document draws its own frame, so sends give it no layout.
+    const isDocumentBody = isFullEmailDocument(fields.body)
+    const layout = resolveEmailLayout(fields.layout, scope)
+    const canvasLayout: EmailLayout = isDocumentBody ? { ...layout, kind: "plain" } : layout
+    const layoutFrame = useQuery({
+        queryKey: ["email-layout-frame", scope, canvasLayout, placesOrgLogo(fields.body)],
+        // A body that places the logo keeps it; the signature then shows it too, as in sends.
+        queryFn: () =>
+            getEmailLayoutFrame({
+                scope,
+                layout: placesOrgLogo(fields.body) ? { ...canvasLayout, show_logo: false } : canvasLayout,
+            }),
+        placeholderData: keepPreviousData,
+        staleTime: 60_000,
+    })
+    // A string keeps the debounced value stable between renders.
+    const checksRequest = useDebouncedValue(
+        JSON.stringify({ subject: fields.subject, body: fields.body, layout: fields.layout }),
+        600,
+    )
+    const checksPreview = useQuery({
+        queryKey: ["email-template-checks", scope, checksRequest],
+        queryFn: () =>
+            previewEmailTemplate({
+                ...(JSON.parse(checksRequest) as Pick<EditorFields, "subject" | "body" | "layout">),
+                scope,
+                variable_mode: "names",
+            }),
+        placeholderData: keepPreviousData,
+        staleTime: 30_000,
+    })
+    const checks = checksPreview.data ? previewChecks(checksPreview.data) : null
 
     const leaveStudio = (destination = "/automation/email-templates") => {
         setPendingNavigation(null)
@@ -526,6 +573,7 @@ function OrganizationEmailTemplateEditor({
                     from_email: currentFields.from_email,
                     body: currentFields.body,
                     ...(currentFields.body_design ? { body_design: currentFields.body_design } : {}),
+                    ...(currentFields.layout ? { layout: currentFields.layout } : {}),
                     scope,
                 })
                 const createdFields = fieldsFromTemplate(activeDraft)
@@ -835,7 +883,6 @@ function OrganizationEmailTemplateEditor({
                 </div>
                 <TabsList aria-label="Studio view" className="order-last w-full md:order-none md:w-fit">
                     <TabsTrigger value="edit">Edit</TabsTrigger>
-                    <TabsTrigger value="preview">Preview</TabsTrigger>
                     <TabsTrigger value="html">HTML</TabsTrigger>
                 </TabsList>
                 <div className="flex flex-wrap items-center justify-end gap-2">
@@ -952,107 +999,189 @@ function OrganizationEmailTemplateEditor({
                         activeEditorFieldRef.current = "body"
                     }}
                     invalid={Boolean(bodyError)}
-                    error={bodyError ? <FieldError id="template-body-error">{bodyError}</FieldError> : null}
-                    fields={
-                        <div className="grid gap-3">
-                            <ValidatedField
-                                id="template-name"
-                                label="Template name"
-                                error={contentForm.errorFor("name")}
+                    documentStyles={canvasLayout.kind === "plain"}
+                    canvas={(body) => (
+                        <div className="flex flex-col gap-3">
+                            <SegmentedControl
+                                aria-label="Viewport"
+                                value={viewport}
+                                onValueChange={(value) => setViewport(value as EmailCanvasViewport)}
+                                className="self-end"
                             >
-                                {(control) => (
-                                    <Input
-                                        {...control}
-                                        value={fields.name}
-                                        onBlur={() => contentForm.touch("name")}
-                                        onChange={(event) =>
+                                <SegmentedControlItem value="desktop">Desktop</SegmentedControlItem>
+                                <SegmentedControlItem value="mobile">Mobile</SegmentedControlItem>
+                            </SegmentedControl>
+                            <EmailLayoutCanvas
+                                layout={canvasLayout}
+                                viewport={viewport}
+                                frame={{
+                                    data: layoutFrame.data,
+                                    isError: layoutFrame.isError,
+                                    onRetry: () => void layoutFrame.refetch(),
+                                }}
+                                header={
+                                    <dl className="grid text-sm">
+                                        <div className="grid min-h-9 grid-cols-[4rem_minmax(0,1fr)] items-center gap-2">
+                                            <dt>
+                                                <Label htmlFor="template-from-email" className="font-normal text-muted-foreground">
+                                                    From
+                                                </Label>
+                                            </dt>
+                                            <dd>
+                                                {scope === "org" ? (
+                                                    <Input
+                                                        id="template-from-email"
+                                                        value={fields.from_email ?? ""}
+                                                        placeholder="Organization default"
+                                                        onChange={(event) =>
+                                                            setFields((current) => ({
+                                                                ...current,
+                                                                from_email: event.target.value || null,
+                                                            }))
+                                                        }
+                                                        className="h-8 border-transparent px-0 shadow-none focus-visible:border-input focus-visible:px-2"
+                                                    />
+                                                ) : (
+                                                    <output id="template-from-email" className="block truncate">
+                                                        {user?.email ?? ""}
+                                                    </output>
+                                                )}
+                                            </dd>
+                                        </div>
+                                        <div className="grid min-h-9 grid-cols-[4rem_minmax(0,1fr)] items-center gap-2 border-t border-border">
+                                            <dt className="text-muted-foreground">To</dt>
+                                            <dd className="text-muted-foreground">Recipient</dd>
+                                        </div>
+                                        <div className="grid min-h-9 grid-cols-[4rem_minmax(0,1fr)] items-center gap-x-2 border-t border-border">
+                                            <dt>
+                                                <Label htmlFor="template-subject" className="font-normal text-muted-foreground">
+                                                    Subject
+                                                </Label>
+                                            </dt>
+                                            <dd>
+                                                <Input
+                                                    id="template-subject"
+                                                    ref={subjectRef}
+                                                    value={fields.subject}
+                                                    aria-invalid={contentForm.errorFor("subject") ? true : undefined}
+                                                    aria-describedby={contentForm.errorFor("subject") ? "template-subject-error" : undefined}
+                                                    onFocus={() => {
+                                                        activeEditorFieldRef.current = "subject"
+                                                    }}
+                                                    onBlur={() => contentForm.touch("subject")}
+                                                    onChange={(event) =>
+                                                        setFields((current) => ({
+                                                            ...current,
+                                                            subject: event.target.value,
+                                                        }))
+                                                    }
+                                                    className="h-8 border-transparent px-0 font-medium shadow-none focus-visible:border-input focus-visible:px-2"
+                                                />
+                                            </dd>
+                                            {contentForm.errorFor("subject") ? (
+                                                <FieldError id="template-subject-error" className="col-start-2 pb-2">
+                                                    {contentForm.errorFor("subject")}
+                                                </FieldError>
+                                            ) : null}
+                                        </div>
+                                    </dl>
+                                }
+                                error={bodyError ? <FieldError id="template-body-error">{bodyError}</FieldError> : null}
+                            >
+                                {body}
+                            </EmailLayoutCanvas>
+                        </div>
+                    )}
+                    panel={
+                        <>
+                            <section aria-labelledby="template-settings-title" className="grid gap-3 border-b border-border p-3 text-sm">
+                                <h2 id="template-settings-title" className="text-xs font-medium text-muted-foreground">
+                                    Template
+                                </h2>
+                                <ValidatedField
+                                    id="template-name"
+                                    label="Template name"
+                                    error={contentForm.errorFor("name")}
+                                >
+                                    {(control) => (
+                                        <Input
+                                            {...control}
+                                            value={fields.name}
+                                            onBlur={() => contentForm.touch("name")}
+                                            onChange={(event) =>
+                                                setFields((current) => ({
+                                                    ...current,
+                                                    name: event.target.value,
+                                                }))
+                                            }
+                                        />
+                                    )}
+                                </ValidatedField>
+                                <div className="flex items-center justify-between gap-4">
+                                    <Label htmlFor="template-active">Template is active</Label>
+                                    <Switch
+                                        id="template-active"
+                                        checked={fields.is_active}
+                                        onCheckedChange={(isActive) =>
                                             setFields((current) => ({
                                                 ...current,
-                                                name: event.target.value,
-                                            }))
-                                        }
-                                    />
-                                )}
-                            </ValidatedField>
-                            {scope === "org" ? (
-                                <div className="grid gap-2">
-                                    <Label htmlFor="template-from-email">From email</Label>
-                                    <Input
-                                        id="template-from-email"
-                                        value={fields.from_email ?? ""}
-                                        onChange={(event) =>
-                                            setFields((current) => ({
-                                                ...current,
-                                                from_email: event.target.value || null,
+                                                is_active: isActive,
                                             }))
                                         }
                                     />
                                 </div>
-                            ) : null}
-                            <ValidatedField
-                                id="template-subject"
-                                label="Subject"
-                                error={contentForm.errorFor("subject")}
-                            >
-                                {(control) => (
-                                    <Input
-                                        {...control}
-                                        ref={subjectRef}
-                                        value={fields.subject}
-                                        onFocus={() => {
-                                            activeEditorFieldRef.current = "subject"
-                                        }}
-                                        onBlur={() => contentForm.touch("subject")}
-                                        onChange={(event) =>
-                                            setFields((current) => ({
-                                                ...current,
-                                                subject: event.target.value,
-                                            }))
-                                        }
-                                    />
-                                )}
-                            </ValidatedField>
-                        </div>
+                                {publishedTemplate?.proposed_by_name ? (
+                                    <dl className="grid gap-1">
+                                        <dt className="text-muted-foreground">Originally proposed by</dt>
+                                        <dd>{publishedTemplate.proposed_by_name}</dd>
+                                    </dl>
+                                ) : null}
+                            </section>
+                            <EmailLayoutSettings
+                                value={layout}
+                                onChange={(next) => setFields((current) => ({ ...current, layout: next }))}
+                                defaultAccent={layoutFrame.data?.accent_color ?? "#111827"}
+                                disabled={isDocumentBody}
+                            />
+                        </>
                     }
                     settings={
-                        <div className="grid gap-3">
-                            <div className="flex items-center justify-between gap-4">
-                                <Label htmlFor="template-active">Template is active</Label>
-                                <Switch
-                                    id="template-active"
-                                    checked={fields.is_active}
-                                    onCheckedChange={(isActive) =>
-                                        setFields((current) => ({
-                                            ...current,
-                                            is_active: isActive,
-                                        }))
-                                    }
-                                />
-                            </div>
-                            {publishedTemplate?.proposed_by_name ? (
-                                <dl className="grid gap-1 text-sm">
-                                    <dt className="text-muted-foreground">Originally proposed by</dt>
-                                    <dd>{publishedTemplate.proposed_by_name}</dd>
+                        <section aria-labelledby="template-checks-title" className="grid gap-2 text-sm">
+                            <h2 id="template-checks-title" className="text-xs font-medium text-muted-foreground">
+                                Checks
+                            </h2>
+                            {checks && checksPreview.data ? (
+                                <dl className="grid gap-1.5">
+                                    <div className="flex justify-between gap-3">
+                                        <dt className="text-muted-foreground">Variables</dt>
+                                        <dd className={checksPreview.data.unresolved_variables.length ? "text-destructive" : undefined}>
+                                            {checksPreview.data.unresolved_variables.length
+                                                ? `Unknown: ${checksPreview.data.unresolved_variables.join(", ")}`
+                                                : "All known"}
+                                        </dd>
+                                    </div>
+                                    <div className="flex justify-between gap-3">
+                                        <dt className="text-muted-foreground">Size</dt>
+                                        <dd className={checks.bytes > GMAIL_CLIP_BYTES ? "text-destructive" : undefined}>
+                                            {`${Math.ceil(checks.bytes / 1024)} KB`}
+                                            {checks.bytes > GMAIL_CLIP_BYTES ? ", Gmail clips over 102 KB" : null}
+                                        </dd>
+                                    </div>
+                                    <div className="flex justify-between gap-3">
+                                        <dt className="text-muted-foreground">Links</dt>
+                                        <dd className={checks.unsafeLinks ? "text-destructive" : undefined}>
+                                            {checks.unsafeLinks
+                                                ? `${checks.links}, ${checks.unsafeLinks} not https`
+                                                : checks.links}
+                                        </dd>
+                                    </div>
                                 </dl>
-                            ) : null}
-                        </div>
-                    }
-                />
-            </TabsContent>
-            <TabsContent value="preview" className="mt-0 flex min-h-0 flex-1 flex-col">
-                <EmailPreviewPane
-                    subject={fields.subject}
-                    body={fields.body}
-                    queryKey={["org", scope]}
-                    modes={canPreviewRecords ? ["sample", "names", "record"] : ["sample", "names"]}
-                    load={({ subject, body, variableMode, recordId }) =>
-                        previewEmailTemplate({
-                            subject,
-                            body,
-                            scope,
-                            variable_mode: variableMode,
-                            surrogate_id: recordId,
-                        })
+                            ) : checksPreview.isError ? (
+                                <p className="text-muted-foreground">Checks could not load.</p>
+                            ) : (
+                                <p role="status" className="text-muted-foreground">Checking…</p>
+                            )}
+                        </section>
                     }
                 />
             </TabsContent>

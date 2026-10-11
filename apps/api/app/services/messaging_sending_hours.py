@@ -1,12 +1,13 @@
-"""Fail-closed recipient-local sending-window resolution."""
+"""Recipient-local sending windows for promotional messages."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import phonenumbers
+from phonenumbers import geocoder
 from phonenumbers import timezone as phone_timezone
 
 
@@ -120,10 +121,93 @@ def resolve_recipient_timezone(
     return RecipientTimezone(None, "ambiguous")
 
 
-def _local_start(local_day, *, state: str | None, zone: ZoneInfo) -> datetime:
-    is_texas_sunday = (state or "").strip().upper() == "TX" and local_day.weekday() == 6
-    start_hour = 12 if is_texas_sunday else 9
-    return datetime.combine(local_day, time(hour=start_hour), tzinfo=zone)
+@dataclass(frozen=True, slots=True)
+class _Window:
+    start_hour: int
+    end_hour: int
+    sunday_start_hour: int | None = None
+
+
+# Quiet hours bind telephone solicitations only, so they apply to promotional
+# messages. Transactional (operational) messages have no legal sending window.
+# Federal TCPA: 08:00-21:00 recipient-local.
+FEDERAL_PROMOTIONAL_WINDOW = _Window(8, 21)
+STATE_PROMOTIONAL_WINDOWS = {
+    "FL": _Window(8, 20),  # Florida Telephone Solicitation Act
+    "OK": _Window(8, 20),  # Oklahoma Telephone Solicitation Act
+    # Sources disagree on 8 or 9 p.m. for Maryland and Washington; 8 p.m. until counsel confirms.
+    "MD": _Window(8, 20),
+    "WA": _Window(8, 20),
+    "TX": _Window(9, 21, sunday_start_hour=12),  # Texas SB 140
+}
+# Applies when the recipient's state is unknown, so every state's rule holds.
+_UNKNOWN_STATE = "*"
+# Applies when the recipient's time zone is unknown: send only when the window is open in all of them.
+US_TIMEZONES = (
+    "America/New_York",
+    "America/Puerto_Rico",
+    "America/Chicago",
+    "America/Denver",
+    "America/Phoenix",
+    "America/Los_Angeles",
+    "America/Anchorage",
+    "Pacific/Honolulu",
+)
+_STATE_CODES_BY_NAME = {
+    "florida": "FL",
+    "oklahoma": "OK",
+    "maryland": "MD",
+    "washington": "WA",
+    "washington state": "WA",
+    "texas": "TX",
+}
+
+
+def _area_code_state(phone_e164: str | None) -> str | None:
+    """Return the state an area code implies, when that state has its own window."""
+    if not phone_e164:
+        return None
+    try:
+        parsed = phonenumbers.parse(phone_e164, None)
+    except phonenumbers.NumberParseException:
+        return None
+    description = geocoder.description_for_number(parsed, "en").strip()
+    if "," in description:
+        # "City, ST" descriptions carry the postal code after the comma.
+        return description.rsplit(",", 1)[1].strip().upper() or None
+    return _STATE_CODES_BY_NAME.get(description.casefold())
+
+
+def florida_rules_apply(*, state: str | None, phone_e164: str | None) -> bool:
+    """Florida law covers Florida addresses, Florida area codes, and unknown addresses."""
+    normalized_state = (state or "").strip().upper()
+    return normalized_state in {"", "FL"} or _area_code_state(phone_e164) == "FL"
+
+
+def _applicable_windows(state: str | None, phone_e164: str | None) -> list[_Window]:
+    """Windows of the address state and of the area-code state, which some laws presume."""
+    normalized_state = (state or "").strip().upper() or _UNKNOWN_STATE
+    states = {normalized_state, _area_code_state(phone_e164)}
+    if _UNKNOWN_STATE in states:
+        return [FEDERAL_PROMOTIONAL_WINDOW, *STATE_PROMOTIONAL_WINDOWS.values()]
+    return [FEDERAL_PROMOTIONAL_WINDOW] + [
+        STATE_PROMOTIONAL_WINDOWS[code] for code in states if code in STATE_PROMOTIONAL_WINDOWS
+    ]
+
+
+def _bounds(local_day: date, windows: list[_Window], zone: ZoneInfo) -> tuple[datetime, datetime]:
+    is_sunday = local_day.weekday() == 6
+    start_hour = max(
+        window.sunday_start_hour
+        if is_sunday and window.sunday_start_hour is not None
+        else window.start_hour
+        for window in windows
+    )
+    end_hour = min(window.end_hour for window in windows)
+    return (
+        datetime.combine(local_day, time(hour=start_hour), tzinfo=zone),
+        datetime.combine(local_day, time(hour=end_hour), tzinfo=zone),
+    )
 
 
 def evaluate_sending_window(
@@ -131,8 +215,9 @@ def evaluate_sending_window(
     now: datetime,
     timezone_name: str,
     state: str | None,
+    phone_e164: str | None = None,
 ) -> SendingWindowDecision:
-    """Allow 09:00-20:00 local, except Texas Sundays begin at 12:00."""
+    """Apply the narrowest promotional window of the federal rule and the recipient's states."""
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must include a timezone")
     try:
@@ -140,29 +225,50 @@ def evaluate_sending_window(
     except ZoneInfoNotFoundError as exc:
         raise ValueError("Unknown recipient timezone") from exc
 
+    windows = _applicable_windows(state, phone_e164)
     local_now = now.astimezone(zone)
-    start = _local_start(local_now.date(), state=state, zone=zone)
-    end = datetime.combine(local_now.date(), time(hour=20), tzinfo=zone)
+    start, end = _bounds(local_now.date(), windows, zone)
     if local_now < start:
-        reason = (
-            "texas_sunday_before_noon"
-            if (state or "").strip().upper() == "TX" and local_now.weekday() == 6
-            else "before_sending_hours"
-        )
         return SendingWindowDecision(
             allowed=False,
             defer_until=start.astimezone(UTC),
-            reason=reason,
+            reason="before_sending_hours",
         )
     if local_now >= end:
-        next_start = _local_start(
-            local_now.date() + timedelta(days=1),
-            state=state,
-            zone=zone,
-        )
+        next_start, _ = _bounds(local_now.date() + timedelta(days=1), windows, zone)
         return SendingWindowDecision(
             allowed=False,
             defer_until=next_start.astimezone(UTC),
             reason="after_sending_hours",
         )
     return SendingWindowDecision(allowed=True, defer_until=None, reason=None)
+
+
+def evaluate_sending_window_in_every_us_timezone(
+    *,
+    now: datetime,
+    state: str | None,
+    phone_e164: str | None = None,
+) -> SendingWindowDecision:
+    """Find the first moment the window is open in every US time zone."""
+    candidate = now
+    # The narrowest window still overlaps across US zones each day, so this settles quickly.
+    for _ in range(len(US_TIMEZONES) * 3):
+        blocked = [
+            decision
+            for decision in (
+                evaluate_sending_window(
+                    now=candidate, timezone_name=zone, state=state, phone_e164=phone_e164
+                )
+                for zone in US_TIMEZONES
+            )
+            if not decision.allowed
+        ]
+        if not blocked:
+            if candidate == now:
+                return SendingWindowDecision(allowed=True, defer_until=None, reason=None)
+            return SendingWindowDecision(
+                allowed=False, defer_until=candidate, reason="outside_shared_sending_hours"
+            )
+        candidate = max(decision.defer_until for decision in blocked if decision.defer_until)
+    raise RuntimeError("No sending window is open in every US time zone")

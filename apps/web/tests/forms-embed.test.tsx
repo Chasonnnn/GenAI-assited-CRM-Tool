@@ -773,16 +773,15 @@ describe("EmbedFormPageClient", () => {
             return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)
         }
 
-        it("renders the SMS consent directly after the mapped phone field with readable disclosure and links", async () => {
+        it("renders the SMS consent after all fields with readable disclosure and links", async () => {
             getEmbedPublicForm.mockResolvedValue(smsForm)
             renderEmbedForm({ slug: "lead-form", initialParentOrigin: "https://www.ewisurrogacy.com" })
 
             const phoneInput = await screen.findByLabelText("Mobile Phone")
             const smsCheckbox = getOperationalCheckbox()
             const emailInput = screen.getByLabelText(/email/i)
-            expect(isBefore(screen.getByLabelText("Home Phone"), phoneInput)).toBe(true)
             expect(isBefore(phoneInput, smsCheckbox)).toBe(true)
-            expect(isBefore(smsCheckbox, emailInput)).toBe(true)
+            expect(isBefore(emailInput, smsCheckbox)).toBe(true)
             expect(isBefore(smsCheckbox, screen.getByText(/By submitting, you agree/i))).toBe(true)
             expect(smsCheckbox).not.toBeChecked()
 
@@ -831,7 +830,7 @@ describe("EmbedFormPageClient", () => {
             expect(submitEmbedPublicForm).not.toHaveBeenCalled()
             expect(smsCheckbox).toHaveAttribute("aria-invalid", "true")
             expect(smsCheckbox).toHaveAccessibleDescription(message.textContent ?? "")
-            expect(screen.getByLabelText("Mobile Phone")).toHaveFocus()
+            expect(smsCheckbox).toHaveFocus()
 
             fireEvent.change(screen.getByLabelText("Mobile Phone"), { target: { value: "(555) 123-4567" } })
             expect(screen.queryByText("Enter your phone number to receive text messages.")).not.toBeInTheDocument()
@@ -864,7 +863,7 @@ describe("EmbedFormPageClient", () => {
             expect(message).toHaveAttribute("role", "alert")
             expect(smsCheckbox).toHaveAttribute("aria-invalid", "true")
             expect(smsCheckbox).toHaveAccessibleDescription(message.textContent ?? "")
-            expect(screen.getByLabelText("Mobile Phone")).toHaveFocus()
+            expect(smsCheckbox).toHaveFocus()
             expect(screen.queryByText(/must be a valid phone number/i)).not.toBeInTheDocument()
             expect(submitEmbedPublicForm).not.toHaveBeenCalled()
         })

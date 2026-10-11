@@ -345,9 +345,9 @@ def send_message(
             "phone": entity.phone or "",
             "org_name": org.name if org else "",
         }
-    from app.services import email_service, messaging_delivery_service
+    from app.services import message_content_service, messaging_delivery_service
 
-    _subject, body = email_service.render_template("", template.body, variables)
+    body = message_content_service.render_message_body(template.body, variables)
     try:
         delivery = messaging_delivery_service.materialize_delivery(
             db,

@@ -23,6 +23,7 @@ async def test_public_signature_logo_allows_cross_origin_embedding(
 
     assert response.status_code == 307
     assert response.headers.get("cross-origin-resource-policy") == "cross-origin"
+    assert response.headers.get("cache-control") == "public, max-age=3600"
 
 
 @pytest.mark.asyncio

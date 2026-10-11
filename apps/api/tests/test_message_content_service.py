@@ -28,6 +28,7 @@ def _configure_twilio_policy(db, organization_id, *, phi_enabled: bool = False) 
         organization_id=organization_id,
         legal_messaging_brand="EWI Surrogacy",
         expected_frequency="Message frequency varies",
+        support_contact="(512) 555-0100",
         twilio_edition="hipaa_eligible" if phi_enabled else None,
         baa_verified_at=configured_at if phi_enabled else None,
         compliance_approved_at=configured_at if phi_enabled else None,
@@ -216,6 +217,16 @@ def test_template_versions_are_immutable_and_publish_is_exact_and_idempotent(
             "Message and data rates may apply. HELP",
             "STOP",
         ),
+        (
+            "EWI Surrogacy: you're signed up for application texts. "
+            "Msg & data rates may apply. Reply HELP for help, STOP to opt out.",
+            "message frequency",
+        ),
+        (
+            "EWI Surrogacy: you're signed up for application texts. Msg frequency varies. "
+            "Msg & data rates may apply. Reply STOP to opt out.",
+            "HELP or support contact",
+        ),
     ],
 )
 def test_enrollment_confirmation_publish_requires_complete_disclosure(
@@ -246,6 +257,42 @@ def test_enrollment_confirmation_publish_requires_complete_disclosure(
 
     assert missing_fragment in str(exc_info.value)
     assert db.get(MessageTemplate, template.id).status == "draft"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # Program description in plain words; no literal purpose name.
+        "EWI Surrogacy: You're signed up for texts about your application, calls and reminders. "
+        "Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.",
+        # A stated rate in place of the configured frequency text.
+        "EWI Surrogacy application updates: up to 4 msgs/month. "
+        "Message and data rates may apply. Reply HELP for help, STOP to cancel.",
+        # The support phone number in place of HELP.
+        "EWI Surrogacy application texts. Message frequency varies. "
+        "Msg&data rates may apply. Questions? Call (512) 555-0100. Reply STOP to opt out.",
+    ],
+)
+def test_enrollment_confirmation_publishes_with_ctia_minimum_content(db, test_org, test_user, body):
+    _configure_twilio_policy(db, test_org.id)
+    template = message_content_service.create_template_draft(
+        db,
+        organization_id=test_org.id,
+        created_by_user_id=test_user.id,
+        name="Opt-in confirmation",
+        purpose="operational",
+        body=body,
+        is_enrollment_confirmation=True,
+        content_classification="no_phi",
+    )
+
+    published = message_content_service.publish_template(
+        db,
+        organization_id=test_org.id,
+        template_id=template.id,
+    )
+
+    assert published.status == "published"
 
 
 def test_phi_templates_require_a_current_valid_twilio_phi_gate(db, test_org, test_user):

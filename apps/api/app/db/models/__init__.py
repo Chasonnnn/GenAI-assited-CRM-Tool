@@ -102,6 +102,8 @@ from app.db.models.messaging import (
     MessagingConsentState,
     MessagingContact,
     MessagingGlobalSuppression,
+    MessagingTestPhone,
+    MessagingTestSend,
     TwilioRoute,
     TwilioSettings,
 )
@@ -115,7 +117,6 @@ from app.db.models.messaging_delivery import (
     MessageWebhookEvent,
     MessagingConversation,
     MessagingMessage,
-    MessagingProviderAdmission,
 )
 from app.db.models.meta import (
     MetaAd,
@@ -350,9 +351,10 @@ __all__ = [
     "MessagingConsentState",
     "MessagingContact",
     "MessagingGlobalSuppression",
+    "MessagingTestPhone",
+    "MessagingTestSend",
     "MessagingConversation",
     "MessagingMessage",
-    "MessagingProviderAdmission",
     "MessageDelivery",
     "MessageDeliveryAttempt",
     "MessageMediaAsset",

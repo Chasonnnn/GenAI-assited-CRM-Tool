@@ -10,11 +10,9 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.encryption import hash_pii
 from app.db.models import (
     IntakeLead,
     MessageMediaAsset,
@@ -24,11 +22,7 @@ from app.db.models import (
     Surrogate,
 )
 from app.db.models.messaging import MessagingContact, TwilioRoute, TwilioSettings
-from app.db.models.messaging_delivery import (
-    MessageDelivery,
-    MessageDeliveryAttempt,
-    MessagingProviderAdmission,
-)
+from app.db.models.messaging_delivery import MessageDelivery, MessageDeliveryAttempt
 from app.services import (
     messaging_consent_service,
     messaging_delivery_service,
@@ -235,44 +229,65 @@ def _recipient_location(
     return None, None, None
 
 
-def _reserve_account_slot(
+FLORIDA_SUBJECT_DAILY_LIMIT = 3
+
+
+def _florida_subject_cap_opens_at(
     db: Session,
+    delivery: MessageDelivery,
     *,
-    account_sid: str,
-    route: TwilioRoute,
     now: datetime,
 ) -> datetime | None:
-    account_hash = hash_pii(account_sid, purpose="twilio-admission")
-    if db.get_bind().dialect.name == "postgresql":
-        db.execute(
-            postgresql_insert(MessagingProviderAdmission)
-            .values(account_sid_hash=account_hash, next_slot_at=now)
-            .on_conflict_do_nothing(index_elements=["account_sid_hash"])
+    """Return when the Florida limit frees a slot, or None when a slot is open.
+
+    The Florida Telephone Solicitation Act (Fla. Stat. 501.059) allows 3 sales texts on
+    the same subject per 24 hours. One template family is one subject.
+
+    A sibling attempt still in progress counts only when it was claimed before this one
+    (claim time, then delivery id), so a batch claimed together sends its first three
+    instead of every delivery seeing the others and deferring.
+    """
+    window_start = now - timedelta(hours=24)
+    current = _current_attempt(db, delivery)
+    claimed_first = or_(
+        MessageDeliveryAttempt.started_at < current.started_at,
+        and_(
+            MessageDeliveryAttempt.started_at == current.started_at,
+            MessageDeliveryAttempt.delivery_id < delivery.id,
+        ),
+    )
+    sent = (
+        select(MessageDeliveryAttempt.started_at)
+        .join(
+            MessageDelivery,
+            (MessageDelivery.organization_id == MessageDeliveryAttempt.organization_id)
+            & (MessageDelivery.id == MessageDeliveryAttempt.delivery_id),
         )
-    admission = db.execute(
-        select(MessagingProviderAdmission)
-        .where(MessagingProviderAdmission.account_sid_hash == account_hash)
-        .with_for_update()
-    ).scalar_one_or_none()
-    if admission is None:
-        admission = MessagingProviderAdmission(
-            account_sid_hash=account_hash,
-            next_slot_at=now,
+        .where(
+            MessageDelivery.organization_id == delivery.organization_id,
+            MessageDelivery.contact_id == delivery.contact_id,
+            MessageDelivery.purpose == "promotional",
+            MessageDelivery.id != delivery.id,
+            or_(
+                MessageDeliveryAttempt.outcome.in_(("succeeded", "ambiguous")),
+                and_(MessageDeliveryAttempt.outcome == "in_progress", claimed_first),
+            ),
+            MessageDeliveryAttempt.started_at > window_start,
         )
-        db.add(admission)
-        db.flush()
-    next_slot = _as_utc(admission.next_slot_at)
-    if next_slot > now:
-        return next_slot
-    evidence = route.capability_evidence or {}
-    raw_rate = evidence.get("messages_per_second", 1)
-    try:
-        messages_per_second = max(0.1, min(100.0, float(raw_rate)))
-    except TypeError, ValueError:
-        messages_per_second = 1.0
-    admission.next_slot_at = now + timedelta(seconds=1 / messages_per_second)
-    admission.updated_at = now
-    return None
+    )
+    if delivery.template_version_id is not None:
+        template_key = (
+            select(MessageTemplate.template_key)
+            .where(MessageTemplate.id == delivery.template_version_id)
+            .scalar_subquery()
+        )
+        sent = sent.join(
+            MessageTemplate, MessageTemplate.id == MessageDelivery.template_version_id
+        ).where(MessageTemplate.template_key == template_key)
+    started = sorted(_as_utc(value) for value in db.execute(sent).scalars())
+    if len(started) < FLORIDA_SUBJECT_DAILY_LIMIT:
+        return None
+    return started[-FLORIDA_SUBJECT_DAILY_LIMIT] + timedelta(hours=24)
 
 
 def _media_urls(
@@ -369,37 +384,49 @@ def dispatch_claimed_delivery(
         select(TwilioSettings).where(TwilioSettings.organization_id == organization_id)
     ).scalar_one()
 
-    state, postal_code, known_timezone = _recipient_location(db, contact)
-    timezone_evidence = messaging_sending_hours.resolve_recipient_timezone(
-        phone_e164=contact.phone_e164,
-        state=state,
-        postal_code=postal_code,
-        known_timezone=known_timezone,
-    )
-    if timezone_evidence.timezone_name is None:
-        _defer(
-            db,
-            delivery,
-            run_at=now + timedelta(days=1),
-            error_type="recipient_location_ambiguous",
-            reason="Recipient timezone requires location review",
+    # Quiet hours bind solicitations only; transactional messages send at any hour.
+    if delivery.purpose == "promotional":
+        state, postal_code, known_timezone = _recipient_location(db, contact)
+        timezone_evidence = messaging_sending_hours.resolve_recipient_timezone(
+            phone_e164=contact.phone_e164,
+            state=state,
+            postal_code=postal_code,
+            known_timezone=known_timezone,
         )
-        return "deferred_location_ambiguous"
-    window = messaging_sending_hours.evaluate_sending_window(
-        now=now,
-        timezone_name=timezone_evidence.timezone_name,
-        state=state,
-    )
-    if not window.allowed:
-        assert window.defer_until is not None
-        _defer(
-            db,
-            delivery,
-            run_at=window.defer_until,
-            error_type="outside_sending_hours",
-            reason=window.reason or "Outside recipient sending hours",
-        )
-        return "deferred_sending_hours"
+        if timezone_evidence.timezone_name is None:
+            window = messaging_sending_hours.evaluate_sending_window_in_every_us_timezone(
+                now=now,
+                state=state,
+                phone_e164=contact.phone_e164,
+            )
+        else:
+            window = messaging_sending_hours.evaluate_sending_window(
+                now=now,
+                timezone_name=timezone_evidence.timezone_name,
+                state=state,
+                phone_e164=contact.phone_e164,
+            )
+        if not window.allowed:
+            assert window.defer_until is not None
+            _defer(
+                db,
+                delivery,
+                run_at=window.defer_until,
+                error_type="outside_sending_hours",
+                reason=window.reason or "Outside recipient sending hours",
+            )
+            return "deferred_sending_hours"
+        if messaging_sending_hours.florida_rules_apply(state=state, phone_e164=contact.phone_e164):
+            cap_opens_at = _florida_subject_cap_opens_at(db, delivery, now=now)
+            if cap_opens_at is not None:
+                _defer(
+                    db,
+                    delivery,
+                    run_at=cap_opens_at,
+                    error_type="florida_daily_limit",
+                    reason="Florida allows 3 promotional texts on one subject per 24 hours",
+                )
+                return "deferred_florida_daily_limit"
 
     from app.services import twilio_readiness_service
 
@@ -407,7 +434,6 @@ def dispatch_claimed_delivery(
         settings,
         route,
         requires_mms=bool(delivery.message.media_links),
-        now=now,
     )
     if route_blockers:
         _defer(
@@ -418,23 +444,6 @@ def dispatch_claimed_delivery(
             reason=f"Purpose-bound Twilio route is not ready: {route_blockers[0][0]}",
         )
         return "deferred_route_not_ready"
-
-    account_sid = twilio_settings_service.decrypt_credential(settings.account_sid_encrypted)
-    admission_at = _reserve_account_slot(
-        db,
-        account_sid=account_sid,
-        route=route,
-        now=now,
-    )
-    if admission_at is not None:
-        _defer(
-            db,
-            delivery,
-            run_at=admission_at,
-            error_type="provider_admission_deferred",
-            reason="Twilio account admission slot is not available",
-        )
-        return "deferred_admission"
 
     consent = messaging_delivery_service.recheck_before_provider_io(
         db,
@@ -473,7 +482,7 @@ def dispatch_claimed_delivery(
     media_urls = _media_urls(db, delivery, now=now)
     result = twilio_transport.send_message(
         credentials=twilio_transport.TwilioCredentials(
-            account_sid=account_sid,
+            account_sid=twilio_settings_service.decrypt_credential(settings.account_sid_encrypted),
             api_key_sid=twilio_settings_service.decrypt_credential(settings.api_key_sid_encrypted),
             api_secret=twilio_settings_service.decrypt_credential(settings.api_secret_encrypted),
         ),

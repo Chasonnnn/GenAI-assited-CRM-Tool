@@ -6,9 +6,17 @@
  * HTML unchanged and stores no design.
  */
 
-import type { EmailBodyDesign } from "@/lib/api/email-templates"
+import type { EmailBodyDesign, EmailLayout, EmailTemplateScope } from "@/lib/api/email-templates"
 
 export const HTML_BLOCK_NODE = "htmlBlock"
+
+/**
+ * The text style sends wrap around fragment bodies (email_composition_service._wrap_body_html).
+ * Fragment renders and HTML conversion use it so the editor shows what recipients get.
+ */
+export const EMAIL_BODY_STYLE =
+    "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',Arial,sans-serif;" +
+    "font-size:16px;line-height:24px;color:#111827;"
 
 /** Nodes that carry no email content of their own. */
 const CONTAINER_NODES = new Set(["container"])
@@ -102,4 +110,35 @@ export function extractEmailBodyFragment(documentHtml: string): string {
     wrapper.setAttribute("style", style)
     wrapper.append(...Array.from(parsed.body.childNodes))
     return wrapper.outerHTML
+}
+
+const FULL_DOCUMENT = /<!doctype|<html\b|<body\b/i
+
+/** A full HTML document controls its own frame, so sends give it no layout. */
+export function isFullEmailDocument(body: string): boolean {
+    return FULL_DOCUMENT.test(body)
+}
+
+const ORG_LOGO_VARIABLE = /\{\{\s*org_logo_url\s*\}\}/
+
+/** A body that places the org logo keeps its own placement; the layout shows none. */
+export function placesOrgLogo(body: string): boolean {
+    return ORG_LOGO_VARIABLE.test(body)
+}
+
+export const EMAIL_PAGE_BACKGROUND = "#f4f4f5"
+
+/** Mirrors app.core.email_layout: org templates default to Card, personal templates to Plain. */
+export function defaultEmailLayout(scope: EmailTemplateScope): EmailLayout {
+    return {
+        kind: scope === "org" ? "card" : "plain",
+        show_logo: true,
+        logo_position: "center",
+        accent_color: null,
+        page_background: EMAIL_PAGE_BACKGROUND,
+    }
+}
+
+export function resolveEmailLayout(layout: EmailLayout | null | undefined, scope: EmailTemplateScope): EmailLayout {
+    return layout ?? defaultEmailLayout(scope)
 }

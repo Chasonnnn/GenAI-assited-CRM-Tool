@@ -62,3 +62,14 @@ def test_unrelated_reply_does_not_change_consent() -> None:
 
 def test_incidental_stop_word_does_not_change_consent() -> None:
     assert classify_consent_instruction("Can you stop by tomorrow?") == "none"
+
+
+@pytest.mark.parametrize(
+    "message_text",
+    [
+        "Can you stop by to drop off the address form?",
+        "I already sent it, no more questions on my end",
+    ],
+)
+def test_promotional_terms_inside_other_words_do_not_opt_out(message_text: str) -> None:
+    assert classify_consent_instruction(message_text) == "none"

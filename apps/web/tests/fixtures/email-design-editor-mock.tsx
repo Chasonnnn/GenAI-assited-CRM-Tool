@@ -12,7 +12,10 @@ type MockDesignEditorProps = {
     onSelectVariable?: (variable: { name: string }) => void
     onFocus?: () => void
     fields?: React.ReactNode
+    canvas?: (body: React.ReactNode) => React.ReactNode
+    panel?: React.ReactNode
     settings?: React.ReactNode
+    documentStyles?: boolean
     error?: React.ReactNode
 }
 
@@ -42,15 +45,25 @@ export const EmailDesignEditor = React.forwardRef<EmailDesignEditorHandle, MockD
             insertText: (text: string) => update(`${body}${text}`),
             insertImage: (src: string, alt: string) => emailDesignEditorMock.insertImage(src, alt),
         }))
+        const textarea = (
+            <textarea
+                aria-label="Email body"
+                value={body}
+                onFocus={props.onFocus}
+                onChange={(event) => update(event.target.value)}
+            />
+        )
         return (
             <>
-                {props.fields}
-                <textarea
-                    aria-label="Email body"
-                    value={body}
-                    onFocus={props.onFocus}
-                    onChange={(event) => update(event.target.value)}
-                />
+                {props.canvas ? (
+                    props.canvas(textarea)
+                ) : (
+                    <>
+                        {props.fields}
+                        {textarea}
+                    </>
+                )}
+                {props.panel}
                 {props.variables.map((variable) => (
                     <button
                         key={variable.name}

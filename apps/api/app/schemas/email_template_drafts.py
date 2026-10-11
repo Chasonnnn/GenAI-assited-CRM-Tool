@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.email_layout import EmailLayout
 from app.schemas.email import (
     EmailBodyDesign,
     EmailTemplateTestSendRequest,
@@ -22,6 +23,7 @@ class EmailTemplateDraftCreate(BaseModel):
     from_email: str | None = Field(default=None, max_length=200)
     body: str = Field(min_length=1, max_length=50000)
     body_design: EmailBodyDesign | None = None
+    layout: EmailLayout | None = None
     scope: EmailTemplateDraftScope = "org"
 
 
@@ -31,6 +33,7 @@ class EmailTemplateDraftUpdate(BaseModel):
     from_email: str | None = Field(default=None, max_length=200)
     body: str | None = Field(default=None, min_length=1, max_length=50000)
     body_design: EmailBodyDesign | None = None
+    layout: EmailLayout | None = None
     is_active: bool | None = None
     expected_revision: int = Field(ge=1)
 
@@ -78,6 +81,7 @@ class EmailTemplateDraftRead(BaseModel):
     from_email: str | None
     body: str
     body_design: dict[str, Any] | None = None
+    layout: dict[str, Any] | None = None
     is_active: bool
     category: str | None
     base_version: int

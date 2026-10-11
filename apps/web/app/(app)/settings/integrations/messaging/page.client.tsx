@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { PermissionDeniedState } from "@/components/error-state"
+import { TestPhonesCard } from "@/components/messaging/test-phones-card"
 import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -44,6 +45,7 @@ import type {
     TwilioSettings,
     TwilioSettingsUpdate,
 } from "@/lib/api/twilio"
+import { useMessagingAccess } from "@/lib/hooks/use-messaging-templates"
 import { useEffectivePermissions } from "@/lib/hooks/use-permissions"
 import {
     readinessPollInterval,
@@ -596,8 +598,7 @@ function RouteCard({
     const configured = Boolean(settings.messaging_service_sid_masked && settings.sender_phone_masked)
     const gateFor = (suffix: string) => gates.find((gate) => gate.key === `${purpose}_${suffix}`) ?? null
     const registration = gateFor("sender_registration")
-    const optOut = gateFor("advanced_opt_out")
-    const consentApi = gateFor("consent_api")
+    const inbound = gateFor("inbound_webhook")
     const providerEvidence = (settings.capability_evidence?.provider ?? {}) as Record<string, unknown>
     const senderTypeLabel = readiness?.sender_type ? SENDER_TYPE_LABELS[readiness.sender_type] : undefined
 
@@ -670,20 +671,11 @@ function RouteCard({
                                 friendlyStatus(settings.a2p_status)
                             )}
                         </SummaryItem>
-                        <SummaryItem label="Advanced Opt-Out">
-                            {optOut ? (
-                                <StatusBadge status={optOut.status} label={GATE_LABELS[optOut.status]} />
-                            ) : (
-                                friendlyStatus(settings.advanced_opt_out_status)
-                            )}
-                        </SummaryItem>
-                        <SummaryItem label="Consent API">
-                            {consentApi ? (
-                                <StatusBadge status={consentApi.status} label={GATE_LABELS[consentApi.status]} />
-                            ) : (
-                                friendlyStatus(settings.consent_management_status)
-                            )}
-                        </SummaryItem>
+                        {inbound ? (
+                            <SummaryItem label={inbound.label}>
+                                <StatusBadge status={inbound.status} label={GATE_LABELS[inbound.status]} />
+                            </SummaryItem>
+                        ) : null}
                         <SummaryItem label="Evidence">
                             <Badge variant="secondary">SMS {providerEvidence.sms === true ? "evidenced" : "not evidenced"}</Badge>
                             <Badge variant="secondary">MMS {providerEvidence.mms === true ? "evidenced" : "not evidenced"}</Badge>
@@ -832,9 +824,8 @@ function ComplianceControlsCard({
                 <CardTitle className="text-lg">Compliance</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-                <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <SummaryItem label="Twilio edition" className="rounded-lg border p-3">{friendlyStatus(settings.twilio_edition)}</SummaryItem>
-                    <SummaryItem label="Counsel approval" className="rounded-lg border p-3">{formatDateOnly(settings.counsel_approved_at) ?? <EmptyValue label="Not recorded" />}</SummaryItem>
                     <SummaryItem label="Compliance approval" className="rounded-lg border p-3">{formatDateOnly(settings.compliance_approved_at) ?? <EmptyValue label="Not recorded" />}</SummaryItem>
                     <SummaryItem label="BAA verification" className="rounded-lg border p-3">{formatDateOnly(settings.baa_verified_at) ?? <EmptyValue label="Not recorded" />}</SummaryItem>
                 </dl>
@@ -1159,6 +1150,7 @@ export default function MessagingIntegrationPageClient() {
         isDeveloper ||
         (permissionsQuery.data?.permissions ?? []).includes("manage_integrations")
     const [awaitingCheckSince, setAwaitingCheckSince] = useState<string | null>(null)
+    const messagingAccess = useMessagingAccess()
     const settingsQuery = useTwilioSettings(Boolean(user && canManageIntegrations))
     const readinessQuery = useTwilioReadiness(Boolean(user && canManageIntegrations), awaitingCheckSince)
     const queueCheck = useQueueTwilioReadinessCheck()
@@ -1258,6 +1250,8 @@ export default function MessagingIntegrationPageClient() {
                         onSaved={() => setAwaitingCheckSince(null)}
                     />
                 ) : null}
+
+                {settingsQuery.data && messagingAccess.allowed ? <TestPhonesCard /> : null}
             </main>
         </div>
     )

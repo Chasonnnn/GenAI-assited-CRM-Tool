@@ -36,9 +36,7 @@ def build_sample_variables(
 ) -> dict[str, str]:
     org = db.get(Organization, org_id) if org_id else None
     org_name = org.name if org else ""
-    org_logo_url = (
-        media_service.get_signed_media_url(org.signature_logo_url) if org else None
-    ) or ""
+    org_logo_url = media_service.email_logo_url(org)
 
     sample_unsubscribe_url = ""
     form_link = ""
@@ -386,6 +384,7 @@ async def send_template_content_test(
     subject_template: str,
     body_template: str,
     template_from_email: str | None,
+    template_layout: dict | None,
     template_id: UUID | None,
     to_email: str,
     variables: dict[str, str] | None,
@@ -397,6 +396,7 @@ async def send_template_content_test(
     Callers can safely pass draft content without mutating the published
     ``email_templates`` projection.
     """
+    from app.core.email_layout import parse_layout
     from app.services import (
         email_composition_service,
         email_service,
@@ -432,6 +432,7 @@ async def send_template_content_test(
         recipient_email=to_email,
         rendered_body_html=rendered_body,
         scope="personal" if scope == "personal" else "org",
+        layout=parse_layout(template_layout),
         sender_user_id=actor_user_id if scope == "personal" else None,
         portal_base_url=portal_base_url,
     )

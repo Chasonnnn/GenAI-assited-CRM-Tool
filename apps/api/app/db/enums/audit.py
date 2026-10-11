@@ -92,6 +92,10 @@ class AuditEventType(str, Enum):
     INTEGRATION_DISCONNECTED = "integration_disconnected"
     INTEGRATION_TOKEN_REFRESHED = "integration_token_refreshed"  # nosec B105
     META_ASSETS_CONNECTED = "meta_assets_connected"
+    MESSAGING_TEST_PHONE_ADDED = "messaging_test_phone_added"
+    MESSAGING_TEST_PHONE_VERIFIED = "messaging_test_phone_verified"
+    MESSAGING_TEST_PHONE_REMOVED = "messaging_test_phone_removed"
+    MESSAGING_TEST_SENT = "messaging_test_sent"
 
     # User management
     USER_INVITED = "user_invited"

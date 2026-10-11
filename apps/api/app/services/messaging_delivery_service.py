@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models.messaging import (
+    MessagingConsentEvidence,
     MessagingConsentState,
     MessagingContact,
     MessagingGlobalSuppression,
@@ -143,13 +144,14 @@ def ensure_orphan_status_case(
     return case
 
 
-def _resolve_orphan_status_cases(
+def resolve_orphan_status_cases(
     db: Session,
     *,
     event: MessageWebhookEvent,
-    delivery: MessageDelivery,
+    delivery_id: UUID | None,
     resolved_at: datetime,
 ) -> None:
+    """Resolve the orphan cases of a replayed status event; test texts pass no delivery."""
     cases = list(
         db.scalars(
             select(MessageReconciliationCase)
@@ -162,9 +164,9 @@ def _resolve_orphan_status_cases(
         )
     )
     for case in cases:
-        if case.delivery_id not in {None, delivery.id}:
+        if case.delivery_id not in {None, delivery_id}:
             continue
-        case.delivery_id = delivery.id
+        case.delivery_id = delivery_id
         if case.status != "resolved":
             case.status = "resolved"
             case.resolved_at = resolved_at
@@ -218,10 +220,10 @@ def _apply_status_event(
             delivery.status = "submitted"
         delivery.updated_at = processed_at
     event.processed_at = processed_at
-    _resolve_orphan_status_cases(
+    resolve_orphan_status_cases(
         db,
         event=event,
-        delivery=delivery,
+        delivery_id=delivery.id,
         resolved_at=processed_at,
     )
 
@@ -418,7 +420,23 @@ def materialize_delivery(
             MessageDelivery.status.notin_(("failed", "cancelled")),
         )
     ).scalar_one_or_none()
-    if prior_confirmation is None and not is_enrollment_confirmation:
+    # Twilio's Advanced Opt-Out answers a START with its opt-in confirmation reply. Only
+    # the signed webhook's record of that keyword counts, not a staff-recorded restore.
+    keyword_restore = (
+        db.execute(
+            select(MessagingConsentEvidence.id).where(
+                MessagingConsentEvidence.organization_id == organization_id,
+                MessagingConsentEvidence.id == state.latest_evidence_id,
+                MessagingConsentEvidence.action == "restore",
+                MessagingConsentEvidence.source == "twilio_inbound",
+                MessagingConsentEvidence.recorded_by_user_id.is_(None),
+                MessagingConsentEvidence.evidence_metadata["advanced_opt_out_type"].astext
+                == "START",
+            )
+        ).scalar_one_or_none()
+        is not None
+    )
+    if prior_confirmation is None and not keyword_restore and not is_enrollment_confirmation:
         raise MessagingEnrollmentRequired(
             "The first message in this consent epoch must be an enrollment confirmation"
         )
