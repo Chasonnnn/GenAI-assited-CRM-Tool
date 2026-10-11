@@ -405,11 +405,13 @@ export function getEmailRecipientUserId(action: ActionConfig): string {
 }
 
 function WorkflowMultiSelect({
+    ariaLabel,
     options,
     value,
     onChange,
     placeholder = "Select values",
 }: {
+    ariaLabel: string
     options: SelectOption[]
     value: string[]
     onChange: (next: string[]) => void
@@ -425,6 +427,7 @@ function WorkflowMultiSelect({
         <Popover>
             <PopoverTrigger
                 type="button"
+                aria-label={`${ariaLabel}: ${label}`}
                 className={buttonVariants({ variant: "outline", className: "flex-1 justify-between" })}
             >
                 <span className="truncate">{label}</span>
@@ -465,10 +468,12 @@ function WorkflowMultiSelect({
 }
 
 export function ConditionValueInput({
+    ariaLabel,
     condition,
     options,
     onChange,
 }: {
+    ariaLabel: string
     condition: Pick<Condition, "field" | "operator" | "value">
     options: SelectOption[] | null
     onChange: (value: JsonValue) => void
@@ -481,6 +486,7 @@ export function ConditionValueInput({
     if (isValueless) {
         return (
             <Input
+                aria-label={ariaLabel}
                 className="flex-1"
                 value=""
                 disabled
@@ -493,7 +499,7 @@ export function ConditionValueInput({
         const checked = Boolean(condition.value)
         return (
             <div className="flex flex-1 items-center gap-2 rounded-md border px-3 py-2">
-                <Switch checked={checked} onCheckedChange={onChange} />
+                <Switch aria-label={ariaLabel} checked={checked} onCheckedChange={onChange} />
                 <span className="text-sm">{checked ? "Yes" : "No"}</span>
             </div>
         )
@@ -502,6 +508,7 @@ export function ConditionValueInput({
     if (!isListOperator && NUMBER_FIELDS.has(field)) {
         return (
             <Input
+                aria-label={ariaLabel}
                 type="number"
                 className="flex-1"
                 value={typeof condition.value === "number" ? condition.value : ""}
@@ -513,6 +520,7 @@ export function ConditionValueInput({
     if (!isListOperator && DATE_FIELDS.has(field)) {
         return (
             <Input
+                aria-label={ariaLabel}
                 type="date"
                 className="flex-1"
                 value={typeof condition.value === "string" ? condition.value : ""}
@@ -527,6 +535,7 @@ export function ConditionValueInput({
             : toListArray(condition.value as JsonValue)
         return (
             <WorkflowMultiSelect
+                ariaLabel={ariaLabel}
                 options={options}
                 value={selectedValues}
                 onChange={onChange}
@@ -541,7 +550,7 @@ export function ConditionValueInput({
                 value={typeof condition.value === "string" ? condition.value : ""}
                 onValueChange={onChange}
             >
-                <SelectTrigger className="flex-1">
+                <SelectTrigger aria-label={ariaLabel} className="flex-1">
                     <SelectValue placeholder="Select value">
                         {(value: string | null) => {
                             if (!value) return "Select value"
@@ -570,6 +579,7 @@ export function ConditionValueInput({
 
     return (
         <Input
+            aria-label={ariaLabel}
             placeholder={isListOperator ? "Comma-separated values" : "Value"}
             className="flex-1"
             value={inputValue}

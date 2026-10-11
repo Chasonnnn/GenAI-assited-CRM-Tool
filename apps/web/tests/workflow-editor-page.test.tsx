@@ -428,6 +428,8 @@ describe('WorkflowEditorPage', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Add filter' }))
         fireEvent.click(screen.getByRole('button', { name: 'Add filter' }))
         expect(screen.getAllByRole('button', { name: 'Remove condition' })).toHaveLength(2)
+        expect(screen.getByRole('textbox', { name: 'Condition 1 value' })).toBeInTheDocument()
+        expect(screen.getByRole('textbox', { name: 'Condition 2 value' })).toBeInTheDocument()
         expect(screen.getByRole('radio', { name: 'All filters match' })).toBeChecked()
 
         addNoteAction('Record the condition result')

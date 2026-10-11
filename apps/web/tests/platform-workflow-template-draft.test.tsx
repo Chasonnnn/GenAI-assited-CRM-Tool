@@ -346,7 +346,7 @@ describe("platform workflow template draft ownership", () => {
         assert.isDefined(removeCondition)
         const stageCondition = removeCondition.closest<HTMLElement>('[data-slot="card"]')
         assert.isNotNull(stageCondition)
-        const conditionStageSelect = within(stageCondition).getAllByRole("combobox")[2]
+        const conditionStageSelect = within(stageCondition).getByRole("combobox", { name: "Condition 1 value" })
         assert.isDefined(conditionStageSelect)
         fireEvent.click(conditionStageSelect)
         const spermConditionStage = screen.getByRole("option", { name: "Sperm Ready" })
