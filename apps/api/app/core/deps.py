@@ -1,14 +1,15 @@
 """FastAPI dependencies for authentication, authorization, and database access."""
 
 import logging
-from collections.abc import Generator
-from contextlib import contextmanager
+from collections.abc import AsyncGenerator, Generator
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Request
+from anyio import CapacityLimiter, fail_after
+from fastapi import BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, validate_csrf
@@ -119,11 +120,49 @@ def _validate_request_host(request: Request, org_slug: str) -> None:
     raise HTTPException(status_code=403, detail="Session invalid for this domain")
 
 
-def get_db(request: Request = None) -> Generator[Session]:
+async def _request_db_slot(
+    request: Request, background_tasks: BackgroundTasks
+) -> AsyncGenerator[None]:
+    limiter = getattr(request.app.state, "request_db_limiter", None)
+    if limiter is None:
+        limiter = CapacityLimiter(settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW)
+        request.app.state.request_db_limiter = limiter
+    # Wait outside the shared worker pool so connection owners can finish their requests.
+    borrower = object()
+    try:
+        with fail_after(settings.DB_POOL_TIMEOUT):
+            await limiter.acquire_on_behalf_of(borrower)
+    except TimeoutError:
+        raise HTTPException(status_code=503, detail="Database request capacity is busy") from None
+    released = False
+
+    def release_slot() -> None:
+        nonlocal released
+        if not released:
+            limiter.release_on_behalf_of(borrower)
+            released = True
+
+    async def finish_database_work() -> None:
+        db = getattr(request.state, "request_db", None)
+        if db is not None:
+            await run_in_threadpool(db.close)
+        release_slot()
+
+    # Register before handlers append database-free storage cleanup. Background tasks
+    # start after the complete response body, preserving sessions used by streams.
+    background_tasks.add_task(finish_database_work)
+    try:
+        yield
+    finally:
+        # Errors and cancellation may bypass response background tasks.
+        release_slot()
+
+
+def get_db(request: Request = None, _slot: None = Depends(_request_db_slot)) -> Generator[Session]:
     """
     Database session dependency.
 
-    Yields a database session and ensures it's closed after the request.
+    Yields a session through the response body. Background work must own its sessions.
     """
     db = SessionLocal()
     try:
@@ -131,18 +170,9 @@ def get_db(request: Request = None) -> Generator[Session]:
             request.state.request_db = db
         yield db
     finally:
+        # Fallback when errors or cancellation bypass the response cleanup task.
         # Request org-scope teardown belongs to clear_org_scope_middleware.
         # Keeping one owner avoids racing to remove the same SQLAlchemy listener.
-        db.close()
-
-
-@contextmanager
-def get_db_for_stream() -> Generator[Session]:
-    """Database session for streaming endpoints."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
         db.close()
 
 

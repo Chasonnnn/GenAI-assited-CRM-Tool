@@ -25,6 +25,13 @@ if TYPE_CHECKING:
     from app.db.models import Organization, User
 
 
+# Key-existence statistics narrow estimates; per-case filters still reject null references.
+MATCH_WORK_AUDIT_PREDICATE = text(
+    "target_type = 'match' AND (event_type <> 'phi_viewed' "
+    "OR details ?| ARRAY['task_id', 'note_id', 'attachment_id'])"
+)
+
+
 class AuditLog(Base):
     """
     Security and compliance audit log.
@@ -48,6 +55,20 @@ class AuditLog(Base):
             "organization_id",
             "actor_user_id",
             "created_at",
+        ),
+        Index(
+            "idx_audit_chain_tail",
+            "organization_id",
+            text("created_at DESC"),
+            text("id DESC"),
+            postgresql_where=text("entry_hash IS NOT NULL"),
+            postgresql_include=["entry_hash"],
+        ),
+        Index(
+            "idx_audit_match_work",
+            "organization_id",
+            "target_id",
+            postgresql_where=MATCH_WORK_AUDIT_PREDICATE,
         ),
     )
 

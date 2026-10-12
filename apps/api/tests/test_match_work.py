@@ -1,8 +1,10 @@
 """Occurrence isolation and authorization for match work."""
 
+import re
 import uuid
 
 import pytest
+from psycopg import sql
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -710,10 +712,31 @@ async def test_work_activity_with_large_unrelated_audit_history(
             plan = cursor.fetchone()[0][0]["Plan"]
             visited += audit_rows_visited(plan)
             temporary_blocks_written += plan.get("Temp Written Blocks", 0)
-    # Budget one activity scan plus the separate authentication audit lookup.
-    # Measure work instead of elapsed time; parallel EXPLAIN row counts are averaged.
-    audit_count = db.execute(text("SELECT count(*) FROM audit_logs")).scalar_one()
-    assert visited <= 2 * audit_count + 10, f"Match work visited {visited:,.0f} audit rows"
+            if "WITH case_audits AS" in statement:
+                # Long-lived pooled connections can switch to a generic prepared plan.
+                names = list(dict.fromkeys(re.findall(r"%\((\w+)\)s", statement)))
+                prepared = re.sub(
+                    r"%\((\w+)\)s", lambda match: f"${names.index(match[1]) + 1}", statement
+                )
+                cursor.execute("SET LOCAL plan_cache_mode = force_generic_plan")
+                cursor.execute("PREPARE match_work_probe AS " + prepared)
+                try:
+                    cursor.execute(
+                        sql.SQL(
+                            "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) EXECUTE match_work_probe ({})"
+                        ).format(
+                            sql.SQL(", ").join(sql.Literal(parameters[name]) for name in names)
+                        )
+                    )
+                    generic_plan = cursor.fetchone()[0][0]["Plan"]
+                    assert audit_rows_visited(generic_plan) < 5000
+                    assert generic_plan.get("Temp Written Blocks", 0) == 0
+                finally:
+                    cursor.execute("DEALLOCATE match_work_probe")
+                    cursor.execute("SET LOCAL plan_cache_mode = auto")
+    # Neither history nor the audit-chain tail should scan 400,000 unrelated views.
+    # Leave room for the 800 durable deleted-work references and planner variation.
+    assert visited < 5000, f"Match work visited {visited:,.0f} audit rows"
 
     assert result.status_code == 200, result.text
     assert len(result.json()["activity"]) == (1 if attempt_scoped else 128)
