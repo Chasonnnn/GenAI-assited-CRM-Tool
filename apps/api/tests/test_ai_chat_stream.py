@@ -1,12 +1,16 @@
-from contextlib import contextmanager
+import asyncio
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
-from httpx import AsyncClient
+from anyio import CapacityLimiter
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
 from app.db.models import AIMessage, AISettings
 from app.services import ai_settings_service
-from app.services.ai_provider import ChatStreamChunk
+from app.services.ai_provider import ChatResponse, ChatStreamChunk
 
 
 def _create_ai_settings(db, org_id, user_id) -> AISettings:
@@ -31,12 +35,6 @@ async def test_chat_stream_returns_events(
     authed_client: AsyncClient, db, test_org, test_user, monkeypatch
 ):
     _create_ai_settings(db, test_org.id, test_user.id)
-
-    @contextmanager
-    def _stream_db():
-        yield db
-
-    monkeypatch.setattr("app.routers.ai_chat.get_db_for_stream", _stream_db)
 
     class StubProvider:
         async def stream_chat(self, messages, **kwargs):  # noqa: ARG002
@@ -66,3 +64,140 @@ async def test_chat_stream_returns_events(
 
     messages = db.query(AIMessage).all()
     assert any(msg.role == "assistant" for msg in messages)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("concurrency", [1, 2])
+@pytest.mark.parametrize("provider_fails", [False, True])
+@pytest.mark.parametrize("streaming", [False, True], ids=["json", "stream"])
+async def test_chat_requests_complete_with_one_connection_per_request(
+    db_engine, monkeypatch, concurrency, provider_fails, streaming
+):
+    from app.core import deps
+    from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
+    from app.core.security import create_session_token
+    from app.db.enums import Role
+    from app.db.models import AuditLog, Membership, Organization, SystemAlert, User
+    from app.main import app
+    from app.services import alert_service, session_service
+
+    request_engine = create_engine(
+        db_engine.url, pool_size=concurrency, max_overflow=0, pool_timeout=0.3
+    )
+    monkeypatch.setattr(deps, "SessionLocal", sessionmaker(bind=request_engine))
+    monkeypatch.setattr(alert_service, "SessionLocal", sessionmaker(bind=request_engine))
+    monkeypatch.setattr(
+        app.state, "request_db_limiter", CapacityLimiter(concurrency), raising=False
+    )
+    org_id, user_id = uuid4(), uuid4()
+    barrier = asyncio.Barrier(concurrency)
+
+    class StubProvider:
+        async def chat(self, messages, **kwargs):
+            await asyncio.wait_for(barrier.wait(), timeout=2)
+            if provider_fails:
+                raise RuntimeError("Synthetic provider failure")
+            return ChatResponse(
+                content="Hello",
+                prompt_tokens=1,
+                completion_tokens=1,
+                total_tokens=2,
+                model="gemini-3.8-flash",
+            )
+
+        async def stream_chat(self, messages, **kwargs):
+            await asyncio.wait_for(barrier.wait(), timeout=2)
+            if provider_fails:
+                raise RuntimeError("Synthetic provider failure")
+            yield ChatStreamChunk(text="Hello", model="gemini-3.8-flash")
+            yield ChatStreamChunk(text="", model="gemini-3.8-flash", is_final=True)
+
+    monkeypatch.setattr(
+        "app.services.ai_provider.get_provider", lambda *_args, **_kwargs: StubProvider()
+    )
+    try:
+        # Independent request sessions must see committed fixture data.
+        with sessionmaker(bind=db_engine)() as seed:
+            seed.add_all(
+                [
+                    Organization(
+                        id=org_id, name="Stream QA", slug=f"stream-{org_id}", ai_enabled=True
+                    ),
+                    User(
+                        id=user_id,
+                        email=f"stream-{user_id}@example.test",
+                        display_name="Stream QA",
+                        token_version=1,
+                        is_active=True,
+                    ),
+                ]
+            )
+            seed.flush()
+            seed.add(Membership(user_id=user_id, organization_id=org_id, role=Role.DEVELOPER))
+            _create_ai_settings(seed, org_id, user_id)
+            token = create_session_token(
+                user_id=user_id,
+                org_id=org_id,
+                role=Role.DEVELOPER.value,
+                token_version=1,
+                mfa_verified=True,
+                mfa_required=True,
+            )
+            session_service.create_session(
+                db=seed, user_id=user_id, org_id=org_id, token=token, request=None
+            )
+            seed.commit()
+
+        csrf = generate_csrf_token()
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="https://test",
+            cookies={deps.COOKIE_NAME: token, CSRF_COOKIE_NAME: csrf},
+            headers={CSRF_HEADER: csrf},
+        ) as client:
+            responses = await asyncio.gather(
+                *(
+                    client.post(
+                        "/ai/chat/stream" if streaming else "/ai/chat", json={"message": "Hi"}
+                    )
+                    for _ in range(concurrency)
+                )
+            )
+            for response in responses:
+                assert response.status_code == 200
+                if streaming:
+                    assert ("event: done" in response.text) is (not provider_fails), response.text
+                    assert ("event: error" in response.text) is provider_fails
+                else:
+                    assert response.json()["content"] == (
+                        "AI error: Synthetic provider failure" if provider_fails else "Hello"
+                    )
+            assert (await client.get("/auth/me")).status_code == 200
+        assert request_engine.pool.checkedout() == 0
+        with sessionmaker(bind=db_engine)() as observer:
+            from app.db.models import AIConversation
+
+            messages = (
+                observer.query(AIMessage)
+                .join(AIConversation)
+                .filter(AIConversation.organization_id == org_id, AIMessage.role == "assistant")
+                .all()
+            )
+            assert len(messages) == (0 if provider_fails else concurrency)
+            alerts = observer.query(SystemAlert).filter(SystemAlert.organization_id == org_id).all()
+            if provider_fails:
+                assert len(alerts) == 1
+                assert alerts[0].occurrence_count == concurrency
+            else:
+                assert not alerts
+    finally:
+        request_engine.dispose()
+        with sessionmaker(bind=db_engine)() as cleanup:
+            cleanup.execute(text("SET LOCAL session_replication_role = replica"))
+            cleanup.query(AuditLog).filter(AuditLog.organization_id == org_id).delete()
+            cleanup.execute(text("SET LOCAL session_replication_role = origin"))
+            cleanup.query(Organization).filter(Organization.id == org_id).delete(
+                synchronize_session=False
+            )
+            cleanup.query(User).filter(User.id == user_id).delete(synchronize_session=False)
+            cleanup.commit()

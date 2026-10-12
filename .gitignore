@@ -73,3 +73,4 @@ infra/terraform/tfplan
 # next-agents-md
 .next-docs/
 .gstack/
+/load-tests/results/

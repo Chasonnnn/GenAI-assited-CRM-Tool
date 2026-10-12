@@ -20,6 +20,7 @@ from app.db.models import (
     Task,
     User,
 )
+from app.db.models.audit import MATCH_WORK_AUDIT_PREDICATE
 from app.schemas.auth import UserSession
 from app.services import (
     attachment_service,
@@ -172,7 +173,8 @@ def _list_activity(db, session, match, attempt_id, page):
         )
         .where(
             AuditLog.organization_id == session.org_id,
-            AuditLog.target_type == "match",
+            # Fixed predicate also permits the partial index in prepared generic plans.
+            MATCH_WORK_AUDIT_PREDICATE,
             case_scope,
         )
         .cte("case_audits")
