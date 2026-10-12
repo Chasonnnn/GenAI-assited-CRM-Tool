@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.models import AIMessage, AISettings
 from app.services import ai_settings_service
-from app.services.ai_provider import ChatStreamChunk
+from app.services.ai_provider import ChatResponse, ChatStreamChunk
 
 
 def _create_ai_settings(db, org_id, user_id) -> AISettings:
@@ -69,8 +69,9 @@ async def test_chat_stream_returns_events(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("concurrency", [1, 2])
 @pytest.mark.parametrize("provider_fails", [False, True])
-async def test_chat_streams_complete_with_one_connection_per_request(
-    db_engine, monkeypatch, concurrency, provider_fails
+@pytest.mark.parametrize("streaming", [False, True], ids=["json", "stream"])
+async def test_chat_requests_complete_with_one_connection_per_request(
+    db_engine, monkeypatch, concurrency, provider_fails, streaming
 ):
     from app.core import deps
     from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
@@ -92,6 +93,18 @@ async def test_chat_streams_complete_with_one_connection_per_request(
     barrier = asyncio.Barrier(concurrency)
 
     class StubProvider:
+        async def chat(self, messages, **kwargs):
+            await asyncio.wait_for(barrier.wait(), timeout=2)
+            if provider_fails:
+                raise RuntimeError("Synthetic provider failure")
+            return ChatResponse(
+                content="Hello",
+                prompt_tokens=1,
+                completion_tokens=1,
+                total_tokens=2,
+                model="gemini-3.8-flash",
+            )
+
         async def stream_chat(self, messages, **kwargs):
             await asyncio.wait_for(barrier.wait(), timeout=2)
             if provider_fails:
@@ -144,14 +157,21 @@ async def test_chat_streams_complete_with_one_connection_per_request(
         ) as client:
             responses = await asyncio.gather(
                 *(
-                    client.post("/ai/chat/stream", json={"message": "Hi"})
+                    client.post(
+                        "/ai/chat/stream" if streaming else "/ai/chat", json={"message": "Hi"}
+                    )
                     for _ in range(concurrency)
                 )
             )
             for response in responses:
                 assert response.status_code == 200
-                assert ("event: done" in response.text) is (not provider_fails), response.text
-                assert ("event: error" in response.text) is provider_fails
+                if streaming:
+                    assert ("event: done" in response.text) is (not provider_fails), response.text
+                    assert ("event: error" in response.text) is provider_fails
+                else:
+                    assert response.json()["content"] == (
+                        "AI error: Synthetic provider failure" if provider_fails else "Hello"
+                    )
             assert (await client.get("/auth/me")).status_code == 200
         assert request_engine.pool.checkedout() == 0
         with sessionmaker(bind=db_engine)() as observer:
