@@ -2,6 +2,73 @@
 
 Run k6 load tests for core workflows (surrogates, tasks, dashboard, automation, search).
 
+## Match history under dashboard traffic
+
+From `apps/api`:
+
+```sh
+mise exec -- uv run python -m scripts.benchmark_match_dashboard
+```
+
+Requires Docker and k6. The runner creates an isolated PostgreSQL 18.1 container,
+applies migrations, and seeds four synthetic repeated matches with treatment attempts.
+The dataset includes 400,000 unrelated audit rows, 3,200 previous-case events, and 512 participant events.
+Bulk audit rows model legacy history without hash-chain entries, matching the existing query-plan regression fixture.
+It starts two API workers with two connections each and no pool overflow.
+Three match users run beside two dashboard users for two minutes.
+
+The test checks current-case, previous-case, and attempt history. All requests must succeed,
+history must be populated, and each flow must meet an 800 ms p95 budget.
+The budget is an initial regression threshold, not a production capacity claim.
+Authentication uses a temporary MFA-verified synthetic administrator session.
+No worker process sends email or calls an AI provider.
+
+```sh
+mise exec -- uv run python -m scripts.benchmark_match_dashboard \
+  --duration 5m --audit-rows 1000000 --match-vus 6 --dashboard-vus 4
+```
+
+`--workers`, `--pool-size`, and `--p95-ms` support controlled comparisons.
+Keep the workload and database size fixed when comparing a query or index change.
+This fixed-user test measures contention; it does not establish maximum sustainable arrival rate.
+The small participant population targets audit-history contention, not high-cardinality dashboard aggregation.
+
+Each run writes an ignored `load-tests/results/<timestamp>/` directory:
+
+- `k6-summary.json`: latency, request failures, checks, and completed history requests by scope.
+- `database.json`: query fingerprints, normalized SQL, execution time, calls, buffer activity, and temporary writes.
+- `run.json`: workload, tool version, Git revision, pool settings, and pool timeout error count.
+
+The runner enables `pg_stat_statements` only in its new container and resets counters after seeding.
+Database execution time excludes application connection-pool waiting and response serialization.
+HTTP latency and pool timeout counts expose contention; they do not measure pool wait duration directly.
+The runner deletes its database, API processes, synthetic session, and temporary files after each run.
+It does not use an inherited database URL or modify either existing development database.
+
+For an existing synthetic staging fixture, run `k6-match-dashboard.js` directly with
+`BASE_URL`, `AUTH_COOKIE`, and `FIXTURE_FILE`. The fixture is a JSON array with
+`match_id`, `previous_match_id`, and `attempt_id` for each repeated match.
+Use `ALLOW_FORBIDDEN=0`; authorization failures invalidate this benchmark.
+
+## Local query adviser
+
+pgAssistant 3.8.4 is pinned by image digest. From the repository root:
+
+```sh
+export PGASSISTANT_SECRET_KEY="$(openssl rand -hex 32)"
+docker compose -f load-tests/compose.pgassistant.yml up -d
+```
+
+The UI is at `http://127.0.0.1:8088`. Connect to a synthetic development or staging database.
+For a database on this Mac, use `host.docker.internal` as the database hostname.
+AI-provider access is disabled in this configuration. Query and index analysis remains available.
+Review suggested SQL before applying it. The benchmark database exists only while its runner is active.
+
+```sh
+docker compose -f load-tests/compose.pgassistant.yml down
+unset PGASSISTANT_SECRET_KEY
+```
+
 ## Prereqs
 - `k6` installed (https://k6.io/docs/get-started/installation)
 - API server running
