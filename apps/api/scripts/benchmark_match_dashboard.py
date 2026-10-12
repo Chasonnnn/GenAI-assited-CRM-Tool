@@ -383,12 +383,12 @@ def run(args) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--duration", default="2m")
+    parser.add_argument("--duration", default="5m")
     parser.add_argument("--audit-rows", type=int, default=400_000)
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--pool-size", type=int, default=2)
-    parser.add_argument("--match-vus", type=int, default=3)
-    parser.add_argument("--dashboard-vus", type=int, default=2)
+    parser.add_argument("--match-vus", type=int, default=12)
+    parser.add_argument("--dashboard-vus", type=int, default=8)
     parser.add_argument("--p95-ms", type=int, default=800)
     parser.add_argument("--seed", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()

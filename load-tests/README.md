@@ -15,7 +15,7 @@ applies migrations, and seeds four synthetic repeated matches with treatment att
 The dataset includes 400,000 unrelated audit rows, 3,200 previous-case events, and 512 participant events.
 Bulk audit rows model legacy history without hash-chain entries, matching the existing query-plan regression fixture.
 It starts two API workers with two connections each and no pool overflow.
-Three match users run beside two dashboard users for two minutes.
+The target is 20 concurrent virtual users: 12 history readers and eight dashboard users for five minutes.
 
 The test checks current-case, previous-case, and attempt history. All requests must succeed,
 history must be populated, and each flow must meet an 800 ms p95 budget.
@@ -25,7 +25,7 @@ No worker process sends email or calls an AI provider.
 
 ```sh
 mise exec -- uv run python -m scripts.benchmark_match_dashboard \
-  --duration 5m --audit-rows 1000000 --match-vus 6 --dashboard-vus 4
+  --audit-rows 1000000
 ```
 
 `--workers`, `--pool-size`, and `--p95-ms` support controlled comparisons.
@@ -33,11 +33,19 @@ Keep the workload and database size fixed when comparing a query or index change
 This fixed-user test measures contention; it does not establish maximum sustainable arrival rate.
 The small participant population targets audit-history contention, not high-cardinality dashboard aggregation.
 
+The first five-minute, 20-user run failed the all-requests-success gate: 47 of 15,855 requests failed (0.30%).
+Dashboard p95 was 654 ms; attempt, case, and previous-case history p95 were 664, 737, and 689 ms.
+The logs contained 157 pool-timeout mentions; duplicate stack traces can represent the same failure.
+Audit-chain tail lookup and case-history queries led captured SQL execution time, at 102 and 100 seconds respectively.
+Investigate their query plans and connection holding time before changing pool limits.
+Local evidence: `results/20261012T044213Z-7fb3b4/`, source `42d379c0d` with workload-default changes.
+This local result does not establish production capacity.
+
 Each run writes an ignored `load-tests/results/<timestamp>/` directory:
 
 - `k6-summary.json`: latency, request failures, checks, and completed history requests by scope.
 - `database.json`: query fingerprints, normalized SQL, execution time, calls, buffer activity, and temporary writes.
-- `run.json`: workload, tool version, Git revision, pool settings, and pool timeout error count.
+- `run.json`: workload, tool version, Git revision, pool settings, and pool timeout log-mention count.
 
 The runner enables `pg_stat_statements` only in its new container and resets counters after seeding.
 Database execution time excludes application connection-pool waiting and response serialization.

@@ -8,14 +8,14 @@ export { dashboardFlow };
 const base = (__ENV.BASE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 const fixtures = __ENV.FIXTURE_FILE ? JSON.parse(open(__ENV.FIXTURE_FILE)) : [];
 const completed = new Counter("match_work_completed");
-const duration = __ENV.DURATION || "2m";
+const duration = __ENV.DURATION || "5m";
 const scopes = ["case", "attempt", "previous_case"];
 const budget = Number(__ENV.P95_MS || 800);
 
 export const options = {
     scenarios: {
-        match_work: { executor: "constant-vus", vus: Number(__ENV.VUS_MATCH || 3), duration, exec: "matchWorkFlow" },
-        dashboard: { executor: "constant-vus", vus: Number(__ENV.VUS_DASHBOARD || 2), duration, exec: "dashboardFlow" },
+        match_work: { executor: "constant-vus", vus: Number(__ENV.VUS_MATCH || 12), duration, exec: "matchWorkFlow" },
+        dashboard: { executor: "constant-vus", vus: Number(__ENV.VUS_DASHBOARD || 8), duration, exec: "dashboardFlow" },
     },
     // URL and error tags can contain identifiers. Export only bounded dimensions.
     systemTags: ["status", "method", "name", "scenario", "check", "expected_response"],
