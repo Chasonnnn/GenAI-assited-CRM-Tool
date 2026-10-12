@@ -33,13 +33,35 @@ Keep the workload and database size fixed when comparing a query or index change
 This fixed-user test measures contention; it does not establish maximum sustainable arrival rate.
 The small participant population targets audit-history contention, not high-cardinality dashboard aggregation.
 
-The first five-minute, 20-user run failed the all-requests-success gate: 47 of 15,855 requests failed (0.30%).
-Dashboard p95 was 654 ms; attempt, case, and previous-case history p95 were 664, 737, and 689 ms.
-The logs contained 157 pool-timeout mentions; duplicate stack traces can represent the same failure.
-Audit-chain tail lookup and case-history queries led captured SQL execution time, at 102 and 100 seconds respectively.
-Investigate their query plans and connection holding time before changing pool limits.
-Local evidence: `results/20261012T044213Z-7fb3b4/`, source `42d379c0d` with workload-default changes.
-This local result does not establish production capacity.
+The repaired five-minute run passed every gate with the same dataset, users, workers, pool limits, and timeout settings.
+
+| Measurement | Before | After |
+| --- | ---: | ---: |
+| Failed requests / total | 47 / 15,855 | 0 / 18,308 |
+| Pool-timeout log mentions | 157 | 0 |
+| Dashboard p95 | 654 ms | 659 ms |
+| Attempt history p95 | 664 ms | 586 ms |
+| Case history p95 | 737 ms | 595 ms |
+| Previous-case history p95 | 689 ms | 606 ms |
+| Mean case-history SQL execution | 26.44 ms | 1.60 ms |
+
+Before: `results/20261012T044213Z-7fb3b4/`, source `42d379c0d` with workload-default changes.
+After: `results/20261012T052049Z-7aa585/`, clean source `01e38cdb5`.
+Pool-timeout mentions can repeat the same exception; they are not distinct failed-request counts.
+These local results do not establish production capacity.
+
+Partial indexes cover the latest hashed audit event and relevant match history.
+The fixed history predicate also supports generic prepared plans without scanning unrelated page views.
+Indexes alone reduced SQL time but left 47 request failures in `results/20261012T050352Z-c6b9d6/`.
+Waiting requests exhausted the shared worker threads needed by connection owners to finish.
+HTTP requests using `get_db` now await admission asynchronously at the configured pool capacity.
+The existing `DB_POOL_TIMEOUT` bounds admission waiting; overload returns 503 before database work begins.
+Success, denial, cancellation, and timeout paths release admission capacity.
+
+Migration `20261012_0900_audit_work_indexes` creates both indexes atomically without rewriting audit records.
+It can temporarily block audit writes; schedule its production application in a controlled migration window.
+Lock waiting is limited to three seconds, and each index statement is limited to 15 seconds.
+Local verification passed 5,941 backend tests, 503 subtests, and all database-free gates.
 
 Each run writes an ignored `load-tests/results/<timestamp>/` directory:
 
