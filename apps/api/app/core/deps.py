@@ -2,7 +2,6 @@
 
 import logging
 from collections.abc import AsyncGenerator, Generator
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 from uuid import UUID
@@ -151,16 +150,6 @@ def get_db(request: Request = None, _slot: None = Depends(_request_db_slot)) -> 
     finally:
         # Request org-scope teardown belongs to clear_org_scope_middleware.
         # Keeping one owner avoids racing to remove the same SQLAlchemy listener.
-        db.close()
-
-
-@contextmanager
-def get_db_for_stream() -> Generator[Session]:
-    """Database session for streaming endpoints."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
         db.close()
 
 

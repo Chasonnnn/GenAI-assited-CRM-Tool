@@ -369,7 +369,7 @@ def _resolve_entity_types(entity_type: str) -> list[str]:
 
 
 def _has_single_conversation_constraint(db: Session) -> bool:
-    inspector = sa.inspect(db.get_bind())
+    inspector = sa.inspect(db.connection())
     return any(
         constraint.get("name") == "uq_ai_conversations_user_entity"
         for constraint in inspector.get_unique_constraints("ai_conversations")

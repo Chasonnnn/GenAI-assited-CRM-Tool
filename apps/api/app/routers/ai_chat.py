@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.deps import (
     get_db,
-    get_db_for_stream,
     require_ai_enabled,
     require_csrf_header,
     require_permission,
@@ -198,46 +197,46 @@ async def chat_stream(
 
     async def event_generator() -> AsyncIterator[str]:
         yield sse_preamble()
-        with get_db_for_stream() as stream_db:
+        # The request dependency stays open through the response, including the stream.
+        try:
+            event_stream = ai_chat_service.stream_chat_async(
+                db=db,
+                organization_id=org_id,
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                message=message,
+                user_integrations=user_integrations,
+                conversation_id=body.conversation_id,
+            )
+            iterator = event_stream.__aiter__()
+            heartbeat_interval = 5.0
+            # Keep a single pending task so heartbeats don't cancel the generator.
+            pending_task = asyncio.create_task(iterator.__anext__())
             try:
-                event_stream = ai_chat_service.stream_chat_async(
-                    db=stream_db,
-                    organization_id=org_id,
-                    user_id=user_id,
-                    entity_type=entity_type,
-                    entity_id=entity_id,
-                    message=message,
-                    user_integrations=user_integrations,
-                    conversation_id=body.conversation_id,
-                )
-                iterator = event_stream.__aiter__()
-                heartbeat_interval = 5.0
-                # Keep a single pending task so heartbeats don't cancel the generator.
-                pending_task = asyncio.create_task(iterator.__anext__())
-                try:
-                    while True:
-                        done, _ = await asyncio.wait({pending_task}, timeout=heartbeat_interval)
-                        if not done:
-                            yield format_sse_comment("heartbeat")
-                            continue
+                while True:
+                    done, _ = await asyncio.wait({pending_task}, timeout=heartbeat_interval)
+                    if not done:
+                        yield format_sse_comment("heartbeat")
+                        continue
 
-                        try:
-                            event = pending_task.result()
-                        except StopAsyncIteration:
-                            break
+                    try:
+                        event = pending_task.result()
+                    except StopAsyncIteration:
+                        break
 
-                        pending_task = asyncio.create_task(iterator.__anext__())
-                        yield format_sse(event["type"], event["data"])
-                finally:
-                    if not pending_task.done():
-                        pending_task.cancel()
-                        try:
-                            await pending_task
-                        except asyncio.CancelledError:
-                            pass
-            except Exception as exc:
-                logger.exception("AI chat stream failed", exc_info=exc)
-                yield format_sse("error", {"message": "Streaming error. Please try again."})
+                    pending_task = asyncio.create_task(iterator.__anext__())
+                    yield format_sse(event["type"], event["data"])
+            finally:
+                if not pending_task.done():
+                    pending_task.cancel()
+                    try:
+                        await pending_task
+                    except asyncio.CancelledError:
+                        pass
+        except Exception as exc:
+            logger.exception("AI chat stream failed", exc_info=exc)
+            yield format_sse("error", {"message": "Streaming error. Please try again."})
 
     return StreamingResponse(
         event_generator(), media_type="text/event-stream", headers=STREAM_HEADERS
