@@ -995,6 +995,8 @@ async def stream_chat_async(
         logger.exception(f"AI provider error: {e}")
         from app.services import alert_service
 
+        # End the failed stream's read transaction before the isolated alert checks out a connection.
+        db.rollback()
         alert_service.record_alert_isolated(
             org_id=organization_id,
             alert_type=AlertType.AI_PROVIDER_ERROR,

@@ -68,21 +68,23 @@ async def test_chat_stream_returns_events(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("concurrency", [1, 2])
+@pytest.mark.parametrize("provider_fails", [False, True])
 async def test_chat_streams_complete_with_one_connection_per_request(
-    db_engine, monkeypatch, concurrency
+    db_engine, monkeypatch, concurrency, provider_fails
 ):
     from app.core import deps
     from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
     from app.core.security import create_session_token
     from app.db.enums import Role
-    from app.db.models import AuditLog, Membership, Organization, User
+    from app.db.models import AuditLog, Membership, Organization, SystemAlert, User
     from app.main import app
-    from app.services import session_service
+    from app.services import alert_service, session_service
 
     request_engine = create_engine(
         db_engine.url, pool_size=concurrency, max_overflow=0, pool_timeout=0.3
     )
     monkeypatch.setattr(deps, "SessionLocal", sessionmaker(bind=request_engine))
+    monkeypatch.setattr(alert_service, "SessionLocal", sessionmaker(bind=request_engine))
     monkeypatch.setattr(
         app.state, "request_db_limiter", CapacityLimiter(concurrency), raising=False
     )
@@ -92,6 +94,8 @@ async def test_chat_streams_complete_with_one_connection_per_request(
     class StubProvider:
         async def stream_chat(self, messages, **kwargs):
             await asyncio.wait_for(barrier.wait(), timeout=2)
+            if provider_fails:
+                raise RuntimeError("Synthetic provider failure")
             yield ChatStreamChunk(text="Hello", model="gemini-3.8-flash")
             yield ChatStreamChunk(text="", model="gemini-3.8-flash", is_final=True)
 
@@ -146,8 +150,8 @@ async def test_chat_streams_complete_with_one_connection_per_request(
             )
             for response in responses:
                 assert response.status_code == 200
-                assert "event: done" in response.text, response.text
-                assert "event: error" not in response.text
+                assert ("event: done" in response.text) is (not provider_fails), response.text
+                assert ("event: error" in response.text) is provider_fails
             assert (await client.get("/auth/me")).status_code == 200
         assert request_engine.pool.checkedout() == 0
         with sessionmaker(bind=db_engine)() as observer:
@@ -159,7 +163,13 @@ async def test_chat_streams_complete_with_one_connection_per_request(
                 .filter(AIConversation.organization_id == org_id, AIMessage.role == "assistant")
                 .all()
             )
-            assert len(messages) == concurrency
+            assert len(messages) == (0 if provider_fails else concurrency)
+            alerts = observer.query(SystemAlert).filter(SystemAlert.organization_id == org_id).all()
+            if provider_fails:
+                assert len(alerts) == 1
+                assert alerts[0].occurrence_count == concurrency
+            else:
+                assert not alerts
     finally:
         request_engine.dispose()
         with sessionmaker(bind=db_engine)() as cleanup:
