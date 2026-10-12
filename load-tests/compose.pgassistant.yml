@@ -1,0 +1,14 @@
+name: crm-performance-tools
+services:
+  pgassistant:
+    image: bertrand73/pgassistant:3.8.4@sha256:39f4720089dec69e793469eae5f9a91bfa89798cb86c8e5eb86aa410a47f85b4
+    ports:
+      - "127.0.0.1:8088:5005"
+    environment:
+      SECRET_KEY: "${PGASSISTANT_SECRET_KEY:?Set a random local session secret}"
+      OPENAI_API_KEY: ""
+      OPENAI_API_MODEL: "disabled"
+      LOCAL_LLM_URI: "http://127.0.0.1:9/v1/"
+      LLM_SQL_GUIDELINES: ""
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
