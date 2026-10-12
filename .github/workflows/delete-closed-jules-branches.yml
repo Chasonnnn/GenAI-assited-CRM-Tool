@@ -1,0 +1,42 @@
+name: Delete Closed Jules Branches
+
+# pull_request_target runs this file from the default branch, so it also covers
+# Jules branches created before the workflow existed. It never checks out PR code.
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  delete-branch:
+    if: >-
+      github.event.pull_request.merged == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Delete the Jules head branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$BRANCH" =~ ^(bolt|palette|sentinel)[-/] ]]; then
+            echo "Not a Jules branch; skipping."
+            exit 0
+          fi
+          current_sha="$(gh api "repos/$REPO/git/ref/heads/$BRANCH" --jq .object.sha 2>/dev/null || true)"
+          if [[ -z "$current_sha" ]]; then
+            echo "Branch already deleted."
+            exit 0
+          fi
+          if [[ "$current_sha" != "$HEAD_SHA" ]]; then
+            echo "Branch moved after the PR closed; keeping it."
+            exit 0
+          fi
+          gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH"
+          echo "Deleted $BRANCH."
