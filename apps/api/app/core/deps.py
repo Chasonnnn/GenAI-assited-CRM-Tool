@@ -1,12 +1,13 @@
 """FastAPI dependencies for authentication, authorization, and database access."""
 
 import logging
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 from uuid import UUID
 
+from anyio import CapacityLimiter, fail_after
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -119,7 +120,24 @@ def _validate_request_host(request: Request, org_slug: str) -> None:
     raise HTTPException(status_code=403, detail="Session invalid for this domain")
 
 
-def get_db(request: Request = None) -> Generator[Session]:
+async def _request_db_slot(request: Request) -> AsyncGenerator[None]:
+    limiter = getattr(request.app.state, "request_db_limiter", None)
+    if limiter is None:
+        limiter = CapacityLimiter(settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW)
+        request.app.state.request_db_limiter = limiter
+    # Wait outside the shared worker pool so connection owners can finish their requests.
+    try:
+        with fail_after(settings.DB_POOL_TIMEOUT):
+            await limiter.acquire()
+    except TimeoutError:
+        raise HTTPException(status_code=503, detail="Database request capacity is busy") from None
+    try:
+        yield
+    finally:
+        limiter.release()
+
+
+def get_db(request: Request = None, _slot: None = Depends(_request_db_slot)) -> Generator[Session]:
     """
     Database session dependency.
 
