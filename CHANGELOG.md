@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.87](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.86...surrogacy-crm-platform-v0.91.87) (2026-10-13)
+
+
+### Bug Fixes
+
+* keep test phone verification open when only one purpose is stopped ([#827](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/827)) ([822a3c8](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/822a3c8d7733c14cfc0ccdc93efafb9afa23ffd4))
+* restore CRM reliability under 20-user dashboard traffic ([#830](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/830)) ([8268ea3](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/8268ea33ebd5552adc6a4ee95168a1f46aea0eba))
+
 ## [0.91.86](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.85...surrogacy-crm-platform-v0.91.86) (2026-10-11)
 
 
