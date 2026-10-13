@@ -23,8 +23,17 @@ import {
     useVerifyMessagingTestPhone,
 } from "@/lib/hooks/use-messaging-templates"
 
+const PURPOSES = ["operational", "promotional"] as const
+
+// START restores only the purpose of the route it reached, so one purpose can stay stopped.
+function partialStopLabel(phone: MessagingTestPhone): string | null {
+    const stopped = phone.stopped_purposes
+    if (stopped.length === 0 || PURPOSES.every((purpose) => stopped.includes(purpose))) return null
+    return stopped.map((purpose) => `${purpose.charAt(0).toUpperCase()}${purpose.slice(1)} stopped`).join(", ")
+}
+
 function phoneStatus(phone: MessagingTestPhone, now: number | null): { label: string; className: string } {
-    if (phone.stopped_purposes.length > 0) {
+    if (PURPOSES.every((purpose) => phone.stopped_purposes.includes(purpose))) {
         return { label: "Replied STOP", className: "border-destructive/30 bg-destructive/10 text-destructive" }
     }
     if (phone.verified_at) {
@@ -166,12 +175,20 @@ export function TestPhonesCard() {
                                 {(phonesQuery.data ?? []).map((testPhone) => {
                                     const status = phoneStatus(testPhone, now)
                                     const awaitingCode = !testPhone.verified_at && status.label === "Code sent"
+                                    const partialStop = partialStopLabel(testPhone)
                                     return (
                                         <TableRow key={testPhone.id}>
                                             <TableCell className="font-medium">{testPhone.label}</TableCell>
                                             <TableCell>{maskedLast4(testPhone.phone_last4)}</TableCell>
                                             <TableCell>
-                                                <Badge variant="outline" className={status.className}>{status.label}</Badge>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <Badge variant="outline" className={status.className}>{status.label}</Badge>
+                                                    {partialStop ? (
+                                                        <Badge variant="outline" className="border-border bg-muted text-muted-foreground">
+                                                            {partialStop}
+                                                        </Badge>
+                                                    ) : null}
+                                                </div>
                                             </TableCell>
                                             <TableCell>{testPhone.created_by_name ?? "—"}</TableCell>
                                             <TableCell>

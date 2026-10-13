@@ -333,6 +333,30 @@ describe("Test phones card", () => {
         await waitFor(() => expect(mockRemovePhone).toHaveBeenCalledWith("phone-3"))
     })
 
+    it("keeps verification open when START restored only one purpose", async () => {
+        mockTestPhones.mockReturnValue({
+            data: [
+                phone({ id: "phone-2", label: "Phone", verified_at: null, code_expires_at: "2999-01-01T00:00:00Z", stopped_purposes: ["promotional"] }),
+                phone({ id: "phone-3", label: "Ops line", stopped_purposes: ["promotional"] }),
+            ],
+            isLoading: false,
+            isError: false,
+        })
+        mockVerifyPhone.mockResolvedValue(phone({ id: "phone-2" }))
+        render(<TestPhonesCard />)
+
+        const rows = within(screen.getByRole("table", { name: "Test phones" })).getAllByRole("row").slice(1)
+        expect(screen.queryByText("Replied STOP")).not.toBeInTheDocument()
+        expect(within(rows[0]!).getByText("Code sent")).toBeInTheDocument()
+        expect(within(rows[0]!).getByText("Promotional stopped")).toBeInTheDocument()
+        expect(within(rows[1]!).getByText(/^Verified/)).toBeInTheDocument()
+        expect(within(rows[1]!).getByText("Promotional stopped")).toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText("Verification code for Phone"), { target: { value: "459614" } })
+        fireEvent.click(within(rows[0]!).getByRole("button", { name: "Verify" }))
+        await waitFor(() => expect(mockVerifyPhone).toHaveBeenCalledWith({ id: "phone-2", code: "459614" }))
+    })
+
     it("shows the empty state", () => {
         mockTestPhones.mockReturnValue({ data: [], isLoading: false, isError: false })
         render(<TestPhonesCard />)
