@@ -653,6 +653,96 @@ def _resolve_stage_ref(
     return str(stage.id), stage.stage_key
 
 
+def _resolve_stage_refs_bulk(
+    db: Session,
+    org_id: UUID,
+    values: list[object | None],
+    *,
+    entity_type: str | None = None,
+) -> dict[str, tuple[str, str]]:
+    """Batch version of _resolve_stage_ref."""
+    # Filter out empty values and convert to string
+    valid_refs = [str(v) for v in values if v not in (None, "")]
+    if not valid_refs:
+        return {}
+
+    from app.services import pipeline_service
+
+    # We need a pipeline ID to call resolve_stages_bulk.
+    # Get all default pipelines for the entity_type.
+    default_pipeline_ids = [
+        pipeline_id
+        for (pipeline_id,) in (
+            db.query(Pipeline.id)
+            .filter(
+                Pipeline.organization_id == org_id,
+                Pipeline.is_default.is_(True),
+                Pipeline.entity_type == entity_type if entity_type else True,
+            )
+            .all()
+        )
+    ]
+    if not default_pipeline_ids and entity_type:
+        pipeline = pipeline_service.get_or_create_default_pipeline(
+            db,
+            org_id,
+            entity_type=entity_type,
+        )
+        default_pipeline_ids = [pipeline.id]
+
+    results: dict[str, tuple[str, str]] = {}
+
+    if not default_pipeline_ids:
+        # Fall back to resolving explicit UUIDs if we don't have a default pipeline
+        for ref in valid_refs:
+            try:
+                stage_uuid = UUID(ref)
+                stage = pipeline_service.get_stage_by_id(db, stage_uuid)
+                if stage and stage.pipeline.organization_id == org_id and (
+                    entity_type is None or stage.pipeline.entity_type == entity_type
+                ):
+                    results[ref] = (str(stage.id), stage.stage_key)
+            except (TypeError, ValueError):
+                pass
+        return results
+
+    # If we have exactly one default pipeline, use resolve_stages_bulk directly.
+    if len(default_pipeline_ids) == 1:
+        stages = pipeline_service.resolve_stages_bulk(
+            db, org_id, default_pipeline_ids[0], valid_refs
+        )
+        for ref, stage in zip(valid_refs, stages, strict=True):
+            if stage and stage.pipeline.organization_id == org_id and (
+                entity_type is None or stage.pipeline.entity_type == entity_type
+            ):
+                results[ref] = (str(stage.id), stage.stage_key)
+        return results
+
+    # If there are multiple default pipelines, it's a legacy corner case.
+    # We resolve them using the bulk method for each pipeline and pick the single match if unambiguous.
+    # We transpose the results:
+    pipeline_results = []
+    for pipeline_id in default_pipeline_ids:
+        pipeline_results.append(
+            pipeline_service.resolve_stages_bulk(db, org_id, pipeline_id, valid_refs)
+        )
+
+    for i, ref in enumerate(valid_refs):
+        matches = [
+            stage
+            for stages in pipeline_results
+            if (stage := stages[i]) is not None
+        ]
+        if len(matches) == 1:
+            stage = matches[0]
+            if stage.pipeline.organization_id == org_id and (
+                entity_type is None or stage.pipeline.entity_type == entity_type
+            ):
+                results[ref] = (str(stage.id), stage.stage_key)
+
+    return results
+
+
 def form_intake_lead_kinds(db: Session, form: Form) -> set[str]:
     """Return the lead kinds a form produces, including both subtypes for shared donor forms."""
     return forms_intake_lead_kinds(db, [form])[form.id]
@@ -789,12 +879,28 @@ def _canonicalize_conditions(
     entity_type: str | None = None,
 ) -> list[dict]:
     normalized: list[dict] = []
-    for raw_condition in conditions or []:
-        condition = (
-            raw_condition.model_dump(mode="json")
-            if isinstance(raw_condition, Condition)
-            else deepcopy(raw_condition)
-        )
+
+    # Convert input conditions to dicts once to avoid double-dumping
+    dict_conditions = [
+        raw_condition.model_dump(mode="json") if isinstance(raw_condition, Condition) else deepcopy(raw_condition)
+        for raw_condition in (conditions or [])
+    ]
+
+    # Extract all required stage references upfront for a bulk lookup
+    refs_to_resolve = []
+    for condition in dict_conditions:
+        if condition.get("field") == "stage_id":
+            value = condition.get("value")
+            if isinstance(value, list):
+                refs_to_resolve.extend(value)
+            else:
+                refs_to_resolve.append(value)
+
+    resolved_refs = _resolve_stage_refs_bulk(
+        db, org_id, refs_to_resolve, entity_type=entity_type
+    )
+
+    for condition in dict_conditions:
         if condition.get("field") != "stage_id":
             normalized.append(condition)
             continue
@@ -804,7 +910,7 @@ def _canonicalize_conditions(
             resolved_ids: list[str] = []
             resolved_keys: list[str] = []
             for item in value:
-                resolved = _resolve_stage_ref(db, org_id, item, entity_type=entity_type)
+                resolved = resolved_refs.get(str(item)) if item not in (None, "") else None
                 if not resolved:
                     continue
                 stage_id, stage_key = resolved
@@ -815,7 +921,7 @@ def _canonicalize_conditions(
             condition["value"] = resolved_ids
             condition["stage_keys"] = resolved_keys
         else:
-            resolved = _resolve_stage_ref(db, org_id, value, entity_type=entity_type)
+            resolved = resolved_refs.get(str(value)) if value not in (None, "") else None
             if resolved:
                 condition["value"] = resolved[0]
                 condition["stage_key"] = resolved[1]
@@ -831,6 +937,19 @@ def _canonicalize_actions(
     entity_type: str | None = None,
 ) -> list[dict]:
     normalized: list[dict] = []
+
+    # Extract all required stage references upfront for a bulk lookup
+    refs_to_resolve = []
+    for raw_action in actions or []:
+        if raw_action.get("action_type") == "update_status":
+            refs_to_resolve.append(raw_action.get("stage_id"))
+        elif raw_action.get("action_type") == "update_field" and raw_action.get("field") == "stage_id":
+            refs_to_resolve.append(raw_action.get("value_stage_key") or raw_action.get("value"))
+
+    resolved_refs = _resolve_stage_refs_bulk(
+        db, org_id, refs_to_resolve, entity_type=entity_type
+    )
+
     for raw_action in actions or []:
         action = deepcopy(raw_action)
         if action.get("action_type") == "update_status":
@@ -843,12 +962,8 @@ def _canonicalize_actions(
             action.pop("stage_id", None)
 
         if action.get("action_type") == "update_field" and action.get("field") == "stage_id":
-            resolved = _resolve_stage_ref(
-                db,
-                org_id,
-                action.get("value_stage_key") or action.get("value"),
-                entity_type=entity_type,
-            )
+            ref = action.get("value_stage_key") or action.get("value")
+            resolved = resolved_refs.get(str(ref)) if ref not in (None, "") else None
             if resolved:
                 action["value"] = resolved[0]
                 action["value_stage_key"] = resolved[1]
