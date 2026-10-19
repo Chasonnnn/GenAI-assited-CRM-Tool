@@ -31,7 +31,7 @@ from app.services import (
     queue_service,
     task_service,
 )
-from app.utils.normalization import normalize_email, escape_like_string
+from app.utils.normalization import escape_like_string, normalize_email
 from app.utils.pagination import paginate_query_by_offset
 
 META_SYSTEM_COLUMNS: list[tuple[str, str]] = [

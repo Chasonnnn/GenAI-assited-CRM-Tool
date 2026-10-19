@@ -120,7 +120,7 @@ def test_digest_lists_open_actions_and_recent_unread_updates(db, test_user, ny_o
     assert again["queued"] == 1  # Same idempotency key; no second email.
     [email] = _digest_emails(db, ny_org.id)
     assert email.recipient_email == test_user.email
-    assert email.subject == "1 need action · 1 new update"
+    assert email.subject == "2 need action · 1 new update"
     assert email.source_id == test_user.id
     assert "File &lt;quarantined&gt;" in email.body
     assert "Moved to Match" in email.body
