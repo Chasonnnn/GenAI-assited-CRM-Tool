@@ -317,7 +317,9 @@ async def test_match_driven_donor_stage_moves_notify_the_donor_owner(
 
     db.refresh(donor)
     assert donor.stage_id == handoff.id
-    assert set(_stage_changed_bodies(db, test_org.id, owner.id, donor.id)) == set([
-        f"{test_user.display_name} changed stage from {handoff.label} to {matched.label}",
-        f"{test_user.display_name} changed stage from {matched.label} to {handoff.label}",
-    ])
+    assert set(_stage_changed_bodies(db, test_org.id, owner.id, donor.id)) == set(
+        [
+            f"{test_user.display_name} changed stage from {handoff.label} to {matched.label}",
+            f"{test_user.display_name} changed stage from {matched.label} to {handoff.label}",
+        ]
+    )
