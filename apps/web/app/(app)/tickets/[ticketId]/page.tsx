@@ -330,6 +330,7 @@ function TicketOverviewCard({
 
                 <div className="grid gap-3 md:grid-cols-3">
                     <Input
+                        aria-label="Surrogate ID"
                         placeholder="Surrogate ID (manual link)"
                         value={surrogateId}
                         onChange={(event) => onSurrogateIdChange(event.target.value)}
