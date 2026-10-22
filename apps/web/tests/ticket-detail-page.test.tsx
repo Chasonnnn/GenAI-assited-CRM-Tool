@@ -122,4 +122,33 @@ describe("TicketDetailPage", () => {
 
         expect(screen.getByPlaceholderText("Recipient")).toHaveValue("edited@example.com")
     })
+
+    it("names every ticket control for assistive technology", () => {
+        mockUseTicket.mockReturnValue({
+            data: {
+                ticket: {
+                    id: "ticket-1",
+                    ticket_code: "T-1001",
+                    subject: "Help requested",
+                    requester_email: "requester@example.com",
+                    status: "open",
+                    priority: "normal",
+                    surrogate_id: null,
+                    surrogate_link_status: null,
+                },
+                notes: [],
+                messages: [],
+            },
+            isLoading: false,
+        })
+
+        render(<TicketDetailPage />)
+
+        expect(screen.getByRole("combobox", { name: "Status" })).toBeInTheDocument()
+        expect(screen.getByRole("combobox", { name: "Priority" })).toBeInTheDocument()
+        expect(screen.getByRole("textbox", { name: "Surrogate ID" })).toBeInTheDocument()
+        expect(screen.getByRole("textbox", { name: "Reply recipient" })).toBeInTheDocument()
+        expect(screen.getByRole("textbox", { name: "Reply message" })).toBeInTheDocument()
+        expect(screen.getByRole("textbox", { name: "Internal note" })).toBeInTheDocument()
+    })
 })
