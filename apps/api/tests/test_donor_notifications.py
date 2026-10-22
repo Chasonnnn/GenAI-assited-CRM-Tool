@@ -317,7 +317,10 @@ async def test_match_driven_donor_stage_moves_notify_the_donor_owner(
 
     db.refresh(donor)
     assert donor.stage_id == handoff.id
-    assert _stage_changed_bodies(db, test_org.id, owner.id, donor.id) == [
-        f"{test_user.display_name} changed stage from {handoff.label} to {matched.label}",
-        f"{test_user.display_name} changed stage from {matched.label} to {handoff.label}",
-    ]
+    # Both moves share the test transaction's now(), so created_at cannot order them.
+    assert sorted(_stage_changed_bodies(db, test_org.id, owner.id, donor.id)) == sorted(
+        [
+            f"{test_user.display_name} changed stage from {handoff.label} to {matched.label}",
+            f"{test_user.display_name} changed stage from {matched.label} to {handoff.label}",
+        ]
+    )

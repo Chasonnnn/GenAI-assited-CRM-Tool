@@ -542,10 +542,12 @@ def get_notifications(
     limit: int = 20,
     offset: int = 0,
     cursor: str | None = None,
+    now: datetime | None = None,
 ) -> tuple[list[Notification], str | None]:
     """Get notifications for user with optional cursor pagination.
 
-    tier=ACTION returns only action items whose work is still outstanding.
+    tier=ACTION returns only action items whose work is still outstanding at `now`
+    (default: the current time).
     """
     import base64
     from datetime import datetime
@@ -578,7 +580,7 @@ def get_notifications(
         query = query.filter(Notification.type.in_(notification_types))
 
     if tier is not None:
-        query = query.filter(_tier_condition(tier, datetime.now(UTC)))
+        query = query.filter(_tier_condition(tier, now or datetime.now(UTC)))
 
     if created_after is not None:
         query = query.filter(Notification.created_at >= created_after)
@@ -679,10 +681,11 @@ def get_notification_counts(
     db: Session,
     user_id: UUID,
     org_id: UUID,
+    now: datetime | None = None,
 ) -> NotificationCounts:
-    """Open action items (the bell badge) and unread updates."""
+    """Open action items at `now` (the bell badge) and unread updates."""
     stmt = select(
-        func.count(Notification.id).filter(_action_open_condition(datetime.now(UTC))),
+        func.count(Notification.id).filter(_action_open_condition(now or datetime.now(UTC))),
         func.count(Notification.id).filter(
             Notification.type.notin_(ACTION_NOTIFICATION_TYPES),
             Notification.read_at.is_(None),
