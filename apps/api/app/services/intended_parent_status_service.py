@@ -21,7 +21,7 @@ from app.db.models import (
     User,
 )
 from app.services import permission_service, pipeline_semantics_service
-from app.utils.datetime_parsing import normalize_effective_at
+from app.utils.datetime_parsing import absorb_creation_clock_skew, normalize_effective_at
 
 
 class StatusChangeResult(TypedDict):
@@ -114,6 +114,7 @@ def change_status(
     if (normalized_effective_at - now).total_seconds() > 1:
         raise ValueError("Cannot set future date for status change")
 
+    normalized_effective_at = absorb_creation_clock_skew(normalized_effective_at, ip.created_at)
     if ip.created_at and normalized_effective_at < ip.created_at:
         raise ValueError("Cannot set date before intended parent was created")
 
