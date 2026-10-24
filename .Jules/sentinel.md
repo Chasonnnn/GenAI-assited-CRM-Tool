@@ -1,0 +1,4 @@
+## 2024-10-24 - SQL Wildcard Injection in Meta Form Mapping Service
+**Vulnerability:** The `apps/api/app/services/meta_form_mapping_service.py` contained a SQL wildcard injection vulnerability because the `marker` variable (derived from `form.id`) was used in an SQLAlchemy `.ilike()` query without being escaped (`Task.description.ilike(f"%{marker}%")`), allowing wildcards to alter the search semantics.
+**Learning:** It is not enough to wrap dynamic values in `%` for `ilike` operations; if the dynamic values themselves could contain `%` or `_`, the developer must use `escape_like_string` and explicitly provide `escape="\\"` to SQLAlchemy.
+**Prevention:** Always sanitize dynamically constructed search strings in `ilike` clauses by wrapping them with `escape_like_string` (from `app.utils.normalization`) and appending `escape="\\"` to the `.ilike()` method call.
