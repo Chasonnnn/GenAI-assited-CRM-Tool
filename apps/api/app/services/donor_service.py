@@ -32,6 +32,7 @@ from app.services import (
     pipeline_semantics_service,
 )
 from app.utils.datetime_parsing import (
+    absorb_creation_clock_skew,
     normalize_effective_at,
     parse_created_from_filter,
     parse_created_to_filter,
@@ -1113,6 +1114,7 @@ def change_status(
 
     if (normalized_effective_at - now).total_seconds() > 1:
         raise DonorValidationError("Cannot set future date for donor stage change")
+    normalized_effective_at = absorb_creation_clock_skew(normalized_effective_at, donor.created_at)
     if donor.created_at and normalized_effective_at < donor.created_at:
         raise DonorValidationError("Cannot set date before donor was created")
 

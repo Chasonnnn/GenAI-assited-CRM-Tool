@@ -613,8 +613,11 @@ async def test_google_calendar_manual_sync_runs_reconciliation_and_updates_last_
     )
     db.add(integration)
     db.commit()
-    db.refresh(integration)
-    previous_updated_at = integration.updated_at
+    # Start from a clearly older sync time: the insert default uses the database clock and
+    # the sync uses the app clock, so comparing those two directly is not deterministic.
+    previous_updated_at = datetime.now(UTC) - timedelta(minutes=5)
+    integration.updated_at = previous_updated_at
+    db.commit()
 
     watch_calls: list[uuid.UUID] = []
 
@@ -671,7 +674,7 @@ async def test_google_calendar_manual_sync_runs_reconciliation_and_updates_last_
     assert watch_calls == [test_auth.user.id]
 
     db.refresh(integration)
-    assert integration.updated_at >= previous_updated_at
+    assert integration.updated_at > previous_updated_at
 
 
 @pytest.mark.asyncio
