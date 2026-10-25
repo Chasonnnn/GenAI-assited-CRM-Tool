@@ -182,11 +182,31 @@ def list_integration_health(
     """
     healths = db.query(IntegrationHealth).filter(IntegrationHealth.organization_id == org_id).all()
 
+    # Bulk query error counts for the last 24 hours to prevent N+1 query issues
+    cutoff = datetime.now(UTC) - timedelta(hours=24)
+    error_rollups = db.execute(
+        text("""
+            SELECT integration_type, integration_key, COALESCE(SUM(error_count), 0) as total
+            FROM integration_error_rollup
+            WHERE organization_id = :org_id
+              AND period_start > :cutoff
+            GROUP BY integration_type, integration_key
+        """),
+        {
+            "org_id": org_id,
+            "cutoff": cutoff,
+        },
+    ).fetchall()
+
+    # Store in a dict for O(1) lookups
+    error_counts_map = {
+        (row[0], row[1]): int(row[2]) for row in error_rollups
+    }
+
     result = []
     for h in healths:
-        error_count = get_error_count_24h(
-            db, org_id, IntegrationType(h.integration_type), h.integration_key
-        )
+        key = h.integration_key or DEFAULT_INTEGRATION_KEY
+        error_count = error_counts_map.get((h.integration_type, key), 0)
         result.append(
             {
                 "id": str(h.id),
