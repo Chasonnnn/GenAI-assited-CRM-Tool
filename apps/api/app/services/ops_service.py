@@ -199,9 +199,7 @@ def list_integration_health(
     ).fetchall()
 
     # Store in a dict for O(1) lookups
-    error_counts_map = {
-        (row[0], row[1]): int(row[2]) for row in error_rollups
-    }
+    error_counts_map = {(row[0], row[1]): int(row[2]) for row in error_rollups}
 
     result = []
     for h in healths:
