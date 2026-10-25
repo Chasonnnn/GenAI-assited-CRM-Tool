@@ -3,7 +3,11 @@ name = "surrogacy-force-ops"
 version = "0.1.0"
 description = "Version-controlled operations templates CLI"
 requires-python = ">=3.14,<3.15"
-dependencies = ["click==8.3.3", "httpx==0.28.1"]
+dependencies = [
+    "certifi==2026.10.19",
+    "click==8.3.3",
+    "httpx==0.28.1",
+]
 
 [project.optional-dependencies]
 keyring = ["keyring>=25,<27"]
