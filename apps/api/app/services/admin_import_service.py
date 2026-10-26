@@ -1476,6 +1476,7 @@ def _restore_donor_status_history(
             row[0]
             for row in db.query(DonorStatusHistory.id)
             .filter(DonorStatusHistory.id.in_(event_history_ids))
+            .execution_options(skip_org_scope=True)
             .all()
         }
 
