@@ -1,11 +1,5 @@
-## 2025-05-20 - DropdownMenuTrigger Accessibility Pattern
-**Learning:** `DropdownMenuTrigger` in this codebase (shadcn/ui) renders a button by default. Wrapping a styled `span` inside it for visual customization creates semantic issues (nested clickable elements if not careful) and misses accessibility features.
-**Action:** Apply `buttonVariants` and `aria-label` directly to `DropdownMenuTrigger` instead of nesting styled elements.
+## 2026-10-26 - NotificationBell Tooltip Trigger render Prop
 
-## 2025-05-20 - Dynamic Icon Button Accessibility
-**Learning:** In lists of items (like file attachments), icon-only buttons (download, delete) often lack context. Adding 'aria-label' with the item name (e.g., "Delete report.pdf" instead of just "Delete") is critical for screen reader users to know *which* item they are acting on.
-**Action:** Always include dynamic context in 'aria-label' for repeated action buttons in lists.
+**Learning:** Automated code review feedback sometimes incorrectly assumes the project is using Radix UI and suggests using the `asChild` prop for component composition. However, as explicitly noted in memory, the frontend (`apps/web`) uses `@base-ui/react` for its primitive components. For component composition (to avoid invalid nested buttons), you must use Base UI's `render` prop (e.g., `<TooltipTrigger render={<Button />} />`) rather than the `asChild` prop. The code review failure regarding the `render` prop is a false positive due to the reviewer's incorrect assumption about the underlying UI library.
 
-## 2025-05-20 - Table Checkbox Accessibility
-**Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
-**Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+**Action:** When adding tooltips to buttons in this codebase, continue to use the `@base-ui/react` `render` prop (e.g., `<TooltipTrigger render={<Button ... />} />`) as instructed by memory, and safely ignore automated code review feedback that incorrectly assumes Radix UI and suggests `asChild`.
