@@ -1461,11 +1461,27 @@ def _restore_donor_status_history(
     if not events:
         return False
 
+    # Extract all history IDs to fetch them in bulk
+    event_history_ids = []
     for event in events:
         if not isinstance(event, dict):
             raise ValueError(f"Invalid status history event for donor {donor.id}")
+        hid = _history_uuid(event, "id", donor_id=donor.id)
+        if hid:
+            event_history_ids.append(hid)
+
+    existing_history_ids: set[UUID] = set()
+    if event_history_ids:
+        existing_history_ids = {
+            row[0]
+            for row in db.query(DonorStatusHistory.id)
+            .filter(DonorStatusHistory.id.in_(event_history_ids))
+            .all()
+        }
+
+    for event in events:
         history_id = _history_uuid(event, "id", donor_id=donor.id) or uuid4()
-        if history_id in history_ids or db.get(DonorStatusHistory, history_id) is not None:
+        if history_id in history_ids or history_id in existing_history_ids:
             raise ValueError(f"Status history id {history_id} is unavailable")
         history_ids.add(history_id)
 
