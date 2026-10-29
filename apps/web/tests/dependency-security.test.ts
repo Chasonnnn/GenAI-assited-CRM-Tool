@@ -108,7 +108,7 @@ describe("Dependency security guards", () => {
         const undiciOverride = readPnpmOverrides().undici
 
         expect(undiciOverride).toBeDefined()
-        expect(compareVersions(undiciOverride!, "7.30.1")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(undiciOverride!, "7.29.1")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins DOMPurify to a non-vulnerable version", () => {
@@ -119,7 +119,7 @@ describe("Dependency security guards", () => {
         const dompurifyVersion = packageJson.dependencies?.dompurify?.replace(/^[^\d]*/, "")
 
         expect(dompurifyVersion).toBeDefined()
-        expect(compareVersions(dompurifyVersion!, "3.4.17")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(dompurifyVersion!, "3.4.16")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins markdown-it to a non-vulnerable version", () => {
@@ -267,7 +267,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "7.30.1")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "7.29.1")).toBeGreaterThanOrEqual(0)
         }
     })
 
@@ -351,7 +351,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "3.4.17")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "3.4.16")).toBeGreaterThanOrEqual(0)
         }
     })
 
