@@ -10,7 +10,7 @@ from datetime import UTC, date, datetime, time
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from app.core.config import settings
 from app.core.csrf import CSRF_COOKIE_NAME, CSRF_HEADER, generate_csrf_token
@@ -937,6 +937,74 @@ class TestAdminImports:
         assert histories[1].recorded_at == datetime.fromisoformat(transition_at)
 
     @pytest.mark.asyncio
+    async def test_import_donors_checks_status_history_ids_in_one_query_per_donor(
+        self,
+        authed_client,
+        db,
+        test_org,
+    ):
+        egg_pipeline = pipeline_service.get_or_create_default_pipeline(
+            db, test_org.id, entity_type="egg_donor"
+        )
+        new_stage = pipeline_service.get_stage_by_key(db, egg_pipeline.id, "new")
+        assert new_stage is not None
+        donor_id = uuid.uuid4()
+        history_ids = [uuid.uuid4() for _ in range(3)]
+        history_payload = {
+            "version": 1,
+            "events": [
+                {
+                    "id": str(history_id),
+                    "new_stage_id": str(new_stage.id),
+                    "new_stage_key": "new",
+                    "new_status": "new",
+                    "new_label_snapshot": "New",
+                    "effective_at": f"2026-08-2{index}T12:00:00+00:00",
+                    "recorded_at": f"2026-08-2{index}T12:00:00+00:00",
+                }
+                for index, history_id in enumerate(history_ids)
+            ],
+        }
+        donors_csv = _build_surrogates_csv(
+            [
+                {
+                    "id": str(donor_id),
+                    "donor_number": "D10007",
+                    "donor_type": "egg",
+                    "stage_id": str(new_stage.id),
+                    "full_name": "Batched History Donor",
+                    "email": "batched-history@example.com",
+                    "status_history_json": json.dumps(history_payload),
+                }
+            ]
+        )
+        history_selects: list[str] = []
+
+        def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+            normalized = " ".join(statement.split()).lower()
+            if normalized.startswith("select") and "from donor_status_history" in normalized:
+                history_selects.append(normalized)
+
+        event.listen(db.bind, "before_cursor_execute", before_cursor_execute)
+        try:
+            response = await authed_client.post(
+                "/admin/imports/donors",
+                files={"donors_csv": ("donors.csv", donors_csv, "text/csv")},
+            )
+        finally:
+            event.remove(db.bind, "before_cursor_execute", before_cursor_execute)
+
+        assert response.status_code == 200, response.text
+        assert len(history_selects) == 1
+        restored_ids = {
+            history.id
+            for history in db.query(DonorStatusHistory)
+            .filter(DonorStatusHistory.donor_id == donor_id)
+            .all()
+        }
+        assert restored_ids == set(history_ids)
+
+    @pytest.mark.asyncio
     async def test_import_donors_rejects_history_stage_from_other_subtype(
         self,
         authed_client,
@@ -1058,6 +1126,8 @@ class TestAdminImports:
             ]
         )
         db.commit()
+        # A real import session has never loaded the other organization's row.
+        db.expunge(foreign_history)
         failure_savepoint = db.begin_nested()
 
         def rollback_failure_savepoint() -> None:
