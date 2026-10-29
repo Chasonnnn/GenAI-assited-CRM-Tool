@@ -119,7 +119,7 @@ describe("Dependency security guards", () => {
         const dompurifyVersion = packageJson.dependencies?.dompurify?.replace(/^[^\d]*/, "")
 
         expect(dompurifyVersion).toBeDefined()
-        expect(compareVersions(dompurifyVersion!, "3.4.16")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(dompurifyVersion!, "3.4.17")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins markdown-it to a non-vulnerable version", () => {
@@ -197,8 +197,8 @@ describe("Dependency security guards", () => {
 
         expect(nextVersion).toBeDefined()
         expect(bundleAnalyzerVersion).toBeDefined()
-        expect(compareVersions(nextVersion!, "16.3.8")).toBeGreaterThanOrEqual(0)
-        expect(compareVersions(bundleAnalyzerVersion!, "16.3.8")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(nextVersion!, "16.4.1")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(bundleAnalyzerVersion!, "16.4.1")).toBeGreaterThanOrEqual(0)
     })
 
     it("holds React and TypeScript on the validated compatibility line", () => {
@@ -351,7 +351,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "3.4.16")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "3.4.17")).toBeGreaterThanOrEqual(0)
         }
     })
 
