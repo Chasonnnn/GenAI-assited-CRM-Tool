@@ -1126,6 +1126,8 @@ class TestAdminImports:
             ]
         )
         db.commit()
+        # A real import session has never loaded the other organization's row.
+        db.expunge(foreign_history)
         failure_savepoint = db.begin_nested()
 
         def rollback_failure_savepoint() -> None:
