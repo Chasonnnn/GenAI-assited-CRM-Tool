@@ -43,11 +43,13 @@ def test_dependency_pins_match_security_fixes():
         "urllib3": "2.8.0",
     }
     expected_exact_pins = {
+        "dnspython": "2.9.0",
         "fastapi": "0.142.2",
         "idna": "3.18",
+        "opentelemetry-api": "1.45.1",
         "pillow": "13.0.0",
         "pydantic-settings": "2.14.2",
-        "pypdf": "6.21.1",
+        "pypdf": "6.21.2",
         "python-multipart": "0.0.31",
         "starlette": "1.3.1",
     }
