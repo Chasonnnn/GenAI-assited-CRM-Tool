@@ -8,6 +8,7 @@ import { formatDistanceToNow } from "date-fns"
 import { useState, type Dispatch, type SetStateAction } from "react"
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -212,15 +213,20 @@ export function NotificationBell() {
                 ) : (
                     <ConsumeLoginNotificationReminder />
                 ))}
-            <Button
-                variant="ghost"
-                size="icon"
-                aria-label={getTriggerLabel(actionCount, updatesUnread)}
-                aria-haspopup="dialog"
-                aria-expanded={isOpen}
-                className="relative"
-                onClick={() => setIsOpen(true)}
-            >
+            <Tooltip>
+                <TooltipTrigger
+                    render={
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={getTriggerLabel(actionCount, updatesUnread)}
+                            aria-haspopup="dialog"
+                            aria-expanded={isOpen}
+                            className="relative"
+                            onClick={() => setIsOpen(true)}
+                        />
+                    }
+                >
                 <Bell
                     key={ringKey}
                     className={cn("size-5 origin-top", ringKey && "motion-safe:animate-bell-ring")}
@@ -245,7 +251,9 @@ export function NotificationBell() {
                         className="absolute top-1.5 right-1.5 size-2 rounded-full bg-muted-foreground"
                     />
                 ) : null}
-            </Button>
+                </TooltipTrigger>
+                <TooltipContent>{getTriggerLabel(actionCount, updatesUnread)}</TooltipContent>
+            </Tooltip>
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
                 <SheetContent
                     side="right"
