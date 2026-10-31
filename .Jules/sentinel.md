@@ -1,0 +1,4 @@
+## YYYY-MM-DD - Frontend Critical Vulnerability Mitigation
+**Vulnerability:** Found 3 critical vulnerabilities in frontend dependencies: Next.js (RCE in Image Optimization API and \`use cache\` functions) and DOMPurify (SAFE_FOR_TEMPLATES bypass). Also found high severity vulnerability in undici.
+**Learning:** These vulnerabilities expose the application to Remote Code Execution and Cross-Site Scripting (XSS). For a multi-tenant platform handling sensitive surrogacy data, these are critical risks. The \`pnpm\` package manager requires updating direct dependencies in \`package.json\` and using \`pnpm-workspace.yaml\` overrides for transitive dependencies like \`undici\`.
+**Prevention:** Regularly audit frontend dependencies using \`pnpm audit --audit-level=critical\` and ensure that security assertions in tests (like \`dependency-security.test.ts\`) are maintained and updated to catch downgrades.
