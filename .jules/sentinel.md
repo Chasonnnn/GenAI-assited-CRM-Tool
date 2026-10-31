@@ -1,0 +1,4 @@
+## YYYY-MM-DD - Python Dependency Security Mitigation
+**Vulnerability:** The CI pipeline security scan failed due to multiple vulnerabilities in backend Python dependencies: dnspython (CVE-2026-114605), pyasn1 (CVE-2026-119196, etc.), opentelemetry-api (CVE-2026-114603), and pypdf (CVE-2026-115572, etc.).
+**Learning:** Hardcoded version assertions in test files (like `test_dependency_security.py`) ensure that critical libraries do not inadvertently downgrade. When updating packages to resolve CVEs, these assertions must be concurrently updated to reflect the new, secure baseline. Missing this step leads to CI failures.
+**Prevention:** Always run all related test files (e.g. `tests/test_dependency_security.py`) locally when performing dependency updates to resolve security issues before pushing.
