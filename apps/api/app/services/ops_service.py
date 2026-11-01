@@ -7,7 +7,7 @@ Manages integration health status and hourly error rollups.
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -122,34 +122,26 @@ def record_error(
     return health
 
 
-def get_error_count_24h(
-    db: Session,
-    org_id: UUID,
-    integration_type: IntegrationType,
-    integration_key: str | None = None,
-) -> int:
-    """Get error count for last 24 hours from rollups."""
+def get_error_counts_24h(db: Session, org_id: UUID) -> dict[tuple[str, str], int]:
+    """Get error counts for the last 24 hours from rollups, keyed by integration type and key."""
     cutoff = datetime.now(UTC) - timedelta(hours=24)
-    key = integration_key or DEFAULT_INTEGRATION_KEY
 
-    result = db.execute(
-        text("""
-            SELECT COALESCE(SUM(error_count), 0) as total
-            FROM integration_error_rollup
-            WHERE organization_id = :org_id
-              AND integration_type = :integration_type
-              AND integration_key = :integration_key
-              AND period_start > :cutoff
-        """),
-        {
-            "org_id": org_id,
-            "integration_type": integration_type.value,
-            "integration_key": key,
-            "cutoff": cutoff,
-        },
+    rows = db.execute(
+        select(
+            IntegrationErrorRollup.integration_type,
+            IntegrationErrorRollup.integration_key,
+            func.sum(IntegrationErrorRollup.error_count),
+        )
+        .where(
+            IntegrationErrorRollup.organization_id == org_id,
+            IntegrationErrorRollup.period_start > cutoff,
+        )
+        .group_by(IntegrationErrorRollup.integration_type, IntegrationErrorRollup.integration_key)
     )
-    row = result.fetchone()
-    return int(row[0]) if row else 0
+    return {
+        (integration_type, integration_key): int(total)
+        for integration_type, integration_key, total in rows
+    }
 
 
 def update_config_status(
@@ -182,11 +174,12 @@ def list_integration_health(
     """
     healths = db.query(IntegrationHealth).filter(IntegrationHealth.organization_id == org_id).all()
 
+    error_counts = get_error_counts_24h(db, org_id)
+
     result = []
     for h in healths:
-        error_count = get_error_count_24h(
-            db, org_id, IntegrationType(h.integration_type), h.integration_key
-        )
+        key = h.integration_key or DEFAULT_INTEGRATION_KEY
+        error_count = error_counts.get((h.integration_type, key), 0)
         result.append(
             {
                 "id": str(h.id),

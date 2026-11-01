@@ -125,6 +125,15 @@ describe("NotificationBell", () => {
         expect(within(trigger).getByText("3")).toBeInTheDocument()
     })
 
+    it("shows its label as a tooltip on keyboard focus", async () => {
+        setCounts(3, 5)
+
+        render(<NotificationBell />)
+
+        fireEvent.focus(screen.getByRole("button", { name: "Notifications (3 need action)" }))
+        expect(await screen.findByText("Notifications (3 need action)")).toBeVisible()
+    })
+
     it("does not badge a number for unread updates alone", () => {
         setCounts(0, 4)
 
