@@ -138,6 +138,18 @@ def normalize_effective_at(
     return local_effective_at.astimezone(UTC)
 
 
+# Record created_at values come from the database clock; effective times come from the
+# app clock. The two can disagree by a fraction of a second.
+CREATION_CLOCK_SKEW_ALLOWANCE = timedelta(seconds=1)
+
+
+def absorb_creation_clock_skew(effective_at: datetime, created_at: datetime | None) -> datetime:
+    """Raise effective_at to created_at when it is earlier by less than the skew allowance."""
+    if created_at and timedelta(0) < created_at - effective_at < CREATION_CLOCK_SKEW_ALLOWANCE:
+        return created_at
+    return effective_at
+
+
 def _resolve_timezone(org_timezone: str | None, warnings: list[str]) -> tuple[ZoneInfo, bool]:
     tz_name = org_timezone or DEFAULT_TIMEZONE
     try:

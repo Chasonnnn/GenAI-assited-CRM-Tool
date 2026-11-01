@@ -66,7 +66,7 @@ dependencies = [
     # Export storage (S3)
     "boto3==1.42.39",
     # Image processing (EXIF stripping)
-    "pillow==12.3.0",
+    "pillow==13.0.0",
     "reportlab==4.4.9",
     # MFA/TOTP support
     "pyotp==2.9.0",
@@ -82,7 +82,7 @@ dependencies = [
     "grpcio==1.83.1",
     "grpcio-status==1.76.0",
     "proto-plus==1.27.0",
-    "pypdf==6.19.0",
+    "pypdf==6.21.1",
     "openai>=2.36.0",
     "twilio==9.10.9",
     "phonenumbers==9.0.34",

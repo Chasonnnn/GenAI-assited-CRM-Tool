@@ -130,7 +130,7 @@ describe("Dependency security guards", () => {
         const markdownItVersion = packageJson.dependencies?.["markdown-it"]?.replace(/^[^\d]*/, "")
 
         expect(markdownItVersion).toBeDefined()
-        expect(compareVersions(markdownItVersion!, "14.3.1")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(markdownItVersion!, "14.3.3")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins js-yaml to a non-vulnerable version in pnpm overrides", () => {
@@ -172,7 +172,7 @@ describe("Dependency security guards", () => {
         const viteOverride = readPnpmOverrides().vite
 
         expect(viteOverride).toBeDefined()
-        expect(compareVersions(viteOverride!, "7.3.5")).toBeGreaterThanOrEqual(0)
+        expect(compareVersions(viteOverride!, "8.1.6")).toBeGreaterThanOrEqual(0)
     })
 
     it("pins Vitest to a non-vulnerable version", () => {
@@ -323,7 +323,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "7.3.5")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "8.1.6")).toBeGreaterThanOrEqual(0)
         }
     })
 
@@ -365,7 +365,7 @@ describe("Dependency security guards", () => {
         expect(resolvedVersions.length).toBeGreaterThan(0)
 
         for (const resolvedVersion of resolvedVersions) {
-            expect(compareVersions(resolvedVersion, "14.3.1")).toBeGreaterThanOrEqual(0)
+            expect(compareVersions(resolvedVersion, "14.3.3")).toBeGreaterThanOrEqual(0)
         }
     })
 

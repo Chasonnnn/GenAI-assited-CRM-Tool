@@ -54,6 +54,7 @@ from app.services.email_service import (
     load_email_log_provider_attachments,
 )
 from app.services.resend_transport import ResendSendResult
+from tests.support.db_clock import database_now
 
 
 def _rendered_email() -> RenderedEmail:
@@ -490,6 +491,7 @@ async def test_dispatch_claim_preserves_idempotency_and_provider_retry_after(
         fake_send_email,
     )
     before_dispatch = datetime.now(UTC)
+    before_dispatch_db = database_now(db)
     credential_identity = (
         "credential:f7240bc588740b1d7f0dae7cb89e18923b38a1c2cc27f9ccdd5945e196df481f"
     )
@@ -497,6 +499,7 @@ async def test_dispatch_claim_preserves_idempotency_and_provider_retry_after(
     delivery = await email_delivery_dispatch.dispatch_claim(db, claim=claim)
 
     after_dispatch = datetime.now(UTC)
+    after_dispatch_db = database_now(db)
     assert sent_idempotency_key == queued.delivery.idempotency_key
     assert delivery.status == EmailDeliveryStatus.RETRY_SCHEDULED.value
     assert before_dispatch + timedelta(seconds=75) <= delivery.run_at
@@ -516,8 +519,9 @@ async def test_dispatch_claim_preserves_idempotency_and_provider_retry_after(
         )
         .one()
     )
-    assert shared_admission.next_slot_at >= before_dispatch + timedelta(seconds=75)
-    assert shared_admission.next_slot_at <= after_dispatch + timedelta(seconds=75)
+    # The shared admission lane is scheduled on the database clock.
+    assert shared_admission.next_slot_at >= before_dispatch_db + timedelta(seconds=75)
+    assert shared_admission.next_slot_at <= after_dispatch_db + timedelta(seconds=75)
 
 
 @pytest.mark.asyncio

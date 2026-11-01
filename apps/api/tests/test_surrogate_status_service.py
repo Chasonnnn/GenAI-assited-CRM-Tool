@@ -58,6 +58,41 @@ def test_status_change_backdate_requires_reason(db, test_org, test_user):
         )
 
 
+@pytest.mark.parametrize(
+    ("db_clock_ahead", "applied"),
+    [(timedelta(milliseconds=300), True), (timedelta(seconds=2), False)],
+)
+def test_status_change_absorbs_small_database_clock_skew(
+    db, test_org, test_user, db_clock_ahead, applied
+):
+    surrogate = _create_surrogate(db, test_org.id, test_user.id)
+    # created_at comes from the database clock, which can run ahead of the app clock.
+    surrogate.created_at = datetime.now(UTC) + db_clock_ahead
+    db.flush()
+    target_stage = _get_stage(db, test_org.id, "contacted")
+
+    def change():
+        return surrogate_status_service.change_status(
+            db=db,
+            surrogate=surrogate,
+            new_stage_id=target_stage.id,
+            user_id=test_user.id,
+            user_role=Role.DEVELOPER,
+        )
+
+    if not applied:
+        with pytest.raises(ValueError, match="before surrogate was created"):
+            change()
+        return
+    assert change()["status"] == "applied"
+    history = (
+        db.query(SurrogateStatusHistory)
+        .filter(SurrogateStatusHistory.surrogate_id == surrogate.id)
+        .one()
+    )
+    assert history.effective_at == surrogate.created_at
+
+
 def test_status_change_regression_creates_pending_request(db, test_org, test_user):
     surrogate = _create_surrogate(db, test_org.id, test_user.id)
     contacted_stage = _get_stage(db, test_org.id, "contacted")

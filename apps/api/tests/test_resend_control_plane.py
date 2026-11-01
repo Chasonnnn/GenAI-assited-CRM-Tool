@@ -9,6 +9,8 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 
+from tests.support.db_clock import database_now
+
 
 class _FakeGetClient:
     def __init__(self, responses: list[httpx.Response]):
@@ -309,7 +311,7 @@ async def test_rate_limit_defers_the_shared_admission_lane_by_bounded_retry_afte
         "AsyncClient",
         lambda **_kwargs: fake_client,
     )
-    before_request = datetime.now(UTC)
+    before_request = database_now(db)
 
     result = await resend_control_plane.ResendControlPlaneClient(
         db=db,
@@ -317,7 +319,7 @@ async def test_rate_limit_defers_the_shared_admission_lane_by_bounded_retry_afte
         admission_identity=admission_identity,
     ).list_domains()
 
-    after_request = datetime.now(UTC)
+    after_request = database_now(db)
     assert result.retry_after_seconds == 3600
     shared_admission = (
         db.query(EmailProviderAdmission)
@@ -356,7 +358,7 @@ async def test_rate_limit_without_retry_after_applies_safe_shared_cooldown(
         "AsyncClient",
         lambda **_kwargs: fake_client,
     )
-    before_request = datetime.now(UTC)
+    before_request = database_now(db)
 
     result = await resend_control_plane.ResendControlPlaneClient(
         db=db,
@@ -364,7 +366,7 @@ async def test_rate_limit_without_retry_after_applies_safe_shared_cooldown(
         admission_identity=admission_identity,
     ).list_domains()
 
-    after_request = datetime.now(UTC)
+    after_request = database_now(db)
     assert result.retry_after_seconds is None
     shared_admission = (
         db.query(EmailProviderAdmission)
@@ -374,8 +376,7 @@ async def test_rate_limit_without_retry_after_applies_safe_shared_cooldown(
         )
         .one()
     )
-    # PostgreSQL and the application clock can differ by a few milliseconds.
-    assert shared_admission.next_slot_at >= before_request + timedelta(milliseconds=900)
+    assert shared_admission.next_slot_at >= before_request + timedelta(seconds=1)
     assert shared_admission.next_slot_at <= after_request + timedelta(seconds=1)
 
 

@@ -126,7 +126,7 @@ class Digest:
 
 def build_digest(db: Session, user_id: UUID, org_id: UUID, now: datetime) -> Digest:
     actions, _ = notification_service.get_notifications(
-        db, user_id, org_id, tier=NotificationTier.ACTION, limit=DIGEST_ITEM_LIMIT
+        db, user_id, org_id, tier=NotificationTier.ACTION, limit=DIGEST_ITEM_LIMIT, now=now
     )
     updates, _ = notification_service.get_notifications(
         db,
@@ -136,8 +136,9 @@ def build_digest(db: Session, user_id: UUID, org_id: UUID, now: datetime) -> Dig
         tier=NotificationTier.UPDATE,
         created_after=now - DIGEST_LOOKBACK,
         limit=DIGEST_ITEM_LIMIT + 1,
+        now=now,
     )
-    counts = notification_service.get_notification_counts(db, user_id, org_id)
+    counts = notification_service.get_notification_counts(db, user_id, org_id, now=now)
     return Digest(
         action_count=counts.action,
         actions=actions,

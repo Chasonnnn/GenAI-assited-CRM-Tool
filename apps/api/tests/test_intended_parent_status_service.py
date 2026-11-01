@@ -61,6 +61,44 @@ def test_implicit_effective_time_uses_status_change_clock(db, test_org, test_use
     assert started_at <= history.effective_at <= datetime.now(UTC)
 
 
+@pytest.mark.parametrize(
+    ("db_clock_ahead", "applied"),
+    [(timedelta(milliseconds=300), True), (timedelta(seconds=2), False)],
+)
+def test_ip_status_change_absorbs_small_database_clock_skew(
+    db, test_org, test_user, db_clock_ahead, applied
+):
+    ip = _create_ip(db, test_org.id, test_user.id)
+    # created_at comes from the database clock, which can run ahead of the app clock.
+    ip.created_at = datetime.now(UTC) + db_clock_ahead
+    db.flush()
+    ready_stage = _get_ip_stage(db, test_org.id, IntendedParentStatus.READY_TO_MATCH.value)
+
+    def change():
+        return intended_parent_status_service.change_status(
+            db=db,
+            ip=ip,
+            new_stage=ready_stage,
+            user_id=test_user.id,
+            user_role=Role.DEVELOPER,
+        )
+
+    if not applied:
+        with pytest.raises(ValueError, match="before intended parent was created"):
+            change()
+        return
+    assert change()["status"] == "applied"
+    history = (
+        db.query(IntendedParentStatusHistory)
+        .filter(
+            IntendedParentStatusHistory.intended_parent_id == ip.id,
+            IntendedParentStatusHistory.new_stage_id == ready_stage.id,
+        )
+        .one()
+    )
+    assert history.effective_at == ip.created_at
+
+
 def test_ip_status_backdate_requires_reason(db, test_org, test_user):
     ip = _create_ip(db, test_org.id, test_user.id)
     ip.created_at = datetime.now(UTC) - timedelta(days=7)

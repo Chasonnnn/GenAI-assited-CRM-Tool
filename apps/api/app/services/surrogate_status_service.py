@@ -36,7 +36,7 @@ from app.db.models import (
     Task,
     User,
 )
-from app.utils.datetime_parsing import normalize_effective_at
+from app.utils.datetime_parsing import absorb_creation_clock_skew, normalize_effective_at
 
 logger = logging.getLogger(__name__)
 
@@ -513,6 +513,9 @@ def change_status(
     if (normalized_effective_at - now).total_seconds() > 1:
         raise ValueError("Cannot set future date for stage change")
 
+    normalized_effective_at = absorb_creation_clock_skew(
+        normalized_effective_at, surrogate.created_at
+    )
     if surrogate.created_at and normalized_effective_at < surrogate.created_at:
         raise ValueError("Cannot set date before surrogate was created")
 

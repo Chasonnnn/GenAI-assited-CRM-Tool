@@ -445,6 +445,30 @@ async def test_status_change_rejects_future_precreation_and_unreasoned_backdate(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("db_clock_ahead", "status_code"),
+    [(timedelta(milliseconds=300), 200), (timedelta(seconds=2), 400)],
+)
+async def test_donor_stage_change_absorbs_small_database_clock_skew(
+    db, test_org, authed_client, db_clock_ahead, status_code
+):
+    _, ready_stage = _seed_donor_pipeline(db, test_org.id, "egg")
+    created = await _create_donor(authed_client)
+    donor = db.get(Donor, UUID(created["id"]))
+    # created_at comes from the database clock, which can run ahead of the app clock.
+    donor.created_at = datetime.now(UTC) + db_clock_ahead
+    db.commit()
+
+    response = await authed_client.patch(
+        f"/donors/{created['id']}/status", json={"stage_id": str(ready_stage.id)}
+    )
+
+    assert response.status_code == status_code
+    if status_code == 400:
+        assert response.json()["detail"] == "Cannot set date before donor was created"
+
+
+@pytest.mark.asyncio
 async def test_recent_donor_stage_change_can_be_undone_without_approval(
     db,
     test_org,

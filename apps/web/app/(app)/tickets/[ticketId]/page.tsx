@@ -289,7 +289,7 @@ function TicketOverviewCard({
                         value={statusValue}
                         onValueChange={(value) => onStatusChange((value ?? 'new') as TicketStatus)}
                     >
-                        <SelectTrigger>
+                        <SelectTrigger aria-label="Status">
                             <SelectValue placeholder="Status">
                                 {(value: string | null) => getTicketStatusLabel((value ?? 'new') as TicketStatus)}
                             </SelectValue>
@@ -308,7 +308,7 @@ function TicketOverviewCard({
                             onPriorityChange((value ?? 'normal') as TicketPriority)
                         }
                     >
-                        <SelectTrigger>
+                        <SelectTrigger aria-label="Priority">
                             <SelectValue placeholder="Priority">
                                 {(value: string | null) =>
                                     getTicketPriorityLabel((value ?? 'normal') as TicketPriority)
@@ -330,6 +330,7 @@ function TicketOverviewCard({
 
                 <div className="grid gap-3 md:grid-cols-3">
                     <Input
+                        aria-label="Surrogate ID"
                         placeholder="Surrogate ID (manual link)"
                         value={surrogateId}
                         onChange={(event) => onSurrogateIdChange(event.target.value)}
@@ -370,11 +371,13 @@ function TicketReplyCard({
             </CardHeader>
             <CardContent className="space-y-3">
                 <Input
+                    aria-label="Reply recipient"
                     placeholder="Recipient"
                     value={replyTo}
                     onChange={(event) => onReplyToChange(event.target.value)}
                 />
                 <Textarea
+                    aria-label="Reply message"
                     placeholder="Write your reply"
                     value={replyBody}
                     onChange={(event) => onReplyBodyChange(event.target.value)}
@@ -408,6 +411,7 @@ function TicketNotesCard({
             </CardHeader>
             <CardContent className="space-y-3">
                 <Textarea
+                    aria-label="Internal note"
                     placeholder="Add internal note"
                     value={noteBody}
                     onChange={(event) => onNoteBodyChange(event.target.value)}
