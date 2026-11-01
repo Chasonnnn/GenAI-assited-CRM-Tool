@@ -48,8 +48,9 @@ def test_dependency_pins_match_security_fixes():
         "idna": "3.18",
         "opentelemetry-api": "1.45.1",
         "pillow": "13.0.0",
+        "pyasn1": "0.6.5",
         "pydantic-settings": "2.14.2",
-        "pypdf": "6.21.2",
+        "pypdf": "6.21.4",
         "python-multipart": "0.0.31",
         "starlette": "1.3.1",
     }
