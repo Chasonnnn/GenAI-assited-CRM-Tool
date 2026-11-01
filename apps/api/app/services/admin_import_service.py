@@ -1461,11 +1461,22 @@ def _restore_donor_status_history(
     if not events:
         return False
 
-    for event in events:
-        if not isinstance(event, dict):
-            raise ValueError(f"Invalid status history event for donor {donor.id}")
-        history_id = _history_uuid(event, "id", donor_id=donor.id) or uuid4()
-        if history_id in history_ids or db.get(DonorStatusHistory, history_id) is not None:
+    if any(not isinstance(event, dict) for event in events):
+        raise ValueError(f"Invalid status history event for donor {donor.id}")
+    event_history_ids = [
+        _history_uuid(event, "id", donor_id=donor.id) or uuid4() for event in events
+    ]
+    # History ids are global primary keys, so the check must see every organization.
+    existing_history_ids = set(
+        db.scalars(
+            select(DonorStatusHistory.id)
+            .where(DonorStatusHistory.id.in_(event_history_ids))
+            .execution_options(skip_org_scope=True)
+        )
+    )
+
+    for event, history_id in zip(events, event_history_ids, strict=True):
+        if history_id in history_ids or history_id in existing_history_ids:
             raise ValueError(f"Status history id {history_id} is unavailable")
         history_ids.add(history_id)
 

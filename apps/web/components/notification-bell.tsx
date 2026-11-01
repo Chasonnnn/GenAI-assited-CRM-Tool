@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { parseDateInput } from "@/lib/utils/date"
 import {
@@ -183,6 +184,7 @@ export function NotificationBell() {
 
     const actionCount = counts?.action_count ?? 0
     const updatesUnread = counts?.updates_unread ?? 0
+    const triggerLabel = getTriggerLabel(actionCount, updatesUnread)
     // Remounting the icon on each new action item replays the ring animation.
     const ringKey = lastNotification?.tier === "action" ? lastNotification.id : undefined
 
@@ -212,40 +214,45 @@ export function NotificationBell() {
                 ) : (
                     <ConsumeLoginNotificationReminder />
                 ))}
-            <Button
-                variant="ghost"
-                size="icon"
-                aria-label={getTriggerLabel(actionCount, updatesUnread)}
-                aria-haspopup="dialog"
-                aria-expanded={isOpen}
-                className="relative"
-                onClick={() => setIsOpen(true)}
-            >
-                <Bell
-                    key={ringKey}
-                    className={cn("size-5 origin-top", ringKey && "motion-safe:animate-bell-ring")}
-                    aria-hidden="true"
-                />
-                {isCountLoading && (
-                    <span
-                        aria-hidden="true"
-                        className="absolute -top-0.5 -right-0.5 size-2.5 animate-pulse rounded-full bg-muted-foreground/40"
+            <Tooltip>
+                <TooltipTrigger render={
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={triggerLabel}
+                        aria-haspopup="dialog"
+                        aria-expanded={isOpen}
+                        className="relative"
+                        onClick={() => setIsOpen(true)}
                     />
-                )}
-                {actionCount > 0 ? (
-                    <Badge
+                }>
+                    <Bell
+                        key={ringKey}
+                        className={cn("size-5 origin-top", ringKey && "motion-safe:animate-bell-ring")}
                         aria-hidden="true"
-                        className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center px-1 text-xs tabular-nums"
-                    >
-                        {actionCount > 99 ? "99+" : actionCount}
-                    </Badge>
-                ) : updatesUnread > 0 ? (
-                    <span
-                        aria-hidden="true"
-                        className="absolute top-1.5 right-1.5 size-2 rounded-full bg-muted-foreground"
                     />
-                ) : null}
-            </Button>
+                    {isCountLoading && (
+                        <span
+                            aria-hidden="true"
+                            className="absolute -top-0.5 -right-0.5 size-2.5 animate-pulse rounded-full bg-muted-foreground/40"
+                        />
+                    )}
+                    {actionCount > 0 ? (
+                        <Badge
+                            aria-hidden="true"
+                            className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center px-1 text-xs tabular-nums"
+                        >
+                            {actionCount > 99 ? "99+" : actionCount}
+                        </Badge>
+                    ) : updatesUnread > 0 ? (
+                        <span
+                            aria-hidden="true"
+                            className="absolute top-1.5 right-1.5 size-2 rounded-full bg-muted-foreground"
+                        />
+                    ) : null}
+                </TooltipTrigger>
+                <TooltipContent>{triggerLabel}</TooltipContent>
+            </Tooltip>
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
                 <SheetContent
                     side="right"
