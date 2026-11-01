@@ -30,6 +30,7 @@ from app.services.attachment_service import (
     generate_signed_url,
     store_file,
     strip_exif_data,
+    resolve_local_storage_path,
 )
 from app.services.form_submission_service import (
     DEFAULT_MAX_FILE_COUNT,
@@ -434,7 +435,7 @@ def get_form_logo_download_url(logo: FormLogo) -> str | None:
 
 
 def get_form_logo_local_path(logo: FormLogo) -> str:
-    return os.path.join(_get_local_storage_path(), logo.storage_key)
+    return resolve_local_storage_path(logo.storage_key)
 
 
 def _field_for_target(

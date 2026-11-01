@@ -171,7 +171,10 @@ def get_form_logo(
     if signed_url:
         return RedirectResponse(signed_url, status_code=307)
 
-    file_path = form_service.get_form_logo_local_path(logo)
+    try:
+        file_path = form_service.get_form_logo_local_path(logo)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Logo not found") from exc
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Logo not found")
 
