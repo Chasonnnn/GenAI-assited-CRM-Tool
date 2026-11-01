@@ -2,7 +2,6 @@
 
 import copy
 import json
-import os
 import uuid
 from typing import Any
 
@@ -26,11 +25,10 @@ from app.db.models import (
 from app.schemas.forms import FormSchema
 from app.services import form_submission_service, storage_cleanup_service
 from app.services.attachment_service import (
-    _get_local_storage_path,
     generate_signed_url,
+    resolve_local_storage_path,
     store_file,
     strip_exif_data,
-    resolve_local_storage_path,
 )
 from app.services.form_submission_service import (
     DEFAULT_MAX_FILE_COUNT,
