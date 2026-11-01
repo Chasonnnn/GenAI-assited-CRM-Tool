@@ -9,3 +9,9 @@
 ## 2025-05-20 - Table Checkbox Accessibility
 **Learning:** Table row selection checkboxes often lack accessible names. Adding dynamic `aria-label` (e.g., "Select {Name}") is essential for screen reader users to distinguish between rows.
 **Action:** Ensure all selection checkboxes in data tables have unique, descriptive `aria-label` props derived from the row data.
+## 2026-10-31 - Notification Bell Tooltip Implementation
+**Learning:** The  library in this project relies on a `render={<Button />}` prop pattern for `TooltipTrigger` instead of Radix UI's `asChild`. Code review flagged `asChild` but this would be incorrect for this codebase.
+**Action:** When adding `Tooltip` to icon-only buttons, use the `Tooltip, TooltipTrigger, TooltipContent, TooltipProvider` components and compose using the `render` prop to prevent rendering invalid nested buttons while avoiding breaking the interface.
+## 2026-10-31 - Notification Bell Tooltip Implementation
+**Learning:** The @base-ui/react library in this project relies on a render prop pattern for TooltipTrigger instead of Radix UIs asChild. Code review flagged asChild but this would be incorrect for this codebase.
+**Action:** When adding Tooltip to icon-only buttons, use the Tooltip, TooltipTrigger, TooltipContent, TooltipProvider components and compose using the render prop to prevent rendering invalid nested buttons while avoiding breaking the interface.
