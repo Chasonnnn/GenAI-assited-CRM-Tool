@@ -197,21 +197,18 @@ jobs:
         working-directory: apps/api
         run: |
           uv run coverage combine
-          # XML and JSON each enforce the configured combined coverage floor.
+          # XML enforces the configured combined coverage floor; its totals feed the floors below.
           uv run coverage xml
-          uv run coverage json
           uv run python - <<'PYTHON'
-          import json
+          import xml.etree.ElementTree as ET
 
-          with open("coverage.json") as report:
-              totals = json.load(report)["totals"]
-          for metric, covered, total, floor in (
-              ("lines", "covered_lines", "num_statements", 79.96),
-              ("branches", "covered_branches", "num_branches", 63.03),
-          ):
-              if totals[total] <= 0:
+          totals = ET.parse("coverage.xml").getroot().attrib
+          for metric, floor in (("lines", 79.96), ("branches", 63.03)):
+              covered = int(totals[f"{metric}-covered"])
+              total = int(totals[f"{metric}-valid"])
+              if total <= 0:
                   raise SystemExit(f"No {metric} measured")
-              actual = 100 * totals[covered] / totals[total]
+              actual = 100 * covered / total
               print(f"{metric}: {actual:.2f}% (floor {floor:.2f}%)")
               if actual < floor:
                   raise SystemExit(f"{metric} coverage below floor")

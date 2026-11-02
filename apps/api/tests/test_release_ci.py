@@ -231,7 +231,6 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
     assert 'test "$GROUP_RESULT" = success' in workflow
     assert "uv run coverage combine" in workflow
     assert "uv run coverage xml" in workflow
-    assert "uv run coverage json" in workflow
     coverage = tomllib.loads(pyproject)["tool"]["coverage"]["report"]
     assert coverage["fail_under"] > 0
 
@@ -353,6 +352,25 @@ def test_ci_shards_frontend_tests_and_preserves_aggregate_gate() -> None:
             capture_output=True,
         )
         assert (result.returncode == 0) == (build == coverage == "success")
+
+
+def test_ci_backend_coverage_floors_read_the_xml_totals(tmp_path) -> None:
+    command = next(
+        step["run"]
+        for step in yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]["backend-tests"]["steps"]
+        if step.get("name") == "Combine coverage and enforce floors"
+    )
+    script = re.search(r"python - <<'PYTHON'\n(.*?)\nPYTHON", command, re.DOTALL)
+    assert script is not None
+    for lines, branches, passes in ((8000, 6400, True), (7900, 6400, False), (8000, 6200, False)):
+        (tmp_path / "coverage.xml").write_text(
+            f'<coverage lines-valid="10000" lines-covered="{lines}" '
+            f'branches-valid="10000" branches-covered="{branches}"/>'
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", script.group(1)], cwd=tmp_path, capture_output=True
+        )
+        assert (result.returncode == 0) == passes
 
 
 def test_ci_uses_the_repository_pnpm_release() -> None:
