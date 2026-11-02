@@ -22,7 +22,9 @@ RELEASE_WORKFLOW = ROOT / ".github/workflows/release-please.yml"
 
 def test_zap_permissions_only_change_report_directory(tmp_path):
     workflow = CI_WORKFLOW.read_text()
-    command = re.search(r"- name: Allow ZAP to write workspace\n\s+run: (.+)", workflow)
+    command = re.search(
+        r"- name: Allow ZAP to write workspace\n(?:\s+if: .+\n)?\s+run: (.+)", workflow
+    )
     assert command is not None
     cache = tmp_path / "__pycache__"
     cache.mkdir()
@@ -227,7 +229,7 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
     assert groups == ["parallel-1", "parallel-2", "parallel-3", "parallel-4", "serial"]
     assert '"${test_files[@]}"' in workflow
     assert "COVERAGE_FILE: .coverage.${{ matrix.group }}" in workflow
-    assert "needs: backend-test-groups" in workflow
+    assert jobs["backend-tests"]["needs"] == ["changes", "backend-test-groups"]
     assert 'test "$GROUP_RESULT" = success' in workflow
     assert "uv run coverage combine" in workflow
     assert "uv run coverage xml" in workflow
@@ -333,9 +335,9 @@ def test_ci_shards_frontend_tests_and_preserves_aggregate_gate() -> None:
     assert "pnpm test --shard=${{ matrix.shard }}/4" in workflow
     assert jobs["frontend-coverage"]["needs"] == "frontend-test-shards"
     gate = jobs["frontend-tests"]
-    assert gate["needs"] == ["frontend-build", "frontend-coverage"]
+    assert gate["needs"] == ["changes", "frontend-build", "frontend-coverage"]
     assert gate["name"] == "Frontend Tests"
-    assert gate["if"] == "always()"
+    assert gate["if"] == _RUN_AREA.format(area="frontend")
     assert "--coverage --reporter=default --reporter=blob" in workflow
     assert "path: apps/web/.vitest/blob/*.json" in workflow
     assert "path: apps/web/.vitest/blob\n" in workflow
@@ -352,6 +354,166 @@ def test_ci_shards_frontend_tests_and_preserves_aggregate_gate() -> None:
             capture_output=True,
         )
         assert (result.returncode == 0) == (build == coverage == "success")
+
+
+_RUN_AREA = (
+    "${{{{ !cancelled() && (needs.changes.result != 'success' "
+    "|| needs.changes.outputs.{area} == 'true') }}}}"
+)
+_AREA_ENV = "${{{{ needs.changes.result != 'success' || needs.changes.outputs.{area} == 'true' }}}}"
+
+
+def _changed_areas(paths: list[str]) -> dict[str, str]:
+    result = subprocess.run(
+        [sys.executable, "-I", str(ROOT / "scripts/ci_changed_areas.py")],
+        input="\n".join(paths),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return dict(line.split("=", 1) for line in result.stdout.splitlines())
+
+
+@pytest.mark.parametrize(
+    ("paths", "backend", "frontend"),
+    [
+        (["apps/web/components/button.tsx"], "false", "true"),
+        (["apps/web/tests/button.test.tsx", "apps/web/app/page.tsx"], "false", "true"),
+        (["apps/api/app/main.py"], "true", "false"),
+        (["uv.lock", "cloudbuild/api.yaml", "docs/adr/0001-x.md"], "true", "false"),
+        (["apps/api/app/main.py", "apps/web/app/page.tsx"], "true", "true"),
+        # Backend tests read these web files.
+        (["apps/web/lib/constants/stages.generated.ts"], "true", "true"),
+        (["apps/web/package.json"], "true", "true"),
+        (["apps/web/public/journey/defaults/match.jpg"], "true", "true"),
+        # Frontend tests read these backend files.
+        (["apps/api/app/core/stage_definitions.py"], "true", "true"),
+        (["apps/api/tests/fixtures/public_email_rule_cases.json"], "true", "true"),
+        # Shared inputs and an empty diff run every area.
+        (["apps/web/app/page.tsx", ".github/workflows/ci.yml"], "true", "true"),
+        (["mise.lock"], "true", "true"),
+        (["scripts/gen_stage_map.py"], "true", "true"),
+        ([], "true", "true"),
+    ],
+)
+def test_ci_changed_areas_skip_only_unaffected_areas(paths, backend, frontend) -> None:
+    assert _changed_areas(paths) == {"backend": backend, "frontend": frontend}
+
+
+def test_ci_backend_tests_read_only_listed_web_files() -> None:
+    """A backend test that reads a new web file must add it to BACKEND_READS_FROM_WEB."""
+    listed = (ROOT / "scripts/ci_changed_areas.py").read_text()
+    pattern = re.compile(r"apps/web/[\w./-]+|\"apps\", \"web\", ((?:\"[\w.-]+\"(?:, )?)+)")
+    for test in (API_ROOT / "tests").rglob("*.py"):
+        if test.name == Path(__file__).name:
+            continue  # This file holds CI fixtures and reads only listed web files.
+        for match in pattern.finditer(test.read_text()):
+            if match.group(1):
+                path = "apps/web/" + "/".join(re.findall(r'"([\w.-]+)"', match.group(1)))
+            else:
+                path = match.group(0).rstrip(".")
+            if path.startswith("apps/web/.vitest") or path.startswith("apps/web/.next"):
+                continue
+            # Directory reads are listed with /**; file reads are listed exactly.
+            assert f'"{path}"' in listed or any(
+                path.startswith(prefix)
+                for prefix in re.findall(r'"(apps/web/[\w./-]+)/\*\*"', listed)
+            ), f"{test.name} reads {path}"
+
+
+def test_ci_select_areas_step_diffs_the_pull_request_merge(tmp_path) -> None:
+    step = next(
+        step
+        for step in yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]["changes"]["steps"]
+        if step.get("id") == "areas"
+    )
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / "scripts/ci_changed_areas.py").write_text(
+        (ROOT / "scripts/ci_changed_areas.py").read_text()
+    )
+    git = ["git", "-c", "user.name=ci", "-c", "user.email=ci@example.com"]
+
+    def run(*command: str) -> None:
+        subprocess.run(command, cwd=repo, check=True, capture_output=True)
+
+    run("git", "init", "-q", "-b", "main")
+    (repo / "apps/api").mkdir(parents=True)
+    (repo / "apps/api/main.py").write_text("base\n")
+    run("git", "add", ".")
+    run(*git, "commit", "-qm", "base")
+    run("git", "checkout", "-qb", "feature")
+    (repo / "apps/web").mkdir(parents=True)
+    (repo / "apps/web/page.tsx").write_text("feature\n")
+    run("git", "add", ".")
+    run(*git, "commit", "-qm", "feature")
+    run("git", "checkout", "-q", "main")
+    # The base branch moves on; its change must not count as part of the pull request.
+    (repo / "apps/api/main.py").write_text("moved\n")
+    run(*git, "commit", "-qam", "moved")
+    run(*git, "merge", "-q", "--no-ff", "feature", "-m", "merge")
+
+    for event, expected in (
+        ("pull_request", {"backend": "false", "frontend": "true"}),
+        ("push", {"backend": "true", "frontend": "true"}),
+    ):
+        output = tmp_path / f"{event}.out"
+        subprocess.run(
+            ["bash", "-e", "-c", step["run"]],
+            cwd=repo,
+            env={**os.environ, "EVENT_NAME": event, "GITHUB_OUTPUT": str(output)},
+            check=True,
+            capture_output=True,
+        )
+        assert dict(line.split("=", 1) for line in output.read_text().splitlines()) == expected
+
+    # A classifier crash must fail the job, which runs every area, not leave empty outputs.
+    (repo / "scripts/ci_changed_areas.py").write_text("raise SystemExit(1)\n")
+    failed = subprocess.run(
+        ["bash", "-e", "-c", step["run"]],
+        cwd=repo,
+        env={**os.environ, "EVENT_NAME": "pull_request", "GITHUB_OUTPUT": str(tmp_path / "x")},
+        capture_output=True,
+    )
+    assert failed.returncode != 0
+
+
+def test_ci_area_skips_fail_open_when_change_detection_fails() -> None:
+    jobs = yaml.safe_load(CI_WORKFLOW.read_text())["jobs"]
+    gated = {
+        "backend-test-groups": "backend",
+        "backend-tests": "backend",
+        "backend-fastapi-gates": "backend",
+        "ticketing-launch-gate": "backend",
+        "frontend-build": "frontend",
+        "frontend-test-shards": "frontend",
+        "frontend-tests": "frontend",
+    }
+    for name, area in gated.items():
+        assert jobs[name]["if"] == _RUN_AREA.format(area=area), name
+    # These jobs always run and skip only the steps of an unaffected area.
+    for name in ("lint", "security-scans", "production-artifact-builds"):
+        assert jobs[name]["needs"] == "changes"
+        assert jobs[name]["if"] == "${{ !cancelled() }}"
+    for name in ("lint", "security-scans"):
+        env = jobs[name]["env"]
+        assert env["RUN_BACKEND"] == _AREA_ENV.format(area="backend")
+        assert env["RUN_FRONTEND"] == _AREA_ENV.format(area="frontend")
+        conditions = {step.get("if") for step in jobs[name]["steps"]}
+        assert {"env.RUN_BACKEND == 'true'", "env.RUN_FRONTEND == 'true'"} <= conditions
+    builds = jobs["production-artifact-builds"]
+    assert {entry["name"]: entry["area"] for entry in builds["strategy"]["matrix"]["include"]} == {
+        "api": "backend",
+        "worker": "backend",
+        "web": "frontend",
+    }
+    build_step = next(step for step in builds["steps"] if "matrix.command" in step.get("run", ""))
+    assert build_step["if"] == (
+        "needs.changes.result != 'success' || needs.changes.outputs[matrix.area] == 'true'"
+    )
+    # Every job that waits for change detection is covered above.
+    waits = {name for name, job in jobs.items() if "changes" in job.get("needs", [])}
+    assert waits == set(gated) | {"lint", "security-scans", "production-artifact-builds"}
 
 
 def test_ci_backend_coverage_floors_read_the_xml_totals(tmp_path) -> None:
