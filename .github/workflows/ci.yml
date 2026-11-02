@@ -120,27 +120,24 @@ jobs:
           TEST_GROUP: ${{ matrix.group }}
         run: |
           # Keep files together for loadscope; every safe file belongs to one shard.
-          python - <<'PYTHON' > /tmp/backend-test-files
-          import os
-          from pathlib import Path
-
-          files = sorted(
-              str(path) for path in Path("tests").rglob("test_*.py")
-              if not path.name.startswith("test_migration_")
-              and path.name != "test_email_delivery_outbox.py"
-              and path.name != "test_ops_cli_integration.py"
-          )
-          shard = int(os.environ["TEST_GROUP"].rsplit("-", 1)[1]) - 1
-          print("\n".join(files[shard::4]))
-          PYTHON
+          # Shards balance recorded durations; refresh them with `ci_test_shards.py record`.
+          python scripts/ci_test_shards.py select "${TEST_GROUP#parallel-}" 4 > /tmp/backend-test-files
           mapfile -t test_files < /tmp/backend-test-files
           test "${#test_files[@]}" -gt 0
           PYTHONPATH=. uv run -m pytest "${test_files[@]}" -v --tb=short \
             --ignore-glob 'tests/test_migration_*.py' \
             --ignore tests/test_email_delivery_outbox.py \
             --ignore tests/test_ops_cli_integration.py \
-            -n 4 --dist loadscope \
+            -n 4 --dist loadscope --junitxml="junit-${TEST_GROUP}.xml" \
             --cov=app --cov-branch --cov-report= --cov-fail-under=0 --durations=30
+
+      - name: Upload backend test durations
+        if: startsWith(matrix.group, 'parallel-')
+        uses: actions/upload-artifact@v6
+        with:
+          name: backend-junit-${{ matrix.group }}
+          path: apps/api/junit-${{ matrix.group }}.xml
+          if-no-files-found: error
 
       - name: Run shared-database tests serially
         if: matrix.group == 'serial'

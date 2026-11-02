@@ -12,7 +12,10 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts import ci_test_shards
+
 ROOT = Path(__file__).resolve().parents[3]
+API_ROOT = ROOT / "apps/api"
 CI_WORKFLOW = ROOT / ".github/workflows/ci.yml"
 RELEASE_WORKFLOW = ROOT / ".github/workflows/release-please.yml"
 
@@ -238,8 +241,8 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
         for step in jobs["backend-test-groups"]["steps"]
         if step.get("name") == "Run parallel-safe tests"
     )
-    script = re.search(r"python - <<'PYTHON'[^\n]*\n(.*?)\nPYTHON", command, re.DOTALL)
-    assert script is not None
+    select = 'python scripts/ci_test_shards.py select "${TEST_GROUP#parallel-}" 4'
+    assert f"{select} > /tmp/backend-test-files" in command
     safe_files = {f"tests/test_{name}.py" for name in ("a", "b", "c", "d", "e")}
     safe_files.add("tests/nested/test_f.py")
     for path in safe_files | {
@@ -254,7 +257,11 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
     selected = []
     for group in groups[:-1]:
         result = subprocess.run(
-            [sys.executable, "-c", script.group(1)],
+            [
+                "bash",
+                "-c",
+                select.replace("python scripts/", f"{sys.executable} {API_ROOT}/scripts/"),
+            ],
             cwd=tmp_path,
             env={**os.environ, "TEST_GROUP": group},
             check=True,
@@ -266,6 +273,39 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
         selected.extend(shard)
     assert set(selected) == safe_files
     assert len(selected) == len(safe_files)
+
+
+def test_backend_shards_balance_recorded_durations(tmp_path) -> None:
+    durations = {"tests/test_a.py": 10.0, "tests/test_b.py": 6.0, "tests/test_c.py": 4.0}
+    files = [*durations, "tests/test_new.py"]
+    # The unrecorded file counts as the median duration (6s), so the shards total 14s and 12s.
+    shards = ci_test_shards.assign_shards(files, durations, 2)
+    assert shards == [
+        ["tests/test_a.py", "tests/test_c.py"],
+        ["tests/test_b.py", "tests/test_new.py"],
+    ]
+
+    report = tmp_path / "junit.xml"
+    report.write_text(
+        "<testsuites><testsuite>"
+        '<testcase classname="tests.test_a" name="one" time="1"/>'
+        '<testcase classname="tests.test_a.TestGroup" name="two" time="2"/>'
+        '<testcase classname="tests.nested.test_b" name="three" time="0.5"/>'
+        "</testsuite></testsuites>"
+    )
+    assert ci_test_shards.junit_file_durations([report]) == {
+        "tests/nested/test_b.py": 0.5,
+        "tests/test_a.py": 3.0,
+    }
+
+
+def test_backend_test_durations_cover_current_parallel_files() -> None:
+    recorded = json.loads(ci_test_shards.DURATIONS.read_text())
+    current = ci_test_shards.parallel_safe_files(API_ROOT / "tests")
+    current = [str(Path(file).relative_to(API_ROOT)) for file in current]
+    # New files fall back to the median; refresh the file when many are missing.
+    missing = set(current) - set(recorded)
+    assert len(missing) <= len(current) // 10, sorted(missing)
 
 
 def test_ci_isolates_global_database_assertions_from_parallel_workers() -> None:
