@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { useQueryClient, type QueryClient } from "@tanstack/react-query"
-import type { ReactNode } from "react"
+import { useEffect, type ReactNode } from "react"
 
 import { ApiError } from "@/lib/api"
 import type { FormRoutingRead, FormWorkflowSummary } from "@/lib/api/forms"
@@ -63,7 +63,10 @@ function renderPanel(props: Partial<Parameters<typeof AutomationFormRoutingPanel
 function renderPanelWithRefetch() {
     let client: QueryClient | undefined
     function CaptureClient({ children }: { children: ReactNode }) {
-        client = useQueryClient()
+        const current = useQueryClient()
+        useEffect(() => {
+            client = current
+        })
         return children
     }
     render(<AutomationFormRoutingPanel formId="form-1" canEdit canCreateWorkflows />, { wrapper: CaptureClient })

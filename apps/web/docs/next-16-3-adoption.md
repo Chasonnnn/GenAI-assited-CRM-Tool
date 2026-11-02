@@ -72,7 +72,7 @@ Current audit: the opt-in build panics while processing `app/globals.css`; the s
 
 ## TypeScript 7 split toolchain
 
-The standalone application type-check uses TypeScript 7's native CLI, while ESLint, Next's built-in checker, and other JavaScript compiler-API consumers retain the TypeScript 6 compatibility package:
+The standalone application type-check uses TypeScript 7's native CLI, while Next's built-in checker and other JavaScript compiler-API consumers retain the TypeScript 6 compatibility package:
 
 ```json
 {
@@ -81,7 +81,7 @@ The standalone application type-check uses TypeScript 7's native CLI, while ESLi
 }
 ```
 
-`pnpm run typecheck` generates Next route types and invokes the native `tsc` binary. ESLint and source-scanning tests resolve the `typescript` package name to the TypeScript 6 API. The compatibility package is version 6.0.2; its compiler and API report version 6.0.3.
+`pnpm run typecheck` generates Next route types and invokes the native `tsc` binary. Source-scanning tests resolve the `typescript` package name to the TypeScript 6 API. The compatibility package is version 6.0.2; its compiler and API report version 6.0.3.
 
 Next 16.3 resolves the `typescript` package name directly during a production build and recognizes the compatibility package's `tsc6` executable. Enabling `experimental.useTypeScriptCli` under this alias layout would run the TypeScript 6 CLI, not the native TypeScript 7 CLI. Keep `experimental.useTypeScriptCli: false` to retain Next's JavaScript API checker and its diagnostic handling; the separate `typecheck` command provides native application checking. Docker builds currently run the API checker through `pnpm build`.
 
@@ -101,4 +101,4 @@ mise exec -- pnpm exec tsc --noEmit --watch
 
 The application project excludes test files. The separate `tests/tsconfig.json` is checked by `pnpm run typecheck:tests`, included in both `pnpm run check` and CI. The remaining diagnostics from the September 30 audit were resolved before this gate was added. The October 4 local frontend check passed application types, test types, lint, and 3,037 tests.
 
-Retain the compatibility alias until `typescript-eslint` and source-scanning tests support TypeScript 7's API. Carrying both compiler packages preserves typed linting and Next build validation while the application check uses the native compiler. The split follows [Microsoft's side-by-side guidance](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/); Next's checker selection follows [its TypeScript CLI contract](https://nextjs.org/docs/app/api-reference/config/next-config-js/useTypeScriptCli).
+Retain the compatibility alias until Next's checker and source-scanning tests support TypeScript 7's API. Oxlint's type-aware rules use `oxlint-tsgolint`, which does not need the alias. Carrying both compiler packages preserves Next build validation while the application check uses the native compiler. The split follows [Microsoft's side-by-side guidance](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/); Next's checker selection follows [its TypeScript CLI contract](https://nextjs.org/docs/app/api-reference/config/next-config-js/useTypeScriptCli).

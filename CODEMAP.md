@@ -630,4 +630,4 @@ Scheduled triggers live in `apps/api/app/routers/internal.py`.
 - Backend tests: `apps/api/tests/*`
 - Frontend tests: `apps/web/tests/*`
 - Load tests: `load-tests/*`
-- Lint/format: `apps/api/pyproject.toml`, `apps/web/eslint.config.mjs`
+- Lint/format: `apps/api/pyproject.toml`, `apps/web/.oxlintrc.json`

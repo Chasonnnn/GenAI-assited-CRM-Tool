@@ -224,7 +224,7 @@ describe("Dependency security guards", () => {
             (match) => capture(match, 1),
         )
 
-        expect(resolvedVersions.length).toBeGreaterThan(0)
+        // ESLint was the only consumer; the override still pins any version a future dependency adds.
 
         for (const resolvedVersion of resolvedVersions) {
             expect(compareVersions(resolvedVersion, "3.4.0")).toBeGreaterThanOrEqual(0)

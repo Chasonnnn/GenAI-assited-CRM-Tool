@@ -31,7 +31,7 @@ module.exports = withBundleAnalyzer({
   typedRoutes: true,
   experimental: {
     // The project-level `tsc` binary is TypeScript 7, while the `typescript` package
-    // name intentionally provides the TypeScript 6 JavaScript API for ESLint. Next
+    // name intentionally provides the TypeScript 6 JavaScript API. Next
     // resolves that package name directly, so use its API checker during builds and
     // keep the native TS7 CLI as the separate fast `pnpm run typecheck` gate.
     useTypeScriptCli: false,

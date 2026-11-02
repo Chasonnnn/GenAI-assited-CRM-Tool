@@ -548,7 +548,7 @@ jobs:
           corepack enable
           corepack prepare pnpm@12.9.1 --activate
       
-      - name: Run ESLint
+      - name: Run Oxlint
         if: env.RUN_FRONTEND == 'true'
         working-directory: apps/web
         run: |
