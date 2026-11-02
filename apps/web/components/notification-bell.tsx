@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
+import { EmptyState } from "@/components/empty-state"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -111,10 +112,10 @@ function NotificationList({
     if (notifications.length === 0) {
         const Icon = tier === "action" ? CircleCheck : BellOff
         return (
-            <div className="flex flex-col items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                <Icon className="size-5" aria-hidden="true" />
-                <span>{tier === "action" ? "Nothing needs you" : "No updates"}</span>
-            </div>
+            <EmptyState
+                icon={Icon}
+                title={tier === "action" ? "Nothing needs you" : "No updates"}
+            />
         )
     }
 
