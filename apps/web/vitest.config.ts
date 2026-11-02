@@ -6,16 +6,17 @@ export default defineConfig({
     plugins: [react()],
     test: {
         environment: 'jsdom',
-        // Keep fresh globals per file; the shared location mock is not VM-compatible.
+        // The shared location mock is not VM-compatible. Workers reuse one environment and the
+        // dependency module cache; tests/reset-file-state.ts restores per-file state.
         pool: 'forks',
-        isolate: true,
+        isolate: false,
         fsModuleCache: true,
         globals: true,
         alias: {
             '@': path.resolve(__dirname, './'),
         },
-        // Shared browser polyfills and cleanup.
-        setupFiles: ['./tests/setup.ts'],
+        // Per-file state reset, then shared browser polyfills and cleanup.
+        setupFiles: ['./tests/reset-file-state.ts', './tests/setup.ts'],
         coverage: {
             provider: 'v8',
             include: [
