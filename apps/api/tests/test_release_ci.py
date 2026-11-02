@@ -279,12 +279,19 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
 def test_backend_shards_balance_recorded_durations(tmp_path) -> None:
     durations = {"tests/test_a.py": 10.0, "tests/test_b.py": 6.0, "tests/test_c.py": 4.0}
     files = [*durations, "tests/test_new.py"]
-    # The unrecorded file counts as the median duration (6s), so the shards total 14s and 12s.
+    # The unrecorded file counts as the median duration (6s).
     shards = ci_test_shards.assign_shards(files, durations, 2)
     assert shards == [
         ["tests/test_a.py", "tests/test_c.py"],
         ["tests/test_b.py", "tests/test_new.py"],
     ]
+
+    # Each file also costs FILE_OVERHEAD_SECONDS, so seven small files outweigh one 10s file.
+    small = [f"tests/test_s{index}.py" for index in range(7)]
+    durations = {"tests/test_big.py": 10.0} | dict.fromkeys(small, 0.5)
+    assert ci_test_shards.FILE_OVERHEAD_SECONDS == 1.5
+    shards = ci_test_shards.assign_shards([*durations], durations, 2)
+    assert shards == [["tests/test_big.py", small[6]], small[:6]]
 
     report = tmp_path / "junit.xml"
     report.write_text(
