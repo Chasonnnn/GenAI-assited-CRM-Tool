@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useId, useRef } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { startOfMonth } from "date-fns"
 import { Loader2Icon } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
@@ -96,7 +96,9 @@ export function SchedulingTimePicker({
     const reasonId = `${idPrefix}-${uniqueId}-reason`
     const calendarRef = useRef<HTMLDivElement>(null)
     const handledFocusRequest = useRef<number | undefined>(undefined)
-    const firstDate = minDate ?? schedulingDateKey(new Date(), timezone)
+    // The time this component mounted; a render-time clock read would be impure.
+    const [mountedAt] = useState(() => new Date())
+    const firstDate = minDate ?? schedulingDateKey(mountedAt, timezone)
     const selectedDate = date ? parseDateInput(date) : undefined
     const selectedSlot = slots?.find(slot => slot.start === selectedStart)
 

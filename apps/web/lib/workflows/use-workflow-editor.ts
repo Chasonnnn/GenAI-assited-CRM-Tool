@@ -112,6 +112,9 @@ export function useWorkflowEditor({
     )
     const state = history.present
     const dispatch = (action: WorkflowBuilderAction) => dispatchHistory({ type: "edit", action, at: Date.now() })
+    // History ignores the time of the untracked render-time updates; reading the clock during
+    // render would be impure.
+    const dispatchDuringRender = (action: WorkflowBuilderAction) => dispatchHistory({ type: "edit", action, at: 0 })
     // A new workflow opens on its trigger; a saved one opens on the whole canvas.
     const [selection, setSelection] = useState<WorkflowEditorSelection>(() =>
         workflowId === null ? { kind: "trigger" } : { kind: "none" },
@@ -249,7 +252,7 @@ export function useWorkflowEditor({
         editingWorkflow.id === workflowId &&
         hydratedWorkflowId !== workflowId
     ) {
-        dispatch({
+        dispatchDuringRender({
             type: "hydrateWorkflow",
             workflow: editingWorkflow as WorkflowCreate & { scope: WorkflowScope },
             workflowId,
@@ -263,7 +266,7 @@ export function useWorkflowEditor({
     ) {
         const normalized = normalizeTriggerConfigForUi(triggerType, triggerConfig, statusOptions)
         if (!areJsonObjectsEqual(normalized, triggerConfig)) {
-            dispatch({ type: "normalizeTriggerConfig", value: normalized })
+            dispatchDuringRender({ type: "normalizeTriggerConfig", value: normalized })
         }
     }
 

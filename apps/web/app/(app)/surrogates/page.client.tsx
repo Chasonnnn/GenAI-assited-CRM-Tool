@@ -625,6 +625,8 @@ function readSurrogateListUrlState(
 }
 
 export function SurrogatesPageClient() {
+    // The time this component mounted; a render-time clock read would be impure.
+    const [mountedAt] = useState(() => new Date())
     const searchParams = useSearchParams()
     const { push, replace } = useRouter()
     const normalizedSearchParams = getNormalizedSurrogateListSearchParams(searchParams)
@@ -976,7 +978,7 @@ export function SurrogatesPageClient() {
             return customRange.to ? { ...params, created_to: formatLocalDate(customRange.to) } : params
         }
         // For presets, calculate dates
-        const now = new Date()
+        const now = mountedAt
         let from: Date | undefined
         if (dateRange === 'today') {
             from = new Date(now.getFullYear(), now.getMonth(), now.getDate())

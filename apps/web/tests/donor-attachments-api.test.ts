@@ -33,6 +33,6 @@ describe("donor attachments API", () => {
             "/attachments/donors/donor-1/attachments",
             expect.any(FormData),
         )
-        expect((mockUpload.mock.calls[0]?.[1] as FormData).get("file")).toBe(file)
+        expect((mockUpload.mock.calls[0]?.[1] as FormData | undefined)?.get("file")).toBe(file)
     })
 })

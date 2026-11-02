@@ -31,6 +31,7 @@ interface SurrogateJourneyTabProps {
 export function SurrogateJourneyTab({ surrogateId, editPermission }: SurrogateJourneyTabProps) {
     const { data: journey, isLoading, error } = useSurrogateJourney(surrogateId)
     const { user } = useAuth()
+    const [generatedDate] = useState(() => format(new Date(), "MMMM yyyy"))
 
     // Image selector state
     const [selectorOpen, setSelectorOpen] = useState(false)
@@ -97,7 +98,6 @@ export function SurrogateJourneyTab({ surrogateId, editPermission }: SurrogateJo
         )
     }
 
-    const generatedDate = format(new Date(), "MMMM yyyy")
     const milestoneBySlug = new Map<string, { label: string; featured_image_id: string | null }>()
     for (const phase of journey.phases) {
         for (const milestone of phase.milestones) {

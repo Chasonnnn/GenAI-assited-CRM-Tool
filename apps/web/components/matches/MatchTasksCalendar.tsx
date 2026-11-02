@@ -368,7 +368,7 @@ function DayView({
 
 // Main Component
 export function MatchTasksCalendar({ matchId, participantKind = "surrogate", onAddTask }: MatchTasksCalendarProps) {
-    const [currentDate, setCurrentDate] = useState(new Date())
+    const [currentDate, setCurrentDate] = useState(() => new Date())
     const [viewType, setViewType] = useState<ViewType>("month")
     const [filter, setFilter] = useState<FilterType>("all")
 

@@ -1,6 +1,6 @@
 import { act, render, renderHook } from "@testing-library/react"
 import { QueryClient, QueryClientProvider, useMutation } from "@tanstack/react-query"
-import { Activity, useState, type PropsWithChildren } from "react"
+import { Activity, useEffect, useState, type PropsWithChildren } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { useFormBuilderAutosave } from "@/lib/forms/use-form-builder-autosave"
@@ -164,7 +164,10 @@ describe("useFormBuilderSaveQueue", () => {
         const onSuccess = vi.fn()
         const builder: { queue?: ReturnType<typeof useFormBuilderSaveQueue> } = {}
         function Builder() {
-            builder.queue = useFormBuilderSaveQueue("form-a")
+            const queue = useFormBuilderSaveQueue("form-a")
+            useEffect(() => {
+                builder.queue = queue
+            })
             return null
         }
         const view = render(

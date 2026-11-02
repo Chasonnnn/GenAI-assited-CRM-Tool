@@ -115,7 +115,7 @@ describe('multipart requests', () => {
 
         await submitSharedPublicForm('shared-slug', {}, [], undefined, undefined, consent, 'version-1')
 
-        const formData = (fetchMock.mock.calls[0]?.[1] as RequestInit).body as FormData
+        const formData = (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body as FormData
         expect(formData.get('sms_operational')).toBe(String(consent.operational))
         expect(formData.get('sms_phone_field_key')).toBe(expected)
     })

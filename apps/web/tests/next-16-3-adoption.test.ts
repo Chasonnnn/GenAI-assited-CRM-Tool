@@ -67,9 +67,19 @@ describe("Next.js 16.3 adoption contracts", () => {
     it("persists Next's incremental build cache in the frontend CI job", () => {
         const workflow = readFileSync(join(process.cwd(), "../../.github/workflows/ci.yml"), "utf8")
 
-        expect(workflow).toContain("uses: actions/cache@v5")
-        expect(workflow).toContain("${{ github.workspace }}/apps/web/.next/cache")
-        expect(workflow).toContain("hashFiles('apps/web/pnpm-lock.yaml')")
-        expect(workflow).toContain("hashFiles('apps/web/**/*.js', 'apps/web/**/*.jsx', 'apps/web/**/*.ts', 'apps/web/**/*.tsx')")
+        const key = "key: ${{ runner.os }}-nextjs-${{ hashFiles('apps/web/pnpm-lock.yaml') }}-${{ github.sha }}"
+        const restore = workflow.split("uses: actions/cache/restore@v5", 2)[1]?.split("- name:", 1)[0] ?? ""
+        const save = workflow.split("uses: actions/cache/save@v5", 2)[1]?.split("\n\n", 1)[0] ?? ""
+        const saveStep = workflow.split("- name: Save Next.js incremental build cache", 2)[1]?.split("\n\n", 1)[0] ?? ""
+
+        expect(restore).toContain("${{ github.workspace }}/apps/web/.next/cache")
+        expect(restore).toContain(key)
+        expect(restore).toContain("restore-keys: |\n            ${{ runner.os }}-nextjs-${{ hashFiles('apps/web/pnpm-lock.yaml') }}-\n")
+        expect(save).toContain("${{ github.workspace }}/apps/web/.next/cache")
+        expect(save).toContain(key)
+        // Pull requests reuse the newest push cache instead of saving one per run.
+        expect(saveStep).toContain("if: github.event_name == 'push'")
+        // A source-file hash would also hash node_modules on every run.
+        expect(workflow).not.toContain("hashFiles('apps/web/**")
     })
 })

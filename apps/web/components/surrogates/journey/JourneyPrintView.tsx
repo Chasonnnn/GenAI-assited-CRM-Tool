@@ -22,6 +22,8 @@ interface PhaseWithMilestones {
 }
 
 export function JourneyPrintView({ journey }: JourneyPrintViewProps) {
+    // A server component renders once per request, so reading the clock here is safe.
+    // oxlint-disable-next-line react/purity
     const generatedDate = format(new Date(), "MMMM yyyy")
 
     const phasesWithMeta: PhaseWithMilestones[] = journey.phases.reduce<{

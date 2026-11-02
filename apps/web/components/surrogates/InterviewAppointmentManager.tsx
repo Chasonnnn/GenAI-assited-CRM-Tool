@@ -111,6 +111,8 @@ export function InterviewAppointmentManager({
     onOpenChange?: (open: boolean) => void
     onManage?: () => void
 }) {
+    // The time this component mounted; a render-time clock read would be impure.
+    const [mountedAt] = useState(() => new Date())
     const query = useInterviewAppointment(surrogateId)
     const mutation = useManageInterviewAppointment(surrogateId)
     const retryGoogleSync = useRetryInterviewAppointmentGoogleSync(surrogateId)
@@ -153,7 +155,7 @@ export function InterviewAppointmentManager({
 
     const resetForm = () => setForm({ view: "manage", validation: null, cancelChoice: "move", overrideAvailability: false, overrideReason: "", date: "", anchorDate: "", month: null, dateFallback: false, dateFocusRequest: 0, selectedStart: null, dateTime: "" })
     const bookingForm = () => {
-        const today = schedulingDateKey(new Date(), timezone)
+        const today = schedulingDateKey(mountedAt, timezone)
         const current = active && appointment ? schedulingDateKey(appointment.scheduled_start, timezone) : today
         const nextAnchorDate = current > today ? current : today
         return {

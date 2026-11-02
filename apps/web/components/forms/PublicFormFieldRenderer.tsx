@@ -677,6 +677,8 @@ export function PublicFormFieldRenderer({
     density = "default",
     error = null,
 }: PublicFormFieldRendererProps) {
+    // The time this component mounted; a render-time clock read would be impure.
+    const [mountedAt] = React.useState(() => new Date())
     const requiredMark = field.required ? <span className="text-red-500">*</span> : null
     const densityStyles = getPublicFieldDensityStyles(density)
     const invalidProps = getInvalidControlProps(field.key, error)
@@ -745,7 +747,7 @@ export function PublicFormFieldRenderer({
                                 ? {
                                       captionLayout: "dropdown" as const,
                                       startMonth: new Date(1950, 0),
-                                      endMonth: new Date(),
+                                      endMonth: mountedAt,
                                   }
                                 : {})}
                             selected={dateValue}
