@@ -111,7 +111,8 @@ export default function NotificationsPage() {
     const markAllRead = useMarkAllRead()
 
     const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-    const now = new Date()
+    // Day groups use the time the page mounted; a render-time clock read would be impure.
+    const [now] = useState(() => new Date())
     const todayStr = formatLocalDate(now, userTimeZone)
     const yesterday = new Date(now)
     yesterday.setDate(now.getDate() - 1)

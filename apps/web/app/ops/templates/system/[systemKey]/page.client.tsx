@@ -1384,7 +1384,7 @@ export default function PlatformSystemEmailTemplatePage() {
                                 <form
                                     ref={testSendCardRef}
                                     noValidate
-                                    onSubmit={testSendValidation.handleSubmit(handleSendTest)}
+                                    onSubmit={(event) => testSendValidation.handleSubmit(handleSendTest)(event)}
                                     className="space-y-3"
                                 >
                                     <ValidatedField

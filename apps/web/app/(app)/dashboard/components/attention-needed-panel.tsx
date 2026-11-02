@@ -843,8 +843,11 @@ function UpcomingItemRow({
     const Icon = item.type === "task" ? CheckSquareIcon : VideoIcon
     const isMeeting = item.type === "meeting"
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const [today] = useState(() => {
+        const start = new Date()
+        start.setHours(0, 0, 0, 0)
+        return start
+    })
     const todayStr = formatLocalDate(today)
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)

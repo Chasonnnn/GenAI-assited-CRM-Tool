@@ -1213,7 +1213,7 @@ export function UnifiedCalendar({
     includeGoogleEvents?: boolean
     onTaskClick?: (task: TaskListItem) => void
 } = {}) {
-    const [currentDate, setCurrentDate] = useState(new Date())
+    const [currentDate, setCurrentDate] = useState(() => new Date())
     const [viewType, setViewType] = useState<ViewType>("month")
     const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null)
     const [dialogOpen, setDialogOpen] = useState(false)

@@ -550,6 +550,8 @@ function ManageAppointmentSession({
     const [timezoneOverride, setTimezoneOverride] = useState<string | null>(null)
     const [viewMonthOverride, setViewMonthOverride] = useState<Date | null>(null)
     const today = useSyncExternalStore(subscribeTodaySnapshot, getTodaySnapshot, getServerTodaySnapshot)
+    // The time this component mounted; a render-time clock read would be impure.
+    const [mountedAt] = useState(() => new Date())
     const [selectedDate, setSelectedDate] = useState<Date | null>(null)
     const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
     const [reason, setReason] = useState("")
@@ -606,7 +608,7 @@ function ManageAppointmentSession({
     if (viewMonth && today) {
         const monthStart = startOfMonth(viewMonth)
         const startDay = getDay(monthStart)
-        const todayKey = schedulingDateKey(new Date(), timezone)
+        const todayKey = schedulingDateKey(mountedAt, timezone)
         for (let i = 0; i < startDay; i++) {
             calendarDays.push({
                 key: `empty-${format(monthStart, "yyyy-MM")}-${i + 1}`,
