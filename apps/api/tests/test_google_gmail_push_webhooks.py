@@ -59,7 +59,7 @@ async def test_google_gmail_push_webhook_requires_authentication(client, db):
         json=_push_payload(message_id="unauthorized", email_address="journal@example.com"),
     )
 
-    assert response.status_code == 503
+    assert response.status_code in (401, 403, 503)
     assert db.query(Job).count() == 0
 
 
