@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import event as sqlalchemy_event
 
 from app.core.encryption import hash_email, hash_phone
 from app.db.enums import CampaignRecipientStatus, CampaignStatus, EmailStatus
@@ -529,14 +530,29 @@ def test_donor_campaign_retry_uses_immutable_launch_identity_and_content(
     db.commit()
 
     monkeypatch.setattr(email_service, "send_email", real_send_email)
-    result = campaign_execution_service.retry_failed_campaign_run(
-        db,
-        test_org.id,
-        campaign.id,
-        run.id,
-        actor_user_id=test_user.id,
-    )
+    # The snapshot column is deferred; retry must load it with the recipients, not per row.
+    db.expire_all()
+    snapshot_lazy_loads: list[str] = []
 
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        normalized = " ".join(statement.lower().split())
+        if normalized.startswith("select campaign_recipients.donor_launch_snapshot"):
+            snapshot_lazy_loads.append(normalized)
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        result = campaign_execution_service.retry_failed_campaign_run(
+            db,
+            test_org.id,
+            campaign.id,
+            run.id,
+            actor_user_id=test_user.id,
+        )
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+
+    assert snapshot_lazy_loads == []
     assert result["retried_count"] == 1
     log = (
         db.query(EmailLog)

@@ -200,7 +200,8 @@ class Surrogate(Base):
 
     # Import metadata (tracking junk from CSV - ad_id, campaign_id, form_id, etc.)
     # NOT for business data - business data goes to custom fields
-    import_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Deferred: CSV imports store every unmapped column here, and no surrogate load reads it.
+    import_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True, deferred=True)
 
     # Contact (normalized: E.164 phone, 2-letter state)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
