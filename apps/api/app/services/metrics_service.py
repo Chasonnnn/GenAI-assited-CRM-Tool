@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.db.models import RequestMetricsRollup
+from app.utils.normalization import escape_like_string
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,11 @@ def get_sli_rollup(
 ) -> dict[str, int | float]:
     """Aggregate SLI metrics for a set of route prefixes."""
     from_time = datetime.now(UTC) - timedelta(minutes=window_minutes)
-    prefix_filters = [RequestMetricsRollup.route.like(f"{prefix}%") for prefix in prefixes]
+    # Security: Escape prefixes to prevent SQL wildcard injection via like()
+    prefix_filters = [
+        RequestMetricsRollup.route.like(f"{escape_like_string(prefix)}%", escape="\\")
+        for prefix in prefixes
+    ]
     if not prefix_filters:
         return {
             "request_count": 0,
