@@ -527,12 +527,19 @@ def apply_form_values(
     """
     today = org_today(db, owner.organization_id)
     changed_sections: list[str] = []
+
+    # Load all records for this owner in a single query to prevent N+1 per section
+    all_records = _load(db, owner, lock=True)
+    records_by_section: dict[str, list[MedicalRecord]] = {}
+    for r in all_records:
+        records_by_section.setdefault(r.section, []).append(r)
+
     for section, raw_values in sorted(values_by_section.items()):
         _check_fields(section, set(raw_values))
         values = MedicalRecordFields.model_validate(raw_values).provided_fields()
         nonempty = {field: value for field, value in values.items() if value is not None}
         now = datetime.now(UTC)
-        current = current_record(_load(db, owner, section=section, lock=True), today)
+        current = current_record(records_by_section.get(section, []), today)
         if current is not None:
             changed = _apply_corrections(current, nonempty, user_id=user_id, source="form", now=now)
             if not changed:
