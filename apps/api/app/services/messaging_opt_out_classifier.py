@@ -57,9 +57,12 @@ AMBIGUOUS_REVOCATION_PHRASES = (
 )
 
 
+_NON_ALNUM_RUN_RE = re.compile(r"[^a-z0-9]+")
+
+
 def _normalize(value: str) -> str:
     folded = value.casefold().replace("'", "").replace("’", "")
-    return re.sub(r"[^a-z0-9]+", " ", folded).strip()
+    return _NON_ALNUM_RUN_RE.sub(" ", folded).strip()
 
 
 def classify_consent_instruction(message_text: str) -> ConsentInstruction:

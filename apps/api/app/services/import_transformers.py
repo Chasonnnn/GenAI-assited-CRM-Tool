@@ -64,9 +64,7 @@ NUMBER_WORDS: dict[str, int] = {
 }
 
 
-def _strip_leading_measurement_label(value: str, labels: tuple[str, ...]) -> str:
-    pattern = r"^\s*(?:" + "|".join(re.escape(label) for label in labels) + r")\b\s*[:=]?\s*"
-    return re.sub(pattern, "", value, count=1, flags=re.IGNORECASE).strip()
+_HEIGHT_LABEL_PATTERN = re.compile(r"^\s*(?:height|ht)\b\s*[:=]?\s*", re.IGNORECASE)
 
 
 @dataclass
@@ -103,6 +101,10 @@ def is_date_ambiguous(month: int, day: int) -> bool:
     return month <= 12 and day <= 12 and month != day
 
 
+_US_DATE_PATTERN = re.compile(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$")
+_ISO_DATE_PATTERN = re.compile(r"^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$")
+
+
 def transform_date_flexible(raw_value: str) -> TransformOutput:
     """
     Parse date from various formats.
@@ -132,7 +134,7 @@ def transform_date_flexible(raw_value: str) -> TransformOutput:
 
     # Try standard date formats
     # US format: MM/DD/YYYY or MM-DD-YYYY
-    match = re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$", value)
+    match = _US_DATE_PATTERN.match(value)
     if match:
         part1, part2, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
 
@@ -165,7 +167,7 @@ def transform_date_flexible(raw_value: str) -> TransformOutput:
                 )
 
     # Try ISO format: YYYY-MM-DD or YYYY/MM/DD
-    match = re.match(r"^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$", value)
+    match = _ISO_DATE_PATTERN.match(value)
     if match:
         year, month, day = int(match.group(1)), int(match.group(2)), int(match.group(3))
         try:
@@ -259,6 +261,37 @@ def transform_datetime_flexible(raw_value: str) -> TransformOutput:
 INCHES_COMPONENT_PATTERN = r"\d+(?:\s+\d+/\d+|\.\d+)?"
 
 
+_COMMA_DIGITS_PATTERN = re.compile(r"^\d+,\d+$")
+_FEET_QUOTE_UNIT_PATTERN = re.compile(r"(\d+)\s*['\"]\s*(ft|feet|foot)\b")
+_COMPACT_HEIGHT_PATTERN = re.compile(r"^([3-8])(\d{2})$")
+_FEET_INCHES_QUOTE_PATTERN = re.compile(
+    rf"^(\d+)(?:\s*['\"]\s*|\s+|\s*-\s*)({INCHES_COMPONENT_PATTERN})\s*\"?\s*$"
+)
+_FT_IN_PATTERN = re.compile(r"^(\d+)\s*ft\.?\s*(\d+)\s*in\.?\s*$", re.IGNORECASE)
+_FEET_WORD_INCHES_PATTERN = re.compile(
+    rf"^(\d+)\s*(?:ft|feet|foot)\.?\s*(?:and\s*)?({INCHES_COMPONENT_PATTERN})?\s*(?:\"|in|ins|inch|inches)?\.?\s*$",
+    re.IGNORECASE,
+)
+_FEET_SEPARATOR_INCHES_PATTERN = re.compile(
+    rf"""^
+        (\d+)
+        \s*['"/:*]\s*
+        ({INCHES_COMPONENT_PATTERN})
+        \s*(?:["']|in|ins|inch|inches|ft)?\s*:?\s*$
+        """,
+    re.IGNORECASE | re.VERBOSE,
+)
+_FEET_ONLY_PATTERN = re.compile(r"^(\d+)\s*(?:ft|feet|foot)\.?\s*$", re.IGNORECASE)
+_FEET_QUOTE_ONLY_PATTERN = re.compile(r"^(\d+)\s*['\"]\s*$")
+_INCHES_ONLY_PATTERN = re.compile(
+    r"^(\d+(?:\.\d+)?)\s*(?:in|ins|inch|inches)\.?\s*$", re.IGNORECASE
+)
+_DECIMAL_FEET_PATTERN = re.compile(r"^(\d+)\.(\d{1,2})\s*ft\.?\s*$", re.IGNORECASE)
+_DOTTED_FEET_FRACTION_PATTERN = re.compile(r"^(\d+)\.(\d{1,2}(?:\s+\d+/\d+|\.5))$")
+_DOTTED_FEET_INCHES_PATTERN = re.compile(r"^(\d+)\.(\d{1,2})$")
+_WHITESPACE_PATTERN = re.compile(r"\s+")
+
+
 def transform_height_flexible(raw_value: str) -> TransformOutput:
     """
     Parse height from various formats to decimal feet.
@@ -275,7 +308,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
 
     Returns decimal feet (e.g., 5.33 for 5'4").
     """
-    value = _strip_leading_measurement_label(raw_value.strip(), ("height", "ht"))
+    value = _HEIGHT_LABEL_PATTERN.sub("", raw_value.strip(), count=1).strip()
     if not value:
         return TransformOutput(value=None, success=True, warnings=[])
 
@@ -293,15 +326,15 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
         .replace("″", '"')
         .replace("½", " 1/2")
     )
-    if re.match(r"^\d+,\d+$", value):
+    if _COMMA_DIGITS_PATTERN.match(value):
         value = value.replace(",", ".")
-    value = re.sub(r"\s+", " ", value).strip()
+    value = _WHITESPACE_PATTERN.sub(" ", value).strip()
 
     lowered = value.lower()
-    lowered = re.sub(r"(\d+)\s*['\"]\s*(ft|feet|foot)\b", r"\1 \2", lowered)
+    lowered = _FEET_QUOTE_UNIT_PATTERN.sub(r"\1 \2", lowered)
 
     # Pattern: 411 => 4'11"
-    match = re.match(r"^([3-8])(\d{2})$", lowered)
+    match = _COMPACT_HEIGHT_PATTERN.match(lowered)
     if match:
         feet = int(match.group(1))
         inches = Decimal(match.group(2))
@@ -310,10 +343,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
 
     # Pattern: 5'4" or 5'4 or 5' 4" or 5' 4 or 5 4
     # Require an explicit separator so plain "54" is not interpreted as 5'4.
-    match = re.match(
-        rf"^(\d+)(?:\s*['\"]\s*|\s+|\s*-\s*)({INCHES_COMPONENT_PATTERN})\s*\"?\s*$",
-        lowered,
-    )
+    match = _FEET_INCHES_QUOTE_PATTERN.match(lowered)
     if match:
         feet = int(match.group(1))
         inches = _parse_inches_component(match.group(2))
@@ -321,18 +351,14 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             return _height_transform_result(feet, inches, warnings)
 
     # Pattern: 5ft 4in or 5 ft 4 in
-    match = re.match(r"^(\d+)\s*ft\.?\s*(\d+)\s*in\.?\s*$", value, re.IGNORECASE)
+    match = _FT_IN_PATTERN.match(value)
     if match:
         feet = int(match.group(1))
         inches = Decimal(match.group(2))
         return _height_transform_result(feet, inches, warnings)
 
     # Pattern: 5ft 6 / 5ft 6" / 5 feet 4 inches / 5 foot 4 / 5ft 2 1/2 inches
-    match = re.match(
-        rf"^(\d+)\s*(?:ft|feet|foot)\.?\s*(?:and\s*)?({INCHES_COMPONENT_PATTERN})?\s*(?:\"|in|ins|inch|inches)?\.?\s*$",
-        lowered,
-        re.IGNORECASE,
-    )
+    match = _FEET_WORD_INCHES_PATTERN.match(lowered)
     if match:
         feet = int(match.group(1))
         inches = _parse_inches_component(match.group(2))
@@ -340,16 +366,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             return _height_transform_result(feet, inches, warnings)
 
     # Pattern: 5:3 / 4/11 / 5*3 / 5'5ft / 5"0'
-    match = re.match(
-        rf"""^
-        (\d+)
-        \s*['"/:*]\s*
-        ({INCHES_COMPONENT_PATTERN})
-        \s*(?:["']|in|ins|inch|inches|ft)?\s*:?\s*$
-        """,
-        lowered,
-        re.IGNORECASE | re.VERBOSE,
-    )
+    match = _FEET_SEPARATOR_INCHES_PATTERN.match(lowered)
     if match:
         feet = int(match.group(1))
         inches = _parse_inches_component(match.group(2))
@@ -357,7 +374,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             return _height_transform_result(feet, inches, warnings)
 
     # Pattern: 5ft (feet only)
-    match = re.match(r"^(\d+)\s*(?:ft|feet|foot)\.?\s*$", lowered, re.IGNORECASE)
+    match = _FEET_ONLY_PATTERN.match(lowered)
     if match:
         feet = int(match.group(1))
         return TransformOutput(
@@ -367,7 +384,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
         )
 
     # Pattern: 5' / 5" (feet only with quote; double quote appears in lead-form typos)
-    match = re.match(r"^(\d+)\s*['\"]\s*$", value)
+    match = _FEET_QUOTE_ONLY_PATTERN.match(value)
     if match:
         feet = int(match.group(1))
         if 3 <= feet <= 8:
@@ -378,7 +395,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             )
 
     # Pattern: 67 inches (total inches with explicit unit)
-    match = re.match(r"^(\d+(?:\.\d+)?)\s*(?:in|ins|inch|inches)\.?\s*$", lowered, re.IGNORECASE)
+    match = _INCHES_ONLY_PATTERN.match(lowered)
     if match:
         total_inches = Decimal(match.group(1))
         feet_from_inches = total_inches / Decimal("12")
@@ -397,7 +414,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
         )
 
     # Pattern: feet.inches shorthand with explicit unit (5.6 ft => 5 ft 6 in)
-    match = re.match(r"^(\d+)\.(\d{1,2})\s*ft\.?\s*$", value, re.IGNORECASE)
+    match = _DECIMAL_FEET_PATTERN.match(value)
     if match:
         feet = int(match.group(1))
         inches = int(match.group(2))
@@ -411,7 +428,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             )
 
     # Pattern: feet.inches shorthand with a fraction (5.2 1/3 => 5 ft 2 1/3 in)
-    match = re.match(r"^(\d+)\.(\d{1,2}(?:\s+\d+/\d+|\.5))$", lowered)
+    match = _DOTTED_FEET_FRACTION_PATTERN.match(lowered)
     if match:
         feet = int(match.group(1))
         inches = _parse_inches_component(match.group(2))
@@ -420,7 +437,7 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
             return _height_transform_result(feet, inches, warnings)
 
     # Pattern: feet.inches shorthand without unit (5.6 => 5 ft 6 in)
-    match = re.match(r"^(\d+)\.(\d{1,2})$", value)
+    match = _DOTTED_FEET_INCHES_PATTERN.match(value)
     if match:
         feet = int(match.group(1))
         inches = int(match.group(2))
@@ -476,6 +493,9 @@ def transform_height_flexible(raw_value: str) -> TransformOutput:
 # =============================================================================
 
 
+_STATE_SEPARATOR_PATTERN = re.compile(r"[,\s]+")
+
+
 def transform_state_normalize(raw_value: str) -> TransformOutput:
     """
     Normalize state to 2-letter code.
@@ -490,7 +510,7 @@ def transform_state_normalize(raw_value: str) -> TransformOutput:
         normalized = normalize_state(value)
         return TransformOutput(value=normalized, success=True, warnings=[])
     except ValueError:
-        tokens = re.split(r"[,\s]+", value)
+        tokens = _STATE_SEPARATOR_PATTERN.split(value)
         tokens = [t for t in tokens if t]
         if len(tokens) >= 2:
             candidates = [tokens[-1], " ".join(tokens[-2:])]
@@ -513,6 +533,9 @@ def transform_state_normalize(raw_value: str) -> TransformOutput:
 # =============================================================================
 
 
+_PHONE_LABEL_PATTERN = re.compile(r"^(p|phone|tel)\s*[:#-]?\s*", re.IGNORECASE)
+
+
 def transform_phone_normalize(raw_value: str) -> TransformOutput:
     """
     Normalize phone to E.164 format.
@@ -524,7 +547,7 @@ def transform_phone_normalize(raw_value: str) -> TransformOutput:
         return TransformOutput(value=None, success=True, warnings=[])
 
     try:
-        cleaned = re.sub(r"^(p|phone|tel)\s*[:#-]?\s*", "", value, flags=re.IGNORECASE)
+        cleaned = _PHONE_LABEL_PATTERN.sub("", value)
         normalized = normalize_phone(cleaned)
         return TransformOutput(value=normalized, success=True, warnings=[])
     except ValueError as e:
@@ -539,6 +562,10 @@ def transform_phone_normalize(raw_value: str) -> TransformOutput:
 # =============================================================================
 # Integer Transformer
 # =============================================================================
+
+
+_NUMBER_WORD_PATTERN = re.compile(r"\b(" + "|".join(NUMBER_WORDS.keys()) + r")\b", re.IGNORECASE)
+_NUMBER_PATTERN = re.compile(r"-?\d+(?:\.\d+)?")
 
 
 def transform_int_flexible(raw_value: str) -> TransformOutput:
@@ -558,11 +585,7 @@ def transform_int_flexible(raw_value: str) -> TransformOutput:
 
     translated = lowered.translate(SUPERSCRIPT_TRANSLATION)
 
-    word_match = re.search(
-        r"\b(" + "|".join(NUMBER_WORDS.keys()) + r")\b",
-        translated,
-        re.IGNORECASE,
-    )
+    word_match = _NUMBER_WORD_PATTERN.search(translated)
     if word_match:
         return TransformOutput(
             value=NUMBER_WORDS[word_match.group(1).lower()],
@@ -571,7 +594,7 @@ def transform_int_flexible(raw_value: str) -> TransformOutput:
         )
 
     cleaned = translated.replace(",", "")
-    match = re.search(r"-?\d+(?:\.\d+)?", cleaned)
+    match = _NUMBER_PATTERN.search(cleaned)
     if not match:
         return TransformOutput(
             value=None,
@@ -708,6 +731,9 @@ def transform_source_meta_platform(raw_value: str) -> TransformOutput:
     return TransformOutput(value="meta", success=True, warnings=[])
 
 
+_SOURCE_SEPARATOR_PATTERN = re.compile(r"[\s\-]+")
+
+
 def transform_source_channel_guess(raw_value: str) -> TransformOutput:
     """
     Map free-form source values to known surrogate sources.
@@ -716,7 +742,7 @@ def transform_source_channel_guess(raw_value: str) -> TransformOutput:
     if not value:
         return TransformOutput(value="other", success=True, warnings=[])
 
-    normalized = re.sub(r"[\s\-]+", "_", value.strip().lower())
+    normalized = _SOURCE_SEPARATOR_PATTERN.sub("_", value.strip().lower())
     valid_sources = {
         "manual",
         "meta",
@@ -827,6 +853,10 @@ def get_suggested_transformer(field_name: str) -> str | None:
     return FIELD_TRANSFORMERS.get(field_name)
 
 
+_MIXED_FRACTION_PATTERN = re.compile(r"(\d+)\s+(\d+)/(\d+)")
+_DECIMAL_PATTERN = re.compile(r"^\d+(?:\.\d+)?$")
+
+
 def _parse_inches_component(raw_inches: str | None) -> Decimal | None:
     if raw_inches is None:
         return Decimal("0")
@@ -835,14 +865,14 @@ def _parse_inches_component(raw_inches: str | None) -> Decimal | None:
     if not value:
         return Decimal("0")
 
-    match = re.fullmatch(r"(\d+)\s+(\d+)/(\d+)", value)
+    match = _MIXED_FRACTION_PATTERN.fullmatch(value)
     if match:
         whole, numerator, denominator = (Decimal(part) for part in match.groups())
         if denominator == 0 or numerator >= denominator:
             return None
         return whole + numerator / denominator
 
-    if re.match(r"^\d+(?:\.\d+)?$", value):
+    if _DECIMAL_PATTERN.match(value):
         return Decimal(value)
 
     return None

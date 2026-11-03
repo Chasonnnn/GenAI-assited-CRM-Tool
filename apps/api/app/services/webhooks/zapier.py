@@ -97,12 +97,16 @@ _META_FIELD_LABELS = {
 }
 
 
+_LEADING_ORDINAL_RE = re.compile(r"^\s*\d+\s*[\.\)\-:]\s*")
+_NON_ALNUM_RUN_RE = re.compile(r"[^0-9a-zA-Z]+")
+
+
 def _normalize_field_key(value: Any) -> str:
     key = str(value or "").strip()
     if not key:
         return ""
-    key = re.sub(r"^\s*\d+\s*[\.\)\-:]\s*", "", key)
-    key = re.sub(r"[^0-9a-zA-Z]+", "_", key).strip("_")
+    key = _LEADING_ORDINAL_RE.sub("", key)
+    key = _NON_ALNUM_RUN_RE.sub("_", key).strip("_")
     return key.lower()
 
 

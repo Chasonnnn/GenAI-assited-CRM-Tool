@@ -17,6 +17,9 @@ class APIError(RuntimeError):
         return self.status_code is None or self.status_code >= 500
 
 
+_PATH_KEY_RE = re.compile(r"[a-zA-Z0-9_.]{1,160}")
+
+
 class Client:
     def __init__(self, base_url: str, token: str, transport: httpx.BaseTransport | None = None):
         self._client = httpx.Client(
@@ -44,7 +47,7 @@ class Client:
                         if not isinstance(item, dict) or not isinstance(item.get("loc"), list):
                             continue
                         path = ".".join(str(part) for part in item["loc"])
-                        if re.fullmatch(r"[a-zA-Z0-9_.]{1,160}", path):
+                        if _PATH_KEY_RE.fullmatch(path):
                             fields.append(path)
                     if fields:
                         suffix = ": invalid fields " + ", ".join(fields[:10])

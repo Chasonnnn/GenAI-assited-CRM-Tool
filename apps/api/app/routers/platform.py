@@ -8,6 +8,7 @@ import io
 import logging
 import mimetypes
 import os
+import re
 import uuid as uuid_lib
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -84,6 +85,9 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
+_SLUG_RE = re.compile(r"^[a-z0-9-]+$")
+
+
 class CreateOrgRequest(BaseModel):
     name: str
     slug: str
@@ -94,9 +98,7 @@ class CreateOrgRequest(BaseModel):
     @classmethod
     def validate_slug(cls, v: str) -> str:
         # Basic format validation (detailed validation in org_service.validate_slug)
-        import re
-
-        if not re.match(r"^[a-z0-9-]+$", v.lower()):
+        if not _SLUG_RE.match(v.lower()):
             raise ValueError("Slug must contain only lowercase letters, numbers, and hyphens")
         if len(v) < 2 or len(v) > 50:
             raise ValueError("Slug must be between 2 and 50 characters")
@@ -216,6 +218,9 @@ class PlatformEmailBrandingUpdate(BaseModel):
     logo_url: str | None = None
 
 
+_SYSTEM_KEY_RE = re.compile(r"^[a-z0-9_]+$")
+
+
 class CreateSystemEmailTemplateRequest(BaseModel):
     system_key: str
     name: str
@@ -228,12 +233,10 @@ class CreateSystemEmailTemplateRequest(BaseModel):
     @field_validator("system_key")
     @classmethod
     def validate_system_key(cls, v: str) -> str:
-        import re
-
         key = v.strip().lower()
         if key == "new":
             raise ValueError("system_key 'new' is reserved")
-        if not re.match(r"^[a-z0-9_]+$", key):
+        if not _SYSTEM_KEY_RE.match(key):
             raise ValueError(
                 "system_key must contain only lowercase letters, numbers, and underscores"
             )

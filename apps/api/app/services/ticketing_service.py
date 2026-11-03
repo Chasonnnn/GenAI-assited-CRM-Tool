@@ -4033,6 +4033,9 @@ def _find_ticket_for_legacy_gmail_thread(
     )
 
 
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
 def record_surrogate_outbound_gmail_send(
     db: Session,
     *,
@@ -4053,7 +4056,7 @@ def record_surrogate_outbound_gmail_send(
         raise HTTPException(status_code=422, detail="Recipient email is required")
 
     subject_value = (subject or "").strip() or "(No subject)"
-    body_text = re.sub(r"<[^>]+>", " ", body_html or "")
+    body_text = _HTML_TAG_RE.sub(" ", body_html or "")
     body_text = " ".join(body_text.split()) or "Message"
     now = _now_utc()
 

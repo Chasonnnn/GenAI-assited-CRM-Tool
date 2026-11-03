@@ -119,14 +119,18 @@ def _extend_known_names_from_text(
             break
 
 
+_SCRIPT_STYLE_BLOCK_PATTERN = re.compile(r"<(script|style)[^>]*>.*?</\1>", re.DOTALL | re.I)
+_HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
+_WHITESPACE_PATTERN = re.compile(r"\s+")
+
+
 def _strip_html(content: str) -> str:
     """Convert HTML content into readable text for AI prompts."""
     import html as html_module
-    import re
 
-    text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", content, flags=re.DOTALL | re.I)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
+    text = _SCRIPT_STYLE_BLOCK_PATTERN.sub("", content)
+    text = _HTML_TAG_PATTERN.sub(" ", text)
+    text = _WHITESPACE_PATTERN.sub(" ", text).strip()
     return html_module.unescape(text)
 
 

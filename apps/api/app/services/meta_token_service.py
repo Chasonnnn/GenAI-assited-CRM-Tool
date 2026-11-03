@@ -12,6 +12,7 @@ Error Categories:
 """
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -44,6 +45,9 @@ class TokenResult:
     needs_reauth: bool
 
 
+_META_ERROR_CODE_RE = re.compile(r'"code":\s*(\d+)')
+
+
 def classify_meta_error(error: Exception) -> ErrorCategory:
     """
     Classify Meta API errors for appropriate handling.
@@ -70,9 +74,7 @@ def classify_meta_error(error: Exception) -> ErrorCategory:
     if error_code is None:
         if "error_code" in error_str:
             # Try to extract code from JSON-like error message
-            import re
-
-            match = re.search(r'"code":\s*(\d+)', error_str)
+            match = _META_ERROR_CODE_RE.search(error_str)
             if match:
                 error_code = int(match.group(1))
 

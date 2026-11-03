@@ -423,6 +423,9 @@ HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
 MAX_SOCIAL_LINKS = 6
 
 
+_PLATFORM_NAME_PATTERN = re.compile(r"^[\w\s]+$")
+
+
 class SocialLinkItem(BaseModel):
     """A social link with platform name and URL."""
 
@@ -433,7 +436,7 @@ class SocialLinkItem(BaseModel):
     @classmethod
     def validate_platform(cls, v: str) -> str:
         # Allow alphanumeric and spaces only (prevent XSS)
-        if not re.match(r"^[\w\s]+$", v):
+        if not _PLATFORM_NAME_PATTERN.match(v):
             raise ValueError("Platform name must be alphanumeric")
         return v.strip()
 

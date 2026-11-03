@@ -108,6 +108,9 @@ def _is_safe_redirect_target(url: str) -> bool:
 # =============================================================================
 
 
+_BODY_CLOSE_RE = re.compile(r"(</body>)", re.IGNORECASE)
+
+
 def inject_tracking_pixel(html_body: str, token: str) -> str:
     """
     Inject a 1x1 tracking pixel into the email body.
@@ -119,12 +122,15 @@ def inject_tracking_pixel(html_body: str, token: str) -> str:
     pixel_html = f'<img src="{pixel_url}" width="1" height="1" style="display:block;width:1px;height:1px;border:0;" alt="" />'
 
     # Try to insert before </body>
-    body_close_pattern = re.compile(r"(</body>)", re.IGNORECASE)
+    body_close_pattern = _BODY_CLOSE_RE
     if body_close_pattern.search(html_body):
         return body_close_pattern.sub(f"{pixel_html}\\1", html_body, count=1)
 
     # No </body> tag, append to end
     return html_body + pixel_html
+
+
+_LINK_HREF_RE = re.compile(r'(<a\s+[^>]*href\s*=\s*)["\']([^"\']+)["\']', re.IGNORECASE)
 
 
 def wrap_links_in_email(html_body: str, token: str) -> str:
@@ -158,7 +164,7 @@ def wrap_links_in_email(html_body: str, token: str) -> str:
         return f'{match.group(1)}"{tracked_url}"'
 
     # Match <a href="..." or <a href='...'
-    link_pattern = re.compile(r'(<a\s+[^>]*href\s*=\s*)["\']([^"\']+)["\']', re.IGNORECASE)
+    link_pattern = _LINK_HREF_RE
     return link_pattern.sub(replace_link, html_body)
 
 

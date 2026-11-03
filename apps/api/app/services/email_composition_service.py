@@ -83,6 +83,10 @@ def _build_unsubscribe_footer_html(*, unsubscribe_url: str, include_divider: boo
     )
 
 
+_BODY_CLOSE_TAG_RE = re.compile(r"</body\s*>", re.IGNORECASE)
+_HTML_CLOSE_TAG_RE = re.compile(r"</html\s*>", re.IGNORECASE)
+
+
 def _insert_before_closing_tag(html_body: str, insertion: str) -> str:
     """Insert HTML inside the document if it contains </body> or </html>.
 
@@ -93,13 +97,13 @@ def _insert_before_closing_tag(html_body: str, insertion: str) -> str:
         return html_body
 
     # Prefer inserting before </body>.
-    body_close = re.search(r"</body\s*>", html_body, flags=re.IGNORECASE)
+    body_close = _BODY_CLOSE_TAG_RE.search(html_body)
     if body_close:
         idx = body_close.start()
         return f"{html_body[:idx]}{insertion}{html_body[idx:]}"
 
     # Next best: insert before </html>.
-    html_close = re.search(r"</html\s*>", html_body, flags=re.IGNORECASE)
+    html_close = _HTML_CLOSE_TAG_RE.search(html_body)
     if html_close:
         idx = html_close.start()
         return f"{html_body[:idx]}{insertion}{html_body[idx:]}"

@@ -169,6 +169,9 @@ RACE_LABEL_OVERRIDES = {
 LOWERCASE_TITLE_WORDS = {"or", "and", "of", "the", "a", "an", "in", "on", "to", "for"}
 
 
+_RACE_SEPARATOR_RE = re.compile(r"[_-]+")
+
+
 def format_race_label(race: str | None) -> str | None:
     """Normalize race labels for display without mutating stored values."""
     if not race:
@@ -184,7 +187,7 @@ def format_race_label(race: str | None) -> str | None:
     if override:
         return override
 
-    normalized = re.sub(r"[_-]+", " ", trimmed.lower())
+    normalized = _RACE_SEPARATOR_RE.sub(" ", trimmed.lower())
     words = []
     for index, word in enumerate(normalized.split()):
         if index > 0 and word in LOWERCASE_TITLE_WORDS:
@@ -192,6 +195,9 @@ def format_race_label(race: str | None) -> str | None:
         elif word:
             words.append(f"{word[0].upper()}{word[1:]}")
     return " ".join(words)
+
+
+_NON_ALNUM_RUN_RE = re.compile(r"[^a-z0-9]+")
 
 
 def normalize_race_key(race: str | None) -> str | None:
@@ -202,7 +208,7 @@ def normalize_race_key(race: str | None) -> str | None:
     if not trimmed:
         return None
 
-    normalized_key = re.sub(r"[^a-z0-9]+", "_", trimmed.lower()).strip("_")
+    normalized_key = _NON_ALNUM_RUN_RE.sub("_", trimmed.lower()).strip("_")
     if not normalized_key:
         return None
 
@@ -241,6 +247,9 @@ def normalize_state(state: str | None) -> str | None:
     )
 
 
+_NON_DIGIT_RE = re.compile(r"\D")
+
+
 def normalize_phone(phone: str | None) -> str | None:
     """
     Normalize phone to E.164 format (+15551234567).
@@ -265,11 +274,11 @@ def normalize_phone(phone: str | None) -> str | None:
     # Strip all non-digits except leading +
     cleaned = phone.strip()
     if cleaned.startswith("+"):
-        digits = re.sub(r"\D", "", cleaned[1:])
+        digits = _NON_DIGIT_RE.sub("", cleaned[1:])
         if digits.startswith("1") and len(digits) == 11:
             return f"+{digits}"
     else:
-        digits = re.sub(r"\D", "", cleaned)
+        digits = _NON_DIGIT_RE.sub("", cleaned)
 
     # Validate and format
     if len(digits) == 10:
@@ -334,6 +343,9 @@ def normalize_search_text(value: str | None) -> str | None:
     return _strip_accents(collapsed).lower()
 
 
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
 def normalize_identifier(value: str | None) -> str | None:
     """
     Normalize identifier-like strings (numbers/short codes) for search.
@@ -343,7 +355,7 @@ def normalize_identifier(value: str | None) -> str | None:
     """
     if not value:
         return None
-    collapsed = re.sub(r"\s+", "", value)
+    collapsed = _WHITESPACE_RE.sub("", value)
     if not collapsed:
         return None
     return collapsed.lower()
@@ -372,7 +384,7 @@ def extract_phone_last4(phone: str | None) -> str | None:
     """
     if not phone:
         return None
-    digits = re.sub(r"\D", "", phone)
+    digits = _NON_DIGIT_RE.sub("", phone)
     if not digits:
         return None
     return digits[-4:] if len(digits) >= 4 else digits

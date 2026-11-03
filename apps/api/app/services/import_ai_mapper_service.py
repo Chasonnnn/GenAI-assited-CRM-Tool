@@ -59,23 +59,29 @@ def mask_email(email: str) -> str:
     return f"{masked_local}@{masked_domain}.{masked_tld}"
 
 
+_NON_DIGIT_RE = re.compile(r"\D")
+
+
 def mask_phone(phone: str) -> str:
     """Mask phone for AI prompt: +15551234567 → ***-***-4567"""
     # Extract digits only
-    digits = re.sub(r"\D", "", phone)
+    digits = _NON_DIGIT_RE.sub("", phone)
     if len(digits) >= 4:
         return f"***-***-{digits[-4:]}"
     return "***"
 
 
+_EMAIL_SHAPE_RE = re.compile(r"[^@]+@[^@]+\.[^@]+")
+
+
 def looks_like_email(value: str) -> bool:
     """Check if value looks like an email."""
-    return bool(re.match(r"[^@]+@[^@]+\.[^@]+", value))
+    return bool(_EMAIL_SHAPE_RE.match(value))
 
 
 def looks_like_phone(value: str) -> bool:
     """Check if value looks like a phone number."""
-    digits = re.sub(r"\D", "", value)
+    digits = _NON_DIGIT_RE.sub("", value)
     return len(digits) >= 10
 
 
