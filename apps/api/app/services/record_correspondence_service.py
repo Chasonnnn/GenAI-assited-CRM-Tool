@@ -85,8 +85,8 @@ def list_correspondence(
         workflow_ids = db.query(Job.id).filter(
             Job.organization_id == session.org_id,
             Job.job_type == JobType.WORKFLOW_EMAIL.value,
-            Job.payload["subject_type"].astext == record.pipeline_entity_type,
-            Job.payload["subject_id"].astext == str(record_id),
+            Job.subject_type == record.pipeline_entity_type,
+            Job.subject_id == record_id,
         )
         # Source references retain previous sends; the recipient pointer covers older logs.
         email_links.extend(

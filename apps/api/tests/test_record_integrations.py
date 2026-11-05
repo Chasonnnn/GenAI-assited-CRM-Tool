@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy.exc import IntegrityError
 
 from app.core.csrf import CSRF_HEADER
@@ -366,8 +367,20 @@ async def test_donor_automated_correspondence_scope_and_pagination(
     )
     assert changed.status_code == 200, changed.text
     path = f"/records/donor/{donor_id}/correspondence"
-    history = await authed_client.get(path)
+    statements: list[str] = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(" ".join(statement.lower().split()))
+
+    engine = db.get_bind()
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        history = await authed_client.get(path)
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
     assert history.status_code == 200, history.text
+    # Workflow history reads the promoted subject columns, never the large payload.
+    assert not [sql for sql in statements if "jobs.payload" in sql]
     assert history.json()["total"] == len(expected_ids)
     assert [row["id"] for row in history.json()["items"]] == expected_ids
     assert all("body" not in row for row in history.json()["items"])

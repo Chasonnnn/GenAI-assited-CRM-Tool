@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     TIMESTAMP,
     CheckConstraint,
+    FetchedValue,
     ForeignKey,
     Index,
     Integer,
@@ -58,6 +59,13 @@ class Job(Base):
             postgresql_where=text("idempotency_key IS NOT NULL"),
         ),
         Index(
+            "idx_jobs_subject",
+            "organization_id",
+            "subject_type",
+            "subject_id",
+            postgresql_where=text("subject_id IS NOT NULL"),
+        ),
+        Index(
             "idx_jobs_stale_resend_reconciliation",
             "claimed_at",
             "id",
@@ -82,6 +90,17 @@ class Job(Base):
 
     job_type: Mapped[str] = mapped_column(String(50), nullable=False)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # Record history reads these instead of the large workflow email payload. The
+    # jobs_subject_from_payload trigger copies them from payload; do not set them.
+    subject_type: Mapped[str | None] = mapped_column(
+        Text, nullable=True, server_default=FetchedValue(), server_onupdate=FetchedValue()
+    )
+    subject_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        server_default=FetchedValue(),
+        server_onupdate=FetchedValue(),
+    )
     run_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
     status: Mapped[str] = mapped_column(
         String(20), server_default=text(f"'{DEFAULT_JOB_STATUS.value}'"), nullable=False
