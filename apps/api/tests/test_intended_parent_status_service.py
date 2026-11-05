@@ -8,6 +8,7 @@ from app.db.enums import IntendedParentStatus, Role
 from app.db.models import IntendedParentStatusHistory, StatusChangeRequest
 from app.services import intended_parent_status_service, ip_service, pipeline_service
 from app.utils import datetime_parsing
+from tests.support.db_clock import database_now
 
 
 def _create_ip(db, org_id, user_id):
@@ -58,7 +59,8 @@ def test_implicit_effective_time_uses_status_change_clock(db, test_org, test_use
         .first()
     )
     assert history is not None
-    assert started_at <= history.effective_at <= datetime.now(UTC)
+    # Effective time can be raised to the database-assigned creation time.
+    assert started_at <= history.effective_at <= max(datetime.now(UTC), database_now(db))
 
 
 @pytest.mark.parametrize(
