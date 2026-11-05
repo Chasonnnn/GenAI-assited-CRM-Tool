@@ -3978,10 +3978,8 @@ def promote_intake_lead(
             db, medical_owner, user_id, medical_values, submitted_on
         )
     if dropped_invalid_fields:
-        surrogate.import_metadata = {
-            **(surrogate.import_metadata or {}),
-            "dropped_invalid_submission_fields": dropped_invalid_fields,
-        }
+        # create_surrogate never sets the deferred import_metadata, so do not load it.
+        surrogate.import_metadata = {"dropped_invalid_submission_fields": dropped_invalid_fields}
 
     lead.status = IntakeLeadStatus.PROMOTED.value
     lead.promoted_surrogate_id = surrogate.id

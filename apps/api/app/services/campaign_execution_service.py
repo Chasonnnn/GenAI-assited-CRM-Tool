@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from app.db.enums import CampaignRecipientStatus, CampaignStatus, EmailStatus
 from app.db.models import (
@@ -38,6 +38,7 @@ def _load_existing_recipients(
         return {}
     recipients = (
         db.query(CampaignRecipient)
+        .options(undefer(CampaignRecipient.donor_launch_snapshot))
         .filter(
             CampaignRecipient.run_id == run_id,
             CampaignRecipient.entity_type == entity_type,
@@ -645,6 +646,7 @@ def retry_failed_campaign_run(
 
     failed_recipient_query = (
         db.query(CampaignRecipient)
+        .options(undefer(CampaignRecipient.donor_launch_snapshot))
         .filter(
             CampaignRecipient.run_id == run_id,
             CampaignRecipient.entity_type == campaign.recipient_type,

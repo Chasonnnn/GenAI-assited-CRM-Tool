@@ -276,9 +276,11 @@ class CampaignRecipient(Base):
     recipient_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Immutable donor identity and rendered content captured at first launch.
     # Legacy donor recipients remain nullable and are pinned on their first retry.
+    # Deferred: holds the full rendered body; only launch and retry read it (they undefer).
     donor_launch_snapshot: Mapped[dict | None] = mapped_column(
         JSONB(none_as_null=True),
         nullable=True,
+        deferred=True,
     )
 
     # Status

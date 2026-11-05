@@ -79,3 +79,41 @@ def test_promoted_lead_count_uses_direct_aggregate():
     assert statement.whereclause.compare(
         (FormSubmission.intake_lead_id == lead.id) & (FormSubmission.surrogate_id == surrogate.id)
     )
+
+
+def test_promotion_records_dropped_fields_without_loading_deferred_metadata(
+    db, test_org, test_user
+):
+    from sqlalchemy import event
+
+    from app.db.models import IntakeLead
+
+    lead = IntakeLead(
+        organization_id=test_org.id,
+        full_name="Dropped Phone Lead",
+        email=f"dropped-{uuid.uuid4().hex[:8]}@example.com",
+        phone="not-a-phone",
+        status=IntakeLeadStatus.PENDING_REVIEW.value,
+    )
+    db.add(lead)
+    db.flush()
+    metadata_selects: list[str] = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        normalized = " ".join(statement.lower().split())
+        if normalized.startswith("select surrogates.import_metadata"):
+            metadata_selects.append(normalized)
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        surrogate, _linked = form_intake_service.promote_intake_lead(
+            db, lead=lead, user_id=test_user.id
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_sql)
+
+    assert metadata_selects == []
+    assert surrogate.phone is None
+    db.expire(surrogate)
+    assert surrogate.import_metadata == {"dropped_invalid_submission_fields": ["phone"]}
