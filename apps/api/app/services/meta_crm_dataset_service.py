@@ -9,7 +9,7 @@ from uuid import UUID
 
 import httpx
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.core.config import settings
 from app.core.stage_definitions import LABEL_OVERRIDES
@@ -37,7 +37,15 @@ logger = logging.getLogger(__name__)
 META_GRAPH_BASE_URL = "https://graph.facebook.com"
 HTTPX_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 MAX_META_LEAD_AGE = meta_outbound_service.MAX_META_LEAD_AGE
-FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
+# Stage events need no lead JSONB; the trigger-maintained meta_click_id replaces it.
+STAGE_EVENT_LEAD_LOAD = (
+    load_only(
+        MetaLead.meta_lead_id,
+        MetaLead.meta_created_time,
+        MetaLead.received_at,
+        MetaLead.meta_click_id,
+    ),
+)
 DEFAULT_WEBSITE_EVENT_SOURCE_URL = "https://ewi-surrogacy.com"
 DONOR_FORM_LEAD_KINDS = frozenset({FormLeadKind.EGG_DONOR.value, FormLeadKind.SPERM_DONOR.value})
 WEBSITE_SUBMISSION_EVENT_SOURCES = frozenset({"form_embed"})
@@ -83,42 +91,6 @@ def resolve_mapping_item(mapping: list[dict], stage_key: str) -> dict | None:
     return None
 
 
-def _normalize_json_key(value: str) -> str:
-    return value.lower().replace("-", "_").replace(" ", "_")
-
-
-def _coerce_string_scalar(value: object) -> str | None:
-    if isinstance(value, str):
-        stripped = value.strip()
-        return stripped or None
-    if isinstance(value, list):
-        for item in value:
-            coerced = _coerce_string_scalar(item)
-            if coerced:
-                return coerced
-    return None
-
-
-def _find_json_value_by_key(payload: object, candidate_keys: tuple[str, ...]) -> str | None:
-    normalized_keys = {_normalize_json_key(key) for key in candidate_keys}
-    if isinstance(payload, dict):
-        for key, value in payload.items():
-            if _normalize_json_key(str(key)) in normalized_keys:
-                coerced = _coerce_string_scalar(value)
-                if coerced:
-                    return coerced
-        for value in payload.values():
-            nested = _find_json_value_by_key(value, candidate_keys)
-            if nested:
-                return nested
-    elif isinstance(payload, list):
-        for item in payload:
-            nested = _find_json_value_by_key(item, candidate_keys)
-            if nested:
-                return nested
-    return None
-
-
 def _normalize_meta_click_id(value: str | None) -> str | None:
     normalized = (value or "").strip()
     if not normalized or not normalized.startswith("fb."):
@@ -131,14 +103,6 @@ def _normalize_meta_browser_id(value: str | None) -> str | None:
     if not normalized or not normalized.startswith("fb."):
         return None
     return normalized
-
-
-def _resolve_meta_click_id(meta_lead: MetaLead) -> str | None:
-    return _normalize_meta_click_id(
-        _find_json_value_by_key(meta_lead.field_data_raw or {}, FBC_CANDIDATE_KEYS)
-        or _find_json_value_by_key(meta_lead.field_data or {}, FBC_CANDIDATE_KEYS)
-        or _find_json_value_by_key(meta_lead.raw_payload or {}, FBC_CANDIDATE_KEYS)
-    )
 
 
 def _skip_event(
@@ -613,6 +577,7 @@ def enqueue_stage_event(
 
     meta_lead = (
         db.query(MetaLead)
+        .options(*STAGE_EVENT_LEAD_LOAD)
         .filter(
             MetaLead.id == surrogate.meta_lead_id,
             MetaLead.organization_id == surrogate.organization_id,
@@ -682,7 +647,7 @@ def enqueue_stage_event(
         include_hashed_pii=settings_row.send_hashed_pii,
         email=surrogate.email,
         phone=surrogate.phone,
-        fbc=_resolve_meta_click_id(meta_lead),
+        fbc=meta_lead.meta_click_id,
         event_id=event_id,
     )
     job_payload = {

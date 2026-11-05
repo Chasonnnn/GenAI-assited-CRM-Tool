@@ -93,11 +93,16 @@ class Job(Base):
     # Record history reads these instead of the large workflow email payload. The
     # jobs_subject_from_payload trigger copies them from payload; do not set them.
     subject_type: Mapped[str | None] = mapped_column(
-        Text, nullable=True, server_default=FetchedValue(), server_onupdate=FetchedValue()
+        Text,
+        nullable=True,
+        deferred=True,
+        server_default=FetchedValue(),
+        server_onupdate=FetchedValue(),
     )
     subject_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         nullable=True,
+        deferred=True,
         server_default=FetchedValue(),
         server_onupdate=FetchedValue(),
     )

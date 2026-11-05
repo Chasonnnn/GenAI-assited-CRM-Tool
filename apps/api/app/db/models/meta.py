@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    FetchedValue,
     ForeignKey,
     Index,
     Integer,
@@ -151,6 +152,30 @@ class MetaLead(Base):
     # Raw field_data preserving multi-select arrays (for form analysis)
     field_data_raw: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     raw_payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Analytics and outbound events read these instead of the lead JSONB. The
+    # meta_leads_attribution_from_fields trigger derives them; do not set them.
+    meta_platform: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        deferred=True,
+        server_default=FetchedValue(),
+        server_onupdate=FetchedValue(),
+    )
+    meta_ad_id: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        deferred=True,
+        server_default=FetchedValue(),
+        server_onupdate=FetchedValue(),
+    )
+    # Normalized fbc: the first click id key found in raw, normalized, then payload data.
+    meta_click_id: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        deferred=True,
+        server_default=FetchedValue(),
+        server_onupdate=FetchedValue(),
+    )
     # Exact affirmative/negative responses returned by Meta's lead endpoint.
     # These are evidence inputs only; missing or malformed values never imply consent.
     custom_disclaimer_responses: Mapped[list | None] = mapped_column(JSONB, nullable=True)

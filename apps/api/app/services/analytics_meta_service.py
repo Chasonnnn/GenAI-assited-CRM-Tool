@@ -170,15 +170,7 @@ def get_meta_platform_breakdown(
 ) -> list[dict[str, Any]]:
     """Lead counts grouped by platform (facebook/instagram/etc.)."""
     lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
-    platform_expr = func.coalesce(
-        MetaLead.field_data_raw["meta_platform"].astext,
-        MetaLead.field_data_raw["platform"].astext,
-        MetaLead.field_data_raw["publisher_platform"].astext,
-        MetaLead.field_data["meta_platform"].astext,
-        MetaLead.field_data["platform"].astext,
-        MetaLead.field_data["publisher_platform"].astext,
-    )
-    platform_expr = func.nullif(func.lower(platform_expr), "")
+    platform_expr = func.nullif(func.lower(MetaLead.meta_platform), "")
     platform_label = func.coalesce(platform_expr, "unknown")
 
     query = (
@@ -289,13 +281,7 @@ def get_leads_by_ad(
 ) -> list[dict[str, Any]]:
     """Lead counts grouped by ad ID with conversion rate."""
     lead_time = func.coalesce(MetaLead.meta_created_time, MetaLead.received_at)
-    ad_id_expr = func.coalesce(
-        MetaLead.field_data_raw["meta_ad_id"].astext,
-        MetaLead.field_data_raw["ad_id"].astext,
-        MetaLead.field_data["meta_ad_id"].astext,
-        MetaLead.field_data["ad_id"].astext,
-    )
-    ad_id_expr = func.nullif(ad_id_expr, "")
+    ad_id_expr = func.nullif(MetaLead.meta_ad_id, "")
 
     lead_counts_query = (
         db.query(
