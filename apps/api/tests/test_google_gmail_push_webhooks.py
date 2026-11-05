@@ -52,7 +52,6 @@ def gmail_push(client, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_google_gmail_push_webhook_requires_authentication(client, db):
-    from app.db.models import Job
 
     response = await client.post(
         "/webhooks/google-gmail",
@@ -60,7 +59,22 @@ async def test_google_gmail_push_webhook_requires_authentication(client, db):
     )
 
     assert response.status_code == 503
-    assert db.query(Job).count() == 0
+    assert _push_jobs(db, "unauthorized") == []
+
+
+def _push_jobs(db, message_id: str) -> list:
+    """History sync jobs from one push; other workers' committed jobs stay out of counts."""
+    from app.db.enums import JobType
+    from app.db.models import Job
+
+    return (
+        db.query(Job)
+        .filter(
+            Job.job_type == JobType.MAILBOX_HISTORY_SYNC.value,
+            Job.payload["pubsub_message_id"].astext == message_id,
+        )
+        .all()
+    )
 
 
 def _push_payload(
@@ -84,8 +98,8 @@ def _push_payload(
 async def test_google_gmail_push_webhook_enqueues_mailbox_history_sync(
     client, db, test_auth, gmail_push
 ):
-    from app.db.enums import JobType, MailboxKind, MailboxProvider
-    from app.db.models import Job, Mailbox
+    from app.db.enums import MailboxKind, MailboxProvider
+    from app.db.models import Mailbox
 
     mailbox = Mailbox(
         id=uuid.uuid4(),
@@ -109,7 +123,7 @@ async def test_google_gmail_push_webhook_enqueues_mailbox_history_sync(
     assert response.status_code == 202
     assert response.json()["status"] == "accepted"
 
-    jobs = db.query(Job).filter(Job.job_type == JobType.MAILBOX_HISTORY_SYNC.value).all()
+    jobs = _push_jobs(db, "pubsub-msg-1")
     assert len(jobs) == 1
     assert jobs[0].payload["mailbox_id"] == str(mailbox.id)
     assert jobs[0].payload["reason"] == "gmail_push"
@@ -121,8 +135,8 @@ async def test_google_gmail_push_webhook_enqueues_mailbox_history_sync(
 async def test_google_gmail_push_webhook_dedupes_same_mailbox_sync_job(
     client, db, test_auth, gmail_push
 ):
-    from app.db.enums import JobType, MailboxKind, MailboxProvider
-    from app.db.models import Job, Mailbox
+    from app.db.enums import MailboxKind, MailboxProvider
+    from app.db.models import Mailbox
 
     db.add(
         Mailbox(
@@ -148,14 +162,11 @@ async def test_google_gmail_push_webhook_dedupes_same_mailbox_sync_job(
     assert first.status_code == 202
     assert second.status_code == 202
 
-    jobs = db.query(Job).filter(Job.job_type == JobType.MAILBOX_HISTORY_SYNC.value).all()
-    assert len(jobs) == 1
+    assert len(_push_jobs(db, "pubsub-msg-2")) == 1
 
 
 @pytest.mark.asyncio
 async def test_google_gmail_push_webhook_ignores_unknown_mailbox(client, db, gmail_push):
-    from app.db.enums import JobType
-    from app.db.models import Job
 
     response = await client.post(
         "/webhooks/google-gmail",
@@ -167,8 +178,7 @@ async def test_google_gmail_push_webhook_ignores_unknown_mailbox(client, db, gma
     assert response.status_code == 202
     assert response.json()["status"] == "ignored"
 
-    jobs = db.query(Job).filter(Job.job_type == JobType.MAILBOX_HISTORY_SYNC.value).all()
-    assert jobs == []
+    assert _push_jobs(db, "pubsub-msg-3") == []
 
 
 @pytest.mark.asyncio
@@ -187,7 +197,6 @@ async def test_google_gmail_push_webhook_ignores_unknown_mailbox(client, db, gma
 async def test_google_gmail_push_rejects_invalid_identity(
     client, db, gmail_push, claims, expected_status
 ):
-    from app.db.models import Job
 
     gmail_push(claims=claims)
     response = await client.post(
@@ -195,13 +204,12 @@ async def test_google_gmail_push_rejects_invalid_identity(
         json=_push_payload(message_id="denied", email_address="journal@example.com"),
     )
     assert response.status_code == expected_status
-    assert db.query(Job).count() == 0
+    assert _push_jobs(db, "denied") == []
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("credential", ["missing", "forged_signature"])
 async def test_google_gmail_push_rejects_untrusted_tokens(client, db, gmail_push, credential):
-    from app.db.models import Job
 
     if credential == "missing":
         del client.headers["Authorization"]
@@ -212,24 +220,22 @@ async def test_google_gmail_push_rejects_untrusted_tokens(client, db, gmail_push
         json=_push_payload(message_id="denied", email_address="journal@example.com"),
     )
     assert response.status_code == 401
-    assert db.query(Job).count() == 0
+    assert _push_jobs(db, "denied") == []
 
 
 @pytest.mark.asyncio
 async def test_google_gmail_push_rejects_other_subscription(client, db, gmail_push):
-    from app.db.models import Job
 
     payload = _push_payload(message_id="wrong-subscription", email_address="journal@example.com")
     payload["subscription"] = "projects/other-project/subscriptions/gmail-push"
     response = await client.post("/webhooks/google-gmail", json=payload)
     assert response.status_code == 403
-    assert db.query(Job).count() == 0
+    assert _push_jobs(db, "wrong-subscription") == []
 
 
 @pytest.mark.asyncio
 async def test_google_gmail_push_key_outage_can_retry(client, db, gmail_push, monkeypatch):
     from app.core import gmail_push_auth
-    from app.db.models import Job
 
     fetch_keys = gmail_push_auth._google_keys.fetch_data
 
@@ -241,7 +247,7 @@ async def test_google_gmail_push_key_outage_can_retry(client, db, gmail_push, mo
     first = await client.post("/webhooks/google-gmail", json=payload)
     assert first.status_code == 503
     assert first.json() == {"detail": "Gmail push verification unavailable"}
-    assert db.query(Job).count() == 0
+    assert _push_jobs(db, "retry") == []
 
     monkeypatch.setattr(gmail_push_auth._google_keys, "fetch_data", fetch_keys)
     second = await client.post("/webhooks/google-gmail", json=payload)
@@ -251,7 +257,7 @@ async def test_google_gmail_push_key_outage_can_retry(client, db, gmail_push, mo
 @pytest.mark.asyncio
 async def test_google_gmail_push_uses_matched_mailbox_scope(client, db, test_org, gmail_push):
     from app.db.enums import MailboxKind, MailboxProvider
-    from app.db.models import Job, Mailbox, Organization
+    from app.db.models import Mailbox, Organization
 
     other_org = Organization(
         id=uuid.uuid4(), name="Other agency", slug=f"other-{uuid.uuid4().hex[:8]}"
@@ -274,7 +280,7 @@ async def test_google_gmail_push_uses_matched_mailbox_scope(client, db, test_org
     payload["organization_id"] = str(other_org.id)
     response = await client.post("/webhooks/google-gmail", json=payload)
     assert response.status_code == 202
-    jobs = db.query(Job).all()
+    jobs = _push_jobs(db, "scope")
     assert len(jobs) == 1
     assert jobs[0].organization_id == test_org.id
     assert jobs[0].payload["organization_id"] == str(test_org.id)

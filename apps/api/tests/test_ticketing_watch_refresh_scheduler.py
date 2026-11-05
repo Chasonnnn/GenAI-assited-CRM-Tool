@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
 
 from app.services import ticketing_service
 
@@ -21,48 +20,6 @@ def _make_mailbox(db, *, org_id, email_address: str):
     db.add(mailbox)
     db.commit()
     return mailbox
-
-
-def test_schedule_incremental_sync_jobs_enqueues_watch_refresh_when_due(db, test_org, monkeypatch):
-    from app.core.config import settings
-    from app.db.enums import JobType
-    from app.db.models import Job
-
-    _make_mailbox(db, org_id=test_org.id, email_address="watch-due@example.com")
-
-    monkeypatch.setattr(settings, "GMAIL_PUSH_TOPIC", "projects/test/topics/gmail")
-    monkeypatch.setattr(settings, "GMAIL_PUSH_LABEL_IDS", "INBOX")
-
-    counts = ticketing_service.schedule_incremental_sync_jobs(db)
-
-    assert counts["mailboxes_checked"] == 1
-    assert counts["jobs_created"] == 1
-    assert counts["watch_jobs_created"] == 1
-
-    job_types = [row.job_type for row in db.query(Job).all()]
-    assert JobType.MAILBOX_HISTORY_SYNC.value in job_types
-    assert JobType.MAILBOX_WATCH_REFRESH.value in job_types
-
-
-def test_schedule_incremental_sync_jobs_skips_watch_refresh_when_fresh(db, test_org, monkeypatch):
-    from app.core.config import settings
-    from app.db.enums import JobType
-    from app.db.models import Job
-
-    mailbox = _make_mailbox(db, org_id=test_org.id, email_address="watch-fresh@example.com")
-    mailbox.gmail_watch_expiration_at = datetime.now(UTC) + timedelta(days=2)
-    db.add(mailbox)
-    db.commit()
-
-    monkeypatch.setattr(settings, "GMAIL_PUSH_TOPIC", "projects/test/topics/gmail")
-    monkeypatch.setattr(settings, "GMAIL_PUSH_LABEL_IDS", "")
-
-    counts = ticketing_service.schedule_incremental_sync_jobs(db)
-    assert counts["watch_jobs_created"] == 0
-
-    job_types = [row.job_type for row in db.query(Job).all()]
-    assert JobType.MAILBOX_HISTORY_SYNC.value in job_types
-    assert JobType.MAILBOX_WATCH_REFRESH.value not in job_types
 
 
 def test_enqueue_mailbox_history_sync_allows_new_run_after_completion(db, test_org):

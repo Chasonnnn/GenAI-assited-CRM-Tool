@@ -8,14 +8,13 @@ import httpx
 import pytest
 
 from app.core.config import settings
-from app.db.enums import AppointmentStatus, JobType, MeetingMode
+from app.db.enums import AppointmentStatus, MeetingMode
 from app.db.models import (
     Appointment,
     AppointmentType,
     AvailabilityRule,
     CalendarBinding,
     ExternalCalendarEvent,
-    Job,
     UserIntegration,
 )
 from app.schemas.calendar_binding import CalendarBindingInput
@@ -563,43 +562,6 @@ async def test_sync_projects_other_page_events_before_remote_availability_check(
         await calendar_binding_service.sync_binding(db, binding_id=binding.id, org_id=test_org.id)
         == 2
     )
-
-
-def test_v2_scheduler_queues_explicit_binding_sync_and_retains_tasks(db, binding):
-    from app.services import google_calendar_sync_service
-
-    now = datetime(2026, 9, 22, 12, tzinfo=UTC)
-    counts = google_calendar_sync_service.schedule_google_calendar_sync_jobs(db, now=now)
-    jobs = db.query(Job).all()
-
-    assert counts == {
-        "connected_users": 1,
-        "jobs_created": 1,
-        "duplicates_skipped": 0,
-        "task_jobs_created": 1,
-        "task_duplicates_skipped": 0,
-        "watch_jobs_created": 1,
-        "watch_duplicates_skipped": 0,
-    }
-    assert {
-        (job.job_type, job.payload.get("binding_id"))
-        for job in jobs
-        if job.job_type
-        in {JobType.GOOGLE_CALENDAR_SYNC.value, JobType.GOOGLE_CALENDAR_WATCH_REFRESH.value}
-    } == {
-        (JobType.GOOGLE_CALENDAR_SYNC.value, str(binding.id)),
-        (JobType.GOOGLE_CALENDAR_WATCH_REFRESH.value, str(binding.id)),
-    }
-    task = next(job for job in jobs if job.job_type == JobType.GOOGLE_TASKS_SYNC.value)
-    assert task.payload == {"user_id": str(binding.user_id)}
-
-    duplicate_counts = google_calendar_sync_service.schedule_google_calendar_sync_jobs(db, now=now)
-    assert duplicate_counts["jobs_created"] == 0
-    assert duplicate_counts["duplicates_skipped"] == 1
-    assert duplicate_counts["watch_jobs_created"] == 0
-    assert duplicate_counts["watch_duplicates_skipped"] == 1
-    assert duplicate_counts["task_jobs_created"] == 0
-    assert duplicate_counts["task_duplicates_skipped"] == 1
 
 
 async def _async_result(value):

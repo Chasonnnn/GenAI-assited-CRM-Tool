@@ -131,7 +131,8 @@ async def test_test_send_renders_the_saved_draft_without_publishing_it(
     assert changed_after_test.json()["revision"] == 3
     assert changed_after_test.json()["last_tested_revision"] is None
 
-    log_count_before_stale_test = db.query(EmailLog).count()
+    org_logs = db.query(EmailLog).filter(EmailLog.organization_id == test_org.id)
+    log_count_before_stale_test = org_logs.count()
     stale_test_response = await authed_client.post(
         f"/email-template-drafts/{draft['id']}/test",
         json={
@@ -141,7 +142,7 @@ async def test_test_send_renders_the_saved_draft_without_publishing_it(
         },
     )
     assert stale_test_response.status_code == 409
-    assert db.query(EmailLog).count() == log_count_before_stale_test
+    assert org_logs.count() == log_count_before_stale_test
 
 
 @pytest.mark.asyncio

@@ -250,6 +250,8 @@ def test_ci_parallelizes_safe_backend_tests_and_serializes_migrations(tmp_path) 
         "tests/test_migration_schema.py",
         "tests/test_email_delivery_outbox.py",
         "tests/test_ops_cli_integration.py",
+        "tests/test_cli_backfill_permissions.py",
+        "tests/test_sync_scheduler_global_scans.py",
         "tests/conftest.py",
     }:
         file = tmp_path / path
@@ -327,6 +329,10 @@ def test_ci_isolates_global_database_assertions_from_parallel_workers() -> None:
     assert "tests/test_email_delivery_outbox.py" in serial
     assert "--ignore tests/test_ops_cli_integration.py" in parallel
     assert "tests/test_ops_cli_integration.py" in serial
+    assert "--ignore tests/test_cli_backfill_permissions.py" in parallel
+    assert "tests/test_cli_backfill_permissions.py" in serial
+    assert "--ignore tests/test_sync_scheduler_global_scans.py" in parallel
+    assert "tests/test_sync_scheduler_global_scans.py" in serial
     assert "-n 4" not in serial
     assert "if: startsWith(matrix.group, 'parallel-')" in parallel
     assert "if: matrix.group == 'serial'" in serial
