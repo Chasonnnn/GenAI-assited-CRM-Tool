@@ -20,6 +20,7 @@ SERIAL_FILES = {
     "test_cli_backfill_permissions.py",
     "test_email_delivery_outbox.py",
     "test_ops_cli_integration.py",
+    "test_sync_scheduler_global_scans.py",
 }
 
 # CI shard wall time fits (JUnit seconds + 1.5s per file) / 4 workers. JUnit times
