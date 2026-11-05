@@ -1080,6 +1080,7 @@ def _create_outbound_message_record(
             reply_to_emails=[f"ticket+{ticket.ticket_code}@reply.surrogacyforce.local"],
             to_emails=to_emails,
             cc_emails=cc_emails,
+            ticket_header_id=ticket.id,
             headers_json={
                 "X-SF-Ticket-ID": [str(ticket.id)],
                 "X-SF-Message-ID": [gmail_message_id] if gmail_message_id else [],
@@ -3309,6 +3310,7 @@ def process_occurrence_parse(db: Session, *, occurrence_id: UUID) -> None:
                     to_emails=parsed["to_emails"],
                     cc_emails=parsed["cc_emails"],
                     headers_json=parsed["headers_json"],
+                    ticket_header_id=_ticket_header_id(parsed["headers_json"]),
                     body_text=parsed["body_text"],
                     body_html_sanitized=parsed["body_html"],
                     has_attachments=bool(parsed["attachments"]),
@@ -3593,6 +3595,22 @@ def _link_message_to_ticket(
     )
 
 
+TICKET_ID_HEADERS = ("X-SF-Ticket-ID", "X-OSS-Ticket-ID", "X-CRM-Ticket-ID")
+
+
+def _ticket_header_id(headers_json: dict[str, list[str]] | None) -> UUID | None:
+    """Return the first parseable ticket id header value; stored as a column at parse time."""
+    for key in TICKET_ID_HEADERS:
+        values = (headers_json or {}).get(key) or []
+        if not values:
+            continue
+        try:
+            return UUID(str(values[0]))
+        except Exception:
+            continue
+    return None
+
+
 def process_occurrence_stitch(db: Session, *, occurrence_id: UUID) -> None:
     """Stitch parsed occurrence to an existing/new ticket."""
     occurrence = (
@@ -3640,9 +3658,16 @@ def process_occurrence_stitch(db: Session, *, occurrence_id: UUID) -> None:
         db.commit()
         return
 
-    content_row = (
+    # Select columns, not the entity: skips the TOASTed header set, the bodies, and ORM
+    # identity bookkeeping. Stitching reads only these values.
+    content = (
         db.query(
-            EmailMessageContent,
+            EmailMessageContent.subject,
+            EmailMessageContent.subject_norm,
+            EmailMessageContent.from_email,
+            EmailMessageContent.from_name,
+            EmailMessageContent.date_header,
+            EmailMessageContent.ticket_header_id,
             cast(EmailMessageContent.reply_to_emails, ARRAY(Text)).label("reply_to_emails_text"),
         )
         .filter(
@@ -3652,26 +3677,15 @@ def process_occurrence_stitch(db: Session, *, occurrence_id: UUID) -> None:
         .order_by(EmailMessageContent.content_version.desc(), EmailMessageContent.parsed_at.desc())
         .first()
     )
-    if content_row is None:
+    if content is None:
         occurrence.state = EmailOccurrenceState.FAILED
         occurrence.stitch_error = "missing message content"
         occurrence.updated_at = _now_utc()
         db.add(occurrence)
         db.commit()
         return
-    content, reply_to_emails = content_row
-
-    headers_json = content.headers_json or {}
-    header_ticket_id = None
-    for key in ("X-SF-Ticket-ID", "X-OSS-Ticket-ID", "X-CRM-Ticket-ID"):
-        values = headers_json.get(key) or []
-        if not values:
-            continue
-        try:
-            header_ticket_id = UUID(str(values[0]))
-        except Exception:
-            continue
-        break
+    reply_to_emails = content.reply_to_emails_text
+    header_ticket_id = content.ticket_header_id
 
     ticket: Ticket | None = None
     stitch_reason = "new_ticket"

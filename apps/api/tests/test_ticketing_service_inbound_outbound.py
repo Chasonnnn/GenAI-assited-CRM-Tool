@@ -446,6 +446,143 @@ def test_process_occurrence_stitch_bulk_resolves_reply_tokens_in_order(db, test_
     assert len(ticket_code_selects) == 1
 
 
+def _parse_and_stitch_inbound(db, org_id, monkeypatch, *, headers: bytes, suffix: str):
+    """Run the real parse and stitch jobs for one inbound message and return its occurrence."""
+    from app.db.enums import EmailOccurrenceState
+    from app.db.models import EmailMessageOccurrence, EmailRawBlob
+
+    mailbox = _make_mailbox(db, org_id=org_id, email_address=f"stitch-{suffix}@example.com")
+    raw_bytes = (
+        b"From: Sender <sender@example.com>\r\n"
+        b"To: intake@example.com\r\n"
+        b"Subject: Re: Status\r\n"
+        b"Message-ID: <" + suffix.encode() + b"@example.com>\r\n" + headers + b"\r\nBody.\r\n"
+    )
+    raw_blob = EmailRawBlob(
+        organization_id=org_id,
+        sha256_hex=hashlib.sha256(raw_bytes).hexdigest(),
+        storage_key=f"{org_id}/{suffix}.eml",
+        size_bytes=len(raw_bytes),
+        content_type="message/rfc822",
+    )
+    db.add(raw_blob)
+    db.flush()
+    occurrence = EmailMessageOccurrence(
+        organization_id=org_id,
+        mailbox_id=mailbox.id,
+        gmail_message_id=f"gmail-{suffix}",
+        gmail_thread_id=f"thread-{suffix}",
+        raw_blob_id=raw_blob.id,
+        state=EmailOccurrenceState.DISCOVERED,
+    )
+    db.add(occurrence)
+    db.commit()
+    monkeypatch.setattr(
+        ticketing_service.attachment_service, "load_file_bytes", lambda _key: raw_bytes
+    )
+    monkeypatch.setattr(ticketing_service, "_enqueue_mailbox_job", lambda *args, **kwargs: uuid4())
+
+    ticketing_service.process_occurrence_parse(db, occurrence_id=occurrence.id)
+    statements: list[str] = []
+    engine = db.get_bind()
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    sqlalchemy_event.listen(engine, "before_cursor_execute", capture_sql)
+    try:
+        ticketing_service.process_occurrence_stitch(db, occurrence_id=occurrence.id)
+    finally:
+        sqlalchemy_event.remove(engine, "before_cursor_execute", capture_sql)
+    db.refresh(occurrence)
+    return occurrence, statements
+
+
+def _make_ticket(db, org_id, code: str):
+    from app.db.enums import LinkConfidence, TicketLinkStatus, TicketPriority, TicketStatus
+    from app.db.models import Ticket
+
+    ticket = Ticket(
+        organization_id=org_id,
+        ticket_code=code,
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.NORMAL,
+        subject="Status",
+        subject_norm="Status",
+        requester_email="sender@example.com",
+        surrogate_link_status=TicketLinkStatus.NEEDS_REVIEW,
+        stitch_reason="new_message",
+        stitch_confidence=LinkConfidence.LOW,
+    )
+    db.add(ticket)
+    db.flush()
+    return ticket
+
+
+def test_stitch_links_explicit_ticket_header_from_promoted_column(db, test_org, monkeypatch):
+    from app.db.enums import LinkConfidence
+    from app.db.models import EmailMessageContent, TicketMessage
+
+    ticket = _make_ticket(db, test_org.id, "T-HEADER")
+    occurrence, statements = _parse_and_stitch_inbound(
+        db,
+        test_org.id,
+        monkeypatch,
+        # An invalid first header must fall through to the next ticket header.
+        headers=b"X-SF-Ticket-ID: not-a-uuid\r\nX-OSS-Ticket-ID: "
+        + str(ticket.id).encode()
+        + b"\r\n",
+        suffix="explicit-header",
+    )
+
+    content = (
+        db.query(EmailMessageContent)
+        .filter(
+            EmailMessageContent.organization_id == test_org.id,
+            EmailMessageContent.message_id == occurrence.message_id,
+        )
+        .one()
+    )
+    assert content.ticket_header_id == ticket.id
+    assert occurrence.ticket_id == ticket.id
+    linked = db.query(TicketMessage).filter(TicketMessage.message_id == occurrence.message_id).one()
+    assert linked.stitch_reason == "explicit_header"
+    assert linked.stitch_confidence == LinkConfidence.HIGH
+    content_selects = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith("SELECT")
+        and "FROM email_message_contents" in statement
+    ]
+    assert content_selects
+    for column in ("headers_json", "body_text", "body_html_sanitized"):
+        assert all(column not in statement for statement in content_selects)
+
+
+def test_stitch_ignores_ticket_header_from_another_organization(db, test_org, monkeypatch):
+    from app.db.models import Organization, Ticket
+
+    other_org = Organization(name="Other org", slug=f"other-org-{uuid4().hex[:8]}")
+    db.add(other_org)
+    db.flush()
+    foreign_ticket = _make_ticket(db, other_org.id, "T-FOREIGN")
+    foreign_ticket_id = foreign_ticket.id
+    db.commit()
+    db.expunge(foreign_ticket)
+
+    occurrence, _statements = _parse_and_stitch_inbound(
+        db,
+        test_org.id,
+        monkeypatch,
+        headers=b"X-SF-Ticket-ID: " + str(foreign_ticket_id).encode() + b"\r\n",
+        suffix="foreign-header",
+    )
+
+    assert occurrence.ticket_id is not None
+    assert occurrence.ticket_id != foreign_ticket_id
+    assert db.get(Ticket, occurrence.ticket_id).organization_id == test_org.id
+
+
 def test_store_message_attachment_does_not_embed_inbound_filename_in_storage_key(
     db, test_org, monkeypatch
 ):

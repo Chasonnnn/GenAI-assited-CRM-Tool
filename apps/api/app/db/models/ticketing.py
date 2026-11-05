@@ -242,6 +242,9 @@ class EmailMessageContent(Base):
     headers_json: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
+    # Promoted from headers_json so ticket stitching never reads the full header set.
+    # Not a foreign key: stitching resolves it inside the content row's organization.
+    ticket_header_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     body_html_sanitized: Mapped[str | None] = mapped_column(Text, nullable=True)
     has_attachments: Mapped[bool] = mapped_column(
