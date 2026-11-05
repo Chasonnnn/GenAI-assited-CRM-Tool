@@ -14,6 +14,7 @@ from app.services import email_provider_admission_service
 from app.services.email_provider_admission_service import (
     reserve_provider_request_slot,
 )
+from tests.support.db_clock import database_now
 
 
 def test_default_resend_team_admission_limit_matches_provider_contract():
@@ -144,7 +145,8 @@ def test_reservation_uses_current_database_time_after_waiting_for_account_lock(
         thread.start()
         assert contender_started.wait(timeout=2)
         time.sleep(0.25)
-        released_at = datetime.now(UTC)
+        # send_at comes from the database clock, which can drift from the host's.
+        released_at = database_now(locker)
         locker.commit()
         thread.join(timeout=5)
 
