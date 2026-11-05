@@ -57,6 +57,8 @@ def _reference_click_id(raw, normalized, payload):
 DOCS = [
     ({"fbc": "fb.1.a"}, None, None),
     ({"FBC": "  fb.1.upper\t"}, None, None),
+    # str.strip() also removes Unicode whitespace.
+    ({"fbc": "\u00a0fb.1.nbsp\u3000"}, None, None),
     ({"Meta Click-ID": ["", "fb.1.list"]}, None, None),
     ({"a": {"b": [{"meta_fbc": "fb.1.deep"}]}}, None, None),
     # Each object checks its own keys before nested values.
