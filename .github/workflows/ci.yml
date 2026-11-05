@@ -157,6 +157,7 @@ jobs:
           test "${#test_files[@]}" -gt 0
           PYTHONPATH=. uv run -m pytest "${test_files[@]}" -v --tb=short \
             --ignore-glob 'tests/test_migration_*.py' \
+            --ignore tests/test_cli_backfill_permissions.py \
             --ignore tests/test_email_delivery_outbox.py \
             --ignore tests/test_ops_cli_integration.py \
             -n 4 --dist loadscope --junitxml="junit-${TEST_GROUP}.xml" \
@@ -174,7 +175,7 @@ jobs:
         if: matrix.group == 'serial'
         working-directory: apps/api
         run: |
-          PYTHONPATH=. uv run -m pytest tests/test_email_delivery_outbox.py tests/test_ops_cli_integration.py tests/test_migration_*.py -v --tb=short \
+          PYTHONPATH=. uv run -m pytest tests/test_cli_backfill_permissions.py tests/test_email_delivery_outbox.py tests/test_ops_cli_integration.py tests/test_migration_*.py -v --tb=short \
             --cov=app --cov-branch --cov-report= --cov-fail-under=0 --durations=30
 
       - name: Upload backend coverage data

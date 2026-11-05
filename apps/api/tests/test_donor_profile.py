@@ -395,9 +395,10 @@ async def test_v2_profile_and_sensitive_info_follow_live_record_scope(
             )
         ).status_code == 200
 
-    existing_member_ids = {member.id for member in db.query(Membership).all()}
+    org_members = db.query(Membership).filter(Membership.organization_id == test_org.id)
+    existing_member_ids = {member.id for member in org_members}
     async with _client_for_org(db, test_org, role=Role.INTAKE_SPECIALIST) as intake_client:
-        intake_member = db.query(Membership).filter(Membership.id.notin_(existing_member_ids)).one()
+        intake_member = org_members.filter(Membership.id.notin_(existing_member_ids)).one()
 
         profile = await intake_client.get(f"/donors/{donor_id}/profile")
         reveal = await intake_client.post(f"/donors/{donor_id}/sensitive-info/reveal")

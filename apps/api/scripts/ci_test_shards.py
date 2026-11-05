@@ -16,7 +16,11 @@ from pathlib import Path
 DURATIONS = Path(__file__).resolve().parents[1] / "tests" / "ci_test_durations.json"
 
 # These files assert on database-wide state, so they run in the serial group.
-SERIAL_FILES = {"test_email_delivery_outbox.py", "test_ops_cli_integration.py"}
+SERIAL_FILES = {
+    "test_cli_backfill_permissions.py",
+    "test_email_delivery_outbox.py",
+    "test_ops_cli_integration.py",
+}
 
 # CI shard wall time fits (JUnit seconds + 1.5s per file) / 4 workers. JUnit times
 # omit the per-file cost, so a shard of many small files otherwise runs longest.
