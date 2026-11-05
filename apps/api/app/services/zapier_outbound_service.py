@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import case, exists, or_, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer, undefer
 
 from app.core.stage_definitions import LABEL_OVERRIDES
 from app.db.enums import JobStatus, JobType, SurrogateSource
@@ -37,7 +37,8 @@ from app.utils.presentation import humanize_identifier
 
 logger = logging.getLogger(__name__)
 MAX_META_LEAD_AGE = meta_outbound_service.MAX_META_LEAD_AGE
-FBC_CANDIDATE_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
+# Stage events read field data but not raw_payload; meta_click_id replaces its only read.
+STAGE_EVENT_LEAD_LOAD = (defer(MetaLead.raw_payload), undefer(MetaLead.meta_click_id))
 # Meta leads without an email get this generated address; it must never reach Meta.
 PLACEHOLDER_EMAIL_SUFFIX = "@placeholder.invalid"
 # Surrogate and donor events share one webhook URL; record_type lets one Zap branch.
@@ -91,55 +92,11 @@ def resolve_mapping_item(mapping: list[dict], stage_key: str) -> dict | None:
     return None
 
 
-def _normalize_json_key(value: str) -> str:
-    return value.lower().replace("-", "_").replace(" ", "_")
-
-
-def _coerce_string_scalar(value: object) -> str | None:
-    if isinstance(value, str):
-        stripped = value.strip()
-        return stripped or None
-    if isinstance(value, list):
-        for item in value:
-            coerced = _coerce_string_scalar(item)
-            if coerced:
-                return coerced
-    return None
-
-
-def _find_json_value_by_key(payload: object, candidate_keys: tuple[str, ...]) -> str | None:
-    normalized_keys = {_normalize_json_key(key) for key in candidate_keys}
-    if isinstance(payload, dict):
-        for key, value in payload.items():
-            if _normalize_json_key(str(key)) in normalized_keys:
-                coerced = _coerce_string_scalar(value)
-                if coerced:
-                    return coerced
-        for value in payload.values():
-            nested = _find_json_value_by_key(value, candidate_keys)
-            if nested:
-                return nested
-    elif isinstance(payload, list):
-        for item in payload:
-            nested = _find_json_value_by_key(item, candidate_keys)
-            if nested:
-                return nested
-    return None
-
-
 def _normalize_meta_click_id(value: str | None) -> str | None:
     normalized = (value or "").strip()
     if not normalized or not normalized.startswith("fb."):
         return None
     return normalized
-
-
-def _resolve_meta_click_id(meta_lead: MetaLead) -> str | None:
-    return _normalize_meta_click_id(
-        _find_json_value_by_key(meta_lead.field_data_raw or {}, FBC_CANDIDATE_KEYS)
-        or _find_json_value_by_key(meta_lead.field_data or {}, FBC_CANDIDATE_KEYS)
-        or _find_json_value_by_key(meta_lead.raw_payload or {}, FBC_CANDIDATE_KEYS)
-    )
 
 
 def _matchable_email(email: str | None) -> str | None:
@@ -383,6 +340,7 @@ def enqueue_stage_event(
 
     meta_lead = (
         db.query(MetaLead)
+        .options(*STAGE_EVENT_LEAD_LOAD)
         .filter(
             MetaLead.id == surrogate.meta_lead_id,
             MetaLead.organization_id == surrogate.organization_id,
@@ -419,7 +377,7 @@ def enqueue_stage_event(
         email=surrogate.email,
         phone=surrogate.phone,
         meta_fields=meta_fields,
-        fbc=_resolve_meta_click_id(meta_lead),
+        fbc=meta_lead.meta_click_id,
         event_id=event_id,
     )
 
@@ -517,6 +475,7 @@ def enqueue_stage_event(
 def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] | None:
     meta_lead = (
         db.query(MetaLead)
+        .options(*STAGE_EVENT_LEAD_LOAD)
         .filter(
             MetaLead.organization_id == donor.organization_id,
             MetaLead.converted_donor_id == donor.id,
@@ -528,7 +487,7 @@ def _resolve_donor_attribution(db: Session, donor: Donor) -> dict[str, object] |
         fields = _extract_meta_fields(meta_lead)
         # lead_id is written from the attribution itself, not from lead tracking fields.
         fields.pop("meta_lead_id", None)
-        fbc = _resolve_meta_click_id(meta_lead)
+        fbc = meta_lead.meta_click_id
         if fbc:
             fields["fbc"] = fbc
             fields["facebook_click_id"] = fbc
