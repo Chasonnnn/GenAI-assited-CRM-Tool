@@ -44,54 +44,70 @@ def test_ticket_header_column_backfills_existing_rows_and_downgrades(db_engine):
                     fallback_id,
                 ),
                 "braced": ({"X-OSS-Ticket-ID": ["{" + str(ticket_id).upper() + "}"]}, ticket_id),
+                "urn": ({"X-SF-Ticket-ID": [f"urn:uuid:{ticket_id}"]}, ticket_id),
                 "invalid": ({"X-SF-Ticket-ID": ["garbage"]}, None),
                 "non_list": ({"X-SF-Ticket-ID": str(ticket_id)}, None),
                 "none": ({"Received": ["from mx"]}, None),
             }
-            message_ids = {}
-            for name, (headers, _expected) in cases.items():
-                message_ids[name] = connection.execute(
-                    text(
-                        """
-                        INSERT INTO email_messages
-                            (organization_id, direction, fingerprint_sha256, signature_sha256)
-                        VALUES (:org, 'inbound', :fp, :sig) RETURNING id
-                        """
-                    ),
-                    {"org": org_id, "fp": uuid.uuid4().hex * 2, "sig": uuid.uuid4().hex * 2},
-                ).scalar_one()
-                connection.execute(
-                    text(
-                        """
-                        INSERT INTO email_message_contents (organization_id, message_id, headers_json)
-                        VALUES (:org, :message_id, CAST(:headers AS jsonb))
-                        """
-                    ),
-                    {
-                        "org": org_id,
-                        "message_id": message_ids[name],
-                        "headers": json.dumps(headers),
-                    },
+
+            def insert_cases(columns: str = "", values: str = "", **params) -> dict:
+                message_ids = {}
+                for name, (headers, _expected) in cases.items():
+                    message_ids[name] = connection.execute(
+                        text(
+                            """
+                            INSERT INTO email_messages
+                                (organization_id, direction, fingerprint_sha256, signature_sha256)
+                            VALUES (:org, 'inbound', :fp, :sig) RETURNING id
+                            """
+                        ),
+                        {"org": org_id, "fp": uuid.uuid4().hex * 2, "sig": uuid.uuid4().hex * 2},
+                    ).scalar_one()
+                    connection.execute(
+                        text(
+                            f"""
+                            INSERT INTO email_message_contents
+                                (organization_id, message_id, headers_json{columns})
+                            VALUES (:org, :message_id, CAST(:headers AS jsonb){values})
+                            """
+                        ),
+                        {
+                            "org": org_id,
+                            "message_id": message_ids[name],
+                            "headers": json.dumps(headers),
+                            **params,
+                        },
+                    )
+                return message_ids
+
+            def stored(message_ids: dict) -> dict:
+                rows = dict(
+                    connection.execute(
+                        text("SELECT message_id, ticket_header_id FROM email_message_contents")
+                    ).all()
                 )
+                return {name: rows[message_id] for name, message_id in message_ids.items()}
+
+            expected = {name: value for name, (_headers, value) in cases.items()}
+            message_ids = insert_cases()
             headers_before = connection.execute(
                 text("SELECT message_id, headers_json FROM email_message_contents ORDER BY id")
             ).all()
 
             command.upgrade(config, "head")
 
-            stored = dict(
-                connection.execute(
-                    text("SELECT message_id, ticket_header_id FROM email_message_contents")
-                ).all()
-            )
-            for name, (_headers, expected) in cases.items():
-                assert stored[message_ids[name]] == expected, name
+            assert stored(message_ids) == expected
             assert (
                 connection.execute(
                     text("SELECT message_id, headers_json FROM email_message_contents ORDER BY id")
                 ).all()
                 == headers_before
             )
+            # Pre-release workers insert without the column; the trigger applies the same parse.
+            assert stored(insert_cases()) == expected
+            # A value set by the runtime parse is kept.
+            kept = insert_cases(", ticket_header_id", ", :kept", kept=fallback_id)
+            assert set(stored(kept).values()) == {fallback_id}
 
             command.downgrade(config, PREVIOUS)
             assert "ticket_header_id" not in columns()

@@ -74,8 +74,58 @@ def upgrade() -> None:
         if updates:
             connection.execute(update_row, updates)
         after = rows[-1][0]
+    # Workers update after this migration, so pre-release code still inserts content
+    # without the column. The trigger fills it with the same parse; runtime values win.
+    keys = ", ".join(f"'{key}'" for key in TICKET_ID_HEADERS)
+    op.execute(
+        f"""
+        CREATE FUNCTION email_ticket_header_id(headers jsonb) RETURNS uuid
+        LANGUAGE plpgsql IMMUTABLE AS $$
+        DECLARE
+            header text;
+            value text;
+        BEGIN
+            FOREACH header IN ARRAY ARRAY[{keys}] LOOP
+                IF jsonb_typeof(headers -> header) = 'array' THEN
+                    value := headers -> header ->> 0;
+                    -- uuid.UUID() drops urn:/uuid: prefixes, braces, and hyphens.
+                    value := replace(replace(value, 'urn:', ''), 'uuid:', '');
+                    value := replace(btrim(value, '{{}}'), '-', '');
+                    IF value ~ '^[0-9A-Fa-f]{{32}}$' THEN
+                        RETURN value::uuid;
+                    END IF;
+                END IF;
+            END LOOP;
+            RETURN NULL;
+        END;
+        $$
+        """
+    )
+    op.execute(
+        """
+        CREATE FUNCTION email_message_contents_ticket_header_from_headers() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+            IF NEW.ticket_header_id IS NULL THEN
+                NEW.ticket_header_id := email_ticket_header_id(NEW.headers_json);
+            END IF;
+            RETURN NEW;
+        END;
+        $$
+        """
+    )
+    op.execute(
+        "CREATE TRIGGER email_message_contents_ticket_header_from_headers "
+        "BEFORE INSERT OR UPDATE OF headers_json ON email_message_contents "
+        "FOR EACH ROW EXECUTE FUNCTION email_message_contents_ticket_header_from_headers()"
+    )
 
 
 def downgrade() -> None:
     op.execute("SET LOCAL lock_timeout = '3s'")
+    op.execute(
+        "DROP TRIGGER email_message_contents_ticket_header_from_headers ON email_message_contents"
+    )
+    op.execute("DROP FUNCTION email_message_contents_ticket_header_from_headers()")
+    op.execute("DROP FUNCTION email_ticket_header_id(jsonb)")
     op.drop_column("email_message_contents", "ticket_header_id")
