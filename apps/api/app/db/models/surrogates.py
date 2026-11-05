@@ -11,6 +11,7 @@ from sqlalchemy import (
     TIMESTAMP,
     Boolean,
     CheckConstraint,
+    Column,
     ForeignKey,
     Index,
     Integer,
@@ -57,6 +58,9 @@ class Surrogate(Base):
     """
 
     __tablename__ = "surrogates"
+    # The surrogates_meta_ad_name_from_metadata trigger owns meta_ad_name. Unmapped, the
+    # ORM never writes or returns it, so surrogate inserts work on schemas without it.
+    __mapper_args__ = {"exclude_properties": ["meta_ad_name"]}
     __table_args__ = (
         # Surrogate number unique per org (even archived)
         UniqueConstraint("organization_id", "surrogate_number", name="uq_surrogate_number"),
@@ -202,6 +206,8 @@ class Surrogate(Base):
     # NOT for business data - business data goes to custom fields
     # Deferred: CSV imports store every unmapped column here, and no surrogate load reads it.
     import_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True, deferred=True)
+    # Campaign lists read meta_ad_name (in __mapper_args__) instead of import_metadata.
+    meta_ad_name = Column(Text, nullable=True)
 
     # Contact (normalized: E.164 phone, 2-letter state)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
