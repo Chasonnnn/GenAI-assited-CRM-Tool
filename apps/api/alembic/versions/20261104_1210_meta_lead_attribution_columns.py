@@ -20,8 +20,13 @@ AD_ID_KEYS = ("meta_ad_id", "ad_id")
 # " " as "_"; each object checks its own keys before nested values.
 CLICK_ID_KEYS = ("fbc", "meta_fbc", "click_id", "meta_click_id")
 CLICK_ID_KEY_TEXT = "fbc|click[-_ ]id"
-# ASCII whitespace that Python str.strip() removes; E-strings have no \v escape.
-WHITESPACE = r"E' \t\n\r\f\x0b'"
+# Every character Python str.strip() removes (str.isspace), as an E-string literal.
+WHITESPACE_CODES = (
+    (0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x85, 0xA0, 0x1680)
+    + tuple(range(0x2000, 0x200B))
+    + (0x2028, 0x2029, 0x202F, 0x205F, 0x3000)
+)
+WHITESPACE = "E'" + "".join(f"\\u{code:04x}" for code in WHITESPACE_CODES) + "'"
 
 
 def _first_value(row: str, keys: tuple[str, ...]) -> str:
