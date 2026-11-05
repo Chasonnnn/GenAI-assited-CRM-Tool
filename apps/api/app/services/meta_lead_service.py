@@ -351,15 +351,6 @@ def backfill_platform_for_date_range(
 
     Returns number of leads updated.
     """
-    platform_expr = func.coalesce(
-        MetaLead.field_data_raw["meta_platform"].astext,
-        MetaLead.field_data_raw["platform"].astext,
-        MetaLead.field_data_raw["publisher_platform"].astext,
-        MetaLead.field_data["meta_platform"].astext,
-        MetaLead.field_data["platform"].astext,
-        MetaLead.field_data["publisher_platform"].astext,
-    )
-
     query = (
         db.query(MetaLead)
         .filter(
@@ -368,19 +359,13 @@ def backfill_platform_for_date_range(
                 datetime.combine(date_start, datetime.min.time(), tzinfo=UTC),
                 datetime.combine(date_end, datetime.max.time(), tzinfo=UTC),
             ),
-            func.nullif(platform_expr, "").is_(None),
+            func.nullif(MetaLead.meta_platform, "").is_(None),
         )
         .order_by(MetaLead.received_at.desc())
     )
 
     if ad_ids:
-        ad_id_expr = func.coalesce(
-            MetaLead.field_data_raw["meta_ad_id"].astext,
-            MetaLead.field_data_raw["ad_id"].astext,
-            MetaLead.field_data["meta_ad_id"].astext,
-            MetaLead.field_data["ad_id"].astext,
-        )
-        query = query.filter(ad_id_expr.in_([str(a) for a in ad_ids]))
+        query = query.filter(MetaLead.meta_ad_id.in_([str(a) for a in ad_ids]))
 
     leads = query.all()
     updated = 0
