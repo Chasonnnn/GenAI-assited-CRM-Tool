@@ -226,13 +226,11 @@ def get_campaigns(
     organization_id: uuid.UUID,
 ) -> list[dict[str, Any]]:
     """Get unique meta_ad_external_id values for campaign filter dropdown."""
-    meta_name_expr = Surrogate.import_metadata["meta_ad_name"].astext
-
     results = (
         db.query(
             Surrogate.meta_ad_external_id,
             func.count(Surrogate.id).label("surrogate_count"),
-            func.max(meta_name_expr).label("meta_ad_name"),
+            func.max(Surrogate.__table__.c.meta_ad_name).label("meta_ad_name"),
         )
         .filter(
             Surrogate.organization_id == organization_id,
@@ -240,7 +238,7 @@ def get_campaigns(
             Surrogate.is_archived.is_(False),
         )
         .group_by(Surrogate.meta_ad_external_id)
-        .order_by(func.count(Surrogate.id).desc())
+        .order_by(func.count(Surrogate.id).desc(), Surrogate.meta_ad_external_id)
         .all()
     )
 
