@@ -29,6 +29,9 @@ def _strip_invisible(value: str) -> str:
 # =============================================================================
 
 
+_NON_ALNUM_RE = re.compile(r"[^A-Za-z0-9]")
+
+
 def get_duo_client(redirect_uri: str | None = None) -> duo_universal.Client:
     """
     Create a Duo Universal Prompt client.
@@ -44,7 +47,7 @@ def get_duo_client(redirect_uri: str | None = None) -> duo_universal.Client:
     # Duo's Python SDK expects strict credential lengths. Secret sources sometimes
     # introduce invisible chars or quotes (e.g. copy/paste), so sanitize gently.
     raw_client_id = _strip_invisible(settings.DUO_CLIENT_ID or "")
-    client_id = re.sub(r"[^A-Za-z0-9]", "", raw_client_id)
+    client_id = _NON_ALNUM_RE.sub("", raw_client_id)
 
     client_secret = (
         _strip_invisible(settings.DUO_CLIENT_SECRET.get_secret_value() or "")

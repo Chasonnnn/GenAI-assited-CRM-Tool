@@ -1208,6 +1208,9 @@ def import_surrogates_csv(
     return imported
 
 
+_SHA256_HEX_RE = re.compile(r"[0-9a-f]{64}")
+
+
 def _restore_donor_profile_photo(
     db: Session,
     *,
@@ -1265,7 +1268,7 @@ def _restore_donor_profile_photo(
         raise ValueError(f"Invalid profile photo bytes for donor {donor.id}") from exc
     if len(decoded_bytes) != expected_size:
         raise ValueError(f"Profile photo size mismatch for donor {donor.id}")
-    if not re.fullmatch(r"[0-9a-f]{64}", expected_checksum):
+    if not _SHA256_HEX_RE.fullmatch(expected_checksum):
         raise ValueError(f"Invalid profile photo checksum for donor {donor.id}")
     if hashlib.sha256(decoded_bytes).hexdigest() != expected_checksum:
         raise ValueError(f"Profile photo checksum mismatch for donor {donor.id}")
@@ -1550,6 +1553,9 @@ def _restore_donor_status_history(
     return True
 
 
+_DONOR_NUMBER_RE = re.compile(r"D(\d{5,9})")
+
+
 def import_donors_csv(
     db: Session,
     org_id: UUID,
@@ -1621,7 +1627,7 @@ def import_donors_csv(
         if donor_number in donor_numbers:
             raise ValueError(f"Duplicate donor_number {donor_number}")
         donor_numbers.add(donor_number)
-        donor_number_match = re.fullmatch(r"D(\d{5,9})", donor_number)
+        donor_number_match = _DONOR_NUMBER_RE.fullmatch(donor_number)
         if donor_number_match is None:
             raise ValueError(f"Invalid donor_number {donor_number}")
         donor_number_value = int(donor_number_match.group(1))

@@ -224,6 +224,9 @@ def _color_background_to_background_color(html: str) -> str:
     return _STYLE_ATTR_RE.sub(rewrite_style, html)
 
 
+_EMPTY_PARAGRAPH_RE = re.compile(r"(<p\b[^>]*>)\s*(?:<br\b[^>]*>)?\s*</p>", re.IGNORECASE)
+
+
 def sanitize_template_html(html: str) -> str:
     """Sanitize email template HTML to prevent XSS."""
     cleaned = nh3.clean(
@@ -234,12 +237,7 @@ def sanitize_template_html(html: str) -> str:
     )
     # Many email clients collapse empty paragraphs. Preserve authoring intent by
     # turning `<p></p>` / `<p><br></p>` into a visible blank line.
-    cleaned = re.sub(
-        r"(<p\b[^>]*>)\s*(?:<br\b[^>]*>)?\s*</p>",
-        r"\1&nbsp;</p>",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
+    cleaned = _EMPTY_PARAGRAPH_RE.sub(r"\1&nbsp;</p>", cleaned)
     return cleaned
 
 
@@ -891,6 +889,9 @@ def is_email_suppressed(
     )
 
 
+_LINE_BREAKS_RE = re.compile(r"[\r\n]+")
+
+
 def render_template(
     subject: str,
     body: str,
@@ -914,7 +915,7 @@ def render_template(
 
     def sanitize_subject_value(value: object) -> str:
         text = normalize_value(value)
-        return re.sub(r"[\r\n]+", " ", text).strip()
+        return _LINE_BREAKS_RE.sub(" ", text).strip()
 
     subject_vars = {k: sanitize_subject_value(v) for k, v in variables.items()}
     safe_html_vars = safe_html_vars or set()
@@ -1456,6 +1457,9 @@ def list_email_log_attachments(
     return rows
 
 
+_SHA256_HEX_RE = re.compile(r"[0-9a-f]{64}")
+
+
 def load_email_log_provider_attachments(
     db: Session,
     org_id: UUID,
@@ -1515,7 +1519,7 @@ def load_email_log_provider_attachments(
             or isinstance(size_bytes, bool)
             or size_bytes < 0
             or not isinstance(sha256, str)
-            or re.fullmatch(r"[0-9a-f]{64}", sha256) is None
+            or _SHA256_HEX_RE.fullmatch(sha256) is None
         ):
             raise EmailAttachmentValidationError("Stored email attachment manifest is invalid.")
         seen_ids.add(attachment_id)

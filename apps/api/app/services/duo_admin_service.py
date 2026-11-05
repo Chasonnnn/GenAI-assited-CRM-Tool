@@ -31,9 +31,12 @@ def _sanitize_host(value: str) -> str:
     return host.rstrip("/")
 
 
+_NON_ALNUM_RE = re.compile(r"[^A-Za-z0-9]")
+
+
 def _sanitize_integration_key(value: str) -> str:
     raw_value = _strip_invisible(value or "")
-    return re.sub(r"[^A-Za-z0-9]", "", raw_value)
+    return _NON_ALNUM_RE.sub("", raw_value)
 
 
 def _sanitize_secret(value: str) -> str:

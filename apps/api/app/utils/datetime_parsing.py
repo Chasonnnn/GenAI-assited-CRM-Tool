@@ -37,6 +37,9 @@ class ParsedDatetime:
     used_fallback_timezone: bool = False
 
 
+_EPOCH_DIGITS_RE = re.compile(r"\d{10,13}")
+
+
 def parse_datetime_with_timezone(raw_value: str, org_timezone: str | None) -> ParsedDatetime:
     """Parse datetime using org timezone as default when no timezone is present."""
     value = raw_value.strip()
@@ -47,7 +50,7 @@ def parse_datetime_with_timezone(raw_value: str, org_timezone: str | None) -> Pa
     tz, used_fallback = _resolve_timezone(org_timezone, warnings)
 
     # Epoch timestamps (seconds or milliseconds)
-    if re.fullmatch(r"\d{10,13}", value):
+    if _EPOCH_DIGITS_RE.fullmatch(value):
         ts = int(value)
         if len(value) == 13:
             ts = ts / 1000

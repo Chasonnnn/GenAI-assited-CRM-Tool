@@ -30,18 +30,24 @@ KEYWORD_STAGE_COLOR_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
 )
 
 
+_HEX_COLOR_RE = re.compile(r"#[0-9a-fA-F]{6}")
+
+
 def _normalize_hex_color(color: str | None) -> str | None:
     if not color:
         return None
     normalized = color.strip()
-    if re.fullmatch(r"#[0-9a-fA-F]{6}", normalized):
+    if _HEX_COLOR_RE.fullmatch(normalized):
         return normalized
     return None
 
 
+_NON_ALNUM_RUN_RE = re.compile(r"[^a-z0-9]+")
+
+
 def _normalize_stage_text(*parts: str | None) -> str:
     joined = " ".join(part for part in parts if part)
-    return re.sub(r"[^a-z0-9]+", " ", joined.lower()).strip()
+    return _NON_ALNUM_RUN_RE.sub(" ", joined.lower()).strip()
 
 
 def _fallback_palette_index(

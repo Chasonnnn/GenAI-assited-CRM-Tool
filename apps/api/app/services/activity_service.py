@@ -13,22 +13,29 @@ ACTION_UPDATED = {"action": "updated"}
 ACTION_CLEARED = {"action": "cleared"}
 
 
+_BR_TAG_RE = re.compile(r"<br\s*/?>")
+_BLOCK_CLOSE_TAG_RE = re.compile(r"</(?:p|div)>")
+_HTML_TAG_RE = re.compile(r"<[^>]*>")
+_BULLET_SPACING_RE = re.compile(r"\s*•\s*")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
 def _sanitize_preview(html: str, max_chars: int = 120) -> str:
     """Strip HTML, preserve line breaks as ' • ', truncate for activity log display."""
     if not html:
         return ""
     # Replace <br>, </p>, </div> with line break marker
-    text = re.sub(r"<br\s*/?>", " • ", html)
-    text = re.sub(r"</(?:p|div)>", " • ", text)
+    text = _BR_TAG_RE.sub(" • ", html)
+    text = _BLOCK_CLOSE_TAG_RE.sub(" • ", text)
     # Strip remaining HTML tags
-    text = re.sub(r"<[^>]*>", "", text)
+    text = _HTML_TAG_RE.sub("", text)
     # Decode common HTML entities
     text = (
         text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
     )
     # Normalize whitespace around markers
-    text = re.sub(r"\s*•\s*", " • ", text)
-    text = re.sub(r"\s+", " ", text).strip()
+    text = _BULLET_SPACING_RE.sub(" • ", text)
+    text = _WHITESPACE_RE.sub(" ", text).strip()
     text = text.strip(" •")
     return text[:max_chars] + ("..." if len(text) > max_chars else "")
 

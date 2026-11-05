@@ -341,6 +341,12 @@ def _content_to_text(content: list) -> str:
     return "".join(_node_to_text(child) for child in content if isinstance(child, dict))
 
 
+_SCRIPT_BLOCK_RE = re.compile(r"<script[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
+_STYLE_BLOCK_RE = re.compile(r"<style[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
+_PARAGRAPH_BREAK_RE = re.compile(r"</p>|<br\s*/?>|<br>|\n\n", re.IGNORECASE)
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
 def html_to_tiptap(html: str) -> dict | None:
     """
     Convert HTML to TipTap JSON (best effort).
@@ -362,15 +368,15 @@ def html_to_tiptap(html: str) -> dict | None:
     paragraphs = []
 
     # Remove script/style tags
-    html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
-    html = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL | re.IGNORECASE)
+    html = _SCRIPT_BLOCK_RE.sub("", html)
+    html = _STYLE_BLOCK_RE.sub("", html)
 
     # Split by paragraph tags or double newlines
-    parts = re.split(r"</p>|<br\s*/?>|<br>|\n\n", html, flags=re.IGNORECASE)
+    parts = _PARAGRAPH_BREAK_RE.split(html)
 
     for part in parts:
         # Strip HTML tags for text content
-        text = re.sub(r"<[^>]+>", "", part).strip()
+        text = _HTML_TAG_RE.sub("", part).strip()
         if text:
             paragraphs.append({"type": "paragraph", "content": [{"type": "text", "text": text}]})
 

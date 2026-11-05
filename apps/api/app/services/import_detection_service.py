@@ -272,6 +272,11 @@ KEYWORD_PATTERNS: dict[str, list[str]] = {
     ],
 }
 
+_KEYWORD_REGEXES: dict[str, list[tuple[str, re.Pattern[str]]]] = {
+    field: [(keyword, re.compile(keyword, re.IGNORECASE)) for keyword in keywords]
+    for field, keywords in KEYWORD_PATTERNS.items()
+}
+
 # Patterns that should BLOCK mapping to certain fields (guards)
 MAPPING_GUARDS: dict[str, dict[str, object]] = {
     "num_csections": {
@@ -280,11 +285,19 @@ MAPPING_GUARDS: dict[str, dict[str, object]] = {
         "reason": "This is a boolean (yes/no), not a count",
     },
 }
+_MAPPING_GUARD_REGEXES: dict[str, list[re.Pattern[str]]] = {
+    field: [re.compile(pattern, re.IGNORECASE) for pattern in guard.get("block_patterns", [])]
+    for field, guard in MAPPING_GUARDS.items()
+}
 
 # Questions that need inverted boolean logic
 # "Do you smoke?" = yes means is_non_smoker = False
 INVERTED_PATTERNS: dict[str, list[str]] = {
     "is_non_smoker": ["do you smoke", "are you.*smoker", "use.*tobacco", "use.*nicotine"],
+}
+_INVERTED_REGEXES: dict[str, list[re.Pattern[str]]] = {
+    field: [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
+    for field, patterns in INVERTED_PATTERNS.items()
 }
 
 
@@ -309,6 +322,10 @@ CUSTOM_FIELD_SUGGESTIONS: dict[str, dict[str, object]] = {
         "field_type": "boolean",
         "label": "More than 2 C-Sections",
     },
+}
+_CUSTOM_FIELD_REGEXES: dict[str, list[re.Pattern[str]]] = {
+    key: [re.compile(pattern, re.IGNORECASE) for pattern in config.get("patterns", [])]
+    for key, config in CUSTOM_FIELD_SUGGESTIONS.items()
 }
 
 
@@ -515,12 +532,15 @@ def detect_delimiter(content: str) -> str:
 # =============================================================================
 
 
+_COLUMN_SEPARATOR_PATTERN = re.compile(r"[\s\-/]+")
+
+
 def normalize_column_name(col: str) -> str:
     """Normalize column name for matching."""
     # Remove common question prefixes/suffixes
     normalized = col.lower().strip()
     # Replace separators with underscores
-    normalized = re.sub(r"[\s\-/]+", "_", normalized)
+    normalized = _COLUMN_SEPARATOR_PATTERN.sub("_", normalized)
     # Remove trailing punctuation
     normalized = normalized.rstrip("?:_")
     return normalized
@@ -548,9 +568,8 @@ def check_mapping_guard(column: str, field: str) -> tuple[bool, str | None, str 
     """
     if field in MAPPING_GUARDS:
         guard = MAPPING_GUARDS[field]
-        patterns = guard.get("block_patterns", [])
-        for pattern in patterns:
-            if re.search(pattern, column, re.IGNORECASE):
+        for pattern in _MAPPING_GUARD_REGEXES[field]:
+            if pattern.search(column):
                 return (
                     True,
                     str(guard.get("suggest_instead")),
@@ -561,11 +580,19 @@ def check_mapping_guard(column: str, field: str) -> tuple[bool, str | None, str 
 
 def check_inverted_pattern(column: str, field: str) -> bool:
     """Check if the column question needs inverted boolean logic."""
-    if field in INVERTED_PATTERNS:
-        for pattern in INVERTED_PATTERNS[field]:
-            if re.search(pattern, column, re.IGNORECASE):
+    if field in _INVERTED_REGEXES:
+        for pattern in _INVERTED_REGEXES[field]:
+            if pattern.search(column):
                 return True
     return False
+
+
+_SAMPLE_DATE_REGEXES = (
+    re.compile(r"^\d{1,2}[/-]\d{1,2}[/-]\d{4}$"),  # MM/DD/YYYY
+    re.compile(r"^\d{4}[/-]\d{1,2}[/-]\d{1,2}$"),  # YYYY-MM-DD
+    re.compile(r"^\d{4}-\d{2}-\d{2}T"),  # ISO timestamp
+)
+_SAMPLE_PHONE_RE = re.compile(r"^[\d\s\-\(\)\+\.]{10,}$")
 
 
 def infer_data_type(samples: list[str]) -> dict[str, object]:
@@ -581,15 +608,10 @@ def infer_data_type(samples: list[str]) -> dict[str, object]:
         return {"type": "text", "confidence": 0.5, "transformation": None}
 
     # Check for dates (MM/DD/YYYY, YYYY-MM-DD, ISO timestamps)
-    date_patterns = [
-        r"^\d{1,2}[/-]\d{1,2}[/-]\d{4}$",  # MM/DD/YYYY
-        r"^\d{4}[/-]\d{1,2}[/-]\d{1,2}$",  # YYYY-MM-DD
-        r"^\d{4}-\d{2}-\d{2}T",  # ISO timestamp
-    ]
     date_matches = 0
     for sample in samples:
-        for pattern in date_patterns:
-            if re.match(pattern, sample.strip()):
+        for pattern in _SAMPLE_DATE_REGEXES:
+            if pattern.match(sample.strip()):
                 date_matches += 1
                 break
 
@@ -597,8 +619,7 @@ def infer_data_type(samples: list[str]) -> dict[str, object]:
         return {"type": "date", "confidence": 0.9, "transformation": "date_flexible"}
 
     # Check for phone numbers
-    phone_pattern = r"^[\d\s\-\(\)\+\.]{10,}$"
-    phone_matches = sum(1 for s in samples if re.match(phone_pattern, s.strip()))
+    phone_matches = sum(1 for s in samples if _SAMPLE_PHONE_RE.match(s.strip()))
     if phone_matches >= len(samples) * 0.8:
         return {"type": "phone", "confidence": 0.85, "transformation": "phone_normalize"}
 
@@ -656,9 +677,8 @@ def is_meta_platform_column(column: str, samples: list[str]) -> bool:
 def suggest_custom_field(column: str) -> dict[str, object] | None:
     """Check if a column should suggest creating a custom field."""
     for key, config in CUSTOM_FIELD_SUGGESTIONS.items():
-        patterns = config.get("patterns", [])
-        for pattern in patterns:
-            if re.search(pattern, column, re.IGNORECASE):
+        for pattern in _CUSTOM_FIELD_REGEXES[key]:
+            if pattern.search(column):
                 return {
                     "key": key,
                     "label": config.get("label"),
@@ -729,9 +749,9 @@ def analyze_column(
     best_score = 0.0
     match_reason = ""
 
-    for target_field, keywords in KEYWORD_PATTERNS.items():
-        for keyword in keywords:
-            if re.search(keyword, column, re.IGNORECASE):
+    for target_field, keywords in _KEYWORD_REGEXES.items():
+        for keyword, keyword_pattern in keywords:
+            if keyword_pattern.search(column):
                 # Score based on keyword specificity
                 score = 0.75 + (len(keyword) / 50)  # Longer patterns = more specific
                 if score > best_score:

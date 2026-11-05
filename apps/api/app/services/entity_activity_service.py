@@ -56,9 +56,13 @@ class ActivityItem(TypedDict):
     created_at: datetime
 
 
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
 def _preview(value: str, limit: int = 180) -> str:
-    plain = re.sub(r"<[^>]+>", " ", value)
-    plain = re.sub(r"\s+", " ", plain).strip()
+    plain = _HTML_TAG_RE.sub(" ", value)
+    plain = _WHITESPACE_RE.sub(" ", plain).strip()
     return plain if len(plain) <= limit else f"{plain[: limit - 1].rstrip()}…"
 
 

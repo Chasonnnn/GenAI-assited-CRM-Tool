@@ -135,8 +135,11 @@ def _mask_email(value: str) -> str:
     return f"***@{match.group(2)}"
 
 
+_NON_DIGIT_RE = re.compile(r"\D")
+
+
 def _mask_phone(value: str) -> str:
-    digits = re.sub(r"\D", "", value)
+    digits = _NON_DIGIT_RE.sub("", value)
     if len(digits) < 4:
         return "***-***-****"
     return f"***-***-{digits[-4:]}"
@@ -161,7 +164,7 @@ def _mask_name(value: str) -> str:
 
 
 def _mask_id_last4(value: str) -> str:
-    digits = re.sub(r"\D", "", value)
+    digits = _NON_DIGIT_RE.sub("", value)
     if len(digits) < 4:
         return "****"
     return f"***-**-{digits[-4:]}"

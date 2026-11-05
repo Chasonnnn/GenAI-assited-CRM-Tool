@@ -85,13 +85,18 @@ class SlotQuery(NamedTuple):
 # =============================================================================
 
 
+_SLUG_INVALID_CHARS_RE = re.compile(r"[^a-z0-9\s-]")
+_SLUG_SEPARATOR_RE = re.compile(r"[\s_]+")
+_SLUG_DASH_RUN_RE = re.compile(r"-+")
+
+
 def generate_slug(name: str) -> str:
     """Generate URL-safe slug from name."""
     # Lowercase, replace spaces with hyphens, remove special chars
     slug = name.lower().strip()
-    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
-    slug = re.sub(r"[\s_]+", "-", slug)
-    slug = re.sub(r"-+", "-", slug)
+    slug = _SLUG_INVALID_CHARS_RE.sub("", slug)
+    slug = _SLUG_SEPARATOR_RE.sub("-", slug)
+    slug = _SLUG_DASH_RUN_RE.sub("-", slug)
     return slug[:100]  # Max length
 
 

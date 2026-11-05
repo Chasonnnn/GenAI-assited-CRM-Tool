@@ -464,11 +464,14 @@ def _normalize_webhook_endpoint(
     return scheme, parsed.hostname.lower(), port, path
 
 
+_DIGITS_PATTERN = re.compile(r"[0-9]+")
+
+
 def _bounded_retry_after_seconds(value: str | None) -> int | None:
     if value is None:
         return None
     normalized = value.strip()
-    if not re.fullmatch(r"[0-9]+", normalized):
+    if not _DIGITS_PATTERN.fullmatch(normalized):
         return None
     try:
         seconds = int(normalized)

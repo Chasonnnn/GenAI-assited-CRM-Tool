@@ -333,11 +333,13 @@ def _get_cached_entity_summary(
     return summary.summary_text
 
 
+_ACTION_BODY_RE = re.compile(r"<action>\s*(.*?)\s*</action>", re.DOTALL)
+
+
 def _parse_actions(content: str) -> list[JsonObject]:
     """Extract action JSON from <action> tags in AI response."""
     actions = []
-    pattern = r"<action>\s*(.*?)\s*</action>"
-    matches = re.findall(pattern, content, re.DOTALL)
+    matches = _ACTION_BODY_RE.findall(content)
 
     for match in matches:
         parsed = parse_json_object(match)
@@ -350,9 +352,12 @@ def _parse_actions(content: str) -> list[JsonObject]:
     return actions
 
 
+_ACTION_TAG_RE = re.compile(r"<action>.*?</action>", re.DOTALL)
+
+
 def _clean_content(content: str) -> str:
     """Remove action tags from content for display."""
-    return re.sub(r"<action>.*?</action>", "", content, flags=re.DOTALL).strip()
+    return _ACTION_TAG_RE.sub("", content).strip()
 
 
 def _normalize_entity_type(entity_type: str) -> str:

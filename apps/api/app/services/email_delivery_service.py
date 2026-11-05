@@ -404,6 +404,9 @@ def _canonical_payload(
     }
 
 
+_SHA256_HEX_RE = re.compile(r"[0-9a-fA-F]{64}")
+
+
 def _capture_attachment_manifest(
     db: Session,
     *,
@@ -440,8 +443,8 @@ def _capture_attachment_manifest(
             or attachment.scan_status != "clean"
         ):
             raise ValueError("One or more email attachments are unavailable")
-        if attachment.file_size < 0 or not re.fullmatch(
-            r"[0-9a-fA-F]{64}", attachment.checksum_sha256 or ""
+        if attachment.file_size < 0 or not _SHA256_HEX_RE.fullmatch(
+            attachment.checksum_sha256 or ""
         ):
             raise ValueError("One or more email attachments have invalid integrity metadata")
         ordered.append(attachment)

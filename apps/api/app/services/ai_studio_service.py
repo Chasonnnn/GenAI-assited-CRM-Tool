@@ -293,8 +293,11 @@ def _build_image_prompt(image_prompt: str, request: AIStudioGenerateRequest) -> 
     )
 
 
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
+
+
 def _strip_json_fence(text: str) -> str:
-    match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, flags=re.DOTALL | re.IGNORECASE)
+    match = _JSON_FENCE_RE.search(text)
     return match.group(1) if match else text
 
 

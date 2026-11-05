@@ -224,11 +224,16 @@ def build_shared_application_link(base_url: str | None, slug: str) -> str:
     return f"{cleaned_base}/intake/{slug}"
 
 
+_SLUG_INVALID_CHARS_RE = re.compile(r"[^a-z0-9\s-]")
+_SLUG_SEPARATOR_RE = re.compile(r"[\s_]+")
+_SLUG_DASH_RUN_RE = re.compile(r"-+")
+
+
 def _normalize_slug(value: str) -> str:
     slug = value.lower().strip()
-    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
-    slug = re.sub(r"[\s_]+", "-", slug)
-    slug = re.sub(r"-+", "-", slug)
+    slug = _SLUG_INVALID_CHARS_RE.sub("", slug)
+    slug = _SLUG_SEPARATOR_RE.sub("-", slug)
+    slug = _SLUG_DASH_RUN_RE.sub("-", slug)
     return slug[:INTAKE_SLUG_MAX_LENGTH]
 
 
@@ -2248,6 +2253,9 @@ def _enqueue_privacy_safe_tracking_event(
     return record
 
 
+_NON_DIGIT_RE = re.compile(r"\D")
+
+
 def _build_enhanced_match_user_data(
     *,
     identity: dict[str, Any],
@@ -2260,7 +2268,7 @@ def _build_enhanced_match_user_data(
     if isinstance(email, str) and "@" in email:
         user_data["em"] = [meta_capi.hash_for_capi(email)]
     if isinstance(phone, str):
-        phone_digits = re.sub(r"\D", "", phone)
+        phone_digits = _NON_DIGIT_RE.sub("", phone)
         if len(phone_digits) >= 10:
             user_data["ph"] = [meta_capi.hash_for_capi(phone_digits)]
     if isinstance(full_name, str) and full_name.strip():

@@ -214,6 +214,9 @@ def _build_file_section(
     """
 
 
+_PROFILE_PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
+
+
 def _generate_submission_html(
     title: str,
     surrogate_name: str,
@@ -237,7 +240,7 @@ def _generate_submission_html(
                 return "{{" + token + "}}"
             return str(value)
 
-        return re.sub(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}", _replace, template)
+        return _PROFILE_PLACEHOLDER_RE.sub(_replace, template)
 
     sections_html = ""
     for page in pages:

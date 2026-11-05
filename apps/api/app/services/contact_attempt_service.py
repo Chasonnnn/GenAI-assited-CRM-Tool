@@ -25,18 +25,24 @@ from app.schemas.surrogate import (
 )
 from app.services import approval_handoff_service, queue_service
 
+_BR_TAG_RE = re.compile(r"<br\s*/?>")
+_BLOCK_CLOSE_TAG_RE = re.compile(r"</(?:p|div)>")
+_HTML_TAG_RE = re.compile(r"<[^>]*>")
+_BULLET_SPACING_RE = re.compile(r"\s*•\s*")
+_WHITESPACE_RE = re.compile(r"\s+")
+
 
 def _sanitize_note_preview(note: str | None, max_chars: int = 120) -> str | None:
     if not note:
         return None
-    text = re.sub(r"<br\s*/?>", " • ", note)
-    text = re.sub(r"</(?:p|div)>", " • ", text)
-    text = re.sub(r"<[^>]*>", "", text)
+    text = _BR_TAG_RE.sub(" • ", note)
+    text = _BLOCK_CLOSE_TAG_RE.sub(" • ", text)
+    text = _HTML_TAG_RE.sub("", text)
     text = (
         text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
     )
-    text = re.sub(r"\s*•\s*", " • ", text)
-    text = re.sub(r"\s+", " ", text).strip().strip(" •")
+    text = _BULLET_SPACING_RE.sub(" • ", text)
+    text = _WHITESPACE_RE.sub(" ", text).strip().strip(" •")
     if not text:
         return None
     return text[:max_chars] + ("..." if len(text) > max_chars else "")

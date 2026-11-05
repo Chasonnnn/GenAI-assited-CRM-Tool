@@ -249,9 +249,12 @@ def _email_claimed_by_another_principal(
     return conflicting_identity is not None
 
 
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
+
+
 def _canonical_email_parts(email: str) -> tuple[str, str]:
     local, domain = _normalized_email(email).split("@", 1)
-    return re.sub(r"[^a-z0-9]", "", local), domain
+    return _NON_ALNUM_RE.sub("", local), domain
 
 
 def _is_conservative_workspace_email_refresh(old_email: str, new_email: str) -> bool:

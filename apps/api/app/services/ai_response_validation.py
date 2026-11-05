@@ -23,12 +23,15 @@ def _strip_code_fences(text: str) -> str:
     return content
 
 
+_JSON_OBJECT_RE = re.compile(r"\{[\s\S]*\}")
+
+
 def parse_json_object(text: str) -> dict | None:
     content = _strip_code_fences(text)
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
-        match = re.search(r"\{[\s\S]*\}", content)
+        match = _JSON_OBJECT_RE.search(content)
         if not match:
             logger.warning(f"Failed to parse JSON object: {exc}")
             return None
@@ -40,12 +43,15 @@ def parse_json_object(text: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+_JSON_ARRAY_RE = re.compile(r"\[[\s\S]*\]")
+
+
 def parse_json_array(text: str) -> list | None:
     content = _strip_code_fences(text)
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
-        match = re.search(r"\[[\s\S]*\]", content)
+        match = _JSON_ARRAY_RE.search(content)
         if not match:
             logger.warning(f"Failed to parse JSON array: {exc}")
             return None

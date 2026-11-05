@@ -355,8 +355,11 @@ def _consent_datetime(value: datetime) -> str:
     return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+_NON_ALNUM_PATTERN = re.compile(r"[^a-z0-9]")
+
+
 def _is_toll_free_marker(route_marker: str) -> bool:
-    normalized = re.sub(r"[^a-z0-9]", "", route_marker.casefold())
+    normalized = _NON_ALNUM_PATTERN.sub("", route_marker.casefold())
     return "tollfree" in normalized
 
 
@@ -558,6 +561,12 @@ def fetch_inbound_media_metadata(
     )
 
 
+_INBOUND_MEDIA_PATH_PATTERN = re.compile(
+    r"/2010-04-01/Accounts/(AC[0-9A-Za-z]{32})/Messages/"
+    r"((?:SM|MM)[0-9A-Za-z]{32})/Media/(ME[0-9A-Za-z]{32})(?:\.json)?"
+)
+
+
 def parse_inbound_media_url(media_url: str) -> tuple[str, str, str]:
     """Return account, message, and media SIDs from an exact Twilio API URL."""
     parsed = urlsplit(media_url)
@@ -569,11 +578,7 @@ def parse_inbound_media_url(media_url: str) -> tuple[str, str, str]:
         or parsed.fragment
     ):
         raise ValueError("Inbound media URL is not an approved Twilio API URL")
-    match = re.fullmatch(
-        r"/2010-04-01/Accounts/(AC[0-9A-Za-z]{32})/Messages/"
-        r"((?:SM|MM)[0-9A-Za-z]{32})/Media/(ME[0-9A-Za-z]{32})(?:\.json)?",
-        parsed.path,
-    )
+    match = _INBOUND_MEDIA_PATH_PATTERN.fullmatch(parsed.path)
     if match is None:
         raise ValueError("Inbound media URL path is invalid")
     return match.group(1), match.group(2), match.group(3)
