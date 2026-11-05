@@ -303,7 +303,7 @@ export function NotificationBell() {
                             <div className="flex items-center gap-3 border-b bg-muted/50 px-4 py-2 text-xs">
                                 <Bell className="size-3.5 text-muted-foreground" aria-hidden="true" />
                                 <span className="flex-1">Desktop alerts are off</span>
-                                <Button variant="outline" size="sm" onClick={handleEnableDesktopAlerts}>
+                                <Button variant="outline" size="sm" aria-label="Turn on desktop alerts" onClick={handleEnableDesktopAlerts}>
                                     Turn on
                                 </Button>
                             </div>
