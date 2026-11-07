@@ -944,7 +944,7 @@ async def test_donor_only_requester_can_cancel_donor_but_not_surrogate_request(
         role=Role.CASE_MANAGER,
         revokes=("view_surrogates", "change_surrogate_status"),
     ) as donor_client:
-        requester = db.query(User).filter(User.id.notin_(existing_users)).one()
+        requester = db.query(User).filter(User.id.notin_(existing_users)).first()
         created = await _create_donor(donor_client)
         donor_request = StatusChangeRequest(
             organization_id=test_org.id,

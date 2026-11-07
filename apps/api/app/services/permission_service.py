@@ -369,6 +369,7 @@ def seed_role_defaults_bulk(
         .filter(RolePermission.organization_id.in_(counts))
         .all()
     )
+    to_insert = []
     for org_id in counts:
         for role, permissions in ROLE_DEFAULTS.items():
             if role == "developer":
@@ -378,15 +379,18 @@ def seed_role_defaults_bulk(
                 if (org_id, role, permission) in existing:
                     continue
                 if not dry_run:
-                    db.add(
-                        RolePermission(
-                            organization_id=org_id,
-                            role=role,
-                            permission=permission,
-                            is_granted=True,
-                        )
+                    to_insert.append(
+                        {
+                            "organization_id": org_id,
+                            "role": role,
+                            "permission": permission,
+                            "is_granted": True,
+                        }
                     )
                 counts[org_id] += 1
+
+    if to_insert and not dry_run:
+        db.execute(RolePermission.__table__.insert(), to_insert)
 
     return counts
 
