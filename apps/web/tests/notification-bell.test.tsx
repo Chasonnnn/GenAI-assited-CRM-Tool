@@ -179,7 +179,7 @@ describe("NotificationBell", () => {
     it("shows an empty action state", () => {
         render(<NotificationBell />)
 
-        expect(within(openPanel()).getByText("Nothing needs you")).toBeInTheDocument()
+        expect(within(openPanel()).getByText("Nothing needs you").closest("[data-slot=empty-state]")).not.toBeNull()
     })
 
     it("shows loading and retryable error states", () => {
@@ -268,7 +268,7 @@ describe("NotificationBell", () => {
         const panel = openPanel()
 
         expect(within(panel).getByText("Desktop alerts are off")).toBeInTheDocument()
-        fireEvent.click(within(panel).getByRole("button", { name: "Turn on" }))
+        fireEvent.click(within(panel).getByRole("button", { name: "Turn on desktop alerts" }))
 
         await waitFor(() => expect(mockToastSuccess).toHaveBeenCalledWith("Desktop alerts on"))
     })
