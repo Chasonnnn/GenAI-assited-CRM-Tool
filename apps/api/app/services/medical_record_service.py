@@ -7,7 +7,7 @@ entry are written in the caller's transaction so they commit or roll back togeth
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
@@ -176,7 +176,12 @@ def current_record(records: list[MedicalRecord], today: date) -> MedicalRecord |
 
 
 def _load(
-    db: Session, owner: RecordOwner, *, section: str | None = None, lock: bool = False
+    db: Session,
+    owner: RecordOwner,
+    *,
+    section: str | None = None,
+    sections: Collection[str] | None = None,
+    lock: bool = False,
 ) -> list[MedicalRecord]:
     stmt = (
         select(MedicalRecord)
@@ -188,6 +193,11 @@ def _load(
     )
     if section is not None:
         stmt = stmt.where(MedicalRecord.section == section)
+    if sections is not None:
+        # Lock rows in a stable order so concurrent multi-section writers cannot deadlock.
+        stmt = stmt.where(MedicalRecord.section.in_(sections)).order_by(
+            MedicalRecord.section, MedicalRecord.id
+        )
     if lock:
         stmt = stmt.with_for_update()
     return list(db.scalars(stmt))
@@ -527,12 +537,16 @@ def apply_form_values(
     """
     today = org_today(db, owner.organization_id)
     changed_sections: list[str] = []
+    records_by_section: dict[str, list[MedicalRecord]] = {}
+    if values_by_section:
+        for loaded in _load(db, owner, sections=sorted(values_by_section), lock=True):
+            records_by_section.setdefault(loaded.section, []).append(loaded)
     for section, raw_values in sorted(values_by_section.items()):
         _check_fields(section, set(raw_values))
         values = MedicalRecordFields.model_validate(raw_values).provided_fields()
         nonempty = {field: value for field, value in values.items() if value is not None}
         now = datetime.now(UTC)
-        current = current_record(_load(db, owner, section=section, lock=True), today)
+        current = current_record(records_by_section.get(section, []), today)
         if current is not None:
             changed = _apply_corrections(current, nonempty, user_id=user_id, source="form", now=now)
             if not changed:
