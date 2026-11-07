@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.91.89](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.88...surrogacy-crm-platform-v0.91.89) (2026-11-07)
+
+
+### Bug Fixes
+
+* consolidate validated fixes from bot PRs [#852](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/852) [#853](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/853) [#854](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/854) [#857](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/857) [#866](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/866) ([#867](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/867)) ([26d0cfd](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/26d0cfdb43b68d33d7f4156d06837f3cbb917b20))
+
+
+### Maintenance
+
+* speed up CI with balanced shards, area skips, and cache fixes ([#855](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/issues/855)) ([9480d6d](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/commit/9480d6d3d0e596862f3e41b67e5a6b1c873a1ad3))
+
 ## [0.91.88](https://github.com/Chasonnnn/GenAI-assited-CRM-Tool/compare/surrogacy-crm-platform-v0.91.87...surrogacy-crm-platform-v0.91.88) (2026-11-01)
 
 
