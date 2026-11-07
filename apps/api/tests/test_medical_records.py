@@ -4,7 +4,7 @@ import uuid
 from datetime import date, timedelta
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import event, select, text
 
 from app.db.enums import Role
 from app.db.models import (
@@ -470,6 +470,46 @@ def test_form_values_correct_current_record_or_start_one(db, test_org, test_user
     assert clinic.source == "form" and clinic.effective_date == today - timedelta(days=2)
     assert clinic.phone == "+15552014400"
     assert "lab_clinic" not in records
+
+
+def test_form_values_lock_requested_sections_in_one_query(db, test_org, test_user, surrogate):
+    owner = medical_record_service.RecordOwner.for_surrogate(surrogate)
+    today = _today(db, test_org)
+    for section in ("clinic", "insurance", "ob"):
+        db.add(
+            MedicalRecord(
+                organization_id=test_org.id,
+                surrogate_id=surrogate.id,
+                section=section,
+                name="Before",
+                effective_date=today - timedelta(days=10),
+            )
+        )
+    db.flush()
+    record_loads: list[str] = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        normalized = " ".join(statement.split()).lower()
+        if normalized.startswith("select") and "from medical_records" in normalized:
+            record_loads.append(normalized)
+
+    event.listen(db.bind, "before_cursor_execute", capture)
+    try:
+        changed = medical_record_service.apply_form_values(
+            db,
+            owner,
+            test_user.id,
+            {"insurance": {"name": "After"}, "clinic": {"name": "After"}},
+            today,
+        )
+    finally:
+        event.remove(db.bind, "before_cursor_execute", capture)
+
+    assert changed == ["clinic", "insurance"]
+    assert len(record_loads) == 1
+    assert "for update" in record_loads[0]
+    names = {r.section: r.name for r in db.scalars(select(MedicalRecord)).all()}
+    assert names == {"clinic": "After", "insurance": "After", "ob": "Before"}
 
 
 def test_legacy_field_map_matches_imported_columns():

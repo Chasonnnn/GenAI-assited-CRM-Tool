@@ -2,7 +2,6 @@
 
 import copy
 import json
-import os
 import uuid
 from typing import Any
 
@@ -26,8 +25,8 @@ from app.db.models import (
 from app.schemas.forms import FormSchema
 from app.services import form_submission_service, storage_cleanup_service
 from app.services.attachment_service import (
-    _get_local_storage_path,
     generate_signed_url,
+    resolve_local_storage_path,
     store_file,
     strip_exif_data,
 )
@@ -434,7 +433,8 @@ def get_form_logo_download_url(logo: FormLogo) -> str | None:
 
 
 def get_form_logo_local_path(logo: FormLogo) -> str:
-    return os.path.join(_get_local_storage_path(), logo.storage_key)
+    """Resolve the logo file; raises ValueError for a key outside the storage root."""
+    return resolve_local_storage_path(logo.storage_key)
 
 
 def _field_for_target(

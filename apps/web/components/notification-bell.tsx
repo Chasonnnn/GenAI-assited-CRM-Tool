@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
+import { EmptyState } from "@/components/empty-state"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -110,12 +111,7 @@ function NotificationList({
 
     if (notifications.length === 0) {
         const Icon = tier === "action" ? CircleCheck : BellOff
-        return (
-            <div className="flex flex-col items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                <Icon className="size-5" aria-hidden="true" />
-                <span>{tier === "action" ? "Nothing needs you" : "No updates"}</span>
-            </div>
-        )
+        return <EmptyState icon={Icon} title={tier === "action" ? "Nothing needs you" : "No updates"} />
     }
 
     return (
@@ -303,7 +299,12 @@ export function NotificationBell() {
                             <div className="flex items-center gap-3 border-b bg-muted/50 px-4 py-2 text-xs">
                                 <Bell className="size-3.5 text-muted-foreground" aria-hidden="true" />
                                 <span className="flex-1">Desktop alerts are off</span>
-                                <Button variant="outline" size="sm" onClick={handleEnableDesktopAlerts}>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    aria-label="Turn on desktop alerts"
+                                    onClick={handleEnableDesktopAlerts}
+                                >
                                     Turn on
                                 </Button>
                             </div>
