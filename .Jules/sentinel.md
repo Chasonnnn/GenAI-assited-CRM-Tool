@@ -1,0 +1,4 @@
+## 2024-05-18 - Local file path traversal in storage backend handling
+**Vulnerability:** Found a local file path traversal vulnerability in `apps/api/app/services/transcription_service.py` within the `_download_file` method. When the local storage backend is used, `os.path.join(local_path, storage_key)` is used directly to read files, without bounds checking on the resulting file path, allowing arbitrary file read.
+**Learning:** Directly joining user-controllable input with local paths in file operations creates a path traversal risk, even when intended for internal components handling media or exports.
+**Prevention:** Use codebase utility functions like `resolve_local_storage_path` (which asserts `os.path.commonpath`) instead of raw `os.path.join` for all local storage file path resolution.
