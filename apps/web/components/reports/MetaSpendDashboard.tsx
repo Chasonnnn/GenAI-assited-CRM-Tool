@@ -773,7 +773,7 @@ export function MetaSpendDashboard({ dateParams }: MetaSpendDashboardProps) {
                 <div className="flex items-center gap-3">
                     {totals && <SyncStatusBadge status={totals.sync_status} lastSynced={totals.last_synced_at} />}
                     <Select value={selectedAdAccount} onValueChange={(v) => setSelectedAdAccount(v ?? "")}>
-                        <SelectTrigger className="w-48">
+                        <SelectTrigger aria-label="Filter by Ad Account" className="w-48">
                             <SelectValue placeholder="All Ad Accounts" />
                         </SelectTrigger>
                         <SelectContent>

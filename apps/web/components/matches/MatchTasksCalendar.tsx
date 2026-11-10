@@ -500,7 +500,7 @@ export function MatchTasksCalendar({ matchId, participantKind = "surrogate", onA
 
                     {/* View selector */}
                     <Select value={viewType} onValueChange={(v) => v && setViewType(v as ViewType)}>
-                        <SelectTrigger className="w-24 h-8">
+                        <SelectTrigger aria-label="Select calendar view" className="w-24 h-8">
                             <SelectValue placeholder="View">
                                 {(value: string | null) => {
                                     if (value === "month") return "Month"
