@@ -148,7 +148,7 @@ export function ProposeMatchFromIPDialog({
                             </div>
                         ) : (
                             <Select value={selectedSurrogateId} onValueChange={(v) => setSelectedSurrogateId(v || "")}>
-                                <SelectTrigger className="w-full">
+                                <SelectTrigger aria-label="Select a surrogate" className="w-full">
                                     <SelectValue placeholder="Select a surrogate">{(value: string | null) => eligibleSurrogates.find((surrogate) => surrogate.id === value)?.full_name ?? "Select a surrogate"}</SelectValue>
                                 </SelectTrigger>
                                 <SelectContent className="max-h-[300px]">

@@ -275,7 +275,7 @@ function RaceFilterField({
                 }}
                 disabled={optionsQuery.isPending || optionsQuery.isError}
             >
-                <SelectTrigger>
+                <SelectTrigger aria-label="Add race">
                     <SelectValue
                         placeholder={
                             optionsQuery.isPending
@@ -404,7 +404,7 @@ function TriStateFilterField({
                 value={value}
                 onValueChange={(nextValue) => onValueChange(nextValue as TriState)}
             >
-                <SelectTrigger>
+                <SelectTrigger aria-label={label}>
                     <SelectValue>
                         {(selectedValue: string | null) => getTriStateLabel(selectedValue)}
                     </SelectValue>
