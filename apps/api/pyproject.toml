@@ -36,7 +36,7 @@ dependencies = [
     "requests==2.33.0",
     "urllib3==2.8.0",
     "email-validator==2.3.0",
-    "dnspython==2.9.0",
+    "dnspython==2.9.2",
     # Security
     "nh3==0.3.2",
     # Email
@@ -50,14 +50,14 @@ dependencies = [
     "google-cloud-logging==3.13.0",
     "google-cloud-error-reporting==1.14.0",
     # Observability (OpenTelemetry)
-    "opentelemetry-api==1.45.1",
-    "opentelemetry-sdk==1.45.1",
-    "opentelemetry-exporter-otlp-proto-common==1.45.1",
-    "opentelemetry-proto==1.45.1",
-    "opentelemetry-instrumentation==0.66b1",
-    "opentelemetry-instrumentation-httpx==0.66b1",
-    "opentelemetry-instrumentation-requests==0.66b1",
-    "opentelemetry-instrumentation-sqlalchemy==0.66b1",
+    "opentelemetry-api==1.45.2",
+    "opentelemetry-sdk==1.45.2",
+    "opentelemetry-exporter-otlp-proto-common==1.45.2",
+    "opentelemetry-proto==1.45.2",
+    "opentelemetry-instrumentation==0.66b2",
+    "opentelemetry-instrumentation-httpx==0.66b2",
+    "opentelemetry-instrumentation-requests==0.66b2",
+    "opentelemetry-instrumentation-sqlalchemy==0.66b2",
     # Protobuf (avoid deprecated PyType_Spec usage warnings in Python 3.14+)
     "protobuf==6.33.5",
     # Timezone support (for containers without system tzdata)
