@@ -109,6 +109,9 @@ describe("MassEditStageModal", () => {
         expect(screen.queryByText("Op")).not.toBeInTheDocument()
         expect(screen.getByRole("combobox", { name: "Age operator" })).toHaveTextContent("Any")
         expect(screen.getByRole("combobox", { name: "BMI operator" })).toHaveTextContent("Any")
+        expect(screen.getByRole("combobox", { name: "Age Eligible" })).toHaveTextContent("Any")
+        expect(screen.getByRole("combobox", { name: "Has Child" })).toHaveTextContent("Any")
+        expect(screen.getByRole("combobox", { name: "Race" })).toBeInTheDocument()
     })
 
     it("sends modal created date filters in preview request and shows override badge", async () => {

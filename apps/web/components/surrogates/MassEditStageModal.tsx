@@ -266,7 +266,7 @@ function RaceFilterField({
 }) {
     return (
         <div className="space-y-2">
-            <Label>Race</Label>
+            <Label htmlFor="mass-race">Race</Label>
             <Select
                 value={raceToAdd}
                 onValueChange={(value) => {
@@ -275,7 +275,7 @@ function RaceFilterField({
                 }}
                 disabled={optionsQuery.isPending || optionsQuery.isError}
             >
-                <SelectTrigger>
+                <SelectTrigger id="mass-race">
                     <SelectValue
                         placeholder={
                             optionsQuery.isPending
@@ -397,14 +397,15 @@ function TriStateFilterField({
     onValueChange: (value: TriState) => void
     className?: string
 }) {
+    const triggerId = React.useId()
     return (
         <div className={cn("space-y-2", className)}>
-            <Label>{label}</Label>
+            <Label htmlFor={triggerId}>{label}</Label>
             <Select
                 value={value}
                 onValueChange={(nextValue) => onValueChange(nextValue as TriState)}
             >
-                <SelectTrigger>
+                <SelectTrigger id={triggerId}>
                     <SelectValue>
                         {(selectedValue: string | null) => getTriStateLabel(selectedValue)}
                     </SelectValue>

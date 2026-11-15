@@ -350,7 +350,7 @@ function ScheduleParserTaskRow({
                         onTaskChange(task.id, "task_type", val || task.task_type)
                     }
                 >
-                    <SelectTrigger className="h-8">
+                    <SelectTrigger className="h-8" aria-label="Task type">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

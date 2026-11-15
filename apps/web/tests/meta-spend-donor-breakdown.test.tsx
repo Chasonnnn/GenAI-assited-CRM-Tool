@@ -77,6 +77,7 @@ describe("MetaSpendDashboard donor breakdown", () => {
     it("labels donor forms and keeps conversion types separate", () => {
         render(<MetaSpendDashboard dateParams={{}} />)
 
+        expect(screen.getByRole("combobox", { name: "Ad account" })).toBeInTheDocument()
         const row = screen.getByText("Egg Donor Form").closest("tr")
         expect(row).not.toBeNull()
         expect(row).toHaveTextContent("Egg Donor")
