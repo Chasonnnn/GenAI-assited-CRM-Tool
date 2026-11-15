@@ -372,3 +372,18 @@ async def test_summarize_all_interviews_loads_tenant_notes_in_one_query(
     combined = "\n".join(message.content for message in captured)
     assert "Cross tenant secret" not in combined
     assert combined.index("First tenant note") < combined.index("Second tenant note")
+
+
+def test_transcription_download_rejects_storage_key_outside_local_root(monkeypatch, tmp_path):
+    from app.core.config import settings
+
+    storage_root = tmp_path / "storage"
+    (storage_root / "org").mkdir(parents=True)
+    (storage_root / "org" / "call.mp3").write_bytes(b"inside-root")
+    (tmp_path / "outside.mp3").write_bytes(b"outside-root")
+    monkeypatch.setattr(settings, "STORAGE_BACKEND", "local", raising=False)
+    monkeypatch.setattr(settings, "LOCAL_STORAGE_PATH", str(storage_root), raising=False)
+
+    assert transcription_service._download_file("org/call.mp3") == b"inside-root"
+    with pytest.raises(ValueError, match="Invalid local storage path"):
+        transcription_service._download_file("../outside.mp3")

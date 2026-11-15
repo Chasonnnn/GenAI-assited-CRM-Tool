@@ -1,8 +1,6 @@
 """AI Transcription service using Gemini/Vertex AI."""
 
 import logging
-import os
-import tempfile
 from datetime import UTC
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -19,7 +17,7 @@ from app.db.models import (
     InterviewAttachment,
     SurrogateInterview,
 )
-from app.services import interview_service, storage_client
+from app.services import attachment_service, interview_service, storage_client
 from app.services.ai_settings_service import (
     get_ai_settings,
     get_decrypted_key,
@@ -77,11 +75,7 @@ def _download_file(storage_key: str) -> bytes:
         response = s3.get_object(Bucket=bucket, Key=storage_key)
         return response["Body"].read()
     else:
-        # Local storage
-        local_path = getattr(settings, "LOCAL_STORAGE_PATH", None)
-        if not local_path:
-            local_path = os.path.join(tempfile.gettempdir(), "crm-attachments")
-        path = os.path.join(local_path, storage_key)
+        path = attachment_service.resolve_local_storage_path(storage_key)
         with open(path, "rb") as f:
             return f.read()
 
