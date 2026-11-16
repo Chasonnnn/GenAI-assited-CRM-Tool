@@ -117,7 +117,7 @@ describe('MatchTasksCalendar', () => {
             isLoading: false,
         })
         render(<MatchTasksCalendar matchId="match1" />)
-        fireEvent.click(screen.getByRole('combobox'))
+        fireEvent.click(screen.getByRole('combobox', { name: 'Calendar view' }))
         const dayOption = screen.getByRole('option', { name: 'Day' })
         fireEvent.mouseMove(dayOption)
         fireEvent.click(dayOption)

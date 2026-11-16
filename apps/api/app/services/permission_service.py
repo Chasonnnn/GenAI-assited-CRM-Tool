@@ -9,6 +9,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from sqlalchemy import insert
 from sqlalchemy.orm import Session
 
 from app.core.permission_resolution import resolve_effective_permissions
@@ -369,6 +370,7 @@ def seed_role_defaults_bulk(
         .filter(RolePermission.organization_id.in_(counts))
         .all()
     )
+    rows = []
     for org_id in counts:
         for role, permissions in ROLE_DEFAULTS.items():
             if role == "developer":
@@ -377,17 +379,20 @@ def seed_role_defaults_bulk(
             for permission in permissions:
                 if (org_id, role, permission) in existing:
                     continue
-                if not dry_run:
-                    db.add(
-                        RolePermission(
-                            organization_id=org_id,
-                            role=role,
-                            permission=permission,
-                            is_granted=True,
-                        )
-                    )
+                rows.append(
+                    {
+                        "organization_id": org_id,
+                        "role": role,
+                        "permission": permission,
+                        "is_granted": True,
+                    }
+                )
                 counts[org_id] += 1
 
+    # The server-generated primary key makes per-object flushes insert one row
+    # at a time; an ORM bulk insert sends every row in one batch.
+    if rows and not dry_run:
+        db.execute(insert(RolePermission), rows)
     return counts
 
 

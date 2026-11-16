@@ -11,8 +11,9 @@ const toastSuccess = vi.fn()
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }))
 vi.mock("@/components/ui/toast", () => ({ toast: { success: (...args: unknown[]) => toastSuccess(...args), error: vi.fn() } }))
 vi.mock("@/lib/hooks/use-matches", () => ({ useCreateMatch: () => ({ mutateAsync: create, isPending: false }) }))
-vi.mock("@/lib/hooks/use-surrogates", () => ({ useSurrogates: () => ({ data: { items: [] }, isLoading: false }) }))
-vi.mock("@/lib/hooks/use-pipelines", () => ({ useDefaultPipeline: () => ({ data: { stages: [] } }) }))
+const surrogateFixtures = vi.hoisted(() => ({ items: [] as unknown[], stages: [] as unknown[] }))
+vi.mock("@/lib/hooks/use-surrogates", () => ({ useSurrogates: () => ({ data: { items: surrogateFixtures.items }, isLoading: false }) }))
+vi.mock("@/lib/hooks/use-pipelines", () => ({ useDefaultPipeline: () => ({ data: { stages: surrogateFixtures.stages } }) }))
 vi.mock("@/lib/api/donors", () => ({ listDonors: (...args: unknown[]) => donors(...args) }))
 
 describe("donor proposal from an IP", () => {
@@ -20,6 +21,14 @@ describe("donor proposal from an IP", () => {
         create.mockReset(); create.mockResolvedValue({ id: "match1", match_number: "M10042" })
         donors.mockReset(); donors.mockResolvedValue({ items: [{ id: "donor1", donor_number: "D10001", full_name: "Taylor Donor" }] })
         push.mockReset(); toastSuccess.mockReset()
+        surrogateFixtures.items = []; surrogateFixtures.stages = []
+    })
+
+    it("names the surrogate picker with its visible label", () => {
+        surrogateFixtures.stages = [{ id: "stage-ready", stage_key: "ready_to_match", slug: "ready_to_match", label: "Ready to Match", stage_type: "post_approval", order: 10, is_active: true }]
+        surrogateFixtures.items = [{ id: "surrogate1", full_name: "Sam Surrogate", stage_id: "stage-ready", stage_key: "ready_to_match", stage_slug: "ready_to_match" }]
+        render(<QueryClientProvider client={new QueryClient()}><ProposeMatchFromIPDialog open onOpenChange={vi.fn()} intendedParentId="ip1" /></QueryClientProvider>)
+        expect(screen.getByRole("combobox", { name: "Surrogate (Ready to Match Only)" })).toHaveTextContent("Select a surrogate")
     })
 
     async function proposeDonorMatch() {

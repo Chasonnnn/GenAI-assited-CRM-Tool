@@ -1125,7 +1125,7 @@ function CSVColumnMappingControls({
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>Default source:</span>
                 <Select value={defaultSource} onValueChange={(value) => onDefaultSourceChange(value as SurrogateSource)}>
-                    <SelectTrigger className="h-8 w-[140px]">
+                    <SelectTrigger className="h-8 w-[140px]" aria-label="Default source">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1143,7 +1143,7 @@ function CSVColumnMappingControls({
                     value={unknownColumnBehavior}
                     onValueChange={(value) => onUnknownBehaviorChange(value as UnknownColumnBehavior)}
                 >
-                    <SelectTrigger className="h-8 w-[140px]">
+                    <SelectTrigger className="h-8 w-[140px]" aria-label="Unknown columns">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1258,7 +1258,7 @@ function CSVMappingActionSelect({
                 }
             }}
         >
-            <SelectTrigger className="w-[130px]">
+            <SelectTrigger className="w-[130px]" aria-label={`${mapping.csv_column} action`}>
                 <SelectValue placeholder="Action" />
             </SelectTrigger>
             <SelectContent>
@@ -1292,7 +1292,7 @@ function CSVMappingTargetControl({
                     })
                 }
             >
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[180px]" aria-label={`${mapping.csv_column} field`}>
                     <SelectValue placeholder="Select field" />
                 </SelectTrigger>
                 <SelectContent>

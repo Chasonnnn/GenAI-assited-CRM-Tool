@@ -26,11 +26,11 @@ from app.services import (
 
 
 @contextmanager
-def _selects(db):
+def _selects(db, verb="select"):
     statements = []
 
     def capture(conn, cursor, statement, parameters, context, executemany):
-        if statement.lstrip().lower().startswith("select"):
+        if statement.lstrip().lower().startswith(verb):
             statements.append(statement)
 
     bind = db.get_bind()
@@ -226,14 +226,20 @@ def test_permission_seed_is_bounded_idempotent_and_preserves_denials(db, test_or
         return permission_service.seed_role_defaults(db, org_id)
 
     expected = sum(len(p) for r, p in ROLE_DEFAULTS.items() if r != "developer") - 1
-    with _selects(db) as statements:
+    with _selects(db) as statements, _selects(db, "insert") as inserts:
         assert seed() == expected
+        db.flush()
     assert len(statements) == 1
-    db.flush()
-    with _selects(db) as statements:
+    assert len(inserts) == 1
+    with _selects(db) as statements, _selects(db, "insert") as inserts:
         assert seed() == 0
+        db.flush()
     assert len(statements) == 1
-    db.flush()
+    assert inserts == []
+    assert (
+        db.query(RolePermission).filter_by(organization_id=test_org.id, is_granted=True).count()
+        == expected
+    )
     db.refresh(denied)
     db.refresh(other)
     assert denied.is_granted is False
